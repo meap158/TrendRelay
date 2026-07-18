@@ -11,6 +11,9 @@ Last updated: 2026-07-19
 - `douyin.cmd` installs, verifies, and runs single-link or file-based Douyin batches. Downloads, SQLite state, ephemeral configuration, upstream source, dependencies, and credentials remain ignored.
 - The pinned `gitroomhq/postiz-agent` 2.0.15 provider is integrated as `social.postiz-agent` at revision `41c5a9dbd6b2776863e7c05c22e7a385c208321c`.
 - `postiz.cmd` installs and verifies the provider, performs OAuth/API-key authentication and integration discovery, and previews or executes short-video drafts/schedules for TikTok, Instagram, and YouTube.
+- `config/tool-catalog.json`, `tools.cmd`, the loopback-only lifecycle API, and `/tools` About & Tools page catalogue all six incorporated GitHub projects with pinned revisions, license posture, install state, and activation state.
+- Last 30 Days, OpenMontage, and Agent Reach are source-ready catalog entries; native job adapters and provider dependency setup remain pending.
+- MediaCrawler is documented but installation and activation are blocked because its license prohibits commercial use.
 - PostgreSQL/pgvector, Redis, and S3-compatible storage remain planned data services when product features require them.
 - `Research/` and `References/` are local-only and ignored by Git.
 - No database migrations, application authentication, Temporal setup, publishing UI, or persisted media-job API exists yet.
@@ -20,6 +23,8 @@ Last updated: 2026-07-19
 - Follow `SOP.md`; atomic descriptive commits and current README/handover files are mandatory.
 - Python/FastAPI is the control-plane runtime; Python also powers compute-heavy workers.
 - Provider source remains isolated under `.tools/`; core modules depend only on capability contracts.
+- Every incorporated GitHub repository must be pinned and recorded in both the machine-readable and human-readable third-party catalogs.
+- Tool installation and activation remain separate; source presence never implies credentials, dependencies, or production readiness.
 - Postiz is dry-run-first. Uploads and remote drafts/schedules require both `--execute` and `--confirm-external-action`; drafts are the default.
 - Postiz operations use content-derived IDs and a local ledger. Duplicate and uncertain retries are blocked pending inspection.
 - Douyin batches default to 50 items per selected profile mode. Full crawls require explicit `--limit 0`.
@@ -36,11 +41,12 @@ Last updated: 2026-07-19
 - End-to-end `douyin.cmd batch --file ... --dry-run` parsed copied share text and profile URLs, deduplicated input, applied incremental bounded settings, and produced redacted configuration.
 - A live media download was not initiated because no user-authorized Douyin URL was provided.
 - Pinned Postiz checkout resolved exactly to `41c5a9dbd6b2776863e7c05c22e7a385c208321c`; the isolated build and both `postiz.cmd check` and `npm run postiz -- check` reported version 2.0.15.
-- The complete project suite passes: 24 tests covering existing scaffolding plus Postiz schema, safe payload defaults, dry-run, confirmation, simulated external calls, cleanup, and idempotency.
 - A three-platform wrapper smoke test produced a draft preview with private/safe defaults and made no provider call.
 - No real social upload or post was initiated because credentials, integration IDs, an approved video, and explicit execution confirmation were not supplied.
 - `start-electron.bat` launcher validation passed through the unified runner with backend, frontend, and desktop services enabled.
+- The complete project suite passes: 30 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
+- Production builds for Next.js and Electron, TypeScript checks, ESLint, Ruff, JSON validation, CLI listing, and diff checks pass. The `/tools` page was visually verified at 1440 by 1000 with six cards, two installed/active providers, guarded controls, and the MediaCrawler block.
 
 ## Next recommended action
 
-Authenticate Postiz, connect the intended social accounts, and run `postiz.cmd integrations` to capture their integration IDs. Then test an approved MP4 as a private/draft post before enabling an explicit schedule. In parallel, connect both provider manifests to persisted media and publication job APIs with rights classification and audit events.
+Install and evaluate one source-ready tool at a time from About & Tools. Build the first native adapter around Last 30 Days research output, with evidence ingestion and scoped secrets; then evaluate OpenMontage behind cost, provenance, and approval gates. Keep MediaCrawler blocked unless written commercial permission is obtained.

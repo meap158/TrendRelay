@@ -1,0 +1,14 @@
+# Third-party project catalog
+
+Every external GitHub project incorporated by TrendRelay is recorded here and in `config/tool-catalog.json`. Repositories are pinned to exact revisions, installed outside Git under `.tools/`, and activated separately. Installation does not grant permission to use a tool outside its license or platform terms.
+
+| Project | Purpose | License posture | TrendRelay status |
+| --- | --- | --- | --- |
+| [jiji262/douyin-downloader](https://github.com/jiji262/douyin-downloader) | Douyin media acquisition | MIT; permitted with platform/rights constraints | Adapter ready |
+| [gitroomhq/postiz-agent](https://github.com/gitroomhq/postiz-agent) | Social publishing | AGPL-3.0; distribution/network-use obligations apply | Adapter ready |
+| [mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill) | Recent multi-source trend research | MIT | Source ready; runtime adapter pending |
+| [calesthio/OpenMontage](https://github.com/calesthio/OpenMontage) | Agentic video production | AGPL-3.0; distribution/network-use obligations apply | Source ready; workflow adapter pending |
+| [Panniantong/Agent-Reach](https://github.com/Panniantong/Agent-Reach) | Research channel discovery and diagnostics | MIT; authenticated channels carry account risk | Source ready; channel adapter pending |
+| [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) | Multi-platform social research | Non-commercial learning/research only | Catalogued; install and activation blocked |
+
+The local `/tools` page and `tools.cmd` expose catalog status. Only pinned-source installation and local activation state are automated. Provider-specific credentials, browsers, system packages, and upstream setup scripts remain explicit follow-up steps.

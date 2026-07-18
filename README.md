@@ -25,6 +25,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 | Media | FFmpeg, ffprobe, and isolated Python workers |
 | Media download provider | Pinned `jiji262/douyin-downloader` integration |
 | Social publishing provider | Pinned `gitroomhq/postiz-agent` integration |
+| Tool governance | FastAPI lifecycle API, pinned JSON catalog, and Next.js About & Tools page |
 | AI workers | Python provider adapters and ComfyUI connectors (planned) |
 | Local development | npm workspaces and a Python virtual environment |
 | Production direction | Managed services and Terraform; orchestration only when justified |
@@ -34,6 +35,8 @@ The first usable release prioritizes reliable research, media handling, publishi
 - `apps/web` — Next.js control surface
 - `apps/desktop` — Electron shell for local media and browser-assisted workflows
 - `scripts/dev.py` — unified hot-reload supervisor for local development
+- `tools.cmd` — list, install, uninstall, activate, and deactivate catalogued tools
+- `config/tool-catalog.json` — machine-readable registry of every incorporated GitHub project
 - `start-electron.bat` — one-click Electron launcher with backend and frontend hot reload
 - `postiz.cmd` — Postiz authentication, integration discovery, and safe short-video publishing entry point
 - `douyin.cmd` — isolated Douyin installation and batch-download entry point
@@ -65,9 +68,25 @@ npm install
 # Add --desktop to also launch Electron.
 ```
 
-API documentation is available at `http://localhost:8080/docs` during development.
+API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/tools` (or About & Tools in the app) to inspect every incorporated project and manage local installation/activation.
 
 The first product vertical slice is authentication, workspaces/roles, audit logging, secret references, and the plugin registry.
+
+## Managed open-source tools
+
+Every incorporated GitHub repository is documented in [the third-party catalog](./docs/third-party/README.md) and pinned in `config/tool-catalog.json`. The About & Tools page shows its repository, revision, license posture, capabilities, installation state, and activation state. Source and runtime state stay ignored under `.tools/` and `.data/`.
+
+Use the UI at `http://localhost:3000/tools`, or the local CLI:
+
+```powershell
+tools.cmd list
+tools.cmd install last30days-skill --confirm-external-action
+tools.cmd activate last30days-skill
+tools.cmd deactivate last30days-skill
+tools.cmd uninstall last30days-skill --confirm-external-action
+```
+
+Installation fetches an exact reviewed revision; activation separately makes it eligible for orchestration. Source-ready tools still require a TrendRelay capability adapter and their documented upstream dependency/credential setup before production use. Lifecycle mutations are loopback-only. MediaCrawler remains visible but cannot be installed or activated because its current license prohibits commercial use.
 
 ## Douyin batch downloader
 
