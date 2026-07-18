@@ -17,29 +17,46 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist "node_modules\" (
-  echo Installing TrendRelay dependencies for the first run...
-  call npm install
-  if errorlevel 1 (
-    echo Dependency installation failed. Review the error above and try again.
-    pause
-    exit /b 1
-  )
-)
-
-if /I "%TRENDRELAY_START_CHECK%"=="1" (
-  echo TrendRelay launcher checks passed.
-  exit /b 0
-)
-
-echo Starting TrendRelay at http://localhost:3000
-echo Keep this window open while using the application.
-call npm run dev:web
-
+where python >nul 2>nul
 if errorlevel 1 (
-  echo TrendRelay stopped because of an error.
+  echo TrendRelay requires Python 3.12 or newer.
+  echo Download it from https://www.python.org/
   pause
   exit /b 1
 )
 
-endlocal
+if not exist "node_modules\" (
+  echo Installing web dependencies for the first run...
+  call npm install
+  if errorlevel 1 goto :install_error
+)
+
+if not exist ".venv\Scripts\python.exe" (
+  echo Creating the Python environment...
+  python -m venv .venv
+  if errorlevel 1 goto :install_error
+)
+
+echo Checking API dependencies...
+".venv\Scripts\python.exe" -m pip install --disable-pip-version-check --quiet -e "services/api[dev]"
+if errorlevel 1 goto :install_error
+
+if /I "%TRENDRELAY_START_CHECK%"=="1" (
+  ".venv\Scripts\python.exe" scripts\dev.py --check
+  if errorlevel 1 exit /b 1
+  exit /b 0
+)
+
+".venv\Scripts\python.exe" scripts\dev.py %*
+if errorlevel 1 goto :run_error
+exit /b 0
+
+:install_error
+echo TrendRelay dependency setup failed. Review the error above and try again.
+pause
+exit /b 1
+
+:run_error
+echo TrendRelay stopped because of an error.
+pause
+exit /b 1

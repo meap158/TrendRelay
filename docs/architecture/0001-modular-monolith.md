@@ -8,7 +8,7 @@ TrendRelay spans trend ingestion, affiliate intelligence, media processing, gene
 
 ## Decision
 
-The Go control plane begins as a modular monolith. Domain modules communicate through explicit interfaces. Expensive or failure-prone workloads run in isolated workers, and platform integrations run as capability-based plugins. PostgreSQL is the system of record; binary assets live in object storage.
+The Python/FastAPI control plane begins as a modular monolith. Domain modules communicate through typed interfaces and Pydantic contracts. Expensive or failure-prone workloads run in isolated Python worker processes, and platform integrations run as capability-based plugins. PostgreSQL is the system of record; binary assets live in object storage.
 
 ## Consequences
 

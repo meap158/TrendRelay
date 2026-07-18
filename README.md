@@ -16,48 +16,51 @@ The first usable release prioritizes reliable research, media handling, publishi
 | --- | --- |
 | Web | Next.js, React, TypeScript |
 | Desktop | Electron and electron-vite with a hardened renderer boundary |
-| Control plane | Go modular monolith using the standard HTTP stack initially |
-| Shared contracts | TypeScript packages; Go SDK boundary reserved |
+| Control plane | Python, FastAPI, Uvicorn, Pydantic |
+| Shared contracts | TypeScript schemas and Pydantic models |
 | Data | PostgreSQL with pgvector |
 | Cache and coordination | Redis |
-| Object storage | S3-compatible storage / MinIO locally |
-| Durable workflows | Temporal (planned in the foundation slice) |
-| Media | FFmpeg, ffprobe, yt-dlp in isolated workers (planned) |
+| Object storage | S3-compatible managed or local storage |
+| Durable workflows | Temporal Python SDK (planned in the foundation slice) |
+| Media | FFmpeg, ffprobe, yt-dlp in isolated Python workers (planned) |
 | AI workers | Python provider adapters and ComfyUI connectors (planned) |
-| Local development | npm workspaces and Docker Compose |
-| Production direction | Containers and Terraform; Kubernetes only when justified |
+| Local development | npm workspaces and a Python virtual environment |
+| Production direction | Managed services and Terraform; orchestration only when justified |
 
 ## Repository structure
 
 - `apps/web` — Next.js control surface
 - `apps/desktop` — Electron shell for local media and browser-assisted workflows
-- `services/api` — Go control plane (modular monolith)
+- `scripts/dev.py` — unified hot-reload supervisor for local development
+- `services/api` — Python/FastAPI control plane (modular monolith)
 - `services/link-router` — first-party attribution redirect boundary
 - `workers` — isolated trend, media, AI, and publishing runtimes
-- `packages` — shared UI, schemas, SDKs, and workflow definitions
+- `packages` — shared UI, schemas, TypeScript SDK, and workflow definitions
 - `plugins` — replaceable provider implementations
-- `infra` — local and production infrastructure
+- `infra` — infrastructure guidance and future Terraform modules
 - `docs` — architecture decisions and capability contracts
 
 The core depends on capabilities, never platform-specific business logic. See [SOP.md](./SOP.md) for engineering rules and [AGENT_HANDOVER.md](./AGENT_HANDOVER.md) for current state.
 
 ## Quick start
 
-Prerequisite for the current web scaffold: Node.js 22+ with npm 10+.
+Prerequisites: Node.js 22+ with npm 10+, and Python 3.12+.
 
 ### Windows — easiest
 
-Double-click `start.cmd`. The launcher checks Node/npm, installs dependencies on the first run, and starts TrendRelay at `http://localhost:3000`.
+Double-click `start.cmd`. It validates prerequisites, creates `.venv`, installs both dependency sets, then hands off to the unified runner. Backend and frontend logs stay in one terminal with prefixes, both servers bind to the LAN, and code changes hot reload automatically. Run `start.cmd --desktop` to include the Electron shell.
 
 ### Command line
 
-```bash
-cp .env.example .env
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e "services/api[dev]"
 npm install
-npm run dev:web
+.\.venv\Scripts\python.exe scripts\dev.py
+# Add --desktop to also launch Electron.
 ```
 
-Go 1.24+ and Docker with Compose are also required for the API and local infrastructure. Start infrastructure with `docker compose -f infra/compose/docker-compose.yml up -d`. Run the API from `services/api` with `go run ./cmd/server`.
+API documentation is available at `http://localhost:8080/docs` during development.
 
 The first product vertical slice is authentication, workspaces/roles, audit logging, secret references, and the plugin registry.
 
@@ -67,4 +70,4 @@ The first product vertical slice is authentication, workspaces/roles, audit logg
 
 ## Documentation rule
 
-This README is a living entry point. Any change to the product goal, stack, structure, setup, major commands, or release scope must update this file in the same atomic commit.
+This README is a living entry point. Any change to the project goal, stack, structure, setup, major commands, or release scope must update this file in the same atomic commit.

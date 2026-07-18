@@ -6,6 +6,14 @@ dist/
 out/
 coverage/
 *.tsbuildinfo
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+pytest-cache-files-*/
+.ruff_cache/
+.coverage
+htmlcov/
 .env
 .env.*
 !.env.example
@@ -18,5 +26,3 @@ tmp/
 Thumbs.db
 .idea/
 .vscode/
-bin/
-*.test
