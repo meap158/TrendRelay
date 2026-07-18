@@ -43,7 +43,13 @@ The core depends on capabilities, never platform-specific business logic. See [S
 
 ## Quick start
 
-Prerequisites: Node.js 22+, npm 10+, Go 1.24+, and Docker with Compose.
+Prerequisite for the current web scaffold: Node.js 22+ with npm 10+.
+
+### Windows — easiest
+
+Double-click `start.cmd`. The launcher checks Node/npm, installs dependencies on the first run, and starts TrendRelay at `http://localhost:3000`.
+
+### Command line
 
 ```bash
 cp .env.example .env
@@ -51,7 +57,7 @@ npm install
 npm run dev:web
 ```
 
-Start local infrastructure with `docker compose -f infra/compose/docker-compose.yml up -d`. Run the API from `services/api` with `go run ./cmd/server`.
+Go 1.24+ and Docker with Compose are also required for the API and local infrastructure. Start infrastructure with `docker compose -f infra/compose/docker-compose.yml up -d`. Run the API from `services/api` with `go run ./cmd/server`.
 
 The first product vertical slice is authentication, workspaces/roles, audit logging, secret references, and the plugin registry.
 
