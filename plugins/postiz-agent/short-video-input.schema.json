@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trendrelay.local/schemas/postiz-short-video-input.json",
+  "title": "Postiz short-form video publication input",
+  "type": "object",
+  "properties": {
+    "operation_id": {"type": "string", "minLength": 1},
+    "video": {"type": "string", "pattern": "\\.[mM][pP]4$"},
+    "caption": {"type": "string", "minLength": 1},
+    "title": {"type": "string"},
+    "date": {"type": "string", "format": "date-time"},
+    "publication_type": {"enum": ["draft", "schedule"], "default": "draft"},
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "properties": {
+          "provider": {"enum": ["tiktok", "instagram", "youtube"]},
+          "integration_id": {"type": "string", "minLength": 1}
+        },
+        "required": ["provider", "integration_id"],
+        "additionalProperties": false
+      }
+    },
+    "settings": {"type": "object"}
+  },
+  "required": ["operation_id", "video", "caption", "date", "targets"],
+  "additionalProperties": false
+}

@@ -1,0 +1,51 @@
+{
+  "id": "social.postiz-agent",
+  "name": "Postiz Social Publisher",
+  "version": "2.0.15+41c5a9dbd6b2",
+  "runtime": {
+    "type": "local-process",
+    "entrypoint": "postiz.cmd short-video"
+  },
+  "source": {
+    "repository": "https://github.com/gitroomhq/postiz-agent",
+    "revision": "41c5a9dbd6b2776863e7c05c22e7a385c208321c",
+    "license": "AGPL-3.0"
+  },
+  "capabilities": [
+    "social.integrations.discover",
+    "social.media.upload",
+    "social.publish.draft",
+    "social.publish.schedule",
+    "social.publish.short_video",
+    "social.analytics.read"
+  ],
+  "platforms": [
+    "tiktok",
+    "instagram",
+    "youtube"
+  ],
+  "permissions": {
+    "network": [
+      "api.postiz.com",
+      "cli-auth.postiz.com",
+      "*.postiz.com",
+      "user-configured POSTIZ_API_URL"
+    ],
+    "secrets": [
+      "POSTIZ_API_KEY",
+      "POSTIZ_API_URL",
+      "postiz_oauth_credentials"
+    ],
+    "storage": {
+      "read": ["approved_assets"],
+      "write": [".data/postiz"]
+    }
+  },
+  "requires_confirmation": [
+    "social.media.upload",
+    "social.publish.draft",
+    "social.publish.schedule"
+  ],
+  "input_schema": "./short-video-input.schema.json",
+  "output_schema": "./publication-result.schema.json"
+}

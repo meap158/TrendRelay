@@ -24,6 +24,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 | Durable workflows | Temporal Python SDK (planned in the foundation slice) |
 | Media | FFmpeg, ffprobe, and isolated Python workers |
 | Media download provider | Pinned `jiji262/douyin-downloader` integration |
+| Social publishing provider | Pinned `gitroomhq/postiz-agent` integration |
 | AI workers | Python provider adapters and ComfyUI connectors (planned) |
 | Local development | npm workspaces and a Python virtual environment |
 | Production direction | Managed services and Terraform; orchestration only when justified |
@@ -33,6 +34,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 - `apps/web` — Next.js control surface
 - `apps/desktop` — Electron shell for local media and browser-assisted workflows
 - `scripts/dev.py` — unified hot-reload supervisor for local development
+- `postiz.cmd` — Postiz authentication, integration discovery, and safe short-video publishing entry point
 - `douyin.cmd` — isolated Douyin installation and batch-download entry point
 - `services/api` — Python/FastAPI control plane (modular monolith)
 - `services/link-router` — first-party attribution redirect boundary
@@ -93,6 +95,32 @@ douyin.cmd batch --file .\douyin-urls.txt --mode post --mode mix --limit 50 --in
 The default limit is 50 items per selected profile mode; use `--limit 0` only for an intentional full crawl. Use `--dry-run` to inspect redacted configuration without downloading. For browser fallback, run `douyin.cmd install --browser`, then add `--browser-fallback` to the batch command.
 
 Optional authenticated access reads `DOUYIN_*` variables from the environment or local `.env`; values are never printed and the generated runtime configuration is deleted after each run. Downloads are written to `.data/downloads/douyin/`. Only download and reuse content when permitted by platform terms and applicable rights.
+
+## Social publishing with Postiz
+
+TrendRelay integrates the AGPL-3.0-licensed `gitroomhq/postiz-agent` at an exact revision. The isolated provider supports connected social accounts; the TrendRelay adapter currently exposes audited MP4 drafts and schedules for TikTok, Instagram, and YouTube.
+
+Install, authenticate, and discover integration IDs:
+
+```powershell
+postiz.cmd install
+postiz.cmd check
+postiz.cmd auth-login
+postiz.cmd auth-status
+postiz.cmd integrations
+```
+
+OAuth device login is preferred. As an alternative, set `POSTIZ_API_KEY` and optionally `POSTIZ_API_URL` in local `.env` for a self-hosted Postiz instance.
+
+Preview a multi-platform short-video draft without network calls:
+
+```powershell
+postiz.cmd short-video --video .\clip.mp4 --caption "Launch caption" --date "2026-07-20T10:00:00+07:00" --target tiktok=TIKTOK_ID --target instagram=INSTAGRAM_ID --target youtube=YOUTUBE_ID
+```
+
+To create the remote draft, append `--execute --confirm-external-action`. To schedule it, also append `--schedule` and use a future timezone-aware date. TikTok defaults to `SELF_ONLY` upload mode with duet, stitch, and comments off; YouTube defaults to private. Override these settings only intentionally with the documented command flags.
+
+Every execution hashes its media and payload into an operation ID recorded at `.data/postiz/operations.json`. Duplicate and uncertain retries are refused; inspect Postiz before resolving an uncertain operation. Only publish approved media for which you hold the necessary rights.
 
 ## Local-only material
 

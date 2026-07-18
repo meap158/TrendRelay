@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trendrelay.local/schemas/postiz-publication-result.json",
+  "title": "Postiz publication result",
+  "type": "object",
+  "properties": {
+    "operation_id": {"type": "string"},
+    "status": {"enum": ["created", "failed_upload", "uncertain"]},
+    "result": {}
+  },
+  "required": ["operation_id", "status"],
+  "additionalProperties": false
+}
