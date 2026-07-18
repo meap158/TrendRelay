@@ -1,0 +1,17 @@
+{
+  "name": "@trendrelay/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@swc/core": "^1.15.43",
+    "electron": "latest",
+    "electron-vite": "latest",
+    "typescript": "latest"
+  }
+}
