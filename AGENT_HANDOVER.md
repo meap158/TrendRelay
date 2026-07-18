@@ -6,7 +6,7 @@ Last updated: 2026-07-19
 
 - Repository uses a hybrid web/desktop, Python modular-monolith architecture.
 - Next.js web shell, hardened Electron shell, shared TypeScript schemas, plugin contracts, publication states, and a FastAPI health endpoint are scaffolded.
-- `scripts/dev.py` supervises backend and frontend hot-reload processes; `start.cmd --desktop` can include Electron.
+- `scripts/dev.py` supervises backend and frontend hot-reload processes; `start-electron.bat` is the one-click Electron launcher and delegates to `start.cmd --desktop`.
 - The pinned `jiji262/douyin-downloader` 2.0.0 provider is integrated as `media.douyin-downloader` and installed locally at revision `ef3ad18c2b50e38e534f72aabe2b3fbb0b3fadd7`.
 - `douyin.cmd` installs, verifies, and runs single-link or file-based Douyin batches. Downloads, SQLite state, ephemeral configuration, upstream source, dependencies, and credentials remain ignored.
 - The pinned `gitroomhq/postiz-agent` 2.0.15 provider is integrated as `social.postiz-agent` at revision `41c5a9dbd6b2776863e7c05c22e7a385c208321c`.
@@ -39,6 +39,7 @@ Last updated: 2026-07-19
 - The complete project suite passes: 24 tests covering existing scaffolding plus Postiz schema, safe payload defaults, dry-run, confirmation, simulated external calls, cleanup, and idempotency.
 - A three-platform wrapper smoke test produced a draft preview with private/safe defaults and made no provider call.
 - No real social upload or post was initiated because credentials, integration IDs, an approved video, and explicit execution confirmation were not supplied.
+- `start-electron.bat` launcher validation passed through the unified runner with backend, frontend, and desktop services enabled.
 
 ## Next recommended action
 

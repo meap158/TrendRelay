@@ -34,6 +34,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 - `apps/web` — Next.js control surface
 - `apps/desktop` — Electron shell for local media and browser-assisted workflows
 - `scripts/dev.py` — unified hot-reload supervisor for local development
+- `start-electron.bat` — one-click Electron launcher with backend and frontend hot reload
 - `postiz.cmd` — Postiz authentication, integration discovery, and safe short-video publishing entry point
 - `douyin.cmd` — isolated Douyin installation and batch-download entry point
 - `services/api` — Python/FastAPI control plane (modular monolith)
@@ -52,7 +53,7 @@ Prerequisites: Node.js 22+ with npm 10+, and Python 3.12+.
 
 ### Windows — easiest
 
-Double-click `start.cmd`. It validates prerequisites, creates `.venv`, installs both dependency sets, then hands off to the unified runner. Backend and frontend logs stay in one terminal with prefixes, both servers bind to the LAN, and code changes hot reload automatically. Run `start.cmd --desktop` to include the Electron shell.
+Double-click `start.cmd` for the browser app or `start-electron.bat` for the Electron app. Both launchers validate prerequisites, create `.venv`, install both dependency sets, then hand off to the unified runner. Backend, frontend, and Electron logs stay in one terminal with prefixes, servers bind to the LAN, and code changes hot reload automatically. `start.cmd --desktop` is equivalent to the Electron launcher.
 
 ### Command line
 

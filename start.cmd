@@ -42,7 +42,7 @@ echo Checking API dependencies...
 if errorlevel 1 goto :install_error
 
 if /I "%TRENDRELAY_START_CHECK%"=="1" (
-  ".venv\Scripts\python.exe" scripts\dev.py --check
+  ".venv\Scripts\python.exe" scripts\dev.py --check %*
   if errorlevel 1 exit /b 1
   exit /b 0
 )
