@@ -1,0 +1,45 @@
+{
+  "id": "media.douyin-downloader",
+  "name": "Douyin Batch Downloader",
+  "version": "2.0.0+ef3ad18c2b50",
+  "runtime": {
+    "type": "local-process",
+    "entrypoint": "douyin.cmd batch"
+  },
+  "source": {
+    "repository": "https://github.com/jiji262/douyin-downloader",
+    "revision": "ef3ad18c2b50e38e534f72aabe2b3fbb0b3fadd7",
+    "license": "MIT"
+  },
+  "capabilities": [
+    "media.resolve.douyin",
+    "media.download.douyin",
+    "media.download.batch",
+    "media.download.incremental"
+  ],
+  "permissions": {
+    "network": [
+      "*.douyin.com",
+      "*.iesdouyin.com",
+      "*.douyinvod.com",
+      "*.douyinpic.com",
+      "*.byteimg.com",
+      "webcast.amemv.com"
+    ],
+    "secrets": [
+      "DOUYIN_MS_TOKEN",
+      "DOUYIN_TTWID",
+      "DOUYIN_ODIN_TT",
+      "DOUYIN_PASSPORT_CSRF_TOKEN",
+      "DOUYIN_SID_GUARD"
+    ],
+    "storage": {
+      "write": [
+        ".data/downloads/douyin",
+        ".data/douyin"
+      ]
+    }
+  },
+  "input_schema": "./batch-input.schema.json",
+  "output_schema": "./batch-result.schema.json"
+}

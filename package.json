@@ -14,7 +14,8 @@
     "dev:desktop": "npm run dev --workspace=@trendrelay/desktop",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "douyin": "python scripts/douyin.py"
   },
   "engines": {
     "node": ">=22"

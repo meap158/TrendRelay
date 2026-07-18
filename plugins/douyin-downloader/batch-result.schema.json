@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trendrelay.local/schemas/douyin-batch-result.json",
+  "title": "Douyin batch download result",
+  "type": "object",
+  "properties": {
+    "exit_code": {
+      "type": "integer"
+    },
+    "output_directory": {
+      "type": "string"
+    },
+    "database_path": {
+      "type": "string"
+    }
+  },
+  "required": ["exit_code", "output_directory", "database_path"],
+  "additionalProperties": false
+}

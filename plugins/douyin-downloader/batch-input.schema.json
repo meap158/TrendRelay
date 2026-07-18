@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trendrelay.local/schemas/douyin-batch-input.json",
+  "title": "Douyin batch download input",
+  "type": "object",
+  "properties": {
+    "urls": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "modes": {
+      "type": "array",
+      "items": {
+        "enum": ["post", "like", "mix", "music", "collect", "collectmix"]
+      },
+      "default": ["post"]
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 50,
+      "description": "Per-mode item limit; zero means all items."
+    },
+    "threads": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 32,
+      "default": 5
+    },
+    "incremental": {
+      "type": "boolean",
+      "default": false
+    },
+    "output": {
+      "type": "string",
+      "default": ".data/downloads/douyin"
+    }
+  },
+  "required": ["urls"],
+  "additionalProperties": false
+}
