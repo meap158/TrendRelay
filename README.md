@@ -96,6 +96,10 @@ Run `npm run db -- upgrade` to apply the current migration. Local development de
 
 Authenticated endpoints under `/api/workspaces` create and list workspaces, manage owner/editor/approver/analyst membership, issue and revoke expiring email-bound invitations, register secret references, and read the workspace audit trail. Invitation tokens are returned once, stored only as SHA-256 digests, and accepted only by a signed-in account with the invited email. The UI generates a copyable link; automated transactional-email delivery still requires an approved provider. Secret-reference requests accept only approved secret-store locators; raw credentials are never accepted. Mutations and their audit records commit in one database transaction.
 
+## Durable execution
+
+Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Last30Days and OpenMontage still need their next adapter migration before their legacy JSON stores can be removed.
+
 ## Managed open-source tools
 
 Every incorporated GitHub repository is documented in [the third-party catalog](./docs/third-party/README.md) and pinned in `config/tool-catalog.json`. The About & Tools page shows its repository, revision, license posture, capabilities, installation state, and activation state. Source and runtime state stay ignored under `.tools/` and `.data/`.
