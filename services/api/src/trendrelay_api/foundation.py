@@ -147,6 +147,27 @@ def create_workspace(
     return {"workspace": serialize_workspace(workspace, "owner")}
 
 
+@router.get("/workspaces/{workspace_id}/members")
+def list_members(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    membership(session, workspace_id, user.id)
+    rows = session.execute(
+        select(WorkspaceMember, UserProfile.email)
+        .join(UserProfile, UserProfile.id == WorkspaceMember.user_id)
+        .where(WorkspaceMember.workspace_id == workspace_id)
+        .order_by(WorkspaceMember.created_at)
+    ).all()
+    return {
+        "members": [
+            {"id": item.id, "user_id": item.user_id, "email": email, "role": item.role}
+            for item, email in rows
+        ]
+    }
+
+
 @router.post("/workspaces/{workspace_id}/members", status_code=201)
 def add_member(
     workspace_id: str,
@@ -182,6 +203,26 @@ def add_member(
     return {"member": {"id": member.id, "user_id": member.user_id, "role": member.role}}
 
 
+@router.get("/workspaces/{workspace_id}/secret-references")
+def list_secret_references(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    require_role(membership(session, workspace_id, user.id), {"owner"})
+    items = session.scalars(
+        select(SecretReference)
+        .where(SecretReference.workspace_id == workspace_id)
+        .order_by(SecretReference.created_at)
+    ).all()
+    return {
+        "secret_references": [
+            {"id": item.id, "provider": item.provider, "name": item.name, "locator": item.locator}
+            for item in items
+        ]
+    }
+
+
 @router.post("/workspaces/{workspace_id}/secret-references", status_code=201)
 def create_secret_reference(
     workspace_id: str,
@@ -191,6 +232,14 @@ def create_secret_reference(
     session: DatabaseSession,
 ) -> dict[str, Any]:
     require_role(membership(session, workspace_id, user.id), {"owner"})
+    if session.scalar(
+        select(SecretReference).where(
+            SecretReference.workspace_id == workspace_id,
+            SecretReference.provider == body.provider,
+            SecretReference.name == body.name,
+        )
+    ):
+        raise HTTPException(status_code=409, detail="Secret reference already exists.")
     item = SecretReference(
         workspace_id=workspace_id,
         provider=body.provider,

@@ -10,8 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.8",
     "@trendrelay/schemas": "*",
-    "next": "latest",
+    "next": "^16.2.11",
     "react": "latest",
     "react-dom": "latest"
   },

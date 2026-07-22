@@ -68,3 +68,46 @@ nav strong { color: #ecf7f1; }
 .diagnostic-channels .ready { border-color: #3c956d; color: #62e6a6; }
 .diagnostic-channels .setup-required { border-color: #9a7b36; color: #f2ca70; }
 .diagnostic-channels .unavailable { color: #91a69d; }
+.auth-page, .workspace-page { padding-top: 6vh; }
+.auth-shell { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr); gap: 48px; align-items: start; }
+.auth-intro h1 { font-size: clamp(3rem, 6vw, 6rem); }
+.auth-intro > p:last-child, .setup-card > p, .workspace-heading > p, .management-card > p, .empty-panel p { color: #aac2b7; line-height: 1.6; }
+.auth-card, .setup-card, .management-card, .audit-panel, .workspace-sidebar, .empty-panel { padding: 26px; border: 1px solid #274138; border-radius: 18px; background: rgba(11, 24, 19, 0.94); }
+.setup-card { max-width: 760px; }
+.setup-card h1 { font-size: clamp(2.5rem, 6vw, 5rem); }
+.setup-card code { color: #62e6a6; }
+.auth-card { display: grid; gap: 18px; }
+.compact-auth { max-width: 620px; margin: 0 auto; }
+.compact-auth h1 { font-size: clamp(2.5rem, 6vw, 5rem); }
+.auth-card label, .stack-form label { display: grid; gap: 7px; color: #aac2b7; font-size: 0.76rem; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; }
+.auth-card input, .stack-form input, .stack-form select { width: 100%; min-height: 44px; border: 1px solid #355247; border-radius: 8px; padding: 9px 11px; background: #07110e; color: #ecf7f1; font: inherit; }
+.auth-card button, .stack-form button, .nav-action, .primary-link { min-height: 42px; border: 1px solid #3b5c50; border-radius: 8px; padding: 9px 12px; background: transparent; color: #ecf7f1; font: inherit; text-decoration: none; cursor: pointer; }
+.auth-card button:disabled, .stack-form button:disabled { cursor: wait; opacity: 0.55; }
+.auth-card .primary-action, .stack-form > button, .primary-link { border-color: #62e6a6; background: #62e6a6; color: #07110e; font-weight: 800; }
+.mode-switch, .auth-alternatives { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.mode-switch button.selected { border-color: #62e6a6; color: #62e6a6; }
+.auth-alternatives { grid-template-columns: 1fr; }
+.form-message { padding: 11px 14px; border-left: 3px solid #62e6a6; background: rgba(98, 230, 166, 0.08); color: #b7f5d5; }
+.nav-action { margin-left: auto; min-height: 34px; padding: 6px 10px; }
+.workspace-heading { display: flex; justify-content: space-between; gap: 30px; align-items: end; margin-bottom: 42px; }
+.workspace-heading h1 { max-width: 760px; font-size: clamp(3rem, 7vw, 6rem); }
+.workspace-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 20px; align-items: start; }
+.workspace-sidebar { display: grid; gap: 10px; position: sticky; top: 20px; }
+.workspace-sidebar > h2 { margin: 0 0 8px; }
+.workspace-sidebar > button { display: flex; justify-content: space-between; gap: 8px; border: 1px solid #274138; border-radius: 9px; padding: 12px; background: #07110e; color: #ecf7f1; text-align: left; cursor: pointer; }
+.workspace-sidebar > button span, .workspace-title span, .record-list span { color: #62e6a6; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+.workspace-sidebar > button.selected { border-color: #62e6a6; }
+.stack-form { display: grid; gap: 12px; margin-top: 22px; padding-top: 20px; border-top: 1px solid #274138; }
+.stack-form h3 { margin: 0; }
+.workspace-content { display: grid; gap: 18px; }
+.workspace-title { padding: 8px 4px; }
+.workspace-title h2 { margin: 6px 0; font-size: 2.4rem; }
+.workspace-title p { margin: 0; color: #759589; font: 0.72rem ui-monospace, monospace; }
+.management-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.management-card h3, .audit-panel h3 { margin-top: 0; font-size: 1.35rem; }
+.record-list, .audit-list { display: grid; gap: 1px; background: #274138; }
+.record-list > div, .audit-list > div { display: grid; gap: 5px; padding: 12px; background: #0b1813; }
+.record-list small { overflow-wrap: anywhere; color: #759589; }
+.audit-list > div { grid-template-columns: 145px minmax(160px, 0.7fr) 1fr; align-items: center; }
+.audit-list time, .audit-list span { color: #759589; font-size: 0.76rem; }
+@media (max-width: 820px) { .auth-shell, .workspace-layout, .management-grid { grid-template-columns: 1fr; } .workspace-sidebar { position: static; } .workspace-heading { display: block; } .audit-list > div { grid-template-columns: 1fr; } }

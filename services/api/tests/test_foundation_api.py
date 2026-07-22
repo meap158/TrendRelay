@@ -63,6 +63,8 @@ def test_workspace_owner_members_secret_references_and_audit() -> None:
         )
     )
     assert member.status_code == 201
+    listed_members = asyncio.run(request("GET", f"/api/workspaces/{workspace['id']}/members"))
+    assert {item["role"] for item in listed_members.json()["members"]} == {"owner", "analyst"}
 
     secret = asyncio.run(
         request(
@@ -77,6 +79,23 @@ def test_workspace_owner_members_secret_references_and_audit() -> None:
     )
     assert secret.status_code == 201
     assert "value" not in secret.json()["secret_reference"]
+    listed_secrets = asyncio.run(
+        request("GET", f"/api/workspaces/{workspace['id']}/secret-references")
+    )
+    assert listed_secrets.json()["secret_references"][0]["name"] == "POSTIZ_API_KEY"
+
+    duplicate = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/secret-references",
+            json={
+                "provider": "postiz",
+                "name": "POSTIZ_API_KEY",
+                "locator": "os-keyring://trendrelay/postiz/editorial",
+            },
+        )
+    )
+    assert duplicate.status_code == 409
 
     audit = asyncio.run(request("GET", f"/api/workspaces/{workspace['id']}/audit-events"))
     assert audit.status_code == 200

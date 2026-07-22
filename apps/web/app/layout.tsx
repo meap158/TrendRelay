@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./styles.css";
+import { AuthProvider } from "./auth-provider";
 
 export const metadata: Metadata = {
   title: "TrendRelay",
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><body><AuthProvider>{children}</AuthProvider></body></html>;
 }

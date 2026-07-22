@@ -17,7 +17,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 | Web | Next.js, React, TypeScript |
 | Desktop | Electron and electron-vite with a hardened renderer boundary |
 | Control plane | Python, FastAPI, Uvicorn, Pydantic |
-| Authentication | Supabase Auth bearer tokens with asymmetric JWKS verification |
+| Authentication | Supabase Auth browser PKCE flows and API-side asymmetric JWKS verification |
 | Shared contracts | TypeScript schemas and Pydantic models |
 | Data | SQLAlchemy and Alembic; SQLite locally, PostgreSQL with pgvector for shared/production use |
 | Cache and coordination | Redis |
@@ -73,7 +73,20 @@ npm install
 
 Initialize or update the local database with `npm run db -- upgrade`. API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/research` for Trend Radar, or `http://localhost:3000/tools` to inspect every incorporated project and manage local installation/activation.
 
-The first product vertical slice now has a database-backed API foundation for Supabase authentication, workspaces/roles, append-only audit events, secret references, and the plugin registry. The browser sign-in and workspace management UI remain to be built.
+The first product vertical slice now includes database-backed Supabase authentication, workspace and role management, append-only audit events, secret references, and the governed plugin registry.
+
+## Browser authentication
+
+Configure the same Supabase project on both sides of the application:
+
+```dotenv
+SUPABASE_URL=https://PROJECT.supabase.co
+AUTH_AUDIENCE=authenticated
+NEXT_PUBLIC_SUPABASE_URL=https://PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+```
+
+Then open `/sign-in`. The browser supports email/password sign-in and account creation, verification redirects, magic links, Google OAuth, password recovery, and global sign-out. Authenticated workspace screens are at `/workspaces`. Renderer components receive an authorized API helper rather than raw tokens; the Python API still verifies every request independently. Google OAuth launched from Electron is handed to the system browser. Secure device pairing back into Electron remains a separate pending capability.
 
 ## Authenticated workspace foundation
 
