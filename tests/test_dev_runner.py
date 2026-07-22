@@ -78,3 +78,13 @@ def test_wait_until_healthy_retries_until_service_is_ready(monkeypatch) -> None:
     monkeypatch.setattr(dev.time, "sleep", lambda _seconds: None)
 
     assert dev.wait_until_healthy(backend) is True
+
+
+def test_windows_launcher_applies_migrations_before_starting() -> None:
+    launcher = (Path(__file__).resolve().parents[1] / "start.cmd").read_text(
+        encoding="utf-8"
+    )
+
+    migration = launcher.index("scripts\\db.py upgrade")
+    runner = launcher.index("scripts\\dev.py %*")
+    assert migration < runner

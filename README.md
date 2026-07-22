@@ -17,8 +17,9 @@ The first usable release prioritizes reliable research, media handling, publishi
 | Web | Next.js, React, TypeScript |
 | Desktop | Electron and electron-vite with a hardened renderer boundary |
 | Control plane | Python, FastAPI, Uvicorn, Pydantic |
+| Authentication | Supabase Auth bearer tokens with asymmetric JWKS verification |
 | Shared contracts | TypeScript schemas and Pydantic models |
-| Data | PostgreSQL with pgvector |
+| Data | SQLAlchemy and Alembic; SQLite locally, PostgreSQL with pgvector for shared/production use |
 | Cache and coordination | Redis |
 | Object storage | S3-compatible managed or local storage |
 | Durable workflows | Temporal Python SDK (planned in the foundation slice) |
@@ -42,7 +43,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 - `config/tool-catalog.json` — machine-readable registry of every incorporated GitHub project
 - `start.cmd` — one-click browser-app launcher with dependency bootstrap and hot reload
 - `start-electron.bat` — one-click Electron launcher with backend and frontend hot reload
-- `services/api` — Python/FastAPI control plane (modular monolith)
+- `services/api` — Python/FastAPI control plane (modular monolith), SQLAlchemy models, and Alembic migrations
 - `services/link-router` — first-party attribution redirect boundary
 - `workers` — isolated trend, media, AI, and publishing runtimes
 - `packages` — shared UI, schemas, TypeScript SDK, and workflow definitions
@@ -58,7 +59,7 @@ Prerequisites: Node.js 22+ with npm 10+, and Python 3.12+.
 
 ### Windows — easiest
 
-Double-click `start.cmd` for the browser app or `start-electron.bat` for the Electron app. These are the only Windows launcher files. Both validate prerequisites, create `.venv`, install dependencies, and hand off to the unified runner. Desktop startup also repairs a missing Electron runtime automatically. Healthy backend or frontend processes are reused, preventing duplicate Next.js server failures. Logs stay in one terminal with prefixes, servers bind to the LAN, and code changes hot reload automatically.
+Double-click `start.cmd` for the browser app or `start-electron.bat` for the Electron app. These are the only Windows launcher files. Both validate prerequisites, create `.venv`, install dependencies, apply database migrations, and hand off to the unified runner. Desktop startup also repairs a missing Electron runtime automatically. Healthy backend or frontend processes are reused, preventing duplicate Next.js server failures. Logs stay in one terminal with prefixes, servers bind to the LAN, and code changes hot reload automatically.
 
 ### Command line
 
@@ -70,9 +71,15 @@ npm install
 # Add --desktop to also launch Electron.
 ```
 
-API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/research` for Trend Radar, or `http://localhost:3000/tools` to inspect every incorporated project and manage local installation/activation.
+Initialize or update the local database with `npm run db -- upgrade`. API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/research` for Trend Radar, or `http://localhost:3000/tools` to inspect every incorporated project and manage local installation/activation.
 
-The first product vertical slice is authentication, workspaces/roles, audit logging, secret references, and the plugin registry.
+The first product vertical slice now has a database-backed API foundation for Supabase authentication, workspaces/roles, append-only audit events, secret references, and the plugin registry. The browser sign-in and workspace management UI remain to be built.
+
+## Authenticated workspace foundation
+
+Run `npm run db -- upgrade` to apply the current migration. Local development defaults to ignored `.data/trendrelay.db`; set `DATABASE_URL` to PostgreSQL for shared or production environments. Configure `SUPABASE_URL` and `AUTH_AUDIENCE` in local `.env` to enable bearer-token verification through Supabase's asymmetric JWKS endpoint.
+
+Authenticated endpoints under `/api/workspaces` create and list workspaces, add owner-managed members with owner/editor/approver/analyst roles, register secret references, and read the workspace audit trail. Secret-reference requests accept only approved secret-store locators; raw credentials are never accepted. Mutations and their audit records commit in one database transaction.
 
 ## Managed open-source tools
 

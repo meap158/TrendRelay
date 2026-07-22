@@ -54,6 +54,12 @@ if "%TRENDRELAY_CHECK_REQUESTED%"=="0" (
   if errorlevel 1 goto :install_error
 )
 
+if "%TRENDRELAY_CHECK_REQUESTED%"=="0" (
+  echo Applying database migrations...
+  ".venv\Scripts\python.exe" scripts\db.py upgrade
+  if errorlevel 1 goto :install_error
+)
+
 if /I "%TRENDRELAY_START_CHECK%"=="1" (
   ".venv\Scripts\python.exe" scripts\dev.py --check %*
   if errorlevel 1 exit /b 1

@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "python scripts/dev.py",
     "dev:check": "python scripts/dev.py --check",
+    "db": "python scripts/db.py",
     "dev:web": "npm run dev --workspace=@trendrelay/web",
     "dev:desktop": "npm run dev --workspace=@trendrelay/desktop",
     "build": "npm run build --workspaces --if-present",
