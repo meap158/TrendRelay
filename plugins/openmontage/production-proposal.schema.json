@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["id", "workspace_id", "title", "status", "provider", "source", "plan", "execution"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^production_[a-f0-9]{16}$"},
+    "workspace_id": {"type": "string"},
+    "title": {"type": "string"},
+    "status": {"enum": ["awaiting_approval", "approved"]},
+    "provider": {"type": "object"},
+    "source": {"type": "object"},
+    "plan": {"type": "object"},
+    "execution": {"type": "object"}
+  }
+}

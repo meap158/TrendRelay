@@ -1,0 +1,26 @@
+{
+  "id": "video.openmontage-preflight",
+  "name": "OpenMontage Production Preflight",
+  "version": "af87fc133725",
+  "runtime": {
+    "type": "local-process",
+    "entrypoint": "npm run studio -- propose"
+  },
+  "source": {
+    "repository": "https://github.com/calesthio/OpenMontage",
+    "revision": "af87fc1337254ec1978e6333b5acbbb5ffb9a3d0",
+    "license": "AGPL-3.0"
+  },
+  "capabilities": ["video.production.preflight", "video.production.approval"],
+  "permissions": {
+    "network": [],
+    "secrets": [],
+    "storage": {
+      "read": ["user-confirmed source media"],
+      "write": [".data/productions/openmontage"]
+    }
+  },
+  "requires_confirmation": ["video.production.preflight", "video.production.approval"],
+  "input_schema": "./production-input.schema.json",
+  "output_schema": "./production-proposal.schema.json"
+}

@@ -26,6 +26,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 | Media download provider | Pinned `jiji262/douyin-downloader` integration |
 | Social publishing provider | Pinned `gitroomhq/postiz-agent` integration |
 | Trend research provider | Pinned `mvanhorn/last30days-skill` 3.16.0 adapter |
+| Video production preflight | Pinned `calesthio/OpenMontage` manifests with rights, budget, and approval gates |
 | Tool governance | FastAPI lifecycle API, pinned JSON catalog, and Next.js About & Tools page |
 | AI workers | Python provider adapters and ComfyUI connectors (planned) |
 | Local development | npm workspaces and a Python virtual environment |
@@ -136,6 +137,21 @@ The default limit is 50 items per selected profile mode; use `--limit 0` only fo
 
 Optional authenticated access reads `DOUYIN_*` variables from the environment or local `.env`; values are never printed and the generated runtime configuration is deleted after each run. Downloads are written to `.data/downloads/douyin/`. Only download and reuse content when permitted by platform terms and applicable rights.
 
+## OpenMontage production preflight
+
+TrendRelay uses the pinned AGPL-3.0 OpenMontage source for guarded short-form production planning. The adapter currently exposes its `clip-factory` and `podcast-repurpose` manifests without installing provider dependencies or making network calls.
+
+Inspect available pipelines, then create a confirmed proposal from media you own or are licensed to use:
+
+```powershell
+npm run tools -- install openmontage --confirm-external-action
+npm run tools -- activate openmontage
+npm run studio -- pipelines
+npm run studio -- propose "Three launch clips" --source .\source.mp4 --rights owned --pipeline clip-factory --platform tiktok --clips 3 --budget 1 --confirm-external-action
+npm run studio -- approve PRODUCTION_ID --approved-by WORKSPACE_OWNER --confirm-external-action
+```
+
+Preflight hashes the immutable source file, records its rights basis and size, captures the exact upstream revision and approval gates, and enforces a budget cap. Approval does not render video, call a paid provider, or enable execution. Runtime production remains blocked until dependency isolation, provider-specific authorization, cost reconciliation, output provenance, and AGPL obligations are implemented.
 ## Social publishing with Postiz
 
 TrendRelay integrates the AGPL-3.0-licensed `gitroomhq/postiz-agent` at an exact revision. The isolated provider supports connected social accounts; the TrendRelay adapter currently exposes audited MP4 drafts and schedules for TikTok, Instagram, and YouTube.

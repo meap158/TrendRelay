@@ -91,7 +91,7 @@
                                            "Clip repurposing",
                                            "Remotion composition"
                                        ],
-                      "integration_status":  "source-ready",
+                      "integration_status":  "preflight-ready",
                       "commercial_use":  "conditional",
                       "install_strategy":  "source-checkout",
                       "install_allowed":  true,
