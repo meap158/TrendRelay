@@ -9,17 +9,26 @@ import re
 import subprocess
 import sys
 from datetime import UTC, datetime
-from pathlib import Path
+from secrets import token_hex
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from trendrelay_api.database import SessionFactory
+from trendrelay_api.jobs import (
+    claim_job,
+    complete_job,
+    create_job_record,
+    fail_job,
+    get_job_record,
+    list_job_records,
+)
 from trendrelay_api.tool_registry import PROJECT_ROOT, list_tools
 
 TOOL_ID = "last30days-skill"
+JOB_SESSION_FACTORY = SessionFactory
 TOOL_ROOT = PROJECT_ROOT / ".tools" / "catalog" / TOOL_ID / "source"
 ENGINE = TOOL_ROOT / "skills" / "last30days" / "scripts" / "last30days.py"
-JOBS_ROOT = PROJECT_ROOT / ".data" / "research" / "last30days"
 SOURCE_TYPES = {
     "reddit": "community",
     "x": "social",
@@ -105,20 +114,6 @@ def _now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
-def _job_path(job_id: str) -> Path:
-    if not re.fullmatch(r"research_[a-f0-9]{16}", job_id):
-        raise ValueError("Invalid research job identifier")
-    return JOBS_ROOT / f"{job_id}.json"
-
-
-def _write_job(job: dict[str, Any]) -> None:
-    path = _job_path(job["id"])
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(job, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    temporary.replace(path)
-
-
 def provider_status() -> dict[str, Any]:
     tool = next(item for item in list_tools() if item["id"] == TOOL_ID)
     return {
@@ -175,7 +170,14 @@ def create_job(request: ResearchRequest) -> dict[str, Any]:
         "source_status": {},
         "error": None,
     }
-    _write_job(job)
+    create_job_record(
+        job_id,
+        request.workspace_id,
+        "trend_research",
+        job,
+        max_attempts=3,
+        factory=JOB_SESSION_FACTORY,
+    )
     return job
 
 
@@ -208,18 +210,38 @@ def _observations(payload: dict[str, Any], request: ResearchRequest) -> list[dic
     return observations
 
 
-def run_job(job_id: str, request: ResearchRequest) -> None:
-    job = get_job(job_id)
-    job.update(status="running", updated_at=_now())
-    _write_job(job)
+def _job_view(record: dict[str, Any]) -> dict[str, Any]:
+    if record["result"]:
+        return dict(record["result"])
+    job = dict(record["payload"])
+    job.update(
+        status=record["status"],
+        updated_at=(record["updated_at"].isoformat().replace("+00:00", "Z")),
+        error=record["error"],
+        attempt_count=record["attempt_count"],
+        max_attempts=record["max_attempts"],
+    )
+    return job
+
+
+def run_job(job_id: str, _request: ResearchRequest | None = None) -> None:
+    worker_id = f"last30days-{os.getpid()}-{token_hex(4)}"
+    try:
+        record = claim_job(
+            job_id, worker_id, lease_seconds=660, factory=JOB_SESSION_FACTORY
+        )
+    except (FileNotFoundError, PermissionError):
+        return
+    stored_request = ResearchRequest.model_validate(record["payload"]["request"])
+    job = _job_view(record)
     try:
         status = provider_status()
         if not status["installed"] or not status["engine_present"]:
             raise RuntimeError("Install the pinned Last 30 Days tool before running research.")
-        if not status["active"] and not request.mock:
+        if not status["active"] and not stored_request.mock:
             raise RuntimeError("Activate Last 30 Days before running live research.")
         result = subprocess.run(
-            build_command(request),
+            build_command(stored_request),
             cwd=TOOL_ROOT,
             env=scoped_environment(),
             text=True,
@@ -248,30 +270,30 @@ def run_job(job_id: str, request: ResearchRequest) -> None:
             window_days=payload.get("window_days"),
             source_status=payload.get("source_status", {}),
             clusters=payload.get("clusters", []),
-            observations=_observations(payload, request),
+            observations=_observations(payload, stored_request),
             error=None,
         )
+        complete_job(job_id, worker_id, job, factory=JOB_SESSION_FACTORY)
     except Exception as error:
-        job.update(status="failed", updated_at=_now(), completed_at=_now(), error=str(error))
-    _write_job(job)
+        fail_job(
+            job_id,
+            worker_id,
+            str(error),
+            retry_delay_seconds=30,
+            factory=JOB_SESSION_FACTORY,
+        )
 
 
 def get_job(job_id: str) -> dict[str, Any]:
-    path = _job_path(job_id)
-    if not path.is_file():
-        raise FileNotFoundError(job_id)
-    return json.loads(path.read_text(encoding="utf-8"))
+    if not re.fullmatch(r"research_[a-f0-9]{16}", job_id):
+        raise ValueError("Invalid research job identifier")
+    return _job_view(get_job_record(job_id, factory=JOB_SESSION_FACTORY))
 
 
 def list_jobs(workspace_id: str = "local", limit: int = 20) -> list[dict[str, Any]]:
-    if not JOBS_ROOT.is_dir():
-        return []
-    jobs = []
-    for path in JOBS_ROOT.glob("research_*.json"):
-        try:
-            job = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if job.get("workspace_id") == workspace_id:
-            jobs.append(job)
-    return sorted(jobs, key=lambda item: item.get("created_at", ""), reverse=True)[:limit]
+    return [
+        _job_view(record)
+        for record in list_job_records(
+            workspace_id, "trend_research", limit, factory=JOB_SESSION_FACTORY
+        )
+    ]

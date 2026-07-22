@@ -8,4 +8,4 @@ Expired running leases are claimable again, making interrupted work recoverable 
 
 ## Consequences
 
-Provider adapters can move off local JSON without coupling their domain result schemas to queue mechanics. Each adapter still needs an idempotent worker and explicit migration before its old file store is removed. External side effects must use provider idempotency keys derived from the durable job ID.
+Provider adapters can move off local JSON without coupling their domain result schemas to queue mechanics. Last30Days is migrated to this store. OpenMontage still needs an idempotent worker and explicit migration before its old file store is removed. External side effects must use provider idempotency keys derived from the durable job ID.

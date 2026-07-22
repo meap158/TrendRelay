@@ -1,10 +1,12 @@
 import json
-from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
-
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 from trendrelay_api.integrations import last30days
+from trendrelay_api.models import Base
 
 
 def test_scoped_environment_excludes_unrelated_secrets(monkeypatch) -> None:
@@ -34,9 +36,7 @@ def test_build_command_uses_stable_agent_contract() -> None:
     assert command[-3:] == ["--search", "reddit,youtube", "--quick"]
 
 
-def test_mock_job_ingests_workspace_scoped_evidence(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_mock_job_ingests_workspace_scoped_evidence(monkeypatch) -> None:
     payload = {
         "schema_version": "1.2",
         "generated_at": "2026-07-22T00:00:00Z",
@@ -61,7 +61,15 @@ def test_mock_job_ingests_workspace_scoped_evidence(
         stdout = json.dumps(payload)
         stderr = ""
 
-    monkeypatch.setattr(last30days, "JOBS_ROOT", tmp_path)
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+    monkeypatch.setattr(
+        last30days,
+        "JOB_SESSION_FACTORY",
+        sessionmaker(bind=engine, expire_on_commit=False),
+    )
     monkeypatch.setattr(
         last30days,
         "provider_status",
@@ -101,6 +109,6 @@ def test_request_rejects_blank_topics_and_non_ascii_identifiers() -> None:
         last30days.ResearchRequest(topic="valid topic", sources=["reddit/../x"])
 
 
-def test_job_path_rejects_non_hex_identifiers() -> None:
+def test_job_lookup_rejects_non_hex_identifiers() -> None:
     with pytest.raises(ValueError):
         last30days.get_job("research_not-a-job")

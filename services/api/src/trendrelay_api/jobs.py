@@ -97,6 +97,38 @@ def list_job_records(
         return [serialize_job(item) for item in items]
 
 
+def claim_job(
+    job_id: str,
+    worker_id: str,
+    *,
+    lease_seconds: int = 120,
+    factory: SessionMaker = SessionFactory,
+) -> dict[str, Any]:
+    timestamp = now_utc()
+    with factory.begin() as session:
+        item = session.get(DurableJob, job_id)
+        if not item:
+            raise FileNotFoundError(job_id)
+        lease_expired = (
+            item.status == "running"
+            and item.lease_expires_at is not None
+            and as_utc(item.lease_expires_at) <= timestamp
+        )
+        ready = item.status == "queued" and as_utc(item.available_at) <= timestamp
+        if item.cancellation_requested or item.attempt_count >= item.max_attempts:
+            raise PermissionError("Job cannot be claimed.")
+        if not ready and not lease_expired:
+            raise PermissionError("Job is not available for claim.")
+        item.status = "running"
+        item.attempt_count += 1
+        item.lease_owner = worker_id
+        item.lease_expires_at = timestamp + timedelta(seconds=lease_seconds)
+        item.started_at = item.started_at or timestamp
+        item.updated_at = timestamp
+        session.flush()
+        return serialize_job(item)
+
+
 def claim_next_job(
     kind: str,
     worker_id: str,

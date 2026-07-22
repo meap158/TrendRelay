@@ -98,7 +98,7 @@ Authenticated endpoints under `/api/workspaces` create and list workspaces, mana
 
 ## Durable execution
 
-Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Last30Days and OpenMontage still need their next adapter migration before their legacy JSON stores can be removed.
+Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Last30Days now uses this durable queue exclusively. OpenMontage still needs its adapter migration before the remaining production JSON store can be removed.
 
 ## Managed open-source tools
 
@@ -118,7 +118,7 @@ Installation fetches an exact reviewed revision; activation separately makes it 
 
 ## Trend Radar research
 
-TrendRelay integrates the MIT-licensed `mvanhorn/last30days-skill` at its exact pinned revision. The adapter uses the stable agent JSON 1.x contract, disables browser-cookie extraction, passes only allowlisted research credentials, and persists normalized workspace evidence under `.data/research/last30days/`.
+TrendRelay integrates the MIT-licensed `mvanhorn/last30days-skill` at its exact pinned revision. The adapter uses the stable agent JSON 1.x contract, disables browser-cookie extraction, passes only allowlisted research credentials, and persists normalized workspace evidence and execution state in the SQL durable-job store.
 
 Install and activate the provider from About & Tools or the CLI:
 
