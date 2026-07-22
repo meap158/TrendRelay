@@ -98,7 +98,7 @@ Authenticated endpoints under `/api/workspaces` create and list workspaces, mana
 
 ## Durable execution
 
-Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Last30Days research and OpenMontage preflight proposals now use this durable queue exclusively; neither adapter writes legacy JSON state. Approved OpenMontage preflights complete the queue record while their domain payload continues to keep rendering disabled. The supervised research worker polls recoverable jobs, retries eligible failures, and reclaims expired leases after process restarts; `python scripts/worker.py --once` provides a deterministic operational drain.
+Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Last30Days research, OpenMontage preflight proposals, and Postiz publishing operations use this durable queue. The research and production adapters write no legacy JSON state. Approved OpenMontage preflights complete the queue record while their domain payload continues to keep rendering disabled. The supervised durable worker polls recoverable jobs, retries eligible research failures, processes publishing operations once, and reclaims expired leases after process restarts; `python scripts/worker.py --once` provides a deterministic operational drain.
 
 ## Managed open-source tools
 
@@ -196,7 +196,7 @@ npm run reach -- channels
 The About & Tools page also provides a Diagnose action. Diagnostics only inspect local file, package, executable, and configured secret-name presence. They do not execute discovered commands, probe the network, read Agent Reach user configuration, inspect browser sessions, or expose secret values. A ready result is a local prerequisite signal, not proof that a live or authenticated platform request will succeed. The upstream system installer, MCP/skill mutations, and cookie import remain disabled.
 ## Social publishing with Postiz
 
-TrendRelay integrates the AGPL-3.0-licensed `gitroomhq/postiz-agent` at an exact revision. The isolated provider supports connected social accounts; the TrendRelay adapter currently exposes audited MP4 drafts and schedules for TikTok, Instagram, and YouTube.
+TrendRelay integrates the AGPL-3.0-licensed `gitroomhq/postiz-agent` at an exact revision. The isolated provider supports connected social accounts; the TrendRelay adapter exposes audited MP4 drafts and schedules for TikTok, Instagram, and YouTube. Authenticated users work at `/publish`: editors can create dry-run previews, while owners and approvers can discover integrations and explicitly submit remote operations. Submitted work is workspace-scoped in the SQL durable queue and can continue in the supervised worker after an API restart.
 
 Install, authenticate, and discover integration IDs:
 
@@ -213,12 +213,12 @@ OAuth device login is preferred. As an alternative, set `POSTIZ_API_KEY` and opt
 Preview a multi-platform short-video draft without network calls:
 
 ```powershell
-npm run postiz -- short-video --video .\clip.mp4 --caption "Launch caption" --date "2026-07-20T10:00:00+07:00" --target tiktok=TIKTOK_ID --target instagram=INSTAGRAM_ID --target youtube=YOUTUBE_ID
+npm run postiz -- short-video --video .\.data\media\approved-clip.mp4 --caption "Launch caption" --date "2026-07-20T10:00:00+07:00" --target tiktok=TIKTOK_ID --target instagram=INSTAGRAM_ID --target youtube=YOUTUBE_ID
 ```
 
 To create the remote draft, append `--execute --confirm-external-action`. To schedule it, also append `--schedule` and use a future timezone-aware date. TikTok defaults to `SELF_ONLY` upload mode with duet, stitch, and comments off; YouTube defaults to private. Override these settings only intentionally with the documented command flags.
 
-Every execution hashes its media and payload into an operation ID recorded at `.data/postiz/operations.json`. Duplicate and uncertain retries are refused; inspect Postiz before resolving an uncertain operation. Only publish approved media for which you hold the necessary rights.
+The API accepts existing MP4 files only from `PUBLISHING_MEDIA_ROOTS`, which defaults to `.data/downloads`, `.data/media`, and `.data/productions`. Every execution hashes its media and payload into an operation ID recorded at `.data/postiz/operations.json`. Durable publishing jobs have a one-attempt retry budget because a provider timeout can leave an uncertain remote outcome. Duplicate and uncertain retries are refused; inspect Postiz before resolving an uncertain operation. Only publish approved media for which you hold the necessary rights.
 
 ## Local-only material
 

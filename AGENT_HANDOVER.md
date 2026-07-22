@@ -23,7 +23,7 @@ Last updated: 2026-07-22
 - SQLAlchemy 2 models and Alembic migrations through `20260722_0004` provide user profiles, workspaces, four roles, expiring invitations, device pairings, secret references, and transactional audit events. SQLite is the easy local default; PostgreSQL is the shared/production target.
 - The API verifies Supabase asymmetric JWTs through JWKS plus distinct TrendRelay device JWTs; both require issuer, audience, expiry, and subject claims. `/sign-in` implements password sign-in/sign-up, verification redirects, magic links, Google OAuth, password recovery, and global sign-out.
 - `/workspaces` lists and creates workspaces, displays members and audit events, and gives owners controls for membership, expiring email-bound invite links, and secret references. Automated transactional-email delivery and optional 2FA remain pending.
-- Temporal setup and the publishing UI do not exist yet. A supervised hot-reload SQL worker now provides local durable retry and expired-lease recovery. Last30Days research and OpenMontage preflight proposals now use the leased SQL job store exclusively; no research or production JSON adapter remains.
+- `/publish` provides authenticated Postiz integration discovery, dry-run previews, and governed TikTok/Instagram/YouTube submission. Publishing joins Last30Days research and OpenMontage preflights in the leased SQL job store and supervised hot-reload worker; no research or production JSON adapter remains. Temporal setup does not exist and remains an optional multi-host evaluation.
 
 ## Decisions in force
 
@@ -31,7 +31,7 @@ Last updated: 2026-07-22
 - Python/FastAPI is the control-plane runtime; Python also powers compute-heavy workers.
 - Provider source remains isolated under `.tools/`; core modules depend only on capability contracts.
 - Supabase access tokens are verified with asymmetric JWKS only. Workspace authorization is membership-and-role based; no service credential is exposed to the web or Electron renderer.
-- Browser components receive an authorized-fetch capability rather than token values. OAuth started in Electron is opened in the system browser; pairing the resulting identity back to Electron remains intentionally disabled until a signed device flow exists.
+- Browser components receive an authorized-fetch capability rather than token values. OAuth started in Electron opens in the system browser; the signed one-time device authorization flow pairs the approved identity back to Electron, whose main process encrypts the distinct device token with operating-system `safeStorage`.
 - Secret records store approved locators only and reject raw values. Governed mutations append audit events in the same transaction.
 - Live trend research requires explicit external-action confirmation. Browser-cookie extraction is disabled and the adapter passes only allowlisted research secrets to Last 30 Days.
 - OpenMontage proposals require a declared rights basis, immutable source hash, budget cap, and explicit approval. Approval never implies permission to spend, render, or publish.
@@ -39,7 +39,8 @@ Last updated: 2026-07-22
 - Every incorporated GitHub repository must be pinned and recorded in both the machine-readable and human-readable third-party catalogs.
 - Tool installation and activation remain separate; source presence never implies credentials, dependencies, or production readiness.
 - Postiz is dry-run-first. Uploads and remote drafts/schedules require both `--execute` and `--confirm-external-action`; drafts are the default.
-- Postiz operations use content-derived IDs and a local ledger. Duplicate and uncertain retries are blocked pending inspection.
+- Postiz operations use content-derived IDs and a local ledger. Workspace publishing jobs are durable but receive one provider attempt because duplicate and uncertain retries require inspection. Only owners and approvers can discover integrations or execute; editors may preview.
+- Publishing media must resolve to an existing MP4 beneath `PUBLISHING_MEDIA_ROOTS`; the local defaults are `.data/downloads`, `.data/media`, and `.data/productions`.
 - Douyin batches default to 50 items per selected profile mode. Full crawls require explicit `--limit 0`.
 - Cookie values come only from local environment variables or `.env`, are redacted from dry runs, and exist in generated configuration only for the process lifetime.
 - SQLite and file-based deduplication remain enabled for repeat and incremental downloads.
@@ -54,7 +55,7 @@ Last updated: 2026-07-22
 - End-to-end `npm run douyin -- batch --file ... --dry-run` parsed copied share text and profile URLs, deduplicated input, applied incremental bounded settings, and produced redacted configuration.
 - A live media download was not initiated because no user-authorized Douyin URL was provided.
 - Pinned Postiz checkout resolved exactly to `41c5a9dbd6b2776863e7c05c22e7a385c208321c`; the isolated build and `npm run postiz -- check` reported version 2.0.15.
-- A three-platform wrapper smoke test produced a draft preview with private/safe defaults and made no provider call.
+- Postiz wrapper and governed-adapter smoke tests produced dry-run drafts with private/safe defaults and made no provider call. The authenticated publishing API enforces workspace roles, explicit confirmation, approved media roots, and one-attempt durable execution; `/publish` is included in the production browser build.
 - No real social upload or post was initiated because credentials, integration IDs, an approved video, and explicit execution confirmation were not supplied.
 - `start-electron.bat` repaired the missing Electron 43.1.1 Windows binary through the package-provided installer, then passed desktop-mode validation.
 - Unified-runner tests cover healthy-service reuse, unavailable-service startup selection, and missing Electron detection.
@@ -69,7 +70,7 @@ Last updated: 2026-07-22
 - Electron keeps the device JWT encrypted with operating-system `safeStorage` in the main process. IPC sender origin, renderer navigation, API origin/path, and HTTP methods are allowlisted; the preload never exposes bearer tokens. `start-electron.bat --check` validates without launching services.
 - Migration `20260722_0004` adds shared durable jobs with expiring leases, heartbeats, retry budgets, scheduling, cooperative cancellation, and recovery of abandoned running work. Last30Days and OpenMontage are migrated off JSON.
 - The unified runner includes a watch-reloaded durable worker. A live Last30Days mock completed from SQL with no legacy file, an OpenMontage proposal/approval completed its SQL preflight record with no legacy file, and `scripts/worker.py --once` drained zero remaining jobs.
-- The complete project suite passes: 69 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
+- The complete project suite passes: 73 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
 - Production builds for Next.js and Electron, TypeScript checks, ESLint, Ruff, JSON validation, CLI listing, and diff checks pass. The `/tools` page exposes six catalog cards, five locally installed/active providers, guarded lifecycle controls, Agent Reach diagnostics, and the MediaCrawler license block.
 
 ## Next recommended action

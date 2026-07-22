@@ -17,6 +17,7 @@ from trendrelay_api.integrations.last30days import (
     provider_status,
     run_job,
 )
+from trendrelay_api.publishing_api import router as publishing_router
 from trendrelay_api.tool_registry import (
     ToolRegistryError,
     install_tool,
@@ -35,6 +36,7 @@ app = FastAPI(
 )
 app.include_router(foundation_router)
 app.include_router(device_pairing_router)
+app.include_router(publishing_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

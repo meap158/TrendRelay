@@ -124,3 +124,24 @@ nav strong { color: #ecf7f1; }
 .pairing-review > span { color: #62e6a6; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
 .pairing-review h2 { margin: 8px 0; }
 .pairing-review p { color: #aac2b7; }
+.publish-page { padding-top: 6vh; }
+.publish-page header { margin-bottom: 38px; }
+.publish-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr); gap: 20px; align-items: start; }
+.publish-form, .publish-side article { display: grid; gap: 16px; padding: 24px; border: 1px solid #274138; border-radius: 18px; background: rgba(11, 24, 19, 0.94); }
+.publish-form label { display: grid; gap: 7px; color: #aac2b7; font-size: 0.76rem; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; }
+.publish-form input, .publish-form select, .publish-form textarea, .publish-form button { width: 100%; min-height: 44px; border: 1px solid #355247; border-radius: 8px; padding: 9px 11px; background: #07110e; color: #ecf7f1; font: inherit; }
+.publish-form textarea { resize: vertical; }
+.publish-form button { cursor: pointer; }
+.publish-form button:disabled { cursor: not-allowed; opacity: 0.5; }
+.publish-targets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.publish-options { display: flex; flex-wrap: wrap; gap: 18px; }
+.publish-options label { display: flex; align-items: center; gap: 8px; text-transform: none; }
+.publish-options input { width: auto; min-height: 0; }
+.publish-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.publish-actions button:first-child { border-color: #62e6a6; color: #62e6a6; }
+.publish-actions .danger-action { border-color: #ff8d6b; background: #ff8d6b; color: #07110e; font-weight: 800; }
+.publish-side { display: grid; gap: 18px; }
+.publish-side h2 { margin-top: 0; }
+.publish-side p { color: #759589; }
+.payload-preview { max-height: 360px; overflow: auto; margin: 0; padding: 14px; border: 1px solid #274138; border-radius: 9px; background: #07110e; color: #b7f5d5; font: 0.72rem/1.5 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 820px) { .publish-layout, .publish-targets, .publish-actions { grid-template-columns: 1fr; } }

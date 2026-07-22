@@ -14,10 +14,15 @@ class Settings(BaseSettings):
     auth_audience: str = "authenticated"
     device_token_secret: str = ""
     device_token_ttl_hours: int = 8
+    publishing_media_roots: str = ".data/downloads,.data/media,.data/productions"
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def publishing_media_root_list(self) -> list[str]:
+        return [root.strip() for root in self.publishing_media_roots.split(",") if root.strip()]
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
