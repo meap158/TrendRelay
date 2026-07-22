@@ -23,7 +23,7 @@ Last updated: 2026-07-22
 - SQLAlchemy 2 models and Alembic migrations through `20260722_0005` provide user profiles, workspaces, four roles, expiring invitations, device pairings, secret references, and transactional audit events. SQLite is the easy local default; PostgreSQL is the shared/production target.
 - The API verifies Supabase asymmetric JWTs through JWKS plus distinct TrendRelay device JWTs; both require issuer, audience, expiry, and subject claims. `/sign-in` implements password sign-in/sign-up, verification redirects, magic links, Google OAuth, password recovery, and global sign-out.
 - `/workspaces` lists and creates workspaces, displays members and audit events, and gives owners controls for membership, expiring email-bound invite links, optional encrypted SMTP delivery, secret references, and TOTP account security. Enrolled AAL1 browser sessions are globally challenged before authenticated screens render; deployments can require AAL2 for governed actions.
-- `/publish` provides authenticated Postiz integration discovery, dry-run previews, and governed TikTok/Instagram/YouTube submission. Publishing joins Last30Days research and OpenMontage preflights in the leased SQL job store and supervised hot-reload worker; no research or production JSON adapter remains. Temporal setup does not exist and remains an optional multi-host evaluation.
+- `/publish` provides authenticated Postiz integration discovery, dry-run previews, and governed TikTok/Instagram/YouTube submission. Publishing joins Last30Days research and OpenMontage preflights in the leased SQL job store and supervised hot-reload worker; no research or production JSON adapter remains. Temporal was evaluated and intentionally deferred until measured multi-host, durable-timer/signal, recovery, or workflow-history needs exceed the SQL lease model.
 
 ## Decisions in force
 
@@ -79,4 +79,4 @@ Last updated: 2026-07-22
 
 ## Next recommended action
 
-Evaluate Temporal only when multi-host production orchestration is required. OpenMontage runtime execution still needs dependency isolation, provider authorization, cost reconciliation, output provenance, and AGPL review. Keep MediaCrawler blocked unless written commercial permission is obtained.
+Keep the SQL leased queue until ADR 0010 adoption triggers are observed. OpenMontage runtime execution still needs dependency isolation, provider authorization, cost reconciliation, output provenance, and AGPL review. Keep MediaCrawler blocked unless written commercial permission is obtained.

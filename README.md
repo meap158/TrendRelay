@@ -20,9 +20,9 @@ The first usable release prioritizes reliable research, media handling, publishi
 | Authentication | Supabase Auth browser PKCE/TOTP MFA flows, API-side asymmetric JWKS verification, and paired device JWTs |
 | Shared contracts | TypeScript schemas and Pydantic models |
 | Data | SQLAlchemy and Alembic; SQLite locally, PostgreSQL with pgvector for shared/production use |
-| Cache and coordination | Redis |
-| Object storage | S3-compatible managed or local storage |
-| Durable workflows | Temporal Python SDK (planned in the foundation slice) |
+| Cache and coordination | No local dependency; Redis is a production candidate only when shared coordination is proven |
+| Object storage | Ignored local media today; S3-compatible storage is the shared/production target |
+| Durable workflows | Leased SQL job queue and supervised Python worker; Temporal deferred until multi-host workflow evidence exists |
 | Media | FFmpeg, ffprobe, and isolated Python workers |
 | Media download provider | Pinned `jiji262/douyin-downloader` integration |
 | Social publishing provider | Pinned `gitroomhq/postiz-agent` integration |
@@ -30,7 +30,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 | Video production preflight | Pinned `calesthio/OpenMontage` manifests with rights, budget, and approval gates |
 | Research channel diagnostics | Pinned `Panniantong/Agent-Reach` registry with side-effect-free local checks |
 | Tool governance | FastAPI lifecycle API, pinned JSON catalog, and Next.js About & Tools page |
-| AI workers | Python provider adapters and ComfyUI connectors (planned) |
+| AI workers | Python provider adapters; ComfyUI connectors remain planned |
 | Local development | npm workspaces and a Python virtual environment |
 | Production direction | Managed services and Terraform; orchestration only when justified |
 
