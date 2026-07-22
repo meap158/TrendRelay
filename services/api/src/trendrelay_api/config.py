@@ -1,5 +1,7 @@
 from functools import lru_cache
+from typing import Literal
 
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +17,14 @@ class Settings(BaseSettings):
     device_token_secret: str = ""
     device_token_ttl_hours: int = 8
     publishing_media_roots: str = ".data/downloads,.data/media,.data/productions"
+    public_web_url: str = "http://localhost:3000"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    smtp_from_email: str = ""
+    smtp_security: Literal["starttls", "ssl"] = "starttls"
+    invitation_delivery_hourly_limit: int = Field(default=20, ge=1, le=1000)
 
     @property
     def cors_origin_list(self) -> list[str]:

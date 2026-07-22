@@ -22,7 +22,7 @@ Last updated: 2026-07-22
 - `Research/` and `References/` are local-only and ignored by Git.
 - SQLAlchemy 2 models and Alembic migrations through `20260722_0004` provide user profiles, workspaces, four roles, expiring invitations, device pairings, secret references, and transactional audit events. SQLite is the easy local default; PostgreSQL is the shared/production target.
 - The API verifies Supabase asymmetric JWTs through JWKS plus distinct TrendRelay device JWTs; both require issuer, audience, expiry, and subject claims. `/sign-in` implements password sign-in/sign-up, verification redirects, magic links, Google OAuth, password recovery, and global sign-out.
-- `/workspaces` lists and creates workspaces, displays members and audit events, and gives owners controls for membership, expiring email-bound invite links, and secret references. Automated transactional-email delivery and optional 2FA remain pending.
+- `/workspaces` lists and creates workspaces, displays members and audit events, and gives owners controls for membership, expiring email-bound invite links, optional encrypted SMTP delivery, and secret references. Optional 2FA remains pending.
 - `/publish` provides authenticated Postiz integration discovery, dry-run previews, and governed TikTok/Instagram/YouTube submission. Publishing joins Last30Days research and OpenMontage preflights in the leased SQL job store and supervised hot-reload worker; no research or production JSON adapter remains. Temporal setup does not exist and remains an optional multi-host evaluation.
 
 ## Decisions in force
@@ -33,6 +33,7 @@ Last updated: 2026-07-22
 - Supabase access tokens are verified with asymmetric JWKS only. Workspace authorization is membership-and-role based; no service credential is exposed to the web or Electron renderer.
 - Browser components receive an authorized-fetch capability rather than token values. OAuth started in Electron opens in the system browser; the signed one-time device authorization flow pairs the approved identity back to Electron, whose main process encrypts the distinct device token with operating-system `safeStorage`.
 - Secret records store approved locators only and reject raw values. Governed mutations append audit events in the same transaction.
+- Invitation email is opt-in, owner-only, TLS-only, and rate-limited. The token digest commits before SMTP; raw tokens are never queued, stored, logged, or audited, and delivery failure preserves the copy-link fallback.
 - Live trend research requires explicit external-action confirmation. Browser-cookie extraction is disabled and the adapter passes only allowlisted research secrets to Last 30 Days.
 - OpenMontage proposals require a declared rights basis, immutable source hash, budget cap, and explicit approval. Approval never implies permission to spend, render, or publish.
 - Agent Reach diagnostics are local-presence-only. The upstream installer, MCP/skill mutation, browser-cookie import, command execution, live network probes, and user-config access remain outside the trusted adapter boundary.
@@ -70,9 +71,10 @@ Last updated: 2026-07-22
 - Electron keeps the device JWT encrypted with operating-system `safeStorage` in the main process. IPC sender origin, renderer navigation, API origin/path, and HTTP methods are allowlisted; the preload never exposes bearer tokens. `start-electron.bat --check` validates without launching services.
 - Migration `20260722_0004` adds shared durable jobs with expiring leases, heartbeats, retry budgets, scheduling, cooperative cancellation, and recovery of abandoned running work. Last30Days and OpenMontage are migrated off JSON.
 - The unified runner includes a watch-reloaded durable worker. A live Last30Days mock completed from SQL with no legacy file, an OpenMontage proposal/approval completed its SQL preflight record with no legacy file, and `scripts/worker.py --once` drained zero remaining jobs.
-- The complete project suite passes: 73 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
+- Opt-in workspace invitation email uses standard SMTP with STARTTLS or implicit TLS, HTTPS-only public links outside loopback, a 20-attempt-per-workspace hourly default, metadata-only audits, and an always-available copy-link fallback. Unit and API tests prove delivery behavior and raw-token non-persistence; no real email was sent because SMTP credentials were not supplied.
+- The complete project suite passes: 81 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
 - Production builds for Next.js and Electron, TypeScript checks, ESLint, Ruff, JSON validation, CLI listing, and diff checks pass. The `/tools` page exposes six catalog cards, five locally installed/active providers, guarded lifecycle controls, Agent Reach diagnostics, and the MediaCrawler license block.
 
 ## Next recommended action
 
-Add an approved transactional-email delivery adapter for workspace invitations, then evaluate Temporal for multi-host production orchestration. OpenMontage runtime execution still needs dependency isolation, provider authorization, cost reconciliation, output provenance, and AGPL review. Keep MediaCrawler blocked unless written commercial permission is obtained.
+Evaluate Temporal only when multi-host production orchestration is required, and add optional account 2FA when the authentication policy is chosen. OpenMontage runtime execution still needs dependency isolation, provider authorization, cost reconciliation, output provenance, and AGPL review. Keep MediaCrawler blocked unless written commercial permission is obtained.

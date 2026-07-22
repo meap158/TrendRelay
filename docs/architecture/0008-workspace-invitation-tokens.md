@@ -8,4 +8,6 @@ The API generates a cryptographically random token and returns it only in the cr
 
 ## Consequences
 
-The web UI can copy a one-time invitation link for delivery through a trusted channel. Automated transactional-email delivery is intentionally not part of this boundary; adding it requires an approved provider, a secret reference, delivery telemetry, and rate limits. Invitation records expose status and metadata but never the raw token.
+The web UI always returns a copyable one-time invitation link and can optionally deliver it through configured SMTP. The token digest and creation audit commit before the external send, ensuring a delivered link is valid. The raw token exists only in request memory, the one-time response, and the outgoing message; it is never placed in SQL jobs, audit details, or logs.
+
+SMTP permits STARTTLS or implicit TLS only, and invitation links require HTTPS except on loopback during development. Delivery is owner-only, bounded per workspace per hour, and records metadata-only attempt and sent/failed audit events. Provider failure does not invalidate or hide the copyable link. Delivery is intentionally not retried durably because doing so would require persisting recoverable raw-token material. Invitation records expose status and metadata but never the raw token.

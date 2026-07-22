@@ -6,10 +6,12 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from trendrelay_api import foundation
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
+from trendrelay_api.email_delivery import DeliveryResult
 from trendrelay_api.main import app
-from trendrelay_api.models import Base, WorkspaceInvitation
+from trendrelay_api.models import AuditEvent, Base, WorkspaceInvitation
 
 engine = create_engine(
     "sqlite://",
@@ -230,6 +232,7 @@ def test_workspace_invitation_can_be_revoked_by_owner() -> None:
     )
     assert acceptance.status_code == 409
 
+
 def test_expired_workspace_invitation_cannot_be_accepted() -> None:
     workspace = asyncio.run(
         request("POST", "/api/workspaces", json={"name": "Editorial", "slug": "editorial"})
@@ -254,3 +257,106 @@ def test_expired_workspace_invitation_cannot_be_accepted() -> None:
         request("POST", "/api/invitations/accept", json={"token": created["token"]})
     )
     assert response.status_code == 409
+
+
+def test_requested_invitation_delivery_is_audited_without_persisting_token(
+    monkeypatch,
+) -> None:
+    delivered: dict[str, str] = {}
+
+    def fake_delivery(**kwargs):
+        delivered.update({key: str(value) for key, value in kwargs.items()})
+        return DeliveryResult("sent")
+
+    monkeypatch.setattr(foundation, "send_invitation_email", fake_delivery)
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Editorial", "slug": "editorial"})
+    ).json()["workspace"]
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/invitations",
+            json={
+                "email": "editor@example.com",
+                "role": "editor",
+                "deliver_email": True,
+            },
+        )
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    token = payload["token"]
+    assert payload["delivery"] == {"requested": True, "status": "sent", "detail": None}
+    assert delivered["token"] == token
+    with TestingSession() as session:
+        invitation = session.get(WorkspaceInvitation, payload["invitation"]["id"])
+        events = session.scalars(select(AuditEvent)).all()
+        assert invitation is not None
+        assert invitation.token_hash != token
+        assert token not in str([event.detail for event in events])
+        assert any(event.action == "workspace.invitation_delivery_sent" for event in events)
+
+
+def test_invitation_email_delivery_is_rate_limited_per_workspace(monkeypatch) -> None:
+    deliveries: list[str] = []
+
+    def fake_delivery(**kwargs):
+        deliveries.append(kwargs["recipient"])
+        return DeliveryResult("sent")
+
+    monkeypatch.setattr(foundation, "send_invitation_email", fake_delivery)
+    monkeypatch.setattr(
+        foundation,
+        "get_settings",
+        lambda: type("Config", (), {"invitation_delivery_hourly_limit": 1})(),
+    )
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Editorial", "slug": "editorial"})
+    ).json()["workspace"]
+    first = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/invitations",
+            json={"email": "first@example.com", "role": "editor", "deliver_email": True},
+        )
+    )
+    second = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/invitations",
+            json={"email": "second@example.com", "role": "editor", "deliver_email": True},
+        )
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 429
+    assert deliveries == ["first@example.com"]
+
+
+def test_invitation_delivery_failure_preserves_copy_link(monkeypatch) -> None:
+    monkeypatch.setattr(
+        foundation,
+        "send_invitation_email",
+        lambda **_kwargs: DeliveryResult("failed", "SMTP delivery is not configured."),
+    )
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Editorial", "slug": "editorial"})
+    ).json()["workspace"]
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/invitations",
+            json={"email": "fallback@example.com", "role": "editor", "deliver_email": True},
+        )
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert len(payload["token"]) >= 32
+    assert payload["delivery"]["status"] == "failed"
+    assert payload["delivery"]["detail"] == "SMTP delivery is not configured."
+    with TestingSession() as session:
+        invitation = session.get(WorkspaceInvitation, payload["invitation"]["id"])
+        assert invitation is not None
+        assert invitation.token_hash != payload["token"]

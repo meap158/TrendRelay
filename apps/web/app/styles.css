@@ -99,6 +99,8 @@ nav strong { color: #ecf7f1; }
 .workspace-sidebar > button.selected { border-color: #62e6a6; }
 .stack-form { display: grid; gap: 12px; margin-top: 22px; padding-top: 20px; border-top: 1px solid #274138; }
 .stack-form h3 { margin: 0; }
+.stack-form .inline-check { display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; }
+.stack-form .inline-check input { width: auto; min-height: 0; }
 .workspace-content { display: grid; gap: 18px; }
 .workspace-title { padding: 8px 4px; }
 .workspace-title h2 { margin: 6px 0; font-size: 2.4rem; }

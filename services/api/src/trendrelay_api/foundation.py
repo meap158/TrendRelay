@@ -14,7 +14,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from trendrelay_api.auth import CurrentUser, current_user
+from trendrelay_api.config import get_settings
 from trendrelay_api.database import get_session
+from trendrelay_api.email_delivery import send_invitation_email
 from trendrelay_api.models import (
     AuditEvent,
     SecretReference,
@@ -53,6 +55,7 @@ class InvitationCreate(BaseModel):
     email: str = Field(min_length=3, max_length=320)
     role: Role
     expires_hours: int = Field(default=72, ge=1, le=168)
+    deliver_email: bool = False
 
     @field_validator("email")
     @classmethod
@@ -227,9 +230,7 @@ def add_member(
 
 def invitation_status(item: WorkspaceInvitation) -> str:
     expires_at = (
-        item.expires_at.replace(tzinfo=UTC)
-        if item.expires_at.tzinfo is None
-        else item.expires_at
+        item.expires_at.replace(tzinfo=UTC) if item.expires_at.tzinfo is None else item.expires_at
     )
     if item.accepted_at:
         return "accepted"
@@ -238,6 +239,23 @@ def invitation_status(item: WorkspaceInvitation) -> str:
     if expires_at <= datetime.now(UTC):
         return "expired"
     return "pending"
+
+
+def enforce_invitation_delivery_rate_limit(session: Session, workspace_id: str) -> None:
+    session.scalar(select(Workspace.id).where(Workspace.id == workspace_id).with_for_update())
+    cutoff = datetime.now(UTC) - timedelta(hours=1)
+    attempts = (
+        session.scalar(
+            select(func.count(AuditEvent.id)).where(
+                AuditEvent.workspace_id == workspace_id,
+                AuditEvent.action == "workspace.invitation_delivery_attempted",
+                AuditEvent.created_at >= cutoff,
+            )
+        )
+        or 0
+    )
+    if attempts >= get_settings().invitation_delivery_hourly_limit:
+        raise HTTPException(status_code=429, detail="Invitation email rate limit reached.")
 
 
 def serialize_invitation(item: WorkspaceInvitation) -> dict[str, Any]:
@@ -297,6 +315,8 @@ def create_invitation(
     ).all()
     if any(invitation_status(item) == "pending" for item in candidates):
         raise HTTPException(status_code=409, detail="A pending invitation already exists.")
+    if body.deliver_email:
+        enforce_invitation_delivery_rate_limit(session, workspace_id)
     raw_token = token_urlsafe(32)
     item = WorkspaceInvitation(
         workspace_id=workspace_id,
@@ -318,7 +338,44 @@ def create_invitation(
         item.id,
         {"email": item.email, "role": item.role, "expires_at": item.expires_at.isoformat()},
     )
-    return {"invitation": serialize_invitation(item), "token": raw_token}
+    delivery = {"requested": body.deliver_email, "status": "skipped", "detail": None}
+    if body.deliver_email:
+        audit(
+            session,
+            request,
+            workspace_id,
+            user.id,
+            "workspace.invitation_delivery_attempted",
+            "workspace_invitation",
+            item.id,
+            {"channel": "email", "recipient": item.email},
+        )
+        # Commit the digest before the external send so a delivered link is always valid.
+        session.commit()
+        workspace = session.get(Workspace, workspace_id)
+        result = send_invitation_email(
+            recipient=item.email,
+            workspace_name=workspace.name if workspace else "TrendRelay",
+            role=item.role,
+            token=raw_token,
+            expires_at=item.expires_at,
+        )
+        delivery = {"requested": True, "status": result.status, "detail": result.detail}
+        audit(
+            session,
+            request,
+            workspace_id,
+            user.id,
+            f"workspace.invitation_delivery_{result.status}",
+            "workspace_invitation",
+            item.id,
+            {"channel": "email", "recipient": item.email, "detail": result.detail},
+        )
+    return {
+        "invitation": serialize_invitation(item),
+        "token": raw_token,
+        "delivery": delivery,
+    }
 
 
 @router.post("/workspaces/{workspace_id}/invitations/{invitation_id}/revoke")
