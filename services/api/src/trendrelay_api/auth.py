@@ -1,4 +1,4 @@
-"""Supabase-compatible asymmetric JWT authentication."""
+"""Supabase asymmetric and TrendRelay device JWT authentication."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from fastapi import Header, HTTPException
 from jwt import PyJWKClient
 
 from trendrelay_api.config import get_settings
+from trendrelay_api.device_tokens import decode_device_token
 
 
 @dataclass(frozen=True)
@@ -19,24 +20,33 @@ class CurrentUser:
 
 def current_user(authorization: str | None = Header(default=None)) -> CurrentUser:
     settings = get_settings()
-    if not settings.supabase_url:
-        raise HTTPException(status_code=503, detail="Authentication provider is not configured.")
+
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Bearer token required.")
     token = authorization.removeprefix("Bearer ").strip()
-    issuer = f"{settings.supabase_url.rstrip('/')}/auth/v1"
     try:
-        signing_key = PyJWKClient(
-            f"{issuer}/.well-known/jwks.json", cache_jwk_set=True
-        ).get_signing_key_from_jwt(token)
-        claims = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256", "ES256"],
-            audience=settings.auth_audience,
-            issuer=issuer,
-            options={"require": ["exp", "sub", "iss"]},
-        )
+        claims = decode_device_token(token)
+        if claims is None:
+            if not settings.supabase_url:
+                raise HTTPException(
+                    status_code=503, detail="Authentication provider is not configured."
+                )
+            issuer = f"{settings.supabase_url.rstrip('/')}/auth/v1"
+            signing_key = PyJWKClient(
+                f"{issuer}/.well-known/jwks.json", cache_jwk_set=True
+            ).get_signing_key_from_jwt(token)
+            claims = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256", "ES256"],
+                audience=settings.auth_audience,
+                issuer=issuer,
+                options={"require": ["exp", "sub", "iss"]},
+            )
     except jwt.PyJWTError as error:
         raise HTTPException(status_code=401, detail="Invalid or expired access token.") from error
+    except RuntimeError as error:
+        raise HTTPException(
+            status_code=503, detail="Device authentication is not configured."
+        ) from error
     return CurrentUser(id=str(claims["sub"]), email=claims.get("email"))

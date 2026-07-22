@@ -75,6 +75,19 @@ class WorkspaceInvitation(Base):
     revoked_at: Mapped[datetime | None]
 
 
+class DevicePairing(Base):
+    __tablename__ = "device_pairings"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("pair"))
+    device_code_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    user_code: Mapped[str] = mapped_column(String(12), unique=True, index=True)
+    device_name: Mapped[str] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+    expires_at: Mapped[datetime]
+    approved_at: Mapped[datetime | None]
+    approved_by: Mapped[str | None] = mapped_column(ForeignKey("user_profiles.id"))
+    consumed_at: Mapped[datetime | None]
+
+
 class SecretReference(Base):
     __tablename__ = "secret_references"
     __table_args__ = (UniqueConstraint("workspace_id", "provider", "name"),)

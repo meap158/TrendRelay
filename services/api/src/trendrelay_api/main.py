@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from trendrelay_api import __version__
 from trendrelay_api.config import get_settings
+from trendrelay_api.device_pairing import router as device_pairing_router
 from trendrelay_api.foundation import router as foundation_router
 from trendrelay_api.integrations.agent_reach import diagnostic_report
 from trendrelay_api.integrations.last30days import (
@@ -33,6 +34,7 @@ app = FastAPI(
     redoc_url=None,
 )
 app.include_router(foundation_router)
+app.include_router(device_pairing_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

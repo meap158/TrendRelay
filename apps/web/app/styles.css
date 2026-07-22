@@ -117,3 +117,10 @@ nav strong { color: #ecf7f1; }
 .invite-link label { display: grid; gap: 7px; color: #aac2b7; font-size: 0.76rem; font-weight: 750; text-transform: uppercase; }
 .invite-link input { width: 100%; min-height: 40px; border: 1px solid #355247; border-radius: 7px; padding: 8px 10px; background: #0b1813; color: #ecf7f1; }
 .invite-link small { color: #759589; line-height: 1.45; }
+.device-card { display: grid; gap: 18px; }
+.device-code { display: grid; gap: 8px; color: #aac2b7; font-size: 0.76rem; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; }
+.device-code input { max-width: 280px; min-height: 54px; border: 1px solid #62e6a6; border-radius: 9px; padding: 10px 14px; background: #07110e; color: #ecf7f1; font: 700 1.5rem ui-monospace, monospace; letter-spacing: 0.18em; text-transform: uppercase; }
+.pairing-review { padding: 18px; border: 1px solid #3b5c50; border-radius: 12px; background: #07110e; }
+.pairing-review > span { color: #62e6a6; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+.pairing-review h2 { margin: 8px 0; }
+.pairing-review p { color: #aac2b7; }

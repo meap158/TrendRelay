@@ -86,7 +86,9 @@ NEXT_PUBLIC_SUPABASE_URL=https://PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
-Then open `/sign-in`. The browser supports email/password sign-in and account creation, verification redirects, magic links, Google OAuth, password recovery, and global sign-out. Authenticated workspace screens are at `/workspaces`. Renderer components receive an authorized API helper rather than raw tokens; the Python API still verifies every request independently. Google OAuth launched from Electron is handed to the system browser. Secure device pairing back into Electron remains a separate pending capability.
+Then open `/sign-in`. The browser supports email/password sign-in and account creation, verification redirects, magic links, Google OAuth, password recovery, and global sign-out. Authenticated workspace screens are at `/workspaces`. Renderer components receive an authorized API helper rather than raw tokens; the Python API still verifies every request independently. Google OAuth launched from Electron is handed to the system browser.
+
+The device-authorization API and `/device` approval screen provide the secure browser half of Electron pairing. Pairings start and exchange only from loopback, expire after ten minutes, store only a device-code digest, and issue a distinct eight-hour app JWT after explicit one-time approval. Local development generates its signing secret under ignored `.data/`; production must set `DEVICE_TOKEN_SECRET`. The Electron main-process broker and encrypted token storage are the next implementation layer.
 
 ## Authenticated workspace foundation
 

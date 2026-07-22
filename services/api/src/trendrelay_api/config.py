@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///.data/trendrelay.db"
     supabase_url: str = ""
     auth_audience: str = "authenticated"
+    device_token_secret: str = ""
+    device_token_ttl_hours: int = 8
 
     @property
     def cors_origin_list(self) -> list[str]:
