@@ -8,4 +8,4 @@ The database stores only the SHA-256 digest of the device code. A successful one
 
 ## Consequences
 
-No Supabase access or refresh token crosses the browser-to-desktop boundary. Pairing requests can start and exchange only over loopback, approval requires an authenticated browser account, and replayed or expired grants fail closed. The remaining Electron IPC broker must keep the resulting app token in the main process, encrypt it with Electron `safeStorage`, and expose only an authorized-request capability to the renderer.
+No Supabase access or refresh token crosses the browser-to-desktop boundary. Pairing requests can start and exchange only over loopback, approval requires an authenticated browser account, and replayed or expired grants fail closed. Electron keeps the resulting app token in its main process, encrypts it with `safeStorage`, validates every IPC sender origin, blocks cross-origin navigation, and exposes only status, pairing, sign-out, and fixed-origin authorized-request capabilities to the renderer.

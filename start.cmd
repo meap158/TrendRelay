@@ -60,7 +60,7 @@ if "%TRENDRELAY_CHECK_REQUESTED%"=="0" (
   if errorlevel 1 goto :install_error
 )
 
-if /I "%TRENDRELAY_START_CHECK%"=="1" (
+if "%TRENDRELAY_CHECK_REQUESTED%"=="1" (
   ".venv\Scripts\python.exe" scripts\dev.py --check %*
   if errorlevel 1 exit /b 1
   exit /b 0

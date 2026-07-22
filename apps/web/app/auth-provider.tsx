@@ -1,31 +1,75 @@
 "use client";
 
-import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import { apiBaseUrl } from "../lib/api";
 import { authConfiguration, supabaseBrowserClient } from "../lib/supabase";
 
+type AuthUser = { id: string; email?: string | null };
+type DesktopStatus =
+  | { paired: false }
+  | { paired: true; userId: string; email: string | null; expiresAt: string | null };
+type DesktopResponse = { ok: boolean; status: number; body: string; contentType: string | null };
+type DesktopBridge = {
+  status: () => Promise<DesktopStatus>;
+  pair: () => Promise<DesktopStatus>;
+  signOut: () => Promise<DesktopStatus>;
+  apiRequest: (input: { path: string; method?: "GET" | "POST"; body?: string }) => Promise<DesktopResponse>;
+};
+
+declare global {
+  interface Window {
+    trendrelayDesktop?: DesktopBridge;
+  }
+}
+
 type AuthContextValue = {
   configured: boolean;
   loading: boolean;
-  user: User | null;
+  user: AuthUser | null;
   event: AuthChangeEvent | null;
+  desktopAvailable: boolean;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  pairDesktop: () => Promise<void>;
   signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function identity(status: DesktopStatus): AuthUser | null {
+  return status.paired ? { id: status.userId, email: status.email } : null;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const configured = authConfiguration().configured;
+  const browserConfigured = authConfiguration().configured;
   const client = useMemo(() => supabaseBrowserClient(), []);
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(configured);
+  const [desktopUser, setDesktopUser] = useState<AuthUser | null>(null);
+  const [desktopAvailable, setDesktopAvailable] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [event, setEvent] = useState<AuthChangeEvent | null>(null);
 
   useEffect(() => {
-    if (!client) return;
+    const bridge = window.trendrelayDesktop;
+    if (bridge) {
+      bridge.status()
+        .then((status) => setDesktopUser(identity(status)))
+        .catch(() => setDesktopUser(null))
+        .finally(() => {
+          setDesktopAvailable(true);
+          setLoading(false);
+        });
+      return;
+    }
+    if (!client) {
+      queueMicrotask(() => setLoading(false));
+      return;
+    }
+    client.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setLoading(false);
+    });
     const { data } = client.auth.onAuthStateChange((nextEvent, nextSession) => {
       setEvent(nextEvent);
       setSession(nextSession);
@@ -36,6 +80,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const apiFetch = useCallback(
     async (path: string, init: RequestInit = {}) => {
+      const bridge = window.trendrelayDesktop;
+      if (bridge) {
+        const method = (init.method ?? "GET").toUpperCase();
+        if (method !== "GET" && method !== "POST") throw new Error("Desktop API method is not allowed.");
+        if (init.body && typeof init.body !== "string") throw new Error("Desktop API bodies must be JSON strings.");
+        const result = await bridge.apiRequest({
+          path,
+          method,
+          body: typeof init.body === "string" ? init.body : undefined,
+        });
+        return new Response(result.body, {
+          status: result.status,
+          headers: result.contentType ? { "Content-Type": result.contentType } : undefined,
+        });
+      }
       if (!client) throw new Error("Supabase authentication is not configured.");
       const { data, error } = await client.auth.getSession();
       if (error || !data.session) throw new Error("Sign in to continue.");
@@ -47,14 +106,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [client],
   );
 
+  const pairDesktop = useCallback(async () => {
+    const bridge = window.trendrelayDesktop;
+    if (!bridge) throw new Error("TrendRelay Desktop bridge is unavailable.");
+    setLoading(true);
+    try {
+      setDesktopUser(identity(await bridge.pair()));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
+    const bridge = window.trendrelayDesktop;
+    if (bridge) {
+      await bridge.signOut();
+      setDesktopUser(null);
+      return;
+    }
     if (!client) return;
     const { error } = await client.auth.signOut({ scope: "global" });
     if (error) throw error;
   }, [client]);
 
+  const user = desktopAvailable ? desktopUser : session?.user ?? null;
   return (
-    <AuthContext.Provider value={{ configured, loading, user: session?.user ?? null, event, apiFetch, signOut }}>
+    <AuthContext.Provider value={{
+      configured: browserConfigured || desktopAvailable,
+      loading,
+      user,
+      event,
+      desktopAvailable,
+      apiFetch,
+      pairDesktop,
+      signOut,
+    }}>
       {children}
     </AuthContext.Provider>
   );

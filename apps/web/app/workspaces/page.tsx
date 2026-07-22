@@ -215,8 +215,8 @@ export default function WorkspacesPage() {
     }
   }
 
+  if (authLoading) return <StatePage title="Checking your session" body="TrendRelay is verifying the browser or desktop session." />;
   if (!configured) return <StatePage title="Authentication setup required" body="Configure the Supabase public URL and publishable key, then restart TrendRelay." />;
-  if (authLoading) return <StatePage title="Checking your session" body="TrendRelay is verifying the local browser session." />;
   if (!user) return <StatePage title="Sign in to manage workspaces" body="Workspace data is protected by verified Supabase access tokens." action={<Link className="primary-link" href="/sign-in">Open sign in</Link>} />;
 
   return (

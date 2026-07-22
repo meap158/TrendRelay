@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 
+import { useAuth } from "../auth-provider";
 import { authConfiguration, supabaseBrowserClient } from "../../lib/supabase";
 
 type Mode = "sign-in" | "sign-up";
@@ -14,6 +15,7 @@ function safeNextPath(): string {
 
 export default function SignInPage() {
   const config = authConfiguration();
+  const { desktopAvailable, loading: authLoading, user, pairDesktop } = useAuth();
   const client = supabaseBrowserClient();
   const [mode, setMode] = useState<Mode>("sign-in");
   const [email, setEmail] = useState("");
@@ -21,6 +23,19 @@ export default function SignInPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  async function pair() {
+    setBusy(true);
+    setError(null);
+    try {
+      await pairDesktop();
+      window.location.assign("/workspaces");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Desktop pairing failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -92,7 +107,15 @@ export default function SignInPage() {
           <h1>Keep every signal inside the right workspace.</h1>
           <p>Sign in through Supabase Auth. TrendRelay verifies every API request independently and applies workspace roles server-side.</p>
         </div>
-        {!config.configured ? (
+        {desktopAvailable ? (
+          <div className="auth-card" role="status">
+            <p className="eyebrow">DESKTOP DEVICE FLOW</p>
+            <h2>{user ? "Desktop paired" : "Pair this desktop"}</h2>
+            <p>{user ? `Signed in as ${user.email ?? user.id}.` : "TrendRelay will open your system browser for a ten-minute, one-time approval."}</p>
+            {user ? <Link className="primary-link" href="/workspaces">Open workspaces</Link> : <button className="primary-action" disabled={busy || authLoading} onClick={pair}>{busy || authLoading ? "Waiting for browser approval..." : "Pair securely in browser"}</button>}
+            {error && <p className="registry-error" role="alert">{error}</p>}
+          </div>
+        ) : !config.configured ? (
           <div className="setup-card" role="status">
             <span>Setup required</span>
             <h2>Connect a Supabase project</h2>

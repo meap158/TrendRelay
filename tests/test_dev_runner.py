@@ -88,3 +88,12 @@ def test_windows_launcher_applies_migrations_before_starting() -> None:
     migration = launcher.index("scripts\\db.py upgrade")
     runner = launcher.index("scripts\\dev.py %*")
     assert migration < runner
+
+
+def test_windows_launcher_check_mode_uses_parsed_flag() -> None:
+    launcher = (Path(__file__).resolve().parents[1] / "start.cmd").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'if "%TRENDRELAY_CHECK_REQUESTED%"=="1" (' in launcher
+    assert "TRENDRELAY_START_CHECK" not in launcher
