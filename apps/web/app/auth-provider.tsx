@@ -30,6 +30,7 @@ type AuthContextValue = {
   user: AuthUser | null;
   event: AuthChangeEvent | null;
   desktopAvailable: boolean;
+  mfaRequired: boolean;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   pairDesktop: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -47,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [desktopUser, setDesktopUser] = useState<AuthUser | null>(null);
   const [desktopAvailable, setDesktopAvailable] = useState(false);
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [loading, setLoading] = useState(true);
   const [event, setEvent] = useState<AuthChangeEvent | null>(null);
 
@@ -68,16 +70,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     client.auth.getSession().then(({ data }) => {
       setSession(data.session);
-      setLoading(false);
+      if (!data.session) setLoading(false);
     });
     const { data } = client.auth.onAuthStateChange((nextEvent, nextSession) => {
       setEvent(nextEvent);
       setSession(nextSession);
-      setLoading(false);
+      setLoading(Boolean(nextSession));
     });
     return () => data.subscription.unsubscribe();
   }, [client]);
 
+  useEffect(() => {
+    if (desktopAvailable || !client || !session) return;
+    let active = true;
+    client.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data, error }) => {
+      if (!active) return;
+      const challengeRequired = Boolean(error)
+        || (data?.currentLevel === "aal1" && data.nextLevel === "aal2");
+      setMfaRequired(challengeRequired);
+      if (
+        challengeRequired
+        && !window.location.pathname.startsWith("/account/security")
+        && window.location.pathname !== "/sign-in"
+      ) {
+        const next = `${window.location.pathname}${window.location.search}`;
+        window.location.replace(`/account/security?next=${encodeURIComponent(next)}`);
+        return;
+      }
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [client, desktopAvailable, session]);
   const apiFetch = useCallback(
     async (path: string, init: RequestInit = {}) => {
       const bridge = window.trendrelayDesktop;
@@ -137,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       event,
       desktopAvailable,
+      mfaRequired,
       apiFetch,
       pairDesktop,
       signOut,

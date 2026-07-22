@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from trendrelay_api.auth import CurrentUser, current_user
+from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
 from trendrelay_api.config import get_settings
 from trendrelay_api.database import get_session
 from trendrelay_api.email_delivery import send_invitation_email
@@ -202,6 +202,7 @@ def add_member(
     session: DatabaseSession,
 ) -> dict[str, Any]:
     require_role(membership(session, workspace_id, user.id), {"owner"})
+    require_governed_assurance(user)
     if session.scalar(
         select(WorkspaceMember).where(
             WorkspaceMember.workspace_id == workspace_id, WorkspaceMember.user_id == body.user_id
@@ -277,6 +278,7 @@ def list_invitations(
     session: DatabaseSession,
 ) -> dict[str, Any]:
     require_role(membership(session, workspace_id, user.id), {"owner"})
+    require_governed_assurance(user)
     items = session.scalars(
         select(WorkspaceInvitation)
         .where(WorkspaceInvitation.workspace_id == workspace_id)
@@ -295,6 +297,7 @@ def create_invitation(
     session: DatabaseSession,
 ) -> dict[str, Any]:
     require_role(membership(session, workspace_id, user.id), {"owner"})
+    require_governed_assurance(user)
     existing_member = session.scalar(
         select(WorkspaceMember)
         .join(UserProfile, UserProfile.id == WorkspaceMember.user_id)
@@ -387,6 +390,7 @@ def revoke_invitation(
     session: DatabaseSession,
 ) -> dict[str, Any]:
     require_role(membership(session, workspace_id, user.id), {"owner"})
+    require_governed_assurance(user)
     item = session.scalar(
         select(WorkspaceInvitation).where(
             WorkspaceInvitation.id == invitation_id,
@@ -466,6 +470,7 @@ def list_secret_references(
     session: DatabaseSession,
 ) -> dict[str, Any]:
     require_role(membership(session, workspace_id, user.id), {"owner"})
+    require_governed_assurance(user)
     items = session.scalars(
         select(SecretReference)
         .where(SecretReference.workspace_id == workspace_id)
@@ -488,6 +493,7 @@ def create_secret_reference(
     session: DatabaseSession,
 ) -> dict[str, Any]:
     require_role(membership(session, workspace_id, user.id), {"owner"})
+    require_governed_assurance(user)
     if session.scalar(
         select(SecretReference).where(
             SecretReference.workspace_id == workspace_id,

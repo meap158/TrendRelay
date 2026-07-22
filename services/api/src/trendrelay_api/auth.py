@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import jwt
 from fastapi import Header, HTTPException
@@ -16,6 +17,7 @@ from trendrelay_api.device_tokens import decode_device_token
 class CurrentUser:
     id: str
     email: str | None = None
+    assurance_level: Literal["aal1", "aal2"] = "aal1"
 
 
 def current_user(authorization: str | None = Header(default=None)) -> CurrentUser:
@@ -49,4 +51,17 @@ def current_user(authorization: str | None = Header(default=None)) -> CurrentUse
         raise HTTPException(
             status_code=503, detail="Device authentication is not configured."
         ) from error
-    return CurrentUser(id=str(claims["sub"]), email=claims.get("email"))
+    assurance_level = "aal2" if claims.get("aal") == "aal2" else "aal1"
+    return CurrentUser(
+        id=str(claims["sub"]),
+        email=claims.get("email"),
+        assurance_level=assurance_level,
+    )
+
+
+def require_governed_assurance(user: CurrentUser) -> None:
+    if get_settings().require_aal2_for_governed_actions and user.assurance_level != "aal2":
+        raise HTTPException(
+            status_code=403,
+            detail="A verified multi-factor session is required for this action.",
+        )

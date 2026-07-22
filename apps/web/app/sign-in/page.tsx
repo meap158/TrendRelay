@@ -52,7 +52,14 @@ export default function SignInPage() {
       setMessage("Check your email to verify the account, then return here to sign in.");
       return;
     }
-    window.location.assign(safeNextPath());
+    const next = safeNextPath();
+    const assurance = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (assurance.error) return setError(assurance.error.message);
+    const challengeRequired = assurance.data.currentLevel === "aal1"
+      && assurance.data.nextLevel === "aal2";
+    window.location.assign(
+      challengeRequired ? `/account/security?next=${encodeURIComponent(next)}` : next,
+    );
   }
 
   async function sendMagicLink() {

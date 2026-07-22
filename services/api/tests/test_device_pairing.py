@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
+from trendrelay_api.device_tokens import decode_device_token
 from trendrelay_api.main import app
 from trendrelay_api.models import Base, DevicePairing
 
@@ -84,7 +85,7 @@ def test_pairing_requires_local_start_and_one_time_browser_approval() -> None:
     assert pending.status_code == 428
 
     app.dependency_overrides[current_user] = lambda: CurrentUser(
-        id="paired-user", email="editor@example.com"
+        id="paired-user", email="editor@example.com", assurance_level="aal2"
     )
     review = asyncio.run(request("GET", f"/api/device-pairings/{pairing['user_code']}"))
     approval = asyncio.run(
@@ -103,6 +104,7 @@ def test_pairing_requires_local_start_and_one_time_browser_approval() -> None:
     )
     assert exchanged.status_code == 200
     token = exchanged.json()["access_token"]
+    assert decode_device_token(token)["aal"] == "aal2"
     authenticated = asyncio.run(
         request("GET", "/api/workspaces", headers={"Authorization": f"Bearer {token}"})
     )

@@ -17,7 +17,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 | Web | Next.js, React, TypeScript |
 | Desktop | Electron and electron-vite with a hardened renderer boundary |
 | Control plane | Python, FastAPI, Uvicorn, Pydantic |
-| Authentication | Supabase Auth browser PKCE flows and API-side asymmetric JWKS verification |
+| Authentication | Supabase Auth browser PKCE/TOTP MFA flows, API-side asymmetric JWKS verification, and paired device JWTs |
 | Shared contracts | TypeScript schemas and Pydantic models |
 | Data | SQLAlchemy and Alembic; SQLite locally, PostgreSQL with pgvector for shared/production use |
 | Cache and coordination | Redis |
@@ -87,6 +87,8 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
 Then open `/sign-in`. The browser supports email/password sign-in and account creation, verification redirects, magic links, Google OAuth, password recovery, and global sign-out. Authenticated workspace screens are at `/workspaces`. Renderer components receive an authorized API helper rather than raw tokens; the Python API still verifies every request independently. Google OAuth launched from Electron is handed to the system browser.
+
+Authenticated browser users manage optional TOTP authenticator factors at `/account/security`. Enrollment keeps the QR secret in browser memory, verifies a six-digit challenge, and upgrades the session to AAL2. The global session gate redirects an enrolled AAL1 session to its factor challenge after password, magic-link, or OAuth authentication. Set `REQUIRE_AAL2_FOR_GOVERNED_ACTIONS=true` to make FastAPI require the verified `aal2` JWT claim for owner controls, Postiz execution/integration discovery, and desktop pairing approval. Paired device JWTs preserve the assurance level of their browser approval; older or claim-less tokens safely remain AAL1 and must be paired again after enabling AAL2 enforcement.
 
 The device-authorization API, `/device` approval screen, and Electron broker complete secure desktop pairing. Pairings start and exchange only from loopback, expire after ten minutes, store only a device-code digest, and issue a distinct eight-hour app JWT after explicit one-time approval. Electron encrypts that token with operating-system `safeStorage` in its main process and exposes only status, pairing, sign-out, and fixed-origin authorized-request capabilities to the isolated renderer. Local development generates its signing secret under ignored `.data/`; production must set `DEVICE_TOKEN_SECRET`. Start or validate the desktop path with `start-electron.bat` or `start-electron.bat --check`.
 

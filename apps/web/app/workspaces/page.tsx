@@ -223,7 +223,7 @@ export default function WorkspacesPage() {
 
   return (
     <main className="workspace-page">
-      <nav><Link href="/">TrendRelay</Link><span>/</span><strong>Workspaces</strong><button className="nav-action" onClick={() => signOut().then(() => window.location.assign("/sign-in"))}>Sign out</button></nav>
+      <nav><Link href="/">TrendRelay</Link><span>/</span><strong>Workspaces</strong><Link href="/account/security">Account security</Link><button className="nav-action" onClick={() => signOut().then(() => window.location.assign("/sign-in"))}>Sign out</button></nav>
       <div className="workspace-heading"><div><p className="eyebrow">CONTROL PLANE</p><h1>One operating system. Clean boundaries.</h1></div><p>Signed in as {user.email ?? user.id}</p></div>
       {error && <p className="registry-error" role="alert">{error}</p>}
       <section className="workspace-layout">

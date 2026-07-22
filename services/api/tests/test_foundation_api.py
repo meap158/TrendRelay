@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from trendrelay_api import foundation
+from trendrelay_api import auth, foundation
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.email_delivery import DeliveryResult
@@ -360,3 +360,23 @@ def test_invitation_delivery_failure_preserves_copy_link(monkeypatch) -> None:
         invitation = session.get(WorkspaceInvitation, payload["invitation"]["id"])
         assert invitation is not None
         assert invitation.token_hash != payload["token"]
+
+
+def test_governed_workspace_actions_can_require_aal2(monkeypatch) -> None:
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Editorial", "slug": "editorial"})
+    ).json()["workspace"]
+    monkeypatch.setattr(
+        auth,
+        "get_settings",
+        lambda: type("Config", (), {"require_aal2_for_governed_actions": True})(),
+    )
+
+    rejected = asyncio.run(request("GET", f"/api/workspaces/{workspace['id']}/invitations"))
+    app.dependency_overrides[current_user] = lambda: CurrentUser(
+        id="owner-user", email="owner@example.com", assurance_level="aal2"
+    )
+    accepted = asyncio.run(request("GET", f"/api/workspaces/{workspace['id']}/invitations"))
+
+    assert rejected.status_code == 403
+    assert accepted.status_code == 200

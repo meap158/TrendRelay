@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from trendrelay_api.auth import CurrentUser, current_user
+from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
 from trendrelay_api.database import get_session
 from trendrelay_api.device_tokens import issue_device_token
 from trendrelay_api.foundation import ensure_profile
@@ -110,6 +110,7 @@ def approve_pairing(
     user: AuthenticatedUser,
     session: DatabaseSession,
 ) -> dict[str, Any]:
+    require_governed_assurance(user)
     item = session.scalar(
         select(DevicePairing).where(DevicePairing.user_code == user_code.strip().upper())
     )
@@ -120,6 +121,7 @@ def approve_pairing(
     ensure_profile(session, user)
     item.approved_at = datetime.now(UTC)
     item.approved_by = user.id
+    item.approved_assurance_level = user.assurance_level
     return {"status": "approved", "device_name": item.device_name}
 
 
@@ -132,8 +134,7 @@ def exchange_pairing(
     loopback_only(request)
     item = session.scalar(
         select(DevicePairing).where(
-            DevicePairing.device_code_hash
-            == sha256(body.device_code.encode("utf-8")).hexdigest()
+            DevicePairing.device_code_hash == sha256(body.device_code.encode("utf-8")).hexdigest()
         )
     )
     if not item:
@@ -147,7 +148,10 @@ def exchange_pairing(
     item.consumed_at = datetime.now(UTC)
     try:
         access_token = issue_device_token(
-            item.approved_by, profile.email if profile else None, item.id
+            item.approved_by,
+            profile.email if profile else None,
+            item.id,
+            item.approved_assurance_level or "aal1",
         )
     except RuntimeError as error:
         raise HTTPException(

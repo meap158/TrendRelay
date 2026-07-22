@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from secrets import token_urlsafe
 from threading import Lock
-from typing import Any
+from typing import Any, Literal
 
 import jwt
 
@@ -36,13 +36,19 @@ def device_token_secret() -> str:
         return secret
 
 
-def issue_device_token(user_id: str, email: str | None, device_id: str) -> str:
+def issue_device_token(
+    user_id: str,
+    email: str | None,
+    device_id: str,
+    assurance_level: Literal["aal1", "aal2"],
+) -> str:
     settings = get_settings()
     now = datetime.now(UTC)
     claims: dict[str, Any] = {
         "sub": user_id,
         "email": email,
         "device_id": device_id,
+        "aal": assurance_level,
         "iss": DEVICE_ISSUER,
         "aud": settings.auth_audience,
         "iat": now,

@@ -85,6 +85,12 @@ class WorkspaceInvitation(Base):
 
 class DevicePairing(Base):
     __tablename__ = "device_pairings"
+    __table_args__ = (
+        CheckConstraint(
+            "approved_assurance_level IS NULL OR approved_assurance_level IN ('aal1','aal2')",
+            name="valid_device_assurance",
+        ),
+    )
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("pair"))
     device_code_hash: Mapped[str] = mapped_column(String(64), unique=True)
     user_code: Mapped[str] = mapped_column(String(12), unique=True, index=True)
@@ -93,6 +99,7 @@ class DevicePairing(Base):
     expires_at: Mapped[datetime]
     approved_at: Mapped[datetime | None]
     approved_by: Mapped[str | None] = mapped_column(ForeignKey("user_profiles.id"))
+    approved_assurance_level: Mapped[str | None] = mapped_column(String(8))
     consumed_at: Mapped[datetime | None]
 
 

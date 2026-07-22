@@ -8,7 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from trendrelay_api.auth import CurrentUser, current_user
+from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import membership, require_role
 from trendrelay_api.integrations.postiz import (
@@ -43,6 +43,7 @@ def postiz_integrations(
     session: DatabaseSession,
 ) -> dict[str, Any]:
     require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    require_governed_assurance(user)
     if not body.confirm_external_action:
         raise HTTPException(status_code=400, detail="Discovery requires explicit confirmation.")
     try:
@@ -76,6 +77,7 @@ def submit_postiz_publish(
 ) -> dict[str, Any]:
     validate_workspace(body, workspace_id)
     require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    require_governed_assurance(user)
     try:
         job = create_publish_job(body)
     except PermissionError as error:
