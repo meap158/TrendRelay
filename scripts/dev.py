@@ -163,6 +163,13 @@ def build_services(include_desktop: bool) -> list[Service]:
             "http://127.0.0.1:3000/",
         ),
     ]
+    services.append(
+        Service(
+            "Worker",
+            [str(python), "scripts/worker.py", "--watch"],
+            "yellow",
+        )
+    )
     if include_desktop:
         services.append(Service("Desktop", [npm, "run", "dev:desktop"], "magenta"))
     return services
@@ -221,6 +228,7 @@ def print_banner(include_desktop: bool) -> None:
     print("   - Backend:  http://0.0.0.0:8080")
     print("   - API docs: http://0.0.0.0:8080/docs")
     print("   - Frontend: http://0.0.0.0:3000")
+    print("   - Worker:    durable SQL queue (hot reload)")
     print(
         f"   - Desktop:  {'enabled' if include_desktop else 'disabled (use start-electron.bat)'}"
     )

@@ -10,6 +10,7 @@ from trendrelay_api.jobs import (
     get_job_record,
     heartbeat_job,
     list_job_records,
+    recoverable_job_ids,
     request_job_cancellation,
 )
 from trendrelay_api.models import Base
@@ -47,6 +48,7 @@ def test_durable_job_retries_and_requires_the_active_lease_owner() -> None:
         factory=sessions,
     )
     assert retried["status"] == "queued"
+    assert recoverable_job_ids("trend_research", factory=sessions) == [claimed["id"]]
     claimed_again = claim_next_job("trend_research", "worker-b", factory=sessions)
     assert claimed_again and claimed_again["attempt_count"] == 2
 

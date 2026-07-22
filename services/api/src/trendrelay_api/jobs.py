@@ -97,6 +97,39 @@ def list_job_records(
         return [serialize_job(item) for item in items]
 
 
+def recoverable_job_ids(
+    kind: str,
+    limit: int = 20,
+    *,
+    factory: SessionMaker = SessionFactory,
+) -> list[str]:
+    timestamp = now_utc()
+    with factory() as session:
+        return list(
+            session.scalars(
+                select(DurableJob.id)
+                .where(
+                    DurableJob.kind == kind,
+                    DurableJob.cancellation_requested.is_(False),
+                    DurableJob.attempt_count < DurableJob.max_attempts,
+                    or_(
+                        and_(
+                            DurableJob.status == "queued",
+                            DurableJob.available_at <= timestamp,
+                        ),
+                        and_(
+                            DurableJob.status == "running",
+                            DurableJob.lease_expires_at.is_not(None),
+                            DurableJob.lease_expires_at <= timestamp,
+                        ),
+                    ),
+                )
+                .order_by(DurableJob.available_at, DurableJob.created_at)
+                .limit(limit)
+            )
+        )
+
+
 def claim_job(
     job_id: str,
     worker_id: str,

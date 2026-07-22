@@ -59,7 +59,7 @@ Prerequisites: Node.js 22+ with npm 10+, and Python 3.12+.
 
 ### Windows — easiest
 
-Double-click `start.cmd` for the browser app or `start-electron.bat` for the Electron app. These are the only Windows launcher files. Both validate prerequisites, create `.venv`, install dependencies, apply database migrations, and hand off to the unified runner. Desktop startup also repairs a missing Electron runtime automatically. Healthy backend or frontend processes are reused, preventing duplicate Next.js server failures. Logs stay in one terminal with prefixes, servers bind to the LAN, and code changes hot reload automatically.
+Double-click `start.cmd` for the browser app or `start-electron.bat` for the Electron app. These are the only Windows launcher files. Both validate prerequisites, create `.venv`, install dependencies, apply database migrations, and hand off to the unified runner. The runner supervises the API, web app, and leased SQL worker with hot reload. Desktop startup also repairs a missing Electron runtime automatically. Healthy backend or frontend processes are reused, preventing duplicate Next.js server failures. Logs stay in one terminal with prefixes, servers bind to the LAN, and code changes hot reload automatically.
 
 ### Command line
 
@@ -98,7 +98,7 @@ Authenticated endpoints under `/api/workspaces` create and list workspaces, mana
 
 ## Durable execution
 
-Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Last30Days research and OpenMontage preflight proposals now use this durable queue exclusively; neither adapter writes legacy JSON state. Approved OpenMontage preflights complete the queue record while their domain payload continues to keep rendering disabled.
+Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Last30Days research and OpenMontage preflight proposals now use this durable queue exclusively; neither adapter writes legacy JSON state. Approved OpenMontage preflights complete the queue record while their domain payload continues to keep rendering disabled. The supervised research worker polls recoverable jobs, retries eligible failures, and reclaims expired leases after process restarts; `python scripts/worker.py --once` provides a deterministic operational drain.
 
 ## Managed open-source tools
 

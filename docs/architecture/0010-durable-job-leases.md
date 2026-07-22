@@ -9,3 +9,5 @@ Expired running leases are claimable again, making interrupted work recoverable 
 ## Consequences
 
 Provider adapters can move off local JSON without coupling their domain result schemas to queue mechanics. Last30Days research and OpenMontage preflight state are migrated to this store and their old JSON paths are removed. OpenMontage rendering remains disabled and will require a separate idempotent execution job when approved for implementation. External side effects must use provider idempotency keys derived from the durable job ID.
+
+The unified development runner supervises a watch-reloaded research worker. It polls eligible SQL records, relies on atomic claims to resolve races with API background dispatch, and reclaims work after lease expiry.

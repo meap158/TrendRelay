@@ -97,3 +97,9 @@ def test_windows_launcher_check_mode_uses_parsed_flag() -> None:
 
     assert 'if "%TRENDRELAY_CHECK_REQUESTED%"=="1" (' in launcher
     assert "TRENDRELAY_START_CHECK" not in launcher
+
+def test_unified_runner_includes_hot_reload_durable_worker() -> None:
+    worker = next(service for service in dev.build_services(False) if service.name == "Worker")
+
+    assert worker.command[-2:] == ["scripts/worker.py", "--watch"]
+    assert worker.health_url is None
