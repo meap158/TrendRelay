@@ -40,3 +40,23 @@ nav strong { color: #ecf7f1; }
 .tool-actions button:disabled { cursor: wait; opacity: 0.5; }
 .registry-note { margin-top: 32px; color: #759589; font-size: 0.8rem; }
 @media (max-width: 600px) { main { width: min(100% - 24px, 1080px); } nav { margin-bottom: 48px; } .tool-card { min-height: 0; } .tool-footer { align-items: flex-start; } }
+.research-page { padding-top: 6vh; }
+.research-page h1 { max-width: 920px; }
+.research-form { display: grid; grid-template-columns: minmax(0, 1fr) 180px auto; gap: 14px; align-items: end; margin: 42px 0 54px; padding: 22px; border: 1px solid #274138; border-radius: 16px; background: rgba(11, 24, 19, 0.92); }
+.research-form label { display: grid; gap: 8px; color: #aac2b7; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.research-form input, .research-form select, .research-form button { width: 100%; min-height: 46px; border: 1px solid #3b5c50; border-radius: 9px; padding: 10px 12px; background: #07110e; color: #ecf7f1; font: inherit; }
+.research-form button { background: #62e6a6; color: #07110e; font-weight: 800; cursor: pointer; }
+.research-form button:disabled { cursor: wait; opacity: 0.55; }
+.research-jobs { display: grid; gap: 18px; }
+.research-job { padding: 24px; border: 1px solid #274138; border-radius: 18px; background: linear-gradient(145deg, rgba(18, 39, 31, 0.95), rgba(8, 20, 15, 0.95)); }
+.job-heading { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; }
+.job-heading h2 { margin: 6px 0 18px; font-size: 1.8rem; }
+.job-heading span, .job-heading small { color: #62e6a6; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+.source-status { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.source-status span { padding: 6px 9px; border: 1px solid #274138; border-radius: 6px; color: #aac2b7; font-size: 0.72rem; }
+.evidence-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 10px; }
+.evidence-list a { display: grid; gap: 8px; padding: 15px; border: 1px solid #274138; border-radius: 10px; color: #ecf7f1; text-decoration: none; }
+.evidence-list a:hover { border-color: #62e6a6; }
+.evidence-list span { color: #62e6a6; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+.evidence-list p, .empty-state { margin: 0; color: #759589; line-height: 1.45; }
+@media (max-width: 760px) { .research-form { grid-template-columns: 1fr; } .job-heading { flex-direction: column; gap: 4px; } }

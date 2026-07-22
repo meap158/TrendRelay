@@ -1,0 +1,52 @@
+{
+  "id": "research.last30days",
+  "name": "Last 30 Days Research",
+  "version": "3.16.0+249c7a4c0405",
+  "runtime": {
+    "type": "local-process",
+    "entrypoint": "npm run research -- run"
+  },
+  "source": {
+    "repository": "https://github.com/mvanhorn/last30days-skill",
+    "revision": "249c7a4c040558a903d6838dee31012980d4946d",
+    "license": "MIT"
+  },
+  "capabilities": ["trend.research", "trend.evidence.ingest"],
+  "permissions": {
+    "network": [
+      "*.reddit.com",
+      "*.youtube.com",
+      "*.googleapis.com",
+      "api.github.com",
+      "api.x.com",
+      "api.x.ai",
+      "*.tiktok.com",
+      "*.instagram.com",
+      "news.ycombinator.com",
+      "*.polymarket.com",
+      "api.search.brave.com",
+      "api.exa.ai",
+      "google.serper.dev",
+      "api.perplexity.ai",
+      "openrouter.ai"
+    ],
+    "secrets": [
+      "BRAVE_API_KEY",
+      "EXA_API_KEY",
+      "OPENROUTER_API_KEY",
+      "PARALLEL_API_KEY",
+      "PERPLEXITY_API_KEY",
+      "SCRAPECREATORS_API_KEY",
+      "SERPER_API_KEY",
+      "XAI_API_KEY",
+      "XQUIK_API_KEY"
+    ],
+    "storage": {
+      "write": [".data/research/last30days"]
+    }
+  },
+  "requires_confirmation": ["trend.research"],
+  "input_schema": "./research-input.schema.json",
+  "output_schema": "./research-job.schema.json",
+  "timeout_seconds": 600
+}

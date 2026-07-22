@@ -1,11 +1,19 @@
 import asyncio
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from trendrelay_api import __version__
 from trendrelay_api.config import get_settings
+from trendrelay_api.integrations.last30days import (
+    ResearchRequest,
+    create_job,
+    get_job,
+    list_jobs,
+    provider_status,
+    run_job,
+)
 from trendrelay_api.tool_registry import (
     ToolRegistryError,
     install_tool,
@@ -24,7 +32,12 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=settings.cors_origin_list,
+    allow_origin_regex=(
+        r"^http://(?:localhost|127\.0\.0\.1|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}):3000$"
+        if settings.environment != "production"
+        else None
+    ),
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
 )
@@ -91,3 +104,40 @@ async def activate(tool_id: str, body: Activation, request: Request) -> dict[str
         return {"tool": await asyncio.to_thread(set_active, tool_id, body.active)}
     except ToolRegistryError as error:
         raise registry_error(error) from error
+
+
+@app.get("/api/research/status", tags=["research"])
+async def research_status() -> dict[str, object]:
+    return {"provider": await asyncio.to_thread(provider_status)}
+
+
+@app.get("/api/research/jobs", tags=["research"])
+async def research_jobs(
+    workspace_id: str = Query(default="local", min_length=1, max_length=80),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> dict[str, object]:
+    return {"jobs": await asyncio.to_thread(list_jobs, workspace_id, limit)}
+
+
+@app.get("/api/research/jobs/{job_id}", tags=["research"])
+async def research_job(job_id: str) -> dict[str, object]:
+    try:
+        return {"job": await asyncio.to_thread(get_job, job_id)}
+    except (FileNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=404, detail="Research job not found.") from error
+
+
+@app.post("/api/research/jobs", tags=["research"], status_code=202)
+async def start_research(
+    body: ResearchRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> dict[str, object]:
+    require_local_mutation(request)
+    if not body.confirm_external_action:
+        raise HTTPException(status_code=400, detail="Research requires explicit confirmation.")
+    if body.mock and settings.environment == "production":
+        raise HTTPException(status_code=400, detail="Mock research is disabled in production.")
+    job = await asyncio.to_thread(create_job, body)
+    background_tasks.add_task(run_job, job["id"], body)
+    return {"job": job}

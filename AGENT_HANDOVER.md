@@ -12,18 +12,20 @@ Last updated: 2026-07-22
 - The pinned `gitroomhq/postiz-agent` 2.0.15 provider is integrated as `social.postiz-agent` at revision `41c5a9dbd6b2776863e7c05c22e7a385c208321c`.
 - `npm run postiz --` installs and verifies the provider, performs OAuth/API-key authentication and integration discovery, and previews or executes short-video drafts/schedules for TikTok, Instagram, and YouTube.
 - `config/tool-catalog.json`, the `npm run tools --` CLI, the loopback-only lifecycle API, and `/tools` About & Tools page catalogue all six incorporated GitHub projects with pinned revisions, license posture, install state, and activation state.
+- The pinned Last 30 Days 3.16.0 source is installed and active locally. `npm run research --`, the research API, and `/research` execute its stable agent JSON 1.x contract and persist workspace-scoped evidence.
 - Windows exposes exactly two root launchers: `start.cmd` for browser development and `start-electron.bat` for desktop development. Provider/tool operations use npm scripts rather than extra `.cmd` files.
-- Last 30 Days, OpenMontage, and Agent Reach are source-ready catalog entries; native job adapters and provider dependency setup remain pending.
+- OpenMontage and Agent Reach remain source-ready catalog entries; their native adapters and provider dependency setup are pending. Last 30 Days is adapter-ready.
 - MediaCrawler is documented but installation and activation are blocked because its license prohibits commercial use.
 - PostgreSQL/pgvector, Redis, and S3-compatible storage remain planned data services when product features require them.
 - `Research/` and `References/` are local-only and ignored by Git.
-- No database migrations, application authentication, Temporal setup, publishing UI, or persisted media-job API exists yet.
+- No database migrations, application authentication, Temporal setup, publishing UI, or persisted media-job API exists yet. Research jobs currently use local JSON persistence and in-process background execution.
 
 ## Decisions in force
 
 - Follow `SOP.md`; atomic descriptive commits and current README/handover files are mandatory.
 - Python/FastAPI is the control-plane runtime; Python also powers compute-heavy workers.
 - Provider source remains isolated under `.tools/`; core modules depend only on capability contracts.
+- Live trend research requires explicit external-action confirmation. Browser-cookie extraction is disabled and the adapter passes only allowlisted research secrets to Last 30 Days.
 - Every incorporated GitHub repository must be pinned and recorded in both the machine-readable and human-readable third-party catalogs.
 - Tool installation and activation remain separate; source presence never implies credentials, dependencies, or production readiness.
 - Postiz is dry-run-first. Uploads and remote drafts/schedules require both `--execute` and `--confirm-external-action`; drafts are the default.
@@ -46,9 +48,11 @@ Last updated: 2026-07-22
 - No real social upload or post was initiated because credentials, integration IDs, an approved video, and explicit execution confirmation were not supplied.
 - `start-electron.bat` repaired the missing Electron 43.1.1 Windows binary through the package-provided installer, then passed desktop-mode validation.
 - Unified-runner tests cover healthy-service reuse, unavailable-service startup selection, and missing Electron detection.
-- The complete project suite passes: 31 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
+- The Last 30 Days pinned checkout was verified as 3.16.0 and activated. CLI and API mock runs completed through agent JSON schema 1.2 and each ingested two workspace-scoped evidence records without external calls.
+- The `/research` Trend Radar page was visually smoke-tested in the local app; the shared browser API resolver follows loopback or LAN hostnames instead of hard-coding `localhost`, and development CORS accepts private-LAN frontend origins.
+- The complete project suite passes: 44 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
 - Production builds for Next.js and Electron, TypeScript checks, ESLint, Ruff, JSON validation, CLI listing, and diff checks pass. The `/tools` page was visually verified at 1440 by 1000 with six cards, two installed/active providers, guarded controls, and the MediaCrawler block.
 
 ## Next recommended action
 
-Install and evaluate one source-ready tool at a time from About & Tools. Build the first native adapter around Last 30 Days research output, with evidence ingestion and scoped secrets; then evaluate OpenMontage behind cost, provenance, and approval gates. Keep MediaCrawler blocked unless written commercial permission is obtained.
+Evaluate OpenMontage behind cost, provenance, rights, and approval gates, then add an Agent Reach diagnostics adapter without invoking its system-wide installer. In parallel, begin the first-party workspace/authentication/audit slice and replace local research JSON/background tasks with database-backed durable execution when those foundations are ready. Keep MediaCrawler blocked unless written commercial permission is obtained.

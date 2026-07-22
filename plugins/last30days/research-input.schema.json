@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["workspace_id", "topic", "confirm_external_action"],
+  "properties": {
+    "workspace_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$"},
+    "topic": {"type": "string", "minLength": 2, "maxLength": 300},
+    "days": {"type": "integer", "minimum": 1, "maximum": 90, "default": 30},
+    "sources": {"type": "array", "maxItems": 12, "items": {"type": "string"}},
+    "mode": {"enum": ["standard", "quick", "deep"]},
+    "confirm_external_action": {"const": true}
+  },
+  "additionalProperties": false
+}

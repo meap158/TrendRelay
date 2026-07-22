@@ -17,6 +17,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "douyin": "python scripts/douyin.py",
     "postiz": "python scripts/postiz.py",
+    "research": "python scripts/research.py",
     "tools": "python scripts/tools.py"
   },
   "engines": {

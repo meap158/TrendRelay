@@ -25,6 +25,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 | Media | FFmpeg, ffprobe, and isolated Python workers |
 | Media download provider | Pinned `jiji262/douyin-downloader` integration |
 | Social publishing provider | Pinned `gitroomhq/postiz-agent` integration |
+| Trend research provider | Pinned `mvanhorn/last30days-skill` 3.16.0 adapter |
 | Tool governance | FastAPI lifecycle API, pinned JSON catalog, and Next.js About & Tools page |
 | AI workers | Python provider adapters and ComfyUI connectors (planned) |
 | Local development | npm workspaces and a Python virtual environment |
@@ -32,7 +33,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 
 ## Repository structure
 
-- `apps/web` — Next.js control surface
+- `apps/web` — Next.js control surface, including Trend Radar and About & Tools
 - `apps/desktop` — Electron shell for local media and browser-assisted workflows
 - `scripts/dev.py` — unified hot-reload supervisor for local development
 - `config/tool-catalog.json` — machine-readable registry of every incorporated GitHub project
@@ -66,7 +67,7 @@ npm install
 # Add --desktop to also launch Electron.
 ```
 
-API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/tools` (or About & Tools in the app) to inspect every incorporated project and manage local installation/activation.
+API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/research` for Trend Radar, or `http://localhost:3000/tools` to inspect every incorporated project and manage local installation/activation.
 
 The first product vertical slice is authentication, workspaces/roles, audit logging, secret references, and the plugin registry.
 
@@ -86,6 +87,27 @@ npm run tools -- uninstall last30days-skill --confirm-external-action
 
 Installation fetches an exact reviewed revision; activation separately makes it eligible for orchestration. Source-ready tools still require a TrendRelay capability adapter and their documented upstream dependency/credential setup before production use. Lifecycle mutations are loopback-only. MediaCrawler remains visible but cannot be installed or activated because its current license prohibits commercial use.
 
+## Trend Radar research
+
+TrendRelay integrates the MIT-licensed `mvanhorn/last30days-skill` at its exact pinned revision. The adapter uses the stable agent JSON 1.x contract, disables browser-cookie extraction, passes only allowlisted research credentials, and persists normalized workspace evidence under `.data/research/last30days/`.
+
+Install and activate the provider from About & Tools or the CLI:
+
+```powershell
+npm run tools -- install last30days-skill --confirm-external-action
+npm run tools -- activate last30days-skill
+npm run research -- check
+```
+
+Run confirmed live research, optionally selecting sources and depth:
+
+```powershell
+npm run research -- run "portable espresso makers" --mode quick --confirm-external-action
+npm run research -- run "AI video tools" --source reddit --source youtube --mode deep --confirm-external-action
+npm run research -- list
+```
+
+Free upstream sources require no key. Optional research keys are documented in `.env.example`; unrelated provider credentials are never passed to the research process. Use `--mock` for deterministic local verification without network calls. The `/research` page provides the same flow and displays source status plus ingested evidence.
 ## Douyin batch downloader
 
 TrendRelay integrates the MIT-licensed `jiji262/douyin-downloader` provider at a pinned revision. Its source, dependencies, cookies, database, and downloaded media stay outside Git under `.tools/` and `.data/`.

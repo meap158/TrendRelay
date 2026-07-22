@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { apiBaseUrl } from "../../lib/api";
+
 type Tool = {
   id: string;
   name: string;
@@ -32,7 +34,7 @@ export default function ToolsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const response = await fetch(`${apiBase}/api/tools`, { cache: "no-store" });
+    const response = await fetch(`${apiBaseUrl()}/api/tools`, { cache: "no-store" });
     if (!response.ok) throw new Error("Could not load the local tool registry.");
     const payload = (await response.json()) as { tools: Tool[] };
     setTools(payload.tools);
@@ -40,7 +42,7 @@ export default function ToolsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`${apiBase}/api/tools`, { cache: "no-store" })
+    fetch(`${apiBaseUrl()}/api/tools`, { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error("Could not load the local tool registry.");
         return response.json() as Promise<{ tools: Tool[] }>;
@@ -75,7 +77,7 @@ export default function ToolsPage() {
         action === "activation"
           ? { active: enabling }
           : { confirm_external_action: true };
-      const response = await fetch(`${apiBase}/api/tools/${tool.id}/${action}`, {
+      const response = await fetch(`${apiBaseUrl()}/api/tools/${tool.id}/${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
