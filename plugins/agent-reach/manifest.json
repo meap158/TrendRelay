@@ -1,0 +1,25 @@
+{
+  "id": "research.agent-reach-diagnostics",
+  "name": "Agent Reach Channel Diagnostics",
+  "version": "1.5.0+1494c2ab239e",
+  "runtime": {
+    "type": "local-process",
+    "entrypoint": "npm run reach -- check"
+  },
+  "source": {
+    "repository": "https://github.com/Panniantong/Agent-Reach",
+    "revision": "1494c2ab239e7355a77e7cceaf3271453a1f34b5",
+    "license": "MIT"
+  },
+  "capabilities": ["research.channel.diagnose"],
+  "permissions": {
+    "network": [],
+    "secrets": [],
+    "storage": { "write": [] },
+    "browser_sessions": false,
+    "user_config": false,
+    "command_execution": false
+  },
+  "output_schema": "./diagnostics.schema.json",
+  "timeout_seconds": 10
+}

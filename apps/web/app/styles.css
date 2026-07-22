@@ -60,3 +60,11 @@ nav strong { color: #ecf7f1; }
 .evidence-list span { color: #62e6a6; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
 .evidence-list p, .empty-state { margin: 0; color: #759589; line-height: 1.45; }
 @media (max-width: 760px) { .research-form { grid-template-columns: 1fr; } .job-heading { flex-direction: column; gap: 4px; } }
+.diagnostic-panel { margin: 28px 0; padding: 24px; border: 1px solid #3b5c50; border-radius: 18px; background: rgba(12, 29, 22, 0.92); }
+.diagnostic-panel h2 { margin: 6px 0; }
+.diagnostic-panel > p, .diagnostic-panel div > p { color: #aac2b7; }
+.diagnostic-channels { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+.diagnostic-channels span { padding: 6px 9px; border: 1px solid #355247; border-radius: 999px; font-size: 0.74rem; }
+.diagnostic-channels .ready { border-color: #3c956d; color: #62e6a6; }
+.diagnostic-channels .setup-required { border-color: #9a7b36; color: #f2ca70; }
+.diagnostic-channels .unavailable { color: #91a69d; }

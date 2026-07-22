@@ -27,6 +27,25 @@ def test_lists_every_catalogued_github_project() -> None:
     }
 
 
+def test_agent_reach_diagnostics_are_sanitized(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "trendrelay_api.main.diagnostic_report",
+        lambda: {
+            "mode": "local-presence-only",
+            "side_effects": [],
+            "privacy": {"secret_values_exposed": False},
+            "channels": [],
+        },
+    )
+
+    response = asyncio.run(request("GET", "/api/tools/agent-reach/diagnostics"))
+
+    assert response.status_code == 200
+    diagnostics = response.json()["diagnostics"]
+    assert diagnostics["side_effects"] == []
+    assert diagnostics["privacy"]["secret_values_exposed"] is False
+
+
 def test_install_requires_explicit_confirmation() -> None:
     response = asyncio.run(
         request(

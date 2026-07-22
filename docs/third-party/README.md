@@ -8,7 +8,7 @@ Every external GitHub project incorporated by TrendRelay is recorded here and in
 | [gitroomhq/postiz-agent](https://github.com/gitroomhq/postiz-agent) | Social publishing | AGPL-3.0; distribution/network-use obligations apply | Adapter ready |
 | [mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill) | Recent multi-source trend research | MIT | Adapter ready; installed and active locally |
 | [calesthio/OpenMontage](https://github.com/calesthio/OpenMontage) | Agentic video production | AGPL-3.0; distribution/network-use obligations apply | Guarded preflight ready; runtime execution blocked |
-| [Panniantong/Agent-Reach](https://github.com/Panniantong/Agent-Reach) | Research channel discovery and diagnostics | MIT; authenticated channels carry account risk | Source ready; channel adapter pending |
+| [Panniantong/Agent-Reach](https://github.com/Panniantong/Agent-Reach) | Research channel discovery and diagnostics | MIT; authenticated channels carry account risk | Sanitized local diagnostics ready |
 | [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) | Multi-platform social research | Non-commercial learning/research only | Catalogued; install and activation blocked |
 
 The local `/tools` page and `npm run tools --` expose catalog status. Only pinned-source installation and local activation state are automated. Provider-specific credentials, browsers, system packages, and upstream setup scripts remain explicit follow-up steps.

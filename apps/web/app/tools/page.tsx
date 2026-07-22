@@ -26,12 +26,18 @@ type Tool = {
   block_reason?: string;
 };
 
-const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+type ReachDiagnostics = {
+  mode: string;
+  summary: { total: number; ready: number; setup_required: number; unavailable: number };
+  privacy: { network_probes: boolean; browser_sessions_read: boolean; secret_values_exposed: boolean };
+  channels: Array<{ id: string; status: string }>;
+};
 
 export default function ToolsPage() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reachDiagnostics, setReachDiagnostics] = useState<ReachDiagnostics | null>(null);
 
   const refresh = useCallback(async () => {
     const response = await fetch(`${apiBaseUrl()}/api/tools`, { cache: "no-store" });
@@ -55,7 +61,7 @@ export default function ToolsPage() {
           setError(reason instanceof Error ? reason.message : "Registry unavailable.");
         }
       });
-    return () => {
+      return () => {
       cancelled = true;
     };
   }, []);
@@ -92,6 +98,20 @@ export default function ToolsPage() {
     }
   }
 
+  async function diagnoseReach() {
+    setBusy("agent-reach-diagnostics");
+    setError(null);
+    try {
+      const response = await fetch(`${apiBaseUrl()}/api/tools/agent-reach/diagnostics`, { cache: "no-store" });
+      const payload = (await response.json()) as { diagnostics?: ReachDiagnostics; detail?: string };
+      if (!response.ok || !payload.diagnostics) throw new Error(payload.detail ?? "Diagnostics failed.");
+      setReachDiagnostics(payload.diagnostics);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Diagnostics failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
   return (
     <main className="tools-page">
       <nav><Link href="/">TrendRelay</Link><span>/</span><strong>About &amp; Tools</strong></nav>
@@ -132,6 +152,9 @@ export default function ToolsPage() {
               </div>
               <div className="tool-actions">
                 <a href={tool.repository} target="_blank" rel="noreferrer">GitHub</a>
+                {tool.id === "agent-reach" && tool.installed && (
+                  <button disabled={busy === "agent-reach-diagnostics"} onClick={diagnoseReach}>Diagnose</button>
+                )}
                 {!tool.present && tool.install_allowed && (
                   <button disabled={busy === tool.id} onClick={() => mutate(tool, "install")}>Install</button>
                 )}
@@ -148,6 +171,21 @@ export default function ToolsPage() {
           </article>
         ))}
       </section>
+      {reachDiagnostics && (
+        <section className="diagnostic-panel" aria-live="polite">
+          <div>
+            <p className="eyebrow">AGENT REACH · LOCAL PRESENCE ONLY</p>
+            <h2>{reachDiagnostics.summary.ready} of {reachDiagnostics.summary.total} channels ready</h2>
+            <p>{reachDiagnostics.summary.setup_required} need setup; {reachDiagnostics.summary.unavailable} lack a local dependency.</p>
+          </div>
+          <div className="diagnostic-channels">
+            {reachDiagnostics.channels.map((channel) => (
+              <span key={channel.id} className={channel.status}>{channel.id}: {channel.status}</span>
+            ))}
+          </div>
+          <p>No network probes, browser-session reads, or secret values were used.</p>
+        </section>
+      )}
       <p className="registry-note">
         Lifecycle controls only work from this machine. Credentials and platform sessions remain outside the catalog.
       </p>

@@ -27,6 +27,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 | Social publishing provider | Pinned `gitroomhq/postiz-agent` integration |
 | Trend research provider | Pinned `mvanhorn/last30days-skill` 3.16.0 adapter |
 | Video production preflight | Pinned `calesthio/OpenMontage` manifests with rights, budget, and approval gates |
+| Research channel diagnostics | Pinned `Panniantong/Agent-Reach` registry with side-effect-free local checks |
 | Tool governance | FastAPI lifecycle API, pinned JSON catalog, and Next.js About & Tools page |
 | AI workers | Python provider adapters and ComfyUI connectors (planned) |
 | Local development | npm workspaces and a Python virtual environment |
@@ -37,6 +38,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 - `apps/web` — Next.js control surface, including Trend Radar and About & Tools
 - `apps/desktop` — Electron shell for local media and browser-assisted workflows
 - `scripts/dev.py` — unified hot-reload supervisor for local development
+- `scripts/reach.py` — sanitized Agent Reach channel diagnostics
 - `config/tool-catalog.json` — machine-readable registry of every incorporated GitHub project
 - `start.cmd` — one-click browser-app launcher with dependency bootstrap and hot reload
 - `start-electron.bat` — one-click Electron launcher with backend and frontend hot reload
@@ -152,6 +154,20 @@ npm run studio -- approve PRODUCTION_ID --approved-by WORKSPACE_OWNER --confirm-
 ```
 
 Preflight hashes the immutable source file, records its rights basis and size, captures the exact upstream revision and approval gates, and enforces a budget cap. Approval does not render video, call a paid provider, or enable execution. Runtime production remains blocked until dependency isolation, provider-specific authorization, cost reconciliation, output provenance, and AGPL obligations are implemented.
+## Agent Reach channel diagnostics
+
+TrendRelay incorporates the MIT-licensed Agent Reach 1.5.0 source at revision `1494c2ab239e7355a77e7cceaf3271453a1f34b5`. Its 15-channel registry covers GitHub, X, YouTube, Reddit, Facebook, Instagram, Bilibili, Xiaohongshu, LinkedIn, Xiaoyuzhou, V2EX, Xueqiu, RSS, Exa, and general web reading.
+
+Install and activate the pinned source, then inspect local readiness:
+
+```powershell
+npm run tools -- install agent-reach --confirm-external-action
+npm run tools -- activate agent-reach
+npm run reach -- check
+npm run reach -- channels
+```
+
+The About & Tools page also provides a Diagnose action. Diagnostics only inspect local file, package, executable, and configured secret-name presence. They do not execute discovered commands, probe the network, read Agent Reach user configuration, inspect browser sessions, or expose secret values. A ready result is a local prerequisite signal, not proof that a live or authenticated platform request will succeed. The upstream system installer, MCP/skill mutations, and cookie import remain disabled.
 ## Social publishing with Postiz
 
 TrendRelay integrates the AGPL-3.0-licensed `gitroomhq/postiz-agent` at an exact revision. The isolated provider supports connected social accounts; the TrendRelay adapter currently exposes audited MP4 drafts and schedules for TikTok, Instagram, and YouTube.

@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from trendrelay_api import __version__
 from trendrelay_api.config import get_settings
+from trendrelay_api.integrations.agent_reach import diagnostic_report
 from trendrelay_api.integrations.last30days import (
     ResearchRequest,
     create_job,
@@ -73,6 +74,11 @@ async def health() -> dict[str, str]:
 @app.get("/api/tools", tags=["tools"])
 async def tools() -> dict[str, object]:
     return {"tools": await asyncio.to_thread(list_tools)}
+
+
+@app.get("/api/tools/agent-reach/diagnostics", tags=["tools"])
+async def agent_reach_diagnostics() -> dict[str, object]:
+    return {"diagnostics": await asyncio.to_thread(diagnostic_report)}
 
 
 @app.post("/api/tools/{tool_id}/install", tags=["tools"])

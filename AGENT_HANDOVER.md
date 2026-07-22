@@ -15,7 +15,8 @@ Last updated: 2026-07-22
 - The pinned Last 30 Days 3.16.0 source is installed and active locally. `npm run research --`, the research API, and `/research` execute its stable agent JSON 1.x contract and persist workspace-scoped evidence.
 - The pinned OpenMontage source is installed and active locally. `npm run studio --` exposes non-executable clip-factory and podcast-repurpose preflights with immutable-source fingerprints, rights records, budget caps, and approval gates.
 - Windows exposes exactly two root launchers: `start.cmd` for browser development and `start-electron.bat` for desktop development. Provider/tool operations use npm scripts rather than extra `.cmd` files.
-- Agent Reach remains source-ready; its safe channel-diagnostics adapter is pending. Last 30 Days is adapter-ready, while OpenMontage is preflight-ready with runtime execution intentionally blocked.
+- The pinned Agent Reach 1.5.0 source is installed and active locally. `npm run reach --` and the `/tools` Diagnose action expose 15-channel local-presence diagnostics without upstream execution, network probes, user-config reads, browser-session access, or secret-value exposure.
+- Last 30 Days is adapter-ready, while OpenMontage is preflight-ready with runtime execution intentionally blocked.
 - MediaCrawler is documented but installation and activation are blocked because its license prohibits commercial use.
 - PostgreSQL/pgvector, Redis, and S3-compatible storage remain planned data services when product features require them.
 - `Research/` and `References/` are local-only and ignored by Git.
@@ -28,6 +29,7 @@ Last updated: 2026-07-22
 - Provider source remains isolated under `.tools/`; core modules depend only on capability contracts.
 - Live trend research requires explicit external-action confirmation. Browser-cookie extraction is disabled and the adapter passes only allowlisted research secrets to Last 30 Days.
 - OpenMontage proposals require a declared rights basis, immutable source hash, budget cap, and explicit approval. Approval never implies permission to spend, render, or publish.
+- Agent Reach diagnostics are local-presence-only. The upstream installer, MCP/skill mutation, browser-cookie import, command execution, live network probes, and user-config access remain outside the trusted adapter boundary.
 - Every incorporated GitHub repository must be pinned and recorded in both the machine-readable and human-readable third-party catalogs.
 - Tool installation and activation remain separate; source presence never implies credentials, dependencies, or production readiness.
 - Postiz is dry-run-first. Uploads and remote drafts/schedules require both `--execute` and `--confirm-external-action`; drafts are the default.
@@ -53,9 +55,10 @@ Last updated: 2026-07-22
 - The Last 30 Days pinned checkout was verified as 3.16.0 and activated. CLI and API mock runs completed through agent JSON schema 1.2 and each ingested two workspace-scoped evidence records without external calls.
 - The exact OpenMontage checkout was installed and activated. Its two guarded short-form manifests loaded successfully; an owned empty-file smoke fixture completed proposal and approval with a SHA-256 fingerprint and $1 cap while execution remained disabled. No provider call, paid action, or render occurred.
 - The `/research` Trend Radar page was visually smoke-tested in the local app; the shared browser API resolver follows loopback or LAN hostnames instead of hard-coding `localhost`, and development CORS accepts private-LAN frontend origins.
-- The complete project suite passes: 48 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
-- Production builds for Next.js and Electron, TypeScript checks, ESLint, Ruff, JSON validation, CLI listing, and diff checks pass. The `/tools` page was visually verified at 1440 by 1000 with six cards, two installed/active providers, guarded controls, and the MediaCrawler block.
+- The Agent Reach pinned checkout resolves to `1494c2ab239e7355a77e7cceaf3271453a1f34b5` (upstream 1.5.0). The adapter reports all 15 pinned channels, currently with 3 ready, 1 setup-required, and 11 unavailable local capabilities; no live platform calls were made.
+- The complete project suite passes: 52 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
+- Production builds for Next.js and Electron, TypeScript checks, ESLint, Ruff, JSON validation, CLI listing, and diff checks pass. The `/tools` page exposes six catalog cards, five locally installed/active providers, guarded lifecycle controls, Agent Reach diagnostics, and the MediaCrawler license block.
 
 ## Next recommended action
 
-Add an Agent Reach diagnostics adapter without invoking its system-wide installer or importing browser sessions. Then begin the first-party workspace/authentication/audit slice and replace local research/production JSON with database-backed durable execution. OpenMontage runtime execution still needs dependency isolation, provider authorization, cost reconciliation, output provenance, and AGPL review. Keep MediaCrawler blocked unless written commercial permission is obtained.
+Begin the first-party workspace/authentication/audit slice and replace local research/production JSON with database-backed durable execution. OpenMontage runtime execution still needs dependency isolation, provider authorization, cost reconciliation, output provenance, and AGPL review. Keep MediaCrawler blocked unless written commercial permission is obtained.

@@ -18,6 +18,7 @@
     "douyin": "python scripts/douyin.py",
     "postiz": "python scripts/postiz.py",
     "research": "python scripts/research.py",
+    "reach": "python scripts/reach.py",
     "studio": "python scripts/studio.py",
     "tools": "python scripts/tools.py"
   },

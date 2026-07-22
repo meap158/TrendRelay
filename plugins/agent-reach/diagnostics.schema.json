@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trendrelay.local/schemas/agent-reach-diagnostics.json",
+  "type": "object",
+  "required": ["provider", "checked_at", "mode", "side_effects", "privacy", "summary", "channels"],
+  "properties": {
+    "provider": {
+      "type": "object",
+      "required": ["id", "installed", "active", "revision"]
+    },
+    "checked_at": { "type": "string", "format": "date-time" },
+    "mode": { "const": "local-presence-only" },
+    "side_effects": { "type": "array", "maxItems": 0 },
+    "privacy": { "type": "object" },
+    "summary": { "type": "object" },
+    "channels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "tier", "status", "detail"],
+        "properties": {
+          "id": { "type": "string" },
+          "tier": { "type": "integer", "minimum": 0, "maximum": 2 },
+          "status": { "enum": ["ready", "setup-required", "unavailable"] },
+          "detail": { "type": "string" }
+        }
+      }
+    }
+  }
+}
