@@ -12,6 +12,7 @@ API_SOURCE = ROOT / "services" / "api" / "src"
 sys.path.insert(0, str(API_SOURCE))
 
 from trendrelay_api.integrations.last30days import run_job  # noqa: E402
+from trendrelay_api.integrations.openmontage_runtime import run_render_job  # noqa: E402
 from trendrelay_api.integrations.postiz import run_publish_job  # noqa: E402
 from trendrelay_api.jobs import recoverable_job_ids  # noqa: E402
 
@@ -19,15 +20,21 @@ from trendrelay_api.jobs import recoverable_job_ids  # noqa: E402
 def process_available() -> int:
     research_ids = recoverable_job_ids("trend_research")
     publishing_ids = recoverable_job_ids("social_publish")
+    render_ids = recoverable_job_ids("openmontage_render")
     for job_id in research_ids:
         run_job(job_id)
     for job_id in publishing_ids:
         run_publish_job(job_id)
-    return len(research_ids) + len(publishing_ids)
+    for job_id in render_ids:
+        run_render_job(job_id)
+    return len(research_ids) + len(publishing_ids) + len(render_ids)
 
 
 def worker_main() -> None:
-    print("Durable worker ready: trend_research, social_publish", flush=True)
+    print(
+        "Durable worker ready: trend_research, social_publish, openmontage_render",
+        flush=True,
+    )
     try:
         while True:
             if process_available() == 0:

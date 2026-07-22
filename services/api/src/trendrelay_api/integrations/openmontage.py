@@ -168,10 +168,8 @@ def create_proposal(request: ProductionRequest) -> dict[str, Any]:
         "approval": None,
         "execution": {
             "enabled": False,
-            "reason": (
-                "Dependencies and paid provider actions require a separately "
-                "confirmed execution adapter."
-            ),
+            "reason": "Human approval is required before local rendering.",
+            "mode": "local-zero-network",
         },
     }
     create_job_record(
@@ -195,6 +193,11 @@ def approve_proposal(production_id: str, approval: ProductionApproval) -> dict[s
     if not status["active"]:
         raise RuntimeError("Activate OpenMontage before approving a production proposal.")
     production.update(status="approved", updated_at=_now())
+    production["execution"] = {
+        "enabled": True,
+        "mode": "local-zero-network",
+        "cost_usd": 0.0,
+    }
     production["approval"] = {
         "approved_by": approval.approved_by.strip(),
         "approved_at": _now(),

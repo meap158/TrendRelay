@@ -11,12 +11,12 @@ Last updated: 2026-07-22
 - `npm run douyin --` installs, verifies, and runs single-link or file-based Douyin batches. Downloads, SQLite state, ephemeral configuration, upstream source, dependencies, and credentials remain ignored.
 - The pinned `gitroomhq/postiz-agent` 2.0.15 provider is integrated as `social.postiz-agent` at revision `41c5a9dbd6b2776863e7c05c22e7a385c208321c`.
 - `npm run postiz --` installs and verifies the provider, performs OAuth/API-key authentication and integration discovery, and previews or executes short-video drafts/schedules for TikTok, Instagram, and YouTube.
-- `config/tool-catalog.json`, the `npm run tools --` CLI, the loopback-only lifecycle API, and `/tools` About & Tools page catalogue all six incorporated GitHub projects with pinned revisions, license posture, install state, and activation state.
+- `config/tool-catalog.json`, the `npm run tools --` CLI, the loopback-only lifecycle API, and `/tools` About & Tools page catalogue all six managed capability projects with pinned revisions, license posture, install state, and activation state.
 - The pinned Last 30 Days 3.16.0 source is installed and active locally. `npm run research --`, the research API, and `/research` execute its stable agent JSON 1.x contract and persist workspace-scoped evidence.
-- The pinned OpenMontage source is installed and active locally. `npm run studio --` exposes non-executable clip-factory and podcast-repurpose preflights with immutable-source fingerprints, rights records, budget caps, and approval gates.
+- The pinned OpenMontage source is installed and active locally. `/studio` and `npm run studio --` expose clip-factory/podcast-repurpose preflights plus approved, zero-network local VideoTrimmer jobs with immutable-source checks, manual clip ranges, budget enforcement, verified outputs, and provenance.
 - Windows exposes exactly two root launchers: `start.cmd` for browser development and `start-electron.bat` for desktop development. Provider/tool operations use npm scripts rather than extra `.cmd` files.
 - The pinned Agent Reach 1.5.0 source is installed and active locally. `npm run reach --` and the `/tools` Diagnose action expose 15-channel local-presence diagnostics without upstream execution, network probes, user-config reads, browser-session access, or secret-value exposure.
-- Last 30 Days is adapter-ready, while OpenMontage is preflight-ready with runtime execution intentionally blocked.
+- Last 30 Days is adapter-ready. OpenMontage preflight and deterministic local clipping are adapter-ready; paid/networked generation remains intentionally blocked.
 - MediaCrawler is documented but installation and activation are blocked because its license prohibits commercial use.
 - PostgreSQL/pgvector, Redis, and S3-compatible storage remain planned data services when product features require them.
 - `Research/` and `References/` are local-only and ignored by Git.
@@ -36,9 +36,9 @@ Last updated: 2026-07-22
 - Secret records store approved locators only and reject raw values. Governed mutations append audit events in the same transaction.
 - Invitation email is opt-in, owner-only, TLS-only, and rate-limited. The token digest commits before SMTP; raw tokens are never queued, stored, logged, or audited, and delivery failure preserves the copy-link fallback.
 - Live trend research requires explicit external-action confirmation. Browser-cookie extraction is disabled and the adapter passes only allowlisted research secrets to Last 30 Days.
-- OpenMontage proposals require a declared rights basis, immutable source hash, budget cap, and explicit approval. Approval never implies permission to spend, render, or publish.
+- OpenMontage proposals require a declared rights basis, immutable source hash, budget cap, and explicit approval. Rendering requires a second confirmed action, stays local and zero-network, uses fixed output roots, and never implies permission to publish.
 - Agent Reach diagnostics are local-presence-only. The upstream installer, MCP/skill mutation, browser-cookie import, command execution, live network probes, and user-config access remain outside the trusted adapter boundary.
-- Every incorporated GitHub repository must be pinned and recorded in both the machine-readable and human-readable third-party catalogs.
+- Every managed capability repository must be pinned in the machine-readable catalog and documented in the human-readable catalog; supporting runtime repositories must be lockfile-pinned and documented.
 - Tool installation and activation remain separate; source presence never implies credentials, dependencies, or production readiness.
 - Postiz is dry-run-first. Uploads and remote drafts/schedules require both `--execute` and `--confirm-external-action`; drafts are the default.
 - Postiz operations use content-derived IDs and a local ledger. Workspace publishing jobs are durable but receive one provider attempt because duplicate and uncertain retries require inspection. Only owners and approvers can discover integrations or execute; editors may preview.
@@ -62,7 +62,7 @@ Last updated: 2026-07-22
 - `start-electron.bat` repaired the missing Electron 43.1.1 Windows binary through the package-provided installer, then passed desktop-mode validation.
 - Unified-runner tests cover healthy-service reuse, unavailable-service startup selection, and missing Electron detection.
 - The Last 30 Days pinned checkout was verified as 3.16.0 and activated. CLI and API mock runs completed through agent JSON schema 1.2 and each ingested two workspace-scoped evidence records without external calls.
-- The exact OpenMontage checkout was installed and activated. Its two guarded short-form manifests loaded successfully; an owned empty-file smoke fixture completed proposal and approval with a SHA-256 fingerprint and $1 cap while execution remained disabled. No provider call, paid action, or render occurred.
+- The exact OpenMontage checkout was installed and activated. Its two guarded manifests load successfully. The isolated upstream VideoTrimmer produced and ffprobe-verified a real one-second MP4 from the pinned demo source using locked FFmpeg 6.1.1 binaries. The worker passes no provider credentials, performs no network call, records source/artifact hashes and package/upstream provenance, and reports zero provider cost.
 - The `/research` Trend Radar page was visually smoke-tested in the local app; the shared browser API resolver follows loopback or LAN hostnames instead of hard-coding `localhost`, and development CORS accepts private-LAN frontend origins.
 - The Agent Reach pinned checkout resolves to `1494c2ab239e7355a77e7cceaf3271453a1f34b5` (upstream 1.5.0). The adapter reports all 15 pinned channels, currently with 3 ready, 1 setup-required, and 11 unavailable local capabilities; no live platform calls were made.
 - Migrations `20260722_0001` through `20260722_0005` upgrade a fresh local database to head. Foundation tests cover workspace creation, roles, invitations, owner-only secret references, raw-secret rejection, slug validation, and ordered audit events.
@@ -74,9 +74,9 @@ Last updated: 2026-07-22
 - Migration `20260722_0004` adds shared durable jobs with expiring leases, heartbeats, retry budgets, scheduling, cooperative cancellation, and recovery of abandoned running work. Last30Days and OpenMontage are migrated off JSON.
 - The unified runner includes a watch-reloaded durable worker. A live Last30Days mock completed from SQL with no legacy file, an OpenMontage proposal/approval completed its SQL preflight record with no legacy file, and `scripts/worker.py --once` drained zero remaining jobs.
 - Opt-in workspace invitation email uses standard SMTP with STARTTLS or implicit TLS, HTTPS-only public links outside loopback, a 20-attempt-per-workspace hourly default, metadata-only audits, and an always-available copy-link fallback. Unit and API tests prove delivery behavior and raw-token non-persistence; no real email was sent because SMTP credentials were not supplied.
-- The complete project suite passes: 85 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
+- The complete project suite passes: 90 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
 - Production builds for Next.js and Electron, TypeScript checks, ESLint, Ruff, JSON validation, CLI listing, and diff checks pass. The `/tools` page exposes six catalog cards, five locally installed/active providers, guarded lifecycle controls, Agent Reach diagnostics, and the MediaCrawler license block.
 
 ## Next recommended action
 
-Keep the SQL leased queue until ADR 0010 adoption triggers are observed. OpenMontage runtime execution still needs dependency isolation, provider authorization, cost reconciliation, output provenance, and AGPL review. Keep MediaCrawler blocked unless written commercial permission is obtained.
+Keep the SQL leased queue until ADR 0010 adoption triggers are observed. Exercise `/studio` with user-owned media and review the resulting clips before sending them through the separate `/publish` approval boundary. Paid or networked OpenMontage providers remain disabled until scoped authorization, cost reconciliation, provider provenance, and license review are implemented. Keep MediaCrawler blocked unless written commercial permission is obtained.

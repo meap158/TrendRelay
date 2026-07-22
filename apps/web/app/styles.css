@@ -155,3 +155,6 @@ nav strong { color: #ecf7f1; }
 .mfa-enrollment img { border-radius: 8px; background: #fff; }
 .mfa-enrollment code { overflow-wrap: anywhere; color: #b7f5d5; }
 @media (max-width: 760px) { .security-grid { grid-template-columns: 1fr; } }
+
+.segment-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 110px; gap: 10px; }
+@media (max-width: 620px) { .segment-row { grid-template-columns: 1fr; } }

@@ -27,7 +27,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 | Media download provider | Pinned `jiji262/douyin-downloader` integration |
 | Social publishing provider | Pinned `gitroomhq/postiz-agent` integration |
 | Trend research provider | Pinned `mvanhorn/last30days-skill` 3.16.0 adapter |
-| Video production preflight | Pinned `calesthio/OpenMontage` manifests with rights, budget, and approval gates |
+| Video production | Pinned `calesthio/OpenMontage` preflights plus isolated local VideoTrimmer execution |
 | Research channel diagnostics | Pinned `Panniantong/Agent-Reach` registry with side-effect-free local checks |
 | Tool governance | FastAPI lifecycle API, pinned JSON catalog, and Next.js About & Tools page |
 | AI workers | Python provider adapters; ComfyUI connectors remain planned |
@@ -36,7 +36,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 
 ## Repository structure
 
-- `apps/web` — Next.js control surface, including Trend Radar and About & Tools
+- `apps/web` — Next.js control surface, including Trend Radar, Studio, publishing, workspaces, and About & Tools
 - `apps/desktop` — Electron shell for local media and browser-assisted workflows
 - `scripts/dev.py` — unified hot-reload supervisor for local development
 - `scripts/reach.py` — sanitized Agent Reach channel diagnostics
@@ -71,7 +71,7 @@ npm install
 # Add --desktop to also launch Electron.
 ```
 
-Initialize or update the local database with `npm run db -- upgrade`. API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/research` for Trend Radar, or `http://localhost:3000/tools` to inspect every incorporated project and manage local installation/activation.
+Initialize or update the local database with `npm run db -- upgrade`. API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/research` for Trend Radar, `http://localhost:3000/studio` for governed local production, or `http://localhost:3000/tools` to inspect every incorporated project and manage local installation/activation.
 
 The first product vertical slice now includes database-backed Supabase authentication, workspace and role management, append-only audit events, secret references, and the governed plugin registry.
 
@@ -100,11 +100,11 @@ Authenticated endpoints under `/api/workspaces` create and list workspaces, mana
 
 ## Durable execution
 
-Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Last30Days research, OpenMontage preflight proposals, and Postiz publishing operations use this durable queue. The research and production adapters write no legacy JSON state. Approved OpenMontage preflights complete the queue record while their domain payload continues to keep rendering disabled. The supervised durable worker polls recoverable jobs, retries eligible research failures, processes publishing operations once, and reclaims expired leases after process restarts; `python scripts/worker.py --once` provides a deterministic operational drain.
+Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Last30Days research, OpenMontage preflights and local renders, and Postiz publishing operations use this durable queue. The research and production adapters write no legacy JSON state. The supervised durable worker polls recoverable jobs, retries eligible research/render failures within their bounds, processes publishing operations once, and reclaims expired leases after process restarts; `python scripts/worker.py --once` provides a deterministic operational drain.
 
 ## Managed open-source tools
 
-Every incorporated GitHub repository is documented in [the third-party catalog](./docs/third-party/README.md) and pinned in `config/tool-catalog.json`. The About & Tools page shows its repository, revision, license posture, capabilities, installation state, and activation state. Source and runtime state stay ignored under `.tools/` and `.data/`.
+Every incorporated GitHub repository is documented in [the third-party catalog](./docs/third-party/README.md). Managed capability providers are pinned in `config/tool-catalog.json`, while supporting runtime packages are pinned in `package-lock.json`. The About & Tools page shows each managed provider's repository, revision, license posture, capabilities, installation state, and activation state. Source and runtime state stay ignored under `.tools/` and `.data/`.
 
 Use the UI at `http://localhost:3000/tools`, or the local CLI:
 
@@ -167,21 +167,25 @@ The default limit is 50 items per selected profile mode; use `--limit 0` only fo
 
 Optional authenticated access reads `DOUYIN_*` variables from the environment or local `.env`; values are never printed and the generated runtime configuration is deleted after each run. Downloads are written to `.data/downloads/douyin/`. Only download and reuse content when permitted by platform terms and applicable rights.
 
-## OpenMontage production preflight
+## OpenMontage local production
 
-TrendRelay uses the pinned AGPL-3.0 OpenMontage source for guarded short-form production planning. The adapter currently exposes its `clip-factory` and `podcast-repurpose` manifests without installing provider dependencies or making network calls.
+TrendRelay uses the pinned AGPL-3.0 OpenMontage source for governed short-form planning and deterministic local clipping. Open `/studio` to create an immutable-source preflight, record owned/licensed/public-domain rights, set a budget cap, approve the plan as an owner or approver, and submit manual clip ranges. Rendering invokes the upstream `VideoTrimmer` in a scrubbed subprocess with no provider credentials or network requirement.
 
-Inspect available pipelines, then create a confirmed proposal from media you own or are licensed to use:
+The locked `ffmpeg-static@5.3.0` and `@derhuerst/ffprobe-static@5.3.0` packages provide FFmpeg/ffprobe 6.1.1. Clips are re-encoded for keyframe-safe boundaries, probed for a valid video stream and duration, hashed, and written only beneath `.data/productions/openmontage/`. Durable render records preserve the source hash, exact OpenMontage revision, package versions, artifact hashes, and zero actual provider cost. Rendering does not publish; `/publish` remains a separate governed Postiz action.
+
+Use the browser Studio or the CLI:
 
 ```powershell
 npm run tools -- install openmontage --confirm-external-action
 npm run tools -- activate openmontage
-npm run studio -- pipelines
+npm run studio -- runtime
 npm run studio -- propose "Three launch clips" --source .\source.mp4 --rights owned --pipeline clip-factory --platform tiktok --clips 3 --budget 1 --confirm-external-action
 npm run studio -- approve PRODUCTION_ID --approved-by WORKSPACE_OWNER --confirm-external-action
+npm run studio -- render PRODUCTION_ID --workspace local --segment "Hook:0:15" --segment "Proof:30:50" --confirm-external-action
 ```
 
-Preflight hashes the immutable source file, records its rights basis and size, captures the exact upstream revision and approval gates, and enforces a budget cap. Approval does not render video, call a paid provider, or enable execution. Runtime production remains blocked until dependency isolation, provider-specific authorization, cost reconciliation, output provenance, and AGPL obligations are implemented.
+The upstream base module auto-loads its own `.env`; TrendRelay deliberately replaces that base only inside the isolated trimmer process so secrets cannot cross this boundary. Paid/networked providers, automatic generation, and arbitrary upstream workflows remain disabled. Distribution must satisfy OpenMontage AGPL-3.0 and the packaged media binaries' GPL-3.0-or-later obligations; see [OpenMontage](./docs/third-party/openmontage.md) and [FFmpeg static runtime](./docs/third-party/ffmpeg-static.md).
+
 ## Agent Reach channel diagnostics
 
 TrendRelay incorporates the MIT-licensed Agent Reach 1.5.0 source at revision `1494c2ab239e7355a77e7cceaf3271453a1f34b5`. Its 15-channel registry covers GitHub, X, YouTube, Reddit, Facebook, Instagram, Bilibili, Xiaohongshu, LinkedIn, Xiaoyuzhou, V2EX, Xueqiu, RSS, Exa, and general web reading.
