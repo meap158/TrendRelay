@@ -7,6 +7,11 @@ import { authConfiguration, supabaseBrowserClient } from "../../lib/supabase";
 
 type Mode = "sign-in" | "sign-up";
 
+function safeNextPath(): string {
+  const candidate = new URLSearchParams(window.location.search).get("next");
+  return candidate?.startsWith("/") && !candidate.startsWith("//") ? candidate : "/workspaces";
+}
+
 export default function SignInPage() {
   const config = authConfiguration();
   const client = supabaseBrowserClient();
@@ -25,14 +30,14 @@ export default function SignInPage() {
     setMessage(null);
     const result = mode === "sign-in"
       ? await client.auth.signInWithPassword({ email, password })
-      : await client.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/workspaces` } });
+      : await client.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}${safeNextPath()}` } });
     setBusy(false);
     if (result.error) return setError(result.error.message);
     if (mode === "sign-up" && !result.data.session) {
       setMessage("Check your email to verify the account, then return here to sign in.");
       return;
     }
-    window.location.assign("/workspaces");
+    window.location.assign(safeNextPath());
   }
 
   async function sendMagicLink() {
@@ -41,7 +46,7 @@ export default function SignInPage() {
     setError(null);
     const { error: authError } = await client.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/workspaces`, shouldCreateUser: false },
+      options: { emailRedirectTo: `${window.location.origin}${safeNextPath()}`, shouldCreateUser: false },
     });
     setBusy(false);
     if (authError) setError(authError.message);
@@ -67,7 +72,7 @@ export default function SignInPage() {
     const { data, error: authError } = await client.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/workspaces`,
+        redirectTo: `${window.location.origin}${safeNextPath()}`,
         skipBrowserRedirect: inElectron,
       },
     });

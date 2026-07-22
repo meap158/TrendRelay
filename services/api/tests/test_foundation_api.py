@@ -1,14 +1,15 @@
 import asyncio
+from datetime import UTC, datetime, timedelta
 
 import httpx
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
-from trendrelay_api.models import Base
+from trendrelay_api.models import Base, WorkspaceInvitation
 
 engine = create_engine(
     "sqlite://",
@@ -160,3 +161,96 @@ def test_workspace_slug_is_normalized_and_validated() -> None:
     assert normalized.status_code == 201
     assert normalized.json()["workspace"]["slug"] == "my-team"
     assert invalid.status_code == 422
+
+
+def test_workspace_invitation_acceptance_is_email_bound_and_single_use() -> None:
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Editorial", "slug": "editorial"})
+    ).json()["workspace"]
+    created = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/invitations",
+            json={"email": "Editor@Example.com", "role": "editor", "expires_hours": 24},
+        )
+    )
+    assert created.status_code == 201
+    token = created.json()["token"]
+    assert created.json()["invitation"]["email"] == "editor@example.com"
+    assert token not in str(created.json()["invitation"])
+    with TestingSession() as session:
+        stored = session.scalar(
+            select(WorkspaceInvitation).where(
+                WorkspaceInvitation.id == created.json()["invitation"]["id"]
+            )
+        )
+        assert stored is not None
+        assert stored.token_hash != token
+        assert len(stored.token_hash) == 64
+
+    app.dependency_overrides[current_user] = lambda: CurrentUser(
+        id="wrong-user", email="wrong@example.com"
+    )
+    mismatch = asyncio.run(request("POST", "/api/invitations/accept", json={"token": token}))
+    assert mismatch.status_code == 403
+
+    app.dependency_overrides[current_user] = lambda: CurrentUser(
+        id="editor-user", email="editor@example.com"
+    )
+    accepted = asyncio.run(request("POST", "/api/invitations/accept", json={"token": token}))
+    replay = asyncio.run(request("POST", "/api/invitations/accept", json={"token": token}))
+    assert accepted.status_code == 200
+    assert accepted.json()["workspace"]["role"] == "editor"
+    assert replay.status_code == 409
+
+
+def test_workspace_invitation_can_be_revoked_by_owner() -> None:
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Editorial", "slug": "editorial"})
+    ).json()["workspace"]
+    created = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/invitations",
+            json={"email": "analyst@example.com", "role": "analyst"},
+        )
+    ).json()
+    invitation_id = created["invitation"]["id"]
+    revoked = asyncio.run(
+        request("POST", f"/api/workspaces/{workspace['id']}/invitations/{invitation_id}/revoke")
+    )
+    assert revoked.status_code == 200
+    assert revoked.json()["invitation"]["status"] == "revoked"
+
+    app.dependency_overrides[current_user] = lambda: CurrentUser(
+        id="analyst-user", email="analyst@example.com"
+    )
+    acceptance = asyncio.run(
+        request("POST", "/api/invitations/accept", json={"token": created["token"]})
+    )
+    assert acceptance.status_code == 409
+
+def test_expired_workspace_invitation_cannot_be_accepted() -> None:
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Editorial", "slug": "editorial"})
+    ).json()["workspace"]
+    created = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/invitations",
+            json={"email": "late@example.com", "role": "analyst"},
+        )
+    ).json()
+    with TestingSession() as session:
+        invitation = session.get(WorkspaceInvitation, created["invitation"]["id"])
+        assert invitation is not None
+        invitation.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+        session.commit()
+
+    app.dependency_overrides[current_user] = lambda: CurrentUser(
+        id="late-user", email="late@example.com"
+    )
+    response = asyncio.run(
+        request("POST", "/api/invitations/accept", json={"token": created["token"]})
+    )
+    assert response.status_code == 409

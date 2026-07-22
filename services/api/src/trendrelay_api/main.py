@@ -42,7 +42,7 @@ app.add_middleware(
         else None
     ),
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
 
 

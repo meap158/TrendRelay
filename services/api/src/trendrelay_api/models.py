@@ -53,6 +53,28 @@ class WorkspaceMember(Base):
     created_at: Mapped[datetime] = mapped_column(default=utc_now)
 
 
+class WorkspaceInvitation(Base):
+    __tablename__ = "workspace_invitations"
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('owner','editor','approver','analyst')", name="valid_invite_role"
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("invite"))
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    role: Mapped[str] = mapped_column(String(16))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    invited_by: Mapped[str] = mapped_column(ForeignKey("user_profiles.id"))
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+    expires_at: Mapped[datetime]
+    accepted_at: Mapped[datetime | None]
+    accepted_by: Mapped[str | None] = mapped_column(ForeignKey("user_profiles.id"))
+    revoked_at: Mapped[datetime | None]
+
+
 class SecretReference(Base):
     __tablename__ = "secret_references"
     __table_args__ = (UniqueConstraint("workspace_id", "provider", "name"),)

@@ -20,9 +20,9 @@ Last updated: 2026-07-22
 - MediaCrawler is documented but installation and activation are blocked because its license prohibits commercial use.
 - PostgreSQL/pgvector, Redis, and S3-compatible storage remain planned data services when product features require them.
 - `Research/` and `References/` are local-only and ignored by Git.
-- SQLAlchemy 2 models and Alembic migration `20260722_0001` provide user profiles, workspaces, four initial roles, secret references, and transactional audit events. SQLite is the easy local default; PostgreSQL is the shared/production target.
+- SQLAlchemy 2 models and Alembic migrations through `20260722_0002` provide user profiles, workspaces, four roles, expiring invitations, secret references, and transactional audit events. SQLite is the easy local default; PostgreSQL is the shared/production target.
 - The API verifies Supabase asymmetric JWTs through JWKS and requires issuer, audience, expiry, and subject claims. `/sign-in` implements password sign-in/sign-up, verification redirects, magic links, Google OAuth, password recovery, and global sign-out.
-- `/workspaces` lists and creates workspaces, displays members and audit events, and gives owners controls for existing-user membership and secret references. Email invitations, Electron device pairing, and optional 2FA remain pending.
+- `/workspaces` lists and creates workspaces, displays members and audit events, and gives owners controls for membership, expiring email-bound invite links, and secret references. Automated transactional-email delivery, Electron device pairing, and optional 2FA remain pending.
 - Temporal setup, publishing UI, and a persisted media-job API do not exist yet. Research jobs currently use local JSON persistence and in-process background execution.
 
 ## Decisions in force
@@ -62,11 +62,12 @@ Last updated: 2026-07-22
 - The exact OpenMontage checkout was installed and activated. Its two guarded short-form manifests loaded successfully; an owned empty-file smoke fixture completed proposal and approval with a SHA-256 fingerprint and $1 cap while execution remained disabled. No provider call, paid action, or render occurred.
 - The `/research` Trend Radar page was visually smoke-tested in the local app; the shared browser API resolver follows loopback or LAN hostnames instead of hard-coding `localhost`, and development CORS accepts private-LAN frontend origins.
 - The Agent Reach pinned checkout resolves to `1494c2ab239e7355a77e7cceaf3271453a1f34b5` (upstream 1.5.0). The adapter reports all 15 pinned channels, currently with 3 ready, 1 setup-required, and 11 unavailable local capabilities; no live platform calls were made.
-- Migration `20260722_0001` upgrades a fresh local database and reports at head. Foundation tests cover owner workspace creation, membership roles, owner-only secret references, raw-secret rejection, slug validation, and ordered audit events.
+- Migrations `20260722_0001` and `20260722_0002` upgrade a fresh local database to head. Foundation tests cover workspace creation, roles, invitations, owner-only secret references, raw-secret rejection, slug validation, and ordered audit events.
 - Browser production builds cover `/sign-in`, `/update-password`, and `/workspaces`; ESLint and TypeScript checks pass. Next.js is updated to 16.2.11, patched PostCSS/Sharp overrides are installed, and `npm audit` reports zero known vulnerabilities.
-- The complete project suite passes: 57 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
+- Migration `20260722_0002` adds one-time, email-bound invitation tokens with expiry, revocation, replay protection, and transactional acceptance. Development CORS now explicitly permits the browser Authorization header.
+- The complete project suite passes: 61 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
 - Production builds for Next.js and Electron, TypeScript checks, ESLint, Ruff, JSON validation, CLI listing, and diff checks pass. The `/tools` page exposes six catalog cards, five locally installed/active providers, guarded lifecycle controls, Agent Reach diagnostics, and the MediaCrawler license block.
 
 ## Next recommended action
 
-Add signed Electron device pairing and email-based workspace invitations, then replace local research/production JSON with database-backed durable execution. OpenMontage runtime execution still needs dependency isolation, provider authorization, cost reconciliation, output provenance, and AGPL review. Keep MediaCrawler blocked unless written commercial permission is obtained.
+Add signed Electron device pairing and an approved transactional-email delivery adapter for workspace invitations, then replace local research/production JSON with database-backed durable execution. OpenMontage runtime execution still needs dependency isolation, provider authorization, cost reconciliation, output provenance, and AGPL review. Keep MediaCrawler blocked unless written commercial permission is obtained.

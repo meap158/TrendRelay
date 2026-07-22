@@ -32,3 +32,22 @@ def test_development_cors_allows_private_lan_frontend() -> None:
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://192.168.101.4:3000"
+
+
+def test_development_cors_allows_browser_authorization_header() -> None:
+    async def preflight() -> httpx.Response:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            return await client.options(
+                "/api/workspaces",
+                headers={
+                    "Origin": "http://localhost:3000",
+                    "Access-Control-Request-Method": "GET",
+                    "Access-Control-Request-Headers": "authorization",
+                },
+            )
+
+    response = asyncio.run(preflight())
+
+    assert response.status_code == 200
+    assert "Authorization" in response.headers["access-control-allow-headers"]

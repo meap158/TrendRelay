@@ -92,7 +92,7 @@ Then open `/sign-in`. The browser supports email/password sign-in and account cr
 
 Run `npm run db -- upgrade` to apply the current migration. Local development defaults to ignored `.data/trendrelay.db`; set `DATABASE_URL` to PostgreSQL for shared or production environments. Configure `SUPABASE_URL` and `AUTH_AUDIENCE` in local `.env` to enable bearer-token verification through Supabase's asymmetric JWKS endpoint.
 
-Authenticated endpoints under `/api/workspaces` create and list workspaces, add owner-managed members with owner/editor/approver/analyst roles, register secret references, and read the workspace audit trail. Secret-reference requests accept only approved secret-store locators; raw credentials are never accepted. Mutations and their audit records commit in one database transaction.
+Authenticated endpoints under `/api/workspaces` create and list workspaces, manage owner/editor/approver/analyst membership, issue and revoke expiring email-bound invitations, register secret references, and read the workspace audit trail. Invitation tokens are returned once, stored only as SHA-256 digests, and accepted only by a signed-in account with the invited email. The UI generates a copyable link; automated transactional-email delivery still requires an approved provider. Secret-reference requests accept only approved secret-store locators; raw credentials are never accepted. Mutations and their audit records commit in one database transaction.
 
 ## Managed open-source tools
 

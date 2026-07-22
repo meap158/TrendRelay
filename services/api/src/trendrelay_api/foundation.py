@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime, timedelta
+from hashlib import sha256
+from secrets import token_urlsafe
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from trendrelay_api.auth import CurrentUser, current_user
@@ -17,6 +20,7 @@ from trendrelay_api.models import (
     SecretReference,
     UserProfile,
     Workspace,
+    WorkspaceInvitation,
     WorkspaceMember,
 )
 
@@ -43,6 +47,24 @@ class MemberCreate(BaseModel):
     user_id: str = Field(min_length=1, max_length=128)
     email: str | None = Field(default=None, max_length=320)
     role: Role
+
+
+class InvitationCreate(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    role: Role
+    expires_hours: int = Field(default=72, ge=1, le=168)
+
+    @field_validator("email")
+    @classmethod
+    def valid_email(cls, value: str) -> str:
+        value = value.strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
+            raise ValueError("Enter a valid email address.")
+        return value
+
+
+class InvitationAccept(BaseModel):
+    token: str = Field(min_length=32, max_length=200)
 
 
 class SecretReferenceCreate(BaseModel):
@@ -201,6 +223,183 @@ def add_member(
         {"role": body.role},
     )
     return {"member": {"id": member.id, "user_id": member.user_id, "role": member.role}}
+
+
+def invitation_status(item: WorkspaceInvitation) -> str:
+    expires_at = (
+        item.expires_at.replace(tzinfo=UTC)
+        if item.expires_at.tzinfo is None
+        else item.expires_at
+    )
+    if item.accepted_at:
+        return "accepted"
+    if item.revoked_at:
+        return "revoked"
+    if expires_at <= datetime.now(UTC):
+        return "expired"
+    return "pending"
+
+
+def serialize_invitation(item: WorkspaceInvitation) -> dict[str, Any]:
+    return {
+        "id": item.id,
+        "workspace_id": item.workspace_id,
+        "email": item.email,
+        "role": item.role,
+        "status": invitation_status(item),
+        "created_at": item.created_at,
+        "expires_at": item.expires_at,
+    }
+
+
+@router.get("/workspaces/{workspace_id}/invitations")
+def list_invitations(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    require_role(membership(session, workspace_id, user.id), {"owner"})
+    items = session.scalars(
+        select(WorkspaceInvitation)
+        .where(WorkspaceInvitation.workspace_id == workspace_id)
+        .order_by(WorkspaceInvitation.created_at.desc())
+        .limit(100)
+    ).all()
+    return {"invitations": [serialize_invitation(item) for item in items]}
+
+
+@router.post("/workspaces/{workspace_id}/invitations", status_code=201)
+def create_invitation(
+    workspace_id: str,
+    body: InvitationCreate,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    require_role(membership(session, workspace_id, user.id), {"owner"})
+    existing_member = session.scalar(
+        select(WorkspaceMember)
+        .join(UserProfile, UserProfile.id == WorkspaceMember.user_id)
+        .where(
+            WorkspaceMember.workspace_id == workspace_id,
+            func.lower(UserProfile.email) == body.email,
+        )
+    )
+    if existing_member:
+        raise HTTPException(status_code=409, detail="Email already belongs to a workspace member.")
+    candidates = session.scalars(
+        select(WorkspaceInvitation).where(
+            WorkspaceInvitation.workspace_id == workspace_id,
+            WorkspaceInvitation.email == body.email,
+            WorkspaceInvitation.accepted_at.is_(None),
+            WorkspaceInvitation.revoked_at.is_(None),
+        )
+    ).all()
+    if any(invitation_status(item) == "pending" for item in candidates):
+        raise HTTPException(status_code=409, detail="A pending invitation already exists.")
+    raw_token = token_urlsafe(32)
+    item = WorkspaceInvitation(
+        workspace_id=workspace_id,
+        email=body.email,
+        role=body.role,
+        token_hash=sha256(raw_token.encode("utf-8")).hexdigest(),
+        invited_by=user.id,
+        expires_at=datetime.now(UTC) + timedelta(hours=body.expires_hours),
+    )
+    session.add(item)
+    session.flush()
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "workspace.invitation_created",
+        "workspace_invitation",
+        item.id,
+        {"email": item.email, "role": item.role, "expires_at": item.expires_at.isoformat()},
+    )
+    return {"invitation": serialize_invitation(item), "token": raw_token}
+
+
+@router.post("/workspaces/{workspace_id}/invitations/{invitation_id}/revoke")
+def revoke_invitation(
+    workspace_id: str,
+    invitation_id: str,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    require_role(membership(session, workspace_id, user.id), {"owner"})
+    item = session.scalar(
+        select(WorkspaceInvitation).where(
+            WorkspaceInvitation.id == invitation_id,
+            WorkspaceInvitation.workspace_id == workspace_id,
+        )
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Invitation not found.")
+    if invitation_status(item) != "pending":
+        raise HTTPException(status_code=409, detail="Only pending invitations can be revoked.")
+    item.revoked_at = datetime.now(UTC)
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "workspace.invitation_revoked",
+        "workspace_invitation",
+        item.id,
+    )
+    return {"invitation": serialize_invitation(item)}
+
+
+@router.post("/invitations/accept")
+def accept_invitation(
+    body: InvitationAccept,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    if not user.email:
+        raise HTTPException(
+            status_code=403, detail="The authenticated account has no email address."
+        )
+    item = session.scalar(
+        select(WorkspaceInvitation).where(
+            WorkspaceInvitation.token_hash == sha256(body.token.encode("utf-8")).hexdigest()
+        )
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Invitation not found.")
+    if invitation_status(item) != "pending":
+        raise HTTPException(status_code=409, detail="Invitation is no longer active.")
+    if user.email.strip().lower() != item.email:
+        raise HTTPException(status_code=403, detail="Invitation email does not match this account.")
+    ensure_profile(session, user)
+    if session.scalar(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == item.workspace_id,
+            WorkspaceMember.user_id == user.id,
+        )
+    ):
+        raise HTTPException(status_code=409, detail="User is already a workspace member.")
+    member = WorkspaceMember(workspace_id=item.workspace_id, user_id=user.id, role=item.role)
+    session.add(member)
+    session.flush()
+    item.accepted_at = datetime.now(UTC)
+    item.accepted_by = user.id
+    audit(
+        session,
+        request,
+        item.workspace_id,
+        user.id,
+        "workspace.invitation_accepted",
+        "workspace_invitation",
+        item.id,
+        {"role": item.role},
+    )
+    workspace = session.get(Workspace, item.workspace_id)
+    return {"workspace": serialize_workspace(workspace, item.role), "member_id": member.id}
 
 
 @router.get("/workspaces/{workspace_id}/secret-references")
