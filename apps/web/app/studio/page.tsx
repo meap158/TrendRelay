@@ -20,6 +20,7 @@ export default function StudioPage() {
   const { loading, user, apiFetch } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
+  const [sourcePath, setSourcePath] = useState("");
   const [productions, setProductions] = useState<Production[]>([]);
   const [renders, setRenders] = useState<RenderJob[]>([]);
   const [runtime, setRuntime] = useState<Record<string, unknown> | null>(null);
@@ -39,6 +40,10 @@ export default function StudioPage() {
     setProductions(records.productions);
     setRenders(records.renders);
   }, [apiFetch]);
+
+  useEffect(() => {
+    queueMicrotask(() => setSourcePath(new URLSearchParams(window.location.search).get("source") ?? ""));
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -114,7 +119,7 @@ export default function StudioPage() {
       <form className="publish-form" onSubmit={(event) => { event.preventDefault(); void propose(event.currentTarget); }}>
         <label>Workspace<select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} / {workspace.role}</option>)}</select></label>
         <label>Production title<input name="title" required minLength={2} /></label>
-        <label>Approved local media path<input name="source_asset" required placeholder="C:\media\source.mp4" /></label>
+        <label>Approved local media path<input name="source_asset" required value={sourcePath} onChange={(event) => setSourcePath(event.target.value)} placeholder="C:\media\source.mp4" /></label>
         <label>Rights basis<select name="source_rights"><option value="owned">Owned</option><option value="licensed">Licensed</option><option value="public-domain">Public domain</option></select></label>
         <label>Pipeline<select name="pipeline"><option value="clip-factory">Clip factory</option><option value="podcast-repurpose">Podcast repurpose</option></select></label>
         <label>Budget cap (USD)<input name="budget_usd" type="number" min="1" max="100" step="0.01" defaultValue="1" /></label>

@@ -55,36 +55,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const bridge = window.trendrelayDesktop;
     if (bridge) {
+      let bridgeCheckComplete = false;
+      const bridgeTimer = window.setTimeout(() => {
+        if (!bridgeCheckComplete) {
+          setDesktopAvailable(true);
+          setLoading(false);
+        }
+      }, 2500);
       bridge.status()
         .then((status) => setDesktopUser(identity(status)))
         .catch(() => setDesktopUser(null))
         .finally(() => {
+          bridgeCheckComplete = true;
+          window.clearTimeout(bridgeTimer);
           setDesktopAvailable(true);
           setLoading(false);
         });
-      return;
+      return () => window.clearTimeout(bridgeTimer);
     }
     if (!client) {
       queueMicrotask(() => setLoading(false));
       return;
     }
+    let sessionCheckComplete = false;
+    const sessionTimer = window.setTimeout(() => {
+      if (!sessionCheckComplete) setLoading(false);
+    }, 2500);
     client.auth.getSession().then(({ data }) => {
       setSession(data.session);
       if (!data.session) setLoading(false);
+    }).catch(() => {
+      setSession(null);
+      setLoading(false);
+    }).finally(() => {
+      sessionCheckComplete = true;
+      window.clearTimeout(sessionTimer);
     });
     const { data } = client.auth.onAuthStateChange((nextEvent, nextSession) => {
       setEvent(nextEvent);
       setSession(nextSession);
-      setLoading(Boolean(nextSession));
+      if (!nextSession) setLoading(false);
     });
-    return () => data.subscription.unsubscribe();
+    return () => {
+      window.clearTimeout(sessionTimer);
+      data.subscription.unsubscribe();
+    };
   }, [client]);
 
   useEffect(() => {
     if (desktopAvailable || !client || !session) return;
     let active = true;
+    const assuranceTimer = window.setTimeout(() => {
+      if (active) {
+        setMfaRequired(true);
+        setLoading(false);
+      }
+    }, 2500);
     client.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data, error }) => {
       if (!active) return;
+      window.clearTimeout(assuranceTimer);
       const challengeRequired = Boolean(error)
         || (data?.currentLevel === "aal1" && data.nextLevel === "aal2");
       setMfaRequired(challengeRequired);
@@ -101,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     return () => {
       active = false;
+      window.clearTimeout(assuranceTimer);
     };
   }, [client, desktopAvailable, session]);
   const apiFetch = useCallback(

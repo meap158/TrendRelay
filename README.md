@@ -36,7 +36,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 
 ## Repository structure
 
-- `apps/web` — Next.js control surface, including Trend Radar, Studio, publishing, workspaces, and About & Tools
+- `apps/web` — compact operations console for media acquisition, Trend Radar, Studio, publishing, workspaces, and About & Tools
 - `apps/desktop` — Electron shell for local media and browser-assisted workflows
 - `scripts/dev.py` — unified hot-reload supervisor for local development
 - `scripts/reach.py` — sanitized Agent Reach channel diagnostics
@@ -71,7 +71,7 @@ npm install
 # Add --desktop to also launch Electron.
 ```
 
-Initialize or update the local database with `npm run db -- upgrade`. API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/research` for Trend Radar, `http://localhost:3000/studio` for governed local production, or `http://localhost:3000/tools` to inspect every incorporated project and manage local installation/activation.
+Initialize or update the local database with `npm run db -- upgrade`. API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/` for the media-to-publish operations console. Paste Douyin source links there, monitor durable downloads, and hand resulting files directly to Studio or Postiz publishing. Trend Radar remains at `/research`, governed local production at `/studio`, and provider management at `/tools`.
 
 The first product vertical slice now includes database-backed Supabase authentication, workspace and role management, append-only audit events, secret references, and the governed plugin registry.
 
@@ -100,7 +100,7 @@ Authenticated endpoints under `/api/workspaces` create and list workspaces, mana
 
 ## Durable execution
 
-Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Last30Days research, OpenMontage preflights and local renders, and Postiz publishing operations use this durable queue. The research and production adapters write no legacy JSON state. The supervised durable worker polls recoverable jobs, retries eligible research/render failures within their bounds, processes publishing operations once, and reclaims expired leases after process restarts; `python scripts/worker.py --once` provides a deterministic operational drain.
+Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Douyin acquisition, Last30Days research, OpenMontage preflights and local renders, and Postiz publishing operations use this durable queue. The research and production adapters write no legacy JSON state. The supervised durable worker polls recoverable jobs, retries eligible research/render failures within their bounds, processes publishing operations once, and reclaims expired leases after process restarts; `python scripts/worker.py --once` provides a deterministic operational drain.
 
 ## Managed open-source tools
 
@@ -163,7 +163,9 @@ Run a newline-delimited batch with deduplication and incremental updates:
 npm run douyin -- batch --file .\douyin-urls.txt --mode post --mode mix --limit 50 --incremental
 ```
 
-The default limit is 50 items per selected profile mode; use `--limit 0` only for an intentional full crawl. Use `--dry-run` to inspect redacted configuration without downloading. For browser fallback, run `npm run douyin -- install --browser`, then add `--browser-fallback` to the batch command.
+The main operations console provides the simpler authenticated path: choose a workspace, paste one or more Douyin video/profile/share links, set a bounded item count, and monitor the durable media queue. Completed artifacts include size and SHA-256 provenance plus direct **Prepare** and **Publish** handoffs that prefill Studio or Postiz. The supervised worker resumes queued downloads after restarts. TikTok acquisition is visibly disabled until a reviewed provider is incorporated; Postiz can still publish approved media to connected TikTok accounts.
+
+The CLI default limit is 50 items per selected profile mode; use `--limit 0` only for an intentional full crawl. The GUI is deliberately bounded to 100. Use `--dry-run` to inspect redacted configuration without downloading. For browser fallback, run `npm run douyin -- install --browser`, then add `--browser-fallback` to the batch command.
 
 Optional authenticated access reads `DOUYIN_*` variables from the environment or local `.env`; values are never printed and the generated runtime configuration is deleted after each run. Downloads are written to `.data/downloads/douyin/`. Only download and reuse content when permitted by platform terms and applicable rights.
 

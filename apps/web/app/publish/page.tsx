@@ -26,6 +26,7 @@ export default function PublishPage() {
   const { loading, user, apiFetch } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
+  const [videoPath, setVideoPath] = useState("");
   const [targets, setTargets] = useState<Record<Platform, string>>({
     tiktok: "",
     instagram: "",
@@ -46,6 +47,10 @@ export default function PublishPage() {
     );
     setJobs(body.jobs);
   }, [apiFetch]);
+
+  useEffect(() => {
+    queueMicrotask(() => setVideoPath(new URLSearchParams(window.location.search).get("video") ?? ""));
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -138,7 +143,7 @@ export default function PublishPage() {
           <label>Workspace<select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} required>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} / {workspace.role}</option>)}</select></label>
           <button type="button" disabled={busy || !canExecute} onClick={discover}>Discover connected accounts</button>
           {integrations !== null && <pre className="payload-preview">{JSON.stringify(integrations, null, 2)}</pre>}
-          <label>Approved local MP4 path<input name="video_path" placeholder=".data\media\approved-clip.mp4" required /><small>Media must be under a configured publishing media directory.</small></label>
+          <label>Approved local MP4 path<input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" required /><small>Media must be under a configured publishing media directory.</small></label>
           <label>Title<input name="title" maxLength={200} /></label>
           <label>Caption<textarea name="caption" rows={6} maxLength={5000} required /></label>
           <label>Date and time<input name="date" type="datetime-local" required /></label>
