@@ -98,7 +98,7 @@ Authenticated endpoints under `/api/workspaces` create and list workspaces, mana
 
 ## Durable execution
 
-Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Last30Days now uses this durable queue exclusively. OpenMontage still needs its adapter migration before the remaining production JSON store can be removed.
+Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Last30Days research and OpenMontage preflight proposals now use this durable queue exclusively; neither adapter writes legacy JSON state. Approved OpenMontage preflights complete the queue record while their domain payload continues to keep rendering disabled.
 
 ## Managed open-source tools
 

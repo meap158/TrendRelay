@@ -235,6 +235,24 @@ def fail_job(
         return serialize_job(item)
 
 
+def update_job_payload(
+    job_id: str,
+    payload: dict[str, Any],
+    *,
+    factory: SessionMaker = SessionFactory,
+) -> dict[str, Any]:
+    with factory.begin() as session:
+        item = session.get(DurableJob, job_id)
+        if not item:
+            raise FileNotFoundError(job_id)
+        if item.status != "queued" or item.lease_owner:
+            raise PermissionError("Only an unclaimed queued job can be updated.")
+        item.payload = payload
+        item.updated_at = now_utc()
+        session.flush()
+        return serialize_job(item)
+
+
 def request_job_cancellation(
     job_id: str, *, factory: SessionMaker = SessionFactory
 ) -> dict[str, Any]:

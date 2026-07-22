@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,12 +11,20 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
+from trendrelay_api.database import SessionFactory
+from trendrelay_api.jobs import (
+    claim_job,
+    complete_job,
+    create_job_record,
+    get_job_record,
+    list_job_records,
+)
 from trendrelay_api.tool_registry import PROJECT_ROOT, list_tools
 
 TOOL_ID = "openmontage"
+JOB_SESSION_FACTORY = SessionFactory
 TOOL_ROOT = PROJECT_ROOT / ".tools" / "catalog" / TOOL_ID / "source"
 PIPELINES_ROOT = TOOL_ROOT / "pipeline_defs"
-PRODUCTIONS_ROOT = PROJECT_ROOT / ".data" / "productions" / "openmontage"
 SAFE_PIPELINES = {"clip-factory", "podcast-repurpose"}
 SAFE_MEDIA_SUFFIXES = {".m4a", ".mkv", ".mov", ".mp3", ".mp4", ".wav", ".webm"}
 
@@ -59,22 +66,6 @@ class ProductionApproval(BaseModel):
 
 def _now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
-
-
-def _production_path(production_id: str) -> Path:
-    if not re.fullmatch(r"production_[a-f0-9]{16}", production_id):
-        raise ValueError("Invalid production identifier")
-    return PRODUCTIONS_ROOT / production_id / "proposal.json"
-
-
-def _write_production(production: dict[str, Any]) -> None:
-    path = _production_path(production["id"])
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(
-        json.dumps(production, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
-    temporary.replace(path)
 
 
 def provider_status() -> dict[str, Any]:
@@ -183,7 +174,14 @@ def create_proposal(request: ProductionRequest) -> dict[str, Any]:
             ),
         },
     }
-    _write_production(proposal)
+    create_job_record(
+        production_id,
+        request.workspace_id,
+        "openmontage_preflight",
+        proposal,
+        max_attempts=1,
+        factory=JOB_SESSION_FACTORY,
+    )
     return proposal
 
 
@@ -203,26 +201,28 @@ def approve_proposal(production_id: str, approval: ProductionApproval) -> dict[s
         "source_sha256": production["source"]["sha256"],
         "budget_cap_usd": production["plan"]["budget_cap_usd"],
     }
-    _write_production(production)
+    worker_id = f"openmontage-approval-{approval.approved_by.strip()}"
+    claim_job(production_id, worker_id, factory=JOB_SESSION_FACTORY)
+    complete_job(
+        production_id, worker_id, production, factory=JOB_SESSION_FACTORY
+    )
     return production
 
 
 def get_production(production_id: str) -> dict[str, Any]:
-    path = _production_path(production_id)
-    if not path.is_file():
-        raise FileNotFoundError(production_id)
-    return json.loads(path.read_text(encoding="utf-8"))
+    if not re.fullmatch(r"production_[a-f0-9]{16}", production_id):
+        raise ValueError("Invalid production identifier")
+    record = get_job_record(production_id, factory=JOB_SESSION_FACTORY)
+    return dict(record["result"] or record["payload"])
 
 
 def list_productions(workspace_id: str = "local", limit: int = 20) -> list[dict[str, Any]]:
-    if not PRODUCTIONS_ROOT.is_dir():
-        return []
-    productions = []
-    for path in PRODUCTIONS_ROOT.glob("production_*/proposal.json"):
-        try:
-            production = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if production.get("workspace_id") == workspace_id:
-            productions.append(production)
-    return sorted(productions, key=lambda item: item.get("created_at", ""), reverse=True)[:limit]
+    return [
+        dict(record["result"] or record["payload"])
+        for record in list_job_records(
+            workspace_id,
+            "openmontage_preflight",
+            limit,
+            factory=JOB_SESSION_FACTORY,
+        )
+    ]

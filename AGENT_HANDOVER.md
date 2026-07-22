@@ -23,7 +23,7 @@ Last updated: 2026-07-22
 - SQLAlchemy 2 models and Alembic migrations through `20260722_0004` provide user profiles, workspaces, four roles, expiring invitations, device pairings, secret references, and transactional audit events. SQLite is the easy local default; PostgreSQL is the shared/production target.
 - The API verifies Supabase asymmetric JWTs through JWKS plus distinct TrendRelay device JWTs; both require issuer, audience, expiry, and subject claims. `/sign-in` implements password sign-in/sign-up, verification redirects, magic links, Google OAuth, password recovery, and global sign-out.
 - `/workspaces` lists and creates workspaces, displays members and audit events, and gives owners controls for membership, expiring email-bound invite links, and secret references. Automated transactional-email delivery and optional 2FA remain pending.
-- Temporal setup and the publishing UI do not exist yet. Last30Days research now uses the leased SQL job store exclusively. OpenMontage production remains the final legacy JSON adapter.
+- Temporal setup and the publishing UI do not exist yet. Last30Days research and OpenMontage preflight proposals now use the leased SQL job store exclusively; no research or production JSON adapter remains.
 
 ## Decisions in force
 
@@ -67,10 +67,10 @@ Last updated: 2026-07-22
 - Migration `20260722_0002` adds one-time, email-bound invitation tokens with expiry, revocation, replay protection, and transactional acceptance. Development CORS now explicitly permits the browser Authorization header.
 - Migration `20260722_0003` and `/device` implement a loopback-only, ten-minute, one-time desktop authorization grant. Device JWTs have a separate token type, audience validation, and an eight-hour default lifetime; production requires `DEVICE_TOKEN_SECRET`.
 - Electron keeps the device JWT encrypted with operating-system `safeStorage` in the main process. IPC sender origin, renderer navigation, API origin/path, and HTTP methods are allowlisted; the preload never exposes bearer tokens. `start-electron.bat --check` validates without launching services.
-- Migration `20260722_0004` adds shared durable jobs with expiring leases, heartbeats, retry budgets, scheduling, cooperative cancellation, and recovery of abandoned running work. Last30Days is migrated off JSON; OpenMontage migration remains active.
+- Migration `20260722_0004` adds shared durable jobs with expiring leases, heartbeats, retry budgets, scheduling, cooperative cancellation, and recovery of abandoned running work. Last30Days and OpenMontage are migrated off JSON.
 - The complete project suite passes: 68 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
 - Production builds for Next.js and Electron, TypeScript checks, ESLint, Ruff, JSON validation, CLI listing, and diff checks pass. The `/tools` page exposes six catalog cards, five locally installed/active providers, guarded lifecycle controls, Agent Reach diagnostics, and the MediaCrawler license block.
 
 ## Next recommended action
 
-Migrate OpenMontage production JSON to the durable database, then add an approved transactional-email delivery adapter for workspace invitations. OpenMontage runtime execution still needs dependency isolation, provider authorization, cost reconciliation, output provenance, and AGPL review. Keep MediaCrawler blocked unless written commercial permission is obtained.
+Add a persistent worker supervisor for durable retries and recovery, then add an approved transactional-email delivery adapter for workspace invitations. OpenMontage runtime execution still needs dependency isolation, provider authorization, cost reconciliation, output provenance, and AGPL review. Keep MediaCrawler blocked unless written commercial permission is obtained.
