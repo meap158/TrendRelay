@@ -7,7 +7,7 @@ TrendRelay uses [jiji262/douyin-downloader](https://github.com/jiji262/douyin-do
 - License: MIT, copyright © 2026 jiji262
 - Installation location: `.tools/douyin-downloader/` (ignored)
 - Download location: `.data/downloads/douyin/` (ignored)
-- TrendRelay entry point: `douyin.cmd`
+- TrendRelay entry point: `npm run douyin --`
 
 The upstream source and its dependencies are installed into a dedicated virtual environment. TrendRelay does not expose its API internals to the core application. Cookies are read from environment variables, written only to an ephemeral runtime configuration, redacted from dry-run output, and deleted after execution.
 

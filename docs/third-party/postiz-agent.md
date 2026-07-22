@@ -7,7 +7,7 @@ TrendRelay uses [gitroomhq/postiz-agent](https://github.com/gitroomhq/postiz-age
 - License: GNU Affero General Public License v3.0, copyright (c) 2024 Nevo David
 - Installation location: `.tools/postiz-agent/` (ignored)
 - Runtime state: `.data/postiz/` (ignored)
-- TrendRelay entry point: `postiz.cmd`
+- TrendRelay entry point: `npm run postiz --`
 
 The upstream project is fetched and built unchanged in an isolated directory. TrendRelay communicates with it through its command-line interface and does not copy upstream source into the core application.
 

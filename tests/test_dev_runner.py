@@ -1,0 +1,80 @@
+from pathlib import Path
+import scripts.dev as dev
+
+
+class HealthyResponse:
+    status = 200
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+
+def test_health_probe_accepts_existing_service(monkeypatch) -> None:
+    service = dev.Service("Frontend", ["npm"], "green", "http://127.0.0.1:3000/")
+    monkeypatch.setattr(
+        dev.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: HealthyResponse(),
+    )
+
+    assert dev.service_is_healthy(service) is True
+
+
+def test_health_probe_rejects_unavailable_service(monkeypatch) -> None:
+    service = dev.Service("Frontend", ["npm"], "green", "http://127.0.0.1:3000/")
+    monkeypatch.setattr(
+        dev.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("offline")),
+    )
+
+    assert dev.service_is_healthy(service) is False
+
+
+def test_desktop_validation_requires_electron_binary(
+    monkeypatch, tmp_path: Path
+) -> None:
+    python = tmp_path / ".venv" / "Scripts" / "python.exe"
+    python.parent.mkdir(parents=True)
+    python.write_bytes(b"python")
+    services = [dev.Service("Backend", [str(python)], "cyan")]
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    monkeypatch.setattr(dev.shutil, "which", lambda _name: "available")
+
+    errors = dev.validation_errors(True, services)
+
+    assert errors == [
+        "Electron binary missing. Run start-electron.bat to repair it automatically."
+    ]
+
+
+def test_desktop_service_has_no_health_probe() -> None:
+    desktop = dev.build_services(True)[-1]
+
+    assert desktop.name == "Desktop"
+    assert desktop.health_url is None
+
+
+def test_partition_reuses_healthy_frontend_and_starts_desktop(monkeypatch) -> None:
+    frontend = dev.Service("Frontend", ["npm"], "green", "http://127.0.0.1:3000/")
+    desktop = dev.Service("Desktop", ["npm"], "magenta")
+    monkeypatch.setattr(dev, "service_is_healthy", lambda service: service is frontend)
+
+    reused, startable = dev.partition_services([frontend, desktop])
+
+    assert reused == [frontend]
+    assert startable == [desktop]
+
+
+def test_wait_until_healthy_retries_until_service_is_ready(monkeypatch) -> None:
+    backend = dev.Service(
+        "Backend", ["python"], "cyan", "http://127.0.0.1:8080/healthz"
+    )
+    results = iter([False, False, True])
+    monkeypatch.setattr(dev, "service_is_healthy", lambda _service: next(results))
+    monkeypatch.setattr(dev.time, "sleep", lambda _seconds: None)
+
+    assert dev.wait_until_healthy(backend) is True

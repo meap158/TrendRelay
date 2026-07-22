@@ -1,17 +1,18 @@
 # Agent Handover
 
-Last updated: 2026-07-19
+Last updated: 2026-07-22
 
 ## Current state
 
 - Repository uses a hybrid web/desktop, Python modular-monolith architecture.
 - Next.js web shell, hardened Electron shell, shared TypeScript schemas, plugin contracts, publication states, and a FastAPI health endpoint are scaffolded.
-- `scripts/dev.py` supervises backend and frontend hot-reload processes; `start-electron.bat` is the one-click Electron launcher and delegates to `start.cmd --desktop`.
+- `scripts/dev.py` supervises hot-reload services, reuses healthy backend/frontend processes instead of launching duplicates, and waits for new services to become healthy before starting dependents. `start-electron.bat` delegates to `start.cmd --desktop`.
 - The pinned `jiji262/douyin-downloader` 2.0.0 provider is integrated as `media.douyin-downloader` and installed locally at revision `ef3ad18c2b50e38e534f72aabe2b3fbb0b3fadd7`.
-- `douyin.cmd` installs, verifies, and runs single-link or file-based Douyin batches. Downloads, SQLite state, ephemeral configuration, upstream source, dependencies, and credentials remain ignored.
+- `npm run douyin --` installs, verifies, and runs single-link or file-based Douyin batches. Downloads, SQLite state, ephemeral configuration, upstream source, dependencies, and credentials remain ignored.
 - The pinned `gitroomhq/postiz-agent` 2.0.15 provider is integrated as `social.postiz-agent` at revision `41c5a9dbd6b2776863e7c05c22e7a385c208321c`.
-- `postiz.cmd` installs and verifies the provider, performs OAuth/API-key authentication and integration discovery, and previews or executes short-video drafts/schedules for TikTok, Instagram, and YouTube.
-- `config/tool-catalog.json`, `tools.cmd`, the loopback-only lifecycle API, and `/tools` About & Tools page catalogue all six incorporated GitHub projects with pinned revisions, license posture, install state, and activation state.
+- `npm run postiz --` installs and verifies the provider, performs OAuth/API-key authentication and integration discovery, and previews or executes short-video drafts/schedules for TikTok, Instagram, and YouTube.
+- `config/tool-catalog.json`, the `npm run tools --` CLI, the loopback-only lifecycle API, and `/tools` About & Tools page catalogue all six incorporated GitHub projects with pinned revisions, license posture, install state, and activation state.
+- Windows exposes exactly two root launchers: `start.cmd` for browser development and `start-electron.bat` for desktop development. Provider/tool operations use npm scripts rather than extra `.cmd` files.
 - Last 30 Days, OpenMontage, and Agent Reach are source-ready catalog entries; native job adapters and provider dependency setup remain pending.
 - MediaCrawler is documented but installation and activation are blocked because its license prohibits commercial use.
 - PostgreSQL/pgvector, Redis, and S3-compatible storage remain planned data services when product features require them.
@@ -35,16 +36,17 @@ Last updated: 2026-07-19
 ## Validation completed
 
 - Pinned upstream checkout resolved exactly to `ef3ad18c2b50e38e534f72aabe2b3fbb0b3fadd7`.
-- Isolated provider installation succeeded on Python 3.14; both `douyin.cmd check` and `npm run douyin -- check` reported version 2.0.0.
+- Isolated provider installation succeeded on Python 3.14; `npm run douyin -- check` reported version 2.0.0.
 - Fourteen API, wrapper, URL-security, validation, secret-lifecycle, environment-loader, and manifest tests passed.
 - Ruff lint and formatting checks passed for the integration code and tests.
-- End-to-end `douyin.cmd batch --file ... --dry-run` parsed copied share text and profile URLs, deduplicated input, applied incremental bounded settings, and produced redacted configuration.
+- End-to-end `npm run douyin -- batch --file ... --dry-run` parsed copied share text and profile URLs, deduplicated input, applied incremental bounded settings, and produced redacted configuration.
 - A live media download was not initiated because no user-authorized Douyin URL was provided.
-- Pinned Postiz checkout resolved exactly to `41c5a9dbd6b2776863e7c05c22e7a385c208321c`; the isolated build and both `postiz.cmd check` and `npm run postiz -- check` reported version 2.0.15.
+- Pinned Postiz checkout resolved exactly to `41c5a9dbd6b2776863e7c05c22e7a385c208321c`; the isolated build and `npm run postiz -- check` reported version 2.0.15.
 - A three-platform wrapper smoke test produced a draft preview with private/safe defaults and made no provider call.
 - No real social upload or post was initiated because credentials, integration IDs, an approved video, and explicit execution confirmation were not supplied.
-- `start-electron.bat` launcher validation passed through the unified runner with backend, frontend, and desktop services enabled.
-- The complete project suite passes: 30 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
+- `start-electron.bat` repaired the missing Electron 43.1.1 Windows binary through the package-provided installer, then passed desktop-mode validation.
+- Unified-runner tests cover healthy-service reuse, unavailable-service startup selection, and missing Electron detection.
+- The complete project suite passes: 31 tests. Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
 - Production builds for Next.js and Electron, TypeScript checks, ESLint, Ruff, JSON validation, CLI listing, and diff checks pass. The `/tools` page was visually verified at 1440 by 1000 with six cards, two installed/active providers, guarded controls, and the MediaCrawler block.
 
 ## Next recommended action

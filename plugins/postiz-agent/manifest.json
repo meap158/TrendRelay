@@ -4,7 +4,7 @@
   "version": "2.0.15+41c5a9dbd6b2",
   "runtime": {
     "type": "local-process",
-    "entrypoint": "postiz.cmd short-video"
+    "entrypoint": "npm run postiz -- short-video"
   },
   "source": {
     "repository": "https://github.com/gitroomhq/postiz-agent",

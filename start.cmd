@@ -2,6 +2,11 @@
 setlocal
 cd /d "%~dp0"
 
+set "TRENDRELAY_DESKTOP_REQUESTED=0"
+set "TRENDRELAY_CHECK_REQUESTED=0"
+for %%A in (%*) do if /I "%%~A"=="--desktop" set "TRENDRELAY_DESKTOP_REQUESTED=1"
+for %%A in (%*) do if /I "%%~A"=="--check" set "TRENDRELAY_CHECK_REQUESTED=1"
+
 where node >nul 2>nul
 if errorlevel 1 (
   echo TrendRelay requires Node.js 22 or newer.
@@ -26,8 +31,14 @@ if errorlevel 1 (
 )
 
 if not exist "node_modules\" (
-  echo Installing web dependencies for the first run...
+  echo Installing application dependencies for the first run...
   call npm install
+  if errorlevel 1 goto :install_error
+)
+
+if "%TRENDRELAY_DESKTOP_REQUESTED%"=="1" if not exist "node_modules\electron\dist\electron.exe" (
+  echo Electron runtime is missing. Repairing the local installation...
+  call node node_modules\electron\install.js
   if errorlevel 1 goto :install_error
 )
 
@@ -37,9 +48,11 @@ if not exist ".venv\Scripts\python.exe" (
   if errorlevel 1 goto :install_error
 )
 
-echo Checking API dependencies...
-".venv\Scripts\python.exe" -m pip install --disable-pip-version-check --quiet -e "services/api[dev]"
-if errorlevel 1 goto :install_error
+if "%TRENDRELAY_CHECK_REQUESTED%"=="0" (
+  echo Checking API dependencies...
+  ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check --quiet -e "services/api[dev]"
+  if errorlevel 1 goto :install_error
+)
 
 if /I "%TRENDRELAY_START_CHECK%"=="1" (
   ".venv\Scripts\python.exe" scripts\dev.py --check %*

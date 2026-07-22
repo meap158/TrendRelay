@@ -80,7 +80,7 @@ def check_provider() -> int:
         print(
             "Douyin provider is not installed at the pinned revision.", file=sys.stderr
         )
-        print("Run: douyin.cmd install", file=sys.stderr)
+        print("Run: npm run douyin -- install", file=sys.stderr)
         return 1
     if not tool_executable().is_file():
         print(
@@ -214,7 +214,8 @@ def batch_download(args: argparse.Namespace) -> int:
         return 1
     if args.browser_fallback and not (VENV_DIR / "browser-installed.txt").is_file():
         print(
-            "Browser fallback requires: douyin.cmd install --browser", file=sys.stderr
+            "Browser fallback requires: npm run douyin -- install --browser",
+            file=sys.stderr,
         )
         return 1
 

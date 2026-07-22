@@ -35,11 +35,9 @@ The first usable release prioritizes reliable research, media handling, publishi
 - `apps/web` — Next.js control surface
 - `apps/desktop` — Electron shell for local media and browser-assisted workflows
 - `scripts/dev.py` — unified hot-reload supervisor for local development
-- `tools.cmd` — list, install, uninstall, activate, and deactivate catalogued tools
 - `config/tool-catalog.json` — machine-readable registry of every incorporated GitHub project
+- `start.cmd` — one-click browser-app launcher with dependency bootstrap and hot reload
 - `start-electron.bat` — one-click Electron launcher with backend and frontend hot reload
-- `postiz.cmd` — Postiz authentication, integration discovery, and safe short-video publishing entry point
-- `douyin.cmd` — isolated Douyin installation and batch-download entry point
 - `services/api` — Python/FastAPI control plane (modular monolith)
 - `services/link-router` — first-party attribution redirect boundary
 - `workers` — isolated trend, media, AI, and publishing runtimes
@@ -56,7 +54,7 @@ Prerequisites: Node.js 22+ with npm 10+, and Python 3.12+.
 
 ### Windows — easiest
 
-Double-click `start.cmd` for the browser app or `start-electron.bat` for the Electron app. Both launchers validate prerequisites, create `.venv`, install both dependency sets, then hand off to the unified runner. Backend, frontend, and Electron logs stay in one terminal with prefixes, servers bind to the LAN, and code changes hot reload automatically. `start.cmd --desktop` is equivalent to the Electron launcher.
+Double-click `start.cmd` for the browser app or `start-electron.bat` for the Electron app. These are the only Windows launcher files. Both validate prerequisites, create `.venv`, install dependencies, and hand off to the unified runner. Desktop startup also repairs a missing Electron runtime automatically. Healthy backend or frontend processes are reused, preventing duplicate Next.js server failures. Logs stay in one terminal with prefixes, servers bind to the LAN, and code changes hot reload automatically.
 
 ### Command line
 
@@ -79,11 +77,11 @@ Every incorporated GitHub repository is documented in [the third-party catalog](
 Use the UI at `http://localhost:3000/tools`, or the local CLI:
 
 ```powershell
-tools.cmd list
-tools.cmd install last30days-skill --confirm-external-action
-tools.cmd activate last30days-skill
-tools.cmd deactivate last30days-skill
-tools.cmd uninstall last30days-skill --confirm-external-action
+npm run tools -- list
+npm run tools -- install last30days-skill --confirm-external-action
+npm run tools -- activate last30days-skill
+npm run tools -- deactivate last30days-skill
+npm run tools -- uninstall last30days-skill --confirm-external-action
 ```
 
 Installation fetches an exact reviewed revision; activation separately makes it eligible for orchestration. Source-ready tools still require a TrendRelay capability adapter and their documented upstream dependency/credential setup before production use. Lifecycle mutations are loopback-only. MediaCrawler remains visible but cannot be installed or activated because its current license prohibits commercial use.
@@ -95,24 +93,24 @@ TrendRelay integrates the MIT-licensed `jiji262/douyin-downloader` provider at a
 Install and verify the provider:
 
 ```powershell
-douyin.cmd install
-douyin.cmd check
+npm run douyin -- install
+npm run douyin -- check
 ```
 
 Download a single video or profile:
 
 ```powershell
-douyin.cmd batch "https://www.douyin.com/video/VIDEO_ID"
-douyin.cmd batch "https://www.douyin.com/user/SEC_UID" --mode post --limit 50
+npm run douyin -- batch "https://www.douyin.com/video/VIDEO_ID"
+npm run douyin -- batch "https://www.douyin.com/user/SEC_UID" --mode post --limit 50
 ```
 
 Run a newline-delimited batch with deduplication and incremental updates:
 
 ```powershell
-douyin.cmd batch --file .\douyin-urls.txt --mode post --mode mix --limit 50 --incremental
+npm run douyin -- batch --file .\douyin-urls.txt --mode post --mode mix --limit 50 --incremental
 ```
 
-The default limit is 50 items per selected profile mode; use `--limit 0` only for an intentional full crawl. Use `--dry-run` to inspect redacted configuration without downloading. For browser fallback, run `douyin.cmd install --browser`, then add `--browser-fallback` to the batch command.
+The default limit is 50 items per selected profile mode; use `--limit 0` only for an intentional full crawl. Use `--dry-run` to inspect redacted configuration without downloading. For browser fallback, run `npm run douyin -- install --browser`, then add `--browser-fallback` to the batch command.
 
 Optional authenticated access reads `DOUYIN_*` variables from the environment or local `.env`; values are never printed and the generated runtime configuration is deleted after each run. Downloads are written to `.data/downloads/douyin/`. Only download and reuse content when permitted by platform terms and applicable rights.
 
@@ -123,11 +121,11 @@ TrendRelay integrates the AGPL-3.0-licensed `gitroomhq/postiz-agent` at an exact
 Install, authenticate, and discover integration IDs:
 
 ```powershell
-postiz.cmd install
-postiz.cmd check
-postiz.cmd auth-login
-postiz.cmd auth-status
-postiz.cmd integrations
+npm run postiz -- install
+npm run postiz -- check
+npm run postiz -- auth-login
+npm run postiz -- auth-status
+npm run postiz -- integrations
 ```
 
 OAuth device login is preferred. As an alternative, set `POSTIZ_API_KEY` and optionally `POSTIZ_API_URL` in local `.env` for a self-hosted Postiz instance.
@@ -135,7 +133,7 @@ OAuth device login is preferred. As an alternative, set `POSTIZ_API_KEY` and opt
 Preview a multi-platform short-video draft without network calls:
 
 ```powershell
-postiz.cmd short-video --video .\clip.mp4 --caption "Launch caption" --date "2026-07-20T10:00:00+07:00" --target tiktok=TIKTOK_ID --target instagram=INSTAGRAM_ID --target youtube=YOUTUBE_ID
+npm run postiz -- short-video --video .\clip.mp4 --caption "Launch caption" --date "2026-07-20T10:00:00+07:00" --target tiktok=TIKTOK_ID --target instagram=INSTAGRAM_ID --target youtube=YOUTUBE_ID
 ```
 
 To create the remote draft, append `--execute --confirm-external-action`. To schedule it, also append `--schedule` and use a future timezone-aware date. TikTok defaults to `SELF_ONLY` upload mode with duet, stitch, and comments off; YouTube defaults to private. Override these settings only intentionally with the documented command flags.

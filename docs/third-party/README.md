@@ -11,4 +11,4 @@ Every external GitHub project incorporated by TrendRelay is recorded here and in
 | [Panniantong/Agent-Reach](https://github.com/Panniantong/Agent-Reach) | Research channel discovery and diagnostics | MIT; authenticated channels carry account risk | Source ready; channel adapter pending |
 | [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) | Multi-platform social research | Non-commercial learning/research only | Catalogued; install and activation blocked |
 
-The local `/tools` page and `tools.cmd` expose catalog status. Only pinned-source installation and local activation state are automated. Provider-specific credentials, browsers, system packages, and upstream setup scripts remain explicit follow-up steps.
+The local `/tools` page and `npm run tools --` expose catalog status. Only pinned-source installation and local activation state are automated. Provider-specific credentials, browsers, system packages, and upstream setup scripts remain explicit follow-up steps.

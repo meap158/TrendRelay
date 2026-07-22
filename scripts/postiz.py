@@ -98,7 +98,7 @@ def check_provider() -> int:
         print(
             "Postiz provider is not installed at the pinned revision.", file=sys.stderr
         )
-        print("Run: postiz.cmd install", file=sys.stderr)
+        print("Run: npm run postiz -- install", file=sys.stderr)
         return 1
     if not ENTRYPOINT.is_file():
         print("Postiz provider build is missing. Re-run installation.", file=sys.stderr)
@@ -115,7 +115,7 @@ def check_provider() -> int:
             "Postiz provider source does not match the pinned revision.",
             file=sys.stderr,
         )
-        print("Run: postiz.cmd install", file=sys.stderr)
+        print("Run: npm run postiz -- install", file=sys.stderr)
         return 1
     try:
         result = run_provider(["--version"], capture=True)
