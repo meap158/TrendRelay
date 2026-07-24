@@ -12,6 +12,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -236,6 +237,13 @@ def print_banner(include_desktop: bool) -> None:
     print("\nStarting or reusing hot-reload services (staggered)...\n")
 
 
+def open_browser_app(include_desktop: bool) -> bool:
+    if include_desktop:
+        return False
+    print("Opening browser...")
+    return webbrowser.open("http://127.0.0.1:3000/")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -280,6 +288,8 @@ def main() -> int:
                 return 1
             if index < len(startable) - 1:
                 time.sleep(0.25)
+
+        open_browser_app(args.desktop)
 
         next_health_check = time.monotonic() + 2
         while True:

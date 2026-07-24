@@ -145,12 +145,35 @@ def audit(
 
 
 @router.get("/workspaces")
-def list_workspaces(user: AuthenticatedUser, session: DatabaseSession) -> dict[str, Any]:
+def list_workspaces(
+    request: Request, user: AuthenticatedUser, session: DatabaseSession
+) -> dict[str, Any]:
     rows = session.execute(
         select(Workspace, WorkspaceMember.role)
         .join(WorkspaceMember)
         .where(WorkspaceMember.user_id == user.id)
     ).all()
+    if not rows and user.local_development:
+        ensure_profile(session, user)
+        workspace = session.scalar(select(Workspace).where(Workspace.slug == "local-workspace"))
+        if not workspace:
+            workspace = Workspace(
+                name="Local Workspace", slug="local-workspace", created_by=user.id
+            )
+            session.add(workspace)
+            session.flush()
+        session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="owner"))
+        audit(
+            session,
+            request,
+            workspace.id,
+            user.id,
+            "workspace.local_bootstrapped",
+            "workspace",
+            workspace.id,
+        )
+        session.flush()
+        rows = [(workspace, "owner")]
     return {"workspaces": [serialize_workspace(item, role) for item, role in rows]}
 
 

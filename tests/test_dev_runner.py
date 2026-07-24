@@ -98,8 +98,34 @@ def test_windows_launcher_check_mode_uses_parsed_flag() -> None:
     assert 'if "%TRENDRELAY_CHECK_REQUESTED%"=="1" (' in launcher
     assert "TRENDRELAY_START_CHECK" not in launcher
 
+
 def test_unified_runner_includes_hot_reload_durable_worker() -> None:
-    worker = next(service for service in dev.build_services(False) if service.name == "Worker")
+    worker = next(
+        service for service in dev.build_services(False) if service.name == "Worker"
+    )
 
     assert worker.command[-2:] == ["scripts/worker.py", "--watch"]
     assert worker.health_url is None
+
+
+def test_browser_app_opens_after_startup(monkeypatch) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(dev.webbrowser, "open", lambda url: opened.append(url) or True)
+
+    assert dev.open_browser_app(False) is True
+    assert opened == ["http://127.0.0.1:3000/"]
+
+    assert dev.open_browser_app(True) is False
+    assert opened == ["http://127.0.0.1:3000/"]
+
+
+def test_browser_opens_only_after_frontend_health_gate() -> None:
+    source = (Path(__file__).resolve().parents[1] / "scripts" / "dev.py").read_text(
+        encoding="utf-8"
+    )
+
+    health_gate = source.index(
+        "if service.health_url and not wait_until_healthy(service)"
+    )
+    browser_open = source.index("open_browser_app(args.desktop)")
+    assert health_gate < browser_open

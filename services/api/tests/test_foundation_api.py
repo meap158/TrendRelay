@@ -50,6 +50,24 @@ def teardown_function() -> None:
     app.dependency_overrides.clear()
 
 
+def test_local_admin_gets_default_owner_workspace() -> None:
+    app.dependency_overrides[current_user] = lambda: CurrentUser(
+        id="local-admin",
+        email="local-admin@trendrelay.local",
+        assurance_level="aal2",
+        local_development=True,
+    )
+
+    first = asyncio.run(request("GET", "/api/workspaces"))
+    second = asyncio.run(request("GET", "/api/workspaces"))
+
+    assert first.status_code == 200
+    assert first.json()["workspaces"][0]["name"] == "Local Workspace"
+    assert first.json()["workspaces"][0]["role"] == "owner"
+    assert second.json()["workspaces"][0]["id"] == first.json()["workspaces"][0]["id"]
+    assert len(second.json()["workspaces"]) == 1
+
+
 def test_workspace_owner_members_secret_references_and_audit() -> None:
     created = asyncio.run(
         request("POST", "/api/workspaces", json={"name": "Editorial", "slug": "editorial"})

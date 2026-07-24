@@ -119,7 +119,6 @@ export default function AccountSecurityPage() {
 
   return (
     <main className="auth-page security-page">
-      <nav><Link href="/">TrendRelay</Link><span>/</span><strong>Account security</strong></nav>
       <section className="security-grid">
         <article className="setup-card">
           <p className="eyebrow">AUTHENTICATOR ASSURANCE</p>

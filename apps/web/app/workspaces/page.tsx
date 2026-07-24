@@ -223,7 +223,7 @@ export default function WorkspacesPage() {
 
   return (
     <main className="workspace-page">
-      <nav><Link href="/">TrendRelay</Link><span>/</span><strong>Workspaces</strong><Link href="/account/security">Account security</Link><button className="nav-action" onClick={() => signOut().then(() => window.location.assign("/sign-in"))}>Sign out</button></nav>
+      <nav><Link href="/account/security">Account security</Link></nav>
       <div className="workspace-heading"><div><p className="eyebrow">CONTROL PLANE</p><h1>One operating system. Clean boundaries.</h1></div><p>Signed in as {user.email ?? user.id}</p></div>
       {error && <p className="registry-error" role="alert">{error}</p>}
       <section className="workspace-layout">
@@ -254,5 +254,5 @@ export default function WorkspacesPage() {
 }
 
 function StatePage({ title, body, action }: { title: string; body: string; action?: React.ReactNode }) {
-  return <main className="auth-page"><nav><Link href="/">TrendRelay</Link><span>/</span><strong>Workspaces</strong></nav><section className="setup-card"><p className="eyebrow">WORKSPACE ACCESS</p><h1>{title}</h1><p>{body}</p>{action}</section></main>;
+  return <main className="auth-page"><section className="setup-card"><p className="eyebrow">WORKSPACE ACCESS</p><h1>{title}</h1><p>{body}</p>{action}</section></main>;
 }

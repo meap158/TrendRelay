@@ -24,7 +24,6 @@ export default function UpdatePasswordPage() {
 
   return (
     <main className="auth-page">
-      <nav><Link href="/">TrendRelay</Link><span>/</span><strong>Password recovery</strong></nav>
       <form className="auth-card compact-auth" onSubmit={update}>
         <p className="eyebrow">PASSWORD RECOVERY</p>
         <h1>Choose a new password.</h1>

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 import jwt
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Request
 from jwt import PyJWKClient
 
 from trendrelay_api.config import get_settings
@@ -18,12 +18,34 @@ class CurrentUser:
     id: str
     email: str | None = None
     assurance_level: Literal["aal1", "aal2"] = "aal1"
+    local_development: bool = False
 
 
-def current_user(authorization: str | None = Header(default=None)) -> CurrentUser:
+LOCAL_ADMIN_ID = "local-admin"
+LOCAL_ADMIN_EMAIL = "local-admin@trendrelay.local"
+
+
+def local_auth_allowed(request: Request | None) -> bool:
+    settings = get_settings()
+    host = request.client.host if request and request.client else ""
+    return (
+        settings.environment == "development"
+        and settings.local_auth_bypass
+        and host in {"127.0.0.1", "::1", "testclient"}
+    )
+
+
+def current_user(request: Request, authorization: str | None = Header(default=None)) -> CurrentUser:
     settings = get_settings()
 
     if not authorization or not authorization.startswith("Bearer "):
+        if local_auth_allowed(request):
+            return CurrentUser(
+                id=LOCAL_ADMIN_ID,
+                email=LOCAL_ADMIN_EMAIL,
+                assurance_level="aal2",
+                local_development=True,
+            )
         raise HTTPException(status_code=401, detail="Bearer token required.")
     token = authorization.removeprefix("Bearer ").strip()
     try:

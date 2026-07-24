@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     smtp_security: Literal["starttls", "ssl"] = "starttls"
     invitation_delivery_hourly_limit: int = Field(default=20, ge=1, le=1000)
     require_aal2_for_governed_actions: bool = False
+    local_auth_bypass: bool = True
 
     @property
     def cors_origin_list(self) -> list[str]:

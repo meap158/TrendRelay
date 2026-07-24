@@ -114,7 +114,6 @@ export default function ToolsPage() {
   }
   return (
     <main className="tools-page">
-      <nav><Link href="/">TrendRelay</Link><span>/</span><strong>About &amp; Tools</strong></nav>
       <p className="eyebrow">OPEN SOURCE, WITH RECEIPTS</p>
       <h1>Know what powers the relay.</h1>
       <p className="lede">

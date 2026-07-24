@@ -4,10 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { useJobs } from "../jobs-provider";
 
 type Workspace = { id: string; name: string; role: string };
 type Production = { id: string; title: string; status: string; source: { path: string }; execution?: { enabled?: boolean } };
-type RenderJob = { id: string; status: string; error?: string | null; result?: { artifacts?: { path: string; label: string }[] } };
 type Segment = { label: string; start_seconds: number; end_seconds: number };
 
 async function json<T>(response: Response): Promise<T> {
@@ -18,15 +18,17 @@ async function json<T>(response: Response): Promise<T> {
 
 export default function StudioPage() {
   const { loading, user, apiFetch } = useAuth();
+  const { jobs: allJobs, setActiveWorkspaceId, refresh: refreshJobs } = useJobs();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
   const [sourcePath, setSourcePath] = useState("");
   const [productions, setProductions] = useState<Production[]>([]);
-  const [renders, setRenders] = useState<RenderJob[]>([]);
   const [runtime, setRuntime] = useState<Record<string, unknown> | null>(null);
   const [segments, setSegments] = useState<Segment[]>([{ label: "Hook", start_seconds: 0, end_seconds: 15 }]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const renders = allJobs.filter(j => j.category === "render").map(j => j.raw);
 
   const selected = workspaces.find((item) => item.id === workspaceId);
   const canApprove = selected?.role === "owner" || selected?.role === "approver";
@@ -34,16 +36,20 @@ export default function StudioPage() {
   const refresh = useCallback(async (id: string) => {
     const [statusBody, records] = await Promise.all([
       json<{ runtime: Record<string, unknown> }>(await apiFetch(`/api/workspaces/${id}/studio/status`)),
-      json<{ productions: Production[]; renders: RenderJob[] }>(await apiFetch(`/api/workspaces/${id}/studio/productions`)),
+      json<{ productions: Production[] }>(await apiFetch(`/api/workspaces/${id}/studio/productions`)),
     ]);
     setRuntime(statusBody.runtime);
     setProductions(records.productions);
-    setRenders(records.renders);
-  }, [apiFetch]);
+    refreshJobs();
+  }, [apiFetch, refreshJobs]);
 
   useEffect(() => {
     queueMicrotask(() => setSourcePath(new URLSearchParams(window.location.search).get("source") ?? ""));
   }, []);
+
+  useEffect(() => {
+    setActiveWorkspaceId(workspaceId || null);
+  }, [workspaceId, setActiveWorkspaceId]);
 
   useEffect(() => {
     if (!user) return;
@@ -56,8 +62,6 @@ export default function StudioPage() {
   useEffect(() => {
     if (!workspaceId) return;
     queueMicrotask(() => void refresh(workspaceId).catch(() => undefined));
-    const timer = window.setInterval(() => void refresh(workspaceId).catch(() => undefined), 5000);
-    return () => window.clearInterval(timer);
   }, [refresh, workspaceId]);
 
   async function propose(form: HTMLFormElement) {
@@ -112,7 +116,6 @@ export default function StudioPage() {
   if (!user) return <main className="publish-page"><Link className="primary-link" href="/sign-in?next=%2Fstudio">Sign in to open Studio</Link></main>;
 
   return <main className="publish-page">
-    <nav><Link href="/">TrendRelay</Link><span>/</span><strong>Studio</strong></nav>
     <header><p className="eyebrow">GOVERNED LOCAL PRODUCTION</p><h1>Approve the source. Cut the clips.</h1><p className="lede">Create immutable OpenMontage preflights, then render deterministic short clips locally without provider credentials or network calls.</p></header>
     {error && <p className="registry-error" role="alert">{error}</p>}
     <section className="publish-layout">
@@ -135,7 +138,7 @@ export default function StudioPage() {
       <aside className="publish-side">
         <article><h2>Runtime</h2><pre className="payload-preview">{JSON.stringify(runtime, null, 2)}</pre></article>
         <article><h2>Productions</h2><div className="record-list">{productions.map((production) => <div key={production.id}><strong>{production.title}</strong><span>{production.status}</span><small>{production.source.path}</small>{production.status === "awaiting_approval" && <button disabled={busy || !canApprove} onClick={() => void approve(production.id)}>Approve plan</button>}{production.execution?.enabled && <button disabled={busy || !canApprove} onClick={() => void render(production.id)}>Render clip plan</button>}</div>)}</div></article>
-        <article><h2>Render jobs</h2><div className="record-list">{renders.map((job) => <div key={job.id}><strong>{job.id}</strong><span>{job.status}</span>{job.error && <small>{job.error}</small>}{job.result?.artifacts?.map((artifact) => <small key={artifact.path}>{artifact.label}: {artifact.path}</small>)}</div>)}</div></article>
+        <article><h2>Render jobs</h2><div className="record-list">{renders.map((job) => <div key={job.id}><strong>{job.id}</strong><span>{job.status}</span>{job.error && <small>{job.error}</small>}{job.result?.artifacts?.map((artifact: { path: string; label: string }) => <small key={artifact.path}>{artifact.label}: {artifact.path}</small>)}</div>)}</div></article>
       </aside>
     </section>
   </main>;

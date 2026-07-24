@@ -26,8 +26,31 @@ REPOSITORY = "https://github.com/jiji262/douyin-downloader.git"
 REVISION = "ef3ad18c2b50e38e534f72aabe2b3fbb0b3fadd7"
 DEFAULT_OUTPUT = ROOT / ".data" / "downloads" / "douyin"
 DEFAULT_DATABASE = ROOT / ".data" / "douyin" / "dy_downloader.db"
+DEFAULT_COOKIE_FILE = ROOT / ".data" / "douyin" / "cookies.json"
 SUPPORTED_MODES = ("post", "like", "mix", "music", "collect", "collectmix")
 URL_PATTERN = re.compile(r"https?://[^\s<>\"']+")
+MEDIA_SUFFIXES = {
+    ".jpg",
+    ".jpeg",
+    ".m4a",
+    ".mkv",
+    ".mov",
+    ".mp3",
+    ".mp4",
+    ".png",
+    ".wav",
+    ".webm",
+    ".webp",
+}
+# Upstream CookieManager requires these three; msToken can be generated.
+REQUIRED_COOKIE_KEYS = ("ttwid", "odin_tt", "passport_csrf_token")
+COOKIE_ENV_KEYS = (
+    ("msToken", "DOUYIN_MS_TOKEN"),
+    ("ttwid", "DOUYIN_TTWID"),
+    ("odin_tt", "DOUYIN_ODIN_TT"),
+    ("passport_csrf_token", "DOUYIN_PASSPORT_CSRF_TOKEN"),
+    ("sid_guard", "DOUYIN_SID_GUARD"),
+)
 
 
 def tool_python() -> Path:
@@ -42,7 +65,7 @@ def run_checked(command: list[str], cwd: Path = ROOT) -> None:
     subprocess.run(command, cwd=cwd, check=True)
 
 
-def install_provider(include_browser: bool) -> int:
+def install_provider(include_login_browser: bool) -> int:
     TOOL_ROOT.mkdir(parents=True, exist_ok=True)
     if not (SOURCE_DIR / ".git").is_dir():
         SOURCE_DIR.mkdir(parents=True, exist_ok=True)
@@ -55,7 +78,7 @@ def install_provider(include_browser: bool) -> int:
     if not tool_python().is_file():
         run_checked([sys.executable, "-m", "venv", str(VENV_DIR)])
 
-    requirement = f"{SOURCE_DIR}[browser]" if include_browser else str(SOURCE_DIR)
+    requirement = f"{SOURCE_DIR}[browser]" if include_login_browser else str(SOURCE_DIR)
     run_checked(
         [
             str(tool_python()),
@@ -67,7 +90,7 @@ def install_provider(include_browser: bool) -> int:
             requirement,
         ]
     )
-    if include_browser:
+    if include_login_browser:
         run_checked([str(tool_python()), "-m", "playwright", "install", "chromium"])
 
     MARKER.write_text(f"{REVISION}\n", encoding="utf-8")
@@ -100,6 +123,140 @@ def check_provider() -> int:
         print(result.stderr.strip(), file=sys.stderr)
         return result.returncode
     print(f"Douyin provider ready: {result.stdout.strip() or REVISION[:12]}")
+    cookie_status = cookie_readiness()
+    if cookie_status["ready"]:
+        print(f"Douyin cookies ready ({cookie_status['source']}).")
+    else:
+        print(
+            "Douyin cookies are missing or incomplete; downloads will fail anti-bot checks.",
+            file=sys.stderr,
+        )
+        print("Run: npm run douyin -- login", file=sys.stderr)
+    return 0
+
+
+def parse_cookie_header(header: str) -> dict[str, str]:
+    cookies: dict[str, str] = {}
+    for item in header.split(";"):
+        item = item.strip()
+        if not item or "=" not in item:
+            continue
+        key, value = item.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if key and value:
+            cookies[key] = value
+    return cookies
+
+
+def load_cookie_file(path: Path) -> dict[str, str]:
+    if not path.is_file():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    cookies: dict[str, str] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str):
+            continue
+        text = "" if value is None else str(value).strip()
+        if text:
+            cookies[key.strip()] = text
+    return cookies
+
+
+def resolve_cookies() -> tuple[dict[str, str], str]:
+    """Resolve cookies from env header, discrete env keys, or cookie file."""
+    header = os.getenv("DOUYIN_COOKIE", "").strip()
+    if header:
+        cookies = parse_cookie_header(header)
+        if cookies:
+            return cookies, "DOUYIN_COOKIE"
+
+    cookies = {
+        cookie_key: os.getenv(env_key, "").strip()
+        for cookie_key, env_key in COOKIE_ENV_KEYS
+        if os.getenv(env_key, "").strip()
+    }
+    if cookies:
+        return cookies, "DOUYIN_* env"
+
+    file_cookies = load_cookie_file(DEFAULT_COOKIE_FILE)
+    if file_cookies:
+        return file_cookies, str(DEFAULT_COOKIE_FILE)
+
+    return {}, "none"
+
+
+def cookies_are_ready(cookies: dict[str, str]) -> bool:
+    return all(cookies.get(key) for key in REQUIRED_COOKIE_KEYS)
+
+
+def cookie_readiness() -> dict[str, object]:
+    cookies, source = resolve_cookies()
+    return {
+        "ready": cookies_are_ready(cookies),
+        "source": source,
+        "keys": sorted(cookies),
+        "missing": [key for key in REQUIRED_COOKIE_KEYS if not cookies.get(key)],
+    }
+
+
+def cookie_setup_message() -> str:
+    return (
+        "Douyin cookies are required for media downloads. "
+        "Run `npm run douyin -- login` (browser login) or set DOUYIN_COOKIE / "
+        "DOUYIN_TTWID, DOUYIN_ODIN_TT, and DOUYIN_PASSPORT_CSRF_TOKEN."
+    )
+
+
+def login_provider() -> int:
+    if check_provider() != 0:
+        return 1
+    if not (VENV_DIR / "login-browser-installed.txt").is_file():
+        print(
+            "Cookie login requires browser support: npm run douyin -- install --login-browser",
+            file=sys.stderr,
+        )
+        return 1
+
+    DEFAULT_COOKIE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    print("Opening Douyin in a browser. Log in, then return here and press Enter.")
+    print(f"Cookies will be saved to {DEFAULT_COOKIE_FILE}")
+    completed = subprocess.run(
+        [
+            str(tool_python()),
+            "-m",
+            "tools.cookie_fetcher",
+            "--output",
+            str(DEFAULT_COOKIE_FILE),
+            "--include-all",
+        ],
+        cwd=SOURCE_DIR,
+        check=False,
+        env={**os.environ, "PYTHONUTF8": "1"},
+    )
+    if completed.returncode != 0:
+        return completed.returncode
+
+    cookies = load_cookie_file(DEFAULT_COOKIE_FILE)
+    if not cookies_are_ready(cookies):
+        missing = [key for key in REQUIRED_COOKIE_KEYS if not cookies.get(key)]
+        print(
+            "Login finished but required cookies are still missing: "
+            + ", ".join(missing),
+            file=sys.stderr,
+        )
+        print(
+            "Make sure you fully log into douyin.com before pressing Enter.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"Saved {len(cookies)} cookie(s) to {DEFAULT_COOKIE_FILE}")
     return 0
 
 
@@ -156,6 +313,7 @@ def build_config(args: argparse.Namespace, urls: list[str]) -> dict[str, object]
         for mode in modes
         if mode in {"post", "like", "mix", "music"}
     }
+    cookies, _source = resolve_cookies()
     return {
         "link": urls,
         "path": str(args.output.resolve()),
@@ -169,29 +327,28 @@ def build_config(args: argparse.Namespace, urls: list[str]) -> dict[str, object]
         "database_path": str(DEFAULT_DATABASE.resolve()),
         "folderstyle": True,
         "progress": {"quiet_logs": not args.verbose},
-        "cookies": {
-            "msToken": os.getenv("DOUYIN_MS_TOKEN", ""),
-            "ttwid": os.getenv("DOUYIN_TTWID", ""),
-            "odin_tt": os.getenv("DOUYIN_ODIN_TT", ""),
-            "passport_csrf_token": os.getenv("DOUYIN_PASSPORT_CSRF_TOKEN", ""),
-            "sid_guard": os.getenv("DOUYIN_SID_GUARD", ""),
-        },
-        "browser_fallback": {
-            "enabled": args.browser_fallback,
-            "headless": False,
-            "max_scrolls": 240,
-            "idle_rounds": 8,
-            "wait_timeout_seconds": 600,
-        },
+        "cookies": cookies,
     }
 
 
 def redacted_config(config: dict[str, object]) -> dict[str, object]:
     safe = dict(config)
-    safe["cookies"] = {
-        key: "***" if value else "" for key, value in config["cookies"].items()
-    }
+    cookies = config.get("cookies")
+    if isinstance(cookies, dict):
+        safe["cookies"] = {
+            key: "***" if value else "" for key, value in cookies.items()
+        }
     return safe
+
+
+def list_media_files(root: Path) -> set[Path]:
+    if not root.exists():
+        return set()
+    return {
+        path.resolve()
+        for path in root.rglob("*")
+        if path.is_file() and path.suffix.lower() in MEDIA_SUFFIXES
+    }
 
 
 def batch_download(args: argparse.Namespace) -> int:
@@ -212,17 +369,17 @@ def batch_download(args: argparse.Namespace) -> int:
         return 0
     if check_provider() != 0:
         return 1
-    if args.browser_fallback and not (VENV_DIR / "browser-installed.txt").is_file():
-        print(
-            "Browser fallback requires: npm run douyin -- install --browser",
-            file=sys.stderr,
-        )
-        return 1
+
+    cookies = config.get("cookies")
+    if not isinstance(cookies, dict) or not cookies_are_ready(cookies):
+        print(cookie_setup_message(), file=sys.stderr)
+        return 4
 
     args.output.mkdir(parents=True, exist_ok=True)
     DEFAULT_DATABASE.parent.mkdir(parents=True, exist_ok=True)
     runtime_dir = ROOT / ".data" / "douyin" / "runtime"
     runtime_dir.mkdir(parents=True, exist_ok=True)
+    before_media = list_media_files(args.output)
     config_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -243,7 +400,29 @@ def batch_download(args: argparse.Namespace) -> int:
             f"with modes {', '.join(args.mode or ['post'])}."
         )
         print("Only download content you are authorized to retain and reuse.")
-        return subprocess.run(command, cwd=SOURCE_DIR, check=False).returncode
+        completed = subprocess.run(
+            command,
+            cwd=SOURCE_DIR,
+            check=False,
+            env={**os.environ, "PYTHONUTF8": "1"},
+        )
+        if completed.returncode != 0:
+            return completed.returncode
+
+        # Upstream exits 0 even when every item fails anti-bot / auth checks.
+        # Treat "no new media written" as a hard failure for TrendRelay jobs.
+        after_media = list_media_files(args.output)
+        new_media = after_media - before_media
+        if not new_media:
+            print(
+                "Download finished without saving any media files. "
+                "Douyin likely blocked the request (missing/expired cookies or anti-bot). "
+                + cookie_setup_message(),
+                file=sys.stderr,
+            )
+            return 3
+        print(f"Saved {len(new_media)} media file(s).")
+        return 0
     finally:
         if config_path:
             config_path.unlink(missing_ok=True)
@@ -269,10 +448,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     install = subparsers.add_parser("install", help="install the pinned provider")
     install.add_argument(
-        "--browser", action="store_true", help="also install browser fallback"
+        "--login-browser",
+        action="store_true",
+        help="install Chromium support used only to capture login cookies",
     )
 
     subparsers.add_parser("check", help="verify the pinned provider installation")
+    subparsers.add_parser(
+        "login",
+        help="open a browser, capture Douyin cookies, and save them for downloads",
+    )
 
     batch = subparsers.add_parser(
         "batch", help="batch download Douyin URLs or profiles"
@@ -293,7 +478,6 @@ def build_parser() -> argparse.ArgumentParser:
     batch.add_argument("--retries", type=non_negative_integer, default=3)
     batch.add_argument("--proxy", default="")
     batch.add_argument("--incremental", action="store_true")
-    batch.add_argument("--browser-fallback", action="store_true")
     batch.add_argument("--verbose", action="store_true")
     batch.add_argument("--dry-run", action="store_true")
     return parser
@@ -303,14 +487,16 @@ def main() -> int:
     load_prefixed_env(ROOT / ".env", "DOUYIN_")
     args = build_parser().parse_args()
     if args.command == "install":
-        result = install_provider(args.browser)
-        if result == 0 and args.browser:
-            (VENV_DIR / "browser-installed.txt").write_text(
+        result = install_provider(args.login_browser)
+        if result == 0 and args.login_browser:
+            (VENV_DIR / "login-browser-installed.txt").write_text(
                 "chromium\n", encoding="utf-8"
             )
         return result
     if args.command == "check":
         return check_provider()
+    if args.command == "login":
+        return login_provider()
     return batch_download(args)
 
 

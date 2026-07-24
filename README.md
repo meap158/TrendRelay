@@ -59,7 +59,7 @@ Prerequisites: Node.js 22+ with npm 10+, and Python 3.12+.
 
 ### Windows — easiest
 
-Double-click `start.cmd` for the browser app or `start-electron.bat` for the Electron app. These are the only Windows launcher files. Both validate prerequisites, create `.venv`, install dependencies, apply database migrations, and hand off to the unified runner. The runner supervises the API, web app, and leased SQL worker with hot reload. Desktop startup also repairs a missing Electron runtime automatically. Healthy backend or frontend processes are reused, preventing duplicate Next.js server failures. Logs stay in one terminal with prefixes, servers bind to the LAN, and code changes hot reload automatically.
+Double-click `start.cmd` for the browser app or `start-electron.bat` for the Electron app. `start.cmd` waits for the API and web app to become healthy, then opens `http://127.0.0.1:3000/` in the default browser automatically. These are the only Windows launcher files. Both validate prerequisites, create `.venv`, install dependencies, apply database migrations, and hand off to the unified runner. The runner supervises the API, web app, and leased SQL worker with hot reload. Desktop startup also repairs a missing Electron runtime automatically. Healthy backend or frontend processes are reused, preventing duplicate Next.js server failures. Logs stay in one terminal with prefixes, servers bind to the LAN, and code changes hot reload automatically.
 
 ### Command line
 
@@ -75,6 +75,11 @@ Initialize or update the local database with `npm run db -- upgrade`. API docume
 
 The first product vertical slice now includes database-backed Supabase authentication, workspace and role management, append-only audit events, secret references, and the governed plugin registry.
 
+## Local development access
+
+Local development starts with `LOCAL_AUTH_BYPASS=true`. Requests from `127.0.0.1`, `::1`, or the API test client receive the development-only `local-admin@trendrelay.local` identity with AAL2 assurance and an automatically created **Local Workspace** owner membership. The console displays a **Local admin** badge and opens without a sign-in step in both the browser and Electron renderer.
+
+The bypass is denied to LAN clients and ignored unless `ENVIRONMENT=development`; bearer authentication remains available and takes precedence when a token is supplied. Set `LOCAL_AUTH_BYPASS=false` to exercise the real Supabase/device sign-in flow locally. Never treat the local identity as a deployment account.
 ## Browser authentication
 
 Configure the same Supabase project on both sides of the application:
@@ -165,7 +170,7 @@ npm run douyin -- batch --file .\douyin-urls.txt --mode post --mode mix --limit 
 
 The main operations console provides the simpler authenticated path: choose a workspace, paste one or more Douyin video/profile/share links, set a bounded item count, and monitor the durable media queue. Completed artifacts include size and SHA-256 provenance plus direct **Prepare** and **Publish** handoffs that prefill Studio or Postiz. The supervised worker resumes queued downloads after restarts. TikTok acquisition is visibly disabled until a reviewed provider is incorporated; Postiz can still publish approved media to connected TikTok accounts.
 
-The CLI default limit is 50 items per selected profile mode; use `--limit 0` only for an intentional full crawl. The GUI is deliberately bounded to 100. Use `--dry-run` to inspect redacted configuration without downloading. For browser fallback, run `npm run douyin -- install --browser`, then add `--browser-fallback` to the batch command.
+The CLI default limit is 50 items per selected profile mode; use `--limit 0` only for an intentional full crawl. The GUI is deliberately bounded to 100. Use `--dry-run` to inspect redacted configuration without downloading. Downloads always use the pinned API-based provider; there is no browser download fallback. The optional `npm run douyin -- install --login-browser` mode is used only by `npm run douyin -- login` to capture cookies.
 
 Optional authenticated access reads `DOUYIN_*` variables from the environment or local `.env`; values are never printed and the generated runtime configuration is deleted after each run. Downloads are written to `.data/downloads/douyin/`. Only download and reuse content when permitted by platform terms and applicable rights.
 

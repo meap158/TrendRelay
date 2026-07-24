@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 
 import { apiBaseUrl } from "../../lib/api";
+import { useJobs } from "../jobs-provider";
 
 type Observation = {
   source: string;
@@ -13,45 +14,14 @@ type Observation = {
   evidence: { source_url: string };
 };
 
-type ResearchJob = {
-  id: string;
-  topic: string;
-  status: "queued" | "running" | "succeeded" | "failed";
-  created_at: string;
-  observations: Observation[];
-  source_status: Record<string, string>;
-  error?: string | null;
-};
-
 export default function ResearchPage() {
   const [topic, setTopic] = useState("");
   const [mode, setMode] = useState("quick");
-  const [jobs, setJobs] = useState<ResearchJob[]>([]);
+  const { jobs: allJobs, refresh: refreshJobs } = useJobs();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    const response = await fetch(`${apiBaseUrl()}/api/research/jobs?workspace_id=local`, {
-      cache: "no-store",
-    });
-    if (!response.ok) throw new Error("Could not load research jobs.");
-    const payload = (await response.json()) as { jobs: ResearchJob[] };
-    setJobs(payload.jobs);
-  }, []);
-
-  useEffect(() => {
-    const update = () => {
-      refresh().catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : "Research service unavailable.");
-      });
-    };
-    const firstUpdate = window.setTimeout(update, 0);
-    const timer = window.setInterval(update, 3000);
-    return () => {
-      window.clearTimeout(firstUpdate);
-      window.clearInterval(timer);
-    };
-  }, [refresh]);
+  const jobs = allJobs.filter(j => j.category === "research").map(j => j.raw);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -74,7 +44,7 @@ export default function ResearchPage() {
       const payload = (await response.json()) as { detail?: string };
       if (!response.ok) throw new Error(payload.detail ?? "Research could not start.");
       setTopic("");
-      await refresh();
+      await refreshJobs();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Research could not start.");
     } finally {
@@ -84,7 +54,6 @@ export default function ResearchPage() {
 
   return (
     <main className="research-page">
-      <nav><Link href="/">TrendRelay</Link><span>/</span><strong>Trend Radar</strong><Link href="/tools">Tools</Link></nav>
       <p className="eyebrow">EVIDENCE BEFORE OUTPUT</p>
       <h1>Research what is moving now.</h1>
       <p className="lede">Run the pinned Last 30 Days engine and ingest every ranked result as workspace-scoped evidence.</p>
@@ -110,9 +79,9 @@ export default function ResearchPage() {
           <article className="research-job" key={job.id}>
             <div className="job-heading"><div><span>{job.status}</span><h2>{job.topic}</h2></div><small>{new Date(job.created_at).toLocaleString()}</small></div>
             {job.error && <p className="block-reason">{job.error}</p>}
-            <div className="source-status">{Object.entries(job.source_status).map(([source, status]) => <span key={source}>{source}: {status}</span>)}</div>
+            <div className="source-status">{Object.entries(job.source_status || {}).map(([source, status]) => <span key={source}>{source}: {String(status)}</span>)}</div>
             <div className="evidence-list">
-              {job.observations.slice(0, 8).map((item, index) => (
+              {job.observations && job.observations.slice(0, 8).map((item: Observation, index: number) => (
                 <a key={`${item.source}-${index}`} href={item.evidence.source_url || undefined} target="_blank" rel="noreferrer">
                   <span>{item.source}</span><strong>{item.title}</strong><p>{item.summary}</p>
                 </a>

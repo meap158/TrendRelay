@@ -107,7 +107,6 @@ export default function SignInPage() {
 
   return (
     <main className="auth-page">
-      <nav><Link href="/">TrendRelay</Link><span>/</span><strong>Account</strong></nav>
       <section className="auth-shell">
         <div className="auth-intro">
           <p className="eyebrow">SECURE WORKSPACE ACCESS</p>

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import "./styles.css";
 import "./console.css";
 import { AuthProvider } from "./auth-provider";
+import { GlobalNav } from "./global-nav";
+import { JobsProvider } from "./jobs-provider";
 
 export const metadata: Metadata = {
   title: "TrendRelay",
@@ -9,5 +11,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body><AuthProvider>{children}</AuthProvider></body></html>;
+  return <html lang="en"><body><AuthProvider><JobsProvider><GlobalNav />{children}</JobsProvider></AuthProvider></body></html>;
 }

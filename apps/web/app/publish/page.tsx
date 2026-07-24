@@ -4,17 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { useJobs } from "../jobs-provider";
 
 type Workspace = { id: string; name: string; role: string };
 type Platform = "tiktok" | "instagram" | "youtube";
-type PublishJob = {
-  id: string;
-  status: string;
-  error?: string | null;
-  created_at: string;
-  payload: { preview?: { external_action?: string }; request?: { caption?: string } };
-  result?: Record<string, unknown> | null;
-};
 
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
@@ -24,6 +17,7 @@ async function json<T>(response: Response): Promise<T> {
 
 export default function PublishPage() {
   const { loading, user, apiFetch } = useAuth();
+  const { jobs: allJobs, setActiveWorkspaceId, refresh: refreshJobs } = useJobs();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
   const [videoPath, setVideoPath] = useState("");
@@ -34,23 +28,21 @@ export default function PublishPage() {
   });
   const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
   const [integrations, setIntegrations] = useState<unknown>(null);
-  const [jobs, setJobs] = useState<PublishJob[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selected = workspaces.find((workspace) => workspace.id === workspaceId);
   const canExecute = selected?.role === "owner" || selected?.role === "approver";
 
-  const loadJobs = useCallback(async (id: string) => {
-    const body = await json<{ jobs: PublishJob[] }>(
-      await apiFetch(`/api/workspaces/${id}/publishing/postiz/jobs`),
-    );
-    setJobs(body.jobs);
-  }, [apiFetch]);
+  const jobs = allJobs.filter(j => j.category === "publish").map(j => j.raw);
 
   useEffect(() => {
     queueMicrotask(() => setVideoPath(new URLSearchParams(window.location.search).get("video") ?? ""));
   }, []);
+
+  useEffect(() => {
+    setActiveWorkspaceId(workspaceId || null);
+  }, [workspaceId, setActiveWorkspaceId]);
 
   useEffect(() => {
     if (!user) return;
@@ -62,13 +54,6 @@ export default function PublishPage() {
       })
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load workspaces."));
   }, [apiFetch, user]);
-
-  useEffect(() => {
-    if (!workspaceId) return;
-    queueMicrotask(() => void loadJobs(workspaceId).catch(() => undefined));
-    const timer = window.setInterval(() => void loadJobs(workspaceId).catch(() => undefined), 5000);
-    return () => window.clearInterval(timer);
-  }, [loadJobs, workspaceId]);
 
   function requestFrom(form: FormData, confirm: boolean) {
     const selectedTargets = (Object.entries(targets) as [Platform, string][])
@@ -99,7 +84,7 @@ export default function PublishPage() {
           method: "POST",
           body: JSON.stringify(body),
         }));
-        await loadJobs(workspaceId);
+        await refreshJobs();
       } else {
         const result = await json<{ preview: Record<string, unknown> }>(await apiFetch(
           `/api/workspaces/${workspaceId}/publishing/postiz/preview`,
@@ -135,7 +120,6 @@ export default function PublishPage() {
 
   return (
     <main className="publish-page">
-      <nav><Link href="/">TrendRelay</Link><span>/</span><strong>Publish</strong></nav>
       <header><p className="eyebrow">GOVERNED DISTRIBUTION</p><h1>Preview first. Publish once.</h1><p className="lede">Create private Postiz drafts by default or schedule approved short videos across connected accounts.</p></header>
       {error && <p className="registry-error" role="alert">{error}</p>}
       <section className="publish-layout">

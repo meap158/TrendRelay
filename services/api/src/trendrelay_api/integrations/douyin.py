@@ -29,7 +29,28 @@ JOB_KIND = "douyin_download"
 JOB_SESSION_FACTORY = SessionFactory
 OUTPUT_ROOT = PROJECT_ROOT / ".data" / "downloads" / "douyin"
 DOWNLOAD_SCRIPT = PROJECT_ROOT / "scripts" / "douyin.py"
-MEDIA_SUFFIXES = {".m4a", ".mkv", ".mov", ".mp3", ".mp4", ".wav", ".webm"}
+COOKIE_FILE = PROJECT_ROOT / ".data" / "douyin" / "cookies.json"
+MEDIA_SUFFIXES = {
+    ".jpg",
+    ".jpeg",
+    ".m4a",
+    ".mkv",
+    ".mov",
+    ".mp3",
+    ".mp4",
+    ".png",
+    ".wav",
+    ".webm",
+    ".webp",
+}
+REQUIRED_COOKIE_KEYS = ("ttwid", "odin_tt", "passport_csrf_token")
+COOKIE_ENV_KEYS = (
+    ("msToken", "DOUYIN_MS_TOKEN"),
+    ("ttwid", "DOUYIN_TTWID"),
+    ("odin_tt", "DOUYIN_ODIN_TT"),
+    ("passport_csrf_token", "DOUYIN_PASSPORT_CSRF_TOKEN"),
+    ("sid_guard", "DOUYIN_SID_GUARD"),
+)
 
 
 class DownloadRequest(BaseModel):
@@ -79,13 +100,79 @@ def _fingerprint(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _parse_cookie_header(header: str) -> dict[str, str]:
+    cookies: dict[str, str] = {}
+    for item in header.split(";"):
+        item = item.strip()
+        if not item or "=" not in item:
+            continue
+        key, value = item.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if key and value:
+            cookies[key] = value
+    return cookies
+
+
+def _load_cookie_file(path: Path) -> dict[str, str]:
+    if not path.is_file():
+        return {}
+    try:
+        import json
+
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    cookies: dict[str, str] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str):
+            continue
+        text = "" if value is None else str(value).strip()
+        if text:
+            cookies[key.strip()] = text
+    return cookies
+
+
+def cookie_status() -> dict[str, Any]:
+    header = os.getenv("DOUYIN_COOKIE", "").strip()
+    cookies: dict[str, str] = {}
+    source = "none"
+    if header:
+        cookies = _parse_cookie_header(header)
+        source = "DOUYIN_COOKIE"
+    if not cookies:
+        cookies = {
+            cookie_key: os.getenv(env_key, "").strip()
+            for cookie_key, env_key in COOKIE_ENV_KEYS
+            if os.getenv(env_key, "").strip()
+        }
+        if cookies:
+            source = "DOUYIN_* env"
+    if not cookies:
+        cookies = _load_cookie_file(COOKIE_FILE)
+        if cookies:
+            source = str(COOKIE_FILE)
+    missing = [key for key in REQUIRED_COOKIE_KEYS if not cookies.get(key)]
+    return {
+        "ready": not missing,
+        "source": source,
+        "missing": missing,
+        "cookie_file": str(COOKIE_FILE),
+    }
+
+
 def provider_status() -> dict[str, Any]:
     tool = next(item for item in list_tools() if item["id"] == "douyin-downloader")
+    cookies = cookie_status()
     return {
         "installed": tool["installed"],
         "active": tool["active"],
         "revision": tool["revision"],
         "output_root": str(OUTPUT_ROOT),
+        "cookies_ready": cookies["ready"],
+        "cookies": cookies,
     }
 
 
@@ -95,6 +182,12 @@ def create_download_job(request: DownloadRequest) -> dict[str, Any]:
     status = provider_status()
     if not status["installed"] or not status["active"]:
         raise RuntimeError("Install and activate Douyin Downloader before fetching media.")
+    if not status["cookies_ready"]:
+        raise RuntimeError(
+            "Douyin cookies are missing or incomplete. "
+            "Run `npm run douyin -- login` or set DOUYIN_COOKIE / "
+            "DOUYIN_TTWID, DOUYIN_ODIN_TT, and DOUYIN_PASSPORT_CSRF_TOKEN, then retry."
+        )
     nonce = f"{request.workspace_id}:{_now()}:{request.model_dump_json()}"
     job_id = f"download_{hashlib.sha256(nonce.encode()).hexdigest()[:16]}"
     payload = {
@@ -122,10 +215,35 @@ def create_download_job(request: DownloadRequest) -> dict[str, Any]:
 
 def _environment() -> dict[str, str]:
     allowed = {name: value for name, value in os.environ.items() if name.startswith("DOUYIN_")}
-    for name in ("SYSTEMROOT", "WINDIR", "TEMP", "TMP", "PATH"):
+    for name in (
+        "SYSTEMROOT",
+        "WINDIR",
+        "TEMP",
+        "TMP",
+        "PATH",
+        "HOME",
+        "USERPROFILE",
+        "APPDATA",
+        "LOCALAPPDATA",
+    ):
         if os.environ.get(name):
             allowed[name] = os.environ[name]
+    allowed["PYTHONIOENCODING"] = "utf-8"
+    allowed["PYTHONUTF8"] = "1"
     return allowed
+
+
+def _collect_artifacts(output_root: Path) -> list[dict[str, Any]]:
+    return [
+        {
+            "path": str(path.resolve()),
+            "name": path.name,
+            "size_bytes": path.stat().st_size,
+            "sha256": _fingerprint(path),
+        }
+        for path in sorted(output_root.rglob("*"))
+        if path.is_file() and path.suffix.lower() in MEDIA_SUFFIXES
+    ]
 
 
 def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str, Any]:
@@ -157,22 +275,24 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
             env=_environment(),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
             timeout=3600,
         )
+        detail = (completed.stderr or completed.stdout or "").strip()
         if completed.returncode != 0:
-            detail = (completed.stderr or completed.stdout or "Download failed").strip()
-            raise RuntimeError(detail[-3000:])
-        artifacts = [
-            {
-                "path": str(path.resolve()),
-                "name": path.name,
-                "size_bytes": path.stat().st_size,
-                "sha256": _fingerprint(path),
-            }
-            for path in sorted(output_root.rglob("*"))
-            if path.is_file() and path.suffix.lower() in MEDIA_SUFFIXES
-        ]
+            raise RuntimeError(detail[-3000:] or "Download failed")
+        artifacts = _collect_artifacts(output_root)
+        if not artifacts:
+            # Defense in depth: never report success for an empty folder.
+            message = (
+                "Download finished without media files. "
+                "Configure Douyin cookies (`npm run douyin -- login`) and retry."
+            )
+            if detail:
+                message = f"{message}\n{detail[-2500:]}"
+            raise RuntimeError(message)
         result = {
             **payload,
             "status": "succeeded",

@@ -31,6 +31,7 @@ type AuthContextValue = {
   event: AuthChangeEvent | null;
   desktopAvailable: boolean;
   mfaRequired: boolean;
+  localMode: boolean;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   pairDesktop: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -47,12 +48,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const client = useMemo(() => supabaseBrowserClient(), []);
   const [session, setSession] = useState<Session | null>(null);
   const [desktopUser, setDesktopUser] = useState<AuthUser | null>(null);
+  const [localUser, setLocalUser] = useState<AuthUser | null>(null);
+  const [localCheckComplete, setLocalCheckComplete] = useState(false);
   const [desktopAvailable, setDesktopAvailable] = useState(false);
   const [mfaRequired, setMfaRequired] = useState(false);
   const [loading, setLoading] = useState(true);
   const [event, setEvent] = useState<AuthChangeEvent | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 2000);
+    fetch(`${apiBaseUrl()}/api/auth/local-session`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => response.ok
+        ? response.json() as Promise<{ enabled: boolean; user: AuthUser | null }>
+        : { enabled: false, user: null })
+      .then((result) => {
+        setLocalUser(result.enabled ? result.user : null);
+        if (result.enabled) setLoading(false);
+      })
+      .catch(() => setLocalUser(null))
+      .finally(() => {
+        window.clearTimeout(timer);
+        setLocalCheckComplete(true);
+      });
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, []);
+  useEffect(() => {
+    if (!localCheckComplete) return;
+    if (localUser) return;
     const bridge = window.trendrelayDesktop;
     if (bridge) {
       let bridgeCheckComplete = false;
@@ -100,7 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.clearTimeout(sessionTimer);
       data.subscription.unsubscribe();
     };
-  }, [client]);
+  }, [client, localCheckComplete, localUser]);
 
   useEffect(() => {
     if (desktopAvailable || !client || !session) return;
@@ -135,6 +164,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [client, desktopAvailable, session]);
   const apiFetch = useCallback(
     async (path: string, init: RequestInit = {}) => {
+      if (localUser) {
+        const headers = new Headers(init.headers);
+        if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+        return fetch(`${apiBaseUrl()}${path}`, { ...init, headers, cache: "no-store" });
+      }
       const bridge = window.trendrelayDesktop;
       if (bridge) {
         const method = (init.method ?? "GET").toUpperCase();
@@ -158,7 +192,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
       return fetch(`${apiBaseUrl()}${path}`, { ...init, headers, cache: "no-store" });
     },
-    [client],
+    [client, localUser],
   );
 
   const pairDesktop = useCallback(async () => {
@@ -173,6 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    if (localUser) return;
     const bridge = window.trendrelayDesktop;
     if (bridge) {
       await bridge.signOut();
@@ -182,17 +217,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!client) return;
     const { error } = await client.auth.signOut({ scope: "global" });
     if (error) throw error;
-  }, [client]);
+  }, [client, localUser]);
 
-  const user = desktopAvailable ? desktopUser : session?.user ?? null;
+  const user = localUser ?? (desktopAvailable ? desktopUser : session?.user ?? null);
   return (
     <AuthContext.Provider value={{
-      configured: browserConfigured || desktopAvailable,
+      configured: browserConfigured || desktopAvailable || Boolean(localUser),
       loading,
       user,
       event,
       desktopAvailable,
       mfaRequired,
+      localMode: Boolean(localUser),
       apiFetch,
       pairDesktop,
       signOut,

@@ -1,10 +1,14 @@
 import asyncio
+import os
+import subprocess
+from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from trendrelay_api import __version__
+from trendrelay_api.auth import LOCAL_ADMIN_EMAIL, LOCAL_ADMIN_ID, local_auth_allowed
 from trendrelay_api.config import get_settings
 from trendrelay_api.device_pairing import router as device_pairing_router
 from trendrelay_api.foundation import router as foundation_router
@@ -21,6 +25,7 @@ from trendrelay_api.media_api import router as media_router
 from trendrelay_api.production_api import router as production_router
 from trendrelay_api.publishing_api import router as publishing_router
 from trendrelay_api.tool_registry import (
+    PROJECT_ROOT,
     ToolRegistryError,
     install_tool,
     list_tools,
@@ -81,6 +86,16 @@ async def health() -> dict[str, str]:
     }
 
 
+@app.get("/api/auth/local-session", tags=["authentication"])
+async def local_session(request: Request) -> dict[str, object]:
+    if not local_auth_allowed(request):
+        return {"enabled": False, "user": None}
+    return {
+        "enabled": True,
+        "user": {"id": LOCAL_ADMIN_ID, "email": LOCAL_ADMIN_EMAIL},
+    }
+
+
 @app.get("/api/tools", tags=["tools"])
 async def tools() -> dict[str, object]:
     return {"tools": await asyncio.to_thread(list_tools)}
@@ -89,6 +104,28 @@ async def tools() -> dict[str, object]:
 @app.get("/api/tools/agent-reach/diagnostics", tags=["tools"])
 async def agent_reach_diagnostics() -> dict[str, object]:
     return {"diagnostics": await asyncio.to_thread(diagnostic_report)}
+
+
+class PathPayload(BaseModel):
+    path: str
+
+
+@app.post("/api/tools/open-folder", tags=["tools"])
+async def open_folder(request: Request, body: PathPayload) -> dict[str, object]:
+    require_local_mutation(request)
+    if os.name != "nt":
+        raise HTTPException(status_code=400, detail="Only supported on Windows.")
+
+    path = Path(body.path).resolve()
+    downloads_root = (PROJECT_ROOT / ".data" / "downloads").resolve()
+    if path != downloads_root and downloads_root not in path.parents:
+        raise HTTPException(status_code=403, detail="Only download folders may be opened.")
+    if not path.is_dir():
+        raise HTTPException(status_code=404, detail="Download folder does not exist.")
+
+    subprocess.Popen(["explorer", str(path)])
+
+    return {"status": "ok"}
 
 
 @app.post("/api/tools/{tool_id}/install", tags=["tools"])

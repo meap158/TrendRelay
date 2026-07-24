@@ -39,7 +39,6 @@ function AcceptInvitationContent() {
   const returnPath = `/invitations/accept?token=${encodeURIComponent(token)}`;
   return (
     <main className="auth-page">
-      <nav><Link href="/">TrendRelay</Link><span>/</span><strong>Invitation</strong></nav>
       <section className="setup-card">
         <p className="eyebrow">WORKSPACE INVITATION</p>
         <h1>Join a trusted workspace.</h1>

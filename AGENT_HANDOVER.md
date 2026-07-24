@@ -1,13 +1,14 @@
 # Agent Handover
 
-Last updated: 2026-07-22
+Last updated: 2026-07-24
 
 ## Current state
 
 - Repository uses a hybrid web/desktop, Python modular-monolith architecture.
 - Next.js web shell, hardened Electron shell, shared TypeScript schemas, plugin contracts, publication states, and a FastAPI health endpoint are scaffolded.
-- `scripts/dev.py` supervises hot-reload services, reuses healthy backend/frontend processes instead of launching duplicates, and waits for new services to become healthy before starting dependents. `start-electron.bat` delegates to `start.cmd --desktop`; normal startup also applies pending database migrations.
+- `scripts/dev.py` supervises hot-reload services, reuses healthy backend/frontend processes instead of launching duplicates, and waits for new services to become healthy before starting dependents. Browser mode opens `http://127.0.0.1:3000/` automatically only after readiness; `start-electron.bat` delegates to `start.cmd --desktop`; normal startup also applies pending database migrations.
 - The pinned `jiji262/douyin-downloader` 2.0.0 provider is integrated as `media.douyin-downloader` and installed locally at revision `ef3ad18c2b50e38e534f72aabe2b3fbb0b3fadd7`.
+- Local development uses a loopback-only `local-admin@trendrelay.local` AAL2 bypass by default, automatically creates one Local Workspace owner membership, and marks the UI with a Local admin badge. It is unavailable to LAN clients and outside the development environment; set `LOCAL_AUTH_BYPASS=false` to exercise real authentication locally.
 - The root `/` screen is a compact media-to-publish console. It submits authenticated, role-gated Douyin links to durable `douyin_download` jobs, shows resulting artifacts, and deep-links each file into Studio or Postiz publishing. `npm run douyin --` remains the full CLI. Downloads, SQLite state, ephemeral configuration, upstream source, dependencies, and credentials remain ignored.
 - The pinned `gitroomhq/postiz-agent` 2.0.15 provider is integrated as `social.postiz-agent` at revision `41c5a9dbd6b2776863e7c05c22e7a385c208321c`.
 - `npm run postiz --` installs and verifies the provider, performs OAuth/API-key authentication and integration discovery, and previews or executes short-video drafts/schedules for TikTok, Instagram, and YouTube.
@@ -43,7 +44,7 @@ Last updated: 2026-07-22
 - Postiz is dry-run-first. Uploads and remote drafts/schedules require both `--execute` and `--confirm-external-action`; drafts are the default.
 - Postiz operations use content-derived IDs and a local ledger. Workspace publishing jobs are durable but receive one provider attempt because duplicate and uncertain retries require inspection. Only owners and approvers can discover integrations or execute; editors may preview.
 - Publishing media must resolve to an existing MP4 beneath `PUBLISHING_MEDIA_ROOTS`; the local defaults are `.data/downloads`, `.data/media`, and `.data/productions`.
-- Douyin batches default to 50 items per selected profile mode. Full crawls require explicit `--limit 0`.
+- Douyin batches default to 50 items per selected profile mode. Full crawls require explicit `--limit 0`. Downloads use only the pinned API provider; browser fallback has been removed. The optional login browser exists only to capture cookies. Empty provider output is a failed job, while historical zero-artifact successes are labeled `empty` in the UI.
 - Cookie values come only from local environment variables or `.env`, are redacted from dry runs, and exist in generated configuration only for the process lifetime.
 - SQLite and file-based deduplication remain enabled for repeat and incremental downloads.
 - Keep downloaded content as reference media until rights and policy classification permits further use.
@@ -74,7 +75,9 @@ Last updated: 2026-07-22
 - Migration `20260722_0004` adds shared durable jobs with expiring leases, heartbeats, retry budgets, scheduling, cooperative cancellation, and recovery of abandoned running work. Last30Days and OpenMontage are migrated off JSON.
 - The unified runner includes a watch-reloaded durable worker for Douyin acquisition, Last30Days research, OpenMontage rendering, and Postiz publishing. A live Last30Days mock completed from SQL with no legacy file, an OpenMontage proposal/approval completed its SQL preflight record with no legacy file, and `scripts/worker.py --once` drains recoverable work.
 - Opt-in workspace invitation email uses standard SMTP with STARTTLS or implicit TLS, HTTPS-only public links outside loopback, a 20-attempt-per-workspace hourly default, metadata-only audits, and an always-available copy-link fallback. Unit and API tests prove delivery behavior and raw-token non-persistence; no real email was sent because SMTP credentials were not supplied.
-- The complete project suite passes: 95 tests.
+- Local-admin behavior was smoke-tested in the running browser app: login was bypassed on loopback, Local Workspace was created with owner role, the Local admin badge rendered, and no browser console errors were reported. LAN/production fail-closed behavior is unit-tested.
+- Douyin provider 2.0.0 passed installation checks and redacted dry-run configuration. Tests cover cookie sources, missing-cookie refusal, absence of browser fallback, artifact hashing, and rejection of zero-exit runs that save no media. A live network download was not run because valid cookies and a user-authorized source URL were not supplied.
+- The complete project suite passes: 107 tests.
 - The practical root console was checked in the running Next.js app through both `localhost` and `127.0.0.1`; the sign-in state exits loading reliably, fits a 1280px viewport without horizontal overflow, and the private-LAN development-origin allowlist matches the unified runner.
 - Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
 - Production builds for Next.js and Electron, TypeScript checks, ESLint, Ruff, JSON validation, CLI listing, and diff checks pass. The `/tools` page exposes six catalog cards, five locally installed/active providers, guarded lifecycle controls, Agent Reach diagnostics, and the MediaCrawler license block.

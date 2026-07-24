@@ -21,7 +21,13 @@ def job_factory(monkeypatch):
     monkeypatch.setattr(
         douyin,
         "provider_status",
-        lambda: {"installed": True, "active": True, "revision": "pinned"},
+        lambda: {
+            "installed": True,
+            "active": True,
+            "revision": "pinned",
+            "cookies_ready": True,
+            "cookies": {"ready": True, "missing": []},
+        },
     )
     return factory
 
@@ -54,10 +60,37 @@ def test_download_job_requires_confirmation() -> None:
         )
 
 
+def test_create_download_job_requires_cookies(job_factory, monkeypatch) -> None:
+    monkeypatch.setattr(
+        douyin,
+        "provider_status",
+        lambda: {
+            "installed": True,
+            "active": True,
+            "revision": "pinned",
+            "cookies_ready": False,
+            "cookies": {"ready": False, "missing": ["ttwid"]},
+        },
+    )
+    with pytest.raises(RuntimeError, match="cookies"):
+        douyin.create_download_job(request())
+
+
 def test_worker_records_downloaded_media(
     monkeypatch, tmp_path: Path, job_factory
 ) -> None:
     monkeypatch.setattr(douyin, "OUTPUT_ROOT", tmp_path / "downloads")
+    monkeypatch.setattr(
+        douyin,
+        "provider_status",
+        lambda: {
+            "installed": True,
+            "active": True,
+            "revision": "pinned",
+            "cookies_ready": True,
+            "cookies": {"ready": True, "missing": []},
+        },
+    )
     job = douyin.create_download_job(request())
 
     def fake_run(command, **_kwargs):
@@ -72,3 +105,38 @@ def test_worker_records_downloaded_media(
     assert completed["status"] == "succeeded"
     assert completed["result"]["artifacts"][0]["name"] == "clip.mp4"
     assert completed["result"]["artifacts"][0]["sha256"]
+
+
+def test_worker_fails_when_provider_exits_zero_without_media(
+    monkeypatch, tmp_path: Path, job_factory
+) -> None:
+    monkeypatch.setattr(douyin, "OUTPUT_ROOT", tmp_path / "downloads")
+    monkeypatch.setattr(
+        douyin,
+        "provider_status",
+        lambda: {
+            "installed": True,
+            "active": True,
+            "revision": "pinned",
+            "cookies_ready": True,
+            "cookies": {"ready": True, "missing": []},
+        },
+    )
+    job = douyin.create_download_job(request())
+
+    def fake_run(command, **_kwargs):
+        output = Path(command[command.index("--output") + 1])
+        output.mkdir(parents=True)
+        return subprocess.CompletedProcess(
+            command, 0, "ok", "Empty 200 response (anti-bot)"
+        )
+
+    monkeypatch.setattr(douyin.subprocess, "run", fake_run)
+    with pytest.raises(RuntimeError, match="without media files"):
+        douyin.run_download_job(job["id"])
+
+    # Empty output is recorded as an error; the durable job layer may requeue
+    # for a later retry instead of terminal failure on the first attempt.
+    recorded = douyin.download_job(job["id"])
+    assert recorded["status"] in {"queued", "failed"}
+    assert "without media files" in (recorded.get("error") or "")
