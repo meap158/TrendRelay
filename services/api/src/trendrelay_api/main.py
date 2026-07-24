@@ -21,6 +21,15 @@ from trendrelay_api.integrations.last30days import (
     provider_status,
     run_job,
 )
+from trendrelay_api.integrations.meta_ads_kit import (
+    MetaBriefingRequest,
+)
+from trendrelay_api.integrations.meta_ads_kit import (
+    provider_status as meta_ads_provider_status,
+)
+from trendrelay_api.integrations.meta_ads_kit import (
+    run_briefing as run_meta_ads_briefing,
+)
 from trendrelay_api.media_api import router as media_router
 from trendrelay_api.production_api import router as production_router
 from trendrelay_api.publishing_api import router as publishing_router
@@ -161,7 +170,34 @@ async def activate(tool_id: str, body: Activation, request: Request) -> dict[str
 
 @app.get("/api/research/status", tags=["research"])
 async def research_status() -> dict[str, object]:
-    return {"provider": await asyncio.to_thread(provider_status)}
+    last30days_status, reach_status, meta_ads_status = await asyncio.gather(
+        asyncio.to_thread(provider_status),
+        asyncio.to_thread(diagnostic_report),
+        asyncio.to_thread(meta_ads_provider_status),
+    )
+    return {
+        "provider": last30days_status,
+        "providers": {
+            "last30days": last30days_status,
+            "agent_reach": reach_status,
+            "meta_ads": meta_ads_status,
+        },
+    }
+
+
+@app.post("/api/research/meta-ads/briefing", tags=["research"])
+async def meta_ads_briefing(body: MetaBriefingRequest, request: Request) -> dict[str, object]:
+    require_local_mutation(request)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400,
+            detail="Meta Ads briefing requires explicit confirmation.",
+        )
+    try:
+        briefing = await asyncio.to_thread(run_meta_ads_briefing, body)
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {"briefing": briefing}
 
 
 @app.get("/api/research/jobs", tags=["research"])

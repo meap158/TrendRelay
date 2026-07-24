@@ -1,6 +1,6 @@
 # Agent Handover
 
-Last updated: 2026-07-24
+Last updated: 2026-07-25
 
 ## Current state
 
@@ -13,11 +13,12 @@ Last updated: 2026-07-24
 - The root `/` screen is a compact media-to-publish console. It submits authenticated, role-gated Douyin links to durable `douyin_download` jobs, shows resulting artifacts, and deep-links each file into Studio or Postiz publishing. `npm run douyin --` remains the full CLI. Downloads, SQLite state, ephemeral configuration, upstream source, dependencies, and credentials remain ignored.
 - The pinned `gitroomhq/postiz-agent` 2.0.15 provider is integrated as `social.postiz-agent` at revision `41c5a9dbd6b2776863e7c05c22e7a385c208321c`.
 - `npm run postiz --` installs and verifies the provider, performs OAuth/API-key authentication and integration discovery, and previews or executes short-video drafts/schedules for TikTok, Instagram, and YouTube.
-- `config/tool-catalog.json`, the `npm run tools --` CLI, the loopback-only lifecycle API, and `/tools` About & Tools page catalogue all six managed capability projects with pinned revisions, license posture, install state, and activation state.
+- `config/tool-catalog.json`, the `npm run tools --` CLI, the loopback-only lifecycle API, and `/tools` About & Tools page catalogue all seven managed capability projects with pinned revisions, license posture, install state, and activation state.
 - The pinned Last 30 Days 3.16.0 source is installed and active locally. `npm run research --`, the research API, and `/research` execute its stable agent JSON 1.x contract and persist workspace-scoped evidence.
 - The pinned OpenMontage source is installed and active locally. `/studio` and `npm run studio --` expose clip-factory/podcast-repurpose preflights plus approved, zero-network local VideoTrimmer jobs with immutable-source checks, manual clip ranges, budget enforcement, verified outputs, and provenance.
 - Windows exposes exactly two root launchers: `start.cmd` for browser development and `start-electron.bat` for desktop development. Provider/tool operations use npm scripts rather than extra `.cmd` files.
 - The pinned Agent Reach 1.5.0 source is installed and active locally. `npm run reach --` and the `/tools` Diagnose action expose 15-channel local-presence diagnostics without upstream execution, network probes, user-config reads, browser-session access, or secret-value exposure.
+- The pinned Meta Ads Kit source is installed and active at `0879bb4566a836670f33beb509ff7d8d4779849e`; its isolated `@vishalgojha/social-flow` 0.2.17 runtime provides the `social` command. The Python adapter exposes only read-only account/campaign/ad/fatigue reports, and `/research` presents it as first-party validation alongside Last30Days execution and Agent Reach diagnostics.
 - Last 30 Days is adapter-ready. OpenMontage preflight and deterministic local clipping are adapter-ready; paid/networked generation remains intentionally blocked.
 - MediaCrawler is documented but installation and activation are blocked because its license prohibits commercial use.
 - PostgreSQL/pgvector, Redis, and S3-compatible storage remain planned data services when product features require them.
@@ -40,6 +41,7 @@ Last updated: 2026-07-24
 - Live trend research requires explicit external-action confirmation. Browser-cookie extraction is disabled and the adapter passes only allowlisted research secrets to Last 30 Days.
 - OpenMontage proposals require a declared rights basis, immutable source hash, budget cap, and explicit approval. Rendering requires a second confirmed action, stays local and zero-network, uses fixed output roots, and never implies permission to publish.
 - Agent Reach diagnostics are local-presence-only. The upstream installer, MCP/skill mutation, browser-cookie import, command execution, live network probes, and user-config access remain outside the trusted adapter boundary.
+- Meta Ads Kit is read-only in TrendRelay. Briefings are loopback-only and confirmed; commands are constructed from fixed report templates, provider stderr is sanitized, credentials remain in the isolated CLI profile, and pause/resume/budget/create/upload/delete operations are absent. Any spend-impacting capability requires a new ADR and approval design.
 - Every managed capability repository must be pinned in the machine-readable catalog and documented in the human-readable catalog; supporting runtime repositories must be lockfile-pinned and documented.
 - Tool installation and activation remain separate; source presence never implies credentials, dependencies, or production readiness.
 - Postiz is dry-run-first. Uploads and remote drafts/schedules require both `--execute` and `--confirm-external-action`; drafts are the default.
@@ -65,8 +67,9 @@ Last updated: 2026-07-24
 - Unified-runner tests cover healthy-service reuse, unavailable-service startup selection, and missing Electron detection.
 - The Last 30 Days pinned checkout was verified as 3.16.0 and activated. CLI and API mock runs completed through agent JSON schema 1.2 and each ingested two workspace-scoped evidence records without external calls.
 - The exact OpenMontage checkout was installed and activated. Its two guarded manifests load successfully. The isolated upstream VideoTrimmer produced and ffprobe-verified a real one-second MP4 from the pinned demo source using locked FFmpeg 6.1.1 binaries. The worker passes no provider credentials, performs no network call, records source/artifact hashes and package/upstream provenance, and reports zero provider cost.
-- The `/research` Trend Radar page was visually smoke-tested in the local app; the shared browser API resolver follows loopback or LAN hostnames instead of hard-coding `localhost`, and development CORS accepts private-LAN frontend origins.
-- The Agent Reach pinned checkout resolves to `1494c2ab239e7355a77e7cceaf3271453a1f34b5` (upstream 1.5.0). The adapter reports all 15 pinned channels, currently with 3 ready, 1 setup-required, and 11 unavailable local capabilities; no live platform calls were made.
+- The harmonized `/research` workbench was visually smoke-tested in the local app with Last30Days, Agent Reach, and Meta Ads Kit source cards, optional channel selection, a read-only briefing panel, local-admin access, responsive layout, and no browser console errors; the shared browser API resolver follows loopback or LAN hostnames instead of hard-coding `localhost`, and development CORS accepts private-LAN frontend origins.
+- The Agent Reach pinned checkout resolves to `1494c2ab239e7355a77e7cceaf3271453a1f34b5` (upstream 1.5.0). The adapter reports all 15 pinned channels, currently with 2 ready, 1 setup-required, and 12 unavailable local capabilities; no live platform calls were made.
+- Meta Ads Kit resolves exactly to `0879bb4566a836670f33beb509ff7d8d4779849e`; isolated Social Flow 0.2.17 version/help checks pass locally on Node 22 despite its declared newer engine warning. Adapter/API tests prove strict account/preset validation, fixed read-only commands, winner/bleeder/fatigue synthesis, loopback confirmation, provider-error redaction, and harmonized research status. No Meta account was authenticated and no live briefing or mutation was run.
 - Migrations `20260722_0001` through `20260722_0005` upgrade a fresh local database to head. Foundation tests cover workspace creation, roles, invitations, owner-only secret references, raw-secret rejection, slug validation, and ordered audit events.
 - Browser production builds cover `/sign-in`, `/update-password`, and `/workspaces`; ESLint and TypeScript checks pass. Next.js is updated to 16.2.11, patched PostCSS/Sharp overrides are installed, and `npm audit` reports zero known vulnerabilities.
 - Migration `20260722_0002` adds one-time, email-bound invitation tokens with expiry, revocation, replay protection, and transactional acceptance. Development CORS now explicitly permits the browser Authorization header.
@@ -79,10 +82,10 @@ Last updated: 2026-07-24
 - Local-admin behavior was smoke-tested in the running browser app: login was bypassed on loopback, Local Workspace was created with owner role, the Local admin badge rendered, and no browser console errors were reported. LAN/production fail-closed behavior is unit-tested.
 - Automatic Douyin connection tests cover loopback owner authorization, explicit confirmation, isolated subprocess startup, automatic cookie detection without stdin, atomic local cookie/status writes, and secret-free public status. The visible login window itself was not completed against a real account during automation.
 - Douyin provider 2.0.0 passed installation checks and redacted dry-run configuration. Tests cover cookie sources, missing-cookie refusal, absence of browser fallback, artifact hashing, and rejection of zero-exit runs that save no media. A live network download was not run because valid cookies and a user-authorized source URL were not supplied.
-- The complete project suite passes: 112 tests.
+- The complete project suite passes: 121 tests.
 - The practical root console was checked in the running Next.js app through both `localhost` and `127.0.0.1`; the sign-in state exits loading reliably, fits a 1280px viewport without horizontal overflow, and the private-LAN development-origin allowlist matches the unified runner.
 - Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
-- Production builds for Next.js and Electron, TypeScript checks, ESLint, Ruff, JSON validation, CLI listing, and diff checks pass. The `/tools` page exposes six catalog cards, five locally installed/active providers, guarded lifecycle controls, Agent Reach diagnostics, and the MediaCrawler license block.
+- Production builds for Next.js and Electron, TypeScript checks, ESLint, Ruff, JSON validation, CLI listing, and diff checks pass. The `/tools` page exposes seven catalog cards, six locally installed/active providers, guarded lifecycle controls, Agent Reach diagnostics, and the MediaCrawler license block.
 
 ## Next recommended action
 

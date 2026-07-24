@@ -21,7 +21,8 @@
     "research": "python scripts/research.py",
     "reach": "python scripts/reach.py",
     "studio": "python scripts/studio.py",
-    "tools": "python scripts/tools.py"
+    "tools": "python scripts/tools.py",
+    "meta-ads": "python scripts/meta_ads.py"
   },
   "engines": {
     "node": ">=22"

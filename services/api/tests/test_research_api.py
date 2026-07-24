@@ -39,3 +39,44 @@ def test_research_mutations_are_local_only() -> None:
     response = asyncio.run(remote_request())
 
     assert response.status_code == 403
+
+
+def test_research_status_harmonizes_all_provider_roles() -> None:
+    response = asyncio.run(request("GET", "/api/research/status"))
+
+    assert response.status_code == 200
+    providers = response.json()["providers"]
+    assert set(providers) == {"last30days", "agent_reach", "meta_ads"}
+    assert providers["agent_reach"]["mode"] == "local-presence-only"
+    assert providers["meta_ads"]["mode"] == "read-only"
+    assert providers["meta_ads"]["mutations_allowed"] is False
+
+
+def test_meta_ads_briefing_requires_confirmation() -> None:
+    response = asyncio.run(request("POST", "/api/research/meta-ads/briefing", json={}))
+
+    assert response.status_code == 400
+
+
+def test_meta_ads_briefing_uses_guarded_adapter(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "trendrelay_api.main.run_meta_ads_briefing",
+        lambda body: {
+            "provider": "meta-ads-kit",
+            "preset": body.preset,
+            "guardrails": {"read_only": True, "mutations_executed": False},
+        },
+    )
+
+    response = asyncio.run(
+        request(
+            "POST",
+            "/api/research/meta-ads/briefing",
+            json={"preset": "last_30d", "confirm_external_action": True},
+        )
+    )
+
+    assert response.status_code == 200
+    briefing = response.json()["briefing"]
+    assert briefing["preset"] == "last_30d"
+    assert briefing["guardrails"]["mutations_executed"] is False

@@ -127,6 +127,31 @@
                       "documentation":  "docs/third-party/agent-reach.md"
                   },
                   {
+                      "id":  "meta-ads-kit",
+                      "name":  "Meta Ads Kit",
+                      "repository":  "https://github.com/TheMattBerman/meta-ads-kit",
+                      "revision":  "0879bb4566a836670f33beb509ff7d8d4779849e",
+                      "version":  "revision-pinned",
+                      "license":  "MIT",
+                      "license_url":  "https://github.com/TheMattBerman/meta-ads-kit/blob/0879bb4566a836670f33beb509ff7d8d4779849e/LICENSE",
+                      "category":  "Ad intelligence",
+                      "summary":  "Read-only Meta Ads briefings for spend pacing, winners, bleeders, and creative fatigue.",
+                      "capabilities":  [
+                                           "Daily ads briefing",
+                                           "Creative fatigue signals",
+                                           "Winner and bleeder detection"
+                                       ],
+                      "integration_status":  "briefing-ready",
+                      "commercial_use":  "allowed",
+                      "install_strategy":  "trendrelay-wrapper",
+                      "install_allowed":  true,
+                      "activation_allowed":  true,
+                      "default_active":  false,
+                      "root_path":  ".tools/catalog/meta-ads-kit",
+                      "source_path":  ".tools/catalog/meta-ads-kit/source",
+                      "documentation":  "docs/third-party/meta-ads-kit.md"
+                  },
+                  {
                       "id":  "mediacrawler",
                       "name":  "MediaCrawler",
                       "repository":  "https://github.com/NanmiCoder/MediaCrawler",

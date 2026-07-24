@@ -16,13 +16,14 @@ def test_lists_every_catalogued_github_project() -> None:
 
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 6
+    assert len(tools) == 7
     assert {tool["id"] for tool in tools} == {
         "douyin-downloader",
         "postiz-agent",
         "last30days-skill",
         "openmontage",
         "agent-reach",
+        "meta-ads-kit",
         "mediacrawler",
     }
 

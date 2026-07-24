@@ -29,6 +29,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 | Trend research provider | Pinned `mvanhorn/last30days-skill` 3.16.0 adapter |
 | Video production | Pinned `calesthio/OpenMontage` preflights plus isolated local VideoTrimmer execution |
 | Research channel diagnostics | Pinned `Panniantong/Agent-Reach` registry with side-effect-free local checks |
+| Ad-performance intelligence | Pinned `TheMattBerman/meta-ads-kit` source with an isolated Social Flow runtime and read-only Python adapter |
 | Tool governance | FastAPI lifecycle API, pinned JSON catalog, and Next.js About & Tools page |
 | AI workers | Python provider adapters; ComfyUI connectors remain planned |
 | Local development | npm workspaces and a Python virtual environment |
@@ -40,6 +41,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 - `apps/desktop` — Electron shell for local media and browser-assisted workflows
 - `scripts/dev.py` — unified hot-reload supervisor for local development
 - `scripts/reach.py` — sanitized Agent Reach channel diagnostics
+- `scripts/meta_ads.py` — isolated Meta Ads Kit source/runtime installer and verifier
 - `config/tool-catalog.json` — machine-readable registry of every incorporated GitHub project
 - `start.cmd` — one-click browser-app launcher with dependency bootstrap and hot reload
 - `start-electron.bat` — one-click Electron launcher with backend and frontend hot reload
@@ -119,6 +121,8 @@ npm run tools -- install last30days-skill --confirm-external-action
 npm run tools -- activate last30days-skill
 npm run tools -- deactivate last30days-skill
 npm run tools -- uninstall last30days-skill --confirm-external-action
+npm run tools -- install meta-ads-kit --confirm-external-action
+npm run tools -- activate meta-ads-kit
 ```
 
 Installation fetches an exact reviewed revision; activation separately makes it eligible for orchestration. Source-ready tools still require a TrendRelay capability adapter and their documented upstream dependency/credential setup before production use. Lifecycle mutations are loopback-only. MediaCrawler remains visible but cannot be installed or activated because its current license prohibits commercial use.
@@ -143,7 +147,18 @@ npm run research -- run "AI video tools" --source reddit --source youtube --mode
 npm run research -- list
 ```
 
-Free upstream sources require no key. Optional research keys are documented in `.env.example`; unrelated provider credentials are never passed to the research process. Use `--mock` for deterministic local verification without network calls. The `/research` page provides the same flow and displays source status plus ingested evidence.
+Free upstream sources require no key. Optional research keys are documented in `.env.example`; unrelated provider credentials are never passed to the research process. Use `--mock` for deterministic local verification without network calls. The `/research` workbench now harmonizes three distinct roles: Last 30 Days executes recent-topic discovery, Agent Reach displays safe local channel diagnostics, and Meta Ads Kit adds first-party ad-performance validation. Agent Reach readiness is never presented as proof of a live request or authenticated platform session.
+## Meta Ads performance research
+
+TrendRelay incorporates the MIT-licensed `TheMattBerman/meta-ads-kit` at revision `0879bb4566a836670f33beb509ff7d8d4779849e`. Its isolated runtime uses the renamed `@vishalgojha/social-flow` 0.2.17 package while retaining the upstream `social` command. Open `/research` to run a confirmed read-only briefing for account status, active campaigns, campaign/ad performance, winners, bleeders, and high-frequency fatigue signals.
+
+```powershell
+npm run tools -- install meta-ads-kit --confirm-external-action
+npm run tools -- activate meta-ads-kit
+npm run meta-ads -- check
+```
+
+Authentication is performed explicitly with the tool-local Social Flow CLI. `META_AD_ACCOUNT=act_...` may set a non-secret default account identifier. TrendRelay never returns token values or provider stderr and exposes no pause, resume, budget, create, upload, or delete path. See [Meta Ads Kit](./docs/third-party/meta-ads-kit.md) and [ADR 0011](./docs/architecture/0011-meta-ads-read-only-boundary.md).
 ## Douyin batch downloader
 
 TrendRelay integrates the MIT-licensed `jiji262/douyin-downloader` provider at a pinned revision. Its source, dependencies, cookies, database, and downloaded media stay outside Git under `.tools/` and `.data/`.
