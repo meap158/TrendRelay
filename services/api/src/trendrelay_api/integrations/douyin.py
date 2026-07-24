@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import subprocess
 import sys
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -30,6 +32,10 @@ JOB_SESSION_FACTORY = SessionFactory
 OUTPUT_ROOT = PROJECT_ROOT / ".data" / "downloads" / "douyin"
 DOWNLOAD_SCRIPT = PROJECT_ROOT / "scripts" / "douyin.py"
 COOKIE_FILE = PROJECT_ROOT / ".data" / "douyin" / "cookies.json"
+CONNECTION_STATUS_FILE = PROJECT_ROOT / ".data" / "douyin" / "connection-status.json"
+CONNECTION_LOG_FILE = PROJECT_ROOT / ".data" / "douyin" / "connection.log"
+CONNECTION_PROCESS: subprocess.Popen[str] | None = None
+CONNECTION_LOCK = threading.Lock()
 MEDIA_SUFFIXES = {
     ".jpg",
     ".jpeg",
@@ -163,6 +169,104 @@ def cookie_status() -> dict[str, Any]:
     }
 
 
+def _write_connection_status(state: str, message: str) -> dict[str, str]:
+    payload = {"state": state, "message": message, "updated_at": _now()}
+    CONNECTION_STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = CONNECTION_STATUS_FILE.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    temporary.replace(CONNECTION_STATUS_FILE)
+    return payload
+
+
+def connection_status() -> dict[str, Any]:
+    payload: dict[str, Any] | None = None
+    try:
+        loaded = json.loads(CONNECTION_STATUS_FILE.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            payload = loaded
+    except (OSError, ValueError):
+        pass
+
+    process = CONNECTION_PROCESS
+    if (
+        process is not None
+        and process.poll() is None
+        and payload
+        and payload.get("state")
+        in {
+            "starting",
+            "installing",
+            "opening_browser",
+            "waiting_for_login",
+        }
+    ):
+        return {
+            "state": str(payload["state"]),
+            "message": str(payload.get("message", "Connect Douyin to continue.")),
+            "updated_at": payload.get("updated_at"),
+        }
+
+    cookies = cookie_status()
+    if cookies["ready"]:
+        return {
+            "state": "connected",
+            "message": "Douyin cookies are ready.",
+            "updated_at": None,
+        }
+    if payload is None:
+        return {
+            "state": "disconnected",
+            "message": "Connect Douyin to capture login cookies.",
+            "updated_at": None,
+        }
+    if (
+        process is not None
+        and process.poll() is not None
+        and payload.get("state")
+        in {"starting", "installing", "opening_browser", "waiting_for_login"}
+    ):
+        return _write_connection_status(
+            "failed", "Douyin connection process exited before login completed."
+        )
+    return {
+        "state": str(payload.get("state", "disconnected")),
+        "message": str(payload.get("message", "Connect Douyin to continue.")),
+        "updated_at": payload.get("updated_at"),
+    }
+
+
+def start_connection(force_refresh: bool = False) -> dict[str, Any]:
+    global CONNECTION_PROCESS
+    with CONNECTION_LOCK:
+        current = connection_status()
+        if current["state"] in {
+            "starting",
+            "installing",
+            "opening_browser",
+            "waiting_for_login",
+        }:
+            return current
+        if cookie_status()["ready"] and not force_refresh:
+            return connection_status()
+
+        _write_connection_status("starting", "Preparing the isolated Douyin login browser.")
+        CONNECTION_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        with CONNECTION_LOG_FILE.open("a", encoding="utf-8") as log:
+            CONNECTION_PROCESS = subprocess.Popen(
+                [sys.executable, str(DOWNLOAD_SCRIPT), "connect"],
+                cwd=PROJECT_ROOT,
+                env=_environment(),
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                creationflags=creation_flags,
+            )
+        return connection_status()
+
+
 def provider_status() -> dict[str, Any]:
     tool = next(item for item in list_tools() if item["id"] == "douyin-downloader")
     cookies = cookie_status()
@@ -173,6 +277,7 @@ def provider_status() -> dict[str, Any]:
         "output_root": str(OUTPUT_ROOT),
         "cookies_ready": cookies["ready"],
         "cookies": cookies,
+        "connection": connection_status(),
     }
 
 
@@ -185,7 +290,7 @@ def create_download_job(request: DownloadRequest) -> dict[str, Any]:
     if not status["cookies_ready"]:
         raise RuntimeError(
             "Douyin cookies are missing or incomplete. "
-            "Run `npm run douyin -- login` or set DOUYIN_COOKIE / "
+            "Use Connect Douyin in the app or set DOUYIN_COOKIE / "
             "DOUYIN_TTWID, DOUYIN_ODIN_TT, and DOUYIN_PASSPORT_CSRF_TOKEN, then retry."
         )
     nonce = f"{request.workspace_id}:{_now()}:{request.model_dump_json()}"
@@ -288,7 +393,7 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
             # Defense in depth: never report success for an empty folder.
             message = (
                 "Download finished without media files. "
-                "Configure Douyin cookies (`npm run douyin -- login`) and retry."
+                "Connect Douyin in the app and retry."
             )
             if detail:
                 message = f"{message}\n{detail[-2500:]}"

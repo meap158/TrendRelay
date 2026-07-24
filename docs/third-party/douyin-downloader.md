@@ -15,8 +15,8 @@ The upstream source and its dependencies are installed into a dedicated virtual 
 
 Douyin blocks unauthenticated media detail requests (empty HTTP 200 / anti-bot). Downloads therefore require cookies:
 
-1. `npm run douyin -- install --login-browser`
-2. `npm run douyin -- login` — opens Chromium, capture cookies after you log in
+1. Click **Connect Douyin** in the media console. The app installs isolated login support when needed, opens Chromium, detects session cookies automatically, and closes it after capture.
+2. CLI equivalent: `npm run douyin -- connect` (no Enter-key checkpoint).
 3. Or set `DOUYIN_COOKIE` (full header) / `DOUYIN_TTWID` + `DOUYIN_ODIN_TT` + `DOUYIN_PASSPORT_CSRF_TOKEN`
 
 Jobs fail when cookies are missing or when the provider exits without writing media. Upstream can return exit code 0 even on failed fetches; TrendRelay treats empty output folders as failure.

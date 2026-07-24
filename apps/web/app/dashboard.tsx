@@ -22,6 +22,7 @@ type MediaStatus = {
     active: boolean;
     revision?: string;
     cookies_ready?: boolean;
+    connection?: { state: string; message: string };
   };
   tiktok: { installed: boolean; active: boolean; reason: string };
 };
@@ -60,6 +61,7 @@ export default function Dashboard() {
   const [limit, setLimit] = useState(20);
   const [status, setStatus] = useState<MediaStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const jobs = allJobs.filter(j => j.category === "fetch").map(j => j.raw); // use the raw specific payload
@@ -94,6 +96,28 @@ export default function Dashboard() {
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load workspaces."));
   }, [apiFetch, user]);
 
+  async function connectDouyin() {
+    if (!workspaceId) return;
+    if (!window.confirm("Open a dedicated Douyin login window and save its cookies locally?")) return;
+    setConnecting(true);
+    setError(null);
+    try {
+      const body = await json<{ connection: { state: string; message: string } }>(
+        await apiFetch(`/api/workspaces/${workspaceId}/media/douyin/connection`, {
+          method: "POST",
+          body: JSON.stringify({ confirm_external_action: true, force_refresh: cookiesReady }),
+        }),
+      );
+      setStatus((current) => current ? {
+        ...current,
+        douyin: { ...current.douyin, connection: body.connection },
+      } : current);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Douyin connection could not start.");
+    } finally {
+      setConnecting(false);
+    }
+  }
   async function fetchMedia(event: FormEvent) {
     event.preventDefault();
     if (platform !== "douyin") return;
@@ -133,6 +157,8 @@ export default function Dashboard() {
   const providerReady = Boolean(status?.douyin.installed && status?.douyin.active);
   const cookiesReady = status?.douyin.cookies_ready !== false;
   const canFetch = providerReady && cookiesReady;
+  const connectionState = status?.douyin.connection?.state ?? "disconnected";
+  const connectionActive = ["starting", "installing", "opening_browser", "waiting_for_login"].includes(connectionState);
 
   return <main className="console-page">
     <section className="console-heading">
@@ -189,8 +215,21 @@ export default function Dashboard() {
             </div>
             {!providerReady && <div className="setup-note" style={{ margin: '12px 0', padding: '8px 12px' }}>Douyin Downloader must be installed and active. <Link href="/tools">Open Tools</Link></div>}
             {providerReady && !cookiesReady && (
-              <div className="setup-note" style={{ margin: '12px 0', padding: '8px 12px' }}>
-                Douyin cookies are required. In a terminal run <code>npm run douyin -- install --login-browser</code> then <code>npm run douyin -- login</code>, or set <code>DOUYIN_COOKIE</code> in <code>.env</code>.
+              <div className="setup-note" style={{ margin: '12px 0', padding: '10px 12px', display: 'grid', gap: '8px' }}>
+                <strong>{connectionActive ? "Complete login in the opened Douyin window" : "Connect Douyin to fetch videos"}</strong>
+                <span>{status?.douyin.connection?.message ?? "TrendRelay can open Douyin and capture the required cookies automatically."}</span>
+                <button type="button" className="secondary-button" disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
+                  {connecting || connectionActive ? "Waiting for Douyin login…" : "Connect Douyin"}
+                </button>
+                <small>Cookies stay on this machine. Downloads continue through the API provider, not the browser.</small>
+              </div>
+            )}
+            {providerReady && cookiesReady && (
+              <div className="setup-note" style={{ margin: '12px 0', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                <span>Douyin session connected.</span>
+                <button type="button" className="secondary-button" disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
+                  {connecting || connectionActive ? "Refreshing login…" : "Refresh login"}
+                </button>
               </div>
             )}
             <button className="primary-button" style={{ width: '100%', minHeight: '32px' }} disabled={busy || !canFetch || !input.trim()}>{busy ? "Starting…" : "Fetch videos"}</button>

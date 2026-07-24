@@ -27,6 +27,8 @@ REVISION = "ef3ad18c2b50e38e534f72aabe2b3fbb0b3fadd7"
 DEFAULT_OUTPUT = ROOT / ".data" / "downloads" / "douyin"
 DEFAULT_DATABASE = ROOT / ".data" / "douyin" / "dy_downloader.db"
 DEFAULT_COOKIE_FILE = ROOT / ".data" / "douyin" / "cookies.json"
+CONNECTION_STATUS_FILE = ROOT / ".data" / "douyin" / "connection-status.json"
+COOKIE_CAPTURE_SCRIPT = ROOT / "scripts" / "douyin_cookie_capture.py"
 SUPPORTED_MODES = ("post", "like", "mix", "music", "collect", "collectmix")
 URL_PATTERN = re.compile(r"https?://[^\s<>\"']+")
 MEDIA_SUFFIXES = {
@@ -59,6 +61,13 @@ def tool_python() -> Path:
 
 def tool_executable() -> Path:
     return VENV_DIR / ("Scripts/douyin-dl.exe" if os.name == "nt" else "bin/douyin-dl")
+
+
+def login_browser_ready() -> bool:
+    return any(
+        (VENV_DIR / marker).is_file()
+        for marker in ("login-browser-installed.txt", "browser-installed.txt")
+    )
 
 
 def run_checked(command: list[str], cwd: Path = ROOT) -> None:
@@ -131,7 +140,7 @@ def check_provider() -> int:
             "Douyin cookies are missing or incomplete; downloads will fail anti-bot checks.",
             file=sys.stderr,
         )
-        print("Run: npm run douyin -- login", file=sys.stderr)
+        print("Run: npm run douyin -- connect", file=sys.stderr)
     return 0
 
 
@@ -208,17 +217,66 @@ def cookie_readiness() -> dict[str, object]:
 def cookie_setup_message() -> str:
     return (
         "Douyin cookies are required for media downloads. "
-        "Run `npm run douyin -- login` (browser login) or set DOUYIN_COOKIE / "
+        "Run `npm run douyin -- connect` or set DOUYIN_COOKIE / "
         "DOUYIN_TTWID, DOUYIN_ODIN_TT, and DOUYIN_PASSPORT_CSRF_TOKEN."
     )
+
+
+def write_connection_status(state: str, message: str) -> None:
+    CONNECTION_STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = CONNECTION_STATUS_FILE.with_suffix(".json.tmp")
+    temporary.write_text(
+        json.dumps({"state": state, "message": message}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    temporary.replace(CONNECTION_STATUS_FILE)
+
+
+def connect_provider() -> int:
+    """Install login support if needed, then capture cookies without terminal input."""
+    try:
+        browser_marker = VENV_DIR / "login-browser-installed.txt"
+        if not login_browser_ready():
+            write_connection_status(
+                "installing",
+                "Installing the isolated browser used only for Douyin login.",
+            )
+            result = install_provider(include_login_browser=True)
+            if result != 0:
+                write_connection_status(
+                    "failed", "Douyin login support could not be installed."
+                )
+                return result
+            browser_marker.write_text("chromium\n", encoding="utf-8")
+
+        write_connection_status("opening_browser", "Opening the Douyin login window.")
+        completed = subprocess.run(
+            [
+                str(tool_python()),
+                str(COOKIE_CAPTURE_SCRIPT),
+                "--output",
+                str(DEFAULT_COOKIE_FILE),
+                "--status",
+                str(CONNECTION_STATUS_FILE),
+            ],
+            cwd=ROOT,
+            check=False,
+            env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
+        )
+        if completed.returncode != 0 and not CONNECTION_STATUS_FILE.is_file():
+            write_connection_status("failed", "Douyin connection process failed.")
+        return completed.returncode
+    except (OSError, subprocess.SubprocessError) as error:
+        write_connection_status("failed", f"Douyin connection failed: {error}")
+        return 1
 
 
 def login_provider() -> int:
     if check_provider() != 0:
         return 1
-    if not (VENV_DIR / "login-browser-installed.txt").is_file():
+    if not login_browser_ready():
         print(
-            "Cookie login requires browser support: npm run douyin -- install --login-browser",
+            "Use `npm run douyin -- connect` so TrendRelay can prepare login support automatically.",
             file=sys.stderr,
         )
         return 1
@@ -455,6 +513,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("check", help="verify the pinned provider installation")
     subparsers.add_parser(
+        "connect", help="open login and capture cookies automatically"
+    )
+    subparsers.add_parser(
         "login",
         help="open a browser, capture Douyin cookies, and save them for downloads",
     )
@@ -497,6 +558,8 @@ def main() -> int:
         return check_provider()
     if args.command == "login":
         return login_provider()
+    if args.command == "connect":
+        return connect_provider()
     return batch_download(args)
 
 

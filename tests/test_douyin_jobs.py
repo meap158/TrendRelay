@@ -140,3 +140,60 @@ def test_worker_fails_when_provider_exits_zero_without_media(
     recorded = douyin.download_job(job["id"])
     assert recorded["status"] in {"queued", "failed"}
     assert "without media files" in (recorded.get("error") or "")
+
+
+def test_connection_starts_isolated_cookie_capture(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(douyin, "CONNECTION_STATUS_FILE", tmp_path / "status.json")
+    monkeypatch.setattr(douyin, "CONNECTION_LOG_FILE", tmp_path / "connection.log")
+    monkeypatch.setattr(douyin, "CONNECTION_PROCESS", None)
+    monkeypatch.setattr(
+        douyin,
+        "cookie_status",
+        lambda: {"ready": False, "source": "none", "missing": ["ttwid"]},
+    )
+    captured: dict[str, object] = {}
+
+    class FakeProcess:
+        def poll(self):
+            return None
+
+    def fake_popen(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return FakeProcess()
+
+    monkeypatch.setattr(douyin.subprocess, "Popen", fake_popen)
+
+    result = douyin.start_connection()
+
+    assert result["state"] == "starting"
+    assert captured["command"][-1] == "connect"
+    assert "--browser-fallback" not in captured["command"]
+
+def test_connection_refresh_starts_capture_when_old_cookies_are_ready(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(douyin, "CONNECTION_STATUS_FILE", tmp_path / "status.json")
+    monkeypatch.setattr(douyin, "CONNECTION_LOG_FILE", tmp_path / "connection.log")
+    monkeypatch.setattr(douyin, "CONNECTION_PROCESS", None)
+    monkeypatch.setattr(
+        douyin,
+        "cookie_status",
+        lambda: {"ready": True, "source": "file", "missing": []},
+    )
+    commands: list[list[str]] = []
+
+    class FakeProcess:
+        def poll(self):
+            return None
+
+    def fake_popen(command, **_kwargs):
+        commands.append(command)
+        return FakeProcess()
+
+    monkeypatch.setattr(douyin.subprocess, "Popen", fake_popen)
+
+    result = douyin.start_connection(force_refresh=True)
+
+    assert result["state"] == "starting"
+    assert commands[0][-1] == "connect"

@@ -93,3 +93,57 @@ def test_analyst_cannot_submit_download() -> None:
         )
     )
     assert response.status_code == 403
+
+
+def test_owner_can_start_automatic_douyin_connection(monkeypatch) -> None:
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Media", "slug": "media"})
+    ).json()["workspace"]
+    received: dict[str, object] = {}
+
+    def fake_start_connection(**kwargs):
+        received.update(kwargs)
+        return {
+            "state": "waiting_for_login",
+            "message": "Log in to Douyin.",
+        }
+
+    monkeypatch.setattr(media_api, "start_connection", fake_start_connection)
+
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/media/douyin/connection",
+            json={"confirm_external_action": True, "force_refresh": True},
+        )
+    )
+
+    assert response.status_code == 202
+    assert response.json()["connection"]["state"] == "waiting_for_login"
+    assert received == {"force_refresh": True}
+
+
+def test_douyin_connection_requires_explicit_confirmation(monkeypatch) -> None:
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Media", "slug": "media"})
+    ).json()["workspace"]
+    received: dict[str, object] = {}
+
+    def fake_start_connection(**kwargs):
+        received.update(kwargs)
+        return {
+            "state": "waiting_for_login",
+            "message": "Log in to Douyin.",
+        }
+
+    monkeypatch.setattr(media_api, "start_connection", fake_start_connection)
+
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/media/douyin/connection",
+            json={"confirm_external_action": False},
+        )
+    )
+
+    assert response.status_code == 400
