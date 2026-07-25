@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./styles.css";
 import "./console.css";
+import "./opportunities.css";
 import { AuthProvider } from "./auth-provider";
 import { GlobalNav } from "./global-nav";
 import { JobsProvider } from "./jobs-provider";

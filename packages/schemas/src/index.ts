@@ -52,3 +52,54 @@ export interface PublicationPlan {
   timezone: string;
   state: PublicationPlanState;
 }
+
+export interface AffiliateOffer {
+  id: string;
+  product: {
+    id: string;
+    name: string;
+    brand?: string;
+    category?: string;
+    marketplace: string;
+    productUrl?: string;
+    imageUrl?: string;
+  };
+  network: string;
+  merchant?: string;
+  affiliateUrl: string;
+  priceCents?: number;
+  currency: string;
+  commissionBps?: number;
+  commissionFlatCents?: number;
+  cookieDays?: number;
+  availability: "available" | "limited" | "unavailable" | "unknown";
+  restrictions: string[];
+}
+
+export interface OpportunityScoreFactor {
+  factor: string;
+  label: string;
+  value: number;
+  weight: number;
+  contribution: number;
+  reason: string;
+  evidenceIds: string[];
+}
+
+export interface Opportunity {
+  id: string;
+  workspaceId: string;
+  name: string;
+  trendEntity: string;
+  summary: string;
+  lifecycle: "emerging" | "accelerating" | "peaking" | "saturated" | "declining" | "unknown";
+  markets: string[];
+  languages: string[];
+  score: number;
+  scoreVersion: string;
+  scoreBreakdown: OpportunityScoreFactor[];
+  offerIds: string[];
+  selectedOfferId?: string;
+  sourceResearchJobId?: string;
+  status: "draft" | "shortlisted" | "dismissed";
+}

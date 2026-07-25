@@ -4,7 +4,10 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { apiBaseUrl } from "../../lib/api";
+import { useAuth } from "../auth-provider";
 import { useJobs } from "../jobs-provider";
+
+type Workspace = { id: string; name: string; role: string };
 
 type Observation = {
   source: string;
@@ -46,7 +49,10 @@ export default function ResearchPage() {
   const [topic, setTopic] = useState("");
   const [mode, setMode] = useState("quick");
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
-  const { jobs: allJobs, refresh: refreshJobs } = useJobs();
+  const { apiFetch } = useAuth();
+  const { jobs: allJobs, refresh: refreshJobs, setActiveWorkspaceId } = useJobs();
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [workspaceId, setWorkspaceId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [providers, setProviders] = useState<ResearchProviders | null>(null);
@@ -55,6 +61,27 @@ export default function ResearchPage() {
   const [briefing, setBriefing] = useState<MetaBriefing | null>(null);
 
   const jobs = allJobs.filter((job) => job.category === "research").map((job) => job.raw);
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch("/api/workspaces")
+      .then((response) => response.json() as Promise<{ workspaces: Workspace[] }>)
+      .then((body) => {
+        if (cancelled) return;
+        setWorkspaces(body.workspaces);
+        const first = body.workspaces[0]?.id ?? "";
+        setWorkspaceId(first);
+        setActiveWorkspaceId(first || null);
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not load workspaces.");
+      });
+    return () => { cancelled = true; };
+  }, [apiFetch, setActiveWorkspaceId]);
+
+  function selectWorkspace(id: string) {
+    setWorkspaceId(id);
+    setActiveWorkspaceId(id || null);
+  }
 
   const refreshProviders = useCallback(async () => {
     const response = await fetch(`${apiBaseUrl()}/api/research/status`, { cache: "no-store" });
@@ -96,7 +123,7 @@ export default function ResearchPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          workspace_id: "local",
+          workspace_id: workspaceId,
           topic,
           days: 30,
           sources: selectedSources,
@@ -140,9 +167,11 @@ export default function ResearchPage() {
 
   return (
     <main className="research-page">
-      <p className="eyebrow">EVIDENCE BEFORE OUTPUT</p>
-      <h1>One research desk, three kinds of signal.</h1>
-      <p className="lede">Discover recent demand with Last 30 Days, inspect reachable channels with Agent Reach, and compare those ideas with first-party Meta Ads performance.</p>
+      <header className="opportunity-header">
+        <div><p className="eyebrow">EVIDENCE BEFORE OUTPUT</p><h1>One research desk, three kinds of signal.</h1><p className="lede">Discover recent demand with Last 30 Days, inspect reachable channels with Agent Reach, and compare those ideas with first-party Meta Ads performance.</p></div>
+        <label className="workspace-picker">Workspace<select value={workspaceId} onChange={(event) => selectWorkspace(event.target.value)}>{workspaces.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.role}</option>)}</select></label>
+      </header>
+
 
       <section className="research-source-grid" aria-label="Research sources">
         <article className="research-source-card">
@@ -187,7 +216,7 @@ export default function ResearchPage() {
                 <option value="deep">Deep</option>
               </select>
             </label>
-            <button disabled={busy === "trends" || !last30Ready}>{busy === "trends" ? "Researching…" : "Run research"}</button>
+            <button disabled={busy === "trends" || !last30Ready || !workspaceId}>{busy === "trends" ? "Researching…" : "Run research"}</button>
           </form>
           <div className="research-source-picker" aria-label="Optional research sources">
             <span>Optional sources</span>
@@ -231,6 +260,7 @@ export default function ResearchPage() {
                 <a key={`${item.source}-${index}`} href={item.evidence.source_url || undefined} target="_blank" rel="noreferrer"><span>{item.source}</span><strong>{item.title}</strong><p>{item.summary}</p></a>
               ))}
             </div>
+            {job.status === "succeeded" && job.observations?.length > 0 && <Link className="text-button" href={`/opportunities?trend=${encodeURIComponent(job.topic)}&job=${encodeURIComponent(job.id)}`}>Score this research as an opportunity</Link>}
           </article>
         ))}
       </section>

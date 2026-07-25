@@ -32,6 +32,7 @@ from trendrelay_api.integrations.meta_ads_kit import (
     run_briefing as run_meta_ads_briefing,
 )
 from trendrelay_api.media_api import router as media_router
+from trendrelay_api.opportunities_api import router as opportunities_router
 from trendrelay_api.production_api import router as production_router
 from trendrelay_api.publishing_api import router as publishing_router
 from trendrelay_api.tool_registry import (
@@ -57,6 +58,7 @@ app.include_router(campaigns_router)
 app.include_router(device_pairing_router)
 app.include_router(publishing_router)
 app.include_router(media_router)
+app.include_router(opportunities_router)
 app.include_router(production_router)
 app.add_middleware(
     CORSMiddleware,

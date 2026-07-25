@@ -1,0 +1,241 @@
+.opportunity-page {
+  width: min(1500px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 34px 0 72px;
+}
+
+.opportunity-header,
+.opportunity-steps,
+.opportunity-card,
+.opportunity-actions,
+.offer-picker > div,
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.opportunity-header {
+  margin-bottom: 24px;
+}
+
+.opportunity-header h1 {
+  margin: 4px 0 8px;
+  font-size: clamp(28px, 4vw, 46px);
+}
+
+.opportunity-steps {
+  align-items: stretch;
+  display: grid;
+  grid-template-columns: minmax(300px, 0.75fr) minmax(520px, 1.5fr);
+  margin-top: 24px;
+}
+
+.offer-import-panel,
+.opportunity-form,
+.opportunity-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 22px;
+}
+
+.offer-import-panel {
+  align-self: start;
+  position: sticky;
+  top: 72px;
+}
+
+.offer-import-panel h2,
+.opportunity-form h2,
+.opportunity-results h2 {
+  margin: 4px 0 8px;
+}
+
+.offer-import-panel textarea,
+.opportunity-form textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.file-button {
+  display: inline-flex;
+  cursor: pointer;
+  color: var(--link);
+  font-weight: 650;
+  margin: 10px 0;
+}
+
+.file-button input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.import-summary {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.import-summary small {
+  color: var(--red);
+}
+
+.opportunity-form,
+.opportunity-form-grid,
+.score-input-grid,
+.offer-picker,
+.score-breakdown {
+  display: grid;
+  gap: 14px;
+}
+
+.opportunity-form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.score-input-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 8px 0;
+}
+
+.score-input-grid fieldset {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.offer-picker {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.offer-picker > label:not(:last-child) {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.offer-picker > label.selected {
+  border-color: var(--link);
+  background: color-mix(in srgb, var(--link) 7%, var(--panel));
+}
+
+.offer-picker label span,
+.offer-picker label small {
+  display: block;
+}
+
+.opportunity-results {
+  margin-top: 34px;
+}
+
+.opportunity-card {
+  justify-content: flex-start;
+  margin-top: 14px;
+}
+
+.opportunity-score {
+  flex: 0 0 94px;
+  min-height: 94px;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--panel);
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  padding-top: 22px;
+  position: relative;
+}
+
+.opportunity-score strong {
+  font-size: 34px;
+}
+
+.opportunity-score span {
+  font-size: 12px;
+}
+
+.opportunity-score small {
+  position: absolute;
+  bottom: 16px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.opportunity-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.score-breakdown {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.score-breakdown details {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 10px 12px;
+}
+
+.score-breakdown summary {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.score-breakdown details p {
+  font-size: 13px;
+  margin: 10px 0 5px;
+}
+
+.opportunity-actions {
+  align-items: center;
+  justify-content: flex-start;
+  margin-top: 18px;
+}
+
+@media (max-width: 980px) {
+  .opportunity-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .offer-import-panel {
+    position: static;
+  }
+
+  .score-breakdown {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .opportunity-page {
+    width: min(100% - 24px, 1500px);
+  }
+
+  .opportunity-header,
+  .opportunity-card {
+    flex-direction: column;
+  }
+
+  .opportunity-form-grid,
+  .score-input-grid,
+  .score-breakdown {
+    grid-template-columns: 1fr;
+  }
+}

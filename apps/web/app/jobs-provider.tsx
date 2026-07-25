@@ -44,8 +44,8 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     try {
       const fetchPromises: Promise<BaseJob[]>[] = [];
 
-      // Research is workspace-agnostic for now (local), or we can just fetch it if needed.
-      const fetchResearch = fetch(`${apiBaseUrl()}/api/research/jobs?workspace_id=local`, { cache: 'no-store' })
+      const researchWorkspace = activeWorkspaceId ?? "local";
+      const fetchResearch = fetch(`${apiBaseUrl()}/api/research/jobs?workspace_id=${encodeURIComponent(researchWorkspace)}`, { cache: 'no-store' })
         .then(res => res.json())
         .then(data => (data.jobs || []).map((j: any) => ({
           id: j.id,
