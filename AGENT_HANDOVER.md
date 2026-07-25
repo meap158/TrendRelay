@@ -1,6 +1,6 @@
 # Agent Handover
 
-Last updated: 2026-07-25
+Last updated: 2026-07-26
 
 ## Current state
 
@@ -13,7 +13,7 @@ Last updated: 2026-07-25
 - The root `/` screen is a compact media-to-publish console. It submits authenticated, role-gated Douyin links to durable `douyin_download` jobs, shows resulting artifacts, and deep-links each file into Studio or Postiz publishing. `npm run douyin --` remains the full CLI. Downloads, SQLite state, ephemeral configuration, upstream source, dependencies, and credentials remain ignored.
 - The pinned `gitroomhq/postiz-agent` 2.0.15 provider is integrated as `social.postiz-agent` at revision `41c5a9dbd6b2776863e7c05c22e7a385c208321c`.
 - `npm run postiz --` installs and verifies the provider, performs OAuth/API-key authentication and integration discovery, and previews or executes short-video drafts/schedules for TikTok, Instagram, and YouTube.
-- `config/tool-catalog.json`, the `npm run tools --` CLI, the loopback-only lifecycle API, and `/tools` About & Tools page catalogue all seven managed capability projects with pinned revisions, license posture, install state, and activation state.
+- `config/tool-catalog.json`, the `npm run tools --` CLI, the loopback-only lifecycle API, and `/tools` catalogue all seven managed capability projects. The Tools page is also the provider setup hub: Douyin owns automatic cookie capture, Postiz and Meta Ads use confirmed fixed-command authentication launchers, Last 30 Days exposes only configured optional secret names, Agent Reach provides local diagnostics, and no-auth tools link to their operational surface.
 - The pinned Last 30 Days 3.16.0 source is installed and active locally. `npm run research --`, the research API, and `/research` execute its stable agent JSON 1.x contract and persist workspace-scoped evidence.
 - The pinned OpenMontage source is installed and active locally. `/studio` and `npm run studio --` expose clip-factory/podcast-repurpose preflights plus approved, zero-network local VideoTrimmer jobs with immutable-source checks, manual clip ranges, budget enforcement, verified outputs, and provenance.
 - Windows exposes exactly two root launchers: `start.cmd` for browser development and `start-electron.bat` for desktop development. Provider/tool operations use npm scripts rather than extra `.cmd` files.
@@ -44,6 +44,7 @@ Last updated: 2026-07-25
 - Meta Ads Kit is read-only in TrendRelay. Briefings are loopback-only and confirmed; commands are constructed from fixed report templates, provider stderr is sanitized, credentials remain in the isolated CLI profile, and pause/resume/budget/create/upload/delete operations are absent. Any spend-impacting capability requires a new ADR and approval design.
 - Every managed capability repository must be pinned in the machine-readable catalog and documented in the human-readable catalog; supporting runtime repositories must be lockfile-pinned and documented.
 - Tool installation and activation remain separate; source presence never implies credentials, dependencies, or production readiness.
+- Tool setup reports expose readiness, dependency state, and credential names only. They never return secret values. Interactive setup actions are loopback-only, explicitly confirmed, and selected from fixed tool/action mappings rather than user-supplied commands.
 - Postiz is dry-run-first. Uploads and remote drafts/schedules require both `--execute` and `--confirm-external-action`; drafts are the default.
 - Postiz operations use content-derived IDs and a local ledger. Workspace publishing jobs are durable but receive one provider attempt because duplicate and uncertain retries require inspection. Only owners and approvers can discover integrations or execute; editors may preview.
 - Publishing media must resolve to an existing MP4 beneath `PUBLISHING_MEDIA_ROOTS`; the local defaults are `.data/downloads`, `.data/media`, and `.data/productions`.
@@ -82,10 +83,11 @@ Last updated: 2026-07-25
 - Local-admin behavior was smoke-tested in the running browser app: login was bypassed on loopback, Local Workspace was created with owner role, the Local admin badge rendered, and no browser console errors were reported. LAN/production fail-closed behavior is unit-tested.
 - Automatic Douyin connection tests cover loopback owner authorization, explicit confirmation, isolated subprocess startup, automatic cookie detection without stdin, atomic local cookie/status writes, and secret-free public status. The visible login window itself was not completed against a real account during automation.
 - Douyin provider 2.0.0 passed installation checks and redacted dry-run configuration. Tests cover cookie sources, missing-cookie refusal, absence of browser fallback, artifact hashing, and rejection of zero-exit runs that save no media. A live network download was not run because valid cookies and a user-authorized source URL were not supplied.
-- The complete project suite passes: 121 tests.
+- The complete project suite passes: 125 tests.
 - The practical root console was checked in the running Next.js app through both `localhost` and `127.0.0.1`; the sign-in state exits loading reliably, fits a 1280px viewport without horizontal overflow, and the private-LAN development-origin allowlist matches the unified runner.
 - Tool catalog coverage includes complete listing, explicit confirmation, loopback-only mutation, MediaCrawler license blocking, pinned checkout, activation, and Windows-safe isolated uninstall.
 - Production builds for Next.js and Electron, TypeScript checks, ESLint, Ruff, JSON validation, CLI listing, and diff checks pass. The `/tools` page exposes seven catalog cards, six locally installed/active providers, guarded lifecycle controls, Agent Reach diagnostics, and the MediaCrawler license block.
+- Tool-setup API tests cover sanitized Douyin readiness, credential-name-only Last 30 Days reporting, explicit launcher confirmation, and rejection of unknown actions. The Next.js production build, TypeScript, ESLint, and Ruff checks pass for the guided setup interface.
 
 ## Next recommended action
 

@@ -111,7 +111,7 @@ Migration `20260722_0004` adds a shared database job queue with expiring worker 
 
 ## Managed open-source tools
 
-Every incorporated GitHub repository is documented in [the third-party catalog](./docs/third-party/README.md). Managed capability providers are pinned in `config/tool-catalog.json`, while supporting runtime packages are pinned in `package-lock.json`. The About & Tools page shows each managed provider's repository, revision, license posture, capabilities, installation state, and activation state. Source and runtime state stay ignored under `.tools/` and `.data/`.
+Every incorporated GitHub repository is documented in [the third-party catalog](./docs/third-party/README.md). Managed capability providers are pinned in `config/tool-catalog.json`, while supporting runtime packages are pinned in `package-lock.json`. The About & Tools page shows each managed provider's repository, revision, license posture, capabilities, installation state, activation state, and guided setup when configuration is required. Douyin setup launches the app-managed cookie-capture browser from its tool card; Postiz and Meta Ads launch fixed interactive authentication commands; Last 30 Days reports configured optional provider-key names without values; Agent Reach runs privacy-safe diagnostics. OpenMontage links directly to Studio because its local adapter needs no separate login. Source and runtime state stay ignored under `.tools/` and `.data/`.
 
 Use the UI at `http://localhost:3000/tools`, or the local CLI:
 

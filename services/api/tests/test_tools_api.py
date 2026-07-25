@@ -47,6 +47,62 @@ def test_agent_reach_diagnostics_are_sanitized(monkeypatch) -> None:
     assert diagnostics["privacy"]["secret_values_exposed"] is False
 
 
+def test_douyin_setup_exposes_status_not_cookie_values(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "trendrelay_api.tool_setup.douyin_status",
+        lambda: {
+            "cookies_ready": True,
+            "connection": {"state": "connected", "message": "Ready."},
+            "cookies": {"ttwid": "secret-cookie-value"},
+        },
+    )
+
+    response = asyncio.run(request("GET", "/api/tools/douyin-downloader/setup"))
+
+    assert response.status_code == 200
+    setup = response.json()["setup"]
+    assert setup["credential_values_exposed"] is False
+    assert setup["actions"][0]["id"] == "connect-douyin"
+    assert "never-return-this-value" not in str(setup)
+
+
+def test_last30days_setup_lists_secret_names_without_values(monkeypatch) -> None:
+    monkeypatch.setenv("EXA_API_KEY", "never-return-this-value")
+
+    response = asyncio.run(request("GET", "/api/tools/last30days-skill/setup"))
+
+    assert response.status_code == 200
+    setup = response.json()["setup"]
+    assert "EXA_API_KEY" in setup["configured_secret_names"]
+    assert "never-return-this-value" not in str(setup)
+
+
+def test_setup_launcher_requires_explicit_confirmation() -> None:
+    response = asyncio.run(
+        request(
+            "POST",
+            "/api/tools/postiz-agent/setup/launch-auth",
+            json={"confirm_external_action": False},
+        )
+    )
+    assert response.status_code == 400
+
+
+def test_unknown_setup_action_is_rejected(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "trendrelay_api.main.launch_setup_action",
+        lambda tool_id, action_id: (_ for _ in ()).throw(KeyError(action_id)),
+    )
+    response = asyncio.run(
+        request(
+            "POST",
+            "/api/tools/postiz-agent/setup/not-a-command",
+            json={"confirm_external_action": True},
+        )
+    )
+    assert response.status_code == 404
+
+
 def test_install_requires_explicit_confirmation() -> None:
     response = asyncio.run(
         request(

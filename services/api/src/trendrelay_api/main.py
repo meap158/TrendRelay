@@ -41,6 +41,7 @@ from trendrelay_api.tool_registry import (
     set_active,
     uninstall_tool,
 )
+from trendrelay_api.tool_setup import launch_setup_action, setup_report
 
 settings = get_settings()
 
@@ -76,6 +77,10 @@ class Activation(BaseModel):
     active: bool
 
 
+class SetupActionRequest(BaseModel):
+    confirm_external_action: bool = False
+
+
 def require_local_mutation(request: Request) -> None:
     host = request.client.host if request.client else ""
     if host not in {"127.0.0.1", "::1", "testclient"}:
@@ -108,6 +113,35 @@ async def local_session(request: Request) -> dict[str, object]:
 @app.get("/api/tools", tags=["tools"])
 async def tools() -> dict[str, object]:
     return {"tools": await asyncio.to_thread(list_tools)}
+
+
+@app.get("/api/tools/{tool_id}/setup", tags=["tools"])
+async def tool_setup(tool_id: str) -> dict[str, object]:
+    try:
+        return {"setup": await asyncio.to_thread(setup_report, tool_id)}
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Tool not found.") from error
+
+
+@app.post("/api/tools/{tool_id}/setup/{action_id}", tags=["tools"])
+async def run_tool_setup_action(
+    tool_id: str,
+    action_id: str,
+    body: SetupActionRequest,
+    request: Request,
+) -> dict[str, object]:
+    require_local_mutation(request)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400,
+            detail="Launching interactive authentication requires explicit confirmation.",
+        )
+    try:
+        return {"result": await asyncio.to_thread(launch_setup_action, tool_id, action_id)}
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Setup action not found.") from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @app.get("/api/tools/agent-reach/diagnostics", tags=["tools"])
