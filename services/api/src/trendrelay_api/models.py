@@ -10,6 +10,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Integer,
     String,
@@ -142,6 +143,72 @@ class DurableJob(Base):
     updated_at: Mapped[datetime] = mapped_column(default=utc_now)
     started_at: Mapped[datetime | None]
     completed_at: Mapped[datetime | None]
+
+
+class Campaign(Base):
+    __tablename__ = "campaigns"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft','active','archived')",
+            name="valid_campaign_status",
+        ),
+    )
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: new_id("campaign")
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(160))
+    objective: Mapped[str] = mapped_column(String(1000))
+    audience: Mapped[str] = mapped_column(String(1000))
+    markets: Mapped[list[str]] = mapped_column(JSON, default=list)
+    languages: Mapped[list[str]] = mapped_column(JSON, default=list)
+    affiliate_url: Mapped[str | None] = mapped_column(String(2000))
+    status: Mapped[str] = mapped_column(String(16), default="draft", index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("user_profiles.id"))
+    created_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(default=utc_now)
+
+
+class PublicationPlan(Base):
+    __tablename__ = "publication_plans"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('needs_approval','approved','rejected','cancelled')",
+            name="valid_publication_plan_state",
+        ),
+        CheckConstraint(
+            "platform IN ('tiktok','instagram','youtube','douyin','other')",
+            name="valid_publication_plan_platform",
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("plan"))
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    campaign_id: Mapped[str] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), index=True
+    )
+    title: Mapped[str] = mapped_column(String(200))
+    platform: Mapped[str] = mapped_column(String(24), index=True)
+    video_path: Mapped[str] = mapped_column(String(1200))
+    video_sha256: Mapped[str] = mapped_column(String(64))
+    cover_path: Mapped[str | None] = mapped_column(String(1200))
+    cover_sha256: Mapped[str | None] = mapped_column(String(64))
+    caption: Mapped[str] = mapped_column(String(5000))
+    hashtags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    affiliate_url: Mapped[str | None] = mapped_column(String(2000))
+    disclosure: Mapped[str] = mapped_column(String(500))
+    deep_link: Mapped[str | None] = mapped_column(String(2000))
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    timezone: Mapped[str] = mapped_column(String(80))
+    state: Mapped[str] = mapped_column(String(24), default="needs_approval", index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("user_profiles.id"))
+    approved_by: Mapped[str | None] = mapped_column(ForeignKey("user_profiles.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(default=utc_now)
 
 
 class AuditEvent(Base):

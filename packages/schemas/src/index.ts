@@ -16,3 +16,39 @@ export interface TrendObservation {
 }
 
 export interface ProviderCapability { id: string; enabled: boolean; reason?: string; }
+
+export type CampaignStatus = "draft" | "active" | "archived";
+export type PublicationPlanState = "needs_approval" | "approved" | "rejected" | "cancelled";
+export type PublicationPlatform = "tiktok" | "instagram" | "youtube" | "douyin" | "other";
+
+export interface Campaign {
+  id: string;
+  workspaceId: string;
+  name: string;
+  objective: string;
+  audience: string;
+  markets: string[];
+  languages: string[];
+  affiliateUrl?: string;
+  status: CampaignStatus;
+}
+
+export interface PublicationPlan {
+  id: string;
+  workspaceId: string;
+  campaignId: string;
+  title: string;
+  platform: PublicationPlatform;
+  videoPath: string;
+  videoSha256: string;
+  coverPath?: string;
+  coverSha256?: string;
+  caption: string;
+  hashtags: string[];
+  affiliateUrl?: string;
+  disclosure: string;
+  deepLink?: string;
+  scheduledAt: string;
+  timezone: string;
+  state: PublicationPlanState;
+}

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from trendrelay_api import __version__
 from trendrelay_api.auth import LOCAL_ADMIN_EMAIL, LOCAL_ADMIN_ID, local_auth_allowed
+from trendrelay_api.campaigns_api import router as campaigns_router
 from trendrelay_api.config import get_settings
 from trendrelay_api.device_pairing import router as device_pairing_router
 from trendrelay_api.foundation import router as foundation_router
@@ -52,6 +53,7 @@ app = FastAPI(
     redoc_url=None,
 )
 app.include_router(foundation_router)
+app.include_router(campaigns_router)
 app.include_router(device_pairing_router)
 app.include_router(publishing_router)
 app.include_router(media_router)
@@ -160,9 +162,15 @@ async def open_folder(request: Request, body: PathPayload) -> dict[str, object]:
         raise HTTPException(status_code=400, detail="Only supported on Windows.")
 
     path = Path(body.path).resolve()
-    downloads_root = (PROJECT_ROOT / ".data" / "downloads").resolve()
-    if path != downloads_root and downloads_root not in path.parents:
-        raise HTTPException(status_code=403, detail="Only download folders may be opened.")
+    allowed_roots = {
+        (PROJECT_ROOT / ".data" / "downloads").resolve(),
+        (PROJECT_ROOT / ".data" / "manual-packages").resolve(),
+    }
+    if not any(path == root or root in path.parents for root in allowed_roots):
+        raise HTTPException(
+            status_code=403,
+            detail="Only download and manual-package folders may be opened.",
+        )
     if not path.is_dir():
         raise HTTPException(status_code=404, detail="Download folder does not exist.")
 

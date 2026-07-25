@@ -37,7 +37,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 
 ## Repository structure
 
-- `apps/web` — compact operations console for media acquisition, Trend Radar, Studio, publishing, workspaces, and About & Tools
+- `apps/web` — compact operations console for media acquisition, Trend Radar, Studio, campaign planning, publishing, workspaces, and Tools
 - `apps/desktop` — Electron shell for local media and browser-assisted workflows
 - `scripts/dev.py` — unified hot-reload supervisor for local development
 - `scripts/reach.py` — sanitized Agent Reach channel diagnostics
@@ -73,7 +73,7 @@ npm install
 # Add --desktop to also launch Electron.
 ```
 
-Initialize or update the local database with `npm run db -- upgrade`. API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/` for the media-to-publish operations console. Paste Douyin source links there, monitor durable downloads, and hand resulting files directly to Studio or Postiz publishing. Trend Radar remains at `/research`, governed local production at `/studio`, and provider management at `/tools`.
+Initialize or update the local database with `npm run db -- upgrade`. API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/` for the media-to-publish operations console. Paste Douyin source links there, monitor durable downloads, and hand resulting files directly to Studio or Postiz publishing. Trend Radar remains at `/research`, governed local production at `/studio`, campaign planning and the content calendar at `/campaigns`, publishing at `/publish`, and provider management at `/tools`.
 
 The first product vertical slice now includes database-backed Supabase authentication, workspace and role management, append-only audit events, secret references, and the governed plugin registry.
 
@@ -222,6 +222,12 @@ npm run reach -- channels
 ```
 
 The About & Tools page also provides a Diagnose action. Diagnostics only inspect local file, package, executable, and configured secret-name presence. They do not execute discovered commands, probe the network, read Agent Reach user configuration, inspect browser sessions, or expose secret values. A ready result is a local prerequisite signal, not proof that a live or authenticated platform request will succeed. The upstream system installer, MCP/skill mutations, and cookie import remain disabled.
+
+## Campaign planning and manual fallback
+
+Open `/campaigns` to connect an objective, audience, markets, languages, affiliate destination, approved MP4, platform, caption, disclosure, timezone, and suggested posting time. New plans enter `needs_approval`; only owners and approvers can approve or reject them, and decided plans lock both metadata and SHA-256-fingerprinted media bytes.
+
+Every approved plan can be sent to Postiz or exported as an idempotent local manual package. The ZIP contains the final video, optional cover, structured manifest, caption, hashtags, affiliate link, disclosure, suggested time, and platform deep link. Exports are loopback-only, explicitly confirmed, SHA-256 audited, and saved beneath ignored `.data/manual-packages/`. See [ADR 0012](./docs/architecture/0012-campaign-calendar-and-manual-fallback.md).
 ## Social publishing with Postiz
 
 TrendRelay integrates the AGPL-3.0-licensed `gitroomhq/postiz-agent` at an exact revision. The isolated provider supports connected social accounts; the TrendRelay adapter exposes audited MP4 drafts and schedules for TikTok, Instagram, and YouTube. Authenticated users work at `/publish`: editors can create dry-run previews, while owners and approvers can discover integrations and explicitly submit remote operations. Submitted work is workspace-scoped in the SQL durable queue and can continue in the supervised worker after an API restart.

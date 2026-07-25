@@ -119,7 +119,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .artifact-row a { padding: 6px 12px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--text); font-size: 12px; font-weight: 500; text-decoration: none; background: #fff; transition: background 150ms; }
 .artifact-row a:hover { background: #f0f2f5; border-color: var(--line); }
 
-.quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin-top: 24px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--line); box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+.quick-actions { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; margin-top: 24px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--line); box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
 .quick-actions > * { display: grid; gap: 4px; padding: 16px; background: var(--panel); color: var(--text); text-decoration: none; }
 .quick-actions span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
 .quick-actions strong { font-size: 13px; font-weight: 500; color: var(--link); }
@@ -206,4 +206,62 @@ button, a { -webkit-tap-highlight-color: transparent; }
 @media (max-width: 640px) {
   .research-toolbar { align-items: flex-start; flex-direction: column; }
   .research-form, .briefing-columns { grid-template-columns: 1fr; }
+}
+
+.campaign-page { padding-top: 24px; }
+.campaign-heading { display: flex; justify-content: space-between; gap: 32px; align-items: end; margin-bottom: 20px; padding: 20px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.campaign-heading p:last-child { margin: 0; color: var(--muted); font-size: 13px; }
+.campaign-message { padding: 11px 14px; border: 1px solid #b7d9cd; border-radius: 5px; color: var(--green); background: #eef8f4; }
+.campaign-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start; }
+.campaign-sidebar, .campaign-summary, .plan-create, .calendar-board { border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.campaign-sidebar { position: sticky; top: 76px; padding: 16px; }
+.campaign-sidebar h2, .campaign-summary h2, .calendar-board h2 { margin: 4px 0; font-size: 16px; font-weight: 500; }
+.campaign-list { display: grid; gap: 6px; }
+.campaign-list > button { display: grid; gap: 4px; width: 100%; border: 1px solid var(--line-strong); border-radius: 4px; padding: 10px; color: var(--text); background: var(--panel); text-align: left; cursor: pointer; }
+.campaign-list > button.selected { border-color: var(--link); background: #f0f3f8; }
+.campaign-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-list span, .campaign-list > p { color: var(--muted); font-size: 11px; }
+.campaign-create { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
+.campaign-create summary, .plan-create summary { color: var(--link); font-weight: 600; cursor: pointer; }
+.campaign-create form, .plan-create form { display: grid; gap: 10px; margin-top: 14px; }
+.campaign-create label, .plan-create label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.campaign-create input, .campaign-create textarea, .plan-create input, .plan-create textarea, .plan-create select { width: 100%; border: 1px solid var(--line-strong); border-radius: 4px; padding: 8px 10px; color: var(--text); background: var(--panel); }
+.campaign-workspace { display: grid; gap: 16px; min-width: 0; }
+.campaign-summary { display: flex; justify-content: space-between; gap: 24px; padding: 18px; }
+.campaign-summary p { margin: 6px 0; color: var(--muted); }
+.campaign-summary small { color: var(--muted); }
+.campaign-status-actions, .calendar-actions { display: flex; flex-wrap: wrap; gap: 7px; align-items: start; }
+.campaign-status-actions button, .calendar-actions button, .calendar-actions a, .package-result button { border: 1px solid var(--line-strong); border-radius: 4px; padding: 7px 10px; color: var(--text); background: var(--panel); font: inherit; text-decoration: none; cursor: pointer; }
+.campaign-status-actions button:hover, .calendar-actions button:hover, .calendar-actions a:hover { border-color: var(--link); color: var(--link); }
+.plan-create { padding: 16px; }
+.plan-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.plan-create form > small { color: var(--muted); }
+.plan-create form > .primary-button { justify-self: start; }
+.calendar-board { padding: 18px; }
+.calendar-entry { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 16px; padding: 16px 0; border-top: 1px solid var(--line); }
+.calendar-entry > time { display: grid; align-content: start; gap: 3px; color: var(--muted); }
+.calendar-entry > time strong { color: var(--text); font-size: 15px; }
+.calendar-copy { min-width: 0; }
+.calendar-copy > div:first-child { display: flex; gap: 7px; color: var(--muted); font-size: 10px; text-transform: uppercase; }
+.calendar-copy h3 { margin: 8px 0 5px; font-size: 14px; font-weight: 600; }
+.calendar-copy > p { margin: 0 0 8px; color: var(--muted); line-height: 1.45; white-space: pre-wrap; }
+.calendar-copy > small { display: block; overflow: hidden; margin-bottom: 10px; color: var(--muted); font-family: ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.plan-state { border-radius: 999px; padding: 3px 7px; font-weight: 700; }
+.plan-state.needs_approval { color: #7a5a00; background: #fff8e1; }
+.plan-state.approved { color: var(--green); background: #e6f6ee; }
+.plan-state.rejected, .plan-state.cancelled { color: #a11; background: #f8d7da; }
+.package-result { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-top: 10px; padding: 10px; border: 1px solid #b7d9cd; border-radius: 4px; background: #eef8f4; }
+.package-result > div { display: grid; gap: 3px; min-width: 0; }
+.package-result strong { overflow: hidden; font-family: ui-monospace, monospace; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.package-result small { color: var(--muted); font-size: 10px; }
+
+@media (max-width: 900px) {
+  .campaign-layout { grid-template-columns: 1fr; }
+  .campaign-sidebar { position: static; }
+  .campaign-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .campaign-heading, .campaign-summary, .package-result { display: grid; }
+  .campaign-list, .plan-form-grid { grid-template-columns: 1fr; }
+  .calendar-entry { grid-template-columns: 1fr; }
 }

@@ -272,7 +272,7 @@ export default function Dashboard() {
                 )}
                 {job.result?.artifacts?.map((artifact: Artifact) => <div className="artifact-row" key={artifact.path} style={{ padding: '8px', background: '#fff', border: '1px solid var(--line-strong)' }}>
                   <div><strong>{artifact.name}</strong><small>{size(artifact.size_bytes)}</small></div>
-                  <div><Link href={`/studio?source=${encodeURIComponent(artifact.path)}`}>Prepare</Link><Link href={`/publish?video=${encodeURIComponent(artifact.path)}`}>Publish</Link></div>
+                  <div><Link href={`/studio?source=${encodeURIComponent(artifact.path)}`}>Prepare</Link><Link href={`/campaigns?video=${encodeURIComponent(artifact.path)}`}>Plan</Link><Link href={`/publish?video=${encodeURIComponent(artifact.path)}`}>Publish</Link></div>
                 </div>)}
               </div>
             </article>)}
@@ -284,6 +284,7 @@ export default function Dashboard() {
         <div><span>Workspace</span><strong>{selectedWorkspace?.name}</strong></div>
         <Link href="/research"><span>Find ideas</span><strong>Run trend research →</strong></Link>
         <Link href="/studio"><span>Local files</span><strong>Prepare existing media →</strong></Link>
+        <Link href="/campaigns"><span>Approved media</span><strong>Plan campaign →</strong></Link>
         <Link href="/publish"><span>Ready media</span><strong>Open publishing →</strong></Link>
       </section>
     </>}
