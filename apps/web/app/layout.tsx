@@ -3,6 +3,7 @@ import "./styles.css";
 import "./console.css";
 import "./opportunities.css";
 import "./media-library.css";
+import "./attribution.css";
 import { AuthProvider } from "./auth-provider";
 import { GlobalNav } from "./global-nav";
 import { JobsProvider } from "./jobs-provider";

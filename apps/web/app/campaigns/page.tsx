@@ -404,16 +404,15 @@ export default function CampaignsPage() {
                   <p>{selectedCampaign.objective}</p>
                   <small>Audience: {selectedCampaign.audience}</small>
                 </div>
-                {canCreateCampaign && (
-                  <div className="campaign-status-actions">
-                    {selectedCampaign.status !== "active" && (
-                      <button onClick={() => void setCampaignStatus("active")}>Activate</button>
-                    )}
-                    {selectedCampaign.status !== "archived" && (
-                      <button onClick={() => void setCampaignStatus("archived")}>Archive</button>
-                    )}
-                  </div>
-                )}
+                <div className="campaign-status-actions">
+                  <Link href={`/attribution?campaign=${encodeURIComponent(selectedCampaign.id)}`}>Measure revenue</Link>
+                  {canCreateCampaign && selectedCampaign.status !== "active" && (
+                    <button onClick={() => void setCampaignStatus("active")}>Activate</button>
+                  )}
+                  {canCreateCampaign && selectedCampaign.status !== "archived" && (
+                    <button onClick={() => void setCampaignStatus("archived")}>Archive</button>
+                  )}
+                </div>
               </section>
 
               {canCreatePlan && selectedCampaign.status !== "archived" && (

@@ -1,0 +1,65 @@
+.attribution-page { width: min(100% - 32px, 1480px); margin: 0 auto; padding: 24px 0 60px; }
+.attribution-heading { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 16px; padding: 20px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.attribution-heading h1 { margin: 3px 0 7px; font-size: 24px; }
+.attribution-heading p { margin: 0; color: var(--muted); }
+.attribution-heading label { display: grid; gap: 5px; min-width: 230px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.attribution-heading select, .attribution-panel input, .attribution-panel select, .attribution-panel textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: 4px; padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; }
+.attribution-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin-bottom: 16px; }
+.attribution-totals article { display: grid; gap: 5px; padding: 14px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); }
+.attribution-totals span { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.attribution-totals strong { font-size: 22px; font-weight: 500; }
+.attribution-totals small { color: var(--muted); }
+.attribution-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+.attribution-main, .attribution-side { display: grid; gap: 16px; min-width: 0; }
+.attribution-side { position: sticky; top: 68px; }
+.attribution-panel { padding: 18px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.attribution-panel h2 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+.attribution-panel h3 { margin: 20px 0 10px; font-size: 13px; }
+.attribution-panel > p, .panel-heading p { margin: 4px 0 14px; color: var(--muted); line-height: 1.45; }
+.attribution-panel form { display: grid; gap: 10px; margin-top: 12px; }
+.attribution-panel label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.attribution-panel label small { font-weight: 400; line-height: 1.4; }
+.attribution-panel button { border: 1px solid var(--line-strong); border-radius: 4px; padding: 7px 10px; color: var(--text); background: var(--panel); font: inherit; cursor: pointer; }
+.attribution-panel button:hover { border-color: var(--link); color: var(--link); }
+.attribution-panel .primary-button { justify-self: start; }
+.attribution-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tracking-list, .conversion-list, .revenue-table { display: grid; margin-top: 14px; border-top: 1px solid var(--line); }
+.tracking-list > div { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.tracking-copy { display: grid; gap: 4px; min-width: 0; }
+.tracking-copy a, .tracking-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tracking-copy a { color: var(--link); font-family: ui-monospace, monospace; font-size: 11px; }
+.tracking-copy small { color: var(--muted); }
+.tracking-metrics { display: flex; gap: 10px; align-items: center; }
+.tracking-metrics > span { display: grid; min-width: 42px; text-align: center; font-size: 15px; }
+.tracking-metrics small { color: var(--muted); font-size: 9px; text-transform: uppercase; }
+.tracking-status, .conversion-status { border-radius: 999px; padding: 3px 7px; font-size: 9px; font-style: normal; font-weight: 700; text-transform: uppercase; }
+.tracking-status.active, .conversion-status.approved { color: var(--green); background: #e6f6ee; }
+.tracking-status.disabled, .tracking-status.expired { color: var(--muted); background: #edf0f3; }
+.tracking-status.broken, .conversion-status.reversed, .conversion-status.refunded { color: #a11; background: #f8d7da; }
+.conversion-status.pending { color: #7a5a00; background: #fff8e1; }
+.tracking-actions { display: flex; gap: 5px; }
+.revenue-table > div { display: grid; grid-template-columns: minmax(0, 1fr) 110px 150px; gap: 12px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.revenue-table .table-head { color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.revenue-table span { display: grid; gap: 3px; }
+.revenue-table small { color: var(--muted); }
+.format-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.format-chips span { display: grid; gap: 3px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); font-size: 11px; }
+.format-chips strong { color: var(--text); }
+.conversion-list > div { display: grid; grid-template-columns: minmax(0, 1fr) 90px 100px 90px; gap: 12px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.conversion-list span { display: grid; gap: 3px; }
+.conversion-list small { color: var(--muted); }
+.attribution-limits ul { margin: 10px 0 0; padding-left: 18px; color: var(--muted); line-height: 1.5; }
+@media (max-width: 1000px) {
+  .attribution-layout { grid-template-columns: 1fr; }
+  .attribution-side { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .attribution-limits { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) {
+  .attribution-heading { display: grid; }
+  .attribution-heading label { min-width: 0; }
+  .attribution-side { grid-template-columns: 1fr; }
+  .attribution-limits { grid-column: auto; }
+  .tracking-list > div, .conversion-list > div, .revenue-table > div { grid-template-columns: 1fr; }
+  .tracking-metrics { justify-content: start; }
+  .attribution-form-row { grid-template-columns: 1fr; }
+}

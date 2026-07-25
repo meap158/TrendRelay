@@ -31,13 +31,14 @@ The first usable release prioritizes reliable research, media handling, publishi
 | Research channel diagnostics | Pinned `Panniantong/Agent-Reach` registry with side-effect-free local checks |
 | Ad-performance intelligence | Pinned `TheMattBerman/meta-ads-kit` source with an isolated Social Flow runtime and read-only Python adapter |
 | Tool governance | FastAPI lifecycle API, pinned JSON catalog, and Next.js About & Tools page |
+| Revenue measurement | Transparent first-party redirect links, privacy-minimized click events, and network conversion CSV imports |
 | AI workers | Python provider adapters; ComfyUI connectors remain planned |
 | Local development | npm workspaces and a Python virtual environment |
 | Production direction | Managed services and Terraform; orchestration only when justified |
 
 ## Repository structure
 
-- `apps/web` — compact operations console for media acquisition, Trend Radar, opportunity scoring, the Media Library, Studio, campaign planning, publishing, workspaces, and Tools
+- `apps/web` — compact operations console for media acquisition, Trend Radar, opportunity scoring, the Media Library, Studio, campaign planning, attribution, publishing, workspaces, and Tools
 - `apps/desktop` — Electron shell for local media and browser-assisted workflows
 - `scripts/dev.py` — unified hot-reload supervisor for local development
 - `scripts/reach.py` — sanitized Agent Reach channel diagnostics
@@ -73,7 +74,7 @@ npm install
 # Add --desktop to also launch Electron.
 ```
 
-Initialize or update the local database with `npm run db -- upgrade`. API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/` for the media-to-publish operations console. Paste Douyin source links there, monitor durable downloads, and hand resulting files directly to Studio or Postiz publishing. Trend Radar remains at `/research`, explainable scoring and affiliate offers at `/opportunities`, searchable creative intelligence at `/library`, governed local production at `/studio`, campaign planning and the content calendar at `/campaigns`, publishing at `/publish`, and provider management at `/tools`.
+Initialize or update the local database with `npm run db -- upgrade`. API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/` for the media-to-publish operations console. Paste Douyin source links there, monitor durable downloads, and hand resulting files directly to Studio or Postiz publishing. Trend Radar remains at `/research`, explainable scoring and affiliate offers at `/opportunities`, searchable creative intelligence at `/library`, governed local production at `/studio`, campaign planning and the content calendar at `/campaigns`, first-party revenue measurement at `/attribution`, publishing at `/publish`, and provider management at `/tools`.
 
 The first product vertical slice now includes database-backed Supabase authentication, workspace and role management, append-only audit events, secret references, and the governed plugin registry.
 
@@ -242,6 +243,14 @@ The Library accepts operator-reviewed speech and OCR text and derives versioned 
 Open `/campaigns` to connect an objective, audience, markets, languages, affiliate destination, approved MP4, platform, caption, disclosure, timezone, and suggested posting time. New plans enter `needs_approval`; only owners and approvers can approve or reject them, and decided plans lock both metadata and SHA-256-fingerprinted media bytes.
 
 Every approved plan can be sent to Postiz or exported as an idempotent local manual package. The ZIP contains the final video, optional cover, structured manifest, caption, hashtags, affiliate link, disclosure, suggested time, and platform deep link. Exports are loopback-only, explicitly confirmed, SHA-256 audited, and saved beneath ignored `.data/manual-packages/`. See [ADR 0012](./docs/architecture/0012-campaign-calendar-and-manual-fallback.md).
+
+## First-party revenue attribution
+
+Open `/attribution` to create transparent HTTPS tracking links from a campaign, approved plan, or imported affiliate offer; inspect the destination host and disclosure; copy the first-party URL; disable or expire links; import network conversion CSVs; and review campaign and creative-format revenue. Campaign cards link directly into this workbench.
+
+Public `/c/{code}` redirects preserve existing affiliate parameters, add only the configured campaign and platform sub-ID parameters, route to optional country-specific HTTPS destinations from trusted edge headers, and record a privacy-minimized click. Unknown visitor query parameters are ignored. `/c/{code}/info` exposes the destination host, disclosure, and status without registering a click. Disabled, expired, broken, or unavailable-offer links fail closed with `410 Gone`.
+
+TrendRelay stores no raw IP address, full referrer path, browser fingerprint, or network order reference. Unique visitors use a workspace-scoped daily HMAC; conversion references use an HMAC and imports are idempotent across approval, reversal, and refund updates. Production must set `ATTRIBUTION_HASH_SECRET`; local development persists an ignored secret under `.data/`. CSV imports accept `tracking_code,network,conversion_id,occurred_at,status,currency,commission` plus optional `order_value`, with a 10,000-row cap. Multi-currency totals remain separated, EPC is directional rather than causal, and unmatched/cookie-window limitations stay visible. See [ADR 0015](./docs/architecture/0015-first-party-attribution-boundary.md).
 
 ## Social publishing with Postiz
 

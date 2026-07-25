@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     device_token_ttl_hours: int = 8
     publishing_media_roots: str = ".data/downloads,.data/media,.data/productions"
     public_web_url: str = "http://localhost:3000"
+    attribution_public_url: str = "http://localhost:8080"
+    attribution_hash_secret: SecretStr = SecretStr("")
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_username: str = ""
