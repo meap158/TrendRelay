@@ -98,7 +98,7 @@ def submit_download(
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
     require_governed_assurance(user)
     try:
-        job = create_download_job(body)
+        job = create_download_job(body, actor_user_id=user.id)
     except PermissionError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except (RuntimeError, ValueError) as error:

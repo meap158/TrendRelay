@@ -15,6 +15,7 @@ from trendrelay_api.integrations.douyin import run_download_job  # noqa: E402
 from trendrelay_api.integrations.last30days import run_job  # noqa: E402
 from trendrelay_api.integrations.openmontage_runtime import run_render_job  # noqa: E402
 from trendrelay_api.integrations.postiz import run_publish_job  # noqa: E402
+from trendrelay_api.media_library import run_ingest_job  # noqa: E402
 from trendrelay_api.jobs import recoverable_job_ids  # noqa: E402
 
 
@@ -23,6 +24,7 @@ def process_available() -> int:
     research_ids = recoverable_job_ids("trend_research")
     publishing_ids = recoverable_job_ids("social_publish")
     render_ids = recoverable_job_ids("openmontage_render")
+    media_ids = recoverable_job_ids("media_ingest")
     for job_id in download_ids:
         run_download_job(job_id)
     for job_id in research_ids:
@@ -31,12 +33,20 @@ def process_available() -> int:
         run_publish_job(job_id)
     for job_id in render_ids:
         run_render_job(job_id)
-    return len(download_ids) + len(research_ids) + len(publishing_ids) + len(render_ids)
+    for job_id in media_ids:
+        run_ingest_job(job_id)
+    return (
+        len(download_ids)
+        + len(research_ids)
+        + len(publishing_ids)
+        + len(render_ids)
+        + len(media_ids)
+    )
 
 
 def worker_main() -> None:
     print(
-        "Durable worker ready: douyin_download, trend_research, social_publish, openmontage_render",
+        "Durable worker ready: douyin_download, trend_research, social_publish, openmontage_render, media_ingest",
         flush=True,
     )
     try:

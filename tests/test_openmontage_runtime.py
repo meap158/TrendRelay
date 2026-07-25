@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from trendrelay_api import media_library
 from trendrelay_api.integrations import openmontage_runtime
 from trendrelay_api.jobs import get_job_record
 from trendrelay_api.models import Base
@@ -86,7 +87,8 @@ def test_render_worker_records_verified_artifact_provenance(
             production_id="production_0123456789abcdef",
             segments=[{"label": "Hook", "start_seconds": 0, "end_seconds": 12}],
             confirm_external_action=True,
-        )
+        ),
+        actor_user_id="user-1",
     )
 
     def fake_run(*_args, **kwargs):
@@ -107,6 +109,12 @@ def test_render_worker_records_verified_artifact_provenance(
         }
         return subprocess.CompletedProcess([], 0, json.dumps(payload), "")
 
+    queued: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        media_library,
+        "create_ingest_job",
+        lambda **kwargs: queued.append(kwargs) or {"id": "media-2", "status": "queued"},
+    )
     monkeypatch.setattr(openmontage_runtime.subprocess, "run", fake_run)
     completed = openmontage_runtime.run_render_job(job["id"])
 
@@ -114,6 +122,9 @@ def test_render_worker_records_verified_artifact_provenance(
     result = get_job_record(job["id"], factory=job_factory)["result"]
     assert result["provenance"]["network_used"] is False
     assert result["artifacts"][0]["sha256"]
+    assert result["library_jobs"][0]["id"] == "media-2"
+    assert queued[0]["source_type"] == "openmontage-render"
+    assert queued[0]["rights_status"] == "unknown"
 
 
 def test_isolated_upstream_video_trimmer_smoke() -> None:
@@ -129,7 +140,9 @@ def test_isolated_upstream_video_trimmer_smoke() -> None:
         pytest.skip("Pinned demo media or static media tools are not installed")
     request = {
         "source": str(source),
-        "output_root": str(openmontage_runtime.PROJECT_ROOT / ".data" / "test-openmontage-smoke"),
+        "output_root": str(
+            openmontage_runtime.PROJECT_ROOT / ".data" / "test-openmontage-smoke"
+        ),
         "ffmpeg": str(openmontage_runtime.FFMPEG),
         "ffprobe": str(openmontage_runtime.FFPROBE),
         "segments": [{"label": "Smoke", "start_seconds": 0, "end_seconds": 1}],

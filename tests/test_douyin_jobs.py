@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from trendrelay_api import media_library
 from trendrelay_api.integrations import douyin
 from trendrelay_api.models import Base
 
@@ -91,7 +92,7 @@ def test_worker_records_downloaded_media(
             "cookies": {"ready": True, "missing": []},
         },
     )
-    job = douyin.create_download_job(request())
+    job = douyin.create_download_job(request(), actor_user_id="user-1")
 
     def fake_run(command, **_kwargs):
         output = Path(command[command.index("--output") + 1])
@@ -99,12 +100,21 @@ def test_worker_records_downloaded_media(
         (output / "clip.mp4").write_bytes(b"downloaded-media")
         return subprocess.CompletedProcess(command, 0, "done", "")
 
+    queued: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        media_library,
+        "create_ingest_job",
+        lambda **kwargs: queued.append(kwargs) or {"id": "media-1", "status": "queued"},
+    )
     monkeypatch.setattr(douyin.subprocess, "run", fake_run)
     completed = douyin.run_download_job(job["id"])
 
     assert completed["status"] == "succeeded"
     assert completed["result"]["artifacts"][0]["name"] == "clip.mp4"
     assert completed["result"]["artifacts"][0]["sha256"]
+    assert completed["result"]["library_jobs"][0]["id"] == "media-1"
+    assert queued[0]["rights_status"] == "reference-only"
+    assert queued[0]["source_type"] == "douyin-download"
 
 
 def test_worker_fails_when_provider_exits_zero_without_media(
@@ -169,6 +179,7 @@ def test_connection_starts_isolated_cookie_capture(monkeypatch, tmp_path: Path) 
     assert result["state"] == "starting"
     assert captured["command"][-1] == "connect"
     assert "--browser-fallback" not in captured["command"]
+
 
 def test_connection_refresh_starts_capture_when_old_cookies_are_ready(
     monkeypatch, tmp_path: Path

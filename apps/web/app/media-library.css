@@ -1,0 +1,64 @@
+.library-page { width: min(100% - 32px, 1480px); margin: 0 auto; padding: 24px 0 60px; }
+.library-heading { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 16px; padding: 20px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.library-heading h1 { margin: 3px 0 7px; font-size: 24px; }
+.library-heading p { margin: 0; color: var(--muted); }
+.library-heading label { display: grid; gap: 5px; min-width: 230px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.library-heading select, .library-search input, .library-search select, .library-import input, .library-import textarea, .library-import select, .library-compact-form input, .library-compact-form textarea, .library-compact-form select, .library-enrichment input, .library-enrichment textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: 4px; padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; }
+.library-status { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); }
+.library-status span { border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 700; }
+.library-status .ready { color: var(--green); background: #e6f6ee; }
+.library-status .warning { color: #7a5a00; background: #fff8e1; }
+.library-status small { color: var(--muted); }
+.library-layout { display: grid; grid-template-columns: 390px minmax(0, 1fr); gap: 16px; align-items: start; }
+.library-browser { position: sticky; top: 68px; display: grid; gap: 12px; max-height: calc(100vh - 84px); overflow: auto; padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.library-search { display: grid; grid-template-columns: 1fr 120px auto; gap: 6px; }
+.library-search button, .library-import button, .library-compact-form button, .library-enrichment button, .library-actions a { border: 1px solid var(--line-strong); border-radius: 4px; padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; text-decoration: none; cursor: pointer; }
+.library-list { display: grid; gap: 6px; }
+.library-list > button { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; width: 100%; border: 1px solid var(--line-strong); border-radius: 5px; padding: 7px; color: var(--text); background: var(--panel); text-align: left; cursor: pointer; }
+.library-list > button.selected { border-color: var(--link); background: #f0f3f8; }
+.library-list > button > span { display: grid; gap: 5px; align-content: center; min-width: 0; }
+.library-list strong, .library-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library-list small { color: var(--muted); font-size: 10px; }
+.library-thumbnail { width: 92px; height: 58px; border-radius: 3px; object-fit: cover; background: #edf0f3; }
+.library-thumbnail-empty { display: grid; place-items: center; color: var(--muted); font-size: 10px; text-transform: uppercase; }
+.rights-badge { justify-self: start; width: fit-content; border-radius: 999px; padding: 3px 7px; font-size: 10px; font-style: normal; font-weight: 700; text-transform: uppercase; }
+.rights-badge.publishable { color: var(--green); background: #e6f6ee; }
+.rights-badge.reference { color: #7a5a00; background: #fff8e1; }
+.library-import { border-top: 1px solid var(--line); padding-top: 12px; }
+.library-import summary { color: var(--link); font-weight: 600; cursor: pointer; }
+.library-import form, .library-compact-form, .library-enrichment form { display: grid; gap: 9px; margin-top: 12px; }
+.library-import label, .library-compact-form label, .library-enrichment label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.library-form-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.library-jobs { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 12px; }
+.library-jobs > div { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; }
+.library-jobs span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library-jobs em { color: var(--muted); font-style: normal; }
+.library-detail { display: grid; gap: 16px; min-width: 0; }
+.library-summary, .library-detail-grid > article, .library-enrichment { border: 1px solid var(--line); border-radius: 6px; padding: 18px; background: var(--panel); }
+.library-summary { display: flex; justify-content: space-between; gap: 24px; }
+.library-summary h2 { margin: 4px 0 8px; font-size: 20px; }
+.library-summary p { color: var(--muted); line-height: 1.5; }
+.library-summary small { color: var(--muted); }
+.library-actions { display: flex; flex-wrap: wrap; gap: 7px; align-content: start; max-width: 310px; }
+.library-actions p { margin: 0; padding: 9px; border: 1px solid #ead9a2; border-radius: 4px; background: #fff8e1; font-size: 11px; }
+.library-actions a:hover { border-color: var(--link); color: var(--link); }
+.library-detail-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); gap: 16px; }
+.library-detail h3 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+.recipe-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin: 0; border: 1px solid var(--line); background: var(--line); }
+.recipe-grid > div { padding: 10px; background: var(--panel); }
+.recipe-grid dt { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.recipe-grid dd { margin: 4px 0 0; line-height: 1.4; }
+.library-enrichment > div > p { color: var(--muted); }
+.library-enrichment .primary-button { justify-self: start; }
+@media (max-width: 1050px) {
+  .library-layout { grid-template-columns: 330px minmax(0, 1fr); }
+  .library-detail-grid { grid-template-columns: 1fr; }
+  .library-search { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .library-heading, .library-summary { display: grid; }
+  .library-heading label { min-width: 0; }
+  .library-layout { grid-template-columns: 1fr; }
+  .library-browser { position: static; max-height: none; }
+  .library-form-row, .recipe-grid { grid-template-columns: 1fr; }
+}

@@ -11,9 +11,7 @@ from trendrelay_api.database import get_session
 from trendrelay_api.main import app
 from trendrelay_api.models import Base
 
-engine = create_engine(
-    "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-)
+engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
 TestingSession = sessionmaker(bind=engine, expire_on_commit=False)
 
 
@@ -77,7 +75,7 @@ def test_owner_can_approve_and_submit_local_render(monkeypatch) -> None:
     monkeypatch.setattr(
         production_api,
         "create_render_job",
-        lambda _body: {"id": "render_0123456789abcdef", "status": "queued"},
+        lambda _body, **_kwargs: {"id": "render_0123456789abcdef", "status": "queued"},
     )
     monkeypatch.setattr(production_api, "run_render_job", lambda _id: None)
     submitted = asyncio.run(

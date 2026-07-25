@@ -105,7 +105,7 @@ def runtime_status() -> dict[str, Any]:
     }
 
 
-def create_render_job(request: RenderRequest) -> dict[str, Any]:
+def create_render_job(request: RenderRequest, actor_user_id: str | None = None) -> dict[str, Any]:
     if not request.confirm_external_action:
         raise PermissionError("Rendering requires explicit confirmation.")
     status = runtime_status()
@@ -127,11 +127,13 @@ def create_render_job(request: RenderRequest) -> dict[str, Any]:
     payload = {
         "id": job_id,
         "workspace_id": request.workspace_id,
+        "actor_user_id": actor_user_id,
         "production_id": request.production_id,
         "status": "queued",
         "created_at": _now(),
         "updated_at": _now(),
         "source": production["source"],
+        "source_rights": production["source"].get("rights_basis", "unknown"),
         "provider": production["provider"],
         "segments": [item.model_dump() for item in request.segments],
         "budget": {"cap_usd": production["plan"]["budget_cap_usd"], "actual_usd": 0.0},
@@ -153,6 +155,40 @@ def _subprocess_environment() -> dict[str, str]:
         if os.environ.get(name):
             environment[name] = os.environ[name]
     return environment
+
+
+def _queue_library_artifacts(
+    payload: dict[str, Any], artifacts: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[str]]:
+    actor = payload.get("actor_user_id")
+    if not actor:
+        return [], []
+    from trendrelay_api.media_library import create_ingest_job
+
+    rights = payload.get("source_rights") or "unknown"
+    if rights not in {"owned", "licensed", "public-domain"}:
+        rights = "unknown"
+    queued = []
+    errors = []
+    for index, artifact in enumerate(artifacts, start=1):
+        try:
+            queued.append(
+                create_ingest_job(
+                    workspace_id=payload["workspace_id"],
+                    actor_user_id=actor,
+                    path=artifact["path"],
+                    title=f"OpenMontage clip {index:02d}",
+                    source_type="openmontage-render",
+                    rights_status=rights,
+                    rights_basis=(
+                        f"Derived from a governed OpenMontage source with {rights} rights."
+                    ),
+                    factory=JOB_SESSION_FACTORY,
+                )
+            )
+        except Exception as error:
+            errors.append(str(error)[-500:])
+    return queued, errors
 
 
 def run_render_job(job_id: str, worker_id: str = "openmontage-worker") -> dict[str, Any]:
@@ -185,12 +221,17 @@ def run_render_job(job_id: str, worker_id: str = "openmontage-worker") -> dict[s
         runtime_result = json.loads(completed.stdout.strip().splitlines()[-1])
         for artifact in runtime_result["artifacts"]:
             artifact["sha256"] = _fingerprint(Path(artifact["path"]))
+        library_jobs, library_errors = _queue_library_artifacts(
+            payload, runtime_result["artifacts"]
+        )
         result = {
             **payload,
             "status": "succeeded",
             "updated_at": _now(),
             "completed_at": _now(),
             "artifacts": runtime_result["artifacts"],
+            "library_jobs": library_jobs,
+            "library_errors": library_errors,
             "provenance": {
                 "tool": runtime_result["tool"],
                 "provider_revision": payload["provider"]["revision"],

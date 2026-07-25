@@ -37,7 +37,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 
 ## Repository structure
 
-- `apps/web` — compact operations console for media acquisition, Trend Radar, opportunity scoring, Studio, campaign planning, publishing, workspaces, and Tools
+- `apps/web` — compact operations console for media acquisition, Trend Radar, opportunity scoring, the Media Library, Studio, campaign planning, publishing, workspaces, and Tools
 - `apps/desktop` — Electron shell for local media and browser-assisted workflows
 - `scripts/dev.py` — unified hot-reload supervisor for local development
 - `scripts/reach.py` — sanitized Agent Reach channel diagnostics
@@ -73,7 +73,7 @@ npm install
 # Add --desktop to also launch Electron.
 ```
 
-Initialize or update the local database with `npm run db -- upgrade`. API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/` for the media-to-publish operations console. Paste Douyin source links there, monitor durable downloads, and hand resulting files directly to Studio or Postiz publishing. Trend Radar remains at `/research`, explainable scoring and affiliate offers at `/opportunities`, governed local production at `/studio`, campaign planning and the content calendar at `/campaigns`, publishing at `/publish`, and provider management at `/tools`.
+Initialize or update the local database with `npm run db -- upgrade`. API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/` for the media-to-publish operations console. Paste Douyin source links there, monitor durable downloads, and hand resulting files directly to Studio or Postiz publishing. Trend Radar remains at `/research`, explainable scoring and affiliate offers at `/opportunities`, searchable creative intelligence at `/library`, governed local production at `/studio`, campaign planning and the content calendar at `/campaigns`, publishing at `/publish`, and provider management at `/tools`.
 
 The first product vertical slice now includes database-backed Supabase authentication, workspace and role management, append-only audit events, secret references, and the governed plugin registry.
 
@@ -107,7 +107,7 @@ Authenticated endpoints under `/api/workspaces` create and list workspaces, mana
 
 ## Durable execution
 
-Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Douyin acquisition, Last30Days research, OpenMontage preflights and local renders, and Postiz publishing operations use this durable queue. The research and production adapters write no legacy JSON state. The supervised durable worker polls recoverable jobs, retries eligible research/render failures within their bounds, processes publishing operations once, and reclaims expired leases after process restarts; `python scripts/worker.py --once` provides a deterministic operational drain.
+Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Douyin acquisition, Media Library ingestion, Last30Days research, OpenMontage preflights and local renders, and Postiz publishing operations use this durable queue. The research and production adapters write no legacy JSON state. The supervised durable worker polls recoverable jobs, retries eligible research/render failures within their bounds, processes publishing operations once, and reclaims expired leases after process restarts; `python scripts/worker.py --once` provides a deterministic operational drain.
 
 ## Managed open-source tools
 
@@ -228,6 +228,14 @@ The About & Tools page also provides a Diagnose action. Diagnostics only inspect
 Open `/opportunities` to import a UTF-8 affiliate CSV, attach matching offers to trend evidence, and save a deterministic 0–100 opportunity score. Required CSV columns are `product_name`, `marketplace`, `network`, and `affiliate_url`; price, percentage or flat commission, cookie window, availability, restrictions, and product metadata are optional. Re-importing identical offers is idempotent.
 
 Every opportunity card exposes all positive factors and penalties with the input, weight, signed contribution, reason, and evidence-reference count. Distinct research sources drive cross-platform confirmation, available offers and commission drive affiliate economics, and completed workspace research can be attached without copying evidence. The principal action creates a linked draft campaign carrying its markets, languages, primary affiliate URL, and score context. See [ADR 0013](./docs/architecture/0013-explainable-opportunities-and-affiliate-import.md).
+
+## Immutable Media Library
+
+Open `/library` to import approved local video, audio, or image files; search by source metadata, creator, transcript, hook, product, format, or keyword; review usage rights; and hand publishable originals to Studio or Campaigns. Imports run through the leased worker, deduplicate by SHA-256, preserve a hash-addressed immutable original beneath `.data/media/`, and create separate thumbnail, 720p proxy, and mono 16 kHz audio versions with their own hashes and media metadata.
+
+Douyin downloads enter automatically as `reference-only`; authenticated OpenMontage renders also enter automatically and inherit only an explicit publishable source classification. `owned`, `licensed`, and `public-domain` are the only publishable states. Owner/approver rights changes require governed assurance, confirmation, written evidence, and an audit event. Campaign planning hashes selected bytes and rejects known `reference-only`, `unknown`, or `prohibited` originals and derivatives even if a file was renamed or copied.
+
+The Library accepts operator-reviewed speech and OCR text and derives versioned creative recipes with hooks, calls to action, products, formats, structures, scene pacing, reveal timing, caption density, and keywords. No automatic transcription provider is currently configured; both the API and UI disclose that limitation instead of labeling machine output as reviewed. See [ADR 0014](./docs/architecture/0014-immutable-media-library.md).
 
 ## Campaign planning and manual fallback
 

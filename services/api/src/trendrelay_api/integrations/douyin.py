@@ -281,7 +281,9 @@ def provider_status() -> dict[str, Any]:
     }
 
 
-def create_download_job(request: DownloadRequest) -> dict[str, Any]:
+def create_download_job(
+    request: DownloadRequest, actor_user_id: str | None = None
+) -> dict[str, Any]:
     if not request.confirm_external_action:
         raise PermissionError("Download requires explicit confirmation.")
     status = provider_status()
@@ -298,6 +300,7 @@ def create_download_job(request: DownloadRequest) -> dict[str, Any]:
     payload = {
         "id": job_id,
         "workspace_id": request.workspace_id,
+        "actor_user_id": actor_user_id,
         "status": "queued",
         "created_at": _now(),
         "updated_at": _now(),
@@ -351,6 +354,41 @@ def _collect_artifacts(output_root: Path) -> list[dict[str, Any]]:
     ]
 
 
+def _queue_library_artifacts(
+    payload: dict[str, Any], artifacts: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[str]]:
+    actor = payload.get("actor_user_id")
+    if not actor:
+        return [], []
+    from trendrelay_api.media_library import create_ingest_job
+
+    source_urls = payload.get("request", {}).get("urls") or []
+    source_url = source_urls[0] if len(source_urls) == 1 else None
+    queued = []
+    errors = []
+    for artifact in artifacts:
+        try:
+            queued.append(
+                create_ingest_job(
+                    workspace_id=payload["workspace_id"],
+                    actor_user_id=actor,
+                    path=artifact["path"],
+                    title=artifact.get("name") or "Douyin reference",
+                    source_type="douyin-download",
+                    source_url=source_url,
+                    platform="douyin",
+                    rights_status="reference-only",
+                    rights_basis=(
+                        "Acquired for internal creative research; reuse rights not established."
+                    ),
+                    factory=JOB_SESSION_FACTORY,
+                )
+            )
+        except Exception as error:
+            errors.append(str(error)[-500:])
+    return queued, errors
+
+
 def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str, Any]:
     claimed = claim_job(job_id, worker_id, lease_seconds=3600, factory=JOB_SESSION_FACTORY)
     payload = dict(claimed["payload"])
@@ -391,19 +429,19 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         artifacts = _collect_artifacts(output_root)
         if not artifacts:
             # Defense in depth: never report success for an empty folder.
-            message = (
-                "Download finished without media files. "
-                "Connect Douyin in the app and retry."
-            )
+            message = "Download finished without media files. Connect Douyin in the app and retry."
             if detail:
                 message = f"{message}\n{detail[-2500:]}"
             raise RuntimeError(message)
+        library_jobs, library_errors = _queue_library_artifacts(payload, artifacts)
         result = {
             **payload,
             "status": "succeeded",
             "updated_at": _now(),
             "completed_at": _now(),
             "artifacts": artifacts,
+            "library_jobs": library_jobs,
+            "library_errors": library_errors,
             "summary": f"Fetched {len(artifacts)} media file(s)",
         }
         return complete_job(job_id, worker_id, result, factory=JOB_SESSION_FACTORY)

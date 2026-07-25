@@ -130,7 +130,7 @@ def render(
     require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
     require_governed_assurance(user)
     try:
-        job = create_render_job(body)
+        job = create_render_job(body, actor_user_id=user.id)
     except PermissionError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except (FileNotFoundError, RuntimeError, ValueError) as error:

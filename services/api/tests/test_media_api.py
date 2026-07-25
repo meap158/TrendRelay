@@ -49,7 +49,7 @@ def test_workspace_member_can_submit_douyin_download(monkeypatch) -> None:
     monkeypatch.setattr(
         media_api,
         "create_download_job",
-        lambda _body: {"id": "download_0123456789abcdef", "status": "queued"},
+        lambda _body, **_kwargs: {"id": "download_0123456789abcdef", "status": "queued"},
     )
 
     response = asyncio.run(

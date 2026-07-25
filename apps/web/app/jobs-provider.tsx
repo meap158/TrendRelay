@@ -5,7 +5,7 @@ import { useAuth } from "./auth-provider";
 import { apiBaseUrl } from "../lib/api";
 
 type JobStatus = "queued" | "running" | "succeeded" | "failed";
-type JobCategory = "fetch" | "render" | "publish" | "research";
+type JobCategory = "fetch" | "media" | "render" | "publish" | "research";
 
 export type BaseJob = {
   id: string;
@@ -75,6 +75,19 @@ export function JobsProvider({ children }: { children: ReactNode }) {
           .catch(() => []);
         fetchPromises.push(fetchMedia);
 
+        const fetchLibrary = apiFetch(`/api/workspaces/${activeWorkspaceId}/media/library/jobs`)
+          .then(res => res.json())
+          .then(data => (data.jobs || []).map((j: any) => ({
+            id: j.id,
+            category: "media" as JobCategory,
+            status: j.status,
+            created_at: j.created_at ?? j.payload?.created_at,
+            title: `Library: ${j.payload?.title ?? j.id}`,
+            error: j.error,
+            raw: j,
+          })))
+          .catch(() => []);
+        fetchPromises.push(fetchLibrary);
         // Studio renders
         const fetchRenders = apiFetch(`/api/workspaces/${activeWorkspaceId}/studio/productions`)
           .then(res => res.json())

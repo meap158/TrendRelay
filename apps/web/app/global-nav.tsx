@@ -24,6 +24,7 @@ export function GlobalNav() {
           <Link className={pathname === "/" ? "active" : ""} href="/">Pipeline</Link>
           <Link className={pathname === "/research" ? "active" : ""} href="/research">Research</Link>
           <Link className={pathname === "/opportunities" ? "active" : ""} href="/opportunities">Opportunities</Link>
+          <Link className={pathname === "/library" ? "active" : ""} href="/library">Library</Link>
           <Link className={pathname === "/studio" ? "active" : ""} href="/studio">Studio</Link>
           <Link className={pathname === "/campaigns" ? "active" : ""} href="/campaigns">Campaigns</Link>
           <Link className={pathname === "/publish" ? "active" : ""} href="/publish">Publish</Link>

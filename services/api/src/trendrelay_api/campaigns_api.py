@@ -20,6 +20,8 @@ from trendrelay_api.auth import CurrentUser, current_user, require_governed_assu
 from trendrelay_api.config import get_settings
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, ensure_profile, membership, require_role
+from trendrelay_api.media_library import PUBLISHABLE_RIGHTS
+from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 from trendrelay_api.models import Campaign, PublicationPlan, utc_now
 from trendrelay_api.tool_registry import PROJECT_ROOT
 
@@ -321,6 +323,33 @@ def publication_calendar(
     return {"plans": [_plan(item) for item in items]}
 
 
+def _require_publishable_library_rights(session: Session, workspace_id: str, digest: str) -> None:
+    asset = session.scalar(
+        select(MediaAsset).where(
+            MediaAsset.workspace_id == workspace_id,
+            MediaAsset.original_sha256 == digest,
+        )
+    )
+    if not asset:
+        asset = session.scalar(
+            select(MediaAsset)
+            .join(MediaAssetVersion, MediaAssetVersion.asset_id == MediaAsset.id)
+            .where(
+                MediaAsset.workspace_id == workspace_id,
+                MediaAssetVersion.sha256 == digest,
+            )
+        )
+    if asset and asset.rights_status not in PUBLISHABLE_RIGHTS:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This media is classified as "
+                f"{asset.rights_status} and cannot enter a publication plan. "
+                "Review its rights in the media library first."
+            ),
+        )
+
+
 @router.post("/{campaign_id}/plans", status_code=201)
 def create_publication_plan(
     workspace_id: str,
@@ -348,13 +377,15 @@ def create_publication_plan(
         raise HTTPException(status_code=403, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    video_sha256 = _file_sha256(video)
+    _require_publishable_library_rights(session, workspace_id, video_sha256)
     item = PublicationPlan(
         workspace_id=workspace_id,
         campaign_id=campaign_id,
         title=body.title,
         platform=body.platform,
         video_path=str(video),
-        video_sha256=_file_sha256(video),
+        video_sha256=video_sha256,
         cover_path=str(cover) if cover else None,
         cover_sha256=_file_sha256(cover) if cover else None,
         caption=body.caption,

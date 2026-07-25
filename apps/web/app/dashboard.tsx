@@ -283,6 +283,7 @@ export default function Dashboard() {
       <section className="quick-actions" style={{ borderRadius: '4px', overflow: 'hidden' }}>
         <div><span>Workspace</span><strong>{selectedWorkspace?.name}</strong></div>
         <Link href="/research"><span>Find ideas</span><strong>Run trend research →</strong></Link>
+        <Link href="/library"><span>Creative assets</span><strong>Search media library →</strong></Link>
         <Link href="/studio"><span>Local files</span><strong>Prepare existing media →</strong></Link>
         <Link href="/campaigns"><span>Approved media</span><strong>Plan campaign →</strong></Link>
         <Link href="/publish"><span>Ready media</span><strong>Open publishing →</strong></Link>
