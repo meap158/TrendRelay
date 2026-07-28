@@ -321,24 +321,26 @@ def launch_setup_action(tool_id: str, action_id: str) -> dict[str, str]:
         raise RuntimeError("The guided authentication terminal is currently available on Windows.")
 
     if tool_id == "postiz-agent":
-        command = subprocess.list2cmdline(
-            [sys.executable, str(PROJECT_ROOT / "scripts" / "postiz.py"), "auth-login"]
+        launch_command = [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "postiz.py"),
+            "auth-login",
+        ]
+        message = (
+            "Postiz device login opened. Complete it in the new terminal and "
+            "browser window, then return here."
         )
-        title = "TrendRelay - Postiz login"
     else:
         from trendrelay_api.integrations.meta_ads_kit import RUNTIME_COMMAND
 
         if not RUNTIME_COMMAND.is_file():
             raise RuntimeError("The Social Flow runtime is missing. Reinstall Meta Ads Kit.")
-        command = subprocess.list2cmdline([str(RUNTIME_COMMAND), "auth", "login"])
-        title = "TrendRelay - Meta Ads login"
+        launch_command = [str(RUNTIME_COMMAND), "auth", "login"]
+        message = "Meta login opened in a new terminal window."
 
     subprocess.Popen(
-        ["cmd.exe", "/k", f"title {title} && {command}"],
+        launch_command,
         cwd=PROJECT_ROOT,
         creationflags=subprocess.CREATE_NEW_CONSOLE,
     )
-    return {
-        "status": "launched",
-        "message": "Complete the guided login in the terminal window, then return to TrendRelay.",
-    }
+    return {"status": "launched", "message": message}
