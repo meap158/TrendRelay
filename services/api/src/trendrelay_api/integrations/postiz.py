@@ -214,16 +214,39 @@ def connection_status() -> dict[str, Any]:
     tool = tools.get("postiz-agent", {})
     credentials_path = Path.home() / ".postiz" / "credentials.json"
     api_key_configured = bool(os.environ.get("POSTIZ_API_KEY"))
-    authenticated = credentials_path.is_file() or api_key_configured
+    authentication_method = (
+        "oauth"
+        if credentials_path.is_file()
+        else "api-key" if api_key_configured else None
+    )
+    authenticated = False
+    authorization_error: str | None = None
+    if authentication_method and tool.get("installed"):
+        try:
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "auth-status"],
+                cwd=PROJECT_ROOT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                capture_output=True,
+                check=False,
+                timeout=15,
+            )
+            authenticated = result.returncode == 0
+            if not authenticated:
+                authorization_error = (
+                    "Stored Postiz authorization is expired or invalid. "
+                    "Authorize again."
+                )
+        except (OSError, subprocess.TimeoutExpired):
+            authorization_error = "Could not verify Postiz authorization. Try authorizing again."
     return {
         "provider_installed": bool(tool.get("installed")),
         "provider_active": bool(tool.get("active")),
         "authenticated": authenticated,
-        "authentication_method": (
-            "oauth"
-            if credentials_path.is_file()
-            else "api-key" if api_key_configured else None
-        ),
+        "authentication_method": authentication_method,
+        "authorization_error": authorization_error,
         "accounts_refreshed": False,
         "supported_platforms": list(SUPPORTED_PLATFORMS),
         "next_step": (
