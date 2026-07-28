@@ -117,8 +117,8 @@ def service_is_healthy(service: Service, timeout: float = 0.8) -> bool:
         request = urllib.request.Request(service.health_url, method="GET")
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return response.status < 500
-    except urllib.error.HTTPError as error:
-        return error.code < 500
+    except urllib.error.HTTPError:
+        return False
     except (OSError, urllib.error.URLError):
         return False
 
@@ -145,7 +145,7 @@ def build_services(include_desktop: bool) -> list[Service]:
                 "services/api/src",
             ],
             "cyan",
-            "http://127.0.0.1:8080/healthz",
+            "http://127.0.0.1:8080/api/auth/local-session",
         ),
         Service(
             "Frontend",
