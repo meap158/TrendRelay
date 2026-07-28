@@ -30,6 +30,7 @@ class Service:
     command: list[str]
     color: str
     health_url: str | None = None
+    environment: dict[str, str] | None = None
 
 
 @dataclass
@@ -74,6 +75,7 @@ def start_service(service: Service) -> RunningService:
         bufsize=1,
         creationflags=creation_flags,
         start_new_session=not IS_WINDOWS,
+        env={**os.environ, **(service.environment or {})},
     )
     thread = threading.Thread(
         target=stream_output,
@@ -139,13 +141,13 @@ def build_services(include_desktop: bool) -> list[Service]:
                 "--host",
                 "0.0.0.0",
                 "--port",
-                "8080",
+                "8011",
                 "--reload",
                 "--reload-dir",
                 "services/api/src",
             ],
             "cyan",
-            "http://127.0.0.1:8080/api/auth/local-session",
+            "http://127.0.0.1:8011/api/auth/local-session",
         ),
         Service(
             "Frontend",
@@ -158,10 +160,11 @@ def build_services(include_desktop: bool) -> list[Service]:
                 "--hostname",
                 "0.0.0.0",
                 "--port",
-                "3000",
+                "3001",
             ],
             "green",
-            "http://127.0.0.1:3000/",
+            "http://127.0.0.1:3001/",
+            {"NEXT_PUBLIC_API_URL": "http://127.0.0.1:8011"},
         ),
     ]
     services.append(
@@ -172,7 +175,7 @@ def build_services(include_desktop: bool) -> list[Service]:
         )
     )
     if include_desktop:
-        services.append(Service("Desktop", [npm, "run", "dev:desktop"], "magenta"))
+        services.append(Service("Desktop", [npm, "run", "dev:desktop"], "magenta", environment={"TRENDRELAY_API_URL": "http://127.0.0.1:8011", "TRENDRELAY_WEB_URL": "http://localhost:3001"}))
     return services
 
 
@@ -226,9 +229,9 @@ def print_banner(include_desktop: bool) -> None:
     print("=" * width)
     print("           TrendRelay - Unified Dev Runner")
     print("=" * width)
-    print("   - Backend:  http://0.0.0.0:8080")
-    print("   - API docs: http://0.0.0.0:8080/docs")
-    print("   - Frontend: http://0.0.0.0:3000")
+    print("   - Backend:  http://0.0.0.0:8011")
+    print("   - API docs: http://0.0.0.0:8011/docs")
+    print("   - Frontend: http://0.0.0.0:3001")
     print("   - Worker:    durable SQL queue (hot reload)")
     print(
         f"   - Desktop:  {'enabled' if include_desktop else 'disabled (use start-electron.bat)'}"
@@ -241,7 +244,7 @@ def open_browser_app(include_desktop: bool) -> bool:
     if include_desktop:
         return False
     print("Opening browser...")
-    return webbrowser.open("http://127.0.0.1:3000/")
+    return webbrowser.open("http://127.0.0.1:3001/")
 
 
 def parse_args() -> argparse.Namespace:

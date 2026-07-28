@@ -113,10 +113,10 @@ def test_browser_app_opens_after_startup(monkeypatch) -> None:
     monkeypatch.setattr(dev.webbrowser, "open", lambda url: opened.append(url) or True)
 
     assert dev.open_browser_app(False) is True
-    assert opened == ["http://127.0.0.1:3000/"]
+    assert opened == ["http://127.0.0.1:3001/"]
 
     assert dev.open_browser_app(True) is False
-    assert opened == ["http://127.0.0.1:3000/"]
+    assert opened == ["http://127.0.0.1:3001/"]
 
 
 def test_browser_opens_only_after_frontend_health_gate() -> None:
@@ -129,3 +129,14 @@ def test_browser_opens_only_after_frontend_health_gate() -> None:
     )
     browser_open = source.index("open_browser_app(args.desktop)")
     assert health_gate < browser_open
+
+def test_runner_passes_its_backend_url_to_browser_and_desktop() -> None:
+    services = dev.build_services(True)
+    frontend = next(service for service in services if service.name == "Frontend")
+    desktop = next(service for service in services if service.name == "Desktop")
+
+    assert frontend.environment == {"NEXT_PUBLIC_API_URL": "http://127.0.0.1:8011"}
+    assert desktop.environment == {
+        "TRENDRELAY_API_URL": "http://127.0.0.1:8011",
+        "TRENDRELAY_WEB_URL": "http://localhost:3001",
+    }

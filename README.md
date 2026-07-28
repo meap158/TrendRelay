@@ -74,7 +74,7 @@ npm install
 # Add --desktop to also launch Electron.
 ```
 
-Initialize or update the local database with `npm run db -- upgrade`. API documentation is available at `http://localhost:8080/docs` during development. Open `http://localhost:3000/` for the media-to-publish operations console. Paste Douyin source links there, monitor durable downloads, and hand resulting files directly to Studio or Postiz publishing. Trend Radar remains at `/research`, explainable scoring and affiliate offers at `/opportunities`, searchable creative intelligence at `/library`, governed local production at `/studio`, campaign planning and the content calendar at `/campaigns`, first-party revenue measurement at `/attribution`, publishing at `/publish`, and provider management at `/tools`.
+Initialize or update the local database with `npm run db -- upgrade`. API documentation is available at `http://localhost:8011/docs` during development. Open `http://localhost:3001/` for the media-to-publish operations console. Paste Douyin source links there, monitor durable downloads, and hand resulting files directly to Studio or Postiz publishing. Trend Radar remains at `/research`, explainable scoring and affiliate offers at `/opportunities`, searchable creative intelligence at `/library`, governed local production at `/studio`, campaign planning and the content calendar at `/campaigns`, first-party revenue measurement at `/attribution`, publishing at `/publish`, and provider management at `/tools`.
 
 The first product vertical slice now includes database-backed Supabase authentication, workspace and role management, append-only audit events, secret references, and the governed plugin registry.
 
