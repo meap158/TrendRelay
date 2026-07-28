@@ -13,6 +13,8 @@ type Connection = {
   provider_installed: boolean;
   provider_active: boolean;
   authenticated: boolean;
+  service_ready: boolean;
+  self_hosted: boolean;
   authentication_method: string | null;
   next_step: string;
   authorization_error?: string | null;
@@ -129,7 +131,7 @@ export default function PublishPage() {
     }
   }
 
-  async function startSetup(action: "launch-auth" | "open-dashboard") {
+  async function startSetup(action: "open-dashboard") {
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -179,17 +181,17 @@ export default function PublishPage() {
   return (
     <main className="publish-page">
       <header className="publish-heading">
-        <div><p className="eyebrow">DISTRIBUTION DESK</p><h1>Publish the approved clip.</h1><p className="lede">Connect social accounts once in Postiz. Then choose them by name, preview the delivery, and create a draft or schedule.</p></div>
+        <div><p className="eyebrow">DISTRIBUTION DESK</p><h1>Publish the approved clip.</h1><p className="lede">TrendRelay runs Postiz locally. Connect social accounts once, then choose them by name, preview the delivery, and create a draft or schedule.</p></div>
         <Link className="secondary-link" href="/tools">Manage tools</Link>
       </header>
       <div aria-live="polite">{notice && <p className="registry-message">{notice}</p>}{error && <p className="registry-error" role="alert">{error}</p>}</div>
 
       <section className="postiz-setup" aria-labelledby="postiz-setup-title">
-        <div className="section-heading"><div><p className="eyebrow">POSTIZ CONNECTION</p><h2 id="postiz-setup-title">Set up once, publish without account IDs.</h2></div><span className={connection?.authenticated ? "connection-badge ready" : "connection-badge"}>{connection?.authenticated ? "Authorized" : "Setup needed"}</span></div>
+        <div className="section-heading"><div><p className="eyebrow">POSTIZ CONNECTION</p><h2 id="postiz-setup-title">Local Postiz, ready when TrendRelay starts.</h2></div><span className={connection?.service_ready && connection?.authenticated ? "connection-badge ready" : "connection-badge"}>{connection?.service_ready && connection?.authenticated ? "Local service ready" : "Starting local service"}</span></div>
         <div className="postiz-steps">{connection?.authorization_error && <p className="setup-note" role="status">{connection.authorization_error}</p>}
           <article className={connection?.provider_installed && connection?.provider_active ? "ready" : ""}><span>01</span><div><strong>Enable Postiz</strong><p>Install and activate the Postiz tool for this workspace.</p></div>{connection?.provider_installed && connection?.provider_active ? <small>Ready</small> : <Link href="/tools">Open tools</Link>}</article>
-          <article className={connection?.authenticated ? "ready" : ""}><span>02</span><div><strong>Authorize Postiz</strong><p>Complete the device-login window. Credentials remain with Postiz on this computer.</p></div><button type="button" disabled={busy || !canExecute || !connection?.provider_installed || !connection?.provider_active} onClick={() => void startSetup("launch-auth")}>{connection?.authenticated ? "Authorize again" : "Authorize"}</button></article>
-          <article className={accounts.length ? "ready" : ""}><span>03</span><div><strong>Connect pages and profiles</strong><p>Use Postiz’s secure dashboard for each platform, then refresh the accounts below.</p></div><div className="step-actions"><button type="button" disabled={busy || !canExecute || !connection?.authenticated} onClick={() => void startSetup("open-dashboard")}>Open Postiz</button><button type="button" className="quiet-action" disabled={busy || !canExecute || !connection?.authenticated} onClick={() => void refreshAccounts()}>Refresh accounts</button></div></article>
+          <article className={connection?.service_ready && connection?.authenticated ? "ready" : ""}><span>02</span><div><strong>Local Postiz service</strong><p>The managed Windows service uses a private local admin and API key. No Postiz cloud account is required.</p></div><button type="button" disabled={busy || !canExecute || !connection?.service_ready} onClick={() => void startSetup("open-dashboard")}>Open local Postiz</button></article>
+          <article className={accounts.length ? "ready" : ""}><span>03</span><div><strong>Connect pages and profiles</strong><p>Authorize each platform in the local Postiz console, then refresh the accounts below.</p></div><div className="step-actions"><button type="button" disabled={busy || !canExecute || !connection?.authenticated} onClick={() => void startSetup("open-dashboard")}>Open local Postiz</button><button type="button" className="quiet-action" disabled={busy || !canExecute || !connection?.authenticated} onClick={() => void refreshAccounts()}>Refresh accounts</button></div></article>
         </div>
         {!canExecute && selected && <p className="setup-note">Only workspace owners and approvers can change Postiz connections or publish. You can still review the setup.</p>}
       </section>

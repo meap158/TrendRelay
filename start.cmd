@@ -2,6 +2,10 @@
 setlocal
 cd /d "%~dp0"
 
+if not exist ".data\tmp\" mkdir ".data\tmp"
+set "TEMP=%CD%\.data\tmp"
+set "TMP=%CD%\.data\tmp"
+
 set "TRENDRELAY_DESKTOP_REQUESTED=0"
 set "TRENDRELAY_CHECK_REQUESTED=0"
 for %%A in (%*) do if /I "%%~A"=="--desktop" set "TRENDRELAY_DESKTOP_REQUESTED=1"
@@ -48,7 +52,8 @@ if not exist ".venv\Scripts\python.exe" (
   if errorlevel 1 goto :install_error
 )
 
-if "%TRENDRELAY_CHECK_REQUESTED%"=="0" (
+if "%TRENDRELAY_CHECK_REQUESTED%"=="0" ".venv\Scripts\python.exe" -c "import trendrelay_api" >nul 2>nul
+if "%TRENDRELAY_CHECK_REQUESTED%"=="0" if errorlevel 1 (
   echo Checking API dependencies...
   ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check --quiet -e "services/api[dev]"
   if errorlevel 1 goto :install_error
@@ -57,6 +62,12 @@ if "%TRENDRELAY_CHECK_REQUESTED%"=="0" (
 if "%TRENDRELAY_CHECK_REQUESTED%"=="0" (
   echo Applying database migrations...
   ".venv\Scripts\python.exe" scripts\db.py upgrade
+  if errorlevel 1 goto :install_error
+)
+
+if "%TRENDRELAY_CHECK_REQUESTED%"=="0" if not exist ".data\postiz-selfhost\prepared-revision.txt" (
+  echo Preparing native self-hosted Postiz for the first run...
+  ".venv\Scripts\python.exe" scripts\postiz_service.py prepare
   if errorlevel 1 goto :install_error
 )
 

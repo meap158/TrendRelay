@@ -31,13 +31,15 @@ class Service:
     color: str
     health_url: str | None = None
     environment: dict[str, str] | None = None
+    health_timeout: float = 30
+    relay_output: bool = True
 
 
 @dataclass
 class RunningService:
     definition: Service
     process: subprocess.Popen[str]
-    output_thread: threading.Thread
+    output_thread: threading.Thread | None
 
 
 COLORS = {
@@ -67,7 +69,7 @@ def start_service(service: Service) -> RunningService:
     process = subprocess.Popen(
         service.command,
         cwd=ROOT,
-        stdout=subprocess.PIPE,
+        stdout=subprocess.PIPE if service.relay_output else subprocess.DEVNULL,
         stderr=subprocess.STDOUT,
         text=True,
         encoding="utf-8",
@@ -77,13 +79,15 @@ def start_service(service: Service) -> RunningService:
         start_new_session=not IS_WINDOWS,
         env={**os.environ, **(service.environment or {})},
     )
-    thread = threading.Thread(
-        target=stream_output,
-        args=(service, process),
-        name=f"{service.name.lower()}-output",
-        daemon=True,
-    )
-    thread.start()
+    thread: threading.Thread | None = None
+    if service.relay_output:
+        thread = threading.Thread(
+            target=stream_output,
+            args=(service, process),
+            name=f"{service.name.lower()}-output",
+            daemon=True,
+        )
+        thread.start()
     print(
         f"{paint(f'[{service.name}]', service.color)} Started monitor for PID {process.pid}."
     )
@@ -96,6 +100,14 @@ def stop_service(running: RunningService) -> None:
         return
 
     print(f"Stopping {running.definition.name} (PID {process.pid})...")
+    if IS_WINDOWS and running.definition.name == "Postiz":
+        try:
+            process.send_signal(signal.CTRL_BREAK_EVENT)
+            process.wait(timeout=15)
+            return
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+
     if IS_WINDOWS:
         subprocess.run(
             ["taskkill", "/PID", str(process.pid), "/T", "/F"],
@@ -169,6 +181,16 @@ def build_services(include_desktop: bool) -> list[Service]:
     ]
     services.append(
         Service(
+            "Postiz",
+            [str(python), "scripts/postiz_service.py", "run"],
+            "magenta",
+            "http://localhost:4200/auth",
+            health_timeout=480,
+            relay_output=False,
+        )
+    )
+    services.append(
+        Service(
             "Worker",
             [str(python), "scripts/worker.py", "--watch"],
             "yellow",
@@ -190,11 +212,14 @@ def partition_services(services: list[Service]) -> tuple[list[Service], list[Ser
     return reused, startable
 
 
-def wait_until_healthy(service: Service, timeout: float = 30) -> bool:
+def wait_until_healthy(running: RunningService, timeout: float = 30) -> bool:
+    service = running.definition
     if not service.health_url:
         return True
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        if running.process.poll() is not None:
+            return False
         if service_is_healthy(service):
             return True
         time.sleep(0.25)
@@ -232,6 +257,7 @@ def print_banner(include_desktop: bool) -> None:
     print("   - Backend:  http://0.0.0.0:8011")
     print("   - API docs: http://0.0.0.0:8011/docs")
     print("   - Frontend: http://0.0.0.0:3001")
+    print("   - Postiz:   http://localhost:4200 (native self-hosted)")
     print("   - Worker:    durable SQL queue (hot reload)")
     print(
         f"   - Desktop:  {'enabled' if include_desktop else 'disabled (use start-electron.bat)'}"
@@ -284,9 +310,12 @@ def main() -> int:
     try:
         for index, service in enumerate(startable):
             running.append(start_service(service))
-            if service.health_url and not wait_until_healthy(service):
+            if service.health_url and not wait_until_healthy(
+                running[-1], service.health_timeout
+            ):
                 print(
-                    f"{service.name} did not become ready at {service.health_url} within 30 seconds."
+                    f"{service.name} did not become ready at {service.health_url} "
+                    f"within {service.health_timeout:g} seconds."
                 )
                 return 1
             if index < len(startable) - 1:

@@ -119,26 +119,38 @@ def test_discover_integrations_normalizes_postiz_list_output(monkeypatch) -> Non
         ]
     }
 
-def test_postiz_setup_actions_are_guided_without_credentials() -> None:
-    from trendrelay_api.tool_setup import setup_report
+def test_postiz_setup_actions_are_guided_without_credentials(monkeypatch) -> None:
+    from trendrelay_api import tool_setup
 
-    report = setup_report("postiz-agent")
+    monkeypatch.setattr(
+        tool_setup,
+        "postiz_status",
+        lambda: {"service_ready": True, "authenticated": True},
+    )
+    report = tool_setup.setup_report("postiz-agent")
 
     assert [action["id"] for action in report["actions"]] == [
-        "launch-auth",
         "open-dashboard",
         "open-publish",
     ]
     assert report["credential_values_exposed"] is False
 
 
-def test_postiz_dashboard_launcher_opens_fixed_provider_dashboard(monkeypatch) -> None:
+def test_postiz_dashboard_launcher_opens_fixed_local_dashboard(monkeypatch) -> None:
     from trendrelay_api import tool_setup
 
     monkeypatch.setattr(
         tool_setup,
         "list_tools",
         lambda: [{"id": "postiz-agent", "installed": True, "active": True}],
+    )
+    monkeypatch.setattr(
+        tool_setup,
+        "postiz_status",
+        lambda: {
+            "service_ready": True,
+            "dashboard_url": "http://localhost:4200/api/trendrelay-local-session",
+        },
     )
     opened: list[tuple[str, int]] = []
     monkeypatch.setattr(
@@ -150,4 +162,4 @@ def test_postiz_dashboard_launcher_opens_fixed_provider_dashboard(monkeypatch) -
     result = tool_setup.launch_setup_action("postiz-agent", "open-dashboard")
 
     assert result["status"] == "launched"
-    assert opened == [("https://app.postiz.com", 2)]
+    assert opened == [("http://localhost:4200/api/trendrelay-local-session", 2)]

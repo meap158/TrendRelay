@@ -5,10 +5,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.request
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -30,6 +33,9 @@ UPSTREAM_VERSION = "2.0.15"
 ENTRYPOINT = SOURCE_DIR / "dist" / "index.js"
 LEDGER_PATH = ROOT / ".data" / "postiz" / "operations.json"
 RUNTIME_DIR = ROOT / ".data" / "postiz" / "runtime"
+SELFHOST_DIR = ROOT / ".data" / "postiz-selfhost"
+SELFHOST_API_KEY = SELFHOST_DIR / "api-key.txt"
+SELFHOST_API_URL = "http://127.0.0.1:3000"
 MEDIA_PLACEHOLDER = "__POSTIZ_UPLOADED_MEDIA_URL__"
 SUPPORTED_PROVIDERS = ("tiktok", "instagram", "youtube")
 MAX_VIDEO_BYTES = {
@@ -82,9 +88,15 @@ def provider_command(arguments: list[str]) -> list[str]:
 def run_provider(
     arguments: list[str], capture: bool = False
 ) -> subprocess.CompletedProcess[str]:
+    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
     return subprocess.run(
         provider_command(arguments),
         cwd=SOURCE_DIR,
+        env={
+            **os.environ,
+            "HOME": str(RUNTIME_DIR),
+            "USERPROFILE": str(RUNTIME_DIR),
+        },
         text=True,
         encoding="utf-8",
         errors="replace",
@@ -439,12 +451,33 @@ def short_video(args: argparse.Namespace) -> int:
     return 0
 
 
+def selfhost_auth_status() -> int:
+    api_key = os.environ.get("POSTIZ_API_KEY", "")
+    request = urllib.request.Request(
+        f"{SELFHOST_API_URL}/public/v1/integrations",
+        headers={"Authorization": api_key, "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            if response.status < 300:
+                print("Local self-hosted Postiz credentials are valid.")
+                return 0
+    except urllib.error.HTTPError as error:
+        if error.code in (401, 403):
+            print("Local Postiz credentials are invalid.", file=sys.stderr)
+            return 1
+        print(f"Local Postiz returned HTTP {error.code}.", file=sys.stderr)
+        return 1
+    except (OSError, urllib.error.URLError) as error:
+        print(f"Could not reach local Postiz: {error}", file=sys.stderr)
+        return 1
+    return 1
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("install", help="install the pinned Postiz provider")
     subparsers.add_parser("check", help="verify the provider build and revision")
-    subparsers.add_parser("auth-login", help="start Postiz OAuth device authorization")
     subparsers.add_parser("auth-status", help="verify Postiz authentication")
     subparsers.add_parser("integrations", help="list connected social integrations")
 
@@ -497,14 +530,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     load_prefixed_env(ROOT / ".env", "POSTIZ_")
+    if SELFHOST_API_KEY.is_file():
+        os.environ.setdefault(
+            "POSTIZ_API_KEY",
+            SELFHOST_API_KEY.read_text(encoding="utf-8").strip(),
+        )
+        os.environ.setdefault("POSTIZ_API_URL", SELFHOST_API_URL)
     args = build_parser().parse_args()
     if args.command == "install":
         return install_provider()
     if args.command == "check":
         return check_provider()
-    if args.command == "auth-login":
-        return provider_passthrough(["auth:login"])
     if args.command == "auth-status":
+        if SELFHOST_API_KEY.is_file():
+            return selfhost_auth_status()
         return provider_passthrough(["auth:status"])
     if args.command == "integrations":
         return provider_passthrough(["integrations:list"])

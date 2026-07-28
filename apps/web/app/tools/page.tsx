@@ -9,6 +9,9 @@ type Tool = {
   id: string;
   name: string;
   repository: string;
+  service_repository?: string;
+  service_revision?: string;
+  service_version?: string;
   revision: string;
   version: string;
   license: string;
@@ -44,7 +47,7 @@ type SetupReport = {
   credential_values_exposed: false;
   configured_secret_names?: string[];
   supported_secret_names?: string[];
-  connection?: { state: string; message: string };
+  connection?: { state?: string; message?: string; service_ready?: boolean; authenticated?: boolean };
 };
 type ReachDiagnostics = {
   mode: string;
@@ -244,6 +247,7 @@ export default function ToolsPage() {
               </div>
               <div className="tool-actions">
                 <a href={tool.repository} target="_blank" rel="noreferrer">GitHub</a>
+                {tool.service_repository && <a href={tool.service_repository} target="_blank" rel="noreferrer">Self-host service</a>}
                 {guidedSetup.has(tool.id) && (
                   <button disabled={busy === `${tool.id}-setup`} onClick={() => void loadSetup(tool.id)}>Setup</button>
                 )}
@@ -296,7 +300,7 @@ export default function ToolsPage() {
               <p>Add or update these entries in the project’s local <code>.env</code> file, then restart TrendRelay.</p>
             </div>
           )}
-          {setup.connection && <p className="connection-note">Douyin connection: <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
+          {setup.tool_id === "douyin-downloader" && setup.connection && <p className="connection-note">Douyin connection: <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
           <div className="setup-actions">
             {setup.actions.map((action) => action.kind === "navigate" && action.href ? (
               <Link className="setup-primary" href={action.href} key={action.id}>{action.label}</Link>

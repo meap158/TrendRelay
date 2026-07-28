@@ -18,6 +18,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "douyin": "python scripts/douyin.py",
     "postiz": "python scripts/postiz.py",
+    "postiz:service": "python scripts/postiz_service.py",
     "research": "python scripts/research.py",
     "reach": "python scripts/reach.py",
     "studio": "python scripts/studio.py",

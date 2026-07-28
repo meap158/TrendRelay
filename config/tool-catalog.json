@@ -49,7 +49,12 @@
                       "default_active":  true,
                       "root_path":  ".tools/postiz-agent",
                       "source_path":  ".tools/postiz-agent/source",
-                      "documentation":  "docs/third-party/postiz-agent.md"
+                      "documentation":  "docs/third-party/postiz-agent.md",
+                      "service_repository":  "https://github.com/gitroomhq/postiz-app",
+                      "service_revision":  "7236213ea4520bd67b45688c2787d1f4586b3b51",
+                      "service_version":  "2.21.7",
+                      "service_license":  "AGPL-3.0",
+                      "service_license_url":  "https://github.com/gitroomhq/postiz-app/blob/7236213ea4520bd67b45688c2787d1f4586b3b51/LICENSE"
                   },
                   {
                       "id":  "last30days-skill",

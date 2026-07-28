@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 import webbrowser
 from typing import Any
 
 from trendrelay_api.integrations.agent_reach import diagnostic_report
 from trendrelay_api.integrations.douyin import provider_status as douyin_status
 from trendrelay_api.integrations.meta_ads_kit import provider_status as meta_ads_status
+from trendrelay_api.integrations.postiz import connection_status as postiz_status
 from trendrelay_api.tool_registry import PROJECT_ROOT, list_tools
 
 LAST30DAYS_KEYS = (
@@ -107,38 +107,44 @@ def setup_report(tool_id: str) -> dict[str, Any]:
             connection=status["connection"],
         )
     elif tool_id == "postiz-agent":
+        status = postiz_status()
         report.update(
             summary=(
-                "Authorize Postiz with its device-login flow, then connect TikTok, "
-                + "Instagram, or YouTube in Postiz."
+                "TrendRelay runs Postiz locally on Windows. Open the local console to "
+                "connect TikTok, Instagram, or YouTube through each platform's OAuth flow."
             ),
             requirements=[
                 *prerequisites,
                 _requirement(
-                    "postiz-auth",
-                    "Postiz authorization",
-                    "setup-required",
-                    "Authorize with the Postiz device-login flow. TrendRelay never "
-                    "reads or displays the resulting credential.",
+                    "postiz-service",
+                    "Local Postiz service",
+                    "ready" if status["service_ready"] else "setup-required",
+                    "The native Postiz backend and console are running."
+                    if status["service_ready"]
+                    else "Start TrendRelay to launch the managed native Postiz service.",
+                ),
+                _requirement(
+                    "postiz-local-admin",
+                    "Local publishing connection",
+                    "ready" if status["authenticated"] else "setup-required",
+                    "TrendRelay's private local API key is verified."
+                    if status["authenticated"]
+                    else "Restart TrendRelay to initialize the private local admin and API key.",
                 ),
                 _requirement(
                     "social-integrations",
                     "Publishing destinations",
-                    "setup-required",
-                    "Connect destination accounts in Postiz's own secure dashboard, "
-                    "then return here to select them by name.",
+                    "optional" if status["authenticated"] else "setup-required",
+                    (
+                        "Connect pages and profiles in the local Postiz console, "
+                        "then refresh them in Publish."
+                    ),
                 ),
             ],
             actions=[
                 {
-                    "id": "launch-auth",
-                    "label": "Authorize Postiz",
-                    "kind": "local-launch",
-                    "requires_confirmation": True,
-                },
-                {
                     "id": "open-dashboard",
-                    "label": "Connect social accounts",
+                    "label": "Open local Postiz",
                     "kind": "local-launch",
                     "requires_confirmation": True,
                 },
@@ -149,6 +155,7 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                     "href": "/publish",
                 },
             ],
+            connection=status,
         )
     elif tool_id == "last30days-skill":
         configured = _configured_names(LAST30DAYS_KEYS)
@@ -298,7 +305,7 @@ def setup_report(tool_id: str) -> dict[str, Any]:
 
 def launch_setup_action(tool_id: str, action_id: str) -> dict[str, str]:
     allowed_actions = {
-        "postiz-agent": {"launch-auth", "open-dashboard"},
+        "postiz-agent": {"open-dashboard"},
         "meta-ads-kit": {"launch-auth"},
     }
     if action_id not in allowed_actions.get(tool_id, set()):
@@ -308,35 +315,27 @@ def launch_setup_action(tool_id: str, action_id: str) -> dict[str, str]:
         raise RuntimeError("Install and activate the tool before continuing setup.")
 
     if tool_id == "postiz-agent" and action_id == "open-dashboard":
-        webbrowser.open("https://app.postiz.com", new=2)
+        status = postiz_status()
+        if not status["service_ready"]:
+            raise RuntimeError("Local Postiz is not ready. Start or restart TrendRelay first.")
+        webbrowser.open(status["dashboard_url"], new=2)
         return {
             "status": "launched",
             "message": (
-                "Postiz opened in your browser. Connect social accounts there, then return "
-                "to TrendRelay and refresh connected accounts."
+                "Local Postiz opened with the TrendRelay admin session. Connect social "
+                "accounts there, then return to Publish and refresh accounts."
             ),
         }
 
     if os.name != "nt":
         raise RuntimeError("The guided authentication terminal is currently available on Windows.")
 
-    if tool_id == "postiz-agent":
-        launch_command = [
-            sys.executable,
-            str(PROJECT_ROOT / "scripts" / "postiz.py"),
-            "auth-login",
-        ]
-        message = (
-            "Postiz device login opened. Complete it in the new terminal and "
-            "browser window, then return here."
-        )
-    else:
-        from trendrelay_api.integrations.meta_ads_kit import RUNTIME_COMMAND
+    from trendrelay_api.integrations.meta_ads_kit import RUNTIME_COMMAND
 
-        if not RUNTIME_COMMAND.is_file():
-            raise RuntimeError("The Social Flow runtime is missing. Reinstall Meta Ads Kit.")
-        launch_command = [str(RUNTIME_COMMAND), "auth", "login"]
-        message = "Meta login opened in a new terminal window."
+    if not RUNTIME_COMMAND.is_file():
+        raise RuntimeError("The Social Flow runtime is missing. Reinstall Meta Ads Kit.")
+    launch_command = [str(RUNTIME_COMMAND), "auth", "login"]
+    message = "Meta login opened in a new terminal window."
 
     subprocess.Popen(
         launch_command,

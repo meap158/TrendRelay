@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from secrets import token_hex
@@ -30,6 +31,10 @@ JOB_KIND = "social_publish"
 JOB_SESSION_FACTORY = SessionFactory
 Platform = Literal["tiktok", "instagram", "youtube"]
 SUPPORTED_PLATFORMS = ("tiktok", "instagram", "youtube")
+SELFHOST_DATA = PROJECT_ROOT / ".data" / "postiz-selfhost"
+SELFHOST_BACKEND = "http://127.0.0.1:3000"
+SELFHOST_FRONTEND = "http://localhost:4200"
+SELFHOST_DASHBOARD = f"{SELFHOST_FRONTEND}/api/trendrelay-local-session"
 
 
 class PublishTarget(BaseModel):
@@ -209,19 +214,23 @@ def discover_integrations() -> dict[str, Any]:
     return {"accounts": _normalized_integrations(parse_json_value(result.stdout))}
 
 
+def _selfhost_healthy(url: str) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=1) as response:
+            return response.status < 500
+    except (OSError, urllib.error.URLError):
+        return False
+
+
 def connection_status() -> dict[str, Any]:
     tools = {tool["id"]: tool for tool in list_tools()}
     tool = tools.get("postiz-agent", {})
-    credentials_path = Path.home() / ".postiz" / "credentials.json"
-    api_key_configured = bool(os.environ.get("POSTIZ_API_KEY"))
-    authentication_method = (
-        "oauth"
-        if credentials_path.is_file()
-        else "api-key" if api_key_configured else None
-    )
+    backend_ready = _selfhost_healthy(f"{SELFHOST_BACKEND}/auth/can-register")
+    frontend_ready = _selfhost_healthy(f"{SELFHOST_FRONTEND}/auth")
+    api_key_configured = (SELFHOST_DATA / "api-key.txt").is_file()
     authenticated = False
     authorization_error: str | None = None
-    if authentication_method and tool.get("installed"):
+    if api_key_configured and backend_ready and tool.get("installed"):
         try:
             result = subprocess.run(
                 [sys.executable, str(SCRIPT), "auth-status"],
@@ -236,26 +245,32 @@ def connection_status() -> dict[str, Any]:
             authenticated = result.returncode == 0
             if not authenticated:
                 authorization_error = (
-                    "Stored Postiz authorization is expired or invalid. "
-                    "Authorize again."
+                    "The local Postiz API key could not be verified. Restart TrendRelay "
+                    "to repair the local service session."
                 )
         except (OSError, subprocess.TimeoutExpired):
-            authorization_error = "Could not verify Postiz authorization. Try authorizing again."
+            authorization_error = "Could not verify the local Postiz service."
+    elif not backend_ready or not frontend_ready:
+        authorization_error = "Local Postiz is still starting or unavailable."
     return {
         "provider_installed": bool(tool.get("installed")),
         "provider_active": bool(tool.get("active")),
         "authenticated": authenticated,
-        "authentication_method": authentication_method,
+        "authentication_method": "self-hosted-api-key" if api_key_configured else None,
         "authorization_error": authorization_error,
+        "service_ready": backend_ready and frontend_ready,
+        "backend_ready": backend_ready,
+        "frontend_ready": frontend_ready,
+        "dashboard_url": SELFHOST_DASHBOARD,
+        "self_hosted": True,
         "accounts_refreshed": False,
         "supported_platforms": list(SUPPORTED_PLATFORMS),
         "next_step": (
-            "Authorize Postiz"
-            if not authenticated
+            "Start local Postiz"
+            if not backend_ready or not frontend_ready
             else "Connect or refresh social accounts"
         ),
     }
-
 def create_publish_job(request: PublishRequest) -> dict[str, Any]:
     if not request.confirm_external_action:
         raise PermissionError("Publishing requires explicit external-action confirmation.")
