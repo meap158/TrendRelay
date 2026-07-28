@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -22,12 +23,13 @@ from trendrelay_api.jobs import (
     get_job_record,
     list_job_records,
 )
-from trendrelay_api.tool_registry import PROJECT_ROOT
+from trendrelay_api.tool_registry import PROJECT_ROOT, list_tools
 
 SCRIPT = PROJECT_ROOT / "scripts" / "postiz.py"
 JOB_KIND = "social_publish"
 JOB_SESSION_FACTORY = SessionFactory
 Platform = Literal["tiktok", "instagram", "youtube"]
+SUPPORTED_PLATFORMS = ("tiktok", "instagram", "youtube")
 
 
 class PublishTarget(BaseModel):
@@ -107,7 +109,7 @@ def approved_video_path(video_path: str) -> Path:
     return resolved
 
 
-def parse_json_output(output: str) -> dict[str, Any]:
+def parse_json_value(output: str) -> Any:
     decoder = json.JSONDecoder()
     matches: list[tuple[int, Any]] = []
     for index, character in enumerate(output):
@@ -117,12 +119,17 @@ def parse_json_output(output: str) -> dict[str, Any]:
             value, end = decoder.raw_decode(output[index:])
         except json.JSONDecodeError:
             continue
-        if isinstance(value, dict):
-            matches.append((end, value))
+        matches.append((end, value))
     if not matches:
-        raise ValueError("Postiz output did not contain a JSON object.")
+        raise ValueError("Postiz output did not contain JSON.")
     return max(matches, key=lambda match: match[0])[1]
 
+
+def parse_json_output(output: str) -> dict[str, Any]:
+    value = parse_json_value(output)
+    if not isinstance(value, dict):
+        raise ValueError("Postiz output did not contain a JSON object.")
+    return value
 
 def run_cli(request: PublishRequest, *, execute: bool) -> dict[str, Any]:
     video_path = approved_video_path(request.video_path)
@@ -146,6 +153,45 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
     return run_cli(request, execute=False)
 
 
+def _account_label(raw: dict[str, Any], platform: str, identifier: str) -> str:
+    for key in ("name", "username", "label", "displayName", "pageName", "accountName"):
+        value = raw.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:160]
+    return f"{platform.title()} account {identifier[-8:]}"
+
+
+def _normalized_integrations(value: Any) -> list[dict[str, str]]:
+    if isinstance(value, list):
+        raw_items = value
+    elif isinstance(value, dict):
+        raw_items = value.get("integrations", [])
+    else:
+        raw_items = []
+    accounts: list[dict[str, str]] = []
+    for raw in raw_items:
+        if not isinstance(raw, dict):
+            continue
+        identifier = raw.get("id") or raw.get("integrationId")
+        platform = raw.get("provider") or raw.get("platform") or raw.get("identifier")
+        if not isinstance(identifier, str) or not isinstance(platform, str):
+            continue
+        normalized_platform = platform.strip().casefold()
+        if normalized_platform not in SUPPORTED_PLATFORMS:
+            continue
+        accounts.append(
+            {
+                "id": identifier.strip(),
+                "platform": normalized_platform,
+                "label": _account_label(raw, normalized_platform, identifier.strip()),
+            }
+        )
+    return sorted(
+        accounts,
+        key=lambda item: (item["platform"], item["label"].casefold(), item["id"]),
+    )
+
+
 def discover_integrations() -> dict[str, Any]:
     result = subprocess.run(
         [sys.executable, str(SCRIPT), "integrations"],
@@ -160,8 +206,32 @@ def discover_integrations() -> dict[str, Any]:
     if result.returncode != 0:
         details = (result.stderr or result.stdout or "Postiz failed.").strip()[-4000:]
         raise RuntimeError(details)
-    return {"integrations": parse_json_output(result.stdout)}
+    return {"accounts": _normalized_integrations(parse_json_value(result.stdout))}
 
+
+def connection_status() -> dict[str, Any]:
+    tools = {tool["id"]: tool for tool in list_tools()}
+    tool = tools.get("postiz-agent", {})
+    credentials_path = Path.home() / ".postiz" / "credentials.json"
+    api_key_configured = bool(os.environ.get("POSTIZ_API_KEY"))
+    authenticated = credentials_path.is_file() or api_key_configured
+    return {
+        "provider_installed": bool(tool.get("installed")),
+        "provider_active": bool(tool.get("active")),
+        "authenticated": authenticated,
+        "authentication_method": (
+            "oauth"
+            if credentials_path.is_file()
+            else "api-key" if api_key_configured else None
+        ),
+        "accounts_refreshed": False,
+        "supported_platforms": list(SUPPORTED_PLATFORMS),
+        "next_step": (
+            "Authorize Postiz"
+            if not authenticated
+            else "Connect or refresh social accounts"
+        ),
+    }
 
 def create_publish_job(request: PublishRequest) -> dict[str, Any]:
     if not request.confirm_external_action:

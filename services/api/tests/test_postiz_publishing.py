@@ -92,3 +92,62 @@ def test_preview_rejects_media_outside_approved_roots(monkeypatch, tmp_path: Pat
     )
     with pytest.raises(PermissionError, match="approved media root"):
         postiz.preview_publish(request(media))
+
+
+def test_discover_integrations_normalizes_postiz_list_output(monkeypatch) -> None:
+    monkeypatch.setattr(
+        postiz.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0,
+            stdout=(
+                "Postiz\n"
+                '[{"id":"ig-1","provider":"instagram","username":"trendrelay"},'
+                '{"id":"x-1","provider":"x","name":"Ignore"},'
+                '{"id":"tt-1","platform":"tiktok","name":"Trend clips"}]'
+            ),
+            stderr="",
+        ),
+    )
+
+    result = postiz.discover_integrations()
+
+    assert result == {
+        "accounts": [
+            {"id": "ig-1", "platform": "instagram", "label": "trendrelay"},
+            {"id": "tt-1", "platform": "tiktok", "label": "Trend clips"},
+        ]
+    }
+
+def test_postiz_setup_actions_are_guided_without_credentials() -> None:
+    from trendrelay_api.tool_setup import setup_report
+
+    report = setup_report("postiz-agent")
+
+    assert [action["id"] for action in report["actions"]] == [
+        "launch-auth",
+        "open-dashboard",
+        "open-publish",
+    ]
+    assert report["credential_values_exposed"] is False
+
+
+def test_postiz_dashboard_launcher_opens_fixed_provider_dashboard(monkeypatch) -> None:
+    from trendrelay_api import tool_setup
+
+    monkeypatch.setattr(
+        tool_setup,
+        "list_tools",
+        lambda: [{"id": "postiz-agent", "installed": True, "active": True}],
+    )
+    opened: list[tuple[str, int]] = []
+    monkeypatch.setattr(
+        tool_setup.webbrowser,
+        "open",
+        lambda url, new: opened.append((url, new)),
+    )
+
+    result = tool_setup.launch_setup_action("postiz-agent", "open-dashboard")
+
+    assert result["status"] == "launched"
+    assert opened == [("https://app.postiz.com", 2)]

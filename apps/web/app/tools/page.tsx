@@ -182,7 +182,7 @@ export default function ToolsPage() {
       return;
     }
     if (action.kind === "local-launch") {
-      if (!window.confirm(`Launch the guided ${setup.title.replace("Set up ", "")} authentication window?`)) return;
+      if (!window.confirm(`Open the guided ${setup.title.replace("Set up ", "")} setup step?`)) return;
       setBusy(`${setup.tool_id}-${action.id}`);
       setError(null);
       try {

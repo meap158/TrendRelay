@@ -256,7 +256,9 @@ TrendRelay stores no raw IP address, full referrer path, browser fingerprint, or
 
 TrendRelay integrates the AGPL-3.0-licensed `gitroomhq/postiz-agent` at an exact revision. The isolated provider supports connected social accounts; the TrendRelay adapter exposes audited MP4 drafts and schedules for TikTok, Instagram, and YouTube. Authenticated users work at `/publish`: editors can create dry-run previews, while owners and approvers can discover integrations and explicitly submit remote operations. Submitted work is workspace-scoped in the SQL durable queue and can continue in the supervised worker after an API restart.
 
-Install, authenticate, and discover integration IDs:
+Set up Postiz from `/publish` in this order: install and activate the provider from `/tools`, choose **Authorize Postiz** to complete its device-login flow, choose **Open Postiz** to connect pages and profiles in Postiz's own dashboard, then choose **Refresh accounts**. TrendRelay presents only the returned account names for selection; it never asks for social-platform passwords or exposes Postiz credential values. A live social account connection still requires the operator to complete the platform’s own authorization in Postiz.
+
+The equivalent CLI operations are available for local troubleshooting:
 
 ```powershell
 npm run postiz -- install

@@ -13,6 +13,7 @@ from trendrelay_api.database import get_session
 from trendrelay_api.foundation import membership, require_role
 from trendrelay_api.integrations.postiz import (
     PublishRequest,
+    connection_status,
     create_publish_job,
     discover_integrations,
     list_publish_jobs,
@@ -34,6 +35,15 @@ def validate_workspace(body: PublishRequest, workspace_id: str) -> None:
     if body.workspace_id != workspace_id:
         raise HTTPException(status_code=422, detail="Workspace path and body must match.")
 
+
+@router.get("/postiz/connection")
+def postiz_connection(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    membership(session, workspace_id, user.id)
+    return {"connection": connection_status()}
 
 @router.post("/postiz/integrations")
 def postiz_integrations(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import webbrowser
 from typing import Any
 
 from trendrelay_api.integrations.agent_reach import diagnostic_report
@@ -117,21 +118,27 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                     "postiz-auth",
                     "Postiz authorization",
                     "setup-required",
-                    "Authentication is completed interactively and is not probed or "
-                    "displayed by TrendRelay.",
+                    "Authorize with the Postiz device-login flow. TrendRelay never "
+                    "reads or displays the resulting credential.",
                 ),
                 _requirement(
                     "social-integrations",
                     "Publishing destinations",
                     "setup-required",
-                    "Connect destination accounts in Postiz, then discover their "
-                    "integration IDs from Publish.",
+                    "Connect destination accounts in Postiz's own secure dashboard, "
+                    "then return here to select them by name.",
                 ),
             ],
             actions=[
                 {
                     "id": "launch-auth",
-                    "label": "Launch Postiz login",
+                    "label": "Authorize Postiz",
+                    "kind": "local-launch",
+                    "requires_confirmation": True,
+                },
+                {
+                    "id": "open-dashboard",
+                    "label": "Connect social accounts",
                     "kind": "local-launch",
                     "requires_confirmation": True,
                 },
@@ -290,11 +297,26 @@ def setup_report(tool_id: str) -> dict[str, Any]:
 
 
 def launch_setup_action(tool_id: str, action_id: str) -> dict[str, str]:
-    if action_id != "launch-auth" or tool_id not in {"postiz-agent", "meta-ads-kit"}:
+    allowed_actions = {
+        "postiz-agent": {"launch-auth", "open-dashboard"},
+        "meta-ads-kit": {"launch-auth"},
+    }
+    if action_id not in allowed_actions.get(tool_id, set()):
         raise KeyError(f"{tool_id}:{action_id}")
     tool = next((item for item in list_tools() if item["id"] == tool_id), None)
     if not tool or not tool["installed"] or not tool["active"]:
-        raise RuntimeError("Install and activate the tool before launching authentication.")
+        raise RuntimeError("Install and activate the tool before continuing setup.")
+
+    if tool_id == "postiz-agent" and action_id == "open-dashboard":
+        webbrowser.open("https://app.postiz.com", new=2)
+        return {
+            "status": "launched",
+            "message": (
+                "Postiz opened in your browser. Connect social accounts there, then return "
+                "to TrendRelay and refresh connected accounts."
+            ),
+        }
+
     if os.name != "nt":
         raise RuntimeError("The guided authentication terminal is currently available on Windows.")
 
