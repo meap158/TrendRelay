@@ -32,6 +32,8 @@ class Service:
     health_url: str | None = None
     environment: dict[str, str] | None = None
     health_timeout: float = 30
+    health_probe_timeout: float = 0.8
+    health_failure_limit: int = 3
     relay_output: bool = True
 
 
@@ -124,12 +126,15 @@ def stop_service(running: RunningService) -> None:
         process.kill()
 
 
-def service_is_healthy(service: Service, timeout: float = 0.8) -> bool:
+def service_is_healthy(service: Service, timeout: float | None = None) -> bool:
     if not service.health_url:
         return False
     try:
         request = urllib.request.Request(service.health_url, method="GET")
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.urlopen(
+            request,
+            timeout=service.health_probe_timeout if timeout is None else timeout,
+        ) as response:
             return response.status < 500
     except urllib.error.HTTPError:
         return False
@@ -186,6 +191,8 @@ def build_services(include_desktop: bool) -> list[Service]:
             "magenta",
             "http://localhost:4200/auth",
             health_timeout=480,
+            health_probe_timeout=5,
+            health_failure_limit=6,
             relay_output=False,
         )
     )
@@ -324,6 +331,7 @@ def main() -> int:
         open_browser_app(args.desktop)
 
         next_health_check = time.monotonic() + 2
+        reused_failures = {service.name: 0 for service in reused}
         while True:
             for item in running:
                 return_code = item.process.poll()
@@ -332,7 +340,11 @@ def main() -> int:
                     return return_code or 1
             if reused and time.monotonic() >= next_health_check:
                 for service in reused:
-                    if not service_is_healthy(service):
+                    if service_is_healthy(service):
+                        reused_failures[service.name] = 0
+                        continue
+                    reused_failures[service.name] += 1
+                    if reused_failures[service.name] >= service.health_failure_limit:
                         print(f"Reused {service.name} service is no longer available.")
                         return 1
                 next_health_check = time.monotonic() + 2
