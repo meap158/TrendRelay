@@ -51,6 +51,8 @@ Last updated: 2026-07-29
 - Tool installation and activation remain separate; source presence never implies credentials, dependencies, or production readiness.
 - Tool setup reports expose readiness, dependency state, and credential names only. They never return secret values. Interactive setup actions are loopback-only, explicitly confirmed, and selected from fixed tool/action mappings rather than user-supplied commands.
 - Postiz is dry-run-first. `/publish` uses a three-step guided flow: enable the provider, open the authenticated local Postiz console, and connect social destinations through each platform's OAuth flow before refreshing named account cards. TrendRelay never accepts social-platform passwords or returns Postiz credentials. Postiz Cloud is not used. Uploads and remote drafts/schedules require both `--execute` and `--confirm-external-action`; drafts are the default.
+- Postiz platform setup is provider-aware rather than Reddit-specific. Tools exposes compact guided cards for Reddit, both Instagram modes, Meta/Facebook, Threads, TikTok, YouTube, LinkedIn, X, Pinterest, Discord, and Slack. Fixed allowlisted field maps write only to the ignored Postiz `.env`; responses expose configured booleans only.
+- A maintained Postiz overlay blocks OAuth URLs with undefined app/client identifiers and displays a setup-focused warning in the embedded channel picker. The overlay is reapplied by `scripts/postiz_service.py configure`.
 - Postiz operations use content-derived IDs and a local ledger. Workspace publishing jobs are durable but receive one provider attempt because duplicate and uncertain retries require inspection. Only owners and approvers can discover integrations or execute; editors may preview.
 - Publishing media must resolve to an existing MP4 beneath `PUBLISHING_MEDIA_ROOTS`; the local defaults are `.data/downloads`, `.data/media`, and `.data/productions`.
 - Douyin batches default to 50 items per selected profile mode. Full crawls require explicit `--limit 0`. Downloads use only the pinned API provider; browser fallback has been removed. The optional login browser exists only to capture cookies. Empty provider output is a failed job, while historical zero-artifact successes are labeled `empty` in the UI.
@@ -64,6 +66,8 @@ Last updated: 2026-07-29
 
 - Native Postiz validation completed: PostgreSQL, Redis, Temporal, the backend, orchestrator, and frontend all reported healthy.
 - The app-managed Postiz local-session route set its auth cookie and landed at `/launches` without a login form. The Publish screen reported `Local service ready`, and its **Open local Postiz** action completed successfully.
+- Live browser QA opened Tools without sign-in, rendered all provider setup cards, then opened embedded Postiz. Clicking unconfigured Reddit and Instagram Standalone connectors stayed on `/launches` and showed the setup warning; no external OAuth URL containing `undefined` opened.
+- The one-click runner remained healthy through a real WatchFiles backend reload after Windows child services were isolated with `CREATE_NO_WINDOW`; backend and web both returned 200 afterward. Focused Postiz/API tests pass (20), along with Ruff, explicit Python compilation, ESLint, and TypeScript checks.
 - The local Postiz API key validated. Integration discovery correctly returns an empty list until platform accounts are connected through their OAuth flows.
 
 - Pinned upstream checkout resolved exactly to `ef3ad18c2b50e38e534f72aabe2b3fbb0b3fadd7`.

@@ -77,7 +77,33 @@ def test_wait_until_healthy_retries_until_service_is_ready(monkeypatch) -> None:
     monkeypatch.setattr(dev, "service_is_healthy", lambda _service: next(results))
     monkeypatch.setattr(dev.time, "sleep", lambda _seconds: None)
 
-    assert dev.wait_until_healthy(backend) is True
+    class Process:
+        def poll(self):
+            return None
+
+    running = dev.RunningService(backend, Process(), None)
+    assert dev.wait_until_healthy(running) is True
+
+
+def test_windows_services_use_an_isolated_hidden_process_group(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class Process:
+        stdout = None
+        pid = 42
+
+    def fake_popen(*args, **kwargs):
+        captured.update(kwargs)
+        return Process()
+
+    monkeypatch.setattr(dev, "IS_WINDOWS", True)
+    monkeypatch.setattr(dev.subprocess, "Popen", fake_popen)
+
+    dev.start_service(dev.Service("Backend", ["python"], "cyan", relay_output=False))
+
+    assert captured["creationflags"] == (
+        dev.subprocess.CREATE_NEW_PROCESS_GROUP | dev.subprocess.CREATE_NO_WINDOW
+    )
 
 
 def test_windows_launcher_applies_migrations_before_starting() -> None:
@@ -124,11 +150,10 @@ def test_browser_opens_only_after_frontend_health_gate() -> None:
         encoding="utf-8"
     )
 
-    health_gate = source.index(
-        "if service.health_url and not wait_until_healthy(service)"
-    )
+    health_gate = source.index("if service.health_url and not wait_until_healthy(")
     browser_open = source.index("open_browser_app(args.desktop)")
     assert health_gate < browser_open
+
 
 def test_runner_passes_its_backend_url_to_browser_and_desktop() -> None:
     services = dev.build_services(True)

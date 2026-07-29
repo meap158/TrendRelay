@@ -67,7 +67,11 @@ def stream_output(service: Service, process: subprocess.Popen[str]) -> None:
 
 
 def start_service(service: Service) -> RunningService:
-    creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if IS_WINDOWS else 0
+    creation_flags = (
+        subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+        if IS_WINDOWS
+        else 0
+    )
     process = subprocess.Popen(
         service.command,
         cwd=ROOT,
@@ -204,7 +208,17 @@ def build_services(include_desktop: bool) -> list[Service]:
         )
     )
     if include_desktop:
-        services.append(Service("Desktop", [npm, "run", "dev:desktop"], "magenta", environment={"TRENDRELAY_API_URL": "http://127.0.0.1:8011", "TRENDRELAY_WEB_URL": "http://localhost:3001"}))
+        services.append(
+            Service(
+                "Desktop",
+                [npm, "run", "dev:desktop"],
+                "magenta",
+                environment={
+                    "TRENDRELAY_API_URL": "http://127.0.0.1:8011",
+                    "TRENDRELAY_WEB_URL": "http://localhost:3001",
+                },
+            )
+        )
     return services
 
 
