@@ -95,8 +95,7 @@ class SetupActionRequest(BaseModel):
 
 class PostizOAuthCredentialsRequest(BaseModel):
     provider: str
-    client_id: str
-    client_secret: str
+    values: dict[str, str]
     confirm_external_action: bool = False
 
 
@@ -158,8 +157,7 @@ async def configure_postiz_platform(
             "result": await asyncio.to_thread(
                 save_postiz_oauth_credentials,
                 body.provider,
-                body.client_id,
-                body.client_secret,
+                body.values,
             )
         }
     except KeyError as error:

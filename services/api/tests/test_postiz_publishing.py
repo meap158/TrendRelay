@@ -119,6 +119,7 @@ def test_discover_integrations_normalizes_postiz_list_output(monkeypatch) -> Non
         ]
     }
 
+
 def test_postiz_setup_actions_are_guided_without_credentials(monkeypatch) -> None:
     from trendrelay_api import tool_setup
 
@@ -165,9 +166,7 @@ def test_postiz_dashboard_launcher_opens_fixed_local_dashboard(monkeypatch) -> N
     assert opened == [("http://localhost:4200/api/trendrelay-local-session", 2)]
 
 
-def test_postiz_setup_reports_reddit_readiness_without_values(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_postiz_setup_reports_reddit_readiness_without_values(monkeypatch, tmp_path: Path) -> None:
     from trendrelay_api import tool_setup
 
     env_path = tmp_path / ".env"
@@ -186,11 +185,44 @@ def test_postiz_setup_reports_reddit_readiness_without_values(
 
     reddit = report["provider_credentials"][0]
     assert reddit["configured"] == {"client_id": True, "client_secret": True}
-    assert reddit["redirect_uri"] == (
-        "http://localhost:4200/integrations/social/reddit"
-    )
+    assert reddit["ready"] is True
+    assert reddit["redirect_uris"] == ["http://localhost:4200/integrations/social/reddit"]
     assert "hidden-client" not in str(report)
     assert "hidden-secret" not in str(report)
+
+
+def test_postiz_setup_includes_distinct_instagram_modes(monkeypatch, tmp_path: Path) -> None:
+    from trendrelay_api import tool_setup
+
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        'INSTAGRAM_APP_ID="direct-id"\nINSTAGRAM_APP_SECRET="direct-secret"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(tool_setup, "POSTIZ_ENV_PATH", env_path)
+
+    providers = {provider["id"]: provider for provider in tool_setup.postiz_oauth_providers()}
+
+    assert providers["instagram-standalone"]["ready"] is True
+    assert providers["meta"]["ready"] is False
+    assert providers["instagram-standalone"]["redirect_uris"] == [
+        "https://redirectmeto.com/http://localhost:4200/integrations/social/instagram-standalone"
+    ]
+    assert "direct-id" not in str(providers)
+    assert "direct-secret" not in str(providers)
+
+
+def test_postiz_provider_rejects_missing_or_unexpected_fields(monkeypatch, tmp_path: Path) -> None:
+    from trendrelay_api import tool_setup
+
+    env_path = tmp_path / ".env"
+    env_path.write_text('DATABASE_URL="local-db"\n', encoding="utf-8")
+    monkeypatch.setattr(tool_setup, "POSTIZ_ENV_PATH", env_path)
+
+    with pytest.raises(ValueError, match="unexpected settings"):
+        tool_setup.save_postiz_oauth_credentials(
+            "reddit", {"client_id": "value", "extra": "rejected"}
+        )
 
 
 def test_postiz_reddit_credentials_are_saved_without_erasing_configuration(
@@ -203,7 +235,7 @@ def test_postiz_reddit_credentials_are_saved_without_erasing_configuration(
     monkeypatch.setattr(tool_setup, "POSTIZ_ENV_PATH", env_path)
 
     result = tool_setup.save_postiz_oauth_credentials(
-        "reddit", "new-client", "new-secret"
+        "reddit", {"client_id": "new-client", "client_secret": "new-secret"}
     )
 
     saved = env_path.read_text(encoding="utf-8")

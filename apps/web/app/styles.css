@@ -175,9 +175,18 @@ nav strong { color: #1c2b33; }
 .setup-step.setup-required small, .setup-step.optional small { color: #8a6302; background: #fff8e1; }
 .setup-step.blocked small { color: #e13333; background: #f8d7da; }
 .secret-checklist { margin: 18px 0; padding: 16px; border: 1px solid #dadde1; border-radius: 6px; background: #fafbfc; }
-.oauth-credential-card { display: grid; gap: 13px; margin: 18px 0; padding: 18px; border: 1px solid #dadde1; border-radius: 6px; background: #fafbfc; }
+.oauth-provider-list { display: grid; gap: 10px; margin: 18px 0; }
+.oauth-provider-intro { padding: 4px 2px 8px; }
+.oauth-provider-intro p { margin: 5px 0 0; color: #606770; }
+.oauth-credential-card { border: 1px solid #dadde1; border-radius: 6px; background: #fafbfc; }
+.oauth-credential-card[open] { border-color: #aeb8c2; box-shadow: 0 5px 16px rgba(28, 43, 51, 0.07); }
+.oauth-credential-card summary { cursor: pointer; list-style: none; padding: 16px 18px; }
+.oauth-credential-card summary::-webkit-details-marker { display: none; }
+.oauth-credential-body { display: grid; gap: 13px; padding: 0 18px 18px; border-top: 1px solid #e4e7ea; }
+.oauth-callbacks { display: grid; gap: 6px; }
+.oauth-callbacks code { padding: 8px 10px; border-radius: 4px; background: #eef1f4; overflow-wrap: anywhere; font-size: 0.78rem; font-weight: 500; }
 .oauth-credential-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
-.oauth-credential-heading p, .oauth-credential-card > p { margin: 4px 0 0; color: #606770; line-height: 1.45; }
+.oauth-credential-heading p, .oauth-credential-body > p { margin: 4px 0 0; color: #606770; line-height: 1.45; }
 .oauth-credential-heading > span { padding: 5px 8px; border-radius: 999px; background: #fff8e1; color: #8a6302; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; }
 .oauth-credential-heading > span.configured { background: #e6f6ee; color: #006b4e; }
 .oauth-credential-card label { display: grid; gap: 7px; font-weight: 700; }

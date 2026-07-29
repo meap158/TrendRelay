@@ -38,12 +38,16 @@ type SetupAction = {
   href?: string;
   requires_confirmation?: boolean;
 };
+type ProviderField = { id: string; label: string; secret: boolean };
 type ProviderCredential = {
   id: string;
   label: string;
-  configured: { client_id: boolean; client_secret: boolean };
+  configured: Record<string, boolean>;
+  ready: boolean;
   create_url: string;
-  redirect_uri: string;
+  requirements: string;
+  redirect_uris: string[];
+  fields: ProviderField[];
 };
 type SetupReport = {
   tool_id: string;
@@ -81,8 +85,7 @@ export default function ToolsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [setup, setSetup] = useState<SetupReport | null>(null);
   const [reachDiagnostics, setReachDiagnostics] = useState<ReachDiagnostics | null>(null);
-  const [redditClientId, setRedditClientId] = useState("");
-  const [redditClientSecret, setRedditClientSecret] = useState("");
+  const [credentialDrafts, setCredentialDrafts] = useState<Record<string, Record<string, string>>>({});
 
   const refresh = useCallback(async () => {
     const payload = await responseJson<{ tools: Tool[] }>(await apiFetch("/api/tools"));
@@ -214,12 +217,20 @@ export default function ToolsPage() {
     }
   }
 
+  function updateCredentialDraft(providerId: string, fieldId: string, value: string) {
+    setCredentialDrafts((current) => ({
+      ...current,
+      [providerId]: { ...current[providerId], [fieldId]: value },
+    }));
+  }
+
   async function savePostizCredentials(provider: ProviderCredential) {
-    if (!redditClientId.trim() || !redditClientSecret.trim()) {
-      setError("Enter both the Reddit client ID and client secret.");
+    const values = credentialDrafts[provider.id] ?? {};
+    if (provider.fields.some((field) => !values[field.id]?.trim())) {
+      setError(`Complete every ${provider.label} app setting before saving.`);
       return;
     }
-    if (!window.confirm("Save these Reddit app credentials only on this computer?")) return;
+    if (!window.confirm(`Save these ${provider.label} app settings only on this computer?`)) return;
     setBusy(`postiz-${provider.id}-credentials`);
     setError(null);
     try {
@@ -228,23 +239,20 @@ export default function ToolsPage() {
           method: "POST",
           body: JSON.stringify({
             provider: provider.id,
-            client_id: redditClientId,
-            client_secret: redditClientSecret,
+            values,
             confirm_external_action: true,
           }),
         }),
       );
-      setRedditClientId("");
-      setRedditClientSecret("");
+      setCredentialDrafts((current) => ({ ...current, [provider.id]: {} }));
       setMessage(payload.result.message);
       await loadSetup("postiz-agent");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Reddit app settings could not be saved.");
+      setError(reason instanceof Error ? reason.message : `${provider.label} app settings could not be saved.`);
     } finally {
       setBusy(null);
     }
-  }
-  if (loading) return <main className="tools-page"><p>Loading local tool registry…</p></main>;
+  }  if (loading) return <main className="tools-page"><p>Loading local tool registry…</p></main>;
   if (!user) return <main className="tools-page"><h1>Sign in to manage tools.</h1><Link href="/sign-in?next=%2Ftools">Sign in</Link></main>;
 
   return (
@@ -328,47 +336,49 @@ export default function ToolsPage() {
               </article>
             ))}
           </div>
-          {setup.tool_id === "postiz-agent" && setup.provider_credentials?.map((provider) => (
-            <div className="oauth-credential-card" key={provider.id}>
-              <div className="oauth-credential-heading">
-                <div><strong>{provider.label} app</strong><p>Create a web app, copy its two values here, then restart TrendRelay once.</p></div>
-                <span className={provider.configured.client_id && provider.configured.client_secret ? "configured" : "missing"}>
-                  {provider.configured.client_id && provider.configured.client_secret ? "Configured" : "Needs setup"}
-                </span>
+          {setup.tool_id === "postiz-agent" && setup.provider_credentials && (
+            <div className="oauth-provider-list">
+              <div className="oauth-provider-intro">
+                <strong>Connect a social platform</strong>
+                <p>Set up only the platforms you use. Authorization stays disabled inside Postiz until every required app value is present.</p>
               </div>
-              <p><a href={provider.create_url} target="_blank" rel="noreferrer">Create or open the Reddit app</a></p>
-              <label>Redirect URI <code>{provider.redirect_uri}</code></label>
-              <label>
-                Client ID
-                <input
-                  autoComplete="off"
-                  onChange={(event) => setRedditClientId(event.target.value)}
-                  placeholder={provider.configured.client_id ? "Configured — enter to replace" : "Paste the Reddit client ID"}
-                  spellCheck={false}
-                  value={redditClientId}
-                />
-              </label>
-              <label>
-                Client secret
-                <input
-                  autoComplete="new-password"
-                  onChange={(event) => setRedditClientSecret(event.target.value)}
-                  placeholder={provider.configured.client_secret ? "Configured — enter to replace" : "Paste the Reddit client secret"}
-                  spellCheck={false}
-                  type="password"
-                  value={redditClientSecret}
-                />
-              </label>
-              <button
-                className="setup-primary"
-                disabled={busy === `postiz-${provider.id}-credentials`}
-                onClick={() => void savePostizCredentials(provider)}
-                type="button"
-              >Save Reddit settings</button>
-              <p className="privacy-note">Saved only in Postiz&apos;s ignored local configuration. Existing values are never returned to this page.</p>
+              {setup.provider_credentials.map((provider) => (
+                <details className="oauth-credential-card" key={provider.id} open={provider.id === "reddit" && !provider.ready}>
+                  <summary className="oauth-credential-heading">
+                    <div><strong>{provider.label}</strong><p>{provider.requirements}</p></div>
+                    <span className={provider.ready ? "configured" : "missing"}>{provider.ready ? "Ready to authorize" : "Setup needed"}</span>
+                  </summary>
+                  <div className="oauth-credential-body">
+                    <p><a href={provider.create_url} target="_blank" rel="noreferrer">Open the {provider.label} developer app</a></p>
+                    <div className="oauth-callbacks">
+                      <strong>Authorized callback {provider.redirect_uris.length > 1 ? "URLs" : "URL"}</strong>
+                      {provider.redirect_uris.map((redirectUri) => <code key={redirectUri}>{redirectUri}</code>)}
+                    </div>
+                    {provider.fields.map((field) => (
+                      <label key={field.id}>
+                        {field.label}
+                        <input
+                          autoComplete={field.secret ? "new-password" : "off"}
+                          onChange={(event) => updateCredentialDraft(provider.id, field.id, event.target.value)}
+                          placeholder={provider.configured[field.id] ? "Configured — enter to replace" : `Paste ${field.label.toLowerCase()}`}
+                          spellCheck={false}
+                          type={field.secret ? "password" : "text"}
+                          value={credentialDrafts[provider.id]?.[field.id] ?? ""}
+                        />
+                      </label>
+                    ))}
+                    <button
+                      className="setup-primary"
+                      disabled={busy === `postiz-${provider.id}-credentials`}
+                      onClick={() => void savePostizCredentials(provider)}
+                      type="button"
+                    >Save {provider.label} settings</button>
+                    <p className="privacy-note">Saved only in Postiz&apos;s ignored local configuration. Existing values are never returned to this page.</p>
+                  </div>
+                </details>
+              ))}
             </div>
-          ))}
-          {setup.configured_secret_names && (
+          )}          {setup.configured_secret_names && (
             <div className="secret-checklist">
               <strong>Optional provider keys</strong>
               <p>Configured names are shown; secret values never leave the API process.</p>

@@ -89,13 +89,12 @@ def test_setup_launcher_requires_explicit_confirmation() -> None:
 
 
 def test_postiz_platform_credentials_require_confirmation(monkeypatch) -> None:
-    saved: list[tuple[str, str, str]] = []
+    saved: list[tuple[str, dict[str, str]]] = []
     monkeypatch.setattr(
         "trendrelay_api.main.save_postiz_oauth_credentials",
-        lambda provider, client_id, client_secret: saved.append(
-            (provider, client_id, client_secret)
-        )
-        or {"status": "saved", "message": "Saved locally."},
+        lambda provider, values: (
+            saved.append((provider, values)) or {"status": "saved", "message": "Saved locally."}
+        ),
     )
     denied = asyncio.run(
         request(
@@ -103,8 +102,7 @@ def test_postiz_platform_credentials_require_confirmation(monkeypatch) -> None:
             "/api/tools/postiz-agent/setup/platform-credentials",
             json={
                 "provider": "reddit",
-                "client_id": "client",
-                "client_secret": "secret",
+                "values": {"client_id": "client", "client_secret": "secret"},
                 "confirm_external_action": False,
             },
         )
@@ -118,14 +116,13 @@ def test_postiz_platform_credentials_require_confirmation(monkeypatch) -> None:
             "/api/tools/postiz-agent/setup/platform-credentials",
             json={
                 "provider": "reddit",
-                "client_id": "client",
-                "client_secret": "secret",
+                "values": {"client_id": "client", "client_secret": "secret"},
                 "confirm_external_action": True,
             },
         )
     )
     assert accepted.status_code == 200
-    assert saved == [("reddit", "client", "secret")]
+    assert saved == [("reddit", {"client_id": "client", "client_secret": "secret"})]
     assert "secret" not in str(accepted.json())
 
 

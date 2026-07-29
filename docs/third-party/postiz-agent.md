@@ -11,4 +11,6 @@ Both source trees stay ignored under `.tools/`. The application uses native Wind
 
 Postiz still needs platform-specific OAuth app credentials and user authorization to connect TikTok, Instagram, YouTube, or other destinations. These values belong only in the ignored Postiz `.env`; TrendRelay reports readiness but never returns secret values. The `/publish` workflow lists only connected account names and IDs.
 
+The **Tools → Postiz Agent → Setup** wizard provides fixed, provider-specific fields and exact local callbacks for Reddit, both Instagram connection modes, Facebook, Threads, TikTok, YouTube, LinkedIn, X, Pinterest, Discord, and Slack. A maintained overlay rejects generated authorization URLs containing an undefined client/app identifier before redirect and returns a setup-focused message in Postiz. This overlay is re-applied idempotently whenever the private Postiz configuration is prepared.
+
 Dry runs never upload or create remote state. Execution requires owner/approver authorization plus explicit external-action confirmation. MP4 files must resolve beneath `PUBLISHING_MEDIA_ROOTS`. Publishing jobs use one execution attempt and content-derived operation IDs because a provider timeout can leave uncertain remote state.

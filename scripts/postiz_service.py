@@ -44,6 +44,12 @@ BACKEND_URL = "http://127.0.0.1:3000"
 ORCHESTRATOR_URL = "http://127.0.0.1:3002/health/status"
 FRONTEND_URL = "http://localhost:4200"
 LOCAL_SESSION_URL = f"{FRONTEND_URL}/api/trendrelay-local-session"
+POSTIZ_INTEGRATIONS_CONTROLLER = (
+    SOURCE / "apps/backend/src/api/routes/integrations.controller.ts"
+)
+POSTIZ_ADD_PROVIDER_COMPONENT = (
+    SOURCE / "apps/frontend/src/components/launches/add.provider.component.tsx"
+)
 ADMIN_EMAIL = "admin@trendrelay.local"
 POSTIZ_REPOSITORY = "https://github.com/gitroomhq/postiz-app.git"
 POSTIZ_REVISION = "7236213ea4520bd67b45688c2787d1f4586b3b51"
@@ -142,6 +148,8 @@ def _redis_ready(commands: dict[str, Path | None]) -> bool:
             return client.recv(64).startswith(b"+PONG")
     except OSError:
         return False
+
+
 def _temporal_ready(commands: dict[str, Path | None]) -> bool:
     executable = commands["temporal"]
     if not executable:
@@ -254,6 +262,64 @@ def ensure_private_configuration() -> None:
         raise RuntimeError("TrendRelay's Postiz local-session route is missing.")
     LOCAL_ROUTE_TARGET.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(LOCAL_ROUTE_SOURCE, LOCAL_ROUTE_TARGET)
+    _apply_provider_readiness_overlay()
+
+
+def _apply_provider_readiness_overlay() -> None:
+    backend = POSTIZ_INTEGRATIONS_CONTROLLER.read_text(encoding="utf-8")
+    backend_needle = """      const { codeVerifier, state, url } =
+        await integrationProvider.generateAuthUrl(getExternalUrl);
+"""
+    backend_replacement = (
+        backend_needle
+        + """
+      if (!url || /(?:^|[?&])(client_id|client_key|app_id)=undefined(?:&|$)/.test(url)) {
+        return {
+          err: true,
+          reason: 'This platform app is not configured yet. Open TrendRelay Tools, choose Postiz Agent, and complete the platform setup first.',
+        };
+      }
+"""
+    )
+    if backend_replacement not in backend:
+        if backend_needle not in backend:
+            raise RuntimeError(
+                "Postiz provider readiness backend overlay no longer applies."
+            )
+        POSTIZ_INTEGRATIONS_CONTROLLER.write_text(
+            backend.replace(backend_needle, backend_replacement, 1),
+            encoding="utf-8",
+        )
+
+    frontend = POSTIZ_ADD_PROVIDER_COMPONENT.read_text(encoding="utf-8")
+    frontend_needle = """          const { url, err } = await (
+"""
+    frontend_replacement = """          const { url, err, reason } = await (
+"""
+    if frontend_replacement not in frontend:
+        if frontend_needle not in frontend:
+            raise RuntimeError(
+                "Postiz provider readiness frontend overlay no longer applies."
+            )
+        frontend = frontend.replace(frontend_needle, frontend_replacement, 1)
+    message_needle = """              t(
+                'could_not_connect_to_platform',
+                'Could not connect to the platform'
+              ),
+"""
+    message_replacement = """              reason ||
+                t(
+                  'could_not_connect_to_platform',
+                  'Could not connect to the platform'
+                ),
+"""
+    if message_replacement not in frontend:
+        if message_needle not in frontend:
+            raise RuntimeError(
+                "Postiz provider error-message overlay no longer applies."
+            )
+        frontend = frontend.replace(message_needle, message_replacement, 1)
+    POSTIZ_ADD_PROVIDER_COMPONENT.write_text(frontend, encoding="utf-8")
 
 
 def _stream(name: str, process: subprocess.Popen[str]) -> None:
@@ -283,9 +349,7 @@ def _start(
         start_new_session=not IS_WINDOWS,
     )
     if stream:
-        threading.Thread(
-            target=_stream, args=(name, process), daemon=True
-        ).start()
+        threading.Thread(target=_stream, args=(name, process), daemon=True).start()
     print(f"[Postiz] Started {name} monitor for PID {process.pid}.", flush=True)
     return process
 
@@ -358,7 +422,9 @@ def _start_infrastructure(
     if not _postgres_ready():
         executable = commands["postgres"]
         if not executable or not POSTGRES_DATA.is_dir():
-            raise RuntimeError("Native PostgreSQL 17 or its Postiz data directory is missing.")
+            raise RuntimeError(
+                "Native PostgreSQL 17 or its Postiz data directory is missing."
+            )
         log = LOGS / "postgres.log"
         result = subprocess.run(
             [
@@ -440,7 +506,9 @@ def _start_infrastructure(
     return postgres_owned
 
 
-def _run_checked(command: list[str], *, cwd: Path = ROOT, env: dict[str, str] | None = None) -> None:
+def _run_checked(
+    command: list[str], *, cwd: Path = ROOT, env: dict[str, str] | None = None
+) -> None:
     result = subprocess.run(
         command,
         cwd=cwd,
@@ -451,7 +519,9 @@ def _run_checked(command: list[str], *, cwd: Path = ROOT, env: dict[str, str] | 
         check=False,
     )
     if result.returncode != 0:
-        raise RuntimeError(f"Command failed with exit code {result.returncode}: {command[0]}")
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}: {command[0]}"
+        )
 
 
 def _install_native_dependencies() -> dict[str, Path | None]:
@@ -497,11 +567,17 @@ def _prepare_source(commands: dict[str, Path | None]) -> None:
         _run_checked([git, "init"], cwd=SOURCE)
         _run_checked([git, "remote", "add", "origin", POSTIZ_REPOSITORY], cwd=SOURCE)
     revision = subprocess.run(
-        [git, "rev-parse", "HEAD"], cwd=SOURCE, capture_output=True, text=True, check=False
+        [git, "rev-parse", "HEAD"],
+        cwd=SOURCE,
+        capture_output=True,
+        text=True,
+        check=False,
     ).stdout.strip()
     if revision != POSTIZ_REVISION:
         print(f"[Postiz setup] Fetching Postiz {POSTIZ_VERSION}...", flush=True)
-        _run_checked([git, "fetch", "--depth", "1", "origin", POSTIZ_REVISION], cwd=SOURCE)
+        _run_checked(
+            [git, "fetch", "--depth", "1", "origin", POSTIZ_REVISION], cwd=SOURCE
+        )
         _run_checked([git, "checkout", "--detach", "FETCH_HEAD"], cwd=SOURCE)
     if not (SOURCE / "node_modules").is_dir():
         corepack = commands["corepack"]
@@ -509,7 +585,13 @@ def _prepare_source(commands: dict[str, Path | None]) -> None:
             raise RuntimeError("Corepack is required to install Postiz dependencies.")
         print("[Postiz setup] Installing pinned Postiz dependencies...", flush=True)
         _run_checked(
-            [str(corepack), "pnpm", "install", "--frozen-lockfile", "--reporter=append-only"],
+            [
+                str(corepack),
+                "pnpm",
+                "install",
+                "--frozen-lockfile",
+                "--reporter=append-only",
+            ],
             cwd=SOURCE,
         )
 
@@ -525,7 +607,9 @@ def _prepare_postgres(commands: dict[str, Path | None]) -> None:
     if not POSTGRES_DATA.is_dir() or not (POSTGRES_DATA / "PG_VERSION").is_file():
         DATA.mkdir(parents=True, exist_ok=True)
         password = _private_value(password_path, lambda: secrets.token_urlsafe(32))
-        print("[Postiz setup] Initializing the isolated PostgreSQL cluster...", flush=True)
+        print(
+            "[Postiz setup] Initializing the isolated PostgreSQL cluster...", flush=True
+        )
         _run_checked(
             [
                 str(initdb),
@@ -597,7 +681,10 @@ def _prepare_postgres(commands: dict[str, Path | None]) -> None:
 
 def prepare_service() -> int:
     if not IS_WINDOWS:
-        print("Native self-hosted Postiz preparation currently supports Windows.", file=sys.stderr)
+        print(
+            "Native self-hosted Postiz preparation currently supports Windows.",
+            file=sys.stderr,
+        )
         return 1
     try:
         DATA.mkdir(parents=True, exist_ok=True)
@@ -608,7 +695,9 @@ def prepare_service() -> int:
         corepack = commands["corepack"]
         if not corepack:
             raise RuntimeError("Corepack is required to initialize Postiz.")
-        print("[Postiz setup] Applying the isolated Postiz database schema...", flush=True)
+        print(
+            "[Postiz setup] Applying the isolated Postiz database schema...", flush=True
+        )
         _run_checked(
             [
                 str(corepack),
@@ -631,17 +720,27 @@ def prepare_service() -> int:
         print(str(error), file=sys.stderr)
         return 1
 
+
 def run_service() -> int:
     if not IS_WINDOWS:
         print("Native self-hosted Postiz currently supports Windows.", file=sys.stderr)
         return 1
     commands = native_commands()
-    missing = [name for name in ("postgres", "redis", "temporal", "corepack") if not commands[name]]
+    missing = [
+        name
+        for name in ("postgres", "redis", "temporal", "corepack")
+        if not commands[name]
+    ]
     if missing:
-        print("Missing native Postiz dependencies: " + ", ".join(missing), file=sys.stderr)
+        print(
+            "Missing native Postiz dependencies: " + ", ".join(missing), file=sys.stderr
+        )
         return 1
     if not (SOURCE / "node_modules").is_dir():
-        print("Postiz dependencies are missing. Run the Postiz preparation step.", file=sys.stderr)
+        print(
+            "Postiz dependencies are missing. Run the Postiz preparation step.",
+            file=sys.stderr,
+        )
         return 1
 
     ensure_private_configuration()
@@ -688,7 +787,9 @@ def run_service() -> int:
             for process in owned:
                 code = process.poll()
                 if code is not None:
-                    raise RuntimeError(f"A managed Postiz process exited with code {code}.")
+                    raise RuntimeError(
+                        f"A managed Postiz process exited with code {code}."
+                    )
             time.sleep(0.5)
     except KeyboardInterrupt:
         return 0
@@ -728,7 +829,18 @@ def main() -> int:
         else:
             for name, value in report.items():
                 print(f"{name}: {value}")
-        return 0 if all(report[name] for name in ("source_ready", "dependencies_ready", "configuration_ready")) else 1
+        return (
+            0
+            if all(
+                report[name]
+                for name in (
+                    "source_ready",
+                    "dependencies_ready",
+                    "configuration_ready",
+                )
+            )
+            else 1
+        )
     if args.command == "configure":
         ensure_private_configuration()
         print("Private Postiz configuration and local-session overlay are ready.")
