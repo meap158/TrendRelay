@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import webbrowser
+from pathlib import Path
 from typing import Any
 
 from trendrelay_api.integrations.agent_reach import diagnostic_report
@@ -24,6 +26,99 @@ LAST30DAYS_KEYS = (
     "XAI_API_KEY",
     "XQUIK_API_KEY",
 )
+
+POSTIZ_ENV_PATH = PROJECT_ROOT / ".tools" / "postiz-app" / "source" / ".env"
+POSTIZ_OAUTH_PROVIDERS = {
+    "reddit": {
+        "label": "Reddit",
+        "client_id_key": "REDDIT_CLIENT_ID",
+        "client_secret_key": "REDDIT_CLIENT_SECRET",
+        "create_url": "https://www.reddit.com/prefs/apps",
+        "redirect_uri": "http://localhost:4200/integrations/social/reddit",
+    }
+}
+
+
+def _configured_dotenv_names(path: Path, names: tuple[str, ...]) -> set[str]:
+    env_path = path
+    if not env_path.is_file():
+        return set()
+    configured: set[str] = set()
+    for raw_line in env_path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key.strip() in names and value.strip().strip("\"'"):
+            configured.add(key.strip())
+    return configured
+
+
+def postiz_oauth_providers() -> list[dict[str, Any]]:
+    configured = _configured_dotenv_names(
+        POSTIZ_ENV_PATH,
+        tuple(
+            key
+            for provider in POSTIZ_OAUTH_PROVIDERS.values()
+            for key in (provider["client_id_key"], provider["client_secret_key"])
+        ),
+    )
+    return [
+        {
+            "id": identifier,
+            "label": provider["label"],
+            "configured": {
+                "client_id": provider["client_id_key"] in configured,
+                "client_secret": provider["client_secret_key"] in configured,
+            },
+            "create_url": provider["create_url"],
+            "redirect_uri": provider["redirect_uri"],
+        }
+        for identifier, provider in POSTIZ_OAUTH_PROVIDERS.items()
+    ]
+
+
+def save_postiz_oauth_credentials(
+    provider_id: str, client_id: str, client_secret: str
+) -> dict[str, str]:
+    provider = POSTIZ_OAUTH_PROVIDERS.get(provider_id)
+    if not provider:
+        raise KeyError(provider_id)
+    values = {"client_id": client_id.strip(), "client_secret": client_secret.strip()}
+    if any(not value or "\n" in value or "\r" in value for value in values.values()):
+        raise ValueError("Both OAuth values are required and must be single-line values.")
+    if any(len(value) > 4096 for value in values.values()):
+        raise ValueError("OAuth values are too long.")
+    if not POSTIZ_ENV_PATH.is_file():
+        raise RuntimeError("Local Postiz configuration is missing. Start TrendRelay first.")
+
+    replacements = {
+        provider["client_id_key"]: values["client_id"],
+        provider["client_secret_key"]: values["client_secret"],
+    }
+    lines = POSTIZ_ENV_PATH.read_text(encoding="utf-8-sig").splitlines()
+    written: set[str] = set()
+    updated: list[str] = []
+    for line in lines:
+        key = line.split("=", 1)[0].strip() if "=" in line else ""
+        if key in replacements:
+            updated.append(f"{key}={json.dumps(replacements[key])}")
+            written.add(key)
+        else:
+            updated.append(line)
+    for key, value in replacements.items():
+        if key not in written:
+            updated.append(f"{key}={json.dumps(value)}")
+    temporary = POSTIZ_ENV_PATH.with_suffix(".env.tmp")
+    temporary.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    os.replace(temporary, POSTIZ_ENV_PATH)
+    return {
+        "status": "saved",
+        "message": (
+            f"{provider['label']} app credentials were saved locally. Restart TrendRelay "
+            "once, then connect the account again in Postiz."
+        ),
+    }
 
 
 def _configured_names(names: tuple[str, ...]) -> list[str]:
@@ -108,10 +203,12 @@ def setup_report(tool_id: str) -> dict[str, Any]:
         )
     elif tool_id == "postiz-agent":
         status = postiz_status()
+        oauth_providers = postiz_oauth_providers()
+        reddit_ready = oauth_providers[0]["configured"]
         report.update(
             summary=(
                 "TrendRelay runs Postiz locally on Windows. Open the local console to "
-                "connect TikTok, Instagram, or YouTube through each platform's OAuth flow."
+                "connect supported social platforms through each platform's OAuth flow."
             ),
             requirements=[
                 *prerequisites,
@@ -130,6 +227,16 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                     "TrendRelay's private local API key is verified."
                     if status["authenticated"]
                     else "Restart TrendRelay to initialize the private local admin and API key.",
+                ),
+                _requirement(
+                    "reddit-oauth-app",
+                    "Reddit app credentials",
+                    "ready"
+                    if reddit_ready["client_id"] and reddit_ready["client_secret"]
+                    else "optional",
+                    "Reddit OAuth is configured."
+                    if reddit_ready["client_id"] and reddit_ready["client_secret"]
+                    else "Required before connecting Reddit; configure it below.",
                 ),
                 _requirement(
                     "social-integrations",
@@ -156,6 +263,7 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                 },
             ],
             connection=status,
+            provider_credentials=oauth_providers,
         )
     elif tool_id == "last30days-skill":
         configured = _configured_names(LAST30DAYS_KEYS)

@@ -38,6 +38,13 @@ type SetupAction = {
   href?: string;
   requires_confirmation?: boolean;
 };
+type ProviderCredential = {
+  id: string;
+  label: string;
+  configured: { client_id: boolean; client_secret: boolean };
+  create_url: string;
+  redirect_uri: string;
+};
 type SetupReport = {
   tool_id: string;
   title: string;
@@ -47,6 +54,7 @@ type SetupReport = {
   credential_values_exposed: false;
   configured_secret_names?: string[];
   supported_secret_names?: string[];
+  provider_credentials?: ProviderCredential[];
   connection?: { state?: string; message?: string; service_ready?: boolean; authenticated?: boolean };
 };
 type ReachDiagnostics = {
@@ -73,6 +81,8 @@ export default function ToolsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [setup, setSetup] = useState<SetupReport | null>(null);
   const [reachDiagnostics, setReachDiagnostics] = useState<ReachDiagnostics | null>(null);
+  const [redditClientId, setRedditClientId] = useState("");
+  const [redditClientSecret, setRedditClientSecret] = useState("");
 
   const refresh = useCallback(async () => {
     const payload = await responseJson<{ tools: Tool[] }>(await apiFetch("/api/tools"));
@@ -204,6 +214,36 @@ export default function ToolsPage() {
     }
   }
 
+  async function savePostizCredentials(provider: ProviderCredential) {
+    if (!redditClientId.trim() || !redditClientSecret.trim()) {
+      setError("Enter both the Reddit client ID and client secret.");
+      return;
+    }
+    if (!window.confirm("Save these Reddit app credentials only on this computer?")) return;
+    setBusy(`postiz-${provider.id}-credentials`);
+    setError(null);
+    try {
+      const payload = await responseJson<{ result: { message: string } }>(
+        await apiFetch("/api/tools/postiz-agent/setup/platform-credentials", {
+          method: "POST",
+          body: JSON.stringify({
+            provider: provider.id,
+            client_id: redditClientId,
+            client_secret: redditClientSecret,
+            confirm_external_action: true,
+          }),
+        }),
+      );
+      setRedditClientId("");
+      setRedditClientSecret("");
+      setMessage(payload.result.message);
+      await loadSetup("postiz-agent");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Reddit app settings could not be saved.");
+    } finally {
+      setBusy(null);
+    }
+  }
   if (loading) return <main className="tools-page"><p>Loading local tool registry…</p></main>;
   if (!user) return <main className="tools-page"><h1>Sign in to manage tools.</h1><Link href="/sign-in?next=%2Ftools">Sign in</Link></main>;
 
@@ -288,6 +328,46 @@ export default function ToolsPage() {
               </article>
             ))}
           </div>
+          {setup.tool_id === "postiz-agent" && setup.provider_credentials?.map((provider) => (
+            <div className="oauth-credential-card" key={provider.id}>
+              <div className="oauth-credential-heading">
+                <div><strong>{provider.label} app</strong><p>Create a web app, copy its two values here, then restart TrendRelay once.</p></div>
+                <span className={provider.configured.client_id && provider.configured.client_secret ? "configured" : "missing"}>
+                  {provider.configured.client_id && provider.configured.client_secret ? "Configured" : "Needs setup"}
+                </span>
+              </div>
+              <p><a href={provider.create_url} target="_blank" rel="noreferrer">Create or open the Reddit app</a></p>
+              <label>Redirect URI <code>{provider.redirect_uri}</code></label>
+              <label>
+                Client ID
+                <input
+                  autoComplete="off"
+                  onChange={(event) => setRedditClientId(event.target.value)}
+                  placeholder={provider.configured.client_id ? "Configured — enter to replace" : "Paste the Reddit client ID"}
+                  spellCheck={false}
+                  value={redditClientId}
+                />
+              </label>
+              <label>
+                Client secret
+                <input
+                  autoComplete="new-password"
+                  onChange={(event) => setRedditClientSecret(event.target.value)}
+                  placeholder={provider.configured.client_secret ? "Configured — enter to replace" : "Paste the Reddit client secret"}
+                  spellCheck={false}
+                  type="password"
+                  value={redditClientSecret}
+                />
+              </label>
+              <button
+                className="setup-primary"
+                disabled={busy === `postiz-${provider.id}-credentials`}
+                onClick={() => void savePostizCredentials(provider)}
+                type="button"
+              >Save Reddit settings</button>
+              <p className="privacy-note">Saved only in Postiz&apos;s ignored local configuration. Existing values are never returned to this page.</p>
+            </div>
+          ))}
           {setup.configured_secret_names && (
             <div className="secret-checklist">
               <strong>Optional provider keys</strong>

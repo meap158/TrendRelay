@@ -260,6 +260,8 @@ TrendRelay embeds [gitroomhq/postiz-app](https://github.com/gitroomhq/postiz-app
 
 From `/publish`: enable the Postiz tool, open the local console, connect TikTok, Instagram, or YouTube through each platform's own OAuth flow, return to TrendRelay, and choose **Refresh accounts**. Self-hosting removes the Postiz Cloud login; it does not remove the platforms' requirement for developer-app credentials and account authorization. Those values belong in the ignored Postiz `.env` and are never returned by TrendRelay.
 
+For Reddit, open **Tools → Postiz Agent → Setup**. Create a Reddit **web app** and register the exact redirect URI `http://localhost:4200/integrations/social/reddit`, then enter its client ID and client secret in the local wizard. TrendRelay reports only whether each value is configured, preserves it across Postiz configuration refreshes, and never returns the value to the browser. Restart TrendRelay once after saving. A Reddit authorization URL containing `client_id=undefined` means this setup step has not been completed.
+
 Local troubleshooting commands:
 
 ```powershell

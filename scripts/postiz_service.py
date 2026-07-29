@@ -239,8 +239,15 @@ def ensure_private_configuration() -> None:
         "POSTIZ_LOCAL_ADMIN_EMAIL": ADMIN_EMAIL,
         "POSTIZ_LOCAL_ADMIN_PASSWORD": admin_password,
     }
+    preserved: list[str] = []
+    if PRIVATE_ENV.is_file():
+        for line in PRIVATE_ENV.read_text(encoding="utf-8-sig").splitlines():
+            key = line.split("=", 1)[0].strip() if "=" in line else ""
+            if not key or key not in values:
+                preserved.append(line)
+    rendered = [f'{key}="{value}"' for key, value in values.items()]
     PRIVATE_ENV.write_text(
-        "".join(f'{key}="{value}"\n' for key, value in values.items()),
+        "\n".join([*rendered, *preserved]) + "\n",
         encoding="utf-8",
     )
     if not LOCAL_ROUTE_SOURCE.is_file():

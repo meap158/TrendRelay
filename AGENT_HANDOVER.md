@@ -1,6 +1,6 @@
 # Agent Handover
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 
 ## Current state
 
@@ -13,6 +13,7 @@ Last updated: 2026-07-28
 - The root `/` screen is a compact media-to-publish console. It submits authenticated, role-gated Douyin links to durable `douyin_download` jobs, shows resulting artifacts, and deep-links each file into Studio or Postiz publishing. `npm run douyin --` remains the full CLI. Downloads, SQLite state, ephemeral configuration, upstream source, dependencies, and credentials remain ignored.
 - Social publishing uses pinned `gitroomhq/postiz-agent` 2.0.15 at `41c5a9dbd6b2776863e7c05c22e7a385c208321c` and embedded `gitroomhq/postiz-app` 2.21.7 at `7236213ea4520bd67b45688c2787d1f4586b3b51`; both are AGPL-3.0.
 - `scripts/postiz_service.py` idempotently prepares and supervises native Windows PostgreSQL, Redis, Temporal, Postiz backend/orchestrator/frontend, local admin bootstrapping, and local API-key rotation. `npm run postiz --` uses only that private self-hosted API key for discovery and governed short-video drafts/schedules.
+- The Postiz Tools wizard includes a Reddit web-app setup form with the exact local callback. Client ID/secret writes are loopback-only, explicitly confirmed, stored only in the ignored Postiz `.env`, preserved by configuration refreshes, and represented in API/UI status only as configured booleans.
 - `config/tool-catalog.json`, the `npm run tools --` CLI, the loopback-only lifecycle API, and `/tools` catalogue all seven managed capability projects. The Tools page is also the provider setup hub: Douyin owns automatic cookie capture, Postiz opens its authenticated local console and Meta Ads uses a confirmed fixed-command authentication launcher, Last 30 Days exposes only configured optional secret names, Agent Reach provides local diagnostics, and no-auth tools link to their operational surface.
 - The pinned Last 30 Days 3.16.0 source is installed and active locally. `npm run research --`, the research API, and `/research` execute its stable agent JSON 1.x contract and persist workspace-scoped evidence.
 - The pinned OpenMontage source is installed and active locally. `/studio` and `npm run studio --` expose clip-factory/podcast-repurpose preflights plus approved, zero-network local VideoTrimmer jobs with immutable-source checks, manual clip ranges, budget enforcement, verified outputs, and provenance.

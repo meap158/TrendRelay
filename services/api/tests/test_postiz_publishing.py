@@ -163,3 +163,52 @@ def test_postiz_dashboard_launcher_opens_fixed_local_dashboard(monkeypatch) -> N
 
     assert result["status"] == "launched"
     assert opened == [("http://localhost:4200/api/trendrelay-local-session", 2)]
+
+
+def test_postiz_setup_reports_reddit_readiness_without_values(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from trendrelay_api import tool_setup
+
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        'REDDIT_CLIENT_ID="hidden-client"\nREDDIT_CLIENT_SECRET="hidden-secret"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(tool_setup, "POSTIZ_ENV_PATH", env_path)
+    monkeypatch.setattr(
+        tool_setup,
+        "postiz_status",
+        lambda: {"service_ready": True, "authenticated": True},
+    )
+
+    report = tool_setup.setup_report("postiz-agent")
+
+    reddit = report["provider_credentials"][0]
+    assert reddit["configured"] == {"client_id": True, "client_secret": True}
+    assert reddit["redirect_uri"] == (
+        "http://localhost:4200/integrations/social/reddit"
+    )
+    assert "hidden-client" not in str(report)
+    assert "hidden-secret" not in str(report)
+
+
+def test_postiz_reddit_credentials_are_saved_without_erasing_configuration(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from trendrelay_api import tool_setup
+
+    env_path = tmp_path / ".env"
+    env_path.write_text('DATABASE_URL="local-db"\nREDDIT_CLIENT_ID="old"\n', encoding="utf-8")
+    monkeypatch.setattr(tool_setup, "POSTIZ_ENV_PATH", env_path)
+
+    result = tool_setup.save_postiz_oauth_credentials(
+        "reddit", "new-client", "new-secret"
+    )
+
+    saved = env_path.read_text(encoding="utf-8")
+    assert 'DATABASE_URL="local-db"' in saved
+    assert 'REDDIT_CLIENT_ID="new-client"' in saved
+    assert 'REDDIT_CLIENT_SECRET="new-secret"' in saved
+    assert "new-client" not in str(result)
+    assert "new-secret" not in str(result)
