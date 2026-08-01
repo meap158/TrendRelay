@@ -84,6 +84,8 @@ Local development starts with `LOCAL_AUTH_BYPASS=true`. Requests from `127.0.0.1
 
 The global toolbar uses an outlined bell for job notifications. It keeps a compact vertical list, wraps long source URLs and errors instead of scrolling horizontally, distinguishes unread job-status changes, and supports per-item or **Mark all read** actions. Read state is stored locally per user and does not remove job history.
 
+Each main workspace tab keeps its compact page identity and primary workspace context beneath the global toolbar while the page scrolls. Operational details remain in the normal document flow: for example, Library keeps its title and workspace selector visible, while media-processing and transcription status scroll with the content.
+
 The bypass is denied to LAN clients and ignored unless `ENVIRONMENT=development`; bearer authentication remains available and takes precedence when a token is supplied. Set `LOCAL_AUTH_BYPASS=false` to exercise the real Supabase/device sign-in flow locally. Never treat the local identity as a deployment account.
 ## Browser authentication
 

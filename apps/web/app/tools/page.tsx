@@ -257,17 +257,21 @@ export default function ToolsPage() {
 
   return (
     <main className="tools-page">
-      <p className="eyebrow">LOCAL TOOLBOX</p>
-      <h1>Install, configure, then use.</h1>
-      <p className="lede">
-        Each provider keeps its own setup path: browser connection, OAuth, optional API keys, diagnostics, or no extra setup at all.
-        Credential values stay outside this catalog and are never returned to the interface.
-      </p>
-      <div className="registry-summary">
-        <span>{tools.length} catalogued projects</span>
-        <span>{tools.filter((tool) => tool.installed).length} installed</span>
-        <span>{tools.filter((tool) => tool.active).length} active</span>
-      </div>
+      <header className="page-sticky-shell tools-sticky-header">
+        <div className="tools-sticky-copy">
+          <p className="eyebrow">LOCAL TOOLBOX</p>
+          <h1>Install, configure, then use.</h1>
+          <p className="lede">
+            Each provider keeps its own setup path: browser connection, OAuth, optional API keys, diagnostics, or no extra setup at all.
+            Credential values stay outside this catalog and are never returned to the interface.
+          </p>
+        </div>
+        <div className="registry-summary">
+          <span>{tools.length} catalogued projects</span>
+          <span>{tools.filter((tool) => tool.installed).length} installed</span>
+          <span>{tools.filter((tool) => tool.active).length} active</span>
+        </div>
+      </header>
       <section className="access-guides" aria-labelledby="access-guides-title">
         <div className="access-guides-heading">
           <div>

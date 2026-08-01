@@ -303,18 +303,20 @@ export default function LibraryPage() {
 
   return (
     <main className="library-page">
-      <header className="library-heading">
-        <div>
-          <p className="section-kicker">Creative intelligence</p>
-          <h1>Media Library</h1>
-          <p>Keep originals immutable, review usage rights, and turn reference clips into searchable creative recipes.</p>
-        </div>
-        <label>Workspace
-          <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
-            {workspaces.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.role}</option>)}
-          </select>
-        </label>
-      </header>
+      <div className="page-sticky-shell library-sticky-header">
+        <header className="library-heading">
+          <div>
+            <p className="section-kicker">Creative intelligence</p>
+            <h1>Media Library</h1>
+            <p>Keep originals immutable, review usage rights, and turn reference clips into searchable creative recipes.</p>
+          </div>
+          <label>Workspace
+            <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
+              {workspaces.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.role}</option>)}
+            </select>
+          </label>
+        </header>
+      </div>
 
       {error && <p className="error-banner">{error}</p>}
       {message && <p className="campaign-message">{message}</p>}

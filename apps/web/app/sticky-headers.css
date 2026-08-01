@@ -1,0 +1,126 @@
+:root {
+  --app-toolbar-offset: 52px;
+}
+
+.page-sticky-shell,
+.console-page > .console-heading,
+.research-radar > .research-radar-header,
+.opportunity-page > .opportunity-header,
+.campaign-page > .campaign-heading,
+.attribution-page > .attribution-heading,
+.publish-page > header:first-child {
+  position: sticky;
+  top: var(--app-toolbar-offset);
+  z-index: 80;
+  isolation: isolate;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 12px 18px -20px rgba(17, 24, 39, 0.75);
+}
+
+.research-radar > .research-radar-header,
+.opportunity-page > .opportunity-header,
+.publish-page > header:first-child,
+.tools-sticky-header {
+  box-sizing: border-box;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 0 0 6px 6px;
+}
+
+.page-sticky-shell h1,
+.console-page > .console-heading h1,
+.research-radar > .research-radar-header h1,
+.opportunity-page > .opportunity-header h1,
+.campaign-page > .campaign-heading h1,
+.attribution-page > .attribution-heading h1,
+.publish-page > header:first-child h1 {
+  font-size: clamp(1.25rem, 2.1vw, 1.75rem);
+}
+
+.library-sticky-header {
+  margin-bottom: 16px;
+  padding-top: 8px;
+  background: var(--bg);
+}
+
+.library-sticky-header .library-heading {
+  margin-bottom: 8px;
+  padding: 12px 16px;
+}
+
+.tools-sticky-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.tools-sticky-header h1 {
+  margin: 4px 0 6px;
+}
+
+.tools-sticky-header .lede {
+  margin: 0;
+  max-width: 760px;
+}
+
+.tools-sticky-header .registry-summary {
+  margin: 0;
+  justify-content: flex-end;
+}
+
+@media (min-width: 901px) {
+  .console-page .download-composer,
+  .console-page .download-queue-card {
+    top: 166px;
+    max-height: calc(100vh - 182px);
+  }
+
+  .library-page .library-browser {
+    top: 166px;
+    max-height: calc(100vh - 182px);
+  }
+
+  .opportunity-page .offer-import-panel,
+  .campaign-page .campaign-sidebar,
+  .attribution-page .attribution-side {
+    top: 174px;
+    max-height: calc(100vh - 190px);
+  }
+}
+
+@media (max-width: 900px) {
+  :root {
+    --app-toolbar-offset: 113px;
+  }
+
+  .tools-sticky-header {
+    grid-template-columns: 1fr;
+  }
+
+  .tools-sticky-header .registry-summary {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .page-sticky-shell,
+  .research-radar > .research-radar-header,
+  .opportunity-page > .opportunity-header,
+  .publish-page > header:first-child {
+    padding: 10px 12px;
+  }
+
+  .library-sticky-header .library-heading {
+    padding: 10px 12px;
+  }
+
+  .tools-sticky-header .lede,
+  .publish-page > header:first-child .lede {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+}

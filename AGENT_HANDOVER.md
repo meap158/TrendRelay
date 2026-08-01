@@ -1,6 +1,6 @@
 # Agent Handover
 
-Last updated: 2026-08-01
+Last updated: 2026-08-02
 
 ## Current state
 
@@ -10,6 +10,7 @@ Last updated: 2026-08-01
 - The pinned `jiji262/douyin-downloader` 2.0.0 provider is integrated as `media.douyin-downloader` and installed locally at revision `ef3ad18c2b50e38e534f72aabe2b3fbb0b3fadd7`.
 - Local development uses a loopback-only `local-admin@trendrelay.local` AAL2 bypass by default, automatically creates one Local Workspace owner membership, and marks the UI with a Local admin badge. It is unavailable to LAN clients and outside the development environment; set `LOCAL_AUTH_BYPASS=false` to exercise real authentication locally.
 - The global toolbar exposes job updates through an outlined notification bell rather than a Jobs text button. Each `job_id:status` transition is an unread notification, displayed in a wrapping vertical list with per-row and mark-all-read controls. Read keys are bounded and stored locally per user; reading never deletes durable job history.
+- All nine primary tabs now share a compact sticky page-context treatment beneath the global toolbar. Existing workspace selectors remain visible where the page header owns them; Library keeps only Creative intelligence, Media Library, its purpose, and Workspace sticky, while processing/transcription status remains ordinary scrolling content. Desktop sticky side panels are offset below the persistent context, and the shared header adapts below the two-row mobile navigation.
 - The media console now owns Douyin authentication setup: **Connect Douyin** starts a loopback-only, owner-confirmed connection process, installs isolated Playwright/Chromium login support if missing, opens a visible Douyin window, polls for the required session cookies without terminal input, stores them only in ignored `.data/douyin/cookies.json`, and refreshes readiness. Chromium is never used for media downloading.
 - The root `/` screen is a focused batch Douyin downloader. It extracts and deduplicates supported links from pasted share text, previews detected video/profile/collection sources, ignores unsupported URLs, exposes profile mode and 10/20/50/100 per-source limits progressively, submits one explicit durable `douyin_download` action without a redundant confirmation dialog, and filters the live queue by active/completed/attention state. Its primary download action is disabled only during submission; incomplete input or provider setup produces a specific inline correction and missing input returns focus to the link field. The label sits outside the focused textarea shell, the three-step guide is one compact row, and history uses five-row progressive disclosure while active work remains expanded. Completed batches link to their folder, Library/Studio preparation, campaign planning, and Postiz publishing. `npm run douyin --` remains the full CLI. Downloads, SQLite state, ephemeral configuration, upstream source, dependencies, and credentials remain ignored.
 - Next.js serves `apps/web/app/icon.svg` as the product favicon: a green rounded square with a white rising four-node relay path, designed to remain distinct at browser-tab sizes.
@@ -117,6 +118,8 @@ Last updated: 2026-08-01
 - Opportunity validation covers required/optional CSV fields, monetary normalization, restrictions, idempotent re-import, workspace isolation, research evidence handoff, exact scoring contributions, ranked listing, affiliate URL propagation, and opportunity-linked campaign creation. Browser QA imported an offer and produced a persisted nine-factor opportunity card under local admin; its isolated demo records were removed afterward.
 
 - Attribution validation covers confirmation and role gates, HTTPS-only destinations, country routing, parameter preservation and collision rejection, visitor-query isolation, privacy HMACs, workspace isolation, click matching, idempotent approval/reversal imports, unavailable-offer failure, and multi-currency summaries. A fresh SQLite database upgrades through `20260726_0010`; the web/desktop build includes `/attribution`; local API and route health checks return 200. The in-app browser could not revisit the loopback page because its URL policy blocked the action, so no new visual claim is made for this slice.
+
+- Sticky page-context validation: ESLint passes and the Next.js production compiler completes. The production build then stops on the pre-existing Media Library `Uint8Array<ArrayBufferLike>[]`/`BlobPart[]` TypeScript error at `apps/web/app/library/page.tsx:134`; this sticky-header change does not touch that helper. The in-app browser could not access loopback (`ERR_BLOCKED_BY_CLIENT`), so no new visual-runtime claim is recorded.
 
 ## Next recommended action
 
