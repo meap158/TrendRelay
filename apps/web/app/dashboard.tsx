@@ -239,7 +239,16 @@ export default function Dashboard() {
   async function fetchMedia(event: FormEvent) {
     event.preventDefault();
     if (!urls.length) {
-      setError("Paste at least one complete Douyin URL or copied share message.");
+      setError("Paste a specific Douyin video, profile, collection, music, or v.douyin.com share link.");
+      requestAnimationFrame(() => linkInputRef.current?.focus());
+      return;
+    }
+    if (!canFetch) {
+      setError(
+        providerReady
+          ? "Connect or refresh your Douyin session before starting this download."
+          : "Enable the Douyin downloader in Tools before starting this download.",
+      );
       return;
     }
     setBusy(true);
@@ -385,7 +394,7 @@ export default function Dashboard() {
           </details>
 
           <div className="download-submit-row">
-            <button className="primary-button download-button" disabled={busy || !canFetch || urls.length === 0}>
+            <button className="primary-button download-button" disabled={busy}>
               {busy ? "Adding to queue…" : urls.length > 1 ? "Download " + urls.length + " sources" : "Start download"}
             </button>
             <small>Only download media you are authorized to retain and reuse.</small>
