@@ -19,6 +19,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
+node -e "process.exit(Number(process.versions.node.split('.')[0]) >= 22 ? 0 : 1)"
+if errorlevel 1 (
+  echo TrendRelay requires Node.js 22 or newer.
+  echo Update Node.js from https://nodejs.org/ and run start.cmd again.
+  pause
+  exit /b 1
+)
 where npm >nul 2>nul
 if errorlevel 1 (
   echo npm was not found. Reinstall Node.js with npm enabled.
@@ -34,10 +41,20 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist "node_modules\" (
-  echo Installing application dependencies for the first run...
-  call npm install
+python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)"
+if errorlevel 1 (
+  echo TrendRelay requires Python 3.12 or newer.
+  echo Update Python from https://www.python.org/downloads/ and run start.cmd again.
+  pause
+  exit /b 1
+)
+if not exist "node_modules" (
+  echo [Setup 1/4] Installing application dependencies...
+  echo This is a one-time download and may take several minutes.
+  call npm ci --no-audit --no-fund
   if errorlevel 1 goto :install_error
+) else (
+  echo [Setup 1/4] Application dependencies are ready.
 )
 
 if "%TRENDRELAY_DESKTOP_REQUESTED%"=="1" if not exist "node_modules\electron\dist\electron.exe" (
@@ -47,20 +64,21 @@ if "%TRENDRELAY_DESKTOP_REQUESTED%"=="1" if not exist "node_modules\electron\dis
 )
 
 if not exist ".venv\Scripts\python.exe" (
-  echo Creating the Python environment...
+  echo [Setup 2/4] Creating the Python environment...
   python -m venv .venv
   if errorlevel 1 goto :install_error
+) else (
+  echo [Setup 2/4] Python environment is ready.
 )
 
-if "%TRENDRELAY_CHECK_REQUESTED%"=="0" ".venv\Scripts\python.exe" -c "import trendrelay_api" >nul 2>nul
-if "%TRENDRELAY_CHECK_REQUESTED%"=="0" if errorlevel 1 (
-  echo Checking API dependencies...
-  ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check --quiet -e "services/api[dev]"
+if "%TRENDRELAY_CHECK_REQUESTED%"=="0" (
+  echo [Setup 3/4] Preparing API dependencies...
+  ".venv\Scripts\python.exe" scripts\bootstrap.py
   if errorlevel 1 goto :install_error
 )
 
 if "%TRENDRELAY_CHECK_REQUESTED%"=="0" (
-  echo Applying database migrations...
+  echo [Setup 4/4] Applying database migrations...
   ".venv\Scripts\python.exe" scripts\db.py upgrade
   if errorlevel 1 goto :install_error
 )
@@ -83,6 +101,7 @@ exit /b 0
 
 :install_error
 echo TrendRelay dependency setup failed. Review the error above and try again.
+echo If a download timed out, confirm GitHub and PyPI are reachable, then rerun start.cmd.
 pause
 exit /b 1
 

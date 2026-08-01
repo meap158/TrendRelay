@@ -116,6 +116,17 @@ def test_windows_launcher_applies_migrations_before_starting() -> None:
     assert migration < runner
 
 
+def test_windows_launcher_uses_observable_dependency_bootstrap() -> None:
+    launcher = (Path(__file__).resolve().parents[1] / "start.cmd").read_text(
+        encoding="utf-8"
+    )
+
+    assert r"scripts\bootstrap.py" in launcher
+    assert "--quiet" not in launcher
+    assert "npm ci --no-audit --no-fund" in launcher
+    assert "Node.js 22 or newer" in launcher
+    assert "Python 3.12 or newer" in launcher
+
 def test_windows_launcher_check_mode_uses_parsed_flag() -> None:
     launcher = (Path(__file__).resolve().parents[1] / "start.cmd").read_text(
         encoding="utf-8"

@@ -45,9 +45,15 @@ cd TrendRelay
 .\start.cmd
 ```
 
-The first run installs the application dependencies, creates the Python environment, applies database migrations, starts the local services with hot reload, and opens TrendRelay in your browser.
+The first run installs the application dependencies, creates the Python environment, applies database migrations, starts the local services with hot reload, and opens TrendRelay in your browser. Setup prints four numbered stages and keeps reporting progress during longer Python downloads; it stops with a useful network error instead of waiting indefinitely.
 
 If the browser does not open automatically, visit [http://127.0.0.1:3001](http://127.0.0.1:3001).
+
+If setup is interrupted, run `.\start.cmd` again. Completed work is reused. To verify an existing Python environment without downloading anything, run:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\bootstrap.py --check
+```
 
 ### Connect Douyin
 
@@ -92,9 +98,9 @@ Research integrations, Meta Ads collection, opportunity scoring, Studio producti
 Run the web and API development environment:
 
 ```powershell
-npm install
+npm ci
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e "services/api[dev]"
+.\.venv\Scripts\python.exe scripts\bootstrap.py
 .\.venv\Scripts\python.exe scripts\db.py upgrade
 npm run dev
 ```
