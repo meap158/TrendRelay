@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import AnyHttpUrl, BaseModel, Field, field_validator
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
@@ -446,60 +446,90 @@ def list_assets(
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> dict[str, Any]:
     membership(session, workspace_id, user.id)
-    query = select(MediaAsset).where(MediaAsset.workspace_id == workspace_id)
-    if platform:
-        query = query.where(MediaAsset.platform == platform)
-    elif platform_missing:
-        query = query.where(
-            (MediaAsset.platform.is_(None)) | (func.trim(MediaAsset.platform) == "")
-        )
-    if creator:
-        query = query.where(MediaAsset.creator == creator)
-    elif creator_missing:
-        query = query.where(
-            (MediaAsset.creator.is_(None)) | (func.trim(MediaAsset.creator) == "")
-        )
-    if rights_status:
-        query = query.where(MediaAsset.rights_status == rights_status)
-    if media_kind:
-        query = query.where(MediaAsset.media_kind == media_kind)
-    if max_duration_seconds:
-        query = query.where(MediaAsset.duration_ms <= max_duration_seconds * 1000)
+
+    def conditions(*, omit: str | None = None) -> list[Any]:
+        values: list[Any] = [MediaAsset.workspace_id == workspace_id]
+        if omit != "platform":
+            if platform:
+                values.append(MediaAsset.platform == platform)
+            elif platform_missing:
+                values.append(
+                    (MediaAsset.platform.is_(None))
+                    | (func.trim(MediaAsset.platform) == "")
+                )
+        if omit != "creator":
+            if creator:
+                values.append(MediaAsset.creator == creator)
+            elif creator_missing:
+                values.append(
+                    (MediaAsset.creator.is_(None))
+                    | (func.trim(MediaAsset.creator) == "")
+                )
+        if omit != "rights" and rights_status:
+            values.append(MediaAsset.rights_status == rights_status)
+        if omit != "media_kind" and media_kind:
+            values.append(MediaAsset.media_kind == media_kind)
+        if max_duration_seconds:
+            values.append(MediaAsset.duration_ms <= max_duration_seconds * 1000)
+        if q and q.strip():
+            escaped = (
+                q.casefold().strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            )
+            pattern = f"%{escaped}%"
+            transcript_match = select(MediaTranscript.id).where(
+                MediaTranscript.asset_id == MediaAsset.id,
+                func.lower(MediaTranscript.text).like(pattern, escape="\\"),
+            ).exists()
+            analysis_match = select(CreativeAnalysis.id).where(
+                CreativeAnalysis.asset_id == MediaAsset.id,
+                or_(
+                    func.lower(CreativeAnalysis.spoken_hook).like(pattern, escape="\\"),
+                    func.lower(CreativeAnalysis.text_hook).like(pattern, escape="\\"),
+                    func.lower(CreativeAnalysis.product_shown).like(pattern, escape="\\"),
+                    func.lower(CreativeAnalysis.analyst_notes).like(pattern, escape="\\"),
+                    func.lower(cast(CreativeAnalysis.keywords, String)).like(
+                        pattern, escape="\\"
+                    ),
+                ),
+            ).exists()
+            values.append(
+                or_(
+                    func.lower(MediaAsset.title).like(pattern, escape="\\"),
+                    func.lower(MediaAsset.caption).like(pattern, escape="\\"),
+                    func.lower(MediaAsset.creator).like(pattern, escape="\\"),
+                    func.lower(MediaAsset.platform).like(pattern, escape="\\"),
+                    func.lower(cast(MediaAsset.hashtags, String)).like(
+                        pattern, escape="\\"
+                    ),
+                    transcript_match,
+                    analysis_match,
+                )
+            )
+        return values
+
     order_by = {
         "newest": (MediaAsset.collected_at.desc(),),
         "oldest": (MediaAsset.collected_at.asc(),),
         "title": (func.lower(MediaAsset.title).asc(), MediaAsset.collected_at.desc()),
         "duration": (MediaAsset.duration_ms.desc(), MediaAsset.collected_at.desc()),
     }[sort]
-    items = session.scalars(query.order_by(*order_by).limit(250)).all()
+    total = session.scalar(
+        select(func.count(MediaAsset.id)).where(*conditions())
+    ) or 0
+    items = session.scalars(
+        select(MediaAsset).where(*conditions()).order_by(*order_by).limit(limit)
+    ).all()
     views = [_asset_view(session, item) for item in items]
-    if q:
-        needle = q.casefold().strip()
-        views = [
-            item
-            for item in views
-            if needle
-            in " ".join(
-                [
-                    item["title"],
-                    item["caption"] or "",
-                    item["creator"] or "",
-                    item["platform"] or "",
-                    " ".join(item["hashtags"]),
-                    " ".join(transcript["text"] for transcript in item["transcripts"]),
-                    " ".join((item["analysis"] or {}).get("keywords") or []),
-                    (item["analysis"] or {}).get("spoken_hook") or "",
-                    (item["analysis"] or {}).get("text_hook") or "",
-                    (item["analysis"] or {}).get("product_shown") or "",
-                    (item["analysis"] or {}).get("analyst_notes") or "",
-                ]
-            ).casefold()
-        ]
 
-    def facet(column: Any, *, missing_label: str) -> list[dict[str, Any]]:
+    def facet(
+        column: Any,
+        *,
+        missing_label: str,
+        omit: str,
+    ) -> list[dict[str, Any]]:
         rows = session.execute(
             select(column, func.count(MediaAsset.id))
-            .where(MediaAsset.workspace_id == workspace_id)
+            .where(*conditions(omit=omit))
             .group_by(column)
         ).all()
         values = [
@@ -516,16 +546,31 @@ def list_assets(
         )
 
     return {
-        "assets": views[:limit],
-        "total": len(views),
+        "assets": views,
+        "total": total,
         "facets": {
-            "channels": facet(MediaAsset.creator, missing_label="Unassigned channel"),
-            "platforms": facet(MediaAsset.platform, missing_label="Other sources"),
-            "rights": facet(MediaAsset.rights_status, missing_label="Unknown rights"),
-            "media_kinds": facet(MediaAsset.media_kind, missing_label="Other media"),
+            "channels": facet(
+                MediaAsset.creator,
+                missing_label="Unassigned channel",
+                omit="creator",
+            ),
+            "platforms": facet(
+                MediaAsset.platform,
+                missing_label="Other sources",
+                omit="platform",
+            ),
+            "rights": facet(
+                MediaAsset.rights_status,
+                missing_label="Unknown rights",
+                omit="rights",
+            ),
+            "media_kinds": facet(
+                MediaAsset.media_kind,
+                missing_label="Other media",
+                omit="media_kind",
+            ),
         },
     }
-
 
 @router.get("/assets/{asset_id}")
 def get_asset(

@@ -12,6 +12,7 @@ from trendrelay_api import campaigns_api, media_library, media_library_api
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
+from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.models import Base
 
 engine = create_engine(
@@ -184,6 +185,70 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
         "sha256": media_library.file_sha256(source),
     }
 
+    with TestingSession.begin() as session:
+        for item in (
+            {
+                "id": "asset-demo-image",
+                "title": "Demo creator cover",
+                "media_kind": "image",
+                "platform": "douyin",
+                "creator": "Demo creator",
+                "rights_status": "reference-only",
+                "digest": "1" * 64,
+                "duration_ms": None,
+            },
+            {
+                "id": "asset-demo-audio",
+                "title": "Demo creator soundtrack",
+                "media_kind": "audio",
+                "platform": "tiktok",
+                "creator": "Demo creator",
+                "rights_status": "licensed",
+                "digest": "2" * 64,
+                "duration_ms": 7_000,
+            },
+            {
+                "id": "asset-other-video",
+                "title": "Other creator video",
+                "media_kind": "video",
+                "platform": "douyin",
+                "creator": "Other creator",
+                "rights_status": "reference-only",
+                "digest": "3" * 64,
+                "duration_ms": 5_000,
+            },
+        ):
+            session.add(
+                MediaAsset(
+                    id=item["id"],
+                    workspace_id=workspace_id,
+                    title=item["title"],
+                    media_kind=item["media_kind"],
+                    source_type="test-fixture",
+                    source_url=None,
+                    platform=item["platform"],
+                    creator=item["creator"],
+                    published_at=None,
+                    caption=None,
+                    hashtags=[],
+                    audio_identifier=None,
+                    engagement={},
+                    rights_status=item["rights_status"],
+                    rights_basis="Test fixture rights",
+                    original_path=str(tmp_path / item["id"]),
+                    original_sha256=item["digest"],
+                    mime_type=f"{item['media_kind']}/test",
+                    size_bytes=100,
+                    duration_ms=item["duration_ms"],
+                    width=None,
+                    height=None,
+                    video_codec=None,
+                    audio_codec=None,
+                    has_audio=item["media_kind"] in {"video", "audio"},
+                    created_by="library-owner",
+                )
+            )
+
     before = asyncio.run(
         request(
             "GET",
@@ -213,13 +278,19 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
         )
     )
     assert categorized.status_code == 200
-    assert categorized.json()["total"] == 1
+    assert categorized.json()["total"] == 2
     assert categorized.json()["assets"][0]["id"] == asset_id
     assert categorized.json()["facets"]["channels"] == [
-        {"value": "Demo creator", "label": "Demo creator", "count": 1}
+        {"value": "Demo creator", "label": "Demo creator", "count": 1},
+        {"value": "Other creator", "label": "Other creator", "count": 1},
     ]
     assert categorized.json()["facets"]["platforms"] == [
-        {"value": "douyin", "label": "douyin", "count": 1}
+        {"value": "douyin", "label": "douyin", "count": 2}
+    ]
+    assert categorized.json()["facets"]["media_kinds"] == [
+        {"value": "video", "label": "video", "count": 2},
+        {"value": "audio", "label": "audio", "count": 1},
+        {"value": "image", "label": "image", "count": 1},
     ]
 
     by_channel = asyncio.run(
@@ -230,9 +301,38 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
         )
     )
     assert by_channel.status_code == 200
-    assert by_channel.json()["total"] == 1
-    assert by_channel.json()["assets"][0]["creator"] == "Demo creator"
+    assert by_channel.json()["total"] == 3
+    assert {item["creator"] for item in by_channel.json()["assets"]} == {
+        "Demo creator"
+    }
+    assert by_channel.json()["facets"]["media_kinds"] == [
+        {"value": "audio", "label": "audio", "count": 1},
+        {"value": "image", "label": "image", "count": 1},
+        {"value": "video", "label": "video", "count": 1},
+    ]
+    assert by_channel.json()["facets"]["channels"] == [
+        {"value": "Demo creator", "label": "Demo creator", "count": 3},
+        {"value": "Other creator", "label": "Other creator", "count": 1},
+    ]
 
+    by_channel_and_kind = asyncio.run(
+        request(
+            "GET",
+            f"/api/workspaces/{workspace_id}/media/library/assets",
+            params={"creator": "Demo creator", "media_kind": "video"},
+        )
+    )
+    assert by_channel_and_kind.status_code == 200
+    assert by_channel_and_kind.json()["total"] == 1
+    assert by_channel_and_kind.json()["facets"]["media_kinds"] == [
+        {"value": "audio", "label": "audio", "count": 1},
+        {"value": "image", "label": "image", "count": 1},
+        {"value": "video", "label": "video", "count": 1},
+    ]
+    assert by_channel_and_kind.json()["facets"]["channels"] == [
+        {"value": "Demo creator", "label": "Demo creator", "count": 1},
+        {"value": "Other creator", "label": "Other creator", "count": 1},
+    ]
     preview = asyncio.run(
         request(
             "POST",

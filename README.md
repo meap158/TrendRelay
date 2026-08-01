@@ -239,7 +239,7 @@ The collapsed **Amazon Creators API** guide on `/tools` links to the current Ass
 
 ## Immutable Media Library
 
-Douyin acquisitions retain their provenance: Library refresh reads local downloader metadata to recover the channel name, source caption, publication time, and item-specific video URL. The detail view keeps the channel readable as text and opens the original video from a compact, accessible Douyin icon. Library browsing uses workspace-wide counted facets for media type, channel, source, and usage rights, with optional grouping by channel, source, or rights status.
+Douyin acquisitions retain their provenance: Library refresh reads local downloader metadata to recover the channel name, source caption, publication time, and item-specific video URL. The detail view keeps the channel readable as text and opens the original video from a compact, accessible Douyin icon. Library browsing uses contextual counted facets for media type, channel, source, and usage rights, with optional grouping by channel, source, or rights status. Each facet recalculates against the active search and other filters while ignoring only itself, and the result total covers the complete match set rather than the loaded page.
 
 Open `/library` to import approved local video, audio, or image files; search by source metadata, creator, transcript, hook, product, format, or keyword; review usage rights; and hand publishable originals to Studio or Campaigns. Imports run through the leased worker, deduplicate by SHA-256, preserve a hash-addressed immutable original beneath `.data/media/`, and create separate thumbnail, 720p proxy, and mono 16 kHz audio versions with their own hashes and media metadata.
 

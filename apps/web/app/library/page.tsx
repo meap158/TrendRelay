@@ -404,6 +404,15 @@ export default function LibraryPage() {
     setMediaKind("");
   }
 
+  function groupTotal(label: string, loadedCount: number) {
+    const source = groupBy === "channel"
+      ? facets.channels
+      : groupBy === "source"
+        ? facets.platforms
+        : facets.rights;
+    return source.find((facet) => facet.label === label)?.count ?? loadedCount;
+  }
+
   function renderAsset(asset: Asset) {
     return (
       <button className={selectedId === asset.id ? "selected" : ""} key={asset.id} aria-label={`Open ${asset.title}`} aria-pressed={selectedId === asset.id} onClick={() => setSelectedId(asset.id)}>
@@ -718,7 +727,7 @@ export default function LibraryPage() {
               ? assets.map(renderAsset)
               : groupedAssets.map(([label, groupAssets]) => (
                 <section className="library-group" key={label}>
-                  <header><strong>{label}</strong><span>{groupAssets.length}</span></header>
+                  <header><strong>{label}</strong><span>{groupTotal(label, groupAssets.length)}</span></header>
                   <div className={`library-group-items library-${viewMode}`}>
                     {groupAssets.map(renderAsset)}
                   </div>
