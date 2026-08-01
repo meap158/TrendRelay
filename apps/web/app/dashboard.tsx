@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "./auth-provider";
 import { useJobs } from "./jobs-provider";
@@ -13,7 +13,10 @@ type DownloadJob = {
   status: string;
   error?: string | null;
   created_at: string;
-  payload: { request?: { urls?: string[] }; output_root?: string };
+  payload: {
+    request?: { urls?: string[]; mode?: string; limit?: number };
+    output_root?: string;
+  };
   result?: { artifacts?: Artifact[]; summary?: string } | null;
 };
 type MediaStatus = {
@@ -26,6 +29,9 @@ type MediaStatus = {
   };
   tiktok: { installed: boolean; active: boolean; reason: string };
 };
+type QueueFilter = "all" | "active" | "completed" | "attention";
+
+const ACTIVE_STATUSES = new Set(["queued", "running", "in_progress", "pending"]);
 
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
@@ -33,7 +39,7 @@ async function json<T>(response: Response): Promise<T> {
   return body;
 }
 
-function sourceUrls(value: string): string[] {
+export function sourceUrls(value: string): string[] {
   return Array.from(new Set(value.match(/https?:\/\/[^\s<>"']+/g) ?? [])).map((url) =>
     url.replace(/[.,;:!?\])}]+$/, ""),
   );
@@ -45,26 +51,99 @@ function effectiveStatus(job: DownloadJob): string {
     : job.status;
 }
 
+function statusLabel(status: string): string {
+  return ({
+    queued: "Waiting",
+    running: "Downloading",
+    in_progress: "Downloading",
+    pending: "Waiting",
+    succeeded: "Downloaded",
+    failed: "Needs attention",
+    empty: "No files found",
+    cancelled: "Cancelled",
+  } as Record<string, string>)[status] ?? status.replaceAll("_", " ");
+}
+
+function isDouyinSource(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === "douyin.com" || host.endsWith(".douyin.com") || host === "iesdouyin.com" || host.endsWith(".iesdouyin.com");
+  } catch {
+    return false;
+  }
+}
+
+function modeLabel(mode: string): string {
+  return ({ post: "Published posts", like: "Liked videos", mix: "Collections", music: "Music videos" } as Record<string, string>)[mode] ?? mode;
+}
+
+function sourceType(url: string): string {
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    if (path.includes("/video/") || path.includes("/note/")) return "Video";
+    if (path.includes("/user/")) return "Profile";
+    if (path.includes("/mix/")) return "Collection";
+    if (path.includes("/music/")) return "Music";
+    return "Share link";
+  } catch {
+    return "Link";
+  }
+}
+
+function shortSource(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.replace(/^www\./, "") + (parsed.pathname === "/" ? "" : parsed.pathname);
+  } catch {
+    return url;
+  }
+}
+
 function size(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024) return Math.max(1, Math.round(bytes / 1024)) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+function isVisibleForFilter(job: DownloadJob, filter: QueueFilter): boolean {
+  const current = effectiveStatus(job);
+  if (filter === "active") return ACTIVE_STATUSES.has(current);
+  if (filter === "completed") return current === "succeeded";
+  if (filter === "attention") return ["failed", "empty", "cancelled"].includes(current);
+  return true;
 }
 
 export default function Dashboard() {
   const { loading, user, apiFetch } = useAuth();
-  const { jobs: allJobs, setActiveWorkspaceId, refresh: refreshJobs } = useJobs();
+  const { jobs: allJobs, busy: jobsBusy, setActiveWorkspaceId, refresh: refreshJobs } = useJobs();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
-  const [platform, setPlatform] = useState<"douyin" | "tiktok">("douyin");
   const [input, setInput] = useState("");
   const [mode, setMode] = useState("post");
   const [limit, setLimit] = useState(20);
   const [status, setStatus] = useState<MediaStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const jobs = allJobs.filter(j => j.category === "fetch").map(j => j.raw); // use the raw specific payload
+  const jobs = useMemo(
+    () => allJobs.filter((job) => job.category === "fetch").map((job) => job.raw as DownloadJob),
+    [allJobs],
+  );
+  const extractedUrls = useMemo(() => sourceUrls(input), [input]);
+  const urls = useMemo(() => extractedUrls.filter(isDouyinSource), [extractedUrls]);
+  const unsupportedCount = extractedUrls.length - urls.length;
+  const filteredJobs = useMemo(
+    () => jobs.filter((job) => isVisibleForFilter(job, queueFilter)),
+    [jobs, queueFilter],
+  );
+  const queueCounts = useMemo(() => ({
+    all: jobs.length,
+    active: jobs.filter((job) => ACTIVE_STATUSES.has(effectiveStatus(job))).length,
+    completed: jobs.filter((job) => effectiveStatus(job) === "succeeded").length,
+    attention: jobs.filter((job) => ["failed", "empty", "cancelled"].includes(effectiveStatus(job))).length,
+  }), [jobs]);
 
   useEffect(() => {
     setActiveWorkspaceId(workspaceId || null);
@@ -72,17 +151,21 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!workspaceId) return;
+    let cancelled = false;
     const fetchStatus = async () => {
       try {
-        const statusBody = await json<MediaStatus>(await apiFetch(`/api/workspaces/${workspaceId}/media/status`));
-        setStatus(statusBody);
+        const body = await json<MediaStatus>(await apiFetch("/api/workspaces/" + workspaceId + "/media/status"));
+        if (!cancelled) setStatus(body);
       } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Media service unavailable.");
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "Media service unavailable.");
       }
     };
-    fetchStatus();
-    const timer = setInterval(fetchStatus, 4000);
-    return () => clearInterval(timer);
+    void fetchStatus();
+    const timer = setInterval(() => void fetchStatus(), 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, [apiFetch, workspaceId]);
 
   useEffect(() => {
@@ -91,19 +174,26 @@ export default function Dashboard() {
       .then((response) => json<{ workspaces: Workspace[] }>(response))
       .then((body) => {
         setWorkspaces(body.workspaces);
-        setWorkspaceId(body.workspaces[0]?.id ?? "");
+        setWorkspaceId((current) => current || body.workspaces[0]?.id || "");
       })
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load workspaces."));
   }, [apiFetch, user]);
 
+  const selectedWorkspace = workspaces.find((item) => item.id === workspaceId);
+  const providerReady = Boolean(status?.douyin.installed && status?.douyin.active);
+  const cookiesReady = status?.douyin.cookies_ready === true;
+  const canFetch = providerReady && cookiesReady;
+  const connectionState = status?.douyin.connection?.state ?? "disconnected";
+  const connectionActive = ["starting", "installing", "opening_browser", "waiting_for_login"].includes(connectionState);
+
   async function connectDouyin() {
     if (!workspaceId) return;
-    if (!window.confirm("Open a dedicated Douyin login window and save its cookies locally?")) return;
     setConnecting(true);
     setError(null);
+    setNotice(null);
     try {
       const body = await json<{ connection: { state: string; message: string } }>(
-        await apiFetch(`/api/workspaces/${workspaceId}/media/douyin/connection`, {
+        await apiFetch("/api/workspaces/" + workspaceId + "/media/douyin/connection", {
           method: "POST",
           body: JSON.stringify({ confirm_external_action: true, force_refresh: cookiesReady }),
         }),
@@ -112,25 +202,43 @@ export default function Dashboard() {
         ...current,
         douyin: { ...current.douyin, connection: body.connection },
       } : current);
+      setNotice("Douyin opened in a separate window. Finish signing in there; TrendRelay will detect it automatically.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Douyin connection could not start.");
     } finally {
       setConnecting(false);
     }
   }
+
+  async function pasteLinks() {
+    setError(null);
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) {
+        setError("Your clipboard does not contain any text.");
+        return;
+      }
+      setInput((current) => current.trim() ? current.trim() + "\n" + text.trim() : text.trim());
+    } catch {
+      setError("Clipboard access was not available. Paste into the box with Ctrl+V instead.");
+    }
+  }
+
+  function removeSource(url: string) {
+    setInput((current) => current.replaceAll(url, "").replace(/\n{3,}/g, "\n\n").trim());
+  }
+
   async function fetchMedia(event: FormEvent) {
     event.preventDefault();
-    if (platform !== "douyin") return;
-    const urls = sourceUrls(input);
     if (!urls.length) {
       setError("Paste at least one complete Douyin URL or copied share message.");
       return;
     }
-    if (!window.confirm(`Fetch media from ${urls.length} Douyin source${urls.length === 1 ? "" : "s"}?`)) return;
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
-      await json(await apiFetch(`/api/workspaces/${workspaceId}/media/douyin/downloads`, {
+      await json(await apiFetch("/api/workspaces/" + workspaceId + "/media/douyin/downloads", {
         method: "POST",
         body: JSON.stringify({
           workspace_id: workspaceId,
@@ -142,6 +250,8 @@ export default function Dashboard() {
         }),
       }));
       setInput("");
+      setQueueFilter("active");
+      setNotice(urls.length === 1 ? "Download added to the queue." : urls.length + " downloads added to the queue.");
       await refreshJobs();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Download could not start.");
@@ -150,25 +260,31 @@ export default function Dashboard() {
     }
   }
 
+  async function openFolder(path: string) {
+    setError(null);
+    try {
+      await json(await apiFetch("/api/tools/open-folder", {
+        method: "POST",
+        body: JSON.stringify({ path }),
+      }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The download folder could not be opened.");
+    }
+  }
+
   if (loading) return <main className="console-page"><div className="loading-panel">Loading workspace…</div></main>;
   if (!user) return <main className="console-page"><section className="empty-console"><strong>TrendRelay</strong><h1>Sign in to manage media.</h1><p>Fetch source videos, prepare clips, and send approved posts from one workspace.</p><Link className="primary-button" href="/sign-in?next=%2F">Sign in</Link></section></main>;
 
-  const selectedWorkspace = workspaces.find((item) => item.id === workspaceId);
-  const providerReady = Boolean(status?.douyin.installed && status?.douyin.active);
-  const cookiesReady = status?.douyin.cookies_ready !== false;
-  const canFetch = providerReady && cookiesReady;
-  const connectionState = status?.douyin.connection?.state ?? "disconnected";
-  const connectionActive = ["starting", "installing", "opening_browser", "waiting_for_login"].includes(connectionState);
-
   return <main className="console-page">
-    <section className="console-heading">
+    <section className="console-heading downloader-heading">
       <div>
-        <h1 style={{ fontSize: '20px', margin: 0, fontWeight: 500 }}>Media pipeline</h1>
-        <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: '12px' }}>Fetch sources, prepare clips, and manage publication queues.</p>
+        <p className="eyebrow">MEDIA ACQUISITION</p>
+        <h1>Download from Douyin</h1>
+        <p>Paste videos, profiles, or collections. TrendRelay downloads them in the background and adds the files to your library.</p>
       </div>
-      <label className="workspace-control" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 'auto' }}>
-        <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Workspace</span>
-        <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} style={{ width: '220px', padding: '6px 12px', height: '32px' }}>
+      <label className="workspace-control">
+        <span>Workspace</span>
+        <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
           {workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} · {workspace.role}</option>)}
         </select>
       </label>
@@ -176,117 +292,156 @@ export default function Dashboard() {
 
     {!workspaceId && <section className="empty-console"><h2>Create a workspace first</h2><p>A workspace owns media, approvals, and publishing history.</p><Link className="primary-button" href="/workspaces">Create workspace</Link></section>}
     {workspaceId && <>
-      <section className="pipeline-steps" aria-label="Content workflow" style={{ minHeight: '48px', margin: '0 0 20px', padding: 0, display: 'flex' }}>
-        <div className="current" style={{ flex: 1, borderRight: '1px solid var(--line)', padding: '12px 16px' }}><span>1</span><div><strong>Fetch media</strong><small>Douyin source links</small></div></div>
-        <Link href="/studio" style={{ flex: 1, borderRight: '1px solid var(--line)', padding: '12px 16px' }}><span>2</span><div><strong>Prepare clips</strong><small>Trim and approve</small></div></Link>
-        <Link href="/publish" style={{ flex: 1, padding: '12px 16px' }}><span>3</span><div><strong>Publish</strong><small>Postiz drafts or schedules</small></div></Link>
-      </section>
+      <nav className="download-steps" aria-label="Media workflow">
+        <a className="current" href="#add-links"><span>1</span><div><strong>Add links</strong><small>One or many at once</small></div></a>
+        <a href="#download-queue"><span>2</span><div><strong>Download</strong><small>Track every batch</small></div></a>
+        <Link href="/library"><span>3</span><div><strong>Use your clips</strong><small>Review in the library</small></div></Link>
+      </nav>
 
-      {error && <p className="inline-error" role="alert">{error}</p>}
-      <section className="console-grid">
-        <form className="operation-card acquire-card" onSubmit={fetchMedia} style={{ padding: '16px' }}>
-          <div className="card-heading" style={{ margin: '0 0 16px', alignItems: 'center' }}>
-            <h2 style={{ fontSize: '14px', margin: 0, fontWeight: 500 }}>Fetch source videos</h2>
-            <span className={`provider-pill ${canFetch ? "ready" : "setup"}`}>{canFetch ? "Douyin ready" : "Setup needed"}</span>
-          </div>
-          <div className="source-tabs" style={{ display: 'flex', background: '#f0f2f5', padding: '2px', borderRadius: '4px', marginBottom: '16px' }}>
-            <button type="button" className={platform === "douyin" ? "selected" : ""} onClick={() => setPlatform("douyin")} style={{ flex: 1, padding: '6px 12px', minHeight: '32px', fontSize: '12px' }}>Douyin</button>
-            <button type="button" className={platform === "tiktok" ? "selected" : ""} onClick={() => setPlatform("tiktok")} style={{ flex: 1, padding: '6px 12px', minHeight: '32px', fontSize: '12px' }}>TikTok <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(not configured)</span></button>
-          </div>
-          {platform === "douyin" ? <>
-            <label className="field-label">
-              <span style={{ display: 'block', marginBottom: '4px' }}>Video, profile, or copied share links</span>
-              <textarea value={input} onChange={(event) => setInput(event.target.value)} rows={5} placeholder={"Paste one or more Douyin links here…\nhttps://www.douyin.com/video/…"} style={{ minHeight: '100px' }} />
-            </label>
-            <div className="compact-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '12px', margin: '12px 0' }}>
-              <label className="field-label">
-                <span style={{ display: 'block', marginBottom: '4px' }}>Fetch type</span>
-                <select value={mode} onChange={(event) => setMode(event.target.value)} style={{ height: '32px', padding: '4px 8px' }}>
-                  <option value="post">Published posts</option>
-                  <option value="like">Liked videos</option>
-                  <option value="mix">Collections</option>
-                  <option value="music">Music videos</option>
-                </select>
-              </label>
-              <label className="field-label">
-                <span style={{ display: 'block', marginBottom: '4px' }}>Limit</span>
-                <input type="number" min="1" max="100" value={limit} onChange={(event) => setLimit(Number(event.target.value))} style={{ height: '32px', padding: '4px 8px' }} />
-              </label>
+      <div className="console-messages" aria-live="polite">
+        {error && <p className="inline-error" role="alert"><strong>Something needs attention.</strong><span>{error}</span></p>}
+        {notice && <p className="inline-notice"><strong>All set.</strong><span>{notice}</span></p>}
+      </div>
+
+      <section className="downloader-layout">
+        <form id="add-links" className="download-composer" onSubmit={fetchMedia}>
+          <div className="download-card-heading">
+            <div>
+              <p className="step-kicker">STEP 1</p>
+              <h2>Add Douyin links</h2>
+              <p>Paste a copied share message or put one link on each line.</p>
             </div>
-            {!providerReady && <div className="setup-note" style={{ margin: '12px 0', padding: '8px 12px' }}>Douyin Downloader must be installed and active. <Link href="/tools">Open Tools</Link></div>}
-            {providerReady && !cookiesReady && (
-              <div className="setup-note" style={{ margin: '12px 0', padding: '10px 12px', display: 'grid', gap: '8px' }}>
-                <strong>{connectionActive ? "Complete login in the opened Douyin window" : "Connect Douyin to fetch videos"}</strong>
-                <span>{status?.douyin.connection?.message ?? "TrendRelay can open Douyin and capture the required cookies automatically."}</span>
-                <button type="button" className="secondary-button" disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
-                  {connecting || connectionActive ? "Waiting for Douyin login…" : "Connect Douyin"}
-                </button>
-                <small>Cookies stay on this machine. Downloads continue through the API provider, not the browser.</small>
-              </div>
-            )}
-            {providerReady && cookiesReady && (
-              <div className="setup-note" style={{ margin: '12px 0', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-                <span>Douyin session connected.</span>
-                <button type="button" className="secondary-button" disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
-                  {connecting || connectionActive ? "Refreshing login…" : "Refresh login"}
-                </button>
-              </div>
-            )}
-            <button className="primary-button" style={{ width: '100%', minHeight: '32px' }} disabled={busy || !canFetch || !input.trim()}>{busy ? "Starting…" : "Fetch videos"}</button>
-            <small className="rights-note" style={{ display: 'block', textAlign: 'center', marginTop: '12px', color: 'var(--muted)' }}>Only fetch media you are authorized to retain and reuse.</small>
-          </> : <div className="provider-empty" style={{ minHeight: '200px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', background: '#fafafa', border: '1px solid var(--line)', borderRadius: '4px' }}>
-            <h3 style={{ fontSize: '13px', margin: '0 0 8px' }}>TikTok acquisition needs a provider</h3>
-            <p style={{ margin: '0 0 16px', fontSize: '12px' }}>Add and review a TikTok downloader before enabling this source.</p>
-            <Link className="secondary-button" href="/tools">Review providers</Link>
+            <span className={"connection-badge " + (canFetch ? "ready" : connectionActive ? "working" : "setup")}>
+              <i aria-hidden="true" />
+              {canFetch ? "Douyin connected" : connectionActive ? "Waiting for sign-in" : "Connection needed"}
+            </span>
+          </div>
+
+          <div className="link-input-shell">
+            <label htmlFor="douyin-links">Douyin links</label>
+            <textarea
+              id="douyin-links"
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              rows={7}
+              placeholder={"Paste a video, profile, collection, or share message…\nhttps://www.douyin.com/video/…"}
+              aria-describedby="douyin-link-help"
+            />
+            <div className="link-input-footer">
+              <span id="douyin-link-help">{urls.length ? urls.length + " Douyin " + (urls.length === 1 ? "link" : "links") + " detected" + (unsupportedCount ? " · " + unsupportedCount + " unsupported ignored" : "") : unsupportedCount ? "No supported Douyin links found" : "Video · Profile · Collection · Music"}</span>
+              <button type="button" className="paste-button" onClick={() => void pasteLinks()}>Paste from clipboard</button>
+            </div>
+          </div>
+
+          {urls.length > 0 && <section className="detected-sources" aria-label="Detected Douyin sources">
+            <div className="detected-heading"><strong>Ready to download</strong><span>{urls.length} {urls.length === 1 ? "source" : "sources"}</span></div>
+            <ul>
+              {urls.map((url) => <li key={url}>
+                <span className="source-kind">{sourceType(url)}</span>
+                <span className="source-address" title={url}>{shortSource(url)}</span>
+                <button type="button" onClick={() => removeSource(url)} aria-label={"Remove " + shortSource(url)}>Remove</button>
+              </li>)}
+            </ul>
+          </section>}
+
+          {!providerReady && <div className="connection-callout warning">
+            <div><strong>Install the Douyin downloader</strong><span>Enable the managed provider once, then return here.</span></div>
+            <Link className="secondary-button" href="/tools">Open Tools</Link>
           </div>}
+          {providerReady && !cookiesReady && <div className="connection-callout warning">
+            <div>
+              <strong>{connectionActive ? "Finish signing in to Douyin" : "Connect your Douyin session"}</strong>
+              <span>{status?.douyin.connection?.message ?? "TrendRelay opens a dedicated login window and stores the session only on this computer."}</span>
+            </div>
+            <button type="button" className="secondary-button" disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
+              {connecting || connectionActive ? "Waiting for sign-in…" : "Connect Douyin"}
+            </button>
+          </div>}
+          {providerReady && cookiesReady && <div className="connection-callout connected">
+            <div><strong>Ready to download</strong><span>Your Douyin session is stored locally. Refresh it only if downloads stop working.</span></div>
+            <button type="button" className="text-action" disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
+              {connecting || connectionActive ? "Refreshing…" : "Refresh session"}
+            </button>
+          </div>}
+
+          <details className="download-options">
+            <summary>Download options <span>{modeLabel(mode)} · up to {limit} per source</span></summary>
+            <div className="download-options-grid">
+              <label><span>Content from profiles</span><select value={mode} onChange={(event) => setMode(event.target.value)}><option value="post">Published posts</option><option value="like">Liked videos</option><option value="mix">Collections</option><option value="music">Music videos</option></select></label>
+              <fieldset><legend>Maximum per source</legend><div className="limit-presets">{[10, 20, 50, 100].map((value) => <button key={value} type="button" className={limit === value ? "selected" : ""} aria-pressed={limit === value} onClick={() => setLimit(value)}>{value}</button>)}</div></fieldset>
+            </div>
+            <p>TrendRelay skips files already downloaded from the same source.</p>
+          </details>
+
+          <div className="download-submit-row">
+            <button className="primary-button download-button" disabled={busy || !canFetch || urls.length === 0}>
+              {busy ? "Adding to queue…" : urls.length > 1 ? "Download " + urls.length + " sources" : "Start download"}
+            </button>
+            <small>Only download media you are authorized to retain and reuse.</small>
+          </div>
         </form>
 
-        <aside className="operation-card queue-card" style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
-          <div className="card-heading" style={{ margin: 0, padding: '12px 16px', borderBottom: '1px solid var(--line)', alignItems: 'center' }}>
-            <h2 style={{ fontSize: '14px', margin: 0, fontWeight: 500 }}>Media queue</h2>
-            <button type="button" className="icon-button" onClick={() => void refreshJobs()} aria-label="Refresh">↻</button>
-          </div>
-          <div className="media-queue" style={{ flex: 1, padding: 0 }}>
-            {jobs.length === 0 && <div className="quiet-empty" style={{ padding: '40px 16px' }}><strong>No downloads yet</strong><span>Paste a Douyin link to begin.</span></div>}
-            {jobs.map((job) => <article key={job.id} className="media-job" style={{ padding: '12px 16px', borderTop: 'none', borderBottom: '1px solid var(--line)' }}>
-              <div className="job-row" style={{ marginBottom: '8px' }}>
-                <span className={`job-status ${effectiveStatus(job)}`} style={{ padding: '2px 6px', borderRadius: '4px', background: effectiveStatus(job) === 'succeeded' ? '#e6f6ee' : ['failed', 'empty'].includes(effectiveStatus(job)) ? '#f8d7da' : '#fff8e1' }}>{effectiveStatus(job)}</span>
-                <time>{new Date(job.created_at).toLocaleString()}</time>
-              </div>
-              <strong style={{ display: 'block', marginBottom: '8px' }}>{job.payload.request?.urls?.[0] ?? job.id}</strong>
-              {job.result?.summary && job.status === "succeeded" && (
-                <small style={{ display: 'block', marginBottom: '8px', color: 'var(--muted)' }}>{job.result.summary}</small>
-              )}
-              {job.error && <small className="job-error" style={{ display: 'block', marginBottom: '8px', whiteSpace: 'pre-wrap', color: '#a11' }}>{job.error}</small>}
-              <div style={{ display: 'grid', gap: '8px' }}>
-                {job.payload?.output_root && job.status === "succeeded" && (
-                  <div style={{ padding: '8px', background: '#fafafa', border: '1px solid var(--line-strong)', borderRadius: '4px', fontSize: '11px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div><strong style={{ color: 'var(--muted)' }}>Saved to: </strong><span style={{ fontFamily: 'monospace' }}>{job.payload.output_root}</span></div>
-                    <button type="button" className="secondary-button" style={{ minHeight: '24px', padding: '0 8px', fontSize: '11px' }} onClick={() => apiFetch('/api/tools/open-folder', { method: 'POST', body: JSON.stringify({ path: job.payload.output_root }) }).catch(() => alert('Could not open folder. Check if the API supports this.'))}>
-                      Open folder
-                    </button>
-                  </div>
-                )}
-                {job.status === "succeeded" && (job.result?.artifacts?.length ?? 0) === 0 && (
-                  <small className="job-error" style={{ color: '#a11' }}>Legacy empty result: no media files were saved. New runs fail instead of reporting success.</small>
-                )}
-                {job.result?.artifacts?.map((artifact: Artifact) => <div className="artifact-row" key={artifact.path} style={{ padding: '8px', background: '#fff', border: '1px solid var(--line-strong)' }}>
-                  <div><strong>{artifact.name}</strong><small>{size(artifact.size_bytes)}</small></div>
-                  <div><Link href={`/studio?source=${encodeURIComponent(artifact.path)}`}>Prepare</Link><Link href={`/campaigns?video=${encodeURIComponent(artifact.path)}`}>Plan</Link><Link href={`/publish?video=${encodeURIComponent(artifact.path)}`}>Publish</Link></div>
-                </div>)}
-              </div>
-            </article>)}
-          </div>
+        <aside className="download-guide" aria-label="Downloader help">
+          <p className="step-kicker">HOW IT WORKS</p>
+          <h2>Paste once. Keep working.</h2>
+          <ol>
+            <li><span>1</span><div><strong>Add every link</strong><p>Mix videos, profiles, and collections in one batch.</p></div></li>
+            <li><span>2</span><div><strong>Download in the background</strong><p>You can leave this page; the queue keeps running.</p></div></li>
+            <li><span>3</span><div><strong>Continue from your library</strong><p>Downloaded files are ready to prepare, plan, or publish.</p></div></li>
+          </ol>
+          <div className="guide-tip"><strong>Good to know</strong><p>Profile and collection links can return several videos. Use the per-source limit to keep batches manageable.</p></div>
         </aside>
       </section>
 
-      <section className="quick-actions" style={{ borderRadius: '4px', overflow: 'hidden' }}>
-        <div><span>Workspace</span><strong>{selectedWorkspace?.name}</strong></div>
-        <Link href="/research"><span>Find ideas</span><strong>Run trend research →</strong></Link>
-        <Link href="/library"><span>Creative assets</span><strong>Search media library →</strong></Link>
-        <Link href="/studio"><span>Local files</span><strong>Prepare existing media →</strong></Link>
-        <Link href="/campaigns"><span>Approved media</span><strong>Plan campaign →</strong></Link>
-        <Link href="/publish"><span>Ready media</span><strong>Open publishing →</strong></Link>
+      <section id="download-queue" className="download-queue-card">
+        <div className="queue-heading">
+          <div><p className="step-kicker">STEP 2</p><h2>Downloads</h2><p>Active batches update automatically every few seconds.</p></div>
+          <button type="button" className="secondary-button refresh-button" disabled={jobsBusy} onClick={() => void refreshJobs()}>{jobsBusy ? "Refreshing…" : "Refresh"}</button>
+        </div>
+        <div className="queue-filters" role="group" aria-label="Filter downloads">
+          {([
+            ["all", "All"],
+            ["active", "Active"],
+            ["completed", "Completed"],
+            ["attention", "Needs attention"],
+          ] as [QueueFilter, string][]).map(([value, label]) => <button key={value} type="button" className={queueFilter === value ? "selected" : ""} aria-pressed={queueFilter === value} onClick={() => setQueueFilter(value)}><span>{label}</span><b>{queueCounts[value]}</b></button>)}
+        </div>
+
+        {filteredJobs.length === 0 && <div className="download-empty">
+          <span className="empty-download-icon" aria-hidden="true">↓</span>
+          <strong>{jobs.length ? "No " + (queueFilter === "attention" ? "downloads need attention" : queueFilter + " downloads") : "Your downloads will appear here"}</strong>
+          <p>{jobs.length ? "Choose another filter to see the rest of your queue." : "Add one or more Douyin links above to start your first batch."}</p>
+          {!jobs.length && <a href="#add-links">Add Douyin links</a>}
+        </div>}
+
+        <div className="download-job-list">
+          {filteredJobs.map((job) => {
+            const current = effectiveStatus(job);
+            const sources = job.payload.request?.urls ?? [];
+            const artifacts = job.result?.artifacts ?? [];
+            return <article key={job.id} className={"download-job " + current}>
+              <div className="download-job-topline">
+                <span className={"job-status " + current}><i aria-hidden="true" />{statusLabel(current)}</span>
+                <time>{new Date(job.created_at).toLocaleString()}</time>
+              </div>
+              <div className="download-job-title">
+                <div><strong>{sources[0] ? shortSource(sources[0]) : job.id}</strong><span>{sources.length > 1 ? sources.length + " sources" : sources[0] ? sourceType(sources[0]) : "Douyin batch"} · up to {job.payload.request?.limit ?? "—"} per source</span></div>
+                {current === "succeeded" && job.payload.output_root && <button type="button" className="secondary-button" onClick={() => void openFolder(job.payload.output_root!)}>Open folder</button>}
+              </div>
+              {ACTIVE_STATUSES.has(current) && <div className={"job-progress " + current} aria-label={current === "queued" ? "Waiting to start" : "Download in progress"}><span /></div>}
+              {job.result?.summary && current === "succeeded" && <p className="job-summary">{job.result.summary}. Files were also added to the media library.</p>}
+              {job.error && <div className="job-error"><strong>Download stopped</strong><span>{job.error}</span><a href="#add-links" onClick={() => setInput(sources.join("\n"))}>Load these links again</a></div>}
+              {current === "empty" && !job.error && <div className="job-error"><strong>No media files were saved</strong><span>Refresh the Douyin session, then load these links again.</span></div>}
+              {artifacts.length > 0 && <div className="artifact-list">
+                {artifacts.slice(0, 4).map((artifact) => <div className="artifact-row" key={artifact.path}>
+                  <div><strong>{artifact.name}</strong><small>{size(artifact.size_bytes)}</small></div>
+                  <div><Link href={"/studio?source=" + encodeURIComponent(artifact.path)}>Prepare</Link><Link href={"/campaigns?video=" + encodeURIComponent(artifact.path)}>Plan</Link><Link href={"/publish?video=" + encodeURIComponent(artifact.path)}>Publish</Link></div>
+                </div>)}
+                {artifacts.length > 4 && <p className="more-artifacts">+ {artifacts.length - 4} more files in this batch</p>}
+              </div>}
+            </article>;
+          })}
+        </div>
       </section>
     </>}
   </main>;
