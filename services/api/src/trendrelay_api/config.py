@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     public_web_url: str = "http://localhost:3000"
     attribution_public_url: str = "http://localhost:8080"
     attribution_hash_secret: SecretStr = SecretStr("")
+    media_ai_speech_model: str = "base"
+    media_ai_device: Literal["cpu", "cuda", "auto"] = "cpu"
+    media_ai_compute_type: str = "int8"
+    media_ai_ocr_interval_seconds: float = 2.0
+    media_ai_max_ocr_frames: int = 60
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_username: str = ""

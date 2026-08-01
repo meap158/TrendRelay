@@ -2,8 +2,14 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 import scripts.douyin as douyin
 
+
+def test_extract_urls_rejects_discovery_page() -> None:
+    with pytest.raises(ValueError, match="Unsupported Douyin URL"):
+        douyin.extract_urls("https://www.douyin.com/jingxuan")
 
 def test_dry_run_redacts_cookie_values(monkeypatch, capsys, tmp_path: Path) -> None:
     monkeypatch.setenv("DOUYIN_TTWID", "top-secret-cookie")

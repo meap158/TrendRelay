@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
 import { useJobs } from "../jobs-provider";
+import { WorkspaceSectionNav } from "../workspace-section-nav";
 
 type Workspace = { id: string; name: string; role: string };
 type Production = { id: string; title: string; status: string; source: { path: string }; execution?: { enabled?: boolean } };
@@ -116,7 +117,8 @@ export default function StudioPage() {
   if (!user) return <main className="publish-page"><Link className="primary-link" href="/sign-in?next=%2Fstudio">Sign in to open Studio</Link></main>;
 
   return <main className="publish-page">
-    <header><p className="eyebrow">GOVERNED LOCAL PRODUCTION</p><h1>Approve the source. Cut the clips.</h1><p className="lede">Create immutable OpenMontage preflights, then render deterministic short clips locally without provider credentials or network calls.</p></header>
+    <WorkspaceSectionNav area="library" />
+    <header><p className="eyebrow">GOVERNED LOCAL PRODUCTION</p><h1>Turn approved assets into clips</h1><p className="lede">Create immutable OpenMontage preflights, then render deterministic short clips locally without provider credentials or network calls.</p></header>
     {error && <p className="registry-error" role="alert">{error}</p>}
     <section className="publish-layout">
       <form className="publish-form" onSubmit={(event) => { event.preventDefault(); void propose(event.currentTarget); }}>

@@ -18,6 +18,11 @@ WRAPPER_INSTALLERS = {
     "douyin-downloader": [sys.executable, str(PROJECT_ROOT / "scripts" / "douyin.py"), "install"],
     "postiz-agent": [sys.executable, str(PROJECT_ROOT / "scripts" / "postiz.py"), "install"],
     "meta-ads-kit": [sys.executable, str(PROJECT_ROOT / "scripts" / "meta_ads.py"), "install"],
+    "meta-ads-collector": [
+        sys.executable,
+        str(PROJECT_ROOT / "scripts" / "meta_ads_collector.py"),
+        "install",
+    ],
 }
 
 

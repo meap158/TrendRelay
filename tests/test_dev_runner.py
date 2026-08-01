@@ -132,6 +132,59 @@ def test_unified_runner_includes_hot_reload_durable_worker() -> None:
 
     assert worker.command[-2:] == ["scripts/worker.py", "--watch"]
     assert worker.health_url is None
+    assert worker.restart_on_exit is True
+
+
+def test_reload_services_restart_after_an_unexpected_watcher_exit(monkeypatch) -> None:
+    class Process:
+        def poll(self):
+            return 7
+
+    service = dev.Service(
+        "Worker", ["python"], "yellow", restart_on_exit=True, restart_limit=2
+    )
+    running = dev.RunningService(service, Process(), None, [10.0])
+    replacement = dev.RunningService(service, Process(), None)
+    monkeypatch.setattr(dev, "start_service", lambda _service: replacement)
+
+    result = dev.restart_exited_service(running, now=20.0)
+
+    assert result is replacement
+    assert result.restart_times == [10.0, 20.0]
+
+
+def test_reload_service_stops_after_repeated_exits(monkeypatch) -> None:
+    class Process:
+        def poll(self):
+            return 3
+
+    service = dev.Service(
+        "Backend",
+        ["python"],
+        "cyan",
+        restart_on_exit=True,
+        restart_limit=2,
+        restart_window=30,
+    )
+    running = dev.RunningService(service, Process(), None, [90.0, 95.0])
+    monkeypatch.setattr(
+        dev,
+        "start_service",
+        lambda _service: (_ for _ in ()).throw(AssertionError("must not restart")),
+    )
+
+    assert dev.restart_exited_service(running, now=100.0) is None
+
+
+def test_backend_frontend_and_worker_are_reload_resilient() -> None:
+    services = {service.name: service for service in dev.build_services(False)}
+
+    assert services["Backend"].restart_on_exit is True
+    assert services["Frontend"].restart_on_exit is True
+    assert services["Worker"].restart_on_exit is True
+    assert services["Postiz"].restart_on_exit is False
+    assert services["Postiz"].required is False
+    assert services["Backend"].required is True
 
 
 def test_browser_app_opens_after_startup(monkeypatch) -> None:
@@ -150,7 +203,9 @@ def test_browser_opens_only_after_frontend_health_gate() -> None:
         encoding="utf-8"
     )
 
-    health_gate = source.index("if service.health_url and not wait_until_healthy(")
+    health_gate = source.index(
+        "if service.health_url and service.required and not wait_until_healthy("
+    )
     browser_open = source.index("open_browser_app(args.desktop)")
     assert health_gate < browser_open
 

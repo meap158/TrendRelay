@@ -328,16 +328,23 @@ def extract_urls(value: str) -> list[str]:
         url = candidate.rstrip(".,;:!?)]}，。；：！？）】》")
         parsed = urlparse(url)
         host = (parsed.hostname or "").lower()
-        if parsed.scheme not in {"http", "https"} or not (
+        supported_host = (
             host == "douyin.com"
             or host.endswith(".douyin.com")
             or host == "iesdouyin.com"
             or host.endswith(".iesdouyin.com")
-            or (
-                host == "webcast.amemv.com"
-                and parsed.path.startswith("/douyin/webcast/reflow/episode/")
-            )
-        ):
+            or host == "webcast.amemv.com"
+        )
+        supported_path = host == "v.douyin.com" and parsed.path not in {"", "/"}
+        supported_path = supported_path or any(
+            marker in parsed.path.lower()
+            for marker in ("/video/", "/note/", "/user/", "/mix/", "/music/")
+        )
+        supported_path = supported_path or (
+            host == "webcast.amemv.com"
+            and parsed.path.startswith("/douyin/webcast/reflow/episode/")
+        )
+        if parsed.scheme not in {"http", "https"} or not supported_host or not supported_path:
             raise ValueError(f"Unsupported Douyin URL: {url}")
         urls.append(url)
     return urls

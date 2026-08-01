@@ -23,6 +23,15 @@ from trendrelay_api.integrations.last30days import (
     provider_status,
     run_job,
 )
+from trendrelay_api.integrations.meta_ads_collector import (
+    MetaAdLibrarySearchRequest,
+)
+from trendrelay_api.integrations.meta_ads_collector import (
+    provider_status as meta_ads_collector_status,
+)
+from trendrelay_api.integrations.meta_ads_collector import (
+    search_ads as search_meta_ad_library,
+)
 from trendrelay_api.integrations.meta_ads_kit import (
     MetaBriefingRequest,
 )
@@ -167,6 +176,7 @@ async def configure_postiz_platform(
     except RuntimeError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
 
+
 @app.post("/api/tools/{tool_id}/setup/{action_id}", tags=["tools"])
 async def run_tool_setup_action(
     tool_id: str,
@@ -254,10 +264,11 @@ async def activate(tool_id: str, body: Activation, request: Request) -> dict[str
 
 @app.get("/api/research/status", tags=["research"])
 async def research_status() -> dict[str, object]:
-    last30days_status, reach_status, meta_ads_status = await asyncio.gather(
+    last30days_status, reach_status, meta_ads_status, collector_status = await asyncio.gather(
         asyncio.to_thread(provider_status),
         asyncio.to_thread(diagnostic_report),
         asyncio.to_thread(meta_ads_provider_status),
+        asyncio.to_thread(meta_ads_collector_status),
     )
     return {
         "provider": last30days_status,
@@ -265,8 +276,27 @@ async def research_status() -> dict[str, object]:
             "last30days": last30days_status,
             "agent_reach": reach_status,
             "meta_ads": meta_ads_status,
+            "meta_ads_collector": collector_status,
         },
     }
+
+
+@app.post("/api/research/meta-ads/library/search", tags=["research"])
+async def meta_ads_library_search(
+    body: MetaAdLibrarySearchRequest,
+    request: Request,
+) -> dict[str, object]:
+    require_local_mutation(request)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400,
+            detail="Public Meta Ad Library search requires explicit confirmation.",
+        )
+    try:
+        result = await asyncio.to_thread(search_meta_ad_library, body)
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {"result": result}
 
 
 @app.post("/api/research/meta-ads/briefing", tags=["research"])

@@ -13,7 +13,7 @@ import time
 import urllib.error
 import urllib.request
 import webbrowser
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +35,10 @@ class Service:
     health_probe_timeout: float = 0.8
     health_failure_limit: int = 3
     relay_output: bool = True
+    restart_on_exit: bool = False
+    restart_limit: int = 5
+    restart_window: float = 60
+    required: bool = True
 
 
 @dataclass
@@ -42,6 +46,7 @@ class RunningService:
     definition: Service
     process: subprocess.Popen[str]
     output_thread: threading.Thread | None
+    restart_times: list[float] = field(default_factory=list)
 
 
 COLORS = {
@@ -98,6 +103,37 @@ def start_service(service: Service) -> RunningService:
         f"{paint(f'[{service.name}]', service.color)} Started monitor for PID {process.pid}."
     )
     return RunningService(service, process, thread)
+
+
+def restart_exited_service(
+    running: RunningService, now: float | None = None
+) -> RunningService | None:
+    service = running.definition
+    if not service.restart_on_exit:
+        return None
+
+    restarted_at = time.monotonic() if now is None else now
+    recent_restarts = [
+        timestamp
+        for timestamp in running.restart_times
+        if restarted_at - timestamp < service.restart_window
+    ]
+    if len(recent_restarts) >= service.restart_limit:
+        print(
+            f"{service.name} exited {service.restart_limit + 1} times within "
+            f"{service.restart_window:g} seconds; stopping TrendRelay."
+        )
+        return None
+
+    attempt = len(recent_restarts) + 1
+    return_code = running.process.poll()
+    print(
+        f"{service.name} watcher exited with code {return_code}; "
+        f"restarting ({attempt}/{service.restart_limit})..."
+    )
+    replacement = start_service(service)
+    replacement.restart_times = [*recent_restarts, restarted_at]
+    return replacement
 
 
 def stop_service(running: RunningService) -> None:
@@ -169,6 +205,7 @@ def build_services(include_desktop: bool) -> list[Service]:
             ],
             "cyan",
             "http://127.0.0.1:8011/api/auth/local-session",
+            restart_on_exit=True,
         ),
         Service(
             "Frontend",
@@ -186,6 +223,7 @@ def build_services(include_desktop: bool) -> list[Service]:
             "green",
             "http://127.0.0.1:3001/",
             {"NEXT_PUBLIC_API_URL": "http://127.0.0.1:8011"},
+            restart_on_exit=True,
         ),
     ]
     services.append(
@@ -198,6 +236,7 @@ def build_services(include_desktop: bool) -> list[Service]:
             health_probe_timeout=5,
             health_failure_limit=6,
             relay_output=False,
+            required=False,
         )
     )
     services.append(
@@ -205,6 +244,7 @@ def build_services(include_desktop: bool) -> list[Service]:
             "Worker",
             [str(python), "scripts/worker.py", "--watch"],
             "yellow",
+            restart_on_exit=True,
         )
     )
     if include_desktop:
@@ -278,7 +318,7 @@ def print_banner(include_desktop: bool) -> None:
     print("   - Backend:  http://0.0.0.0:8011")
     print("   - API docs: http://0.0.0.0:8011/docs")
     print("   - Frontend: http://0.0.0.0:3001")
-    print("   - Postiz:   http://localhost:4200 (native self-hosted)")
+    print("   - Postiz:   http://localhost:4200 (optional, starts in background)")
     print("   - Worker:    durable SQL queue (hot reload)")
     print(
         f"   - Desktop:  {'enabled' if include_desktop else 'disabled (use start-electron.bat)'}"
@@ -331,7 +371,7 @@ def main() -> int:
     try:
         for index, service in enumerate(startable):
             running.append(start_service(service))
-            if service.health_url and not wait_until_healthy(
+            if service.health_url and service.required and not wait_until_healthy(
                 running[-1], service.health_timeout
             ):
                 print(
@@ -339,6 +379,11 @@ def main() -> int:
                     f"within {service.health_timeout:g} seconds."
                 )
                 return 1
+            if service.health_url and not service.required:
+                print(
+                    f"{paint(f'[{service.name}]', service.color)} Optional service is "
+                    "starting in the background."
+                )
             if index < len(startable) - 1:
                 time.sleep(0.25)
 
@@ -347,18 +392,46 @@ def main() -> int:
         next_health_check = time.monotonic() + 2
         reused_failures = {service.name: 0 for service in reused}
         while True:
-            for item in running:
+            index = 0
+            while index < len(running):
+                item = running[index]
                 return_code = item.process.poll()
                 if return_code is not None:
-                    print(f"{item.definition.name} exited with code {return_code}.")
-                    return return_code or 1
+                    replacement = restart_exited_service(item)
+                    if replacement is None:
+                        if not item.definition.required:
+                            print(
+                                f"Optional {item.definition.name} service exited with "
+                                f"code {return_code}; TrendRelay will keep running."
+                            )
+                            running.pop(index)
+                            continue
+                        print(f"{item.definition.name} exited with code {return_code}.")
+                        return return_code or 1
+                    running[index] = replacement
+                    if replacement.definition.health_url and not wait_until_healthy(
+                        replacement, replacement.definition.health_timeout
+                    ):
+                        print(
+                            f"Restarted {replacement.definition.name} did not become "
+                            f"ready at {replacement.definition.health_url}."
+                        )
+                        return 1
+                index += 1
             if reused and time.monotonic() >= next_health_check:
-                for service in reused:
+                for service in list(reused):
                     if service_is_healthy(service):
                         reused_failures[service.name] = 0
                         continue
                     reused_failures[service.name] += 1
                     if reused_failures[service.name] >= service.health_failure_limit:
+                        if not service.required:
+                            print(
+                                f"Optional reused {service.name} service is no longer "
+                                "available; TrendRelay will keep running."
+                            )
+                            reused.remove(service)
+                            continue
                         print(f"Reused {service.name} service is no longer available.")
                         return 1
                 next_health_check = time.monotonic() + 2

@@ -98,6 +98,12 @@ class MediaAssetVersion(Base):
 class MediaTranscript(Base):
     __tablename__ = "media_transcripts"
     __table_args__ = (
+        UniqueConstraint(
+            "asset_id",
+            "kind",
+            "job_id",
+            name="unique_media_transcript_job_kind",
+        ),
         CheckConstraint("kind IN ('speech','ocr')", name="valid_media_transcript_kind"),
         CheckConstraint(
             "status IN ('machine','reviewed')",
@@ -119,6 +125,14 @@ class MediaTranscript(Base):
     status: Mapped[str] = mapped_column(String(16), default="reviewed", index=True)
     text: Mapped[str] = mapped_column(String(100_000))
     segments: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    job_id: Mapped[str | None] = mapped_column(
+        ForeignKey("durable_jobs.id", ondelete="SET NULL"), index=True
+    )
+    source_transcript_id: Mapped[str | None] = mapped_column(
+        ForeignKey("media_transcripts.id", ondelete="SET NULL"), unique=True, index=True
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("user_profiles.id"))
+    reviewed_at: Mapped[datetime | None]
     created_by: Mapped[str] = mapped_column(ForeignKey("user_profiles.id"))
     created_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
 

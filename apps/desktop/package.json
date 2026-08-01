@@ -10,8 +10,8 @@
   },
   "devDependencies": {
     "@swc/core": "^1.15.43",
-    "electron": "latest",
-    "electron-vite": "latest",
-    "typescript": "latest"
+    "electron": "43.1.1",
+    "electron-vite": "5.0.0",
+    "typescript": "6.0.3"
   }
 }

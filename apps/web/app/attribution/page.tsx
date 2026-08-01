@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { WorkspaceSectionNav } from "../workspace-section-nav";
 
 type Workspace = { id: string; name: string; role: string };
 type Campaign = { id: string; name: string; affiliate_url?: string | null };
@@ -250,10 +251,11 @@ export default function AttributionPage() {
 
   return (
     <main className="attribution-page">
+      <WorkspaceSectionNav area="publish" />
       <header className="attribution-heading">
         <div>
           <p className="section-kicker">Revenue loop</p>
-          <h1>Attribution</h1>
+          <h1>Measure distribution performance</h1>
           <p>Create transparent first-party links, measure privacy-minimized clicks, and reconcile affiliate commission.</p>
         </div>
         <label>Workspace<select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>

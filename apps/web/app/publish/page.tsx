@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
 import { useJobs } from "../jobs-provider";
+import { WorkspaceSectionNav } from "../workspace-section-nav";
 
 type Workspace = { id: string; name: string; role: string };
 type Platform = "tiktok" | "instagram" | "youtube";
@@ -180,8 +181,9 @@ export default function PublishPage() {
 
   return (
     <main className="publish-page">
+      <WorkspaceSectionNav area="publish" />
       <header className="publish-heading">
-        <div><p className="eyebrow">DISTRIBUTION DESK</p><h1>Publish the approved clip.</h1><p className="lede">TrendRelay runs Postiz locally. Connect social accounts once, then choose them by name, preview the delivery, and create a draft or schedule.</p></div>
+        <div><p className="eyebrow">DISTRIBUTION DESK</p><h1>Deliver the approved clip</h1><p className="lede">TrendRelay runs Postiz locally. Connect social accounts once, then choose them by name, preview the delivery, and create a draft or schedule.</p></div>
         <Link className="secondary-link" href="/tools">Manage tools</Link>
       </header>
       <div aria-live="polite">{notice && <p className="registry-message">{notice}</p>}{error && <p className="registry-error" role="alert">{error}</p>}</div>

@@ -16,7 +16,7 @@ def test_lists_every_catalogued_github_project() -> None:
 
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 7
+    assert len(tools) == 8
     assert {tool["id"] for tool in tools} == {
         "douyin-downloader",
         "postiz-agent",
@@ -24,6 +24,7 @@ def test_lists_every_catalogued_github_project() -> None:
         "openmontage",
         "agent-reach",
         "meta-ads-kit",
+        "meta-ads-collector",
         "mediacrawler",
     }
 

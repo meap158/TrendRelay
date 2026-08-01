@@ -50,7 +50,7 @@ export function GlobalNav() {
       }
       setReadStateReady(true);
     });
-    return () => { cancelled = true; };
+  return () => { cancelled = true; };
   }, [storageKey]);
 
   useEffect(() => {
@@ -66,7 +66,7 @@ export function GlobalNav() {
     }
     document.addEventListener("pointerdown", closeFromOutside);
     document.addEventListener("keydown", closeFromKeyboard);
-    return () => {
+  return () => {
       document.removeEventListener("pointerdown", closeFromOutside);
       document.removeEventListener("keydown", closeFromKeyboard);
     };
@@ -102,19 +102,33 @@ export function GlobalNav() {
     setDrawerOpen(false);
     notificationButtonRef.current?.focus();
   }
+  const researchActive = pathname === "/research" || pathname.startsWith("/research/") || pathname === "/opportunities" || pathname.startsWith("/opportunities/");
+  const libraryActive = pathname === "/library" || pathname.startsWith("/library/") || pathname === "/studio" || pathname.startsWith("/studio/");
+  const publishActive = pathname === "/publish" || pathname.startsWith("/publish/") || pathname === "/attribution" || pathname.startsWith("/attribution/");
 
   return (
     <header className="app-toolbar">
-      <Link className="app-brand" href="/"><span>TR</span><strong>TrendRelay</strong></Link>
+      <Link className="app-brand" href="/" aria-label="TrendRelay home">
+        <span className="app-brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" focusable="false">
+            <path d="M7.5 21.5 13 16l5 3 6.5-8.5" />
+            <circle cx="7.5" cy="21.5" r="2" />
+            <circle cx="13" cy="16" r="2" />
+            <circle cx="18" cy="19" r="2" />
+            <circle cx="24.5" cy="10.5" r="2" />
+          </svg>
+        </span>
+        <strong>TrendRelay</strong>
+      </Link>
       <nav className="app-nav">
-        <Link className={pathname === "/" ? "active" : ""} href="/">Pipeline</Link>
-        <Link className={pathname === "/research" ? "active" : ""} href="/research">Research</Link>
-        <Link className={pathname === "/opportunities" ? "active" : ""} href="/opportunities">Opportunities</Link>
-        <Link className={pathname === "/library" ? "active" : ""} href="/library">Library</Link>
-        <Link className={pathname === "/studio" ? "active" : ""} href="/studio">Studio</Link>
+        <Link className={pathname === "/" ? "active" : ""} href="/">Home</Link>
+        <Link className={libraryActive ? "active" : ""} href="/library">Library</Link>
+        <Link className={researchActive ? "active" : ""} href="/research">Research</Link>
+
+
         <Link className={pathname === "/campaigns" ? "active" : ""} href="/campaigns">Campaigns</Link>
-        <Link className={pathname === "/attribution" ? "active" : ""} href="/attribution">Attribution</Link>
-        <Link className={pathname === "/publish" ? "active" : ""} href="/publish">Publish</Link>
+
+        <Link className={publishActive ? "active" : ""} href="/publish">Publish</Link>
         <Link className={pathname === "/tools" ? "active" : ""} href="/tools">Tools</Link>
       </nav>
 
@@ -154,7 +168,7 @@ export function GlobalNav() {
                 <ol className="notification-list">
                   {jobs.slice(0, 15).map((job) => {
                     const read = readKeys.has(notificationKey(job));
-                    return (
+  return (
                       <li className={read ? "notification-item read" : "notification-item unread"} key={notificationKey(job)}>
                         <div className="notification-item-topline">
                           <span className="notification-category">{job.category}</span>
