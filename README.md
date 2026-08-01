@@ -38,7 +38,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 
 ## Repository structure
 
-- `apps/web` — compact operations console for media acquisition, Trend Radar, opportunity scoring, the Media Library, Studio, campaign planning, attribution, publishing, workspaces, and Tools
+- `apps/web` — compact operations console for media acquisition, Trend Radar, opportunity scoring, the Media Library, Studio, campaign planning, attribution, publishing, workspaces, and Tools; `app/icon.svg` supplies the green trend-relay browser mark
 - `apps/desktop` — Electron shell for local media and browser-assisted workflows
 - `scripts/dev.py` — unified hot-reload supervisor for local development
 - `scripts/reach.py` — sanitized Agent Reach channel diagnostics
