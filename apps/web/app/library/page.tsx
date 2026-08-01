@@ -817,7 +817,7 @@ export default function LibraryPage() {
                     <span>{selected.media_kind}</span>
                     <span aria-hidden="true">·</span>
                     <span>{selected.platform ?? selected.source_type}</span>
-{selected.creator && <>
+                    {selected.creator && <>
                       <span aria-hidden="true">·</span>
                       {selectedChannelUrl ? (
                         <a className="library-channel-name library-channel-link" href={selectedChannelUrl} target="_blank" rel="noreferrer" aria-label={`Open ${selected.creator}'s Douyin channel`}>
