@@ -1,6 +1,8 @@
 import asyncio
+import os
 
 import httpx
+import pytest
 
 from trendrelay_api.main import app
 
@@ -141,6 +143,25 @@ def test_unknown_setup_action_is_rejected(monkeypatch) -> None:
     )
     assert response.status_code == 404
 
+
+@pytest.mark.skipif(os.name != "nt", reason="Folder reveal is a native Windows action.")
+def test_open_folder_reveals_library_file_parent(tmp_path, monkeypatch) -> None:
+    media_file = tmp_path / ".data" / "media" / "workspace" / "digest" / "original.mp4"
+    media_file.parent.mkdir(parents=True)
+    media_file.write_bytes(b"media")
+    opened: list[list[str]] = []
+    monkeypatch.setattr("trendrelay_api.main.PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        "trendrelay_api.main.subprocess.Popen",
+        lambda command: opened.append(command),
+    )
+
+    response = asyncio.run(
+        request("POST", "/api/tools/open-folder", json={"path": str(media_file)})
+    )
+
+    assert response.status_code == 200
+    assert opened == [["explorer", str(media_file.parent.resolve())]]
 
 def test_install_requires_explicit_confirmation() -> None:
     response = asyncio.run(

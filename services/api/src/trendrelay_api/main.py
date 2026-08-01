@@ -216,15 +216,18 @@ async def open_folder(request: Request, body: PathPayload) -> dict[str, object]:
     path = Path(body.path).resolve()
     allowed_roots = {
         (PROJECT_ROOT / ".data" / "downloads").resolve(),
+        (PROJECT_ROOT / ".data" / "media").resolve(),
         (PROJECT_ROOT / ".data" / "manual-packages").resolve(),
     }
     if not any(path == root or root in path.parents for root in allowed_roots):
         raise HTTPException(
             status_code=403,
-            detail="Only download and manual-package folders may be opened.",
+            detail="Only TrendRelay media and package folders may be opened.",
         )
-    if not path.is_dir():
-        raise HTTPException(status_code=404, detail="Download folder does not exist.")
+    if path.is_file():
+        path = path.parent
+    elif not path.is_dir():
+        raise HTTPException(status_code=404, detail="Media folder does not exist.")
 
     subprocess.Popen(["explorer", str(path)])
 
