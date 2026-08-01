@@ -63,8 +63,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .notification-mark-all:disabled { color: var(--muted); cursor: default; opacity: .55; }
 .notification-close { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 4px; color: var(--muted); font-size: 20px; font-weight: 400; }
 .notification-close:hover { color: var(--text); background: var(--panel-raised); }
-.notification-list { display: grid; overflow-x: hidden; overflow-y: auto; min-width: 0; margin: 0; padding: 0; list-style: none; overscroll-behavior: contain; }
-.notification-item { position: relative; display: grid; min-width: 0; gap: 7px; border-bottom: 1px solid var(--line-strong); padding: 12px 16px 11px 19px; }
+.notification-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; overflow-x: hidden; overflow-y: auto; width: 100%; min-width: 0; margin: 0; padding: 0; list-style: none; background: transparent; overscroll-behavior: contain; }
+.notification-item { position: relative; display: grid; width: 100%; min-width: 0; box-sizing: border-box; gap: 7px; border-bottom: 1px solid var(--line-strong); padding: 12px 16px 11px 19px; }
 .notification-item:last-child { border-bottom: 0; }
 .notification-item.unread { background: #f4f8fc; }
 .notification-item.unread::before { position: absolute; top: 17px; left: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--link); content: ""; }
