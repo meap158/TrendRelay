@@ -60,6 +60,7 @@
 .library-summary p { color: var(--muted); line-height: 1.5; }
 .library-summary small { color: var(--muted); }
 .library-actions { display: flex; flex-wrap: wrap; gap: 7px; align-content: start; min-width: 0; max-width: none; }
+.library-actions .library-open-folder { min-height: 36px; }
 .library-actions p { margin: 0; padding: 9px; border: 1px solid #ead9a2; border-radius: 4px; background: #fff8e1; font-size: 11px; }
 .library-actions a:hover { border-color: var(--link); color: var(--link); }
 .library-source-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }

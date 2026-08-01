@@ -636,6 +636,22 @@ export default function LibraryPage() {
     }
   }
 
+  async function openAssetFolder(asset: Asset) {
+    setBusy("folder");
+    setError("");
+    try {
+      await json(await apiFetch("/api/tools/open-folder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: asset.original_path }),
+      }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The media folder could not be opened.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   if (loading) return <main className="library-page"><p>Opening media library…</p></main>;
   if (!user) return <main className="library-page"><Link className="primary-link" href="/sign-in?next=%2Flibrary">Sign in to open Library</Link></main>;
 
@@ -836,6 +852,9 @@ export default function LibraryPage() {
                     <span>{selectedIndex + 1} of {assets.length}</span>
                     <button type="button" disabled={selectedIndex < 0 || selectedIndex >= assets.length - 1} onClick={() => setSelectedId(assets[selectedIndex + 1]?.id ?? selectedId)}>Next →</button>
                   </nav>
+                  <button type="button" className="secondary-button library-open-folder" disabled={busy === "folder"} onClick={() => void openAssetFolder(selected)}>
+                    {busy === "folder" ? "Opening…" : "Open folder"}
+                  </button>
                   {selected.publishable && (
                     <>
                       <Link className="primary-action" href={`/studio?source=${encodeURIComponent(selected.original_path)}`}>Auto-edit in Studio</Link>
