@@ -2,69 +2,182 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+
 import { useAuth } from "./auth-provider";
-import { useJobs } from "./jobs-provider";
-import { useState } from "react";
+import { type BaseJob, useJobs } from "./jobs-provider";
+
+const READ_NOTIFICATIONS_KEY = "trendrelay:read-notifications:";
+const MAX_STORED_READ_KEYS = 300;
+
+function notificationKey(job: BaseJob): string {
+  return `${job.id}:${job.status}`;
+}
+
+function statusLabel(status: string): string {
+  return status.replaceAll("_", " ");
+}
 
 export function GlobalNav() {
   const { user, signOut, localMode } = useAuth();
   const { jobs } = useJobs();
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [readKeys, setReadKeys] = useState<Set<string>>(new Set());
+  const [readStateReady, setReadStateReady] = useState(false);
+  const notificationShellRef = useRef<HTMLDivElement>(null);
+  const notificationButtonRef = useRef<HTMLButtonElement>(null);
 
-  if (!user) return null; // Only show for authenticated users
+  const storageKey = user ? READ_NOTIFICATIONS_KEY + user.id : null;
+  const unreadCount = readStateReady
+    ? jobs.filter((job) => !readKeys.has(notificationKey(job))).length
+    : 0;
 
-  const activeJobsCount = jobs.filter((j) => ["queued", "running", "in_progress", "pending"].includes(j.status)).length;
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (!storageKey) {
+        setReadKeys(new Set());
+        setReadStateReady(false);
+        return;
+      }
+      try {
+        const stored = JSON.parse(window.localStorage.getItem(storageKey) ?? "[]") as unknown;
+        setReadKeys(new Set(Array.isArray(stored) ? stored.filter((value): value is string => typeof value === "string") : []));
+      } catch {
+        setReadKeys(new Set());
+      }
+      setReadStateReady(true);
+    });
+    return () => { cancelled = true; };
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    function closeFromOutside(event: PointerEvent) {
+      if (!notificationShellRef.current?.contains(event.target as Node)) setDrawerOpen(false);
+    }
+    function closeFromKeyboard(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setDrawerOpen(false);
+        notificationButtonRef.current?.focus();
+      }
+    }
+    document.addEventListener("pointerdown", closeFromOutside);
+    document.addEventListener("keydown", closeFromKeyboard);
+    return () => {
+      document.removeEventListener("pointerdown", closeFromOutside);
+      document.removeEventListener("keydown", closeFromKeyboard);
+    };
+  }, [drawerOpen]);
+
+  if (!user) return null;
+
+  function saveReadKeys(next: Set<string>) {
+    const bounded = new Set(Array.from(next).slice(-MAX_STORED_READ_KEYS));
+    setReadKeys(bounded);
+    if (storageKey) {
+      try {
+        window.localStorage.setItem(storageKey, JSON.stringify(Array.from(bounded)));
+      } catch {
+        // Read state remains available for this session when storage is unavailable.
+      }
+    }
+  }
+
+  function markRead(job: BaseJob) {
+    const next = new Set(readKeys);
+    next.add(notificationKey(job));
+    saveReadKeys(next);
+  }
+
+  function markAllRead() {
+    const next = new Set(readKeys);
+    jobs.forEach((job) => next.add(notificationKey(job)));
+    saveReadKeys(next);
+  }
+
+  function closeDrawer() {
+    setDrawerOpen(false);
+    notificationButtonRef.current?.focus();
+  }
 
   return (
-    <>
-      <header className="app-toolbar">
-        <Link className="app-brand" href="/"><span>TR</span><strong>TrendRelay</strong></Link>
-        <nav className="app-nav">
-          <Link className={pathname === "/" ? "active" : ""} href="/">Pipeline</Link>
-          <Link className={pathname === "/research" ? "active" : ""} href="/research">Research</Link>
-          <Link className={pathname === "/opportunities" ? "active" : ""} href="/opportunities">Opportunities</Link>
-          <Link className={pathname === "/library" ? "active" : ""} href="/library">Library</Link>
-          <Link className={pathname === "/studio" ? "active" : ""} href="/studio">Studio</Link>
-          <Link className={pathname === "/campaigns" ? "active" : ""} href="/campaigns">Campaigns</Link>
-          <Link className={pathname === "/attribution" ? "active" : ""} href="/attribution">Attribution</Link>
-          <Link className={pathname === "/publish" ? "active" : ""} href="/publish">Publish</Link>
-          <Link className={pathname === "/tools" ? "active" : ""} href="/tools">Tools</Link>
-        </nav>
+    <header className="app-toolbar">
+      <Link className="app-brand" href="/"><span>TR</span><strong>TrendRelay</strong></Link>
+      <nav className="app-nav">
+        <Link className={pathname === "/" ? "active" : ""} href="/">Pipeline</Link>
+        <Link className={pathname === "/research" ? "active" : ""} href="/research">Research</Link>
+        <Link className={pathname === "/opportunities" ? "active" : ""} href="/opportunities">Opportunities</Link>
+        <Link className={pathname === "/library" ? "active" : ""} href="/library">Library</Link>
+        <Link className={pathname === "/studio" ? "active" : ""} href="/studio">Studio</Link>
+        <Link className={pathname === "/campaigns" ? "active" : ""} href="/campaigns">Campaigns</Link>
+        <Link className={pathname === "/attribution" ? "active" : ""} href="/attribution">Attribution</Link>
+        <Link className={pathname === "/publish" ? "active" : ""} href="/publish">Publish</Link>
+        <Link className={pathname === "/tools" ? "active" : ""} href="/tools">Tools</Link>
+      </nav>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button className="text-button" onClick={() => setDrawerOpen(!drawerOpen)} style={{ position: 'relative' }}>
-            Jobs
-            {activeJobsCount > 0 && <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: 'var(--link)', color: '#fff', borderRadius: '50%', width: '16px', height: '16px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{activeJobsCount}</span>}
+      <div className="toolbar-actions">
+        <div className="notification-shell" ref={notificationShellRef}>
+          <button
+            ref={notificationButtonRef}
+            type="button"
+            className="notification-trigger"
+            aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : "Notifications"}
+            aria-expanded={drawerOpen}
+            aria-controls="notification-panel"
+            onClick={() => setDrawerOpen((current) => !current)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+            </svg>
+            {unreadCount > 0 && <span className="notification-count" aria-hidden="true">{unreadCount > 99 ? "99+" : unreadCount}</span>}
           </button>
-          {localMode ? <span className="local-admin-badge" title="Development-only loopback session">Local admin</span> : <button className="text-button" onClick={() => void signOut()}>Sign out</button>}
-        </div>
-      </header>
 
-      {drawerOpen && (
-        <div style={{ position: 'absolute', top: '51px', right: '16px', width: '320px', maxHeight: '400px', overflowY: 'auto', background: 'var(--panel)', border: '1px solid var(--line)', borderTop: 'none', borderRadius: '0 0 6px 6px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 99 }}>
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line-strong)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 500 }}>Recent Jobs</h3>
-            <button className="icon-button" style={{ width: '24px', height: '24px' }} onClick={() => setDrawerOpen(false)}>×</button>
-          </div>
-          {jobs.length === 0 ? (
-            <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--muted)', fontSize: '12px' }}>No recent jobs</div>
-          ) : (
-            <div style={{ display: 'grid' }}>
-              {jobs.slice(0, 15).map(job => (
-                <div key={job.id} style={{ padding: '12px 16px', borderBottom: '1px solid var(--line-strong)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>{job.category}</span>
-                    <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: job.status === 'succeeded' ? '#e6f6ee' : job.status === 'failed' ? '#f8d7da' : '#fff8e1', color: job.status === 'succeeded' ? 'var(--green)' : job.status === 'failed' ? 'var(--red)' : '#b78103', fontWeight: 500 }}>{job.status}</span>
-                  </div>
-                  <strong style={{ display: 'block', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '4px' }}>{job.title}</strong>
-                  <time style={{ fontSize: '10px', color: 'var(--muted)' }}>{new Date(job.created_at).toLocaleString()}</time>
+          {drawerOpen && (
+            <section id="notification-panel" className="notification-panel" aria-label="Notifications">
+              <header className="notification-heading">
+                <div>
+                  <h2>Notifications</h2>
+                  <p>{unreadCount ? `${unreadCount} unread` : "You are all caught up"}</p>
                 </div>
-              ))}
-            </div>
+                <div className="notification-heading-actions">
+                  <button type="button" className="notification-mark-all" disabled={unreadCount === 0} onClick={markAllRead}>Mark all read</button>
+                  <button type="button" className="notification-close" aria-label="Close notifications" onClick={closeDrawer}>×</button>
+                </div>
+              </header>
+
+              {jobs.length === 0 ? (
+                <div className="notification-empty"><strong>No notifications yet</strong><span>Job updates will appear here.</span></div>
+              ) : (
+                <ol className="notification-list">
+                  {jobs.slice(0, 15).map((job) => {
+                    const read = readKeys.has(notificationKey(job));
+                    return (
+                      <li className={read ? "notification-item read" : "notification-item unread"} key={notificationKey(job)}>
+                        <div className="notification-item-topline">
+                          <span className="notification-category">{job.category}</span>
+                          <span className={`notification-status status-${job.status.replace(/[^a-z0-9_-]/gi, "-")}`}>{statusLabel(job.status)}</span>
+                        </div>
+                        <strong className="notification-title">{job.title}</strong>
+                        {job.error && <p className="notification-error">{job.error}</p>}
+                        <footer>
+                          <time dateTime={job.created_at}>{new Date(job.created_at).toLocaleString()}</time>
+                          {read
+                            ? <span className="notification-read-label">Read</span>
+                            : <button type="button" className="notification-row-read" onClick={() => markRead(job)}>Mark read</button>}
+                        </footer>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </section>
           )}
         </div>
-      )}
-    </>
+        {localMode ? <span className="local-admin-badge" title="Development-only loopback session">Local admin</span> : <button className="text-button" onClick={() => void signOut()}>Sign out</button>}
+      </div>
+    </header>
   );
 }

@@ -82,6 +82,8 @@ The first product vertical slice now includes database-backed Supabase authentic
 
 Local development starts with `LOCAL_AUTH_BYPASS=true`. Requests from `127.0.0.1`, `::1`, or the API test client receive the development-only `local-admin@trendrelay.local` identity with AAL2 assurance and an automatically created **Local Workspace** owner membership. The console displays a **Local admin** badge and opens without a sign-in step in both the browser and Electron renderer.
 
+The global toolbar uses an outlined bell for job notifications. It keeps a compact vertical list, wraps long source URLs and errors instead of scrolling horizontally, distinguishes unread job-status changes, and supports per-item or **Mark all read** actions. Read state is stored locally per user and does not remove job history.
+
 The bypass is denied to LAN clients and ignored unless `ENVIRONMENT=development`; bearer authentication remains available and takes precedence when a token is supplied. Set `LOCAL_AUTH_BYPASS=false` to exercise the real Supabase/device sign-in flow locally. Never treat the local identity as a deployment account.
 ## Browser authentication
 
