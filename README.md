@@ -46,6 +46,7 @@ The first usable release prioritizes reliable research, media handling, publishi
 - `config/tool-catalog.json` — machine-readable registry of every incorporated GitHub project
 - `start.cmd` — one-click browser-app launcher with dependency bootstrap and hot reload
 - `start-electron.bat` — one-click Electron launcher with backend and frontend hot reload
+- `update.cmd` — one-click, fast-forward-only Git updater that protects uncommitted local work
 - `services/api` — Python/FastAPI control plane (modular monolith), SQLAlchemy models, and Alembic migrations
 - `services/link-router` — first-party attribution redirect boundary
 - `workers` — isolated trend, media, AI, and publishing runtimes
@@ -62,7 +63,7 @@ Prerequisites: Node.js 22+ with Corepack/npm, Python 3.12+, Git, and Windows Pac
 
 ### Windows — easiest
 
-Double-click `start.cmd` for the browser app or `start-electron.bat` for the Electron app. `start.cmd` waits for the API and web app to become healthy, then opens `http://127.0.0.1:3001/` in the default browser automatically. These are the only Windows launcher files. Both validate prerequisites, create `.venv`, install dependencies, apply database migrations, and hand off to the unified runner. The runner supervises the API, web app, leased SQL worker, and native self-hosted Postiz stack with hot reload. The first run installs PostgreSQL 17, Redis, and Temporal through `winget`, fetches pinned Postiz 2.21.7, initializes its isolated database under `.data/postiz-selfhost/`. Desktop startup also repairs a missing Electron runtime automatically. Healthy backend or frontend processes are reused, preventing duplicate Next.js server failures. Logs stay in one terminal with prefixes, servers bind to the LAN, and code changes hot reload automatically.
+Double-click `update.cmd` to pull the current branch's latest upstream revision before starting. It stops when local changes, a detached commit, or a missing upstream could make updating unsafe, and it uses fast-forward-only Git history. Then double-click `start.cmd` for the browser app or `start-electron.bat` for the Electron app. `start.cmd` waits for the API and web app to become healthy, then opens `http://127.0.0.1:3001/` in the default browser automatically. These are the three Windows entry-point files. Both validate prerequisites, create `.venv`, install dependencies, apply database migrations, and hand off to the unified runner. The runner supervises the API, web app, leased SQL worker, and native self-hosted Postiz stack with hot reload. The first run installs PostgreSQL 17, Redis, and Temporal through `winget`, fetches pinned Postiz 2.21.7, initializes its isolated database under `.data/postiz-selfhost/`. Desktop startup also repairs a missing Electron runtime automatically. Healthy backend or frontend processes are reused, preventing duplicate Next.js server failures. Logs stay in one terminal with prefixes, servers bind to the LAN, and code changes hot reload automatically.
 
 ### Command line
 
