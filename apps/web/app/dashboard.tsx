@@ -32,6 +32,7 @@ type MediaStatus = {
 type QueueFilter = "all" | "active" | "completed" | "attention";
 
 const ACTIVE_STATUSES = new Set(["queued", "running", "in_progress", "pending"]);
+const INITIAL_JOB_COUNT = 5;
 
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
@@ -124,6 +125,7 @@ export default function Dashboard() {
   const [busy, setBusy] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
+  const [visibleJobCount, setVisibleJobCount] = useState(INITIAL_JOB_COUNT);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -138,6 +140,7 @@ export default function Dashboard() {
     () => jobs.filter((job) => isVisibleForFilter(job, queueFilter)),
     [jobs, queueFilter],
   );
+  const visibleJobs = filteredJobs.slice(0, visibleJobCount);
   const queueCounts = useMemo(() => ({
     all: jobs.length,
     active: jobs.filter((job) => ACTIVE_STATUSES.has(effectiveStatus(job))).length,
@@ -228,6 +231,11 @@ export default function Dashboard() {
     setInput((current) => current.replaceAll(url, "").replace(/\n{3,}/g, "\n\n").trim());
   }
 
+  function selectQueueFilter(filter: QueueFilter) {
+    setQueueFilter(filter);
+    setVisibleJobCount(INITIAL_JOB_COUNT);
+  }
+
   async function fetchMedia(event: FormEvent) {
     event.preventDefault();
     if (!urls.length) {
@@ -251,6 +259,7 @@ export default function Dashboard() {
       }));
       setInput("");
       setQueueFilter("active");
+      setVisibleJobCount(INITIAL_JOB_COUNT);
       setNotice(urls.length === 1 ? "Download added to the queue." : urls.length + " downloads added to the queue.");
       await refreshJobs();
     } catch (reason) {
@@ -293,9 +302,9 @@ export default function Dashboard() {
     {!workspaceId && <section className="empty-console"><h2>Create a workspace first</h2><p>A workspace owns media, approvals, and publishing history.</p><Link className="primary-button" href="/workspaces">Create workspace</Link></section>}
     {workspaceId && <>
       <nav className="download-steps" aria-label="Media workflow">
-        <a className="current" href="#add-links"><span>1</span><div><strong>Add links</strong><small>One or many at once</small></div></a>
-        <a href="#download-queue"><span>2</span><div><strong>Download</strong><small>Track every batch</small></div></a>
-        <Link href="/library"><span>3</span><div><strong>Use your clips</strong><small>Review in the library</small></div></Link>
+        <a className="current" href="#add-links"><span>1</span><strong>Add links</strong></a>
+        <a href="#download-queue"><span>2</span><strong>Track downloads</strong></a>
+        <Link href="/library"><span>3</span><strong>Use your clips</strong></Link>
       </nav>
 
       <div className="console-messages" aria-live="polite">
@@ -317,19 +326,21 @@ export default function Dashboard() {
             </span>
           </div>
 
-          <div className="link-input-shell">
-            <label htmlFor="douyin-links">Douyin links</label>
-            <textarea
-              id="douyin-links"
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              rows={7}
-              placeholder={"Paste a video, profile, collection, or share message…\nhttps://www.douyin.com/video/…"}
-              aria-describedby="douyin-link-help"
-            />
-            <div className="link-input-footer">
-              <span id="douyin-link-help">{urls.length ? urls.length + " Douyin " + (urls.length === 1 ? "link" : "links") + " detected" + (unsupportedCount ? " · " + unsupportedCount + " unsupported ignored" : "") : unsupportedCount ? "No supported Douyin links found" : "Video · Profile · Collection · Music"}</span>
-              <button type="button" className="paste-button" onClick={() => void pasteLinks()}>Paste from clipboard</button>
+          <div className="link-input-field">
+            <label className="link-input-label" htmlFor="douyin-links">Douyin links</label>
+            <div className="link-input-shell">
+              <textarea
+                id="douyin-links"
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                rows={5}
+                placeholder={"Paste a video, profile, collection, or share message…\nhttps://www.douyin.com/video/…"}
+                aria-describedby="douyin-link-help"
+              />
+              <div className="link-input-footer">
+                <span id="douyin-link-help">{urls.length ? urls.length + " Douyin " + (urls.length === 1 ? "link" : "links") + " detected" + (unsupportedCount ? " · " + unsupportedCount + " unsupported ignored" : "") : unsupportedCount ? "No supported Douyin links found" : "Video · Profile · Collection · Music"}</span>
+                <button type="button" className="paste-button" onClick={() => void pasteLinks()}>Paste from clipboard</button>
+              </div>
             </div>
           </div>
 
@@ -381,16 +392,6 @@ export default function Dashboard() {
           </div>
         </form>
 
-        <aside className="download-guide" aria-label="Downloader help">
-          <p className="step-kicker">HOW IT WORKS</p>
-          <h2>Paste once. Keep working.</h2>
-          <ol>
-            <li><span>1</span><div><strong>Add every link</strong><p>Mix videos, profiles, and collections in one batch.</p></div></li>
-            <li><span>2</span><div><strong>Download in the background</strong><p>You can leave this page; the queue keeps running.</p></div></li>
-            <li><span>3</span><div><strong>Continue from your library</strong><p>Downloaded files are ready to prepare, plan, or publish.</p></div></li>
-          </ol>
-          <div className="guide-tip"><strong>Good to know</strong><p>Profile and collection links can return several videos. Use the per-source limit to keep batches manageable.</p></div>
-        </aside>
       </section>
 
       <section id="download-queue" className="download-queue-card">
@@ -404,7 +405,7 @@ export default function Dashboard() {
             ["active", "Active"],
             ["completed", "Completed"],
             ["attention", "Needs attention"],
-          ] as [QueueFilter, string][]).map(([value, label]) => <button key={value} type="button" className={queueFilter === value ? "selected" : ""} aria-pressed={queueFilter === value} onClick={() => setQueueFilter(value)}><span>{label}</span><b>{queueCounts[value]}</b></button>)}
+          ] as [QueueFilter, string][]).map(([value, label]) => <button key={value} type="button" className={queueFilter === value ? "selected" : ""} aria-pressed={queueFilter === value} onClick={() => selectQueueFilter(value)}><span>{label}</span><b>{queueCounts[value]}</b></button>)}
         </div>
 
         {filteredJobs.length === 0 && <div className="download-empty">
@@ -415,33 +416,35 @@ export default function Dashboard() {
         </div>}
 
         <div className="download-job-list">
-          {filteredJobs.map((job) => {
+          {visibleJobs.map((job) => {
             const current = effectiveStatus(job);
             const sources = job.payload.request?.urls ?? [];
             const artifacts = job.result?.artifacts ?? [];
-            return <article key={job.id} className={"download-job " + current}>
-              <div className="download-job-topline">
+            return <details key={job.id} className={"download-job " + current} open={ACTIVE_STATUSES.has(current) || undefined}>
+              <summary>
                 <span className={"job-status " + current}><i aria-hidden="true" />{statusLabel(current)}</span>
+                <span className="download-job-summary-title"><strong>{sources[0] ? shortSource(sources[0]) : job.id}</strong><small>{sources.length > 1 ? sources.length + " sources" : sources[0] ? sourceType(sources[0]) : "Douyin batch"} · {artifacts.length ? artifacts.length + " files" : "up to " + (job.payload.request?.limit ?? "—") + " per source"}</small></span>
                 <time>{new Date(job.created_at).toLocaleString()}</time>
+                <span className="job-disclosure" aria-hidden="true">⌄</span>
+              </summary>
+              <div className="download-job-body">
+                {ACTIVE_STATUSES.has(current) && <div className={"job-progress " + current} aria-label={current === "queued" ? "Waiting to start" : "Download in progress"}><span /></div>}
+                {current === "succeeded" && job.payload.output_root && <div className="download-job-actions"><button type="button" className="secondary-button" onClick={() => void openFolder(job.payload.output_root!)}>Open folder</button><Link href="/library">Open library</Link></div>}
+                {job.result?.summary && current === "succeeded" && <p className="job-summary">{job.result.summary}. Files were also added to the media library.</p>}
+                {job.error && <div className="job-error"><strong>Download stopped</strong><span>{job.error}</span><a href="#add-links" onClick={() => setInput(sources.join("\n"))}>Load these links again</a></div>}
+                {current === "empty" && !job.error && <div className="job-error"><strong>No media files were saved</strong><span>Refresh the Douyin session, then load these links again.</span><a href="#add-links" onClick={() => setInput(sources.join("\n"))}>Load these links again</a></div>}
+                {artifacts.length > 0 && <div className="artifact-list">
+                  {artifacts.slice(0, 4).map((artifact) => <div className="artifact-row" key={artifact.path}>
+                    <div><strong>{artifact.name}</strong><small>{size(artifact.size_bytes)}</small></div>
+                    <div><Link href={"/studio?source=" + encodeURIComponent(artifact.path)}>Prepare</Link><Link href={"/campaigns?video=" + encodeURIComponent(artifact.path)}>Plan</Link><Link href={"/publish?video=" + encodeURIComponent(artifact.path)}>Publish</Link></div>
+                  </div>)}
+                  {artifacts.length > 4 && <p className="more-artifacts">+ {artifacts.length - 4} more files in this batch</p>}
+                </div>}
               </div>
-              <div className="download-job-title">
-                <div><strong>{sources[0] ? shortSource(sources[0]) : job.id}</strong><span>{sources.length > 1 ? sources.length + " sources" : sources[0] ? sourceType(sources[0]) : "Douyin batch"} · up to {job.payload.request?.limit ?? "—"} per source</span></div>
-                {current === "succeeded" && job.payload.output_root && <button type="button" className="secondary-button" onClick={() => void openFolder(job.payload.output_root!)}>Open folder</button>}
-              </div>
-              {ACTIVE_STATUSES.has(current) && <div className={"job-progress " + current} aria-label={current === "queued" ? "Waiting to start" : "Download in progress"}><span /></div>}
-              {job.result?.summary && current === "succeeded" && <p className="job-summary">{job.result.summary}. Files were also added to the media library.</p>}
-              {job.error && <div className="job-error"><strong>Download stopped</strong><span>{job.error}</span><a href="#add-links" onClick={() => setInput(sources.join("\n"))}>Load these links again</a></div>}
-              {current === "empty" && !job.error && <div className="job-error"><strong>No media files were saved</strong><span>Refresh the Douyin session, then load these links again.</span></div>}
-              {artifacts.length > 0 && <div className="artifact-list">
-                {artifacts.slice(0, 4).map((artifact) => <div className="artifact-row" key={artifact.path}>
-                  <div><strong>{artifact.name}</strong><small>{size(artifact.size_bytes)}</small></div>
-                  <div><Link href={"/studio?source=" + encodeURIComponent(artifact.path)}>Prepare</Link><Link href={"/campaigns?video=" + encodeURIComponent(artifact.path)}>Plan</Link><Link href={"/publish?video=" + encodeURIComponent(artifact.path)}>Publish</Link></div>
-                </div>)}
-                {artifacts.length > 4 && <p className="more-artifacts">+ {artifacts.length - 4} more files in this batch</p>}
-              </div>}
-            </article>;
+            </details>;
           })}
         </div>
+        {visibleJobs.length < filteredJobs.length && <button type="button" className="queue-show-more" onClick={() => setVisibleJobCount((current) => current + INITIAL_JOB_COUNT)}>Show {Math.min(INITIAL_JOB_COUNT, filteredJobs.length - visibleJobs.length)} more downloads</button>}
       </section>
     </>}
   </main>;

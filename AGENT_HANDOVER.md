@@ -1,6 +1,6 @@
 # Agent Handover
 
-Last updated: 2026-07-29
+Last updated: 2026-08-01
 
 ## Current state
 
@@ -10,7 +10,7 @@ Last updated: 2026-07-29
 - The pinned `jiji262/douyin-downloader` 2.0.0 provider is integrated as `media.douyin-downloader` and installed locally at revision `ef3ad18c2b50e38e534f72aabe2b3fbb0b3fadd7`.
 - Local development uses a loopback-only `local-admin@trendrelay.local` AAL2 bypass by default, automatically creates one Local Workspace owner membership, and marks the UI with a Local admin badge. It is unavailable to LAN clients and outside the development environment; set `LOCAL_AUTH_BYPASS=false` to exercise real authentication locally.
 - The media console now owns Douyin authentication setup: **Connect Douyin** starts a loopback-only, owner-confirmed connection process, installs isolated Playwright/Chromium login support if missing, opens a visible Douyin window, polls for the required session cookies without terminal input, stores them only in ignored `.data/douyin/cookies.json`, and refreshes readiness. Chromium is never used for media downloading.
-- The root `/` screen is a focused batch Douyin downloader. It extracts and deduplicates supported links from pasted share text, previews detected video/profile/collection sources, ignores unsupported URLs, exposes profile mode and 10/20/50/100 per-source limits progressively, submits one explicit durable `douyin_download` action without a redundant confirmation dialog, and filters the live queue by active/completed/attention state. Completed batches link to their folder, Library/Studio preparation, campaign planning, and Postiz publishing. `npm run douyin --` remains the full CLI. Downloads, SQLite state, ephemeral configuration, upstream source, dependencies, and credentials remain ignored.
+- The root `/` screen is a focused batch Douyin downloader. It extracts and deduplicates supported links from pasted share text, previews detected video/profile/collection sources, ignores unsupported URLs, exposes profile mode and 10/20/50/100 per-source limits progressively, submits one explicit durable `douyin_download` action without a redundant confirmation dialog, and filters the live queue by active/completed/attention state. The label sits outside the focused textarea shell, the three-step guide is one compact row, and history uses five-row progressive disclosure while active work remains expanded. Completed batches link to their folder, Library/Studio preparation, campaign planning, and Postiz publishing. `npm run douyin --` remains the full CLI. Downloads, SQLite state, ephemeral configuration, upstream source, dependencies, and credentials remain ignored.
 - Social publishing uses pinned `gitroomhq/postiz-agent` 2.0.15 at `41c5a9dbd6b2776863e7c05c22e7a385c208321c` and embedded `gitroomhq/postiz-app` 2.21.7 at `7236213ea4520bd67b45688c2787d1f4586b3b51`; both are AGPL-3.0.
 - `scripts/postiz_service.py` idempotently prepares and supervises native Windows PostgreSQL, Redis, Temporal, Postiz backend/orchestrator/frontend, local admin bootstrapping, and local API-key rotation. `npm run postiz --` uses only that private self-hosted API key for discovery and governed short-video drafts/schedules.
 - The Postiz Tools wizard includes a Reddit web-app setup form with the exact local callback. Client ID/secret writes are loopback-only, explicitly confirmed, stored only in the ignored Postiz `.env`, preserved by configuration refreshes, and represented in API/UI status only as configured booleans.
@@ -64,6 +64,7 @@ Last updated: 2026-07-29
 
 ## Validation
 
+- Douyin console browser QA verified a separate field label and accessible shell focus ring with no textarea outline overlap, five initial history rows, expandable artifacts and handoffs, five-at-a-time history loading, no duplicate help rail, no console warnings, and no horizontal overflow at a 390 px viewport.
 - Native Postiz validation completed: PostgreSQL, Redis, Temporal, the backend, orchestrator, and frontend all reported healthy.
 - The app-managed Postiz local-session route set its auth cookie and landed at `/launches` without a login form. The Publish screen reported `Local service ready`, and its **Open local Postiz** action completed successfully.
 - Live browser QA opened Tools without sign-in, rendered all provider setup cards, then opened embedded Postiz. Clicking unconfigured Reddit and Instagram Standalone connectors stayed on `/launches` and showed the setup warning; no external OAuth URL containing `undefined` opened.
