@@ -356,6 +356,7 @@ export default function OpportunitiesPage() {
           <p className="eyebrow">1 · OFFER CATALOG</p>
           <h2>Import affiliate offers</h2>
           <p>Use the CSV fallback for Amazon Creators, impact.com, Awin, or any manual affiliate link.</p>
+          <Link className="inline-guide-link" href="/tools#amazon-access-guide">Where to get Amazon API access</Link>
           <label className="file-button">
             Load CSV
             <input type="file" accept=".csv,text/csv" onChange={(event) => void loadCsv(event.target.files?.[0])} />

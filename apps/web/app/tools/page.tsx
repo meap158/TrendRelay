@@ -268,6 +268,68 @@ export default function ToolsPage() {
         <span>{tools.filter((tool) => tool.installed).length} installed</span>
         <span>{tools.filter((tool) => tool.active).length} active</span>
       </div>
+      <section className="access-guides" aria-labelledby="access-guides-title">
+        <div className="access-guides-heading">
+          <div>
+            <p className="eyebrow">PLATFORM ACCESS</p>
+            <h2 id="access-guides-title">Get the right credentials.</h2>
+          </div>
+          <p>Short, current setup paths for the two accounts most likely to block research and affiliate work.</p>
+        </div>
+        <div className="access-guide-grid">
+          <details className="access-guide" id="meta-access-guide">
+            <summary>
+              <span><strong>Meta Ads</strong><small>First-party campaign reporting</small></span>
+              <b>OAuth in app</b>
+            </summary>
+            <div className="access-guide-body">
+              <div className="access-guide-callout">
+                <strong>Fastest path in TrendRelay</strong>
+                <p>Open <b>Meta Ads Kit → Setup → Launch Meta login</b>. Approve read access in the local Social Flow window; TrendRelay does not ask you to paste the resulting token.</p>
+              </div>
+              <div className="access-guide-steps">
+                <p><i>1</i><span>Create or select a <b>Business</b> app in Meta for Developers and add the Marketing API product.</span></p>
+                <p><i>2</i><span>Give the app access to the correct Business and ad account. Read-only reporting needs <code>ads_read</code>; account discovery may also require <code>business_management</code>.</span></p>
+                <p><i>3</i><span>Use TrendRelay&apos;s login launcher for normal use. For a short diagnostic token, use Graph API Explorer; for unattended server automation, create a System User in Business Settings.</span></p>
+                <p><i>4</i><span>Copy the ad account ID from Ads Manager (<code>act_…</code>). Optionally save only that non-secret ID as <code>META_AD_ACCOUNT=act_…</code> in the local <code>.env</code>.</span></p>
+              </div>
+              <div className="access-guide-links">
+                <a href="https://developers.facebook.com/apps/" target="_blank" rel="noreferrer">Meta developer apps</a>
+                <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer">Graph API Explorer</a>
+                <a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noreferrer">Business system users</a>
+                <a href="https://developers.facebook.com/docs/marketing-api/overview/authorization/" target="_blank" rel="noreferrer">Official authorization guide</a>
+              </div>
+              <p className="access-guide-note">Public competitor research through Meta Ads Collector needs no Meta account or token. Never put a Meta access token in source control or a browser-facing field.</p>
+            </div>
+          </details>
+
+          <details className="access-guide" id="amazon-access-guide">
+            <summary>
+              <span><strong>Amazon Creators API</strong><small>Catalog and affiliate product access</small></span>
+              <b>Guide only</b>
+            </summary>
+            <div className="access-guide-body">
+              <div className="access-guide-callout warning">
+                <strong>What works in TrendRelay today</strong>
+                <p>The Amazon API adapter is not connected yet. Use SiteStripe affiliate links or export offers to CSV, then import them in Opportunities. TrendRelay does not currently accept Amazon API secrets.</p>
+              </div>
+              <div className="access-guide-steps">
+                <p><i>1</i><span>Join Amazon Associates for the marketplace you will promote and obtain its Partner Tag. API registration requires a reviewed, finally accepted Associates account.</span></p>
+                <p><i>2</i><span>Sign in as the primary account owner, then open <b>Associates Central → Tools → Creators API</b>.</span></p>
+                <p><i>3</i><span>Choose <b>Create Application</b>, then <b>Add New Credential</b>. Save the Credential ID, Credential Secret, and Version securely—the secret may only be shown once.</span></p>
+                <p><i>4</i><span>The application exchanges those credentials for a one-hour OAuth access token at runtime. Do not copy that temporary access token into TrendRelay.</span></p>
+              </div>
+              <div className="access-guide-links">
+                <a href="https://affiliate-program.amazon.com/creatorsapi/docs/en-us/onboarding/sign-up-as-an-amazon-associate" target="_blank" rel="noreferrer">Join Amazon Associates</a>
+                <a href="https://affiliate-program.amazon.com/creatorsapi/docs/en-us/onboarding/register-for-creators-api" target="_blank" rel="noreferrer">Create API credentials</a>
+                <a href="https://affiliate-program.amazon.com/creatorsapi/docs/en-us/get-started/using-curl" target="_blank" rel="noreferrer">Official token guide</a>
+                <Link href="/opportunities">Import Amazon offers</Link>
+              </div>
+              <p className="access-guide-note">Do not start a new PA-API integration: Amazon stopped accepting new PA-API customers and deprecated it on May 15, 2026. Creators API uses Credential ID and Credential Secret instead of the old AWS access-key pair.</p>
+            </div>
+          </details>
+        </div>
+      </section>
       {error && <p className="registry-error" role="alert">{error}</p>}
       {message && <p className="registry-message" role="status">{message}</p>}
       <section className="tool-grid" aria-label="Third-party tools">
@@ -296,6 +358,7 @@ export default function ToolsPage() {
               <div className="tool-actions">
                 <a href={tool.repository} target="_blank" rel="noreferrer">GitHub</a>
                 {tool.service_repository && <a href={tool.service_repository} target="_blank" rel="noreferrer">Self-host service</a>}
+                {tool.id === "meta-ads-kit" && <a href="#meta-access-guide">Access guide</a>}
                 {guidedSetup.has(tool.id) && (
                   <button disabled={busy === `${tool.id}-setup`} onClick={() => void loadSetup(tool.id)}>Setup</button>
                 )}

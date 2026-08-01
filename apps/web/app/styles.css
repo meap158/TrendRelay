@@ -242,3 +242,34 @@ nav strong { color: #1c2b33; }
 .preview-list dd { margin: 0; overflow-wrap: anywhere; color: #1c2b33; font: .75rem/1.45 ui-monospace, monospace; }
 .publish-page button:focus-visible, .publish-page a:focus-visible, .publish-page input:focus-visible, .publish-page textarea:focus-visible, .publish-page select:focus-visible { outline: 2px solid #006b4e; outline-offset: 2px; }
 @media (max-width: 820px) { .publish-heading, .section-heading { display: grid; } .platform-grid { grid-template-columns: 1fr; } .postiz-steps > article { grid-template-columns: 28px minmax(0, 1fr); } .postiz-steps > article > button, .postiz-steps > article > a, .postiz-steps .step-actions, .postiz-steps small { grid-column: 2; justify-self: start; } }
+/* Platform access quick guides */
+.access-guides { margin: 0 0 32px; }
+.access-guides-heading { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 12px; }
+.access-guides-heading h2 { margin: 5px 0 0; font-size: 1.55rem; }
+.access-guides-heading > p { max-width: 500px; margin: 0; color: #606770; line-height: 1.45; }
+.access-guide-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.access-guide { scroll-margin-top: 70px; border: 1px solid #cbd2d9; border-radius: 8px; background: #fff; }
+.access-guide[open] { border-color: #aeb8c2; box-shadow: 0 5px 16px rgba(28, 43, 51, .07); }
+.access-guide > summary { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 15px 16px; cursor: pointer; list-style: none; }
+.access-guide > summary::-webkit-details-marker { display: none; }
+.access-guide > summary > span { display: grid; gap: 3px; }
+.access-guide > summary strong { font-size: 1rem; }
+.access-guide > summary small { color: #606770; }
+.access-guide > summary > b { flex: 0 0 auto; border-radius: 999px; padding: 5px 8px; color: #006b4e; background: #e6f6ee; font-size: .68rem; text-transform: uppercase; }
+.access-guide-body { display: grid; gap: 14px; border-top: 1px solid #e4e7ea; padding: 16px; }
+.access-guide-callout { border-left: 3px solid #006b4e; padding: 10px 12px; background: #f1f8f5; }
+.access-guide-callout.warning { border-left-color: #b78103; background: #fff8e1; }
+.access-guide-callout p { margin: 4px 0 0; color: #44515d; line-height: 1.45; }
+.access-guide-steps { display: grid; gap: 1px; border: 1px solid #e4e7ea; background: #e4e7ea; }
+.access-guide-steps p { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 9px; margin: 0; padding: 10px; color: #44515d; background: #fff; line-height: 1.45; }
+.access-guide-steps i { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; color: #fff; background: #006b4e; font-style: normal; font-size: .68rem; font-weight: 800; }
+.access-guide-steps code { color: #006b4e; overflow-wrap: anywhere; }
+.access-guide-links { display: flex; flex-wrap: wrap; gap: 7px; }
+.access-guide-links a, .inline-guide-link { border: 1px solid #cbd2d9; border-radius: 6px; padding: 7px 9px; color: #385898; background: #fff; font-size: .76rem; font-weight: 700; text-decoration: none; }
+.access-guide-links a:hover, .inline-guide-link:hover { border-color: #385898; }
+.access-guide-note { margin: 0; color: #606770; font-size: .74rem; line-height: 1.45; }
+
+@media (max-width: 760px) {
+  .access-guide-grid { grid-template-columns: 1fr; }
+  .access-guides-heading { align-items: stretch; flex-direction: column; }
+}

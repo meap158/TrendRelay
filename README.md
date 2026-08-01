@@ -159,7 +159,7 @@ npm run tools -- activate meta-ads-kit
 npm run meta-ads -- check
 ```
 
-Authentication is performed explicitly with the tool-local Social Flow CLI. `META_AD_ACCOUNT=act_...` may set a non-secret default account identifier. TrendRelay never returns token values or provider stderr and exposes no pause, resume, budget, create, upload, or delete path. See [Meta Ads Kit](./docs/third-party/meta-ads-kit.md) and [ADR 0011](./docs/architecture/0011-meta-ads-read-only-boundary.md).
+Open the collapsed **Meta Marketing API** access guide on `/tools` for the shortest setup path and official links. The preferred local flow is **Meta Ads Kit → Setup → Launch Meta login**: the isolated Social Flow profile completes OAuth and stores its session locally, so no raw access token is pasted into TrendRelay. For manual developer setup, create a Business app, add Marketing API, and use Meta's Graph API Explorer for short diagnostic tokens; use a system user for unattended server access. `META_AD_ACCOUNT=act_...` may set a non-secret default account identifier. TrendRelay never returns token values or provider stderr and exposes no pause, resume, budget, create, upload, or delete path. See [Meta Ads Kit](./docs/third-party/meta-ads-kit.md), [Meta Marketing API authorization](https://developers.facebook.com/docs/marketing-api/overview/authorization/), and [ADR 0011](./docs/architecture/0011-meta-ads-read-only-boundary.md).
 ## Douyin batch downloader
 
 TrendRelay integrates the MIT-licensed `jiji262/douyin-downloader` provider at a pinned revision. Its source, dependencies, cookies, database, and downloaded media stay outside Git under `.tools/` and `.data/`.
@@ -229,6 +229,8 @@ The About & Tools page also provides a Diagnose action. Diagnostics only inspect
 Open `/opportunities` to import a UTF-8 affiliate CSV, attach matching offers to trend evidence, and save a deterministic 0–100 opportunity score. Required CSV columns are `product_name`, `marketplace`, `network`, and `affiliate_url`; price, percentage or flat commission, cookie window, availability, restrictions, and product metadata are optional. Re-importing identical offers is idempotent.
 
 Every opportunity card exposes all positive factors and penalties with the input, weight, signed contribution, reason, and evidence-reference count. Distinct research sources drive cross-platform confirmation, available offers and commission drive affiliate economics, and completed workspace research can be attached without copying evidence. The principal action creates a linked draft campaign carrying its markets, languages, primary affiliate URL, and score context. See [ADR 0013](./docs/architecture/0013-explainable-opportunities-and-affiliate-import.md).
+
+The collapsed **Amazon Creators API** guide on `/tools` links to the current Associates onboarding, application-credential, and OAuth-token instructions. Amazon Product Advertising API is retired; new work should target Creators API. TrendRelay does not yet accept Amazon credentials or include a reviewed Creators API adapter, so use SiteStripe affiliate links or the CSV import today. Never paste the temporary one-hour bearer token into TrendRelay; a future adapter should accept the application credential ID/secret through the governed secret boundary and mint tokens server-side.
 
 ## Immutable Media Library
 
