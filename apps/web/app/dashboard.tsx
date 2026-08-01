@@ -1,13 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "./auth-provider";
 import { useJobs } from "./jobs-provider";
 
 type Workspace = { id: string; name: string; role: string };
 type Artifact = { path: string; name: string; size_bytes: number };
+type DownloadProgress = {
+  folder_exists: boolean;
+  files_downloaded: number;
+  videos_downloaded: number;
+  images_downloaded: number;
+  audio_downloaded: number;
+  bytes_downloaded: number;
+  has_files_on_disk: boolean;
+};
+type LibraryProgress = {
+  total: number;
+  queued: number;
+  running: number;
+  succeeded: number;
+  failed: number;
+  cancelled: number;
+  active: number;
+};
 type DownloadJob = {
   id: string;
   status: string;
@@ -18,6 +36,8 @@ type DownloadJob = {
     output_root?: string;
   };
   result?: { artifacts?: Artifact[]; summary?: string } | null;
+  progress?: DownloadProgress;
+  library_progress?: LibraryProgress;
 };
 type MediaStatus = {
   douyin: {
@@ -31,7 +51,7 @@ type MediaStatus = {
 };
 type QueueFilter = "all" | "active" | "completed" | "attention";
 
-const ACTIVE_STATUSES = new Set(["queued", "running", "in_progress", "pending"]);
+const ACTIVE_STATUSES = new Set(["queued", "running", "in_progress", "pending", "processing"]);
 const INITIAL_JOB_COUNT = 5;
 
 async function json<T>(response: Response): Promise<T> {
@@ -47,6 +67,8 @@ export function sourceUrls(value: string): string[] {
 }
 
 function effectiveStatus(job: DownloadJob): string {
+  if (job.status === "succeeded" && (job.library_progress?.active ?? 0) > 0) return "processing";
+  if (job.status === "succeeded" && ((job.library_progress?.failed ?? 0) + (job.library_progress?.cancelled ?? 0)) > 0) return "partial";
   return job.status === "succeeded" && (job.result?.artifacts?.length ?? 0) === 0
     ? "empty"
     : job.status;
@@ -58,20 +80,35 @@ function statusLabel(status: string): string {
     running: "Downloading",
     in_progress: "Downloading",
     pending: "Waiting",
+    processing: "Preparing Library",
     succeeded: "Downloaded",
     failed: "Needs attention",
+    partial: "Needs attention",
     empty: "No files found",
     cancelled: "Cancelled",
   } as Record<string, string>)[status] ?? status.replaceAll("_", " ");
 }
 
-function isDouyinSource(url: string): boolean {
+export function isDouyinSource(url: string): boolean {
   try {
-    const host = new URL(url).hostname.toLowerCase();
-    return host === "douyin.com" || host.endsWith(".douyin.com") || host === "iesdouyin.com" || host.endsWith(".iesdouyin.com");
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (host === "v.douyin.com") return parsed.pathname !== "/";
+    const douyinHost = host === "douyin.com" || host.endsWith(".douyin.com") || host === "iesdouyin.com" || host.endsWith(".iesdouyin.com");
+    return douyinHost && ["/video/", "/note/", "/user/", "/mix/", "/music/"].some((part) => parsed.pathname.toLowerCase().includes(part));
   } catch {
     return false;
   }
+}
+
+function friendlyDownloadError(error: string): string {
+  if (/datetime is not JSON serializable/i.test(error)) {
+    return "The files are saved, but TrendRelay could not finish recording the batch. Resume to finalize it without redownloading retained files.";
+  }
+  if (/cookies|anti-bot|without saving any media|could not access this source/i.test(error)) {
+    return "Douyin could not access this source. Refresh the Douyin session, then retry with a specific video or profile link.";
+  }
+  return error;
 }
 
 function modeLabel(mode: string): string {
@@ -105,11 +142,48 @@ function size(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
+function progressSummary(
+  progress: DownloadProgress | undefined,
+  status: string,
+  artifacts: Artifact[],
+  limit: number | undefined,
+): string {
+  if (progress) {
+    if (progress.videos_downloaded > 0) {
+      const videos = `${progress.videos_downloaded} ${progress.videos_downloaded === 1 ? "video" : "videos"}`;
+      const files = `${progress.files_downloaded} ${progress.files_downloaded === 1 ? "file" : "files"}`;
+      return progress.files_downloaded === progress.videos_downloaded ? `${videos} downloaded` : `${videos} · ${files} on disk`;
+    }
+    if (progress.files_downloaded > 0) return `${progress.files_downloaded} media ${progress.files_downloaded === 1 ? "file" : "files"} on disk`;
+    if (progress.folder_exists && ACTIVE_STATUSES.has(status)) return "0 videos downloaded so far";
+    if (status === "succeeded") return "no files on disk";
+  }
+  if (artifacts.length) return `${artifacts.length} files`;
+  return limit === 0 ? "all videos" : `up to ${limit ?? "—"} per source`;
+}
+
+function progressBreakdown(progress: DownloadProgress): string {
+  const parts = [];
+  if (progress.videos_downloaded) parts.push(`${progress.videos_downloaded} ${progress.videos_downloaded === 1 ? "video" : "videos"}`);
+  if (progress.images_downloaded) parts.push(`${progress.images_downloaded} ${progress.images_downloaded === 1 ? "image" : "images"}`);
+  if (progress.audio_downloaded) parts.push(`${progress.audio_downloaded} audio`);
+  parts.push(`${progress.files_downloaded} total ${progress.files_downloaded === 1 ? "file" : "files"}`);
+  if (progress.bytes_downloaded) parts.push(size(progress.bytes_downloaded));
+  return parts.join(" · ");
+}
+
+function libraryProgressBreakdown(progress: LibraryProgress): string {
+  const parts = [`${progress.succeeded} of ${progress.total} prepared`];
+  if (progress.active) parts.push(`${progress.active} remaining`);
+  if (progress.failed) parts.push(`${progress.failed} failed`);
+  if (progress.cancelled) parts.push(`${progress.cancelled} cancelled`);
+  return parts.join(" · ");
+}
 function isVisibleForFilter(job: DownloadJob, filter: QueueFilter): boolean {
   const current = effectiveStatus(job);
   if (filter === "active") return ACTIVE_STATUSES.has(current);
   if (filter === "completed") return current === "succeeded";
-  if (filter === "attention") return ["failed", "empty", "cancelled"].includes(current);
+  if (filter === "attention") return ["failed", "partial", "empty", "cancelled"].includes(current);
   return true;
 }
 
@@ -120,14 +194,17 @@ export default function Dashboard() {
   const [workspaceId, setWorkspaceId] = useState("");
   const [input, setInput] = useState("");
   const [mode, setMode] = useState("post");
-  const [limit, setLimit] = useState(20);
+  const [limit, setLimit] = useState(0);
   const [status, setStatus] = useState<MediaStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [clearingHistory, setClearingHistory] = useState(false);
+  const [resumingJobId, setResumingJobId] = useState("");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
   const [visibleJobCount, setVisibleJobCount] = useState(INITIAL_JOB_COUNT);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const linkInputRef = useRef<HTMLTextAreaElement>(null);
 
   const jobs = useMemo(
     () => allJobs.filter((job) => job.category === "fetch").map((job) => job.raw as DownloadJob),
@@ -145,8 +222,19 @@ export default function Dashboard() {
     all: jobs.length,
     active: jobs.filter((job) => ACTIVE_STATUSES.has(effectiveStatus(job))).length,
     completed: jobs.filter((job) => effectiveStatus(job) === "succeeded").length,
-    attention: jobs.filter((job) => ["failed", "empty", "cancelled"].includes(effectiveStatus(job))).length,
+    attention: jobs.filter((job) => ["failed", "partial", "empty", "cancelled"].includes(effectiveStatus(job))).length,
   }), [jobs]);
+
+  function reuseLinks(sources: string[]) {
+    if (!sources.length) return;
+    setInput(sources.join("\n"));
+    setError(null);
+    setNotice(`${sources.length} ${sources.length === 1 ? "link is" : "links are"} ready to download again.`);
+    requestAnimationFrame(() => {
+      linkInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      linkInputRef.current?.focus();
+    });
+  }
 
   useEffect(() => {
     setActiveWorkspaceId(workspaceId || null);
@@ -185,8 +273,9 @@ export default function Dashboard() {
   const selectedWorkspace = workspaces.find((item) => item.id === workspaceId);
   const providerReady = Boolean(status?.douyin.installed && status?.douyin.active);
   const cookiesReady = status?.douyin.cookies_ready === true;
-  const canFetch = providerReady && cookiesReady;
   const connectionState = status?.douyin.connection?.state ?? "disconnected";
+  const refreshRequired = connectionState === "refresh_required";
+  const canFetch = providerReady && cookiesReady && !refreshRequired;
   const connectionActive = ["starting", "installing", "opening_browser", "waiting_for_login"].includes(connectionState);
 
   async function connectDouyin() {
@@ -245,9 +334,11 @@ export default function Dashboard() {
     }
     if (!canFetch) {
       setError(
-        providerReady
-          ? "Connect or refresh your Douyin session before starting this download."
-          : "Enable the Douyin downloader in Tools before starting this download.",
+        refreshRequired
+          ? "Refresh the Douyin session before starting this download."
+          : providerReady
+            ? "Connect your Douyin session before starting this download."
+            : "Enable the Douyin downloader in Tools before starting this download.",
       );
       return;
     }
@@ -290,6 +381,56 @@ export default function Dashboard() {
     }
   }
 
+  async function clearUnavailableDownloads() {
+    if (!window.confirm("Clear download history with no files on disk? Active downloads and jobs with retained files will stay.")) return;
+    setClearingHistory(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const body = await json<{
+        cleanup: {
+          removed_job_ids: string[];
+          preserved_active_job_ids: string[];
+          preserved_on_disk_job_ids: string[];
+        };
+      }>(await apiFetch(`/api/workspaces/${workspaceId}/media/downloads/clear`, {
+        method: "POST",
+        body: JSON.stringify({ confirm_external_action: true }),
+      }));
+      const removed = body.cleanup.removed_job_ids.length;
+      const active = body.cleanup.preserved_active_job_ids.length;
+      const retained = body.cleanup.preserved_on_disk_job_ids.length;
+      setNotice(`${removed} ${removed === 1 ? "download" : "downloads"} cleared. ${retained} with files and ${active} active kept.`);
+      setVisibleJobCount(INITIAL_JOB_COUNT);
+      await refreshJobs();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Download history could not be cleared.");
+    } finally {
+      setClearingHistory(false);
+    }
+  }
+
+  async function resumeDownload(jobId: string, fromSavedFiles = false) {
+    setResumingJobId(jobId);
+    setError(null);
+    setNotice(null);
+    try {
+      await json(await apiFetch(`/api/workspaces/${workspaceId}/media/downloads/${jobId}/resume`, {
+        method: "POST",
+        body: JSON.stringify({ confirm_external_action: true, from_saved_files: fromSavedFiles }),
+      }));
+      setNotice(fromSavedFiles
+        ? "Finishing the files already saved. No new Douyin request is needed."
+        : "Download resumed. Existing files will be kept while TrendRelay checks for anything missing.");
+      setQueueFilter("active");
+      await refreshJobs();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The download could not be resumed.");
+    } finally {
+      setResumingJobId("");
+    }
+  }
+
   if (loading) return <main className="console-page"><div className="loading-panel">Loading workspace…</div></main>;
   if (!user) return <main className="console-page"><section className="empty-console"><strong>TrendRelay</strong><h1>Sign in to manage media.</h1><p>Fetch source videos, prepare clips, and send approved posts from one workspace.</p><Link className="primary-button" href="/sign-in?next=%2F">Sign in</Link></section></main>;
 
@@ -310,11 +451,6 @@ export default function Dashboard() {
 
     {!workspaceId && <section className="empty-console"><h2>Create a workspace first</h2><p>A workspace owns media, approvals, and publishing history.</p><Link className="primary-button" href="/workspaces">Create workspace</Link></section>}
     {workspaceId && <>
-      <nav className="download-steps" aria-label="Media workflow">
-        <a className="current" href="#add-links"><span>1</span><strong>Add links</strong></a>
-        <a href="#download-queue"><span>2</span><strong>Track downloads</strong></a>
-        <Link href="/library"><span>3</span><strong>Use your clips</strong></Link>
-      </nav>
 
       <div className="console-messages" aria-live="polite">
         {error && <p className="inline-error" role="alert"><strong>Something needs attention.</strong><span>{error}</span></p>}
@@ -339,6 +475,7 @@ export default function Dashboard() {
             <label className="link-input-label" htmlFor="douyin-links">Douyin links</label>
             <div className="link-input-shell">
               <textarea
+                ref={linkInputRef}
                 id="douyin-links"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
@@ -347,7 +484,7 @@ export default function Dashboard() {
                 aria-describedby="douyin-link-help"
               />
               <div className="link-input-footer">
-                <span id="douyin-link-help">{urls.length ? urls.length + " Douyin " + (urls.length === 1 ? "link" : "links") + " detected" + (unsupportedCount ? " · " + unsupportedCount + " unsupported ignored" : "") : unsupportedCount ? "No supported Douyin links found" : "Video · Profile · Collection · Music"}</span>
+                <span id="douyin-link-help">{urls.length ? urls.length + " Douyin " + (urls.length === 1 ? "link" : "links") + " detected" + (unsupportedCount ? " · " + unsupportedCount + " unsupported ignored" : "") : unsupportedCount ? "Use a specific video, profile, collection, music, or v.douyin.com share link" : "Video · Profile · Collection · Music"}</span>
                 <button type="button" className="paste-button" onClick={() => void pasteLinks()}>Paste from clipboard</button>
               </div>
             </div>
@@ -377,7 +514,11 @@ export default function Dashboard() {
               {connecting || connectionActive ? "Waiting for sign-in…" : "Connect Douyin"}
             </button>
           </div>}
-          {providerReady && cookiesReady && <div className="connection-callout connected">
+          {providerReady && cookiesReady && refreshRequired && <div className="connection-callout warning">
+            <div><strong>Refresh the Douyin session</strong><span>{status?.douyin.connection?.message}</span></div>
+            <button type="button" className="secondary-button" disabled={connecting || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>{connecting ? "Opening…" : "Refresh session"}</button>
+          </div>}
+          {providerReady && cookiesReady && !refreshRequired && <div className="connection-callout connected">
             <div><strong>Ready to download</strong><span>Your Douyin session is stored locally. Refresh it only if downloads stop working.</span></div>
             <button type="button" className="text-action" disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
               {connecting || connectionActive ? "Refreshing…" : "Refresh session"}
@@ -385,12 +526,12 @@ export default function Dashboard() {
           </div>}
 
           <details className="download-options">
-            <summary>Download options <span>{modeLabel(mode)} · up to {limit} per source</span></summary>
+            <summary>Download options <span>{modeLabel(mode)} · {limit === 0 ? "all videos" : `up to ${limit} per source`}</span></summary>
             <div className="download-options-grid">
               <label><span>Content from profiles</span><select value={mode} onChange={(event) => setMode(event.target.value)}><option value="post">Published posts</option><option value="like">Liked videos</option><option value="mix">Collections</option><option value="music">Music videos</option></select></label>
-              <fieldset><legend>Maximum per source</legend><div className="limit-presets">{[10, 20, 50, 100].map((value) => <button key={value} type="button" className={limit === value ? "selected" : ""} aria-pressed={limit === value} onClick={() => setLimit(value)}>{value}</button>)}</div></fieldset>
+              <fieldset><legend>Videos per source</legend><div className="limit-presets">{[0, 10, 20, 50, 100].map((value) => <button key={value} type="button" className={limit === value ? "selected" : ""} aria-pressed={limit === value} onClick={() => setLimit(value)}>{value === 0 ? "All" : value}</button>)}</div></fieldset>
             </div>
-            <p>TrendRelay skips files already downloaded from the same source.</p>
+            <p>All videos is the default. TrendRelay keeps paging through the source and skips files already downloaded.</p>
           </details>
 
           <div className="download-submit-row">
@@ -401,12 +542,13 @@ export default function Dashboard() {
           </div>
         </form>
 
-      </section>
-
       <section id="download-queue" className="download-queue-card">
         <div className="queue-heading">
           <div><p className="step-kicker">STEP 2</p><h2>Downloads</h2><p>Active batches update automatically every few seconds.</p></div>
-          <button type="button" className="secondary-button refresh-button" disabled={jobsBusy} onClick={() => void refreshJobs()}>{jobsBusy ? "Refreshing…" : "Refresh"}</button>
+          <div className="queue-heading-actions">
+            {jobs.length > 0 && <button type="button" className="text-action clear-downloads-button" disabled={clearingHistory || jobsBusy} onClick={() => void clearUnavailableDownloads()}>{clearingHistory ? "Clearing…" : "Clear missing files"}</button>}
+            <button type="button" className="secondary-button refresh-button" disabled={jobsBusy} onClick={() => void refreshJobs()}>{jobsBusy ? "Refreshing…" : "Refresh"}</button>
+          </div>
         </div>
         <div className="queue-filters" role="group" aria-label="Filter downloads">
           {([
@@ -429,19 +571,33 @@ export default function Dashboard() {
             const current = effectiveStatus(job);
             const sources = job.payload.request?.urls ?? [];
             const artifacts = job.result?.artifacts ?? [];
+            const progress = job.progress;
+            const libraryProgress = job.library_progress;
+            const preparingLibrary = current === "processing";
+            const libraryPercent = libraryProgress?.total ? Math.round((libraryProgress.succeeded / libraryProgress.total) * 100) : 0;
+            const downloadCount = progressSummary(progress, current, artifacts, job.payload.request?.limit);
+            const canOpenFolder = Boolean(job.payload.output_root && (progress?.folder_exists || (!progress && job.status === "succeeded")));
             return <details key={job.id} className={"download-job " + current} open={ACTIVE_STATUSES.has(current) || undefined}>
               <summary>
-                <span className={"job-status " + current}><i aria-hidden="true" />{statusLabel(current)}</span>
-                <span className="download-job-summary-title"><strong>{sources[0] ? shortSource(sources[0]) : job.id}</strong><small>{sources.length > 1 ? sources.length + " sources" : sources[0] ? sourceType(sources[0]) : "Douyin batch"} · {artifacts.length ? artifacts.length + " files" : "up to " + (job.payload.request?.limit ?? "—") + " per source"}</small></span>
+                <span className={"job-status " + current}><i aria-hidden="true" />{job.error && current === "queued" ? "Waiting to retry" : statusLabel(current)}</span>
+                <span className="download-job-summary-title"><strong>{sources[0] ? shortSource(sources[0]) : job.id}</strong><small>{sources.length > 1 ? sources.length + " sources" : sources[0] ? sourceType(sources[0]) : "Douyin batch"} · {downloadCount}</small></span>
                 <time>{new Date(job.created_at).toLocaleString()}</time>
-                <span className="job-disclosure" aria-hidden="true">⌄</span>
+                <span className="job-disclosure" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" focusable="false"><path d="m4 6 4 4 4-4" /></svg>
+                </span>
               </summary>
               <div className="download-job-body">
-                {ACTIVE_STATUSES.has(current) && <div className={"job-progress " + current} aria-label={current === "queued" ? "Waiting to start" : "Download in progress"}><span /></div>}
-                {current === "succeeded" && job.payload.output_root && <div className="download-job-actions"><button type="button" className="secondary-button" onClick={() => void openFolder(job.payload.output_root!)}>Open folder</button><Link href="/library">Open library</Link></div>}
+                {ACTIVE_STATUSES.has(current) && <div className={"job-progress " + current} aria-label={current === "queued" ? "Waiting to start" : preparingLibrary ? "Preparing downloaded media for Library" : "Download in progress"}><span style={preparingLibrary ? { width: `${libraryPercent}%` } : undefined} /></div>}
+                {progress?.folder_exists && <div className="download-live-status"><strong>{job.error && current === "queued" ? "Ready to resume" : preparingLibrary ? "Preparing Library" : ACTIVE_STATUSES.has(current) ? "Downloading now" : "Files on disk"}</strong><span>{preparingLibrary && libraryProgress ? libraryProgressBreakdown(libraryProgress) : progressBreakdown(progress)}</span></div>}
+                {(sources.length > 0 || canOpenFolder || job.status === "succeeded") && <div className="download-job-actions">
+                  {sources.length > 0 && <button type="button" className="secondary-button" onClick={() => reuseLinks(sources)}>Reuse {sources.length === 1 ? "link" : "links"}</button>}
+                  {sources[0] && <a href={sources[0]} target="_blank" rel="noreferrer">Open source</a>}
+                  {canOpenFolder && <button type="button" className="secondary-button" onClick={() => void openFolder(job.payload.output_root!)}>Open folder</button>}
+                  {job.status === "succeeded" && <Link href="/library">Open library</Link>}
+                </div>}
                 {job.result?.summary && current === "succeeded" && <p className="job-summary">{job.result.summary}. Files were also added to the media library.</p>}
-                {job.error && <div className="job-error"><strong>Download stopped</strong><span>{job.error}</span><a href="#add-links" onClick={() => setInput(sources.join("\n"))}>Load these links again</a></div>}
-                {current === "empty" && !job.error && <div className="job-error"><strong>No media files were saved</strong><span>Refresh the Douyin session, then load these links again.</span><a href="#add-links" onClick={() => setInput(sources.join("\n"))}>Load these links again</a></div>}
+                {job.error && <div className="job-error"><strong>{current === "queued" ? "Download ready to resume" : "Download stopped"}</strong><span>{friendlyDownloadError(job.error)}</span><div className="download-recovery-actions">{(progress?.files_downloaded ?? 0) > 0 && <button type="button" className="text-action" disabled={resumingJobId === job.id || current === "running"} onClick={() => void resumeDownload(job.id, true)}>{resumingJobId === job.id ? "Working…" : "Finish saved files"}</button>}<button type="button" className="text-action" disabled={resumingJobId === job.id || current === "running"} onClick={() => void resumeDownload(job.id)}>{resumingJobId === job.id ? "Working…" : "Resume download"}</button><button type="button" className="text-action" disabled={connecting || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>{connecting ? "Opening…" : "Refresh session"}</button><button type="button" className="text-action" onClick={() => reuseLinks(sources)}>Reuse {sources.length === 1 ? "link" : "links"}</button></div></div>}
+                {current === "empty" && !job.error && <div className="job-error"><strong>No media files were saved</strong><span>Refresh the Douyin session, then reuse these links.</span><button type="button" className="text-action" onClick={() => reuseLinks(sources)}>Reuse {sources.length === 1 ? "link" : "links"}</button></div>}
                 {artifacts.length > 0 && <div className="artifact-list">
                   {artifacts.slice(0, 4).map((artifact) => <div className="artifact-row" key={artifact.path}>
                     <div><strong>{artifact.name}</strong><small>{size(artifact.size_bytes)}</small></div>
@@ -454,6 +610,7 @@ export default function Dashboard() {
           })}
         </div>
         {visibleJobs.length < filteredJobs.length && <button type="button" className="queue-show-more" onClick={() => setVisibleJobCount((current) => current + INITIAL_JOB_COUNT)}>Show {Math.min(INITIAL_JOB_COUNT, filteredJobs.length - visibleJobs.length)} more downloads</button>}
+      </section>
       </section>
     </>}
   </main>;

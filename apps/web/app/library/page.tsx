@@ -87,6 +87,19 @@ function displayDuration(milliseconds?: number | null): string {
   return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
 }
 
+function douyinChannelUrl(asset: Asset): string | null {
+  if (asset.platform !== "douyin") return null;
+  return (asset.source_urls ?? []).find((url) => {
+    try {
+      const parsed = new URL(url);
+      return (parsed.hostname === "douyin.com" || parsed.hostname.endsWith(".douyin.com"))
+        && parsed.pathname.startsWith("/user/");
+    } catch {
+      return false;
+    }
+  }) ?? null;
+}
+
 function DouyinMark() {
   const path = "M14.2 3v10.1a4.4 4.4 0 1 1-3.3-4.26v3.06a1.75 1.75 0 1 0 .75 1.44V3h2.55Zm0 0c.38 2.62 1.95 4.2 4.8 4.68v2.77a7.4 7.4 0 0 1-4.8-1.72V3Z";
   return (
@@ -336,6 +349,7 @@ export default function LibraryPage() {
           ? [selected.source_url]
           : []
     : [];
+  const selectedChannelUrl = selected ? douyinChannelUrl(selected) : null;
   const selectedIndex = assets.findIndex((asset) => asset.id === selectedId);
   const videoAssets = assets.filter((asset) => asset.media_kind === "video");
   const selectedVideoIndex = videoAssets.findIndex((asset) => asset.id === selectedId);
@@ -803,7 +817,14 @@ export default function LibraryPage() {
                     <span>{selected.media_kind}</span>
                     <span aria-hidden="true">·</span>
                     <span>{selected.platform ?? selected.source_type}</span>
-                    {selected.creator && <><span aria-hidden="true">·</span><span className="library-channel-name">Channel: {selected.creator}</span></>}
+{selected.creator && <>
+                      <span aria-hidden="true">·</span>
+                      {selectedChannelUrl ? (
+                        <a className="library-channel-name library-channel-link" href={selectedChannelUrl} target="_blank" rel="noreferrer" aria-label={`Open ${selected.creator}'s Douyin channel`}>
+                          Channel: {selected.creator}
+                        </a>
+                      ) : <span className="library-channel-name">Channel: {selected.creator}</span>}
+                    </>}
                   </p>
                   <h2>{selected.title}</h2>
                   <p>{selected.caption || "No source caption recorded."}</p>
@@ -815,13 +836,13 @@ export default function LibraryPage() {
                     <span>{selectedIndex + 1} of {assets.length}</span>
                     <button type="button" disabled={selectedIndex < 0 || selectedIndex >= assets.length - 1} onClick={() => setSelectedId(assets[selectedIndex + 1]?.id ?? selectedId)}>Next →</button>
                   </nav>
-                  {selected.publishable ? (
+                  {selected.publishable && (
                     <>
                       <Link className="primary-action" href={`/studio?source=${encodeURIComponent(selected.original_path)}`}>Auto-edit in Studio</Link>
                       <Link href={`/campaigns?video=${encodeURIComponent(selected.original_path)}`}>Plan campaign</Link>
                       <Link href={`/publish?video=${encodeURIComponent(selected.original_path)}`}>Prepare to publish</Link>
                     </>
-                  ) : <p>Reference only until an owner or approver records publishable rights.</p>}
+                  )}
                   {selectedSourceLinks.map((url, index, links) => {
                     const label = selected.platform === "douyin"
                       ? `${selected.creator ? `${selected.creator}'s ` : ""}original Douyin video`
@@ -856,7 +877,6 @@ export default function LibraryPage() {
 
                 <article>
                   <h3>Rights</h3>
-                  <p><em className={`rights-badge ${selected.publishable ? "publishable" : "reference"}`}>{selected.rights_status}</em></p>
                   <p>{selected.rights_basis || "No evidence recorded."}</p>
                   {canReviewRights && (
                     <form className="library-compact-form" onSubmit={updateRights}>

@@ -11,6 +11,9 @@ from typing import Any
 
 from trendrelay_api.integrations.agent_reach import diagnostic_report
 from trendrelay_api.integrations.douyin import provider_status as douyin_status
+from trendrelay_api.integrations.meta_ads_collector import (
+    provider_status as meta_ads_collector_status,
+)
 from trendrelay_api.integrations.meta_ads_kit import provider_status as meta_ads_status
 from trendrelay_api.integrations.postiz import connection_status as postiz_status
 from trendrelay_api.tool_registry import PROJECT_ROOT, list_tools
@@ -556,6 +559,34 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                     "kind": "navigate",
                     "href": "/research",
                 },
+            ],
+        )
+    elif tool_id == "meta-ads-collector":
+        status = meta_ads_collector_status()
+        report.update(
+            summary=(
+                "Search the public Meta Ad Library without an API key. The isolated "
+                "collector uses Meta's browser-facing transport and may require maintenance "
+                "when Meta changes it."
+            ),
+            requirements=[
+                *prerequisites,
+                _requirement(
+                    "collector-runtime",
+                    "Isolated collector runtime",
+                    "ready" if status["runtime_present"] else "setup-required",
+                    "The pinned Python collector and TLS runtime are available."
+                    if status["runtime_present"]
+                    else "Install the tool to prepare its isolated runtime.",
+                ),
+            ],
+            actions=[
+                {
+                    "id": "open-research",
+                    "label": "Open Research",
+                    "kind": "navigate",
+                    "href": "/research",
+                }
             ],
         )
     elif tool_id == "openmontage":

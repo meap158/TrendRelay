@@ -147,3 +147,143 @@ def test_douyin_connection_requires_explicit_confirmation(monkeypatch) -> None:
     )
 
     assert response.status_code == 400
+
+
+def test_owner_can_resume_existing_download(monkeypatch) -> None:
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Media", "slug": "media"})
+    ).json()["workspace"]
+    recovery: dict[str, bool] = {}
+
+    def fake_resume(job_id: str, workspace_id: str, *, from_saved_files: bool = False):
+        recovery["from_saved_files"] = from_saved_files
+        return {
+            "id": job_id,
+            "workspace_id": workspace_id,
+            "status": "queued",
+            "progress": {"files_downloaded": 749},
+        }
+
+    monkeypatch.setattr(media_api, "resume_download_job", fake_resume)
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/media/downloads/download_0123456789abcdef/resume",
+            json={"confirm_external_action": True, "from_saved_files": True},
+        )
+    )
+
+    assert response.status_code == 202
+    assert response.json()["job"]["status"] == "queued"
+    assert recovery["from_saved_files"] is True
+
+def test_owner_can_clear_download_history_without_disk_files(monkeypatch) -> None:
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Media", "slug": "media"})
+    ).json()["workspace"]
+    monkeypatch.setattr(
+        media_api,
+        "clear_download_history",
+        lambda workspace_id: {
+            "removed_job_ids": ["download_old"],
+            "preserved_active_job_ids": ["download_active"],
+            "preserved_on_disk_job_ids": ["download_retained"],
+            "workspace_id": workspace_id,
+        },
+    )
+
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/media/downloads/clear",
+            json={"confirm_external_action": True},
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.json()["cleanup"]["removed_job_ids"] == ["download_old"]
+    assert response.json()["cleanup"]["preserved_on_disk_job_ids"] == [
+        "download_retained"
+    ]
+
+
+def test_clear_download_history_requires_confirmation(monkeypatch) -> None:
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Media", "slug": "media"})
+    ).json()["workspace"]
+    called = False
+
+    def fake_clear(_workspace_id: str):
+        nonlocal called
+        called = True
+        return {}
+
+    monkeypatch.setattr(media_api, "clear_download_history", fake_clear)
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/media/downloads/clear",
+            json={"confirm_external_action": False},
+        )
+    )
+
+    assert response.status_code == 400
+    assert called is False
+
+
+def test_owner_can_add_completed_downloads_to_library(monkeypatch) -> None:
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Media", "slug": "media"})
+    ).json()["workspace"]
+    monkeypatch.setattr(
+        media_api,
+        "reconcile_downloads_to_library",
+        lambda workspace_id, actor_user_id: {
+            "scanned_downloads": 2,
+            "queued": [{"id": "media-1"}],
+            "errors": [],
+            "removed_asset_ids": [],
+            "workspace_id": workspace_id,
+            "actor_user_id": actor_user_id,
+        },
+    )
+
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/media/downloads/library-sync",
+            json={"confirm_external_action": True},
+        )
+    )
+
+    assert response.status_code == 202
+    assert response.json()["sync"]["queued"] == [{"id": "media-1"}]
+
+
+def test_download_library_sync_requires_confirmation(monkeypatch) -> None:
+    workspace = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Media", "slug": "media"})
+    ).json()["workspace"]
+    called = False
+
+    def fake_reconcile(_workspace_id: str, _actor_user_id: str):
+        nonlocal called
+        called = True
+        return {
+            "scanned_downloads": 0,
+            "queued": [],
+            "errors": [],
+            "removed_asset_ids": [],
+        }
+
+    monkeypatch.setattr(media_api, "reconcile_downloads_to_library", fake_reconcile)
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/media/downloads/library-sync",
+            json={"confirm_external_action": False},
+        )
+    )
+
+    assert response.status_code == 400
+    assert called is False

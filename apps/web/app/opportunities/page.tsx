@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { WorkspaceSectionNav } from "../workspace-section-nav";
 
 type Workspace = { id: string; name: string; role: string };
 type Offer = {
@@ -332,10 +333,11 @@ export default function OpportunitiesPage() {
 
   return (
     <main className="opportunity-page">
+      <WorkspaceSectionNav area="research" />
       <header className="opportunity-header">
         <div>
           <p className="eyebrow">EVIDENCE → ECONOMICS → CAMPAIGN</p>
-          <h1>Opportunity workbench</h1>
+          <h1>Rank the opportunities worth pursuing</h1>
           <p className="lede">
             Import offers, score demand with visible factors, and turn the best case into a draft campaign.
           </p>

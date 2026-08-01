@@ -1,296 +1,123 @@
 # TrendRelay
 
-TrendRelay is an affiliate trend-to-content orchestrator. It connects trend discovery, demand validation, affiliate matching, creative research, content production, approval, publishing, and revenue attribution in one workflow.
+**Download authorized Douyin media, track large batches, and review every clip in a searchable local library.**
 
-## Project goal
+TrendRelay is a local-first Windows workspace for collecting reference media from Douyin. Paste a video, profile, collection, music, or copied share link; TrendRelay downloads it in the background, preserves the original source, and adds the resulting videos, images, and audio to your Library.
 
-Turn fragmented research and publishing tools into a repeatable, evidence-backed loop:
+![TrendRelay Home showing a Douyin profile download](docs/assets/trendrelay-douyin-home.png)
 
-`Discover → validate demand → match offers → analyze content → create variations → approve → publish → measure revenue → learn`
+## What works today
 
-The first usable release prioritizes reliable research, media handling, publishing, and attribution before costly AI video generation.
+- **Paste and download** Douyin videos, profiles, collections, music pages, and copied share messages.
+- **Download full profiles** with **all videos** selected by default, or set a smaller limit when needed.
+- **Track large batches** with live video, image, audio, file-count, and disk-size progress.
+- **Resume interrupted work** after session expiry, provider errors, or an application restart.
+- **Keep source provenance** so every Library item can lead back to the Douyin URL that produced it.
+- **Avoid duplicate work** through local metadata, file checks, and incremental downloading.
+- **Review media locally** using thumbnails, filters, gallery/list views, and an in-page video player.
+- **Keep downloads private** in the local `.data/` directory, which is excluded from Git.
 
-## Technology stack
+## From link to Library
 
-| Layer | Technology |
-| --- | --- |
-| Web | Next.js, React, TypeScript |
-| Desktop | Electron and electron-vite with a hardened renderer boundary |
-| Control plane | Python, FastAPI, Uvicorn, Pydantic |
-| Authentication | Supabase Auth browser PKCE/TOTP MFA flows, API-side asymmetric JWKS verification, and paired device JWTs |
-| Shared contracts | TypeScript schemas and Pydantic models |
-| Data | SQLAlchemy and Alembic; SQLite locally, PostgreSQL with pgvector for shared/production use |
-| Cache and coordination | TrendRelay uses no cache locally; embedded Postiz uses isolated native Redis on port 6389 |
-| Object storage | Ignored local media today; S3-compatible storage is the shared/production target |
-| Durable workflows | TrendRelay uses a leased SQL queue; embedded Postiz uses isolated native Temporal on port 7233 |
-| Media | FFmpeg, ffprobe, and isolated Python workers |
-| Media download provider | Pinned `jiji262/douyin-downloader` integration |
-| Social publishing | Pinned `gitroomhq/postiz-agent` adapter plus pinned native self-hosted `gitroomhq/postiz-app` 2.21.7 |
-| Trend research provider | Pinned `mvanhorn/last30days-skill` 3.16.0 adapter |
-| Video production | Pinned `calesthio/OpenMontage` preflights plus isolated local VideoTrimmer execution |
-| Research channel diagnostics | Pinned `Panniantong/Agent-Reach` registry with side-effect-free local checks |
-| Ad-performance intelligence | Pinned `TheMattBerman/meta-ads-kit` source with an isolated Social Flow runtime and read-only Python adapter |
-| Tool governance | FastAPI lifecycle API, pinned JSON catalog, and Next.js About & Tools page |
-| Revenue measurement | Transparent first-party redirect links, privacy-minimized click events, and network conversion CSV imports |
-| AI workers | Python provider adapters; ComfyUI connectors remain planned |
-| Local development | npm workspaces, Python virtual environment, hot reload, and native Windows Postiz services |
-| Production direction | Managed services and Terraform; orchestration only when justified |
+1. Open **Home** and paste one or more Douyin links or share messages.
+2. Choose the download options. Profiles default to **Published posts / all videos**.
+3. Start the batch and follow the live counts under **Downloads**.
+4. Refresh the Douyin session and resume the same link if Douyin interrupts a long run.
+5. Open **Library** to search, filter, preview, and revisit the original source.
 
-## Repository structure
+![TrendRelay Library showing downloaded video thumbnails and preview](docs/assets/trendrelay-library.png)
 
-- `apps/web` — compact operations console for media acquisition, Trend Radar, opportunity scoring, the Media Library, Studio, campaign planning, attribution, publishing, workspaces, and Tools; `app/icon.svg` supplies the green trend-relay browser mark
-- `apps/desktop` — Electron shell for local media and browser-assisted workflows
-- `scripts/dev.py` — unified hot-reload supervisor for local development
-- `scripts/reach.py` — sanitized Agent Reach channel diagnostics
-- `scripts/meta_ads.py` — isolated Meta Ads Kit source/runtime installer and verifier
-- `config/tool-catalog.json` — machine-readable registry of every incorporated GitHub project
-- `start.cmd` — one-click browser-app launcher with dependency bootstrap and hot reload
-- `start-electron.bat` — one-click Electron launcher with backend and frontend hot reload
-- `update.cmd` — one-click, fast-forward-only Git updater that protects uncommitted local work
-- `services/api` — Python/FastAPI control plane (modular monolith), SQLAlchemy models, and Alembic migrations
-- `services/link-router` — first-party attribution redirect boundary
-- `workers` — isolated trend, media, AI, and publishing runtimes
-- `packages` — shared UI, schemas, TypeScript SDK, and workflow definitions
-- `plugins` — replaceable provider implementations
-- `infra` — infrastructure guidance and future Terraform modules
-- `docs` — architecture decisions and capability contracts
+Library videos use poster thumbnails and load the video stream only after you choose to play it. This keeps browsing fast and avoids triggering external download managers while changing filters or moving between items. Use the previous/next controls or arrow keys to navigate; press Space to play or pause.
 
-The core depends on capabilities, never platform-specific business logic. See [SOP.md](./SOP.md) for engineering rules and [AGENT_HANDOVER.md](./AGENT_HANDOVER.md) for current state.
+## Quick start on Windows
 
-## Quick start
+### Requirements
 
-Prerequisites: Node.js 22+ with Corepack/npm, Python 3.12+, Git, and Windows Package Manager (`winget`) for the native Postiz first run.
+- [Git](https://git-scm.com/downloads)
+- [Node.js 22 or newer](https://nodejs.org/)
+- [Python 3.12 or newer](https://www.python.org/downloads/)
 
-### Windows — easiest
-
-Double-click `update.cmd` to pull the current branch's latest upstream revision before starting. It stops when local changes, a detached commit, or a missing upstream could make updating unsafe, and it uses fast-forward-only Git history. Then double-click `start.cmd` for the browser app or `start-electron.bat` for the Electron app. `start.cmd` waits for the API and web app to become healthy, then opens `http://127.0.0.1:3001/` in the default browser automatically. These are the three Windows entry-point files. Both validate prerequisites, create `.venv`, install dependencies, apply database migrations, and hand off to the unified runner. The runner supervises the API, web app, leased SQL worker, and native self-hosted Postiz stack with hot reload. The first run installs PostgreSQL 17, Redis, and Temporal through `winget`, fetches pinned Postiz 2.21.7, initializes its isolated database under `.data/postiz-selfhost/`. Desktop startup also repairs a missing Electron runtime automatically. Healthy backend or frontend processes are reused, preventing duplicate Next.js server failures. Logs stay in one terminal with prefixes, servers bind to the LAN, and code changes hot reload automatically.
-
-### Command line
+### Install and run
 
 ```powershell
+git clone https://github.com/meap158/TrendRelay.git
+cd TrendRelay
+.\start.cmd
+```
+
+The first run installs the application dependencies, creates the Python environment, applies database migrations, starts the local services with hot reload, and opens TrendRelay in your browser.
+
+If the browser does not open automatically, visit [http://127.0.0.1:3001](http://127.0.0.1:3001).
+
+### Connect Douyin
+
+Use **Refresh session** on Home and complete the Douyin login in the opened browser. The equivalent command is:
+
+```powershell
+npm run douyin -- connect
+```
+
+The session is stored locally under `.data/douyin/`. Refresh it only when Douyin rejects a download or the saved session expires.
+
+## Download behavior
+
+TrendRelay stores downloaded files under `.data/downloads/douyin/` and automatically registers them in the media Library. Library refresh reconciles items removed from disk. Use **Clear missing files** on Home to remove download records whose files are gone; records that still reference on-disk media are kept.
+
+For command-line batch downloads:
+
+```powershell
+npm run douyin -- batch "https://www.douyin.com/user/..." --limit 0
+```
+
+`--limit 0` means all available items. The Home interface selects this behavior by default for profile downloads.
+
+## Local-first by design
+
+- Downloads, cookies, databases, thumbnails, proxies, and job state stay in `.data/`.
+- Provider source and isolated runtimes stay in `.tools/`.
+- Both directories, along with `.env`, are excluded by `.gitignore`.
+- Original media is kept immutable; generated previews and derivatives are stored separately.
+- Acquired media defaults to **reference only** until reuse rights are reviewed.
+
+Never commit real cookies, access tokens, downloaded media, customer data, or generated databases.
+
+## Project status
+
+TrendRelay is an early, Douyin-first release. The downloader, durable background jobs, provenance capture, and local media Library are the current core product.
+
+Research integrations, Meta Ads collection, opportunity scoring, Studio production, campaigns, publishing, and attribution remain under active development. They are included in the repository for contributors and testing, but they are not yet the primary supported workflow.
+
+## Development
+
+Run the web and API development environment:
+
+```powershell
+npm install
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e "services/api[dev]"
-npm install
-.\.venv\Scripts\python.exe scripts\dev.py
-# Add --desktop to also launch Electron.
+.\.venv\Scripts\python.exe scripts\db.py upgrade
+npm run dev
 ```
 
-Initialize or update the local database with `npm run db -- upgrade`. API documentation is available at `http://localhost:8011/docs` during development. Open `http://localhost:3001/` for the media-to-publish operations console. Paste Douyin source links there, monitor durable downloads, and hand resulting files directly to Studio or Postiz publishing. Trend Radar remains at `/research`, explainable scoring and affiliate offers at `/opportunities`, searchable creative intelligence at `/library`, governed local production at `/studio`, campaign planning and the content calendar at `/campaigns`, first-party revenue measurement at `/attribution`, publishing at `/publish`, and provider management at `/tools`.
-
-The first product vertical slice now includes database-backed Supabase authentication, workspace and role management, append-only audit events, secret references, and the governed plugin registry.
-
-## Local development access
-
-Local development starts with `LOCAL_AUTH_BYPASS=true`. Requests from `127.0.0.1`, `::1`, or the API test client receive the development-only `local-admin@trendrelay.local` identity with AAL2 assurance and an automatically created **Local Workspace** owner membership. The console displays a **Local admin** badge and opens without a sign-in step in both the browser and Electron renderer.
-
-The global toolbar uses an outlined bell for job notifications. It keeps a compact vertical list, wraps long source URLs and errors instead of scrolling horizontally, distinguishes unread job-status changes, and supports per-item or **Mark all read** actions. Read state is stored locally per user and does not remove job history.
-
-Each main workspace tab keeps its compact page identity and primary workspace context beneath the global toolbar while the page scrolls. Operational details remain in the normal document flow: for example, Library keeps its title and workspace selector visible, while media-processing and transcription status scroll with the content.
-
-The bypass is denied to LAN clients and ignored unless `ENVIRONMENT=development`; bearer authentication remains available and takes precedence when a token is supplied. Set `LOCAL_AUTH_BYPASS=false` to exercise the real Supabase/device sign-in flow locally. Never treat the local identity as a deployment account.
-## Browser authentication
-
-Configure the same Supabase project on both sides of the application:
-
-```dotenv
-SUPABASE_URL=https://PROJECT.supabase.co
-AUTH_AUDIENCE=authenticated
-NEXT_PUBLIC_SUPABASE_URL=https://PROJECT.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-```
-
-Then open `/sign-in`. The browser supports email/password sign-in and account creation, verification redirects, magic links, Google OAuth, password recovery, and global sign-out. Authenticated workspace screens are at `/workspaces`. Renderer components receive an authorized API helper rather than raw tokens; the Python API still verifies every request independently. Google OAuth launched from Electron is handed to the system browser.
-
-Authenticated browser users manage optional TOTP authenticator factors at `/account/security`. Enrollment keeps the QR secret in browser memory, verifies a six-digit challenge, and upgrades the session to AAL2. The global session gate redirects an enrolled AAL1 session to its factor challenge after password, magic-link, or OAuth authentication. Set `REQUIRE_AAL2_FOR_GOVERNED_ACTIONS=true` to make FastAPI require the verified `aal2` JWT claim for owner controls, Postiz execution/integration discovery, and desktop pairing approval. Paired device JWTs preserve the assurance level of their browser approval; older or claim-less tokens safely remain AAL1 and must be paired again after enabling AAL2 enforcement.
-
-The device-authorization API, `/device` approval screen, and Electron broker complete secure desktop pairing. Pairings start and exchange only from loopback, expire after ten minutes, store only a device-code digest, and issue a distinct eight-hour app JWT after explicit one-time approval. Electron encrypts that token with operating-system `safeStorage` in its main process and exposes only status, pairing, sign-out, and fixed-origin authorized-request capabilities to the isolated renderer. Local development generates its signing secret under ignored `.data/`; production must set `DEVICE_TOKEN_SECRET`. Start or validate the desktop path with `start-electron.bat` or `start-electron.bat --check`.
-
-## Authenticated workspace foundation
-
-Run `npm run db -- upgrade` to apply the current migration. Local development defaults to ignored `.data/trendrelay.db`; set `DATABASE_URL` to PostgreSQL for shared or production environments. Configure `SUPABASE_URL` and `AUTH_AUDIENCE` in local `.env` to enable bearer-token verification through Supabase's asymmetric JWKS endpoint.
-
-Authenticated endpoints under `/api/workspaces` create and list workspaces, manage owner/editor/approver/analyst membership, issue and revoke expiring email-bound invitations, register secret references, and read the workspace audit trail. Invitation tokens are returned once, stored only as SHA-256 digests, and accepted only by a signed-in account with the invited email. The UI always generates a copyable link and can optionally send it through configured SMTP. Email delivery supports encrypted STARTTLS or implicit TLS only, commits the token digest before sending, records metadata-only attempt/outcome telemetry, and is rate-limited per workspace. A provider failure leaves the one-time link available; raw tokens are never queued, audited, or stored. Configure `PUBLIC_WEB_URL`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_FROM_EMAIL`, and optional `SMTP_USERNAME`/`SMTP_PASSWORD` in local `.env`. `PUBLIC_WEB_URL` must use HTTPS except for loopback development, and `SMTP_SECURITY` must be `starttls` or `ssl`. Secret-reference requests accept only approved secret-store locators; raw credentials are never accepted. Mutations and their audit records commit in one database transaction.
-
-## Durable execution
-
-Migration `20260722_0004` adds a shared database job queue with expiring worker leases, heartbeats, bounded retries, scheduling, cancellation intent, and structured payload/result storage. PostgreSQL supports competing workers through row locking; SQLite is the single-worker local default. Douyin acquisition, Media Library ingestion, Last30Days research, OpenMontage preflights and local renders, and Postiz publishing operations use this durable queue. The research and production adapters write no legacy JSON state. The supervised durable worker polls recoverable jobs, retries eligible research/render failures within their bounds, processes publishing operations once, and reclaims expired leases after process restarts; `python scripts/worker.py --once` provides a deterministic operational drain.
-
-## Managed open-source tools
-
-Every incorporated GitHub repository is documented in [the third-party catalog](./docs/third-party/README.md). Managed capability providers are pinned in `config/tool-catalog.json`, while supporting runtime packages are pinned in `package-lock.json`. The About & Tools page shows each managed provider's repository, revision, license posture, capabilities, installation state, activation state, and guided setup when configuration is required. Douyin setup launches the app-managed cookie-capture browser from its tool card; Postiz opens its managed local console while Meta Ads launches a fixed interactive authentication command; Last 30 Days reports configured optional provider-key names without values; Agent Reach runs privacy-safe diagnostics. OpenMontage links directly to Studio because its local adapter needs no separate login. Source and runtime state stay ignored under `.tools/` and `.data/`.
-
-Use the UI at `http://localhost:3001/tools`, or the local CLI:
+Validate changes with:
 
 ```powershell
-npm run tools -- list
-npm run tools -- install last30days-skill --confirm-external-action
-npm run tools -- activate last30days-skill
-npm run tools -- deactivate last30days-skill
-npm run tools -- uninstall last30days-skill --confirm-external-action
-npm run tools -- install meta-ads-kit --confirm-external-action
-npm run tools -- activate meta-ads-kit
+npm run release:check
 ```
 
-Installation fetches an exact reviewed revision; activation separately makes it eligible for orchestration. Source-ready tools still require a TrendRelay capability adapter and their documented upstream dependency/credential setup before production use. Lifecycle mutations are loopback-only. MediaCrawler remains visible but cannot be installed or activated because its current license prohibits commercial use.
+The main code lives in:
 
-## Trend Radar research
-
-TrendRelay integrates the MIT-licensed `mvanhorn/last30days-skill` at its exact pinned revision. The adapter uses the stable agent JSON 1.x contract, disables browser-cookie extraction, passes only allowlisted research credentials, and persists normalized workspace evidence and execution state in the SQL durable-job store.
-
-Install and activate the provider from About & Tools or the CLI:
-
-```powershell
-npm run tools -- install last30days-skill --confirm-external-action
-npm run tools -- activate last30days-skill
-npm run research -- check
+```text
+apps/web       Next.js interface
+services/api   FastAPI control plane and media catalog
+scripts        Development supervisor and Douyin integration
+workers        Background media and publishing workers
 ```
 
-Run confirmed live research, optionally selecting sources and depth:
+See [DESIGN.md](DESIGN.md) for interaction principles, [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidance, and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
-```powershell
-npm run research -- run "portable espresso makers" --mode quick --confirm-external-action
-npm run research -- run "AI video tools" --source reddit --source youtube --mode deep --confirm-external-action
-npm run research -- list
-```
+## Responsible use
 
-Free upstream sources require no key. Optional research keys are documented in `.env.example`; unrelated provider credentials are never passed to the research process. Use `--mock` for deterministic local verification without network calls. The `/research` workbench now harmonizes three distinct roles: Last 30 Days executes recent-topic discovery, Agent Reach displays safe local channel diagnostics, and Meta Ads Kit adds first-party ad-performance validation. Agent Reach readiness is never presented as proof of a live request or authenticated platform session.
-## Meta Ads performance research
+Only download, retain, and reuse media you are authorized to access. Douyin integrations may rely on browser-facing or reverse-engineered interfaces that can change without notice and may be restricted by platform terms. Review the [third-party notices](docs/third-party/README.md) before redistribution.
 
-TrendRelay incorporates the MIT-licensed `TheMattBerman/meta-ads-kit` at revision `0879bb4566a836670f33beb509ff7d8d4779849e`. Its isolated runtime uses the renamed `@vishalgojha/social-flow` 0.2.17 package while retaining the upstream `social` command. Open `/research` to run a confirmed read-only briefing for account status, active campaigns, campaign/ad performance, winners, bleeders, and high-frequency fatigue signals.
-
-```powershell
-npm run tools -- install meta-ads-kit --confirm-external-action
-npm run tools -- activate meta-ads-kit
-npm run meta-ads -- check
-```
-
-Open the collapsed **Meta Marketing API** access guide on `/tools` for the shortest setup path and official links. The preferred local flow is **Meta Ads Kit → Setup → Launch Meta login**: the isolated Social Flow profile completes OAuth and stores its session locally, so no raw access token is pasted into TrendRelay. For manual developer setup, create a Business app, add Marketing API, and use Meta's Graph API Explorer for short diagnostic tokens; use a system user for unattended server access. `META_AD_ACCOUNT=act_...` may set a non-secret default account identifier. TrendRelay never returns token values or provider stderr and exposes no pause, resume, budget, create, upload, or delete path. See [Meta Ads Kit](./docs/third-party/meta-ads-kit.md), [Meta Marketing API authorization](https://developers.facebook.com/docs/marketing-api/overview/authorization/), and [ADR 0011](./docs/architecture/0011-meta-ads-read-only-boundary.md).
-## Douyin batch downloader
-
-TrendRelay integrates the MIT-licensed `jiji262/douyin-downloader` provider at a pinned revision. Its source, dependencies, cookies, database, and downloaded media stay outside Git under `.tools/` and `.data/`.
-
-Install and verify the provider:
-
-```powershell
-npm run douyin -- install
-npm run douyin -- check
-```
-
-Download a single video or profile:
-
-```powershell
-npm run douyin -- batch "https://www.douyin.com/video/VIDEO_ID"
-npm run douyin -- batch "https://www.douyin.com/user/SEC_UID" --mode post --limit 50
-```
-
-Run a newline-delimited batch with deduplication and incremental updates:
-
-```powershell
-npm run douyin -- batch --file .\douyin-urls.txt --mode post --mode mix --limit 50 --incremental
-```
-
-The main operations console provides the simpler authenticated path: choose a workspace, paste one or many Douyin video/profile/collection/share links, review the detected batch, and start it with one explicit action. **Start download** remains clickable when setup or input is incomplete and explains the exact correction inline instead of appearing broken. It ignores duplicate links, flags unsupported URLs before submission, keeps advanced profile mode and per-source limits behind progressive disclosure, and separates active, completed, and attention-needed downloads. Its focused field keeps the label outside the focus ring, the workflow guide stays to one compact row, and download history opens details on demand with five rows shown initially. Completed artifacts include size and SHA-256 provenance plus direct **Prepare**, **Plan**, **Publish**, and **Open folder** handoffs. The supervised worker resumes queued downloads after restarts. The interaction model adapts the clear paste → review → download → open-folder progression documented in the [Nabla Mind batch downloader guide](https://www.nablamind.com/video-download/download-multiple-youtube-videos.html), while retaining TrendRelay's local, durable, rights-aware workflow. TikTok acquisition remains unavailable until a reviewed provider is incorporated; Postiz can still publish approved media to connected TikTok accounts.
-
-The CLI default limit is 50 items per selected profile mode; use `--limit 0` only for an intentional full crawl. The GUI is deliberately bounded to 100. Use `--dry-run` to inspect redacted configuration without downloading. Downloads always use the pinned API-based provider; there is no browser download fallback. When cookies are missing, click **Connect Douyin** in the media console. TrendRelay installs isolated login support if needed, opens Douyin, detects the required session cookies automatically, stores them under ignored `.data/`, closes the login window, and refreshes provider readiness. The CLI equivalent is `npm run douyin -- connect`; it requires no terminal confirmation.
-
-Optional authenticated access reads `DOUYIN_*` variables from the environment or local `.env`; values are never printed and the generated runtime configuration is deleted after each run. Downloads are written to `.data/downloads/douyin/`. Only download and reuse content when permitted by platform terms and applicable rights.
-
-## OpenMontage local production
-
-TrendRelay uses the pinned AGPL-3.0 OpenMontage source for governed short-form planning and deterministic local clipping. Open `/studio` to create an immutable-source preflight, record owned/licensed/public-domain rights, set a budget cap, approve the plan as an owner or approver, and submit manual clip ranges. Rendering invokes the upstream `VideoTrimmer` in a scrubbed subprocess with no provider credentials or network requirement.
-
-The locked `ffmpeg-static@5.3.0` and `@derhuerst/ffprobe-static@5.3.0` packages provide FFmpeg/ffprobe 6.1.1. Clips are re-encoded for keyframe-safe boundaries, probed for a valid video stream and duration, hashed, and written only beneath `.data/productions/openmontage/`. Durable render records preserve the source hash, exact OpenMontage revision, package versions, artifact hashes, and zero actual provider cost. Rendering does not publish; `/publish` remains a separate governed Postiz action.
-
-Use the browser Studio or the CLI:
-
-```powershell
-npm run tools -- install openmontage --confirm-external-action
-npm run tools -- activate openmontage
-npm run studio -- runtime
-npm run studio -- propose "Three launch clips" --source .\source.mp4 --rights owned --pipeline clip-factory --platform tiktok --clips 3 --budget 1 --confirm-external-action
-npm run studio -- approve PRODUCTION_ID --approved-by WORKSPACE_OWNER --confirm-external-action
-npm run studio -- render PRODUCTION_ID --workspace local --segment "Hook:0:15" --segment "Proof:30:50" --confirm-external-action
-```
-
-The upstream base module auto-loads its own `.env`; TrendRelay deliberately replaces that base only inside the isolated trimmer process so secrets cannot cross this boundary. Paid/networked providers, automatic generation, and arbitrary upstream workflows remain disabled. Distribution must satisfy OpenMontage AGPL-3.0 and the packaged media binaries' GPL-3.0-or-later obligations; see [OpenMontage](./docs/third-party/openmontage.md) and [FFmpeg static runtime](./docs/third-party/ffmpeg-static.md).
-
-## Agent Reach channel diagnostics
-
-TrendRelay incorporates the MIT-licensed Agent Reach 1.5.0 source at revision `1494c2ab239e7355a77e7cceaf3271453a1f34b5`. Its 15-channel registry covers GitHub, X, YouTube, Reddit, Facebook, Instagram, Bilibili, Xiaohongshu, LinkedIn, Xiaoyuzhou, V2EX, Xueqiu, RSS, Exa, and general web reading.
-
-Install and activate the pinned source, then inspect local readiness:
-
-```powershell
-npm run tools -- install agent-reach --confirm-external-action
-npm run tools -- activate agent-reach
-npm run reach -- check
-npm run reach -- channels
-```
-
-The About & Tools page also provides a Diagnose action. Diagnostics only inspect local file, package, executable, and configured secret-name presence. They do not execute discovered commands, probe the network, read Agent Reach user configuration, inspect browser sessions, or expose secret values. A ready result is a local prerequisite signal, not proof that a live or authenticated platform request will succeed. The upstream system installer, MCP/skill mutations, and cookie import remain disabled.
-
-## Explainable opportunities and affiliate offers
-
-Open `/opportunities` to import a UTF-8 affiliate CSV, attach matching offers to trend evidence, and save a deterministic 0–100 opportunity score. Required CSV columns are `product_name`, `marketplace`, `network`, and `affiliate_url`; price, percentage or flat commission, cookie window, availability, restrictions, and product metadata are optional. Re-importing identical offers is idempotent.
-
-Every opportunity card exposes all positive factors and penalties with the input, weight, signed contribution, reason, and evidence-reference count. Distinct research sources drive cross-platform confirmation, available offers and commission drive affiliate economics, and completed workspace research can be attached without copying evidence. The principal action creates a linked draft campaign carrying its markets, languages, primary affiliate URL, and score context. See [ADR 0013](./docs/architecture/0013-explainable-opportunities-and-affiliate-import.md).
-
-The collapsed **Amazon Creators API** guide on `/tools` links to the current Associates onboarding, application-credential, and OAuth-token instructions. Amazon Product Advertising API is retired; new work should target Creators API. TrendRelay does not yet accept Amazon credentials or include a reviewed Creators API adapter, so use SiteStripe affiliate links or the CSV import today. Never paste the temporary one-hour bearer token into TrendRelay; a future adapter should accept the application credential ID/secret through the governed secret boundary and mint tokens server-side.
-
-## Immutable Media Library
-
-Douyin acquisitions retain their provenance: Library refresh reads local downloader metadata to recover the channel name, source caption, publication time, and item-specific video URL. The detail view keeps the channel readable as text and opens the original video from a compact, accessible Douyin icon. Library browsing uses contextual counted facets for media type, channel, source, and usage rights, with optional grouping by channel, source, or rights status. Each facet recalculates against the active search and other filters while ignoring only itself, and the result total covers the complete match set rather than the loaded page.
-
-Open `/library` to import approved local video, audio, or image files; search by source metadata, creator, transcript, hook, product, format, or keyword; review usage rights; and hand publishable originals to Studio or Campaigns. Imports run through the leased worker, deduplicate by SHA-256, preserve a hash-addressed immutable original beneath `.data/media/`, and create separate thumbnail, 720p proxy, and mono 16 kHz audio versions with their own hashes and media metadata.
-
-Douyin downloads enter automatically as `reference-only`; authenticated OpenMontage renders also enter automatically and inherit only an explicit publishable source classification. `owned`, `licensed`, and `public-domain` are the only publishable states. Owner/approver rights changes require governed assurance, confirmation, written evidence, and an audit event. Campaign planning hashes selected bytes and rejects known `reference-only`, `unknown`, or `prohibited` originals and derivatives even if a file was renamed or copied.
-
-The Library accepts operator-reviewed speech and OCR text and derives versioned creative recipes with hooks, calls to action, products, formats, structures, scene pacing, reveal timing, caption density, and keywords. No automatic transcription provider is currently configured; both the API and UI disclose that limitation instead of labeling machine output as reviewed. See [ADR 0014](./docs/architecture/0014-immutable-media-library.md).
-
-## Campaign planning and manual fallback
-
-Open `/campaigns` to connect an objective, audience, markets, languages, affiliate destination, approved MP4, platform, caption, disclosure, timezone, and suggested posting time. New plans enter `needs_approval`; only owners and approvers can approve or reject them, and decided plans lock both metadata and SHA-256-fingerprinted media bytes.
-
-Every approved plan can be sent to Postiz or exported as an idempotent local manual package. The ZIP contains the final video, optional cover, structured manifest, caption, hashtags, affiliate link, disclosure, suggested time, and platform deep link. Exports are loopback-only, explicitly confirmed, SHA-256 audited, and saved beneath ignored `.data/manual-packages/`. See [ADR 0012](./docs/architecture/0012-campaign-calendar-and-manual-fallback.md).
-
-## First-party revenue attribution
-
-Open `/attribution` to create transparent HTTPS tracking links from a campaign, approved plan, or imported affiliate offer; inspect the destination host and disclosure; copy the first-party URL; disable or expire links; import network conversion CSVs; and review campaign and creative-format revenue. Campaign cards link directly into this workbench.
-
-Public `/c/{code}` redirects preserve existing affiliate parameters, add only the configured campaign and platform sub-ID parameters, route to optional country-specific HTTPS destinations from trusted edge headers, and record a privacy-minimized click. Unknown visitor query parameters are ignored. `/c/{code}/info` exposes the destination host, disclosure, and status without registering a click. Disabled, expired, broken, or unavailable-offer links fail closed with `410 Gone`.
-
-TrendRelay stores no raw IP address, full referrer path, browser fingerprint, or network order reference. Unique visitors use a workspace-scoped daily HMAC; conversion references use an HMAC and imports are idempotent across approval, reversal, and refund updates. Production must set `ATTRIBUTION_HASH_SECRET`; local development persists an ignored secret under `.data/`. CSV imports accept `tracking_code,network,conversion_id,occurred_at,status,currency,commission` plus optional `order_value`, with a 10,000-row cap. Multi-currency totals remain separated, EPC is directional rather than causal, and unmatched/cookie-window limitations stay visible. See [ADR 0015](./docs/architecture/0015-first-party-attribution-boundary.md).
-
-## Social publishing with Postiz
-
-TrendRelay embeds [gitroomhq/postiz-app](https://github.com/gitroomhq/postiz-app) 2.21.7 at revision `7236213ea4520bd67b45688c2787d1f4586b3b51` and connects to it through the pinned [gitroomhq/postiz-agent](https://github.com/gitroomhq/postiz-agent) 2.0.15 adapter at revision `41c5a9dbd6b2776863e7c05c22e7a385c208321c`. Both are AGPL-3.0 licensed. Postiz runs entirely on this Windows machine with isolated PostgreSQL (`54329`), Redis (`6389`), Temporal (`7233`), backend (`3000`), orchestrator (`3002`), and console (`4200`). A Postiz Cloud account is not used.
-
-`start.cmd` performs one-time native preparation, then the unified runner starts or reuses the complete service and waits up to eight minutes for a cold compilation. TrendRelay creates a private `admin@trendrelay.local` Postiz account, rotates a local API key, and stores all passwords, keys, database files, uploads, and logs only beneath ignored `.data/postiz-selfhost/`. **Open local Postiz** uses Postiz's normal local login endpoint server-side and sets the browser session without returning credentials to the TrendRelay UI. Local status checks never print key characters.
-
-From `/publish`: enable the Postiz tool, open the local console, connect a social destination, return to TrendRelay, and choose **Refresh accounts**. Self-hosting removes the Postiz Cloud login; it does not remove each platform's developer-app and account-authorization requirements.
-
-Before authorizing, open **Tools → Postiz Agent → Setup** and expand only the platform you need. The guided cards cover Reddit, direct Instagram, Instagram through Facebook, Threads, TikTok, YouTube, LinkedIn, X, Pinterest, Discord, and Slack. Each card shows the exact callback URL(s), account requirements, and fixed app fields. Values are saved only to the ignored Postiz `.env`; the API returns configured booleans, never values. The embedded Postiz backend also rejects any OAuth URL whose app/client identifier would be `undefined`, and its channel picker directs the user back to this wizard instead of leaving TrendRelay on a broken provider page.
-Local troubleshooting commands:
-
-```powershell
-npm run postiz:service -- status --json
-npm run postiz:service -- prepare
-npm run postiz -- check
-npm run postiz -- auth-status
-npm run postiz -- integrations
-```
-
-Authenticated users work at `/publish`: editors create dry-run previews, while owners and approvers discover integrations and explicitly submit drafts or schedules. Preview a multi-platform short-video draft without provider calls:
-
-```powershell
-npm run postiz -- short-video --video .\.data\media\approved-clip.mp4 --caption "Launch caption" --date "2026-07-20T10:00:00+07:00" --target tiktok=TIKTOK_ID --target instagram=INSTAGRAM_ID --target youtube=YOUTUBE_ID
-```
-
-To create the remote draft, append `--execute --confirm-external-action`. To schedule it, also append `--schedule` with a future timezone-aware date. TikTok defaults to `SELF_ONLY`; YouTube defaults to private. Media must be an existing MP4 beneath `PUBLISHING_MEDIA_ROOTS`. Every execution has a content-derived operation ID and a one-attempt durable job because provider timeouts can leave uncertain remote state.
-## Local-only material
-
-`Research/` and `References/` are intentionally ignored. They may contain working notes or licensed/source material and are not part of the distributable repository.
-
-## Documentation rule
-
-This README is a living entry point. Any change to the project goal, stack, structure, setup, major commands, or release scope must update this file in the same atomic commit.
+No project-level software license has been selected yet. Until one is added, TrendRelay-authored code remains under default copyright while incorporated dependencies retain their respective licenses.

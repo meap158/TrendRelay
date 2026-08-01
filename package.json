@@ -2,6 +2,7 @@
   "name": "trendrelay",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@10.9.4",
   "description": "Affiliate trend-to-content orchestration platform",
   "workspaces": [
     "apps/*",
@@ -16,6 +17,9 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
+    "test": "node scripts/run_pytest.mjs",
+    "check": "npm run lint && npm run typecheck && npm test",
+    "release:check": "npm run check && npm run build",
     "douyin": "python scripts/douyin.py",
     "postiz": "python scripts/postiz.py",
     "postiz:service": "python scripts/postiz_service.py",

@@ -157,6 +157,31 @@
                       "documentation":  "docs/third-party/meta-ads-kit.md"
                   },
                   {
+                      "id":  "meta-ads-collector",
+                      "name":  "Meta Ads Collector",
+                      "repository":  "https://github.com/promisingcoder/MetaAdsCollector",
+                      "revision":  "0ffb2fb1af94eae6542b328ab3ae31fc1c9a5897",
+                      "version":  "1.4.0",
+                      "license":  "MIT",
+                      "license_url":  "https://github.com/promisingcoder/MetaAdsCollector/blob/0ffb2fb1af94eae6542b328ab3ae31fc1c9a5897/LICENSE",
+                      "category":  "Competitive ad research",
+                      "summary":  "Bounded public Meta Ad Library search with creative, delivery, spend, and impression evidence.",
+                      "capabilities":  [
+                                           "Public Ad Library keyword search",
+                                           "Page and competitor ad collection",
+                                           "Creative and delivery evidence"
+                                       ],
+                      "integration_status":  "research-ready",
+                      "commercial_use":  "allowed",
+                      "install_strategy":  "trendrelay-wrapper",
+                      "install_allowed":  true,
+                      "activation_allowed":  true,
+                      "default_active":  false,
+                      "root_path":  ".tools/catalog/meta-ads-collector",
+                      "source_path":  ".tools/catalog/meta-ads-collector/source",
+                      "documentation":  "docs/third-party/meta-ads-collector.md"
+                  },
+                  {
                       "id":  "mediacrawler",
                       "name":  "MediaCrawler",
                       "repository":  "https://github.com/NanmiCoder/MediaCrawler",
