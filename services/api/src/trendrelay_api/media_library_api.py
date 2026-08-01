@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import re
 from collections import Counter
 from datetime import datetime
@@ -211,6 +212,21 @@ def _asset_view(session: Session, item: MediaAsset) -> dict[str, Any]:
         .order_by(CreativeAnalysis.version.desc())
         .limit(1)
     )
+    recorded_origin_value = (
+        item.engagement.get("origin_urls", [])
+        if isinstance(item.engagement, dict)
+        else []
+    )
+    recorded_origins = (
+        recorded_origin_value if isinstance(recorded_origin_value, list) else []
+    )
+    source_urls = list(
+        dict.fromkeys(
+            url
+            for url in [*recorded_origins, item.source_url]
+            if isinstance(url, str) and url
+        )
+    )
     return {
         "id": item.id,
         "workspace_id": item.workspace_id,
@@ -218,6 +234,7 @@ def _asset_view(session: Session, item: MediaAsset) -> dict[str, Any]:
         "media_kind": item.media_kind,
         "source_type": item.source_type,
         "source_url": item.source_url,
+        "source_urls": source_urls,
         "platform": item.platform,
         "creator": item.creator,
         "published_at": item.published_at,
@@ -419,22 +436,42 @@ def list_assets(
     session: DatabaseSession,
     q: Annotated[str | None, Query(max_length=300)] = None,
     platform: Annotated[str | None, Query(max_length=80)] = None,
+    platform_missing: Annotated[bool, Query()] = False,
+    creator: Annotated[str | None, Query(max_length=200)] = None,
+    creator_missing: Annotated[bool, Query()] = False,
     rights_status: Annotated[RightsStatus | None, Query()] = None,
     media_kind: Annotated[Literal["video", "audio", "image"] | None, Query()] = None,
     max_duration_seconds: Annotated[int | None, Query(ge=1, le=86_400)] = None,
+    sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> dict[str, Any]:
     membership(session, workspace_id, user.id)
     query = select(MediaAsset).where(MediaAsset.workspace_id == workspace_id)
     if platform:
         query = query.where(MediaAsset.platform == platform)
+    elif platform_missing:
+        query = query.where(
+            (MediaAsset.platform.is_(None)) | (func.trim(MediaAsset.platform) == "")
+        )
+    if creator:
+        query = query.where(MediaAsset.creator == creator)
+    elif creator_missing:
+        query = query.where(
+            (MediaAsset.creator.is_(None)) | (func.trim(MediaAsset.creator) == "")
+        )
     if rights_status:
         query = query.where(MediaAsset.rights_status == rights_status)
     if media_kind:
         query = query.where(MediaAsset.media_kind == media_kind)
     if max_duration_seconds:
         query = query.where(MediaAsset.duration_ms <= max_duration_seconds * 1000)
-    items = session.scalars(query.order_by(MediaAsset.collected_at.desc()).limit(250)).all()
+    order_by = {
+        "newest": (MediaAsset.collected_at.desc(),),
+        "oldest": (MediaAsset.collected_at.asc(),),
+        "title": (func.lower(MediaAsset.title).asc(), MediaAsset.collected_at.desc()),
+        "duration": (MediaAsset.duration_ms.desc(), MediaAsset.collected_at.desc()),
+    }[sort]
+    items = session.scalars(query.order_by(*order_by).limit(250)).all()
     views = [_asset_view(session, item) for item in items]
     if q:
         needle = q.casefold().strip()
@@ -458,7 +495,36 @@ def list_assets(
                 ]
             ).casefold()
         ]
-    return {"assets": views[:limit]}
+
+    def facet(column: Any, *, missing_label: str) -> list[dict[str, Any]]:
+        rows = session.execute(
+            select(column, func.count(MediaAsset.id))
+            .where(MediaAsset.workspace_id == workspace_id)
+            .group_by(column)
+        ).all()
+        values = [
+            {
+                "value": value or "",
+                "label": value or missing_label,
+                "count": count,
+            }
+            for value, count in rows
+        ]
+        return sorted(
+            values,
+            key=lambda item: (-item["count"], item["label"].casefold()),
+        )
+
+    return {
+        "assets": views[:limit],
+        "total": len(views),
+        "facets": {
+            "channels": facet(MediaAsset.creator, missing_label="Unassigned channel"),
+            "platforms": facet(MediaAsset.platform, missing_label="Other sources"),
+            "rights": facet(MediaAsset.rights_status, missing_label="Unknown rights"),
+            "media_kinds": facet(MediaAsset.media_kind, missing_label="Other media"),
+        },
+    }
 
 
 @router.get("/assets/{asset_id}")
@@ -497,8 +563,47 @@ def asset_content(
         path = Path(version.path).resolve(strict=True)
     except OSError as error:
         raise HTTPException(status_code=404, detail="Media file is unavailable.") from error
-    return FileResponse(path, media_type=version.mime_type, filename=path.name)
+    return FileResponse(
+        path,
+        media_type=version.mime_type,
+        filename=path.name,
+        content_disposition_type="inline",
+    )
 
+
+@router.post("/assets/{asset_id}/preview")
+def asset_preview(
+    workspace_id: str,
+    asset_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, str]:
+    membership(session, workspace_id, user.id)
+    asset = _asset_record(session, workspace_id, asset_id)
+    if asset.media_kind != "video":
+        raise HTTPException(status_code=422, detail="Only videos have playable previews.")
+    versions = session.scalars(
+        select(MediaAssetVersion).where(
+            MediaAssetVersion.asset_id == asset_id,
+            MediaAssetVersion.version_kind.in_(("proxy", "original")),
+        )
+    ).all()
+    version = next((item for item in versions if item.version_kind == "proxy"), None)
+    version = version or next(
+        (item for item in versions if item.version_kind == "original"), None
+    )
+    if not version:
+        raise HTTPException(status_code=404, detail="Video preview not found.")
+    try:
+        path = Path(version.path).resolve(strict=True)
+    except OSError as error:
+        raise HTTPException(status_code=404, detail="Video preview is unavailable.") from error
+    if path.stat().st_size > 100 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Video preview is too large to play safely.")
+    return {
+        "mime_type": version.mime_type,
+        "content_base64": base64.b64encode(path.read_bytes()).decode("ascii"),
+    }
 
 @router.post("/assets/{asset_id}/rights")
 def update_rights(

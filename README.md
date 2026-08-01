@@ -239,6 +239,8 @@ The collapsed **Amazon Creators API** guide on `/tools` links to the current Ass
 
 ## Immutable Media Library
 
+Douyin acquisitions retain their provenance: Library refresh reads local downloader metadata to recover the channel name, source caption, publication time, and item-specific video URL. The detail view keeps the channel readable as text and opens the original video from a compact, accessible Douyin icon. Library browsing uses workspace-wide counted facets for media type, channel, source, and usage rights, with optional grouping by channel, source, or rights status.
+
 Open `/library` to import approved local video, audio, or image files; search by source metadata, creator, transcript, hook, product, format, or keyword; review usage rights; and hand publishable originals to Studio or Campaigns. Imports run through the leased worker, deduplicate by SHA-256, preserve a hash-addressed immutable original beneath `.data/media/`, and create separate thumbnail, 720p proxy, and mono 16 kHz audio versions with their own hashes and media metadata.
 
 Douyin downloads enter automatically as `reference-only`; authenticated OpenMontage renders also enter automatically and inherit only an explicit publishable source classification. `owned`, `licensed`, and `public-domain` are the only publishable states. Owner/approver rights changes require governed assurance, confirmation, written evidence, and an audit event. Campaign planning hashes selected bytes and rejects known `reference-only`, `unknown`, or `prohibited` originals and derivatives even if a file was renamed or copied.

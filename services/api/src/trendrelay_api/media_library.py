@@ -6,6 +6,7 @@ import hashlib
 import json
 import mimetypes
 import os
+import re
 import shutil
 import subprocess
 from datetime import UTC, datetime
@@ -210,7 +211,27 @@ def process_media(source: Path, workspace_id: str, digest: str) -> dict[str, Any
                     str(thumbnail),
                 ]
             )
-            _run(command)
+            try:
+                _run(command)
+            except RuntimeError:
+                if kind != "video":
+                    raise
+                thumbnail.unlink(missing_ok=True)
+                _run(
+                    [
+                        str(FFMPEG),
+                        "-y",
+                        "-i",
+                        str(original),
+                        "-frames:v",
+                        "1",
+                        "-vf",
+                        "scale=w='min(720,iw)':h=-2",
+                        "-q:v",
+                        "3",
+                        str(thumbnail),
+                    ]
+                )
         thumbnail_meta = probe_media(thumbnail)
         versions.append(_version(thumbnail, "thumbnail", thumbnail_meta))
 
@@ -297,14 +318,62 @@ def create_ingest_job(
     hashtags: list[str] | None = None,
     audio_identifier: str | None = None,
     engagement: dict[str, Any] | None = None,
+    source_sha256: str | None = None,
     factory=None,
 ) -> dict[str, Any]:
     factory = factory or JOB_SESSION_FACTORY
     source = approved_source_path(path)
-    digest = file_sha256(source)
+    if source_sha256 and not re.fullmatch(r"[a-f0-9]{64}", source_sha256):
+        raise ValueError("source_sha256 must be a lowercase SHA-256 digest.")
+    digest = source_sha256 or file_sha256(source)
     with factory() as session:
         existing = _existing_asset(session, workspace_id, digest)
         if existing:
+            incoming = engagement or {}
+            current = dict(existing.engagement or {})
+            current_origin_value = current.get("origin_urls") or []
+            incoming_origin_value = incoming.get("origin_urls") or []
+            current_origins = (
+                current_origin_value if isinstance(current_origin_value, list) else []
+            )
+            incoming_origins = (
+                incoming_origin_value if isinstance(incoming_origin_value, list) else []
+            )
+            origin_urls = list(
+                dict.fromkeys(
+                    url
+                    for url in [*current_origins, *incoming_origins, source_url]
+                    if isinstance(url, str) and url
+                )
+            )
+            current.update(incoming)
+            if origin_urls:
+                current["origin_urls"] = origin_urls
+            if current != (existing.engagement or {}):
+                existing.engagement = current
+            if source_url and (
+                not existing.source_url
+                or (
+                    (platform or existing.platform) == "douyin"
+                    and "/video/" in source_url
+                    and "/video/" not in existing.source_url
+                )
+            ):
+                existing.source_url = source_url
+            published_value = (
+                datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+                if published_at
+                else None
+            )
+            for attribute, value in (
+                ("platform", platform),
+                ("creator", creator),
+                ("published_at", published_value),
+                ("caption", caption),
+            ):
+                if not getattr(existing, attribute) and value:
+                    setattr(existing, attribute, value)
+            session.commit()
             return {
                 "id": None,
                 "status": "succeeded",

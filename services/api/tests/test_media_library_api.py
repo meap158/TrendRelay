@@ -1,4 +1,5 @@
 import asyncio
+import base64
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -168,6 +169,7 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
             json={
                 "path": str(source),
                 "title": "Duplicate title is ignored",
+                "source_url": "https://www.douyin.com/video/456",
                 "rights_status": "unknown",
                 "confirm_external_action": True,
             },
@@ -190,12 +192,66 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
         )
     )
     assert before.status_code == 200
+    assert before.json()["total"] == 1
     asset = before.json()["assets"][0]
+    assert asset["media_kind"] == "video"
     assert asset["publishable"] is False
     assert asset["original_sha256"] == media_library.file_sha256(source)
     assert asset["published_at"].startswith("2026-07-20T08:30:00")
     assert asset["engagement"]["likes"] == 1200
+    assert asset["source_urls"] == [
+        "https://www.douyin.com/video/456",
+        "https://www.douyin.com/video/123",
+    ]
     assert asset["versions"][0]["kind"] == "original"
+
+    categorized = asyncio.run(
+        request(
+            "GET",
+            f"/api/workspaces/{workspace_id}/media/library/assets",
+            params={"media_kind": "video", "sort": "duration"},
+        )
+    )
+    assert categorized.status_code == 200
+    assert categorized.json()["total"] == 1
+    assert categorized.json()["assets"][0]["id"] == asset_id
+    assert categorized.json()["facets"]["channels"] == [
+        {"value": "Demo creator", "label": "Demo creator", "count": 1}
+    ]
+    assert categorized.json()["facets"]["platforms"] == [
+        {"value": "douyin", "label": "douyin", "count": 1}
+    ]
+
+    by_channel = asyncio.run(
+        request(
+            "GET",
+            f"/api/workspaces/{workspace_id}/media/library/assets",
+            params={"creator": "Demo creator"},
+        )
+    )
+    assert by_channel.status_code == 200
+    assert by_channel.json()["total"] == 1
+    assert by_channel.json()["assets"][0]["creator"] == "Demo creator"
+
+    preview = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/preview",
+        )
+    )
+    assert preview.status_code == 200
+    assert preview.headers["content-type"].startswith("application/json")
+    assert preview.json()["mime_type"] == "video/mp4"
+    assert base64.b64decode(preview.json()["content_base64"]) == b"immutable-video"
+
+    invalid_sort = asyncio.run(
+        request(
+            "GET",
+            f"/api/workspaces/{workspace_id}/media/library/assets",
+            params={"sort": "popular"},
+        )
+    )
+    assert invalid_sort.status_code == 422
 
     campaign_response = asyncio.run(
         request(

@@ -1,11 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { WorkspaceSectionNav } from "../workspace-section-nav";
 
 type Workspace = { id: string; name: string; role: string };
+type ViewMode = "gallery" | "list";
+type GroupBy = "none" | "channel" | "source" | "rights";
+type Facet = { value: string; label: string; count: number };
+type LibraryFacets = {
+  channels: Facet[];
+  platforms: Facet[];
+  rights: Facet[];
+  media_kinds: Facet[];
+};
 type Version = { kind: "original" | "proxy" | "thumbnail" | "audio"; path: string; size_bytes: number };
 type Transcript = { id: string; kind: "speech" | "ocr"; language: string; text: string };
 type Analysis = {
@@ -28,6 +38,7 @@ type Asset = {
   media_kind: "video" | "audio" | "image";
   source_type: string;
   source_url?: string | null;
+  source_urls?: string[];
   platform?: string | null;
   creator?: string | null;
   published_at?: string | null;
@@ -76,6 +87,17 @@ function displayDuration(milliseconds?: number | null): string {
   return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
 }
 
+function DouyinMark() {
+  const path = "M14.2 3v10.1a4.4 4.4 0 1 1-3.3-4.26v3.06a1.75 1.75 0 1 0 .75 1.44V3h2.55Zm0 0c.38 2.62 1.95 4.2 4.8 4.68v2.77a7.4 7.4 0 0 1-4.8-1.72V3Z";
+  return (
+    <svg className="douyin-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path className="douyin-mark-cyan" d={path} />
+      <path className="douyin-mark-pink" d={path} />
+      <path className="douyin-mark-core" d={path} />
+    </svg>
+  );
+}
+
 function Thumbnail({
   asset,
   workspaceId,
@@ -108,16 +130,178 @@ function Thumbnail({
     };
   }, [apiFetch, asset.id, hasThumbnail, workspaceId]);
 
-  return source
-    ? (
-      <>
-        {/* eslint-disable-next-line @next/next/no-img-element -- authenticated blob URL */}
-        <img className="library-thumbnail" src={source} alt="" />
-      </>
-    )
-    : <div className="library-thumbnail library-thumbnail-empty">{asset.media_kind}</div>;
+  return (
+    <div className="library-thumbnail-frame">
+      {source ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element -- authenticated blob URL */}
+          <img className="library-thumbnail" src={source} alt={`${asset.title} thumbnail`} loading="lazy" />
+        </>
+      ) : <div className="library-thumbnail library-thumbnail-empty">{asset.media_kind}</div>}
+      {asset.media_kind === "video" && <span className="library-play-indicator" aria-hidden="true">▶</span>}
+      {asset.media_kind === "video" && <span className="library-duration-badge">{displayDuration(asset.duration_ms)}</span>}
+    </div>
+  );
 }
 
+function previewBlob(contentBase64: string, mimeType: string): Blob {
+  const binary = window.atob(contentBase64);
+  const chunks: ArrayBuffer[] = [];
+  for (let offset = 0; offset < binary.length; offset += 8192) {
+    const slice = binary.slice(offset, offset + 8192);
+    const bytes = Uint8Array.from(slice, (character) => character.charCodeAt(0));
+    chunks.push(bytes.buffer as ArrayBuffer);
+  }
+  return new Blob(chunks, { type: mimeType });
+}
+
+function MediaPreview({
+  asset,
+  workspaceId,
+  apiFetch,
+  videoPosition,
+  videoTotal,
+  hasPreviousVideo,
+  hasNextVideo,
+  autoStart,
+  onPlaybackChange,
+  onPreviousVideo,
+  onNextVideo,
+}: {
+  asset: Asset;
+  workspaceId: string;
+  apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  videoPosition: number;
+  videoTotal: number;
+  hasPreviousVideo: boolean;
+  hasNextVideo: boolean;
+  autoStart: boolean;
+  onPlaybackChange: (playing: boolean) => void;
+  onPreviousVideo: () => void;
+  onNextVideo: () => void;
+}) {
+  const [source, setSource] = useState("");
+  const [error, setError] = useState("");
+  const [requested, setRequested] = useState(autoStart);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const navigatingRef = useRef(false);
+
+  useEffect(() => {
+    if (asset.media_kind !== "video" || !requested) return;
+    let active = true;
+    let objectUrl = "";
+    const controller = new AbortController();
+    apiFetch(`/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/preview`, {
+      method: "POST",
+      signal: controller.signal,
+    })
+      .then((response) => json<{ mime_type: string; content_base64: string }>(response))
+      .then((preview) => {
+        objectUrl = URL.createObjectURL(previewBlob(preview.content_base64, preview.mime_type));
+        if (active) setSource(objectUrl);
+      })
+      .catch((reason) => {
+        if (active && reason instanceof DOMException && reason.name === "AbortError") return;
+        if (active) setError(reason instanceof Error ? reason.message : "Video preview unavailable");
+      });
+    return () => {
+      active = false;
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [apiFetch, asset.id, asset.media_kind, requested, workspaceId]);
+
+  function startPlayback() {
+    setError("");
+    onPlaybackChange(true);
+    setRequested(true);
+  }
+
+  function navigateVideo(action: () => void) {
+    const video = videoRef.current;
+    const shouldContinue = requested && (!video || !video.paused);
+    navigatingRef.current = true;
+    onPlaybackChange(shouldContinue);
+    action();
+  }
+
+  function togglePlayback() {
+    const video = videoRef.current;
+    if (!requested || !video) {
+      startPlayback();
+      return;
+    }
+    if (video.paused) {
+      onPlaybackChange(true);
+      void video.play();
+    } else {
+      onPlaybackChange(false);
+      video.pause();
+    }
+  }
+
+  useEffect(() => {
+    if (asset.media_kind !== "video") return;
+    function navigateWithKeyboard(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (event.key === "ArrowLeft" && hasPreviousVideo) {
+        event.preventDefault();
+        navigateVideo(onPreviousVideo);
+      }
+      if (event.key === "ArrowRight" && hasNextVideo) {
+        event.preventDefault();
+        navigateVideo(onNextVideo);
+      }
+      if (event.code === "Space") {
+        event.preventDefault();
+        togglePlayback();
+      }
+    }
+    window.addEventListener("keydown", navigateWithKeyboard);
+    return () => window.removeEventListener("keydown", navigateWithKeyboard);
+  });
+
+  if (asset.media_kind !== "video") return null;
+  return (
+    <article className="library-preview-card">
+      <div className="library-preview-stage">
+        {!requested ? (
+          <button type="button" className="library-preview-launch" onClick={startPlayback}>
+            <Thumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
+            <span className="library-preview-launch-overlay">
+              <span className="library-preview-launch-icon" aria-hidden="true">▶</span>
+              <strong>Play video preview</strong>
+              <small>Loaded privately only when you choose to play it</small>
+            </span>
+          </button>
+        ) : source ? (
+          <video
+            ref={videoRef}
+            aria-label={`Preview ${asset.title}`}
+            controls
+            autoPlay
+            playsInline
+            preload="metadata"
+            src={source}
+            onPlay={() => onPlaybackChange(true)}
+            onPause={() => { if (!navigatingRef.current) onPlaybackChange(false); }}
+            onEnded={() => onPlaybackChange(false)}
+          />
+        ) : <p>{error || "Loading video preview…"}</p>}
+      </div>
+      <nav className="library-preview-navigation" aria-label="Browse video previews">
+        <button type="button" disabled={!hasPreviousVideo} onClick={() => navigateVideo(onPreviousVideo)} aria-label="Previous video" title="Previous video (Left arrow)">
+          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m12.5 4.5-5.5 5.5 5.5 5.5" /></svg>
+        </button>
+        <span>{videoPosition} of {videoTotal} videos <small>← → navigate · Space play/pause</small></span>
+        <button type="button" disabled={!hasNextVideo} onClick={() => navigateVideo(onNextVideo)} aria-label="Next video" title="Next video (Right arrow)">
+          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m7.5 4.5 5.5 5.5-5.5 5.5" /></svg>
+        </button>
+      </nav>
+    </article>
+  );
+}
 export default function LibraryPage() {
   const { loading, user, apiFetch } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -128,24 +312,69 @@ export default function LibraryPage() {
   const [status, setStatus] = useState<Status | null>(null);
   const [query, setQuery] = useState("");
   const [rightsFilter, setRightsFilter] = useState("");
+  const [channelFilter, setChannelFilter] = useState("");
+  const [platformFilter, setPlatformFilter] = useState("");
+  const [mediaKind, setMediaKind] = useState<"" | Asset["media_kind"]>("");
+  const [sortOrder, setSortOrder] = useState("newest");
+  const [groupBy, setGroupBy] = useState<GroupBy>("none");
+  const [facets, setFacets] = useState<LibraryFacets>({ channels: [], platforms: [], rights: [], media_kinds: [] });
+  const [total, setTotal] = useState(0);
+  const [viewMode, setViewMode] = useState<ViewMode>("gallery");
+  const [continueVideoPlayback, setContinueVideoPlayback] = useState(false);
+  const autoSyncedWorkspaces = useRef(new Set<string>());
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
   const selected = assets.find((asset) => asset.id === selectedId);
+  const selectedSourceLinks = selected
+    ? selected.platform === "douyin" && selected.source_url
+      ? [selected.source_url]
+      : selected.source_urls?.length
+        ? selected.source_urls
+        : selected.source_url
+          ? [selected.source_url]
+          : []
+    : [];
+  const selectedIndex = assets.findIndex((asset) => asset.id === selectedId);
+  const videoAssets = assets.filter((asset) => asset.media_kind === "video");
+  const selectedVideoIndex = videoAssets.findIndex((asset) => asset.id === selectedId);
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const canImport = ["owner", "editor", "approver"].includes(workspace?.role ?? "");
   const canEnrich = ["owner", "editor", "analyst"].includes(workspace?.role ?? "");
   const canReviewRights = ["owner", "approver"].includes(workspace?.role ?? "");
+  const activeFilterCount = [query.trim(), rightsFilter, channelFilter, platformFilter, mediaKind].filter(Boolean).length;
+  const mediaTotal = facets.media_kinds.reduce((sum, facet) => sum + facet.count, 0);
+  const mediaCount = (kind: Asset["media_kind"]) => facets.media_kinds.find((facet) => facet.value === kind)?.count ?? 0;
+  const groupedAssets = groupBy === "none"
+    ? []
+    : Array.from(assets.reduce((groups, asset) => {
+      const label = groupBy === "channel"
+        ? asset.creator || "Unassigned channel"
+        : groupBy === "source"
+          ? asset.platform || asset.source_type || "Other sources"
+          : asset.rights_status || "Unknown rights";
+      const items = groups.get(label) ?? [];
+      items.push(asset);
+      groups.set(label, items);
+      return groups;
+    }, new Map<string, Asset[]>())).sort((left, right) => right[1].length - left[1].length || left[0].localeCompare(right[0]));
 
   const refresh = useCallback(async (nextWorkspace = workspaceId) => {
     if (!nextWorkspace) return;
     const params = new URLSearchParams();
     if (query.trim()) params.set("q", query.trim());
     if (rightsFilter) params.set("rights_status", rightsFilter);
-    const suffix = params.size ? `?${params}` : "";
+    if (channelFilter === "__unassigned__") params.set("creator_missing", "true");
+    else if (channelFilter) params.set("creator", channelFilter);
+    if (platformFilter === "__other__") params.set("platform_missing", "true");
+    else if (platformFilter) params.set("platform", platformFilter);
+    if (mediaKind) params.set("media_kind", mediaKind);
+    params.set("sort", sortOrder);
+    params.set("limit", "100");
+    const suffix = `?${params}`;
     const [assetBody, jobBody, statusBody] = await Promise.all([
-      json<{ assets: Asset[] }>(
+      json<{ assets: Asset[]; total?: number; facets?: LibraryFacets }>(
         await apiFetch(`/api/workspaces/${nextWorkspace}/media/library/assets${suffix}`),
       ),
       json<{ jobs: Job[] }>(
@@ -156,6 +385,8 @@ export default function LibraryPage() {
       ),
     ]);
     setAssets(assetBody.assets);
+    setTotal(assetBody.total ?? assetBody.assets.length);
+    if (assetBody.facets) setFacets(assetBody.facets);
     setJobs(jobBody.jobs);
     setStatus(statusBody);
     setSelectedId((current) =>
@@ -163,7 +394,32 @@ export default function LibraryPage() {
         ? current
         : (assetBody.assets[0]?.id ?? ""),
     );
-  }, [apiFetch, query, rightsFilter, workspaceId]);
+  }, [apiFetch, channelFilter, mediaKind, platformFilter, query, rightsFilter, sortOrder, workspaceId]);
+
+  function clearFilters() {
+    setQuery("");
+    setRightsFilter("");
+    setChannelFilter("");
+    setPlatformFilter("");
+    setMediaKind("");
+  }
+
+  function renderAsset(asset: Asset) {
+    return (
+      <button className={selectedId === asset.id ? "selected" : ""} key={asset.id} aria-label={`Open ${asset.title}`} aria-pressed={selectedId === asset.id} onClick={() => setSelectedId(asset.id)}>
+        <Thumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
+        <span>
+          <strong>{asset.title}</strong>
+          <small>{asset.creator ? `${asset.creator} · ` : ""}{asset.platform ?? asset.source_type} · {displayDuration(asset.duration_ms)} · {displaySize(asset.size_bytes)}</small>
+          <em className={`rights-badge ${asset.publishable ? "publishable" : "reference"}`}>{asset.rights_status}</em>
+        </span>
+      </button>
+    );
+  }
+
+  function chooseView(nextView: ViewMode) {
+    setViewMode(nextView);
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -189,10 +445,69 @@ export default function LibraryPage() {
   }, [refresh, workspaceId]);
 
   useEffect(() => {
+    if (!workspaceId || !canImport || autoSyncedWorkspaces.current.has(workspaceId)) return;
+    autoSyncedWorkspaces.current.add(workspaceId);
+    queueMicrotask(() => {
+      void (async () => {
+        try {
+          const body = await json<{ sync: { queued: Job[]; errors: string[]; removed_asset_ids: string[] } }>(
+            await apiFetch(`/api/workspaces/${workspaceId}/media/downloads/library-sync`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ confirm_external_action: true }),
+            }),
+          );
+          const pendingCount = body.sync.queued.filter((job) => ["queued", "running"].includes(job.status)).length;
+          if (pendingCount) {
+            setMessage(`${pendingCount} downloaded media items are being prepared automatically.`);
+          } else if (body.sync.removed_asset_ids.length) {
+            setMessage(`${body.sync.removed_asset_ids.length} removed media items were cleared from Library.`);
+          }
+          if (body.sync.errors.length) {
+            setError(`${body.sync.errors.length} downloaded media items could not be prepared.`);
+          }
+          await refresh(workspaceId);
+        } catch (reason) {
+          autoSyncedWorkspaces.current.delete(workspaceId);
+          setError(reason instanceof Error ? reason.message : "Downloaded media could not be synchronized.");
+        }
+      })();
+    });
+  }, [apiFetch, canImport, refresh, workspaceId]);
+
+  useEffect(() => {
     if (!jobs.some((job) => ["queued", "running"].includes(job.status))) return;
     const timer = window.setInterval(() => void refresh().catch(() => undefined), 2500);
     return () => window.clearInterval(timer);
   }, [jobs, refresh]);
+
+  async function syncDownloads() {
+    setBusy("sync");
+    setError("");
+    setMessage("");
+    try {
+      const body = await json<{ sync: { queued: Job[]; errors: string[]; removed_asset_ids: string[] } }>(
+        await apiFetch(`/api/workspaces/${workspaceId}/media/downloads/library-sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirm_external_action: true }),
+        }),
+      );
+      const queuedCount = body.sync.queued.filter((job) => ["queued", "running"].includes(job.status)).length;
+      const removedCount = body.sync.removed_asset_ids.length;
+      setMessage(queuedCount
+        ? `${queuedCount} downloaded media items are being prepared for Library.`
+        : removedCount
+          ? `${removedCount} removed media items were cleared from Library.`
+          : "Downloaded media is already up to date.");
+      if (body.sync.errors.length) setError(`${body.sync.errors.length} media items could not be queued.`);
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Downloaded media could not be added.");
+    } finally {
+      setBusy("");
+    }
+  }
 
   async function importMedia(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -303,6 +618,7 @@ export default function LibraryPage() {
 
   return (
     <main className="library-page">
+      <WorkspaceSectionNav area="library" />
       <div className="page-sticky-shell library-sticky-header">
         <header className="library-heading">
           <div>
@@ -333,34 +649,83 @@ export default function LibraryPage() {
 
       <section className="library-layout">
         <aside className="library-browser">
+          <div className="library-browser-toolbar">
           <form className="library-search" onSubmit={(event) => { event.preventDefault(); void refresh(); }}>
-            <input aria-label="Search library" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search hooks, transcript, creator…" />
-            <select aria-label="Rights filter" value={rightsFilter} onChange={(event) => setRightsFilter(event.target.value)}>
-              <option value="">All rights</option>
-              <option value="owned">Owned</option>
-              <option value="licensed">Licensed</option>
-              <option value="public-domain">Public domain</option>
-              <option value="reference-only">Reference only</option>
-              <option value="unknown">Unknown</option>
-              <option value="prohibited">Prohibited</option>
-            </select>
+            <input aria-label="Search library" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search titles, hooks, transcripts, or creators…" />
             <button>Search</button>
           </form>
 
-          <div className="library-list">
-            {assets.map((asset) => (
-              <button className={selectedId === asset.id ? "selected" : ""} key={asset.id} onClick={() => setSelectedId(asset.id)}>
-                <Thumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
-                <span>
-                  <strong>{asset.title}</strong>
-                  <small>{asset.platform ?? asset.source_type} · {displayDuration(asset.duration_ms)} · {displaySize(asset.size_bytes)}</small>
-                  <em className={`rights-badge ${asset.publishable ? "publishable" : "reference"}`}>{asset.rights_status}</em>
-                </span>
-              </button>
-            ))}
-            {!assets.length && <p>No matching media yet.</p>}
+          <nav className="library-category-bar" aria-label="Media categories">
+            <div className="library-category-tabs">
+              <button type="button" className={!mediaKind ? "selected" : ""} aria-pressed={!mediaKind} onClick={() => setMediaKind("")}>All <span>{mediaTotal}</span></button>
+              <button type="button" className={mediaKind === "video" ? "selected" : ""} aria-pressed={mediaKind === "video"} onClick={() => setMediaKind("video")}>Videos <span>{mediaCount("video")}</span></button>
+              <button type="button" className={mediaKind === "image" ? "selected" : ""} aria-pressed={mediaKind === "image"} onClick={() => setMediaKind("image")}>Images <span>{mediaCount("image")}</span></button>
+              <button type="button" className={mediaKind === "audio" ? "selected" : ""} aria-pressed={mediaKind === "audio"} onClick={() => setMediaKind("audio")}>Audio <span>{mediaCount("audio")}</span></button>
+            </div>
+            <label>Sort
+              <select aria-label="Sort media" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}>
+                <option value="newest">Newest</option>
+                <option value="oldest">Oldest</option>
+                <option value="title">Title</option>
+                <option value="duration">Longest</option>
+              </select>
+            </label>
+          </nav>
+
+          <div className="library-facet-row" aria-label="Library categories">
+            <label>Channel
+              <select aria-label="Filter by channel" value={channelFilter} onChange={(event) => setChannelFilter(event.target.value)}>
+                <option value="">All channels</option>
+                {facets.channels.map((facet) => <option key={facet.value || "__unassigned__"} value={facet.value || "__unassigned__"}>{facet.label} ({facet.count})</option>)}
+              </select>
+            </label>
+            <label>Source
+              <select aria-label="Filter by source" value={platformFilter} onChange={(event) => setPlatformFilter(event.target.value)}>
+                <option value="">All sources</option>
+                {facets.platforms.map((facet) => <option key={facet.value || "__other__"} value={facet.value || "__other__"}>{facet.label} ({facet.count})</option>)}
+              </select>
+            </label>
+            <label>Usage rights
+              <select aria-label="Filter by usage rights" value={rightsFilter} onChange={(event) => setRightsFilter(event.target.value)}>
+                <option value="">All rights</option>
+                {facets.rights.map((facet) => <option key={facet.value} value={facet.value}>{facet.label} ({facet.count})</option>)}
+              </select>
+            </label>
+            <label>Group
+              <select aria-label="Group library" value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)}>
+                <option value="none">No grouping</option>
+                <option value="channel">Channel</option>
+                <option value="source">Source</option>
+                <option value="rights">Usage rights</option>
+              </select>
+            </label>
+            {activeFilterCount > 0 && <button type="button" className="library-clear-filters" onClick={clearFilters}>Clear {activeFilterCount}</button>}
+          </div>
+          <div className="library-collection-toolbar">
+            <strong>{total} {total === 1 ? "item" : "items"}</strong>
+            <div className="library-collection-actions">
+              {canImport && <button type="button" className="library-sync-button" disabled={busy === "sync"} onClick={() => void syncDownloads()}>{busy === "sync" ? "Refreshing…" : "Refresh downloads"}</button>}
+              <div className="library-view-switcher" role="group" aria-label="Library view">
+                <button type="button" className={viewMode === "gallery" ? "selected" : ""} aria-label="Gallery view" title="Gallery view" aria-pressed={viewMode === "gallery"} onClick={() => chooseView("gallery")}><span aria-hidden="true">▦</span></button>
+                <button type="button" className={viewMode === "list" ? "selected" : ""} aria-label="List view" title="List view" aria-pressed={viewMode === "list"} onClick={() => chooseView("list")}><span aria-hidden="true">☷</span></button>
+              </div>
+            </div>
+          </div>
           </div>
 
+          <div className={`library-collection ${groupBy === "none" ? `library-${viewMode}` : "library-grouped"}`}>
+            {groupBy === "none"
+              ? assets.map(renderAsset)
+              : groupedAssets.map(([label, groupAssets]) => (
+                <section className="library-group" key={label}>
+                  <header><strong>{label}</strong><span>{groupAssets.length}</span></header>
+                  <div className={`library-group-items library-${viewMode}`}>
+                    {groupAssets.map(renderAsset)}
+                  </div>
+                </section>
+              ))}
+            {!assets.length && <p>No matching media yet.</p>}
+          </div>
           {canImport && (
             <details className="library-import">
               <summary>Import a local file</summary>
@@ -409,21 +774,57 @@ export default function LibraryPage() {
         <section className="library-detail">
           {selected ? (
             <>
+              <MediaPreview
+                key={selected.id}
+                asset={selected}
+                workspaceId={workspaceId}
+                apiFetch={apiFetch}
+                videoPosition={selectedVideoIndex + 1}
+                videoTotal={videoAssets.length}
+                hasPreviousVideo={selectedVideoIndex > 0}
+                hasNextVideo={selectedVideoIndex >= 0 && selectedVideoIndex < videoAssets.length - 1}
+                autoStart={continueVideoPlayback}
+                onPlaybackChange={setContinueVideoPlayback}
+                onPreviousVideo={() => setSelectedId(videoAssets[selectedVideoIndex - 1]?.id ?? selected.id)}
+                onNextVideo={() => setSelectedId(videoAssets[selectedVideoIndex + 1]?.id ?? selected.id)}
+              />
               <article className="library-summary">
                 <div>
-                  <p className="section-kicker">{selected.media_kind} · {selected.platform ?? selected.source_type}</p>
+                  <p className="section-kicker library-source-meta">
+                    <span>{selected.media_kind}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{selected.platform ?? selected.source_type}</span>
+                    {selected.creator && <><span aria-hidden="true">·</span><span className="library-channel-name">Channel: {selected.creator}</span></>}
+                  </p>
                   <h2>{selected.title}</h2>
                   <p>{selected.caption || "No source caption recorded."}</p>
-                  <small>{selected.creator ? `By ${selected.creator} · ` : ""}{selected.width && selected.height ? `${selected.width}×${selected.height} · ` : ""}{displaySize(selected.size_bytes)}</small>
+                  <small>{selected.width && selected.height ? `${selected.width}×${selected.height} · ` : ""}{displaySize(selected.size_bytes)}</small>
                 </div>
                 <div className="library-actions">
+                  <nav className="library-item-navigation" aria-label="Browse media">
+                    <button type="button" disabled={selectedIndex <= 0} onClick={() => setSelectedId(assets[selectedIndex - 1]?.id ?? selectedId)}>← Previous</button>
+                    <span>{selectedIndex + 1} of {assets.length}</span>
+                    <button type="button" disabled={selectedIndex < 0 || selectedIndex >= assets.length - 1} onClick={() => setSelectedId(assets[selectedIndex + 1]?.id ?? selectedId)}>Next →</button>
+                  </nav>
                   {selected.publishable ? (
                     <>
-                      <Link href={`/studio?source=${encodeURIComponent(selected.original_path)}`}>Prepare in Studio</Link>
+                      <Link className="primary-action" href={`/studio?source=${encodeURIComponent(selected.original_path)}`}>Auto-edit in Studio</Link>
                       <Link href={`/campaigns?video=${encodeURIComponent(selected.original_path)}`}>Plan campaign</Link>
+                      <Link href={`/publish?video=${encodeURIComponent(selected.original_path)}`}>Prepare to publish</Link>
                     </>
                   ) : <p>Reference only until an owner or approver records publishable rights.</p>}
-                  {selected.source_url && <a href={selected.source_url} target="_blank" rel="noreferrer">Open source</a>}
+                  {selectedSourceLinks.map((url, index, links) => {
+                    const label = selected.platform === "douyin"
+                      ? `${selected.creator ? `${selected.creator}'s ` : ""}original Douyin video`
+                      : `Original source${links.length > 1 ? ` ${index + 1}` : ""}`;
+                    return selected.platform === "douyin" ? (
+                      <a className="douyin-source-link" key={url} href={url} target="_blank" rel="noreferrer" aria-label={`Open ${label}`} title={`Open ${label}`}>
+                        <DouyinMark />
+                      </a>
+                    ) : (
+                      <a key={url} href={url} target="_blank" rel="noreferrer">{label}</a>
+                    );
+                  })}
                 </div>
               </article>
 
