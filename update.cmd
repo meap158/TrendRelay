@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableExtensions DisableDelayedExpansion
+setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0" || (
   echo TrendRelay updater could not open the project folder.
   exit /b 1
@@ -28,12 +28,17 @@ if errorlevel 1 (
 
 set "TRENDRELAY_DIRTY="
 for /f "delims=" %%I in ('git status --porcelain --untracked-files^=normal 2^>nul') do set "TRENDRELAY_DIRTY=1"
+set "TRENDRELAY_STASHED="
 if defined TRENDRELAY_DIRTY (
-  echo Update stopped because this project has local changes.
-  echo Commit or stash them first so the updater cannot overwrite your work.
-  echo.
-  git status --short 2>nul
-  goto :failed
+  echo Local changes detected. Stashing them automatically...
+  git stash push -m "TrendRelay auto-stash before update" --include-untracked >nul 2>&1
+  if errorlevel 1 (
+    echo Could not stash local changes. Commit or stash them manually first.
+    echo.
+    git status --short 2>nul
+    goto :failed
+  )
+  set "TRENDRELAY_STASHED=1"
 )
 
 set "TRENDRELAY_BRANCH="
@@ -67,11 +72,24 @@ if errorlevel 1 (
 
 echo.
 echo TrendRelay is up to date.
+if defined TRENDRELAY_STASHED (
+  echo Restoring stashed local changes...
+  git stash pop >nul 2>&1
+  if errorlevel 1 (
+    echo.
+    echo Warning: Could not auto-restore your stashed changes.
+    echo Run "git stash pop" manually to recover them.
+  )
+)
 echo Run start.cmd for the browser app or start-electron.bat for the desktop app.
 goto :success
 
 :failed
 set "TRENDRELAY_EXIT=1"
+if defined TRENDRELAY_STASHED (
+  echo Restoring stashed local changes...
+  git stash pop >nul 2>&1
+)
 goto :finish
 
 :success

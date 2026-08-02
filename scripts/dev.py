@@ -60,16 +60,104 @@ COLORS = {
 }
 
 
-def find_free_port(preferred: int, max_attempts: int = 20) -> int:
-    for offset in range(max_attempts):
+def _port_is_free(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(1)
+        return sock.connect_ex(("127.0.0.1", port)) != 0
+
+
+def _kill_port_holders(port: int) -> bool:
+    try:
+        if IS_WINDOWS:
+            result = subprocess.run(
+                ["netstat", "-ano", "-p", "TCP"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            pids: list[int] = []
+            for line in result.stdout.splitlines():
+                parts = line.split()
+                if (
+                    len(parts) >= 5
+                    and f":{port}" in parts[1]
+                    and parts[3] == "LISTENING"
+                ):
+                    try:
+                        pids.append(int(parts[4]))
+                    except ValueError:
+                        pass
+            for pid in dict.fromkeys(pids):
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+        else:
+            result = subprocess.run(
+                ["lsof", "-ti", f":{port}"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            for token in result.stdout.split():
+                try:
+                    os.kill(int(token), signal.SIGTERM)
+                except (ValueError, OSError):
+                    pass
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if _port_is_free(port):
+            return True
+        time.sleep(0.25)
+    return False
+
+
+def find_free_port(preferred: int, name: str, max_attempts: int = 20) -> int:
+    if _port_is_free(preferred):
+        return preferred
+    print(f"Port {preferred} is in use. Attempting to free it for {name}...")
+    if _kill_port_holders(preferred):
+        print(f"Port {preferred} is now free.")
+        return preferred
+    print(f"Could not free port {preferred}. Searching for an alternative...")
+    for offset in range(1, max_attempts):
         candidate = preferred + offset
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.settimeout(1)
-            if sock.connect_ex(("127.0.0.1", candidate)) != 0:
-                return candidate
+        if _port_is_free(candidate):
+            print(f"{name} will use port {candidate} instead of {preferred}.")
+            return candidate
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
+        port = sock.getsockname()[1]
+    print(f"{name} will use port {port} instead of {preferred}.")
+    return port
+
+
+def _cleanup_stale_nextjs() -> None:
+    next_dir = ROOT / "apps" / "web" / ".next"
+    if not next_dir.is_dir():
+        return
+    pid_file = next_dir / "dev" / "pid"
+    if pid_file.is_file():
+        try:
+            pid = int(pid_file.read_text().strip())
+            if IS_WINDOWS:
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            else:
+                os.kill(pid, signal.SIGTERM)
+        except (ValueError, OSError):
+            pass
+    dev_dir = next_dir / "dev"
+    if dev_dir.is_dir():
+        shutil.rmtree(dev_dir, ignore_errors=True)
 
 
 def paint(text: str, color: str) -> str:
@@ -200,13 +288,9 @@ def build_services(include_desktop: bool) -> list[Service]:
     python = ROOT / ".venv" / ("Scripts/python.exe" if IS_WINDOWS else "bin/python")
     npm = "npm.cmd" if IS_WINDOWS else "npm"
 
-    backend_port = find_free_port(8011)
-    frontend_port = find_free_port(3001)
-
-    if backend_port != 8011:
-        print(f"Port 8011 in use; Backend will use port {backend_port} instead.")
-    if frontend_port != 3001:
-        print(f"Port 3001 in use; Frontend will use port {frontend_port} instead.")
+    _cleanup_stale_nextjs()
+    backend_port = find_free_port(8011, "Backend")
+    frontend_port = find_free_port(3001, "Frontend")
 
     services = [
         Service(
@@ -249,6 +333,7 @@ def build_services(include_desktop: bool) -> list[Service]:
             {"NEXT_PUBLIC_API_URL": f"http://127.0.0.1:{backend_port}"},
             restart_on_exit=True,
             port=frontend_port,
+            health_timeout=120,
         ),
     ]
     services.append(
