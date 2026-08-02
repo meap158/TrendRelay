@@ -12,6 +12,6 @@
     "@swc/core": "^1.15.43",
     "electron": "43.1.1",
     "electron-vite": "5.0.0",
-    "typescript": "6.0.3"
+    "typescript": "7.0.2"
   }
 }
