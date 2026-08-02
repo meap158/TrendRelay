@@ -45,7 +45,6 @@ type Asset = {
   caption?: string | null;
   hashtags: string[];
   rights_status: string;
-  rights_basis?: string | null;
   publishable: boolean;
   original_path: string;
   size_bytes: number;
@@ -559,7 +558,6 @@ export default function LibraryPage() {
             ),
             hashtags: String(form.get("hashtags") ?? "").split(",").map((item) => item.trim()).filter(Boolean),
             rights_status: rightsStatus,
-            rights_basis: form.get("rights_basis") || null,
             confirm_external_action: true,
           }),
         }),
@@ -622,7 +620,6 @@ export default function LibraryPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             rights_status: nextStatus,
-            rights_basis: form.get("rights_basis"),
             confirm_external_action: true,
           }),
         }),
@@ -784,16 +781,6 @@ export default function LibraryPage() {
                   <label>Comments<input name="comments" type="number" min={0} /></label>
                   <label>Shares<input name="shares" type="number" min={0} /></label>
                 </div>
-                <label>Usage rights
-                  <select name="rights_status" defaultValue="unknown">
-                    <option value="unknown">Unknown</option>
-                    <option value="owned">Owned</option>
-                    <option value="licensed">Licensed</option>
-                    <option value="public-domain">Public domain</option>
-                    <option value="prohibited">Prohibited</option>
-                  </select>
-                </label>
-                <label>Rights evidence<textarea name="rights_basis" rows={2} placeholder="Required before publishable use" /></label>
                 <button className="primary-button" disabled={busy === "import"}>{busy === "import" ? "Queuing…" : "Import safely"}</button>
               </form>
             </details>
@@ -891,24 +878,6 @@ export default function LibraryPage() {
                       <div><dt>Keywords</dt><dd>{selected.analysis.keywords.join(", ") || "—"}</dd></div>
                     </dl>
                   ) : <p>No recipe yet. Add reviewed speech or on-screen text below.</p>}
-                </article>
-
-                <article>
-                  <h3>Rights</h3>
-                  <p>{selected.rights_basis || "No evidence recorded."}</p>
-                  {canReviewRights && (
-                    <form className="library-compact-form" onSubmit={updateRights}>
-                      <label>Status<select name="rights_status" defaultValue={selected.rights_status}>
-                        <option value="unknown">Unknown</option>
-                        <option value="owned">Owned</option>
-                        <option value="licensed">Licensed</option>
-                        <option value="public-domain">Public domain</option>
-                        <option value="prohibited">Prohibited</option>
-                      </select></label>
-                      <label>Evidence<textarea name="rights_basis" required minLength={3} defaultValue={selected.rights_basis ?? ""} rows={3} /></label>
-                      <button disabled={busy === "rights"}>{busy === "rights" ? "Saving…" : "Review rights"}</button>
-                    </form>
-                  )}
                 </article>
               </div>
 
