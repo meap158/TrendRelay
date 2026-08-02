@@ -467,7 +467,7 @@ export default function CampaignsPage() {
                             <>
                               <button onClick={() => void copyPostingText(plan)}>Copy post</button>
                               <button disabled={busy === `package-${plan.id}`} onClick={() => void exportPackage(plan)}>Export package</button>
-                              <Link href={`/publish?video=${encodeURIComponent(plan.video_path)}`}>Use Postiz</Link>
+                              <Link href={`/publish?video=${encodeURIComponent(plan.video_path)}`}>Publish</Link>
                               {plan.deep_link && <a href={plan.deep_link} target="_blank" rel="noreferrer">Open {plan.platform}</a>}
                             </>
                           )}

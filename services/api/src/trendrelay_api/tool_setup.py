@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
-import webbrowser
 from pathlib import Path
 from typing import Any
 
@@ -29,282 +27,6 @@ LAST30DAYS_KEYS = (
     "XAI_API_KEY",
     "XQUIK_API_KEY",
 )
-
-POSTIZ_ENV_PATH = PROJECT_ROOT / ".tools" / "postiz-app" / "source" / ".env"
-POSTIZ_OAUTH_PROVIDERS = {
-    "reddit": {
-        "label": "Reddit",
-        "create_url": "https://www.reddit.com/prefs/apps",
-        "requirements": "Create a Reddit web app.",
-        "redirect_uris": ["http://localhost:4200/integrations/social/reddit"],
-        "fields": [
-            {"id": "client_id", "label": "Client ID", "env_key": "REDDIT_CLIENT_ID"},
-            {
-                "id": "client_secret",
-                "label": "Client secret",
-                "env_key": "REDDIT_CLIENT_SECRET",
-                "secret": True,
-            },
-        ],
-    },
-    "instagram-standalone": {
-        "label": "Instagram (direct)",
-        "create_url": "https://developers.facebook.com/apps/",
-        "requirements": (
-            "Use an Instagram professional account and add Instagram API with "
-            "Instagram Login to the Meta app."
-        ),
-        "redirect_uris": [
-            "https://redirectmeto.com/http://localhost:4200/integrations/social/instagram-standalone"
-        ],
-        "fields": [
-            {"id": "app_id", "label": "Instagram app ID", "env_key": "INSTAGRAM_APP_ID"},
-            {
-                "id": "app_secret",
-                "label": "Instagram app secret",
-                "env_key": "INSTAGRAM_APP_SECRET",
-                "secret": True,
-            },
-        ],
-    },
-    "meta": {
-        "label": "Facebook + Instagram via Facebook",
-        "create_url": "https://developers.facebook.com/apps/",
-        "requirements": (
-            "Use a Meta app. Instagram publishing requires a professional Instagram "
-            "account linked to a Facebook Page."
-        ),
-        "redirect_uris": [
-            "http://localhost:4200/integrations/social/facebook",
-            "http://localhost:4200/integrations/social/instagram",
-        ],
-        "fields": [
-            {"id": "app_id", "label": "Meta app ID", "env_key": "FACEBOOK_APP_ID"},
-            {
-                "id": "app_secret",
-                "label": "Meta app secret",
-                "env_key": "FACEBOOK_APP_SECRET",
-                "secret": True,
-            },
-        ],
-    },
-    "threads": {
-        "label": "Threads",
-        "create_url": "https://developers.facebook.com/apps/",
-        "requirements": "Add the Threads API product to a Meta app.",
-        "redirect_uris": [
-            "https://redirectmeto.com/http://localhost:4200/integrations/social/threads"
-        ],
-        "fields": [
-            {"id": "app_id", "label": "Threads app ID", "env_key": "THREADS_APP_ID"},
-            {
-                "id": "app_secret",
-                "label": "Threads app secret",
-                "env_key": "THREADS_APP_SECRET",
-                "secret": True,
-            },
-        ],
-    },
-    "tiktok": {
-        "label": "TikTok",
-        "create_url": "https://developers.tiktok.com/apps/",
-        "requirements": "Create a TikTok developer app with Content Posting API access.",
-        "redirect_uris": [
-            "https://redirectmeto.com/http://localhost:4200/integrations/social/tiktok"
-        ],
-        "fields": [
-            {"id": "client_id", "label": "Client key", "env_key": "TIKTOK_CLIENT_ID"},
-            {
-                "id": "client_secret",
-                "label": "Client secret",
-                "env_key": "TIKTOK_CLIENT_SECRET",
-                "secret": True,
-            },
-        ],
-    },
-    "youtube": {
-        "label": "YouTube",
-        "create_url": "https://console.cloud.google.com/apis/credentials",
-        "requirements": "Create Google OAuth web credentials and enable the YouTube Data API.",
-        "redirect_uris": ["http://localhost:4200/integrations/social/youtube"],
-        "fields": [
-            {"id": "client_id", "label": "Client ID", "env_key": "YOUTUBE_CLIENT_ID"},
-            {
-                "id": "client_secret",
-                "label": "Client secret",
-                "env_key": "YOUTUBE_CLIENT_SECRET",
-                "secret": True,
-            },
-        ],
-    },
-    "linkedin": {
-        "label": "LinkedIn profile + Page",
-        "create_url": "https://www.linkedin.com/developers/apps",
-        "requirements": "Create one LinkedIn app for profiles and Pages.",
-        "redirect_uris": [
-            "http://localhost:4200/integrations/social/linkedin",
-            "http://localhost:4200/integrations/social/linkedin-page",
-        ],
-        "fields": [
-            {"id": "client_id", "label": "Client ID", "env_key": "LINKEDIN_CLIENT_ID"},
-            {
-                "id": "client_secret",
-                "label": "Client secret",
-                "env_key": "LINKEDIN_CLIENT_SECRET",
-                "secret": True,
-            },
-        ],
-    },
-    "x": {
-        "label": "X",
-        "create_url": "https://developer.x.com/en/portal/dashboard",
-        "requirements": "Create an X developer app with OAuth access.",
-        "redirect_uris": ["http://localhost:4200/integrations/social/x"],
-        "fields": [
-            {"id": "api_key", "label": "API key", "env_key": "X_API_KEY"},
-            {"id": "api_secret", "label": "API secret", "env_key": "X_API_SECRET", "secret": True},
-        ],
-    },
-    "pinterest": {
-        "label": "Pinterest",
-        "create_url": "https://developers.pinterest.com/apps/",
-        "requirements": "Create a Pinterest app.",
-        "redirect_uris": ["http://localhost:4200/integrations/social/pinterest"],
-        "fields": [
-            {"id": "client_id", "label": "App ID", "env_key": "PINTEREST_CLIENT_ID"},
-            {
-                "id": "client_secret",
-                "label": "App secret",
-                "env_key": "PINTEREST_CLIENT_SECRET",
-                "secret": True,
-            },
-        ],
-    },
-    "discord": {
-        "label": "Discord",
-        "create_url": "https://discord.com/developers/applications",
-        "requirements": "Create a Discord application and bot.",
-        "redirect_uris": ["http://localhost:4200/integrations/social/discord"],
-        "fields": [
-            {"id": "client_id", "label": "Application ID", "env_key": "DISCORD_CLIENT_ID"},
-            {
-                "id": "client_secret",
-                "label": "Client secret",
-                "env_key": "DISCORD_CLIENT_SECRET",
-                "secret": True,
-            },
-            {
-                "id": "bot_token",
-                "label": "Bot token",
-                "env_key": "DISCORD_BOT_TOKEN_ID",
-                "secret": True,
-            },
-        ],
-    },
-    "slack": {
-        "label": "Slack",
-        "create_url": "https://api.slack.com/apps",
-        "requirements": "Create a Slack app with OAuth permissions.",
-        "redirect_uris": ["http://localhost:4200/integrations/social/slack"],
-        "fields": [
-            {"id": "client_id", "label": "Client ID", "env_key": "SLACK_ID"},
-            {
-                "id": "client_secret",
-                "label": "Client secret",
-                "env_key": "SLACK_SECRET",
-                "secret": True,
-            },
-        ],
-    },
-}
-
-
-def _configured_dotenv_names(path: Path, names: tuple[str, ...]) -> set[str]:
-    env_path = path
-    if not env_path.is_file():
-        return set()
-    configured: set[str] = set()
-    for raw_line in env_path.read_text(encoding="utf-8-sig").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        if key.strip() in names and value.strip().strip("\"'"):
-            configured.add(key.strip())
-    return configured
-
-
-def postiz_oauth_providers() -> list[dict[str, Any]]:
-    all_fields = [
-        field for provider in POSTIZ_OAUTH_PROVIDERS.values() for field in provider["fields"]
-    ]
-    configured = _configured_dotenv_names(
-        POSTIZ_ENV_PATH,
-        tuple(field["env_key"] for field in all_fields),
-    )
-    return [
-        {
-            "id": identifier,
-            "label": provider["label"],
-            "configured": {
-                field["id"]: field["env_key"] in configured for field in provider["fields"]
-            },
-            "ready": all(field["env_key"] in configured for field in provider["fields"]),
-            "create_url": provider["create_url"],
-            "requirements": provider["requirements"],
-            "redirect_uris": provider["redirect_uris"],
-            "fields": [
-                {
-                    "id": field["id"],
-                    "label": field["label"],
-                    "secret": bool(field.get("secret")),
-                }
-                for field in provider["fields"]
-            ],
-        }
-        for identifier, provider in POSTIZ_OAUTH_PROVIDERS.items()
-    ]
-
-
-def save_postiz_oauth_credentials(provider_id: str, field_values: dict[str, str]) -> dict[str, str]:
-    provider = POSTIZ_OAUTH_PROVIDERS.get(provider_id)
-    if not provider:
-        raise KeyError(provider_id)
-    expected = {field["id"]: field for field in provider["fields"]}
-    if set(field_values) != set(expected):
-        raise ValueError("All listed app settings are required; unexpected settings are rejected.")
-    values = {field_id: value.strip() for field_id, value in field_values.items()}
-    if any(not value or "\n" in value or "\r" in value for value in values.values()):
-        raise ValueError("All app settings are required and must be single-line values.")
-    if any(len(value) > 4096 for value in values.values()):
-        raise ValueError("An app setting is too long.")
-    if not POSTIZ_ENV_PATH.is_file():
-        raise RuntimeError("Local Postiz configuration is missing. Start TrendRelay first.")
-
-    replacements = {expected[field_id]["env_key"]: value for field_id, value in values.items()}
-    lines = POSTIZ_ENV_PATH.read_text(encoding="utf-8-sig").splitlines()
-    written: set[str] = set()
-    updated: list[str] = []
-    for line in lines:
-        key = line.split("=", 1)[0].strip() if "=" in line else ""
-        if key in replacements:
-            updated.append(f"{key}={json.dumps(replacements[key])}")
-            written.add(key)
-        else:
-            updated.append(line)
-    for key, value in replacements.items():
-        if key not in written:
-            updated.append(f"{key}={json.dumps(value)}")
-    temporary = POSTIZ_ENV_PATH.with_suffix(".env.tmp")
-    temporary.write_text("\n".join(updated) + "\n", encoding="utf-8")
-    os.replace(temporary, POSTIZ_ENV_PATH)
-    return {
-        "status": "saved",
-        "message": (
-            f"{provider['label']} app settings were saved locally. They apply "
-            "the next time the embedded Postiz service starts."
-        ),
-    }
 
 
 def _configured_names(names: tuple[str, ...]) -> list[str]:
@@ -389,56 +111,24 @@ def setup_report(tool_id: str) -> dict[str, Any]:
         )
     elif tool_id == "postiz-agent":
         status = postiz_status()
-        oauth_providers = postiz_oauth_providers()
-        configured_providers = sum(provider["ready"] for provider in oauth_providers)
         report.update(
             summary=(
-                "TrendRelay runs Postiz locally on Windows. Open the local console to "
-                "connect supported social platforms through each platform's OAuth flow."
+                "Publish to connected social accounts via bundle.social API. "
+                "Set BUNDLE_SOCIAL_API_KEY and BUNDLE_SOCIAL_TEAM_ID in .env, "
+                "then connect accounts in the bundle.social dashboard."
             ),
             requirements=[
                 *prerequisites,
                 _requirement(
-                    "postiz-service",
-                    "Local Postiz service",
-                    "ready" if status["service_ready"] else "setup-required",
-                    "The native Postiz backend and console are running."
-                    if status["service_ready"]
-                    else "Start TrendRelay to launch the managed native Postiz service.",
-                ),
-                _requirement(
-                    "postiz-local-admin",
-                    "Local publishing connection",
+                    "api-key",
+                    "bundle.social API key",
                     "ready" if status["authenticated"] else "setup-required",
-                    "TrendRelay's private local API key is verified."
+                    "API key verified and connected."
                     if status["authenticated"]
-                    else "Restart TrendRelay to initialize the private local admin and API key.",
-                ),
-                _requirement(
-                    "platform-apps",
-                    "Social platform apps",
-                    "ready" if configured_providers else "optional",
-                    f"{configured_providers} platform app(s) ready to authorize."
-                    if configured_providers
-                    else "Choose a platform below and complete its app setup before authorizing.",
-                ),
-                _requirement(
-                    "social-integrations",
-                    "Publishing destinations",
-                    "optional" if status["authenticated"] else "setup-required",
-                    (
-                        "Connect pages and profiles in the local Postiz console, "
-                        "then refresh them in Publish."
-                    ),
+                    else "Set BUNDLE_SOCIAL_API_KEY and BUNDLE_SOCIAL_TEAM_ID in .env.",
                 ),
             ],
             actions=[
-                {
-                    "id": "open-dashboard",
-                    "label": "Open local Postiz",
-                    "kind": "local-launch",
-                    "requires_confirmation": True,
-                },
                 {
                     "id": "open-publish",
                     "label": "Open Publish",
@@ -447,7 +137,6 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                 },
             ],
             connection=status,
-            provider_credentials=oauth_providers,
         )
     elif tool_id == "last30days-skill":
         configured = _configured_names(LAST30DAYS_KEYS)
@@ -625,7 +314,6 @@ def setup_report(tool_id: str) -> dict[str, Any]:
 
 def launch_setup_action(tool_id: str, action_id: str) -> dict[str, str]:
     allowed_actions = {
-        "postiz-agent": {"open-dashboard"},
         "meta-ads-kit": {"launch-auth"},
     }
     if action_id not in allowed_actions.get(tool_id, set()):
@@ -633,19 +321,6 @@ def launch_setup_action(tool_id: str, action_id: str) -> dict[str, str]:
     tool = next((item for item in list_tools() if item["id"] == tool_id), None)
     if not tool or not tool["installed"] or not tool["active"]:
         raise RuntimeError("Install and activate the tool before continuing setup.")
-
-    if tool_id == "postiz-agent" and action_id == "open-dashboard":
-        status = postiz_status()
-        if not status["service_ready"]:
-            raise RuntimeError("Local Postiz is not ready. Start or restart TrendRelay first.")
-        webbrowser.open(status["dashboard_url"], new=2)
-        return {
-            "status": "launched",
-            "message": (
-                "Local Postiz opened with the TrendRelay admin session. Connect social "
-                "accounts there, then return to Publish and refresh accounts."
-            ),
-        }
 
     if os.name != "nt":
         raise RuntimeError("The guided authentication terminal is currently available on Windows.")

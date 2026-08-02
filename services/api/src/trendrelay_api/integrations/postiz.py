@@ -1,10 +1,8 @@
-"""Durable, dry-run-first adapter for Postiz short-video publishing."""
+"""Durable, dry-run-first adapter for social publishing via bundle.social API."""
 
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -24,17 +22,28 @@ from trendrelay_api.jobs import (
     get_job_record,
     list_job_records,
 )
-from trendrelay_api.tool_registry import PROJECT_ROOT, list_tools
+from trendrelay_api.tool_registry import PROJECT_ROOT
 
-SCRIPT = PROJECT_ROOT / "scripts" / "postiz.py"
+API_BASE = "https://api.bundle.social/api/v1"
 JOB_KIND = "social_publish"
 JOB_SESSION_FACTORY = SessionFactory
-Platform = Literal["tiktok", "instagram", "youtube"]
-SUPPORTED_PLATFORMS = ("tiktok", "instagram", "youtube")
-SELFHOST_DATA = PROJECT_ROOT / ".data" / "postiz-selfhost"
-SELFHOST_BACKEND = "http://127.0.0.1:3000"
-SELFHOST_FRONTEND = "http://localhost:4200"
-SELFHOST_DASHBOARD = f"{SELFHOST_FRONTEND}/api/trendrelay-local-session"
+
+PLATFORM_MAP: dict[str, str] = {
+    "tiktok": "TIKTOK",
+    "instagram": "INSTAGRAM",
+    "youtube": "YOUTUBE",
+    "facebook": "FACEBOOK",
+    "twitter": "TWITTER",
+    "linkedin": "LINKEDIN",
+    "threads": "THREADS",
+    "pinterest": "PINTEREST",
+    "reddit": "REDDIT",
+}
+Platform = Literal[
+    "tiktok", "instagram", "youtube", "facebook", "twitter",
+    "linkedin", "threads", "pinterest", "reddit",
+]
+SUPPORTED_PLATFORMS = tuple(PLATFORM_MAP.keys())
 
 
 class PublishTarget(BaseModel):
@@ -57,7 +66,7 @@ class PublishRequest(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     date: datetime
     schedule: bool = False
-    targets: list[PublishTarget] = Field(min_length=1, max_length=3)
+    targets: list[PublishTarget] = Field(min_length=1, max_length=10)
     made_with_ai: bool = False
     confirm_external_action: bool = False
 
@@ -69,27 +78,91 @@ class PublishRequest(BaseModel):
         return targets
 
 
-def cli_arguments(request: PublishRequest, *, execute: bool) -> list[str]:
-    arguments = [
-        "short-video",
-        "--video",
-        request.video_path,
-        "--caption",
-        request.caption,
-        "--date",
-        request.date.isoformat(),
-    ]
-    if request.title:
-        arguments.extend(["--title", request.title])
-    for target in request.targets:
-        arguments.extend(["--target", f"{target.platform}={target.integration_id}"])
-    if request.schedule:
-        arguments.append("--schedule")
-    if request.made_with_ai:
-        arguments.append("--made-with-ai")
-    if execute:
-        arguments.extend(["--execute", "--confirm-external-action"])
-    return arguments
+def _api_key() -> str:
+    key = get_settings().bundle_social_api_key
+    if not key:
+        raise RuntimeError(
+            "bundle.social API key is not configured. "
+            "Set BUNDLE_SOCIAL_API_KEY in .env or environment."
+        )
+    return key
+
+
+def _team_id() -> str:
+    tid = get_settings().bundle_social_team_id
+    if not tid:
+        raise RuntimeError(
+            "bundle.social team ID is not configured. "
+            "Set BUNDLE_SOCIAL_TEAM_ID in .env or environment."
+        )
+    return tid
+
+
+def _api_request(
+    method: str,
+    path: str,
+    *,
+    body: dict[str, Any] | None = None,
+    data: bytes | None = None,
+    content_type: str = "application/json",
+    timeout: float = 30,
+) -> Any:
+    url = f"{API_BASE}{path}"
+    if body is not None:
+        payload = json.dumps(body).encode()
+    elif data is not None:
+        payload = data
+    else:
+        payload = None
+    request = urllib.request.Request(url, data=payload, method=method)
+    request.add_header("x-api-key", _api_key())
+    if payload is not None:
+        request.add_header("Content-Type", content_type)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        try:
+            detail = json.loads(error.read())
+            message = detail.get("message", str(error))
+        except (json.JSONDecodeError, OSError):
+            message = str(error)
+        raise RuntimeError(f"bundle.social API error: {message}") from error
+    except (OSError, urllib.error.URLError) as error:
+        raise RuntimeError(f"Could not reach bundle.social API: {error}") from error
+
+
+def _upload_video(video_path: Path) -> str:
+    boundary = f"----BundleSocial{token_hex(16)}"
+    body_parts: list[bytes] = []
+
+    body_parts.append(f"--{boundary}\r\n".encode())
+    body_parts.append(
+        f'Content-Disposition: form-data; name="teamId"\r\n\r\n{_team_id()}\r\n'.encode()
+    )
+
+    body_parts.append(f"--{boundary}\r\n".encode())
+    body_parts.append(
+        f'Content-Disposition: form-data; name="file"; filename="{video_path.name}"\r\n'
+        f"Content-Type: video/mp4\r\n\r\n".encode()
+    )
+    body_parts.append(video_path.read_bytes())
+    body_parts.append(f"\r\n--{boundary}--\r\n".encode())
+
+    payload = b"".join(body_parts)
+    content_type = f"multipart/form-data; boundary={boundary}"
+
+    result = _api_request(
+        "POST",
+        "/upload/",
+        data=payload,
+        content_type=content_type,
+        timeout=600,
+    )
+    upload_id = result.get("id")
+    if not upload_id:
+        raise RuntimeError("bundle.social upload did not return an upload ID.")
+    return upload_id
 
 
 def approved_video_path(video_path: str) -> Path:
@@ -114,163 +187,134 @@ def approved_video_path(video_path: str) -> Path:
     return resolved
 
 
-def parse_json_value(output: str) -> Any:
-    decoder = json.JSONDecoder()
-    matches: list[tuple[int, Any]] = []
-    for index, character in enumerate(output):
-        if character not in "[{":
-            continue
-        try:
-            value, end = decoder.raw_decode(output[index:])
-        except json.JSONDecodeError:
-            continue
-        matches.append((end, value))
-    if not matches:
-        raise ValueError("Postiz output did not contain JSON.")
-    return max(matches, key=lambda match: match[0])[1]
-
-
-def parse_json_output(output: str) -> dict[str, Any]:
-    value = parse_json_value(output)
-    if not isinstance(value, dict):
-        raise ValueError("Postiz output did not contain a JSON object.")
-    return value
-
-def run_cli(request: PublishRequest, *, execute: bool) -> dict[str, Any]:
-    video_path = approved_video_path(request.video_path)
-    validated_request = request.model_copy(update={"video_path": str(video_path)})
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT), *cli_arguments(validated_request, execute=execute)],
-        cwd=PROJECT_ROOT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        capture_output=True,
-        check=False,
-        timeout=900 if execute else 30,
-    )
-    if result.returncode != 0:
-        raise RuntimeError((result.stderr or result.stdout or "Postiz failed.").strip()[-4000:])
-    return parse_json_output(result.stdout)
+def _build_post_data(
+    request: PublishRequest, upload_id: str
+) -> dict[str, Any]:
+    post: dict[str, Any] = {
+        "teamId": _team_id(),
+        "postDate": request.date.isoformat(),
+        "status": "SCHEDULED" if request.schedule else "DRAFT",
+        "data": {},
+    }
+    for target in request.targets:
+        platform_key = PLATFORM_MAP[target.platform]
+        platform_data: dict[str, Any] = {
+            "uploadIds": [upload_id],
+            "text": request.caption,
+        }
+        if request.title and platform_key in ("YOUTUBE", "REDDIT", "PINTEREST"):
+            platform_data["title"] = request.title
+        if platform_key == "YOUTUBE":
+            platform_data["type"] = "SHORT"
+            platform_data["privacyStatus"] = "public"
+        if platform_key == "INSTAGRAM":
+            platform_data["type"] = "REEL"
+        if platform_key == "FACEBOOK":
+            platform_data["type"] = "REEL"
+        if platform_key == "TIKTOK" and request.made_with_ai:
+            platform_data["brandContentToggle"] = True
+        post["data"][platform_key] = platform_data
+        post.setdefault("socialAccountIds", []).append(target.integration_id)
+    return post
 
 
 def preview_publish(request: PublishRequest) -> dict[str, Any]:
-    return run_cli(request, execute=False)
+    approved_video_path(request.video_path)
+    return {
+        "operation_id": token_hex(12),
+        "status": "dry_run",
+        "video_path": request.video_path,
+        "caption": request.caption,
+        "title": request.title,
+        "date": request.date.isoformat(),
+        "schedule": request.schedule,
+        "made_with_ai": request.made_with_ai,
+        "targets": [
+            {"platform": t.platform, "integration_id": t.integration_id}
+            for t in request.targets
+        ],
+        "provider": "bundle.social",
+    }
 
 
-def _account_label(raw: dict[str, Any], platform: str, identifier: str) -> str:
-    for key in ("name", "username", "label", "displayName", "pageName", "accountName"):
-        value = raw.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()[:160]
-    return f"{platform.title()} account {identifier[-8:]}"
-
-
-def _normalized_integrations(value: Any) -> list[dict[str, str]]:
-    if isinstance(value, list):
-        raw_items = value
-    elif isinstance(value, dict):
-        raw_items = value.get("integrations", [])
-    else:
-        raw_items = []
-    accounts: list[dict[str, str]] = []
-    for raw in raw_items:
-        if not isinstance(raw, dict):
-            continue
-        identifier = raw.get("id") or raw.get("integrationId")
-        platform = raw.get("provider") or raw.get("platform") or raw.get("identifier")
-        if not isinstance(identifier, str) or not isinstance(platform, str):
-            continue
-        normalized_platform = platform.strip().casefold()
-        if normalized_platform not in SUPPORTED_PLATFORMS:
-            continue
-        accounts.append(
-            {
-                "id": identifier.strip(),
-                "platform": normalized_platform,
-                "label": _account_label(raw, normalized_platform, identifier.strip()),
-            }
-        )
-    return sorted(
-        accounts,
-        key=lambda item: (item["platform"], item["label"].casefold(), item["id"]),
-    )
+def _execute_publish(request: PublishRequest) -> dict[str, Any]:
+    video = approved_video_path(request.video_path)
+    upload_id = _upload_video(video)
+    post_data = _build_post_data(request, upload_id)
+    result = _api_request("POST", "/post/", body=post_data, timeout=120)
+    return {
+        "status": "created",
+        "provider": "bundle.social",
+        "post_id": result.get("id"),
+        "upload_id": upload_id,
+        "post_status": result.get("status"),
+    }
 
 
 def discover_integrations() -> dict[str, Any]:
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT), "integrations"],
-        cwd=PROJECT_ROOT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        capture_output=True,
-        check=False,
-        timeout=60,
-    )
-    if result.returncode != 0:
-        details = (result.stderr or result.stdout or "Postiz failed.").strip()[-4000:]
-        raise RuntimeError(details)
-    return {"accounts": _normalized_integrations(parse_json_value(result.stdout))}
-
-
-def _selfhost_healthy(url: str) -> bool:
-    try:
-        with urllib.request.urlopen(url, timeout=1) as response:
-            return response.status < 500
-    except (OSError, urllib.error.URLError):
-        return False
+    teams = _api_request("GET", f"/team/")
+    accounts: list[dict[str, str]] = []
+    items = teams.get("items", [teams] if isinstance(teams, dict) else [])
+    for team in items:
+        for sa in team.get("socialAccounts", []):
+            sa_type = (sa.get("type") or "").lower()
+            if sa_type not in SUPPORTED_PLATFORMS:
+                continue
+            label = (
+                sa.get("displayName")
+                or sa.get("username")
+                or sa.get("name")
+                or f"{sa_type.title()} account"
+            )
+            accounts.append({
+                "id": sa["id"],
+                "platform": sa_type,
+                "label": str(label).strip()[:160],
+            })
+    return {
+        "accounts": sorted(
+            accounts,
+            key=lambda a: (a["platform"], a["label"].casefold(), a["id"]),
+        )
+    }
 
 
 def connection_status() -> dict[str, Any]:
-    tools = {tool["id"]: tool for tool in list_tools()}
-    tool = tools.get("postiz-agent", {})
-    backend_ready = _selfhost_healthy(f"{SELFHOST_BACKEND}/auth/can-register")
-    frontend_ready = _selfhost_healthy(f"{SELFHOST_FRONTEND}/auth")
-    api_key_configured = (SELFHOST_DATA / "api-key.txt").is_file()
+    settings = get_settings()
+    api_key = settings.bundle_social_api_key
+    team_id = settings.bundle_social_team_id
+    configured = bool(api_key and team_id)
     authenticated = False
     authorization_error: str | None = None
-    if api_key_configured and backend_ready and tool.get("installed"):
+    if configured:
         try:
-            result = subprocess.run(
-                [sys.executable, str(SCRIPT), "auth-status"],
-                cwd=PROJECT_ROOT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                capture_output=True,
-                check=False,
-                timeout=15,
-            )
-            authenticated = result.returncode == 0
-            if not authenticated:
-                authorization_error = (
-                    "The local Postiz API key could not be verified. Restart TrendRelay "
-                    "to repair the local service session."
-                )
-        except (OSError, subprocess.TimeoutExpired):
-            authorization_error = "Could not verify the local Postiz service."
-    elif not backend_ready or not frontend_ready:
-        authorization_error = "Local Postiz is still starting or unavailable."
+            _api_request("GET", "/app/health", timeout=5)
+            authenticated = True
+        except RuntimeError as error:
+            authorization_error = str(error)
+    else:
+        authorization_error = (
+            "bundle.social API key or team ID is not configured. "
+            "Set BUNDLE_SOCIAL_API_KEY and BUNDLE_SOCIAL_TEAM_ID in .env."
+        )
     return {
-        "provider_installed": bool(tool.get("installed")),
-        "provider_active": bool(tool.get("active")),
+        "provider_installed": configured,
+        "provider_active": configured,
         "authenticated": authenticated,
-        "authentication_method": "self-hosted-api-key" if api_key_configured else None,
+        "authentication_method": "api-key" if api_key else None,
         "authorization_error": authorization_error,
-        "service_ready": backend_ready and frontend_ready,
-        "backend_ready": backend_ready,
-        "frontend_ready": frontend_ready,
-        "dashboard_url": SELFHOST_DASHBOARD,
-        "self_hosted": True,
+        "service_ready": authenticated,
+        "self_hosted": False,
         "accounts_refreshed": False,
         "supported_platforms": list(SUPPORTED_PLATFORMS),
         "next_step": (
-            "Start local Postiz"
-            if not backend_ready or not frontend_ready
+            "Configure BUNDLE_SOCIAL_API_KEY and BUNDLE_SOCIAL_TEAM_ID"
+            if not configured
             else "Connect or refresh social accounts"
         ),
     }
+
+
 def create_publish_job(request: PublishRequest) -> dict[str, Any]:
     if not request.confirm_external_action:
         raise PermissionError("Publishing requires explicit external-action confirmation.")
@@ -300,14 +344,14 @@ def create_publish_job(request: PublishRequest) -> dict[str, Any]:
 
 
 def run_publish_job(job_id: str) -> None:
-    worker_id = f"postiz-{token_hex(6)}"
+    worker_id = f"bundle-{token_hex(6)}"
     try:
         record = claim_job(job_id, worker_id, lease_seconds=960, factory=JOB_SESSION_FACTORY)
     except (FileNotFoundError, PermissionError):
         return
     request = PublishRequest.model_validate(record["payload"]["request"])
     try:
-        result = run_cli(request, execute=True)
+        result = _execute_publish(request)
         complete_job(job_id, worker_id, result, factory=JOB_SESSION_FACTORY)
     except Exception as error:
         fail_job(job_id, worker_id, str(error), factory=JOB_SESSION_FACTORY)

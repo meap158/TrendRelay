@@ -8,7 +8,7 @@ import { useJobs } from "../jobs-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 
 type Workspace = { id: string; name: string; role: string };
-type Platform = "tiktok" | "instagram" | "youtube";
+type Platform = "tiktok" | "instagram" | "youtube" | "facebook" | "twitter" | "linkedin" | "threads" | "pinterest" | "reddit";
 type Account = { id: string; label: string; platform: Platform };
 type Connection = {
   provider_installed: boolean;
@@ -21,7 +21,7 @@ type Connection = {
   authorization_error?: string | null;
 };
 
-const platforms: Platform[] = ["tiktok", "instagram", "youtube"];
+const platforms: Platform[] = ["tiktok", "instagram", "youtube", "facebook", "twitter", "linkedin", "threads", "pinterest", "reddit"];
 
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
@@ -30,7 +30,12 @@ async function json<T>(response: Response): Promise<T> {
 }
 
 function platformName(platform: Platform) {
-  return platform === "tiktok" ? "TikTok" : platform === "youtube" ? "YouTube" : "Instagram";
+  const names: Record<Platform, string> = {
+    tiktok: "TikTok", instagram: "Instagram", youtube: "YouTube",
+    facebook: "Facebook", twitter: "X / Twitter", linkedin: "LinkedIn",
+    threads: "Threads", pinterest: "Pinterest", reddit: "Reddit",
+  };
+  return names[platform] ?? platform;
 }
 
 export default function PublishPage() {
@@ -41,7 +46,7 @@ export default function PublishPage() {
   const [videoPath, setVideoPath] = useState("");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [connection, setConnection] = useState<Connection | null>(null);
-  const [targets, setTargets] = useState<Record<Platform, string>>({ tiktok: "", instagram: "", youtube: "" });
+  const [targets, setTargets] = useState<Record<Platform, string>>({ tiktok: "", instagram: "", youtube: "", facebook: "", twitter: "", linkedin: "", threads: "", pinterest: "", reddit: "" });
   const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -70,12 +75,6 @@ export default function PublishPage() {
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load workspaces."));
   }, [apiFetch, user]);
 
-  async function refreshConnection() {
-    if (!workspaceId) return;
-    const body = await json<{ connection: Connection }>(await apiFetch(`/api/workspaces/${workspaceId}/publishing/postiz/connection`));
-    setConnection(body.connection);
-  }
-
   useEffect(() => {
     if (!workspaceId) return;
     let cancelled = false;
@@ -83,7 +82,7 @@ export default function PublishPage() {
       .then((response) => json<{ connection: Connection }>(response))
       .then((body) => { if (!cancelled) setConnection(body.connection); })
       .catch((reason: unknown) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not check Postiz setup.");
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not check publishing setup.");
       });
     return () => { cancelled = true; };
   }, [apiFetch, workspaceId]);
@@ -123,28 +122,9 @@ export default function PublishPage() {
         platform,
         result.accounts.some((account) => account.id === current[platform]) ? current[platform] : "",
       ])) as Record<Platform, string>);
-      setNotice(result.accounts.length ? "Connected accounts refreshed. Choose where this video should go." : "No supported accounts found yet. Connect TikTok, Instagram, or YouTube in Postiz, then refresh.");
-      await refreshConnection();
+      setNotice(result.accounts.length ? "Connected accounts refreshed. Choose where this video should go." : "No supported accounts found yet. Connect accounts in bundle.social, then refresh.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not refresh connected accounts.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function startSetup(action: "open-dashboard") {
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const result = await json<{ result: { message: string } }>(await apiFetch(`/api/tools/postiz-agent/setup/${action}`, {
-        method: "POST",
-        body: JSON.stringify({ confirm_external_action: true }),
-      }));
-      setNotice(result.result.message);
-      await refreshConnection();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not start Postiz setup.");
     } finally {
       setBusy(false);
     }
@@ -160,14 +140,14 @@ export default function PublishPage() {
       if (execute) {
         await json(await apiFetch(`/api/workspaces/${workspaceId}/publishing/postiz/jobs`, { method: "POST", body: JSON.stringify(body) }));
         await refreshJobs();
-        setNotice("Postiz job created. Track its status below or from Jobs.");
+        setNotice("Publishing job created. Track its status below or from Jobs.");
       } else {
         const result = await json<{ preview: Record<string, unknown> }>(await apiFetch(
           `/api/workspaces/${workspaceId}/publishing/postiz/preview`,
           { method: "POST", body: JSON.stringify(body) },
         ));
         setPreview(result.preview);
-        setNotice("Dry-run ready. Review the delivery plan before creating the Postiz draft or schedule.");
+        setNotice("Dry-run ready. Review the delivery plan before publishing.");
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Publishing request failed.");
@@ -183,19 +163,19 @@ export default function PublishPage() {
     <main className="publish-page">
       <WorkspaceSectionNav area="publish" />
       <header className="publish-heading">
-        <div><p className="eyebrow">DISTRIBUTION DESK</p><h1>Deliver the approved clip</h1><p className="lede">TrendRelay runs Postiz locally. Connect social accounts once, then choose them by name, preview the delivery, and create a draft or schedule.</p></div>
-        <Link className="secondary-link" href="/tools">Manage tools</Link>
+        <div><p className="eyebrow">DISTRIBUTION DESK</p><h1>Deliver the approved clip</h1><p className="lede">Publish to connected social accounts via bundle.social. Connect accounts in your bundle.social dashboard, then choose them by name, preview the delivery, and schedule or draft.</p></div>
+        <a className="secondary-link" href="https://app.bundle.social" target="_blank" rel="noopener noreferrer">Open bundle.social</a>
       </header>
       <div aria-live="polite">{notice && <p className="registry-message">{notice}</p>}{error && <p className="registry-error" role="alert">{error}</p>}</div>
 
       <section className="postiz-setup" aria-labelledby="postiz-setup-title">
-        <div className="section-heading"><div><p className="eyebrow">POSTIZ CONNECTION</p><h2 id="postiz-setup-title">Local Postiz, ready when TrendRelay starts.</h2></div><span className={connection?.service_ready && connection?.authenticated ? "connection-badge ready" : "connection-badge"}>{connection?.service_ready && connection?.authenticated ? "Local service ready" : "Starting local service"}</span></div>
+        <div className="section-heading"><div><p className="eyebrow">PUBLISHING CONNECTION</p><h2 id="postiz-setup-title">bundle.social API</h2></div><span className={connection?.service_ready && connection?.authenticated ? "connection-badge ready" : "connection-badge"}>{connection?.service_ready && connection?.authenticated ? "API connected" : "Not connected"}</span></div>
         <div className="postiz-steps">{connection?.authorization_error && <p className="setup-note" role="status">{connection.authorization_error}</p>}
-          <article className={connection?.provider_installed && connection?.provider_active ? "ready" : ""}><span>01</span><div><strong>Enable Postiz</strong><p>Install and activate the Postiz tool for this workspace.</p></div>{connection?.provider_installed && connection?.provider_active ? <small>Ready</small> : <Link href="/tools">Open tools</Link>}</article>
-          <article className={connection?.service_ready && connection?.authenticated ? "ready" : ""}><span>02</span><div><strong>Local Postiz service</strong><p>The managed Windows service uses a private local admin and API key. No Postiz cloud account is required.</p></div><button type="button" disabled={busy || !canExecute || !connection?.service_ready} onClick={() => void startSetup("open-dashboard")}>Open local Postiz</button></article>
-          <article className={accounts.length ? "ready" : ""}><span>03</span><div><strong>Connect pages and profiles</strong><p>Authorize each platform in the local Postiz console, then refresh the accounts below.</p></div><div className="step-actions"><button type="button" disabled={busy || !canExecute || !connection?.authenticated} onClick={() => void startSetup("open-dashboard")}>Open local Postiz</button><button type="button" className="quiet-action" disabled={busy || !canExecute || !connection?.authenticated} onClick={() => void refreshAccounts()}>Refresh accounts</button></div></article>
+          <article className={connection?.provider_installed && connection?.provider_active ? "ready" : ""}><span>01</span><div><strong>Configure API key</strong><p>Set BUNDLE_SOCIAL_API_KEY and BUNDLE_SOCIAL_TEAM_ID in your .env file. Get these from your <a href="https://app.bundle.social" target="_blank" rel="noopener noreferrer">bundle.social dashboard</a>.</p></div>{connection?.provider_installed && connection?.provider_active ? <small>Ready</small> : <a href="https://bundle.social" target="_blank" rel="noopener noreferrer">Sign up</a>}</article>
+          <article className={connection?.authenticated ? "ready" : ""}><span>02</span><div><strong>API connection</strong><p>The API key authenticates with bundle.social cloud service. No local service is required.</p></div>{connection?.authenticated ? <small>Connected</small> : <small>Waiting for API key</small>}</article>
+          <article className={accounts.length ? "ready" : ""}><span>03</span><div><strong>Connect social accounts</strong><p>Connect your social accounts in the bundle.social dashboard, then refresh below.</p></div><div className="step-actions"><a className="quiet-action" href="https://app.bundle.social" target="_blank" rel="noopener noreferrer">Open dashboard</a><button type="button" className="quiet-action" disabled={busy || !canExecute || !connection?.authenticated} onClick={() => void refreshAccounts()}>Refresh accounts</button></div></article>
         </div>
-        {!canExecute && selected && <p className="setup-note">Only workspace owners and approvers can change Postiz connections or publish. You can still review the setup.</p>}
+        {!canExecute && selected && <p className="setup-note">Only workspace owners and approvers can change connections or publish. You can still review the setup.</p>}
       </section>
 
       <section className="publish-layout">
@@ -206,16 +186,16 @@ export default function PublishPage() {
           <label>Title<input name="title" maxLength={200} /></label>
           <label>Caption<textarea name="caption" rows={6} maxLength={5000} required /></label>
           <label>Date and time<input name="date" type="datetime-local" required /></label>
-          <fieldset className="account-picker"><legend>Publishing destinations</legend><p>Choose the connected profile or page for each platform. This project never asks for a social password.</p><div className="platform-grid">{platforms.map((platform) => {
+          <fieldset className="account-picker"><legend>Publishing destinations</legend><p>Choose the connected profile or page for each platform.</p><div className="platform-grid">{platforms.map((platform) => {
             const platformAccounts = accounts.filter((account) => account.platform === platform);
-            return <section key={platform} className="platform-card"><div><strong>{platformName(platform)}</strong><span>{platformAccounts.length ? `${platformAccounts.length} connected` : "Not connected"}</span></div>{platformAccounts.length ? <div className="account-options">{platformAccounts.map((account) => <button type="button" key={account.id} aria-pressed={targets[platform] === account.id} className={targets[platform] === account.id ? "selected" : ""} onClick={() => setTargets({ ...targets, [platform]: targets[platform] === account.id ? "" : account.id })}>{account.label}</button>)}</div> : <button type="button" className="text-action" disabled={busy || !canExecute || !connection?.authenticated} onClick={() => void startSetup("open-dashboard")}>Connect in Postiz</button>}</section>;
+            return <section key={platform} className="platform-card"><div><strong>{platformName(platform)}</strong><span>{platformAccounts.length ? `${platformAccounts.length} connected` : "Not connected"}</span></div>{platformAccounts.length ? <div className="account-options">{platformAccounts.map((account) => <button type="button" key={account.id} aria-pressed={targets[platform] === account.id} className={targets[platform] === account.id ? "selected" : ""} onClick={() => setTargets({ ...targets, [platform]: targets[platform] === account.id ? "" : account.id })}>{account.label}</button>)}</div> : null}</section>;
           })}</div></fieldset>
           <div className="publish-options"><label><input name="schedule" type="checkbox" /> Schedule instead of draft</label><label><input name="made_with_ai" type="checkbox" /> Disclose AI-generated media</label></div>
-          <div className="publish-actions"><button disabled={busy}>Generate dry-run preview</button><button type="button" className="danger-action" disabled={busy || !canExecute} onClick={(event) => { const form = event.currentTarget.form; if (form && window.confirm("Create the remote Postiz draft or schedule for the selected accounts?")) void submit(form, true); }}>Confirm and publish</button></div>
+          <div className="publish-actions"><button disabled={busy}>Generate dry-run preview</button><button type="button" className="danger-action" disabled={busy || !canExecute} onClick={(event) => { const form = event.currentTarget.form; if (form && window.confirm("Create the remote post or schedule for the selected accounts?")) void submit(form, true); }}>Confirm and publish</button></div>
         </form>
         <aside className="publish-side">
-          <article><h2>Dry-run delivery</h2>{preview ? <dl className="preview-list">{Object.entries(preview).map(([key, value]) => <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{typeof value === "object" ? JSON.stringify(value) : String(value)}</dd></div>)}</dl> : <p>Generate a dry-run to inspect the Postiz delivery before creating anything remotely.</p>}</article>
-          <article><h2>Publishing jobs</h2>{jobs.length ? <div className="record-list">{jobs.map((job) => <div key={job.id}><strong>{job.payload.request?.caption ?? job.id}</strong><span>{job.status}</span>{job.error && <small>{job.error}</small>}</div>)}</div> : <p>No Postiz jobs yet.</p>}</article>
+          <article><h2>Dry-run delivery</h2>{preview ? <dl className="preview-list">{Object.entries(preview).map(([key, value]) => <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{typeof value === "object" ? JSON.stringify(value) : String(value)}</dd></div>)}</dl> : <p>Generate a dry-run to inspect the delivery before publishing.</p>}</article>
+          <article><h2>Publishing jobs</h2>{jobs.length ? <div className="record-list">{jobs.map((job) => <div key={job.id}><strong>{job.payload.request?.caption ?? job.id}</strong><span>{job.status}</span>{job.error && <small>{job.error}</small>}</div>)}</div> : <p>No publishing jobs yet.</p>}</article>
         </aside>
       </section>
     </main>

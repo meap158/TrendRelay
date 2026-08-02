@@ -56,7 +56,6 @@ from trendrelay_api.tool_registry import (
 )
 from trendrelay_api.tool_setup import (
     launch_setup_action,
-    save_postiz_oauth_credentials,
     setup_report,
 )
 
@@ -102,12 +101,6 @@ class SetupActionRequest(BaseModel):
     confirm_external_action: bool = False
 
 
-class PostizOAuthCredentialsRequest(BaseModel):
-    provider: str
-    values: dict[str, str]
-    confirm_external_action: bool = False
-
-
 def require_local_mutation(request: Request) -> None:
     host = request.client.host if request.client else ""
     if host not in {"127.0.0.1", "::1", "testclient"}:
@@ -148,33 +141,6 @@ async def tool_setup(tool_id: str) -> dict[str, object]:
         return {"setup": await asyncio.to_thread(setup_report, tool_id)}
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Tool not found.") from error
-
-
-@app.post("/api/tools/postiz-agent/setup/platform-credentials", tags=["tools"])
-async def configure_postiz_platform(
-    body: PostizOAuthCredentialsRequest,
-    request: Request,
-) -> dict[str, object]:
-    require_local_mutation(request)
-    if not body.confirm_external_action:
-        raise HTTPException(
-            status_code=400,
-            detail="Saving local platform credentials requires explicit confirmation.",
-        )
-    try:
-        return {
-            "result": await asyncio.to_thread(
-                save_postiz_oauth_credentials,
-                body.provider,
-                body.values,
-            )
-        }
-    except KeyError as error:
-        raise HTTPException(status_code=404, detail="Platform is not supported.") from error
-    except ValueError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
-    except RuntimeError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @app.post("/api/tools/{tool_id}/setup/{action_id}", tags=["tools"])

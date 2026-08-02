@@ -338,20 +338,6 @@ def build_services(include_desktop: bool) -> list[Service]:
     ]
     services.append(
         Service(
-            "Postiz",
-            [str(python), "scripts/postiz_service.py", "run"],
-            "magenta",
-            "http://localhost:4200/auth",
-            health_timeout=480,
-            health_probe_timeout=5,
-            health_failure_limit=6,
-            relay_output=False,
-            required=False,
-            port=4200,
-        )
-    )
-    services.append(
-        Service(
             "Worker",
             [str(python), "scripts/worker.py", "--watch"],
             "yellow",
@@ -433,7 +419,6 @@ def print_banner(include_desktop: bool, services: list[Service]) -> None:
     print(f"   - Backend:  http://0.0.0.0:{backend_port}")
     print(f"   - API docs: http://0.0.0.0:{backend_port}/docs")
     print(f"   - Frontend: http://0.0.0.0:{frontend_port}")
-    print("   - Postiz:   http://localhost:4200 (optional, starts in background)")
     print("   - Worker:    durable SQL queue (hot reload)")
     print(
         f"   - Desktop:  {'enabled' if include_desktop else 'disabled (use start-electron.bat)'}"

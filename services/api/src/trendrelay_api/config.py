@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     invitation_delivery_hourly_limit: int = Field(default=20, ge=1, le=1000)
     require_aal2_for_governed_actions: bool = False
     local_auth_bypass: bool = True
+    bundle_social_api_key: str = ""
+    bundle_social_team_id: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:
