@@ -292,7 +292,7 @@ def test_missing_download_cleanup_removes_record_and_library_copy(
                 hashtags=[],
                 audio_identifier=None,
                 engagement={},
-                rights_status="reference-only",
+                rights_status="unknown",
                 rights_basis="Research only",
                 original_path=str(original),
                 original_sha256=digest,
@@ -382,7 +382,7 @@ def test_duplicate_ingest_fills_missing_source_metadata(
                 hashtags=[],
                 audio_identifier=None,
                 engagement={},
-                rights_status="reference-only",
+                rights_status="unknown",
                 rights_basis="Research only",
                 original_path=str(source),
                 original_sha256=digest,
@@ -409,7 +409,7 @@ def test_duplicate_ingest_fills_missing_source_metadata(
         creator="Creator channel",
         published_at="2025-03-16T00:00:00+00:00",
         caption="Recovered caption",
-        rights_status="reference-only",
+        rights_status="unknown",
         source_sha256=digest,
         factory=job_factory,
     )
@@ -516,7 +516,7 @@ def test_worker_records_downloaded_media(
     assert completed["result"]["library_jobs"] == [
         {"id": "media-1", "status": "queued"}
     ]
-    assert queued[0]["rights_status"] == "reference-only"
+    assert queued[0]["rights_status"] == "unknown"
     assert queued[0]["source_type"] == "douyin-download"
     assert queued[0]["source_sha256"] == completed["result"]["artifacts"][0]["sha256"]
     assert queued[0]["engagement"]["origin_urls"] == request().urls

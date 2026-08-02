@@ -21,7 +21,7 @@ class MediaAsset(Base):
         ),
         CheckConstraint(
             "rights_status IN "
-            "('owned','licensed','public-domain','reference-only','unknown','prohibited')",
+            "('owned','licensed','public-domain','unknown','prohibited')",
             name="valid_media_rights_status",
         ),
         CheckConstraint(

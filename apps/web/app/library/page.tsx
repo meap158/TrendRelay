@@ -787,7 +787,6 @@ export default function LibraryPage() {
                 <label>Usage rights
                   <select name="rights_status" defaultValue="unknown">
                     <option value="unknown">Unknown</option>
-                    <option value="reference-only">Reference only</option>
                     <option value="owned">Owned</option>
                     <option value="licensed">Licensed</option>
                     <option value="public-domain">Public domain</option>
@@ -901,7 +900,6 @@ export default function LibraryPage() {
                     <form className="library-compact-form" onSubmit={updateRights}>
                       <label>Status<select name="rights_status" defaultValue={selected.rights_status}>
                         <option value="unknown">Unknown</option>
-                        <option value="reference-only">Reference only</option>
                         <option value="owned">Owned</option>
                         <option value="licensed">Licensed</option>
                         <option value="public-domain">Public domain</option>

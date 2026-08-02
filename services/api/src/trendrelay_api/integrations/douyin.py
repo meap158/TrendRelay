@@ -570,11 +570,8 @@ def _queue_library_artifacts(
                         "download_source_path": artifact["path"],
                         "origin_urls": origin_urls,
                     },
-                    rights_status="reference-only",
+                    rights_status="unknown",
                     source_sha256=artifact.get("sha256"),
-                    rights_basis=(
-                        "Acquired for internal creative research; reuse rights not established."
-                    ),
                     factory=JOB_SESSION_FACTORY,
                 )
             )

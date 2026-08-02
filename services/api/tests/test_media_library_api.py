@@ -151,7 +151,7 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
                 "caption": "A portable espresso maker for travel.",
                 "engagement": {"likes": 1200, "comments": 44, "shares": 91},
                 "hashtags": ["coffee", "#travel"],
-                "rights_status": "reference-only",
+                "rights_status": "unknown",
                 "rights_basis": "Downloaded for internal creative research only.",
                 "confirm_external_action": True,
             },
@@ -193,7 +193,7 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
                 "media_kind": "image",
                 "platform": "douyin",
                 "creator": "Demo creator",
-                "rights_status": "reference-only",
+                "rights_status": "unknown",
                 "digest": "1" * 64,
                 "duration_ms": None,
             },
@@ -213,7 +213,7 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
                 "media_kind": "video",
                 "platform": "douyin",
                 "creator": "Other creator",
-                "rights_status": "reference-only",
+                "rights_status": "unknown",
                 "digest": "3" * 64,
                 "duration_ms": 5_000,
             },
@@ -381,7 +381,7 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
         )
     )
     assert blocked_plan.status_code == 409
-    assert "reference-only" in blocked_plan.json()["detail"]
+    assert "unknown" in blocked_plan.json()["detail"]
 
     enriched = asyncio.run(
         request(
@@ -416,7 +416,7 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
         request(
             "GET",
             f"/api/workspaces/{workspace_id}/media/library/assets",
-            params={"q": "hotel coffee", "rights_status": "reference-only"},
+            params={"q": "hotel coffee", "rights_status": "unknown"},
         )
     )
     assert search.status_code == 200

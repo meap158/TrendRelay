@@ -42,7 +42,6 @@ RightsStatus = Literal[
     "owned",
     "licensed",
     "public-domain",
-    "reference-only",
     "unknown",
     "prohibited",
 ]
