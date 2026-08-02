@@ -89,7 +89,12 @@ if "%TRENDRELAY_CHECK_REQUESTED%"=="0" (
 if "%TRENDRELAY_CHECK_REQUESTED%"=="0" if not exist ".data\postiz-selfhost\prepared-revision.txt" (
   echo Preparing native self-hosted Postiz for the first run...
   ".venv\Scripts\python.exe" scripts\postiz_service.py prepare
-  if errorlevel 1 goto :install_error
+  if errorlevel 1 (
+    echo [Postiz setup] Postiz is not ready yet. TrendRelay will continue without it.
+    echo Open Tools after startup for status, then rerun start.cmd after repairing Winget.
+  ) else (
+    echo [Postiz setup] Native self-hosted Postiz is ready.
+  )
 )
 
 if "%TRENDRELAY_CHECK_REQUESTED%"=="1" (

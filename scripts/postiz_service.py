@@ -506,6 +506,25 @@ def _start_infrastructure(
     return postgres_owned
 
 
+WINGET_SOURCE_FAILURES = {
+    0x8A15000A,  # source index is corrupt
+    0x8A15000B,  # configured source information is corrupt
+    0x8A15003F,  # source data integrity failure
+    0x8A150045,  # source open failed
+    0x8A15004B,  # one or more sources failed to open
+}
+
+
+class CommandFailure(RuntimeError):
+    def __init__(self, command: list[str], returncode: int) -> None:
+        self.command = tuple(command)
+        self.returncode = returncode
+        code = returncode & 0xFFFFFFFF
+        super().__init__(
+            f"Command failed with exit code {returncode} (0x{code:08X}): {command[0]}"
+        )
+
+
 def _run_checked(
     command: list[str], *, cwd: Path = ROOT, env: dict[str, str] | None = None
 ) -> None:
@@ -519,9 +538,43 @@ def _run_checked(
         check=False,
     )
     if result.returncode != 0:
+        raise CommandFailure(command, result.returncode)
+
+
+def _install_winget_package(winget: str, package: str) -> None:
+    command = [
+        winget,
+        "install",
+        "--id",
+        package,
+        "-e",
+        "--source",
+        "winget",
+        "--silent",
+        "--accept-package-agreements",
+        "--accept-source-agreements",
+    ]
+    try:
+        _run_checked(command)
+        return
+    except CommandFailure as error:
+        if error.returncode & 0xFFFFFFFF not in WINGET_SOURCE_FAILURES:
+            raise
+
+    print(
+        "[Postiz setup] The Winget community source is unavailable; "
+        "refreshing it once...",
+        flush=True,
+    )
+    try:
+        _run_checked([winget, "source", "update", "--name", "winget"])
+        _run_checked(command)
+    except CommandFailure as error:
         raise RuntimeError(
-            f"Command failed with exit code {result.returncode}: {command[0]}"
-        )
+            "Windows Package Manager could not open the Winget community source. "
+            "Update App Installer from Microsoft Store > Library, then run start.cmd "
+            "again. TrendRelay can run without Postiz in the meantime."
+        ) from error
 
 
 def _install_native_dependencies() -> dict[str, Path | None]:
@@ -538,18 +591,7 @@ def _install_native_dependencies() -> dict[str, Path | None]:
         if not winget:
             raise RuntimeError(f"{name} is missing and winget is unavailable.")
         print(f"[Postiz setup] Installing native {name}...", flush=True)
-        _run_checked(
-            [
-                winget,
-                "install",
-                "--id",
-                package,
-                "-e",
-                "--silent",
-                "--accept-package-agreements",
-                "--accept-source-agreements",
-            ]
-        )
+        _install_winget_package(winget, package)
         commands = native_commands()
         if not commands[name]:
             raise RuntimeError(

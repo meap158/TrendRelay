@@ -256,3 +256,15 @@ def test_runner_passes_its_backend_url_to_browser_and_desktop() -> None:
         "TRENDRELAY_API_URL": "http://127.0.0.1:8011",
         "TRENDRELAY_WEB_URL": "http://localhost:3001",
     }
+
+
+def test_windows_launcher_keeps_postiz_setup_optional() -> None:
+    root = Path(__file__).resolve().parents[1]
+    launcher = (root / "start.cmd").read_text(encoding="utf-8")
+    marker = "Preparing native self-hosted Postiz"
+    block = launcher[
+        launcher.index(marker) : launcher.index('if "%TRENDRELAY_CHECK_REQUESTED%"=="1"')
+    ]
+
+    assert "goto :install_error" not in block
+    assert "TrendRelay will continue without it" in block

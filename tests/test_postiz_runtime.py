@@ -2,7 +2,10 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 import scripts.postiz as postiz
+import scripts.postiz_service as postiz_service
 
 
 def make_args(video: Path, *extra: str):
@@ -81,3 +84,33 @@ def test_executes_once_and_deletes_runtime_plan(monkeypatch, tmp_path: Path) -> 
     assert list(postiz.RUNTIME_DIR.glob("*.json")) == []
     assert postiz.short_video(args) == 3
     assert len(calls) == 2
+
+
+def test_winget_install_targets_and_refreshes_only_community_source(
+    monkeypatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        if len(calls) == 1:
+            raise postiz_service.CommandFailure(command, 0x8A15004B)
+
+    monkeypatch.setattr(postiz_service, "_run_checked", fake_run)
+    postiz_service._install_winget_package("winget.exe", "Example.Package")
+
+    assert calls[0][5:7] == ["--source", "winget"]
+    assert calls[1] == ["winget.exe", "source", "update", "--name", "winget"]
+    assert calls[2] == calls[0]
+
+
+def test_winget_source_failure_explains_non_blocking_recovery(monkeypatch) -> None:
+    def always_fail(command, **_kwargs):
+        raise postiz_service.CommandFailure(command, 0x8A15004B)
+
+    monkeypatch.setattr(postiz_service, "_run_checked", always_fail)
+    with pytest.raises(
+        RuntimeError,
+        match="TrendRelay can run without Postiz",
+    ):
+        postiz_service._install_winget_package("winget.exe", "Example.Package")
