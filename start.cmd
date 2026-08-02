@@ -48,10 +48,13 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-if not exist "node_modules" (
+node scripts\check_node_dependencies.mjs >nul 2>nul
+if errorlevel 1 (
   echo [Setup 1/4] Installing application dependencies...
   echo This is a one-time download and may take several minutes.
   call npm ci --no-audit --no-fund
+  if errorlevel 1 goto :install_error
+  node scripts\check_node_dependencies.mjs
   if errorlevel 1 goto :install_error
 ) else (
   echo [Setup 1/4] Application dependencies are ready.

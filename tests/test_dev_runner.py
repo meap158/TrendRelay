@@ -1,4 +1,6 @@
+import json
 from pathlib import Path
+
 import scripts.dev as dev
 
 
@@ -126,6 +128,23 @@ def test_windows_launcher_uses_observable_dependency_bootstrap() -> None:
     assert "npm ci --no-audit --no-fund" in launcher
     assert "Node.js 22 or newer" in launcher
     assert "Python 3.12 or newer" in launcher
+
+
+def test_windows_launcher_verifies_javascript_runtime_dependencies() -> None:
+    root = Path(__file__).resolve().parents[1]
+    launcher = (root / "start.cmd").read_text(encoding="utf-8")
+    package = json.loads((root / "package.json").read_text(encoding="utf-8"))
+
+    assert r"scripts\check_node_dependencies.mjs" in launcher
+    assert package["allowScripts"] == {
+        "@derhuerst/ffprobe-static@5.3.0": True,
+        "@swc/core@1.15.43": True,
+        "esbuild@0.25.12": True,
+        "esbuild@0.28.1": True,
+        "ffmpeg-static@5.3.0": True,
+        "unrs-resolver@1.12.2": True,
+    }
+
 
 def test_windows_launcher_check_mode_uses_parsed_flag() -> None:
     launcher = (Path(__file__).resolve().parents[1] / "start.cmd").read_text(
