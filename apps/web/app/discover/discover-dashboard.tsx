@@ -658,6 +658,36 @@ export default function ResearchDashboard() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  async function fetchTiktokDiscovery(category: string) {
+    if (!window.confirm(`Crawl TikTok Creative Center for trending ${category}?`)) return;
+    setBusy("tiktok");
+    setError(null);
+    try {
+      const response = await fetch(`${apiBaseUrl()}/api/research/tiktok/discovery/${category}`, { method: "GET" });
+      const payload = (await response.json()) as { result?: { items: Array<{ title: string, source: string, metrics: { relevance: number } }> }, detail?: string };
+      if (!response.ok || !payload.result) throw new Error(payload.detail ?? "TikTok discovery failed.");
+      
+      const mockedInspirations = payload.result.items.map((item, idx) => ({
+        id: `tiktok-${category}-${idx}`,
+        kind: "trend" as const,
+        label: "TikTok Creative Center",
+        title: item.title,
+        summary: `Crawled from the ${category} discovery page.`,
+        source: item.source,
+        metrics: [],
+        relevance: item.metrics.relevance,
+      }));
+      setBriefing(null);
+      setAdResult(null);
+      // Let's hackily reuse adInspirations/accountInspirations rendering by pretending this is a special adResult
+      setAdResult({ query: `TikTok ${category}`, country: "US", collected: 3, ads: mockedInspirations.map(m => ({ id: m.id, creatives: [{ title: m.title, body: m.summary }] })) });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "TikTok discovery failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function runQuery(event: FormEvent) {
     event.preventDefault();
     const normalized = query.trim();
@@ -787,7 +817,7 @@ export default function ResearchDashboard() {
           >
             {busy === "account" ? "Reading…" : (
               <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLineLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                 Import account signals
               </>
             )}
@@ -848,18 +878,18 @@ export default function ResearchDashboard() {
         </div>
 
         <div style={S.quickLinksRow}>
-          <a href="https://ads.tiktok.com/business/creativecenter/inspiration/popular/music/pc/en" target="_blank" rel="noreferrer" style={S.quickLinkBtn}>
+          <button type="button" onClick={() => void fetchTiktokDiscovery("music")} style={S.quickLinkBtn}>
             🎵 Viral TikTok Sounds
-          </a>
-          <a href="https://ads.tiktok.com/business/creativecenter/inspiration/popular/hashtag/pc/en" target="_blank" rel="noreferrer" style={S.quickLinkBtn}>
+          </button>
+          <button type="button" onClick={() => void fetchTiktokDiscovery("hashtag")} style={S.quickLinkBtn}>
             # Popular Hashtags
-          </a>
-          <a href="https://ads.tiktok.com/business/creativecenter/inspiration/popular/creator/pc/en" target="_blank" rel="noreferrer" style={S.quickLinkBtn}>
+          </button>
+          <button type="button" onClick={() => void fetchTiktokDiscovery("creator")} style={S.quickLinkBtn}>
             👑 Trending Creators
-          </a>
-          <a href="https://ads.tiktok.com/business/creativecenter/inspiration/popular/pc/en" target="_blank" rel="noreferrer" style={S.quickLinkBtn}>
+          </button>
+          <button type="button" onClick={() => void fetchTiktokDiscovery("video")} style={S.quickLinkBtn}>
             🔥 Hot content
-          </a>
+          </button>
         </div>
       </div>
 
