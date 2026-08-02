@@ -45,7 +45,7 @@ cd TrendRelay
 .\start.cmd
 ```
 
-The first run installs and verifies the application dependencies, creates the Python environment, applies database migrations, starts the local services with hot reload, and opens TrendRelay in your browser. Setup prints four numbered stages and keeps reporting progress during longer downloads; it stops with a useful network error instead of waiting indefinitely. TrendRelay includes a version-pinned npm install-script allowlist for its reviewed Electron, media, compiler, and resolver runtimes, so npm 11 does not require per-machine approval. If an install is interrupted or incomplete, running `start.cmd` again detects and repairs it automatically.
+The first run installs and verifies the application dependencies, creates the Python environment, applies database migrations, starts the local services with hot reload, and opens TrendRelay in your browser. Setup prints four numbered stages and keeps reporting progress during longer downloads; it stops with a useful network error instead of waiting indefinitely. TrendRelay's lockfile and CI are validated with npm 11.16, and a version-pinned install-script allowlist covers its reviewed Electron, media, compiler, and resolver runtimes. If an install is interrupted or incomplete, running `start.cmd` again detects and repairs it automatically.
 
 If the browser does not open automatically, visit [http://127.0.0.1:3001](http://127.0.0.1:3001).
 

@@ -135,7 +135,13 @@ def test_windows_launcher_verifies_javascript_runtime_dependencies() -> None:
     launcher = (root / "start.cmd").read_text(encoding="utf-8")
     package = json.loads((root / "package.json").read_text(encoding="utf-8"))
 
+    workflow = (root / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+
     assert r"scripts\check_node_dependencies.mjs" in launcher
+    assert package["packageManager"] == "npm@11.16.0"
+    assert "npm install --global npm@11.16.0" in workflow
     assert package["allowScripts"] == {
         "@derhuerst/ffprobe-static@5.3.0": True,
         "@swc/core@1.15.43": True,

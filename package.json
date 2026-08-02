@@ -2,7 +2,7 @@
   "name": "trendrelay",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "npm@10.9.4",
+  "packageManager": "npm@11.16.0",
   "description": "Affiliate trend-to-content orchestration platform",
   "workspaces": [
     "apps/*",

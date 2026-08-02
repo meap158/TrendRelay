@@ -30,6 +30,9 @@ jobs:
           cache: pip
           cache-dependency-path: services/api/pyproject.toml
 
+      - name: Use the clean-machine npm version
+        run: npm install --global npm@11.16.0
+
       - name: Install JavaScript dependencies
         run: npm ci
 
