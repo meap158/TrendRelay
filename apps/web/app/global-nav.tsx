@@ -102,7 +102,7 @@ export function GlobalNav() {
     setDrawerOpen(false);
     notificationButtonRef.current?.focus();
   }
-  const researchActive = pathname === "/research" || pathname.startsWith("/research/") || pathname === "/opportunities" || pathname.startsWith("/opportunities/");
+  const discoverActive = pathname === "/discover" || pathname.startsWith("/discover/") || pathname === "/opportunities" || pathname.startsWith("/opportunities/");
   const libraryActive = pathname === "/library" || pathname.startsWith("/library/") || pathname === "/studio" || pathname.startsWith("/studio/");
   const publishActive = pathname === "/publish" || pathname.startsWith("/publish/") || pathname === "/attribution" || pathname.startsWith("/attribution/");
 
@@ -123,7 +123,7 @@ export function GlobalNav() {
       <nav className="app-nav">
         <Link className={pathname === "/" ? "active" : ""} href="/">Home</Link>
         <Link className={libraryActive ? "active" : ""} href="/library">Library</Link>
-        <Link className={researchActive ? "active" : ""} href="/research">Research</Link>
+        <Link className={discoverActive ? "active" : ""} href="/discover">Discover</Link>
 
 
         <Link className={pathname === "/campaigns" ? "active" : ""} href="/campaigns">Campaigns</Link>

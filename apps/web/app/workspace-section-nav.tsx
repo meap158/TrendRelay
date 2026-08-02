@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-type WorkspaceArea = "research" | "library" | "publish";
+type WorkspaceArea = "discover" | "library" | "publish";
 
 const AREAS = {
-  research: {
+  discover: {
     eyebrow: "Research workspace",
     description: "Move from market evidence to a ranked, actionable opportunity.",
     items: [
-      { href: "/research", label: "Discover", description: "Signals and inspiration" },
+      { href: "/discover", label: "Discover", description: "Signals and inspiration" },
       { href: "/opportunities", label: "Opportunities", description: "Offers and scoring" },
     ],
   },

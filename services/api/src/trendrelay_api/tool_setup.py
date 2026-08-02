@@ -163,7 +163,7 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                     "id": "open-research",
                     "label": "Open Research",
                     "kind": "navigate",
-                    "href": "/research",
+                    "href": "/discover",
                 }
             ],
         )
@@ -195,7 +195,7 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                     "id": "open-research",
                     "label": "Open Research",
                     "kind": "navigate",
-                    "href": "/research",
+                    "href": "/discover",
                 },
             ],
         )
@@ -246,7 +246,7 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                     "id": "open-research",
                     "label": "Open Research",
                     "kind": "navigate",
-                    "href": "/research",
+                    "href": "/discover",
                 },
             ],
         )
@@ -274,7 +274,7 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                     "id": "open-research",
                     "label": "Open Research",
                     "kind": "navigate",
-                    "href": "/research",
+                    "href": "/discover",
                 }
             ],
         )

@@ -95,6 +95,42 @@ type Inspiration = {
   relevance?: number;
 };
 
+const AFFILIATE_STARTERS: Inspiration[] = [
+  {
+    id: "starter-1",
+    kind: "starter",
+    label: "TikTok Shop Trend",
+    title: "#TikTokMadeMeBuyIt - Viral Home Gadgets",
+    summary: "High conversion rates on aesthetic home organization and cleaning tools. Audiences engage heavily with ASMR-style restock videos.",
+    source: "Affiliate Signals",
+    metrics: ["Conversion potential: Very High", "Avg. Commission: 10-15%"],
+    relevance: 95,
+    topic: "Home organization gadgets",
+  },
+  {
+    id: "starter-2",
+    kind: "starter",
+    label: "Amazon Associates",
+    title: "Travel Essentials - Packing Hacks",
+    summary: "Packing cubes and travel tech accessories are showing a sustained spike in affiliate demand heading into the season.",
+    source: "Affiliate Signals",
+    metrics: ["Conversion potential: High", "Avg. Commission: 4%"],
+    relevance: 88,
+    topic: "Amazon travel essentials",
+  },
+  {
+    id: "starter-3",
+    kind: "starter",
+    label: "Creator Commission",
+    title: "Skincare Dupes - Drugstore vs High-end",
+    summary: "Side-by-side comparison formats of popular luxury skincare alternatives remain top performers for creator affiliate links.",
+    source: "Affiliate Signals",
+    metrics: ["Conversion potential: High", "Engagement rate: 8.5%"],
+    relevance: 92,
+    topic: "Affiliate skincare dupes",
+  }
+];
+
 function formatRange(range?: Range | null, currency?: string | null): string {
   if (!range || (range.lower_bound == null && range.upper_bound == null)) {
     return "Not reported";
@@ -200,7 +236,7 @@ const S: Record<string, React.CSSProperties> = {
     background: "#fff",
     border: "1px solid #dfe1e5",
     borderRadius: "24px",
-    padding: "6px 16px",
+    padding: "6px 8px 6px 16px",
     boxShadow: "0 1px 6px rgba(32,33,36,0.08)",
     transition: "box-shadow 0.2s",
   },
@@ -213,23 +249,6 @@ const S: Record<string, React.CSSProperties> = {
     background: "transparent",
     color: "#202124",
     fontFamily: "inherit",
-  },
-  searchBtn: {
-    background: "#1a73e8",
-    color: "#fff",
-    border: "none",
-    borderRadius: "20px",
-    padding: "8px 20px",
-    fontSize: "14px",
-    fontWeight: 500,
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-    fontFamily: "inherit",
-  },
-  searchBtnDisabled: {
-    background: "#dadce0",
-    color: "#80868b",
-    cursor: "not-allowed",
   },
   modeRow: {
     display: "flex",
@@ -249,9 +268,9 @@ const S: Record<string, React.CSSProperties> = {
     transition: "all 0.15s",
   },
   modeBtnActive: {
-    background: "#e8f0fe",
-    border: "1px solid #1a73e8",
-    color: "#1a73e8",
+    background: "#e6f6ee",
+    border: "1px solid #006b4e",
+    color: "#006b4e",
   },
   topBar: {
     display: "flex",
@@ -313,9 +332,9 @@ const S: Record<string, React.CSSProperties> = {
     transition: "all 0.15s",
   },
   filterBtnActive: {
-    background: "#e8f0fe",
-    border: "1px solid #d2e3fc",
-    color: "#1a73e8",
+    background: "#f1f8f5",
+    border: "1px solid #006b4e",
+    color: "#006b4e",
   },
   grid: {
     display: "grid",
@@ -338,7 +357,7 @@ const S: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     textTransform: "uppercase" as const,
     letterSpacing: "0.5px",
-    color: "#1a73e8",
+    color: "#006b4e",
   },
   cardTitle: {
     fontSize: "15px",
@@ -378,20 +397,10 @@ const S: Record<string, React.CSSProperties> = {
     color: "#80868b",
   },
   link: {
-    color: "#1a73e8",
+    color: "#006b4e",
     textDecoration: "none",
     fontSize: "12px",
     fontWeight: 500,
-  },
-  textBtn: {
-    background: "none",
-    border: "none",
-    color: "#1a73e8",
-    fontSize: "12px",
-    fontWeight: 500,
-    cursor: "pointer",
-    padding: 0,
-    fontFamily: "inherit",
   },
   jobsSection: {
     maxWidth: "960px",
@@ -595,7 +604,10 @@ export default function ResearchDashboard() {
   );
 
   const liveInspirations = useMemo(
-    () => [...adInspirations, ...trendInspirations, ...accountInspirations],
+    () => {
+      const items = [...adInspirations, ...trendInspirations, ...accountInspirations];
+      return items.length > 0 ? items : AFFILIATE_STARTERS;
+    },
     [accountInspirations, adInspirations, trendInspirations],
   );
   const visibleInspirations = liveInspirations.filter(
@@ -722,7 +734,7 @@ export default function ResearchDashboard() {
 
   return (
     <main style={S.page}>
-      <WorkspaceSectionNav area="research" />
+      <WorkspaceSectionNav area="discover" />
 
       <div style={S.topBar}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -745,7 +757,7 @@ export default function ResearchDashboard() {
         {metaReady && (
           <button
             type="button"
-            style={{ ...S.textBtn, fontSize: "13px" }}
+            className="quiet-action"
             disabled={busy !== null}
             onClick={() => void runAccountValidation()}
           >
@@ -776,11 +788,8 @@ export default function ResearchDashboard() {
           />
           <button
             type="submit"
-            style={
-              canSearch
-                ? S.searchBtn
-                : { ...S.searchBtn, ...S.searchBtnDisabled }
-            }
+            className="primary-button"
+            style={{ borderRadius: "20px" }}
             disabled={!canSearch}
           >
             {busy === queryMode ? "Searching…" : "Search"}
@@ -904,7 +913,7 @@ export default function ResearchDashboard() {
                       {item.topic && (
                         <button
                           type="button"
-                          style={S.textBtn}
+                          className="quiet-action"
                           onClick={() => exploreTopic(item.topic!)}
                         >
                           Explore
@@ -932,7 +941,7 @@ export default function ResearchDashboard() {
       {visibleInspirations.length === 0 && liveInspirations.length > 0 && (
         <div style={{ ...S.empty, ...S.section }}>
           <p>No signals of this type yet.</p>
-          <button type="button" style={S.textBtn} onClick={() => setFeedFilter("all")}>
+          <button type="button" className="quiet-action" onClick={() => setFeedFilter("all")}>
             Show all results
           </button>
         </div>

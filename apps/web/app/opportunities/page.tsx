@@ -333,7 +333,7 @@ export default function OpportunitiesPage() {
 
   return (
     <main className="opportunity-page">
-      <WorkspaceSectionNav area="research" />
+      <WorkspaceSectionNav area="discover" />
       <header className="opportunity-header">
         <div>
           <p className="eyebrow">EVIDENCE → ECONOMICS → CAMPAIGN</p>
@@ -428,7 +428,7 @@ export default function OpportunitiesPage() {
       <section className="opportunity-results">
         <div className="section-heading">
           <div><p className="eyebrow">3 · DECIDE</p><h2>Ranked opportunities</h2></div>
-          <Link href="/research">Gather more evidence</Link>
+          <Link href="/discover">Gather more evidence</Link>
         </div>
         {opportunities.length === 0 && <p className="empty-state">No opportunities scored yet.</p>}
         {opportunities.map((item) => (
