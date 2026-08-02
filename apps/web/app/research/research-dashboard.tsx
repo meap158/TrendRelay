@@ -92,77 +92,8 @@ type Inspiration = {
   image?: string;
   metrics?: string[];
   topic?: string;
+  relevance?: number;
 };
-
-const TREND_SOURCES = ["reddit", "youtube", "x", "web", "github", "instagram", "tiktok"];
-const STARTER_INSPIRATIONS: Inspiration[] = [
-  {
-    id: "starter-proof",
-    kind: "starter",
-    label: "Reliable format",
-    title: "Show the proof before explaining the product",
-    summary:
-      "Lead with a visible result, then rewind to the small decision or product feature that created it.",
-    source: "Creative pattern",
-    topic: "before and after product proof",
-    metrics: ["Hook: outcome first", "Best for: visual products"],
-  },
-  {
-    id: "starter-comparison",
-    kind: "starter",
-    label: "High-intent angle",
-    title: "Turn the buying decision into a three-way comparison",
-    summary:
-      "Compare the default choice, the premium choice, and the unexpectedly practical option your audience may overlook.",
-    source: "Creative pattern",
-    topic: "three way product comparison",
-    metrics: ["Hook: this vs that", "Best for: considered purchases"],
-  },
-  {
-    id: "starter-routine",
-    kind: "starter",
-    label: "Repeatable story",
-    title: "Build the product into a specific daily ritual",
-    summary:
-      "Anchor the idea to a recognizable moment—first coffee, commute, desk reset, or evening wind-down.",
-    source: "Creative pattern",
-    topic: "daily routine product ideas",
-    metrics: ["Hook: a familiar moment", "Best for: lifestyle offers"],
-  },
-  {
-    id: "starter-objection",
-    kind: "starter",
-    label: "Conversion angle",
-    title: "Answer the objection people are embarrassed to ask",
-    summary:
-      "Use candid creator language to resolve friction around price, complexity, quality, or whether it actually works.",
-    source: "Creative pattern",
-    topic: "customer objections product reviews",
-    metrics: ["Hook: honest concern", "Best for: UGC"],
-  },
-  {
-    id: "starter-niche",
-    kind: "starter",
-    label: "Community signal",
-    title: "Borrow the exact phrase enthusiasts use",
-    summary:
-      "Research niche communities for the shorthand, frustrations, and tiny details that signal genuine category fluency.",
-    source: "Research pattern",
-    topic: "niche community product language",
-    metrics: ["Hook: insider language", "Best for: enthusiast niches"],
-  },
-  {
-    id: "starter-mistake",
-    kind: "starter",
-    label: "Educational hook",
-    title: "Reveal the mistake that makes the product seem ineffective",
-    summary:
-      "Teach one overlooked setup or usage detail, then position the offer as the easier path to the desired result.",
-    source: "Creative pattern",
-    topic: "common product usage mistakes",
-    metrics: ["Hook: you may be doing this wrong", "Best for: demos"],
-  },
-];
 
 function formatRange(range?: Range | null, currency?: string | null): string {
   if (!range || (range.lower_bound == null && range.upper_bound == null)) {
@@ -181,6 +112,335 @@ function metricLabels(metrics?: Record<string, number>): string[] {
     .map(([key, value]) => `${key.replaceAll("_", " ")}: ${value.toLocaleString()}`);
 }
 
+function extractRelevance(metrics?: Record<string, number>): number {
+  if (!metrics) return 0;
+  const keys = Object.keys(metrics);
+  if (keys.length === 0) return 0;
+  const first = metrics[keys[0]!]!;
+  return Math.min(Math.max(first, 0), 100);
+}
+
+function statusDot(ready: boolean): React.CSSProperties {
+  return {
+    display: "inline-block",
+    width: "8px",
+    height: "8px",
+    borderRadius: "50%",
+    background: ready ? "#34a853" : "#ea4335",
+    marginRight: "6px",
+  };
+}
+
+function barTrack(): React.CSSProperties {
+  return {
+    height: "6px",
+    borderRadius: "3px",
+    background: "#f1f3f4",
+    overflow: "hidden",
+    position: "relative",
+    flex: 1,
+  };
+}
+
+function barFill(pct: number, color: string): React.CSSProperties {
+  return {
+    height: "100%",
+    width: `${Math.min(pct, 100)}%`,
+    background: color,
+    borderRadius: "3px",
+    transition: "width 0.4s ease",
+  };
+}
+
+function jobDot(status: string): React.CSSProperties {
+  return {
+    display: "inline-block",
+    width: "8px",
+    height: "8px",
+    borderRadius: "50%",
+    marginRight: "10px",
+    background:
+      status === "succeeded" ? "#34a853" : status === "failed" ? "#ea4335" : "#fbbc04",
+  };
+}
+
+const S: Record<string, React.CSSProperties> = {
+  page: {
+    fontFamily: "'Google Sans', 'Segoe UI', system-ui, -apple-system, sans-serif",
+    background: "#fff",
+    color: "#202124",
+    minHeight: "100vh",
+  },
+  hero: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "80px 24px 48px",
+    textAlign: "center",
+  },
+  logo: {
+    fontSize: "42px",
+    fontWeight: 400,
+    letterSpacing: "-0.5px",
+    color: "#202124",
+    margin: "0 0 8px",
+  },
+  tagline: {
+    fontSize: "15px",
+    color: "#5f6368",
+    margin: "0 0 36px",
+    fontWeight: 400,
+  },
+  searchForm: {
+    display: "flex",
+    alignItems: "center",
+    width: "100%",
+    maxWidth: "584px",
+    background: "#fff",
+    border: "1px solid #dfe1e5",
+    borderRadius: "24px",
+    padding: "6px 16px",
+    boxShadow: "0 1px 6px rgba(32,33,36,0.08)",
+    transition: "box-shadow 0.2s",
+  },
+  searchInput: {
+    flex: 1,
+    border: "none",
+    outline: "none",
+    fontSize: "16px",
+    padding: "10px 8px",
+    background: "transparent",
+    color: "#202124",
+    fontFamily: "inherit",
+  },
+  searchBtn: {
+    background: "#1a73e8",
+    color: "#fff",
+    border: "none",
+    borderRadius: "20px",
+    padding: "8px 20px",
+    fontSize: "14px",
+    fontWeight: 500,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+    fontFamily: "inherit",
+  },
+  searchBtnDisabled: {
+    background: "#dadce0",
+    color: "#80868b",
+    cursor: "not-allowed",
+  },
+  modeRow: {
+    display: "flex",
+    gap: "8px",
+    marginTop: "16px",
+  },
+  modeBtn: {
+    background: "transparent",
+    border: "1px solid #dadce0",
+    borderRadius: "16px",
+    padding: "6px 16px",
+    fontSize: "13px",
+    cursor: "pointer",
+    color: "#5f6368",
+    fontFamily: "inherit",
+    fontWeight: 500,
+    transition: "all 0.15s",
+  },
+  modeBtnActive: {
+    background: "#e8f0fe",
+    border: "1px solid #1a73e8",
+    color: "#1a73e8",
+  },
+  topBar: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "12px 24px",
+    borderBottom: "1px solid #f1f3f4",
+    fontSize: "13px",
+    color: "#5f6368",
+  },
+  wsSelect: {
+    border: "1px solid #dadce0",
+    borderRadius: "8px",
+    padding: "4px 8px",
+    fontSize: "13px",
+    background: "#fff",
+    color: "#3c4043",
+    fontFamily: "inherit",
+  },
+  error: {
+    background: "#fce8e6",
+    color: "#c5221f",
+    padding: "12px 24px",
+    fontSize: "14px",
+    textAlign: "center",
+    margin: 0,
+  },
+  section: {
+    maxWidth: "960px",
+    margin: "0 auto",
+    padding: "32px 24px",
+  },
+  sectionTitle: {
+    fontSize: "20px",
+    fontWeight: 400,
+    color: "#202124",
+    margin: "0 0 4px",
+  },
+  sectionSub: {
+    fontSize: "13px",
+    color: "#5f6368",
+    margin: "0 0 20px",
+  },
+  filterRow: {
+    display: "flex",
+    gap: "8px",
+    marginBottom: "24px",
+    flexWrap: "wrap",
+  },
+  filterBtn: {
+    background: "transparent",
+    border: "1px solid #dadce0",
+    borderRadius: "16px",
+    padding: "5px 14px",
+    fontSize: "13px",
+    cursor: "pointer",
+    color: "#5f6368",
+    fontFamily: "inherit",
+    transition: "all 0.15s",
+  },
+  filterBtnActive: {
+    background: "#e8f0fe",
+    border: "1px solid #d2e3fc",
+    color: "#1a73e8",
+  },
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+    gap: "16px",
+  },
+  card: {
+    border: "1px solid #e8eaed",
+    borderRadius: "12px",
+    padding: "20px",
+    background: "#fff",
+    transition: "box-shadow 0.2s",
+    cursor: "default",
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+  },
+  cardLabel: {
+    fontSize: "11px",
+    fontWeight: 500,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.5px",
+    color: "#1a73e8",
+  },
+  cardTitle: {
+    fontSize: "15px",
+    fontWeight: 500,
+    color: "#202124",
+    margin: 0,
+    lineHeight: 1.4,
+  },
+  cardSummary: {
+    fontSize: "13px",
+    color: "#5f6368",
+    margin: 0,
+    lineHeight: 1.5,
+  },
+  cardImg: {
+    width: "100%",
+    height: "140px",
+    objectFit: "cover" as const,
+    borderRadius: "8px",
+    background: "#f8f9fa",
+  },
+  metricRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    fontSize: "12px",
+    color: "#5f6368",
+  },
+  cardFooter: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: "auto",
+    paddingTop: "8px",
+    borderTop: "1px solid #f1f3f4",
+    fontSize: "12px",
+    color: "#80868b",
+  },
+  link: {
+    color: "#1a73e8",
+    textDecoration: "none",
+    fontSize: "12px",
+    fontWeight: 500,
+  },
+  textBtn: {
+    background: "none",
+    border: "none",
+    color: "#1a73e8",
+    fontSize: "12px",
+    fontWeight: 500,
+    cursor: "pointer",
+    padding: 0,
+    fontFamily: "inherit",
+  },
+  jobsSection: {
+    maxWidth: "960px",
+    margin: "0 auto",
+    padding: "0 24px 48px",
+  },
+  jobRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "12px 0",
+    borderBottom: "1px solid #f1f3f4",
+    fontSize: "13px",
+  },
+  empty: {
+    textAlign: "center",
+    padding: "40px 24px",
+    color: "#80868b",
+    fontSize: "14px",
+  },
+  accountRow: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "flex-end",
+    flexWrap: "wrap",
+    padding: "16px 0",
+  },
+  inputSmall: {
+    border: "1px solid #dadce0",
+    borderRadius: "8px",
+    padding: "6px 10px",
+    fontSize: "13px",
+    fontFamily: "inherit",
+    color: "#3c4043",
+  },
+  divider: {
+    border: "none",
+    borderTop: "1px solid #f1f3f4",
+    margin: "0",
+  },
+};
+
+const COLORS_BY_KIND: Record<string, string> = {
+  trend: "#1a73e8",
+  ad: "#e37400",
+  account: "#34a853",
+  starter: "#9334e6",
+};
+
 export default function ResearchDashboard() {
   const { apiFetch } = useAuth();
   const { jobs: allJobs, refresh: refreshJobs, setActiveWorkspaceId } = useJobs();
@@ -189,15 +449,7 @@ export default function ResearchDashboard() {
   const [providers, setProviders] = useState<ResearchProviders | null>(null);
   const [query, setQuery] = useState("");
   const [queryMode, setQueryMode] = useState<"trends" | "ads">("trends");
-  const [depth, setDepth] = useState("quick");
-  const [selectedSources, setSelectedSources] = useState<string[]>([]);
-  const [country, setCountry] = useState("US");
-  const [adType, setAdType] = useState("all");
-  const [mediaType, setMediaType] = useState("all");
-  const [maxResults, setMaxResults] = useState(20);
   const [adResult, setAdResult] = useState<AdSearchResult | null>(null);
-  const [account, setAccount] = useState("");
-  const [preset, setPreset] = useState("last_7d");
   const [briefing, setBriefing] = useState<MetaBriefing | null>(null);
   const [feedFilter, setFeedFilter] = useState<"all" | "trend" | "ad" | "account">("all");
   const [busy, setBusy] = useState<string | null>(null);
@@ -263,41 +515,6 @@ export default function ResearchDashboard() {
     };
   }, [refreshProviders]);
 
-  const reachById = useMemo(
-    () => new Map((providers?.agent_reach.channels ?? []).map((channel) => [channel.id, channel])),
-    [providers],
-  );
-
-  const readiness = useMemo(() => {
-    const values = [
-      {
-        name: "Trend discovery",
-        detail: "Recent demand, community language, and cited web evidence",
-        ready: Boolean(
-          providers?.last30days.installed &&
-            providers.last30days.active &&
-            providers.last30days.engine_present,
-        ),
-      },
-      {
-        name: "Channel coverage",
-        detail: `${providers?.agent_reach.summary.ready ?? 0} of ${providers?.agent_reach.summary.total ?? 0} research channels ready`,
-        ready: Boolean(providers?.agent_reach.provider.active),
-      },
-      {
-        name: "Competitive creative",
-        detail: "Public Meta Ad Library creative and delivery evidence",
-        ready: Boolean(providers?.meta_ads_collector.ready),
-      },
-      {
-        name: "Account validation",
-        detail: "Read-only performance, winners, bleeders, and fatigue",
-        ready: Boolean(providers?.meta_ads.ready),
-      },
-    ];
-    return { values, ready: values.filter((item) => item.ready).length };
-  }, [providers]);
-
   const trendInspirations = useMemo<Inspiration[]>(
     () =>
       jobs
@@ -313,6 +530,7 @@ export default function ResearchDashboard() {
             href: observation.evidence?.source_url,
             metrics: metricLabels(observation.metrics),
             topic: job.topic,
+            relevance: extractRelevance(observation.metrics),
           })),
         )
         .slice(0, 18),
@@ -337,6 +555,9 @@ export default function ResearchDashboard() {
             `Impressions: ${formatRange(ad.impressions)}`,
             `Spend: ${formatRange(ad.spend, ad.spend?.currency)}`,
           ],
+          relevance: ad.impressions?.upper_bound
+            ? Math.min((ad.impressions.upper_bound / 100_000) * 100, 100)
+            : 30,
         } satisfies Inspiration;
       }),
     [adResult],
@@ -366,6 +587,7 @@ export default function ResearchDashboard() {
                 `$${signal.spend.toFixed(2)} spend`,
                 `${signal.ctr.toFixed(2)}% CTR`,
               ],
+              relevance: Math.min(signal.ctr * 20, 100),
             })),
           )
         : [],
@@ -376,8 +598,7 @@ export default function ResearchDashboard() {
     () => [...adInspirations, ...trendInspirations, ...accountInspirations],
     [accountInspirations, adInspirations, trendInspirations],
   );
-  const baseInspirations = liveInspirations.length > 0 ? liveInspirations : STARTER_INSPIRATIONS;
-  const visibleInspirations = baseInspirations.filter(
+  const visibleInspirations = liveInspirations.filter(
     (item) => feedFilter === "all" || item.kind === feedFilter,
   );
 
@@ -389,17 +610,11 @@ export default function ResearchDashboard() {
   const collectorReady = Boolean(providers?.meta_ads_collector.ready);
   const metaReady = Boolean(providers?.meta_ads.ready);
 
+  const readinessCount = [last30Ready, collectorReady, metaReady].filter(Boolean).length;
+
   function selectWorkspace(id: string) {
     setWorkspaceId(id);
     setActiveWorkspaceId(id || null);
-  }
-
-  function toggleSource(source: string) {
-    setSelectedSources((current) =>
-      current.includes(source)
-        ? current.filter((item) => item !== source)
-        : [...current, source],
-    );
   }
 
   function exploreTopic(topic: string) {
@@ -415,8 +630,8 @@ export default function ResearchDashboard() {
     if (
       !window.confirm(
         queryMode === "trends"
-          ? `Research “${normalized}” using the selected evidence sources?`
-          : `Search Meta's public Ad Library for “${normalized}”?`,
+          ? `Research "${normalized}" using the selected evidence sources?`
+          : `Search Meta's public Ad Library for "${normalized}"?`,
       )
     ) {
       return;
@@ -432,8 +647,8 @@ export default function ResearchDashboard() {
             workspace_id: workspaceId,
             topic: normalized,
             days: 30,
-            sources: selectedSources,
-            mode: depth,
+            sources: [],
+            mode: "quick",
             confirm_external_action: true,
           }),
         });
@@ -446,10 +661,10 @@ export default function ResearchDashboard() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             query: normalized,
-            country,
-            ad_type: adType,
-            media_type: mediaType,
-            max_results: maxResults,
+            country: "US",
+            ad_type: "all",
+            media_type: "all",
+            max_results: 20,
             confirm_external_action: true,
           }),
         });
@@ -481,8 +696,8 @@ export default function ResearchDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          account: account || null,
-          preset,
+          account: null,
+          preset: "last_7d",
           confirm_external_action: true,
         }),
       });
@@ -502,344 +717,268 @@ export default function ResearchDashboard() {
     }
   }
 
-  return (
-    <main className="research-page research-radar">
-      <WorkspaceSectionNav area="research" />
-      <header className="research-radar-header">
-        <div>
-          <p className="eyebrow">INSPIRATION RADAR</p>
-          <h1>What is worth making next?</h1>
-          <p className="lede">
-            Recent demand, competitor creative, and your own performance signals—ranked in
-            one place.
-          </p>
-        </div>
-        <div className="research-header-controls">
-          <label className="workspace-picker">
-            Workspace
-            <select value={workspaceId} onChange={(event) => selectWorkspace(event.target.value)}>
-              {workspaces.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>
-                  {workspace.name} · {workspace.role}
-                </option>
-              ))}
-            </select>
-          </label>
-          <details className="research-sources-menu">
-            <summary>
-              <span className="source-pulse" />
-              {readiness.ready}/{readiness.values.length} intelligence inputs ready
-            </summary>
-            <div className="research-sources-popover">
-              <div className="sources-popover-heading">
-                <div>
-                  <strong>Intelligence inputs</strong>
-                  <small>Different signals, one inspiration ranking.</small>
-                </div>
-                <button type="button" onClick={() => void refreshProviders()}>
-                  Refresh
-                </button>
-              </div>
-              {readiness.values.map((item) => (
-                <div className="source-health-row" key={item.name}>
-                  <span className={item.ready ? "health-ready" : "health-setup"} />
-                  <div>
-                    <strong>{item.name}</strong>
-                    <small>{item.detail}</small>
-                  </div>
-                  <span>{item.ready ? "Ready" : "Setup"}</span>
-                </div>
-              ))}
-              <Link href="/tools">Manage research tools</Link>
-            </div>
-          </details>
-        </div>
-      </header>
+  const canSearch =
+    workspaceId && busy === null && (queryMode === "trends" ? last30Ready : collectorReady);
 
-      <section className="research-query-shell" aria-label="Research controls">
-        <div className="query-mode-switch" aria-label="Research mode">
-          <button
-            type="button"
-            className={queryMode === "trends" ? "selected" : ""}
-            onClick={() => setQueryMode("trends")}
+  return (
+    <main style={S.page}>
+      <WorkspaceSectionNav area="research" />
+
+      <div style={S.topBar}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <select
+            style={S.wsSelect}
+            value={workspaceId}
+            onChange={(event) => selectWorkspace(event.target.value)}
           >
-            Find demand
-          </button>
-          <button
-            type="button"
-            className={queryMode === "ads" ? "selected" : ""}
-            onClick={() => setQueryMode("ads")}
-          >
-            Inspect ads
-          </button>
+            {workspaces.map((ws) => (
+              <option key={ws.id} value={ws.id}>
+                {ws.name}
+              </option>
+            ))}
+          </select>
+          <span>
+            <span style={statusDot(last30Ready)} />
+            {readinessCount}/3 sources ready
+          </span>
         </div>
-        <form className="research-query-form" onSubmit={runQuery}>
-          <label>
-            <span>{queryMode === "trends" ? "Topic or product" : "Brand, product, or angle"}</span>
-            <input
-              required
-              minLength={1}
-              maxLength={queryMode === "trends" ? 300 : 200}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={
-                queryMode === "trends"
-                  ? "e.g. portable espresso makers"
-                  : "e.g. mushroom coffee"
-              }
-            />
-          </label>
-          {queryMode === "trends" ? (
-            <label className="query-short-field">
-              <span>Depth</span>
-              <select value={depth} onChange={(event) => setDepth(event.target.value)}>
-                <option value="quick">Quick scan</option>
-                <option value="standard">Standard</option>
-                <option value="deep">Deep dive</option>
-              </select>
-            </label>
-          ) : (
-            <label className="query-short-field">
-              <span>Country</span>
-              <input
-                minLength={2}
-                maxLength={2}
-                value={country}
-                onChange={(event) => setCountry(event.target.value.toUpperCase())}
-              />
-            </label>
-          )}
+        {metaReady && (
           <button
-            className="research-run-button"
-            disabled={
-              busy !== null ||
-              !workspaceId ||
-              (queryMode === "trends" ? !last30Ready : !collectorReady)
-            }
+            type="button"
+            style={{ ...S.textBtn, fontSize: "13px" }}
+            disabled={busy !== null}
+            onClick={() => void runAccountValidation()}
           >
-            {busy === queryMode
-              ? "Gathering signals…"
-              : queryMode === "trends"
-                ? "Scan trends"
-                : "Find creative"}
+            {busy === "account" ? "Reading…" : "Import account signals"}
+          </button>
+        )}
+      </div>
+
+      {error && <p style={S.error} role="alert">{error}</p>}
+
+      <div style={S.hero}>
+        <h1 style={S.logo}>TrendRelay</h1>
+        <p style={S.tagline}>Discover what is trending. Research what matters.</p>
+
+        <form style={S.searchForm} onSubmit={runQuery}>
+          <input
+            style={S.searchInput}
+            required
+            minLength={1}
+            maxLength={300}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={
+              queryMode === "trends"
+                ? "Search trends..."
+                : "Search competitor ads..."
+            }
+          />
+          <button
+            type="submit"
+            style={
+              canSearch
+                ? S.searchBtn
+                : { ...S.searchBtn, ...S.searchBtnDisabled }
+            }
+            disabled={!canSearch}
+          >
+            {busy === queryMode ? "Searching…" : "Search"}
           </button>
         </form>
 
-        {queryMode === "trends" ? (
-          <div className="research-source-picker" aria-label="Optional channels">
-            <span>Focus channels</span>
-            {TREND_SOURCES.map((source) => {
-              const reach = reachById.get(source === "x" ? "twitter" : source);
-              return (
-                <button
-                  key={source}
-                  type="button"
-                  className={selectedSources.includes(source) ? "selected" : ""}
-                  onClick={() => toggleSource(source)}
-                  title={reach?.detail ?? "Provider-selected when available"}
-                >
-                  {source}
-                  <small>{reach?.status ?? "auto"}</small>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <details className="research-advanced">
-            <summary>Ad search filters</summary>
-            <div>
-              <label>
-                Ad type
-                <select value={adType} onChange={(event) => setAdType(event.target.value)}>
-                  <option value="all">All ads</option>
-                  <option value="political">Political / issue</option>
-                  <option value="housing">Housing</option>
-                  <option value="employment">Employment</option>
-                  <option value="credit">Credit</option>
-                </select>
-              </label>
-              <label>
-                Creative
-                <select value={mediaType} onChange={(event) => setMediaType(event.target.value)}>
-                  <option value="all">Any media</option>
-                  <option value="video">Video</option>
-                  <option value="image">Image</option>
-                  <option value="none">No media</option>
-                </select>
-              </label>
-              <label>
-                Results
-                <select
-                  value={maxResults}
-                  onChange={(event) => setMaxResults(Number(event.target.value))}
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={30}>30</option>
-                  <option value={50}>50</option>
-                </select>
-              </label>
-            </div>
-          </details>
-        )}
-      </section>
+        <div style={S.modeRow}>
+          {(
+            [
+              ["trends", "Trends"],
+              ["ads", "Ads"],
+            ] as const
+          ).map(([val, label]) => (
+            <button
+              key={val}
+              type="button"
+              style={
+                queryMode === val
+                  ? { ...S.modeBtn, ...S.modeBtnActive }
+                  : S.modeBtn
+              }
+              onClick={() => setQueryMode(val)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      {error && <p className="registry-error research-error" role="alert">{error}</p>}
+      {visibleInspirations.length > 0 && (
+        <div style={S.section}>
+          <h2 style={S.sectionTitle}>Results</h2>
+          <p style={S.sectionSub}>
+            {liveInspirations.length} signals from your research
+          </p>
 
-      <section className="inspiration-section" aria-labelledby="inspiration-heading">
-        <div className="inspiration-heading">
-          <div>
-            <p className="eyebrow">
-              {liveInspirations.length > 0 ? "LATEST EVIDENCE" : "STARTER RADAR"}
-            </p>
-            <h2 id="inspiration-heading">Inspiration worth exploring</h2>
-            <p>
-              {liveInspirations.length > 0
-                ? `${liveInspirations.length} fresh signals from your research activity.`
-                : "Proven creative directions to start from while live evidence builds."}
-            </p>
-          </div>
-          <div className="feed-filter" aria-label="Filter inspiration">
+          <div style={S.filterRow}>
             {(
               [
-                ["all", "For you"],
-                ["trend", "Demand"],
+                ["all", "All"],
+                ["trend", "Trends"],
                 ["ad", "Ads"],
-                ["account", "Your winners"],
+                ["account", "Account"],
               ] as const
-            ).map(([value, label]) => (
+            ).map(([val, label]) => (
               <button
-                key={value}
+                key={val}
                 type="button"
-                className={feedFilter === value ? "selected" : ""}
-                onClick={() => setFeedFilter(value)}
+                style={
+                  feedFilter === val
+                    ? { ...S.filterBtn, ...S.filterBtnActive }
+                    : S.filterBtn
+                }
+                onClick={() => setFeedFilter(val)}
               >
                 {label}
               </button>
             ))}
           </div>
-        </div>
 
-        {visibleInspirations.length > 0 ? (
-          <div className="inspiration-grid">
-            {visibleInspirations.map((item, index) => (
-              <article className={`inspiration-card inspiration-${item.kind}`} key={item.id}>
-                {item.image && (
-                  // eslint-disable-next-line @next/next/no-img-element -- public evidence URL
-                  <img src={item.image} alt="" loading="lazy" referrerPolicy="no-referrer" />
-                )}
-                <div className="inspiration-card-body">
-                  <div className="inspiration-card-meta">
-                    <span>{item.label}</span>
-                    <small>#{String(index + 1).padStart(2, "0")}</small>
-                  </div>
-                  <h3>{item.title}</h3>
-                  <p>{item.summary}</p>
-                  {item.metrics && item.metrics.length > 0 && (
-                    <div className="inspiration-metrics">
-                      {item.metrics.map((metric) => (
-                        <span key={metric}>{metric}</span>
-                      ))}
-                    </div>
+          <div style={S.grid}>
+            {visibleInspirations.map((item) => {
+              const color = COLORS_BY_KIND[item.kind] ?? "#5f6368";
+              const pct = item.relevance ?? 40;
+              return (
+                <div
+                  key={item.id}
+                  style={S.card}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLDivElement).style.boxShadow =
+                      "0 1px 6px rgba(32,33,36,0.15)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLDivElement).style.boxShadow = "none";
+                  }}
+                >
+                  <span style={{ ...S.cardLabel, color }}>{item.label}</span>
+                  {item.image && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.image}
+                      alt=""
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      style={S.cardImg}
+                    />
                   )}
-                  <footer>
+                  <h3 style={S.cardTitle}>{item.title}</h3>
+                  <p style={S.cardSummary}>{item.summary}</p>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <div style={S.metricRow}>
+                      <span style={{ minWidth: "56px" }}>Relevance</span>
+                      <div style={barTrack()}>
+                        <div style={barFill(pct, color)} />
+                      </div>
+                      <span>{Math.round(pct)}%</span>
+                    </div>
+                    {item.metrics && item.metrics.length > 0 && (
+                      <div style={S.metricRow}>
+                        {item.metrics.map((m) => (
+                          <span
+                            key={m}
+                            style={{
+                              background: "#f1f3f4",
+                              borderRadius: "10px",
+                              padding: "2px 8px",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {m}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={S.cardFooter}>
                     <span>{item.source}</span>
-                    <div>
+                    <div style={{ display: "flex", gap: "12px" }}>
                       {item.topic && (
-                        <button type="button" onClick={() => exploreTopic(item.topic!)}>
-                          Explore angle
+                        <button
+                          type="button"
+                          style={S.textBtn}
+                          onClick={() => exploreTopic(item.topic!)}
+                        >
+                          Explore
                         </button>
                       )}
                       {item.href && (
-                        <a href={item.href} target="_blank" rel="noreferrer">
-                          View evidence
+                        <a
+                          href={item.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={S.link}
+                        >
+                          Source
                         </a>
                       )}
                     </div>
-                  </footer>
+                  </div>
                 </div>
-              </article>
-            ))}
+              );
+            })}
           </div>
-        ) : (
-          <div className="feed-empty-filter">
-            <p>No signals of this type yet.</p>
-            <button type="button" onClick={() => setFeedFilter("all")}>Show all inspiration</button>
-          </div>
-        )}
-      </section>
+        </div>
+      )}
 
-      <section className="research-secondary-grid">
-        <details className="account-validation">
-          <summary>
-            <span>
-              <strong>Validate ideas against your ad account</strong>
-              <small>Add winners, bleeders, and fatigue to the same inspiration radar.</small>
-            </span>
-            <span className={metaReady ? "source-ready" : "source-setup"}>
-              {metaReady ? "Ready" : "Setup needed"}
-            </span>
-          </summary>
-          <div className="account-validation-form">
-            <label>
-              Account (optional)
-              <input
-                value={account}
-                onChange={(event) => setAccount(event.target.value)}
-                placeholder="act_123456789"
-              />
-            </label>
-            <label>
-              Window
-              <select value={preset} onChange={(event) => setPreset(event.target.value)}>
-                <option value="last_7d">Last 7 days</option>
-                <option value="last_30d">Last 30 days</option>
-                <option value="last_90d">Last 90 days</option>
-                <option value="today">Today</option>
-                <option value="yesterday">Yesterday</option>
-              </select>
-            </label>
-            <button
-              type="button"
-              disabled={!metaReady || busy !== null}
-              onClick={() => void runAccountValidation()}
-            >
-              {busy === "account" ? "Reading performance…" : "Add account signals"}
-            </button>
-          </div>
-        </details>
+      {visibleInspirations.length === 0 && liveInspirations.length > 0 && (
+        <div style={{ ...S.empty, ...S.section }}>
+          <p>No signals of this type yet.</p>
+          <button type="button" style={S.textBtn} onClick={() => setFeedFilter("all")}>
+            Show all results
+          </button>
+        </div>
+      )}
 
-        <details className="research-activity">
-          <summary>
-            <span>
-              <strong>Research activity</strong>
-              <small>{jobs.length} recent runs · open for provenance and errors</small>
-            </span>
-          </summary>
-          <div className="research-activity-list">
-            {jobs.length === 0 && <p>No workspace research runs yet.</p>}
-            {jobs.slice(0, 10).map((job) => (
-              <article key={job.id}>
-                <span className={`activity-status activity-${job.status}`} />
+      {liveInspirations.length === 0 && !busy && (
+        <div style={{ ...S.empty, ...S.section }}>
+          <p style={{ color: "#80868b", fontSize: "15px" }}>
+            Start by searching a topic or product above.
+          </p>
+        </div>
+      )}
+
+      {jobs.length > 0 && (
+        <div style={S.jobsSection}>
+          <hr style={S.divider} />
+          <h2 style={{ ...S.sectionTitle, marginTop: "24px" }}>Recent research</h2>
+          <p style={S.sectionSub}>{jobs.length} runs</p>
+          {jobs.slice(0, 8).map((job) => (
+            <div key={job.id} style={S.jobRow}>
+              <div style={{ display: "flex", alignItems: "center" }}>
+                <span style={jobDot(job.status)} />
                 <div>
-                  <strong>{job.topic}</strong>
-                  <small>
+                  <span style={{ color: "#202124", fontWeight: 500 }}>{job.topic}</span>
+                  <span style={{ color: "#80868b", marginLeft: "8px" }}>
                     {job.status} · {new Date(job.created_at).toLocaleString()}
-                  </small>
-                  {job.error && <p>{job.error}</p>}
+                  </span>
                 </div>
+              </div>
+              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                {job.error && (
+                  <span style={{ color: "#ea4335", fontSize: "12px" }}>{job.error}</span>
+                )}
                 {job.status === "succeeded" && (job.observations?.length ?? 0) > 0 && (
                   <Link
                     href={`/opportunities?trend=${encodeURIComponent(job.topic)}&job=${encodeURIComponent(job.id)}`}
+                    style={S.link}
                   >
                     Score opportunity
                   </Link>
                 )}
-              </article>
-            ))}
-          </div>
-        </details>
-      </section>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </main>
   );
 }
