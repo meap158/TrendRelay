@@ -218,19 +218,19 @@ def test_backend_frontend_and_worker_are_reload_resilient() -> None:
     assert services["Backend"].restart_on_exit is True
     assert services["Frontend"].restart_on_exit is True
     assert services["Worker"].restart_on_exit is True
-    assert services["Postiz"].restart_on_exit is False
-    assert services["Postiz"].required is False
     assert services["Backend"].required is True
+    assert "Postiz" not in services
 
 
 def test_browser_app_opens_after_startup(monkeypatch) -> None:
     opened: list[str] = []
     monkeypatch.setattr(dev.webbrowser, "open", lambda url: opened.append(url) or True)
+    services = dev.build_services(False)
 
-    assert dev.open_browser_app(False) is True
+    assert dev.open_browser_app(False, services) is True
     assert opened == ["http://127.0.0.1:3001/"]
 
-    assert dev.open_browser_app(True) is False
+    assert dev.open_browser_app(True, services) is False
     assert opened == ["http://127.0.0.1:3001/"]
 
 
@@ -242,7 +242,7 @@ def test_browser_opens_only_after_frontend_health_gate() -> None:
     health_gate = source.index(
         "if service.health_url and service.required and not wait_until_healthy("
     )
-    browser_open = source.index("open_browser_app(args.desktop)")
+    browser_open = source.index("open_browser_app(args.desktop, services)")
     assert health_gate < browser_open
 
 
@@ -258,13 +258,9 @@ def test_runner_passes_its_backend_url_to_browser_and_desktop() -> None:
     }
 
 
-def test_windows_launcher_keeps_postiz_setup_optional() -> None:
+def test_windows_launcher_no_longer_prepares_a_local_publishing_service() -> None:
     root = Path(__file__).resolve().parents[1]
     launcher = (root / "start.cmd").read_text(encoding="utf-8")
-    marker = "Preparing native self-hosted Postiz"
-    block = launcher[
-        launcher.index(marker) : launcher.index('if "%TRENDRELAY_CHECK_REQUESTED%"=="1"')
-    ]
 
-    assert "goto :install_error" not in block
-    assert "TrendRelay will continue without it" in block
+    assert "postiz" not in launcher.lower()
+    assert "postiz" not in (root / "scripts" / "dev.py").read_text(encoding="utf-8").lower()

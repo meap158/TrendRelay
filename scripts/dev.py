@@ -244,14 +244,6 @@ def stop_service(running: RunningService) -> None:
         return
 
     print(f"Stopping {running.definition.name} (PID {process.pid})...")
-    if IS_WINDOWS and running.definition.name == "Postiz":
-        try:
-            process.send_signal(signal.CTRL_BREAK_EVENT)
-            process.wait(timeout=15)
-            return
-        except (OSError, subprocess.TimeoutExpired):
-            pass
-
     if IS_WINDOWS:
         subprocess.run(
             ["taskkill", "/PID", str(process.pid), "/T", "/F"],

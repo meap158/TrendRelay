@@ -18,10 +18,9 @@ def test_lists_every_catalogued_github_project() -> None:
 
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 8
+    assert len(tools) == 7
     assert {tool["id"] for tool in tools} == {
         "douyin-downloader",
-        "postiz-agent",
         "last30days-skill",
         "openmontage",
         "agent-reach",
@@ -84,7 +83,7 @@ def test_setup_launcher_requires_explicit_confirmation() -> None:
     response = asyncio.run(
         request(
             "POST",
-            "/api/tools/postiz-agent/setup/launch-auth",
+            "/api/tools/meta-ads-kit/setup/launch-auth",
             json={"confirm_external_action": False},
         )
     )
@@ -99,7 +98,7 @@ def test_unknown_setup_action_is_rejected(monkeypatch) -> None:
     response = asyncio.run(
         request(
             "POST",
-            "/api/tools/postiz-agent/setup/not-a-command",
+            "/api/tools/meta-ads-kit/setup/not-a-command",
             json={"confirm_external_action": True},
         )
     )

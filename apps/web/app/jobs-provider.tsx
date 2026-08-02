@@ -104,7 +104,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         fetchPromises.push(fetchRenders);
 
         // Publish jobs
-        const fetchPublish = apiFetch(`/api/workspaces/${activeWorkspaceId}/publishing/postiz/jobs`)
+        const fetchPublish = apiFetch(`/api/workspaces/${activeWorkspaceId}/publishing/jobs`)
           .then(res => res.json())
           .then(data => (data.jobs || []).map((j: any) => ({
             id: j.id,

@@ -47,7 +47,7 @@ cd TrendRelay
 
 The first run installs and verifies the application dependencies, creates the Python environment, applies database migrations, starts the local services with hot reload, and opens TrendRelay in your browser. Setup prints four numbered stages and keeps reporting progress during longer downloads; it stops with a useful network error instead of waiting indefinitely. TrendRelay's lockfile and CI are validated with npm 11.16, and a version-pinned install-script allowlist covers its reviewed Electron, media, compiler, and resolver runtimes. If an install is interrupted or incomplete, running `start.cmd` again detects and repairs it automatically.
 
-Self-hosted Postiz setup is attempted automatically but does not block the core app. Its Windows prerequisites use only Winget's community source and retry one safe source refresh. If App Installer still cannot open that source, TrendRelay opens normally and reports Postiz as unavailable until `start.cmd` is run again after Winget is repaired.
+Social publishing runs entirely against a hosted API. Pick Bundle.social, Zernio, or Buffer on `/publish`, paste that engine's API key into the form, and TrendRelay writes it back to the local `.env`. No local publishing service is installed or supervised.
 
 If the browser does not open automatically, visit [http://127.0.0.1:3001](http://127.0.0.1:3001).
 

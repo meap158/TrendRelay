@@ -27,36 +27,6 @@
                       "documentation":  "docs/third-party/douyin-downloader.md"
                   },
                   {
-                      "id":  "postiz-agent",
-                      "name":  "Postiz Agent",
-                      "repository":  "https://github.com/gitroomhq/postiz-agent",
-                      "revision":  "41c5a9dbd6b2776863e7c05c22e7a385c208321c",
-                      "version":  "2.0.15",
-                      "license":  "AGPL-3.0",
-                      "license_url":  "https://github.com/gitroomhq/postiz-agent/blob/41c5a9dbd6b2776863e7c05c22e7a385c208321c/LICENSE",
-                      "category":  "Social publishing",
-                      "summary":  "Audited short-video drafts and schedules for connected social accounts.",
-                      "capabilities":  [
-                                           "TikTok publishing",
-                                           "Instagram publishing",
-                                           "YouTube publishing"
-                                       ],
-                      "integration_status":  "adapter-ready",
-                      "commercial_use":  "conditional",
-                      "install_strategy":  "trendrelay-wrapper",
-                      "install_allowed":  true,
-                      "activation_allowed":  true,
-                      "default_active":  true,
-                      "root_path":  ".tools/postiz-agent",
-                      "source_path":  ".tools/postiz-agent/source",
-                      "documentation":  "docs/third-party/postiz-agent.md",
-                      "service_repository":  "https://github.com/gitroomhq/postiz-app",
-                      "service_revision":  "7236213ea4520bd67b45688c2787d1f4586b3b51",
-                      "service_version":  "2.21.7",
-                      "service_license":  "AGPL-3.0",
-                      "service_license_url":  "https://github.com/gitroomhq/postiz-app/blob/7236213ea4520bd67b45688c2787d1f4586b3b51/LICENSE"
-                  },
-                  {
                       "id":  "last30days-skill",
                       "name":  "Last 30 Days",
                       "repository":  "https://github.com/mvanhorn/last30days-skill",

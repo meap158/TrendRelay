@@ -4,14 +4,15 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
 from trendrelay_api.database import get_session
+from trendrelay_api.env_store import EnvWriteError
 from trendrelay_api.foundation import membership, require_role
-from trendrelay_api.integrations.postiz import (
+from trendrelay_api.integrations.publishing import (
     PublishRequest,
     connection_status,
     create_publish_job,
@@ -20,6 +21,8 @@ from trendrelay_api.integrations.postiz import (
     preview_publish,
     publish_job,
     run_publish_job,
+    save_provider_credentials,
+    set_active_provider,
 )
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/publishing", tags=["publishing"])
@@ -29,6 +32,17 @@ DatabaseSession = Annotated[Session, Depends(get_session)]
 
 class ExternalConfirmation(BaseModel):
     confirm_external_action: bool = False
+    provider: str | None = None
+
+
+class ProviderSelection(BaseModel):
+    provider: str = Field(min_length=1, max_length=40)
+
+
+class ProviderCredentials(ProviderSelection):
+    values: dict[str, str] = Field(default_factory=dict)
+    confirm_external_action: bool = False
+    activate: bool = False
 
 
 def validate_workspace(body: PublishRequest, workspace_id: str) -> None:
@@ -36,8 +50,14 @@ def validate_workspace(body: PublishRequest, workspace_id: str) -> None:
         raise HTTPException(status_code=422, detail="Workspace path and body must match.")
 
 
-@router.get("/postiz/connection")
-def postiz_connection(
+def require_local_request(request: Request) -> None:
+    host = request.client.host if request.client else ""
+    if host not in {"127.0.0.1", "::1", "testclient"}:
+        raise HTTPException(status_code=403, detail="Credential changes are local-machine only.")
+
+
+@router.get("/connection")
+def publishing_connection(
     workspace_id: str,
     user: AuthenticatedUser,
     session: DatabaseSession,
@@ -45,8 +65,52 @@ def postiz_connection(
     membership(session, workspace_id, user.id)
     return {"connection": connection_status()}
 
-@router.post("/postiz/integrations")
-def postiz_integrations(
+
+@router.post("/providers/credentials")
+def save_credentials(
+    workspace_id: str,
+    body: ProviderCredentials,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    require_local_request(request)
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(status_code=400, detail="Saving credentials requires confirmation.")
+    try:
+        result = save_provider_credentials(body.provider, body.values)
+        if body.activate:
+            result |= set_active_provider(body.provider)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except EnvWriteError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {"result": result, "connection": connection_status()}
+
+
+@router.post("/providers/activate")
+def activate_provider(
+    workspace_id: str,
+    body: ProviderSelection,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    require_local_request(request)
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    try:
+        result = set_active_provider(body.provider)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except EnvWriteError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {"result": result, "connection": connection_status()}
+
+
+@router.post("/integrations")
+def publishing_integrations(
     workspace_id: str,
     body: ExternalConfirmation,
     user: AuthenticatedUser,
@@ -57,13 +121,15 @@ def postiz_integrations(
     if not body.confirm_external_action:
         raise HTTPException(status_code=400, detail="Discovery requires explicit confirmation.")
     try:
-        return discover_integrations()
+        return discover_integrations(body.provider)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     except RuntimeError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
 
 
-@router.post("/postiz/preview")
-def preview_postiz_publish(
+@router.post("/preview")
+def preview_publishing(
     workspace_id: str,
     body: PublishRequest,
     user: AuthenticatedUser,
@@ -77,8 +143,8 @@ def preview_postiz_publish(
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
-@router.post("/postiz/jobs", status_code=202)
-def submit_postiz_publish(
+@router.post("/jobs", status_code=202)
+def submit_publishing(
     workspace_id: str,
     body: PublishRequest,
     background_tasks: BackgroundTasks,
@@ -98,8 +164,8 @@ def submit_postiz_publish(
     return {"job": job}
 
 
-@router.get("/postiz/jobs")
-def postiz_jobs(
+@router.get("/jobs")
+def publishing_jobs(
     workspace_id: str,
     user: AuthenticatedUser,
     session: DatabaseSession,
@@ -108,8 +174,8 @@ def postiz_jobs(
     return {"jobs": list_publish_jobs(workspace_id)}
 
 
-@router.get("/postiz/jobs/{job_id}")
-def get_postiz_job(
+@router.get("/jobs/{job_id}")
+def get_publishing_job(
     workspace_id: str,
     job_id: str,
     user: AuthenticatedUser,

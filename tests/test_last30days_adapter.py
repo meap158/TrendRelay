@@ -10,13 +10,13 @@ from trendrelay_api.models import Base
 
 
 def test_scoped_environment_excludes_unrelated_secrets(monkeypatch) -> None:
-    monkeypatch.setenv("POSTIZ_API_KEY", "must-not-leak")
+    monkeypatch.setenv("ZERNIO_API_KEY", "must-not-leak")
     monkeypatch.setenv("BRAVE_API_KEY", "allowed")
 
     environment = last30days.scoped_environment()
 
     assert environment["BRAVE_API_KEY"] == "allowed"
-    assert "POSTIZ_API_KEY" not in environment
+    assert "ZERNIO_API_KEY" not in environment
     assert environment["FROM_BROWSER"] == "off"
 
 

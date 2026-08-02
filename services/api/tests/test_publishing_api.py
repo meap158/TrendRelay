@@ -77,14 +77,14 @@ def test_editor_can_preview_but_only_approver_can_submit(monkeypatch) -> None:
     preview = asyncio.run(
         request(
             "POST",
-            f"/api/workspaces/{workspace['id']}/publishing/postiz/preview",
+            f"/api/workspaces/{workspace['id']}/publishing/preview",
             json=payload(workspace["id"]),
         )
     )
     submitted = asyncio.run(
         request(
             "POST",
-            f"/api/workspaces/{workspace['id']}/publishing/postiz/jobs",
+            f"/api/workspaces/{workspace['id']}/publishing/jobs",
             json={**payload(workspace["id"]), "confirm_external_action": True},
         )
     )

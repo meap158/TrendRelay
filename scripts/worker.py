@@ -16,7 +16,7 @@ sys.path.insert(0, str(API_SOURCE))
 from trendrelay_api.integrations.douyin import run_download_job  # noqa: E402
 from trendrelay_api.integrations.last30days import run_job  # noqa: E402
 from trendrelay_api.integrations.openmontage_runtime import run_render_job  # noqa: E402
-from trendrelay_api.integrations.postiz import run_publish_job  # noqa: E402
+from trendrelay_api.integrations.publishing import run_publish_job  # noqa: E402
 from trendrelay_api.media_library import run_ingest_job  # noqa: E402
 from trendrelay_api.jobs import recoverable_job_ids  # noqa: E402
 

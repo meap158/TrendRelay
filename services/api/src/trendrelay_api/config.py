@@ -34,8 +34,12 @@ class Settings(BaseSettings):
     invitation_delivery_hourly_limit: int = Field(default=20, ge=1, le=1000)
     require_aal2_for_governed_actions: bool = False
     local_auth_bypass: bool = True
+    publishing_provider: Literal["bundle_social", "zernio", "buffer"] = "bundle_social"
     bundle_social_api_key: str = ""
     bundle_social_team_id: str = ""
+    zernio_api_key: str = ""
+    buffer_api_key: str = ""
+    buffer_organization_id: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -51,3 +55,9 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def refresh_settings() -> Settings:
+    """Re-read configuration after the local .env file changed."""
+    get_settings.cache_clear()
+    return get_settings()

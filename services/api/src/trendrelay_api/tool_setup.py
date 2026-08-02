@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-from pathlib import Path
 from typing import Any
 
 from trendrelay_api.integrations.agent_reach import diagnostic_report
@@ -13,7 +12,6 @@ from trendrelay_api.integrations.meta_ads_collector import (
     provider_status as meta_ads_collector_status,
 )
 from trendrelay_api.integrations.meta_ads_kit import provider_status as meta_ads_status
-from trendrelay_api.integrations.postiz import connection_status as postiz_status
 from trendrelay_api.tool_registry import PROJECT_ROOT, list_tools
 
 LAST30DAYS_KEYS = (
@@ -108,35 +106,6 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                 }
             ],
             connection=status["connection"],
-        )
-    elif tool_id == "postiz-agent":
-        status = postiz_status()
-        report.update(
-            summary=(
-                "Publish to connected social accounts via bundle.social API. "
-                "Set BUNDLE_SOCIAL_API_KEY and BUNDLE_SOCIAL_TEAM_ID in .env, "
-                "then connect accounts in the bundle.social dashboard."
-            ),
-            requirements=[
-                *prerequisites,
-                _requirement(
-                    "api-key",
-                    "bundle.social API key",
-                    "ready" if status["authenticated"] else "setup-required",
-                    "API key verified and connected."
-                    if status["authenticated"]
-                    else "Set BUNDLE_SOCIAL_API_KEY and BUNDLE_SOCIAL_TEAM_ID in .env.",
-                ),
-            ],
-            actions=[
-                {
-                    "id": "open-publish",
-                    "label": "Open Publish",
-                    "kind": "navigate",
-                    "href": "/publish",
-                },
-            ],
-            connection=status,
         )
     elif tool_id == "last30days-skill":
         configured = _configured_names(LAST30DAYS_KEYS)

@@ -21,8 +21,6 @@
     "check": "npm run lint && npm run typecheck && npm test",
     "release:check": "npm run check && npm run build",
     "douyin": "python scripts/douyin.py",
-    "postiz": "python scripts/postiz.py",
-    "postiz:service": "python scripts/postiz_service.py",
     "research": "python scripts/research.py",
     "reach": "python scripts/reach.py",
     "studio": "python scripts/studio.py",
