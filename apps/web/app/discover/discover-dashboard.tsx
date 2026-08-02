@@ -250,6 +250,29 @@ const S: Record<string, React.CSSProperties> = {
     color: "#202124",
     fontFamily: "inherit",
   },
+  quickLinksRow: {
+    display: "flex",
+    gap: "8px",
+    marginTop: "24px",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    maxWidth: "800px",
+  },
+  quickLinkBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    background: "#f8f9fa",
+    border: "1px solid #dadce0",
+    borderRadius: "16px",
+    padding: "6px 14px",
+    fontSize: "12px",
+    cursor: "pointer",
+    color: "#3c4043",
+    textDecoration: "none",
+    fontWeight: 500,
+    transition: "all 0.15s",
+  },
   modeRow: {
     display: "flex",
     gap: "8px",
@@ -757,11 +780,17 @@ export default function ResearchDashboard() {
         {metaReady && (
           <button
             type="button"
-            className="quiet-action"
+            className="secondary-link"
+            style={{ borderRadius: "20px", display: "inline-flex", alignItems: "center", gap: "6px" }}
             disabled={busy !== null}
             onClick={() => void runAccountValidation()}
           >
-            {busy === "account" ? "Reading…" : "Import account signals"}
+            {busy === "account" ? "Reading…" : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLineLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                Import account signals
+              </>
+            )}
           </button>
         )}
       </div>
@@ -816,6 +845,21 @@ export default function ResearchDashboard() {
               {label}
             </button>
           ))}
+        </div>
+
+        <div style={S.quickLinksRow}>
+          <a href="https://ads.tiktok.com/business/creativecenter/inspiration/popular/music/pc/en" target="_blank" rel="noreferrer" style={S.quickLinkBtn}>
+            🎵 Viral TikTok Sounds
+          </a>
+          <a href="https://ads.tiktok.com/business/creativecenter/inspiration/popular/hashtag/pc/en" target="_blank" rel="noreferrer" style={S.quickLinkBtn}>
+            # Popular Hashtags
+          </a>
+          <a href="https://ads.tiktok.com/business/creativecenter/inspiration/popular/creator/pc/en" target="_blank" rel="noreferrer" style={S.quickLinkBtn}>
+            👑 Trending Creators
+          </a>
+          <a href="https://ads.tiktok.com/business/creativecenter/inspiration/popular/pc/en" target="_blank" rel="noreferrer" style={S.quickLinkBtn}>
+            🔥 Hot content
+          </a>
         </div>
       </div>
 
