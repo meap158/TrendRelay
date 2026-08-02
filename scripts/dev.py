@@ -6,6 +6,7 @@ import argparse
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -35,6 +36,7 @@ class Service:
     health_probe_timeout: float = 0.8
     health_failure_limit: int = 3
     relay_output: bool = True
+    port: int | None = None
     restart_on_exit: bool = False
     restart_limit: int = 5
     restart_window: float = 60
@@ -56,6 +58,18 @@ COLORS = {
     "yellow": "\033[93m",
     "reset": "\033[0m",
 }
+
+
+def find_free_port(preferred: int, max_attempts: int = 20) -> int:
+    for offset in range(max_attempts):
+        candidate = preferred + offset
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(1)
+            if sock.connect_ex(("127.0.0.1", candidate)) != 0:
+                return candidate
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
 
 
 def paint(text: str, color: str) -> str:
@@ -185,6 +199,15 @@ def service_is_healthy(service: Service, timeout: float | None = None) -> bool:
 def build_services(include_desktop: bool) -> list[Service]:
     python = ROOT / ".venv" / ("Scripts/python.exe" if IS_WINDOWS else "bin/python")
     npm = "npm.cmd" if IS_WINDOWS else "npm"
+
+    backend_port = find_free_port(8011)
+    frontend_port = find_free_port(3001)
+
+    if backend_port != 8011:
+        print(f"Port 8011 in use; Backend will use port {backend_port} instead.")
+    if frontend_port != 3001:
+        print(f"Port 3001 in use; Frontend will use port {frontend_port} instead.")
+
     services = [
         Service(
             "Backend",
@@ -198,14 +221,15 @@ def build_services(include_desktop: bool) -> list[Service]:
                 "--host",
                 "0.0.0.0",
                 "--port",
-                "8011",
+                str(backend_port),
                 "--reload",
                 "--reload-dir",
                 "services/api/src",
             ],
             "cyan",
-            "http://127.0.0.1:8011/api/auth/local-session",
+            f"http://127.0.0.1:{backend_port}/api/auth/local-session",
             restart_on_exit=True,
+            port=backend_port,
         ),
         Service(
             "Frontend",
@@ -218,12 +242,13 @@ def build_services(include_desktop: bool) -> list[Service]:
                 "--hostname",
                 "0.0.0.0",
                 "--port",
-                "3001",
+                str(frontend_port),
             ],
             "green",
-            "http://127.0.0.1:3001/",
-            {"NEXT_PUBLIC_API_URL": "http://127.0.0.1:8011"},
+            f"http://127.0.0.1:{frontend_port}/",
+            {"NEXT_PUBLIC_API_URL": f"http://127.0.0.1:{backend_port}"},
             restart_on_exit=True,
+            port=frontend_port,
         ),
     ]
     services.append(
@@ -237,6 +262,7 @@ def build_services(include_desktop: bool) -> list[Service]:
             health_failure_limit=6,
             relay_output=False,
             required=False,
+            port=4200,
         )
     )
     services.append(
@@ -254,8 +280,8 @@ def build_services(include_desktop: bool) -> list[Service]:
                 [npm, "run", "dev:desktop"],
                 "magenta",
                 environment={
-                    "TRENDRELAY_API_URL": "http://127.0.0.1:8011",
-                    "TRENDRELAY_WEB_URL": "http://localhost:3001",
+                    "TRENDRELAY_API_URL": f"http://127.0.0.1:{backend_port}",
+                    "TRENDRELAY_WEB_URL": f"http://localhost:{frontend_port}",
                 },
             )
         )
@@ -310,14 +336,18 @@ def validation_errors(include_desktop: bool, services: list[Service]) -> list[st
     return errors
 
 
-def print_banner(include_desktop: bool) -> None:
+def print_banner(include_desktop: bool, services: list[Service]) -> None:
+    backend = next((s for s in services if s.name == "Backend"), None)
+    frontend = next((s for s in services if s.name == "Frontend"), None)
+    backend_port = backend.port if backend else 8011
+    frontend_port = frontend.port if frontend else 3001
     width = 62
     print("=" * width)
     print("           TrendRelay - Unified Dev Runner")
     print("=" * width)
-    print("   - Backend:  http://0.0.0.0:8011")
-    print("   - API docs: http://0.0.0.0:8011/docs")
-    print("   - Frontend: http://0.0.0.0:3001")
+    print(f"   - Backend:  http://0.0.0.0:{backend_port}")
+    print(f"   - API docs: http://0.0.0.0:{backend_port}/docs")
+    print(f"   - Frontend: http://0.0.0.0:{frontend_port}")
     print("   - Postiz:   http://localhost:4200 (optional, starts in background)")
     print("   - Worker:    durable SQL queue (hot reload)")
     print(
@@ -327,11 +357,13 @@ def print_banner(include_desktop: bool) -> None:
     print("\nStarting or reusing hot-reload services (staggered)...\n")
 
 
-def open_browser_app(include_desktop: bool) -> bool:
+def open_browser_app(include_desktop: bool, services: list[Service]) -> bool:
     if include_desktop:
         return False
+    frontend = next((s for s in services if s.name == "Frontend"), None)
+    frontend_port = frontend.port if frontend else 3001
     print("Opening browser...")
-    return webbrowser.open("http://127.0.0.1:3001/")
+    return webbrowser.open(f"http://127.0.0.1:{frontend_port}/")
 
 
 def parse_args() -> argparse.Namespace:
@@ -356,7 +388,7 @@ def main() -> int:
             print(error, file=sys.stderr)
         return 1
 
-    print_banner(args.desktop)
+    print_banner(args.desktop, services)
     if args.check:
         print("Unified runner checks passed.")
         return 0
@@ -387,7 +419,7 @@ def main() -> int:
             if index < len(startable) - 1:
                 time.sleep(0.25)
 
-        open_browser_app(args.desktop)
+        open_browser_app(args.desktop, services)
 
         next_health_check = time.monotonic() + 2
         reused_failures = {service.name: 0 for service in reused}
