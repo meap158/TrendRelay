@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "../auth-provider";
 import { useJobs } from "../jobs-provider";
@@ -41,6 +41,7 @@ type Provider = {
   authenticated: boolean;
   authorization_error: string | null;
   credential_fields: CredentialField[];
+  account_count?: number;
 };
 type Connection = {
   active_provider: PublishingProvider;
@@ -52,11 +53,32 @@ type Connection = {
   supported_platforms: PublishingPlatform[];
   providers: Provider[];
 };
+type Destination = { platform: PublishingPlatform; label: string; notes: string[] };
+type Preview = {
+  provider_label: string;
+  delivery: string;
+  date: string;
+  media_source: string;
+  media_handling: string;
+  caption: string;
+  title: string | null;
+  visibility: string;
+  made_with_ai: boolean;
+  destinations: Destination[];
+};
 
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
   if (!response.ok) throw new Error(body.detail ?? "Publishing request failed.");
   return body;
+}
+
+/** `datetime-local` needs a naive local string, so build one from the clock. */
+function localDateTime(offsetMinutes: number) {
+  const value = new Date(Date.now() + offsetMinutes * 60_000);
+  value.setSeconds(0, 0);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
 }
 
 export default function PublishPage() {
@@ -73,7 +95,8 @@ export default function PublishPage() {
   const [targets, setTargets] = useState<Record<string, string>>({});
   const [credentialDrafts, setCredentialDrafts] = useState<Record<string, Record<string, string>>>({});
   const [openProvider, setOpenProvider] = useState<string | null>(null);
-  const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
+  const [schedule, setSchedule] = useState(false);
+  const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -82,9 +105,15 @@ export default function PublishPage() {
   const canExecute = selected?.role === "owner" || selected?.role === "approver";
   const jobs = allJobs.filter((job) => job.category === "publish").map((job) => job.raw);
   const activeProvider = connection?.providers.find((item) => item.id === connection.active_provider) ?? null;
-  const platforms = activeProvider?.platforms ?? [];
+  const platforms = useMemo(() => activeProvider?.platforms ?? [], [activeProvider]);
   // Destinations belong to one engine, so a switch invalidates the whole book.
   const accounts = accountBook.provider === activeProvider?.id ? accountBook.items : [];
+  const connectedPlatforms = platforms.filter((platform) =>
+    accounts.some((account) => account.platform === platform));
+  const chosen = connectedPlatforms.filter((platform) =>
+    accounts.some((account) => account.id === targets[platform]));
+  const needsPublicMedia = activeProvider?.requires_public_media ?? false;
+  const checking = !connection && !error;
 
   useEffect(() => {
     queueMicrotask(() => setVideoPath(new URLSearchParams(window.location.search).get("video") ?? ""));
@@ -106,12 +135,10 @@ export default function PublishPage() {
   }, [apiFetch, user]);
 
   const loadConnection = useCallback(async () => {
-    if (!workspaceId) return;
     const body = await json<{ connection: Connection }>(
       await apiFetch(`/api/workspaces/${workspaceId}/publishing/connection`),
     );
     setConnection(body.connection);
-    return body.connection;
   }, [apiFetch, workspaceId]);
 
   useEffect(() => {
@@ -127,27 +154,34 @@ export default function PublishPage() {
   }, [apiFetch, workspaceId]);
 
   function requestFrom(form: FormData, confirm: boolean) {
-    const selectedTargets = platforms
-      .filter((platform) => accounts.some((account) => account.id === targets[platform]))
-      .map((platform) => ({ platform, integration_id: targets[platform] }));
-    if (!selectedTargets.length) throw new Error("Select at least one connected social account.");
-    const localDate = String(form.get("date"));
+    const selectedTargets = chosen.map((platform) => ({
+      platform,
+      integration_id: targets[platform],
+    }));
+    if (!selectedTargets.length) throw new Error("Choose at least one connected destination.");
+    const localDate = String(form.get("date") ?? "");
     if (!localDate) throw new Error("Choose a date and time.");
     const mediaUrl = String(form.get("media_url") ?? "").trim();
-    if (activeProvider?.requires_public_media && !mediaUrl) {
-      throw new Error(`${activeProvider.label} needs a public media URL. ${activeProvider.media_note}`);
+    const localPath = String(form.get("video_path") ?? "").trim();
+    if (needsPublicMedia && !mediaUrl) {
+      throw new Error(`${activeProvider?.label} needs a public media URL. ${activeProvider?.media_note}`);
+    }
+    if (!needsPublicMedia && !localPath && !mediaUrl) {
+      throw new Error("Enter the approved local MP4 path.");
     }
     return {
       workspace_id: workspaceId,
       provider: connection?.active_provider ?? null,
-      video_path: form.get("video_path"),
+      video_path: localPath || "unused",
       media_url: mediaUrl || null,
       caption: form.get("caption"),
       title: form.get("title") || null,
       date: new Date(localDate).toISOString(),
-      schedule: form.get("schedule") === "on",
+      schedule,
       made_with_ai: form.get("made_with_ai") === "on",
       visibility: form.get("visibility") === "private" ? "private" : "public",
+      subreddit: form.get("subreddit") || null,
+      board: form.get("board") || null,
       targets: selectedTargets,
       confirm_external_action: confirm,
     };
@@ -166,7 +200,7 @@ export default function PublishPage() {
       Object.entries(values).filter(([, value]) => value.trim().length > 0),
     );
     if (!Object.keys(payload).length && !activate) {
-      setError(`Nothing to save for ${provider.label}.`);
+      setError(`Nothing new to save for ${provider.label}.`);
       return;
     }
     if (!window.confirm(`Write the ${provider.label} API settings to this machine's .env file?`)) return;
@@ -188,12 +222,40 @@ export default function PublishPage() {
       setCredentialDrafts((current) => ({ ...current, [provider.id]: {} }));
       setConnection(body.connection);
       if (activate) setTargets({});
+      setOpenProvider(null);
       setNotice(
-        `${provider.label} settings saved to .env (${body.result.written_keys.join(", ")}).` +
+        `Saved ${body.result.written_keys.join(", ")} to .env.` +
         (activate ? ` ${provider.label} is now the active engine.` : ""),
       );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Credentials could not be saved.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function testProvider(provider: Provider) {
+    setBusy(`${provider.id}-test`);
+    setError(null);
+    setNotice(null);
+    try {
+      const body = await json<{ provider: Provider & { account_count: number } }>(
+        await apiFetch(`/api/workspaces/${workspaceId}/publishing/providers/test`, {
+          method: "POST",
+          body: JSON.stringify({ provider: provider.id }),
+        }),
+      );
+      const result = body.provider;
+      if (result.authenticated) {
+        setNotice(
+          `${provider.label} responded. ${result.account_count} connected account${result.account_count === 1 ? "" : "s"} visible to this key.`,
+        );
+      } else {
+        setError(result.authorization_error ?? `${provider.label} did not accept this key.`);
+      }
+      await loadConnection();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : `${provider.label} could not be reached.`);
     } finally {
       setBusy(null);
     }
@@ -213,7 +275,7 @@ export default function PublishPage() {
       setConnection(body.connection);
       setTargets({});
       setPreview(null);
-      setNotice(`${provider.label} is now the active publishing engine.`);
+      setNotice(`${provider.label} is now the active publishing engine. Refresh accounts to load its destinations.`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Engine could not be switched.");
     } finally {
@@ -237,9 +299,8 @@ export default function PublishPage() {
         result.accounts.some((account) => account.id === current[platform]) ? current[platform] : "",
       ])));
       setNotice(result.accounts.length
-        ? "Connected accounts refreshed. Choose where this video should go."
-        : `No supported accounts found yet. Connect accounts in ${activeProvider.label}, then refresh.`);
-      await loadConnection();
+        ? `${result.accounts.length} connected account${result.accounts.length === 1 ? "" : "s"} loaded from ${activeProvider.label}.`
+        : `${activeProvider.label} has no supported accounts yet. Connect them in its dashboard, then refresh.`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not refresh connected accounts.");
     } finally {
@@ -259,12 +320,12 @@ export default function PublishPage() {
         await refreshJobs();
         setNotice("Publishing job created. Track its status below or from Jobs.");
       } else {
-        const result = await json<{ preview: Record<string, unknown> }>(await apiFetch(
+        const result = await json<{ preview: Preview }>(await apiFetch(
           `/api/workspaces/${workspaceId}/publishing/preview`,
           { method: "POST", body: JSON.stringify(body) },
         ));
         setPreview(result.preview);
-        setNotice("Dry-run ready. Review the delivery plan before publishing.");
+        setNotice("Dry-run ready. Nothing was sent — review the plan, then publish.");
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Publishing request failed.");
@@ -273,7 +334,7 @@ export default function PublishPage() {
     }
   }
 
-  if (loading) return <main className="publish-page"><p>Checking your session...</p></main>;
+  if (loading) return <main className="publish-page"><p>Checking your session…</p></main>;
   if (!user) return <main className="publish-page"><Link className="primary-link" href="/sign-in?next=%2Fpublish">Sign in to publish</Link></main>;
 
   return (
@@ -284,33 +345,41 @@ export default function PublishPage() {
           <p className="eyebrow">DISTRIBUTION DESK</p>
           <h1>Deliver the approved clip</h1>
           <p className="lede">
-            Pick a publishing engine, paste its API key here, and TrendRelay stores it in this
-            machine&apos;s <code>.env</code>. Connect social accounts in the engine&apos;s dashboard,
-            then choose destinations, preview the delivery, and schedule or draft.
+            Choose a publishing engine and save its API key here — TrendRelay writes it to this
+            machine&apos;s <code>.env</code>. Connect social accounts in the engine&apos;s own
+            dashboard, then pick destinations, dry-run the delivery, and draft or schedule.
           </p>
         </div>
-        {activeProvider && (
-          <a className="secondary-link" href={activeProvider.dashboard_url} target="_blank" rel="noopener noreferrer">
-            Open {activeProvider.label}
-          </a>
-        )}
+        <div className="publish-heading-side">
+          <span className={connection?.service_ready ? "connection-badge ready" : "connection-badge"}>
+            {checking ? "Checking…" : connection?.service_ready ? "Engine connected" : "Not connected"}
+          </span>
+          {activeProvider && (
+            <a className="secondary-link" href={activeProvider.dashboard_url} target="_blank" rel="noopener noreferrer">
+              Open {activeProvider.label}
+            </a>
+          )}
+        </div>
       </header>
-      <div aria-live="polite">{notice && <p className="registry-message">{notice}</p>}{error && <p className="registry-error" role="alert">{error}</p>}</div>
+
+      <div className="publish-feedback" aria-live="polite">
+        {notice && <p className="registry-message">{notice}</p>}
+        {error && <p className="registry-error" role="alert">{error}</p>}
+      </div>
 
       <section className="engine-setup" aria-labelledby="engine-setup-title">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">PUBLISHING ENGINE</p>
+            <p className="eyebrow">STEP 1 · PUBLISHING ENGINE</p>
             <h2 id="engine-setup-title">Choose and configure an API</h2>
           </div>
-          <span className={connection?.service_ready ? "connection-badge ready" : "connection-badge"}>
-            {connection?.service_ready ? "API connected" : "Not connected"}
-          </span>
+          {connection && <span>{connection.next_step}</span>}
         </div>
         <div className="engine-grid">
           {connection?.providers.map((provider) => {
             const active = provider.id === connection.active_provider;
             const state = provider.authenticated ? "connected" : provider.configured ? "key saved" : "needs key";
+            const open = openProvider === provider.id;
             return (
               <article
                 className={`engine-card${active ? " active" : ""}`}
@@ -323,41 +392,56 @@ export default function PublishPage() {
                     <strong>{provider.label}</strong>
                     <span>{provider.tagline}</span>
                   </div>
-                  <small className={provider.authenticated ? "engine-state ready" : "engine-state"}>{state}</small>
+                  <small className={`engine-state ${provider.authenticated ? "ready" : provider.configured ? "partial" : ""}`}>
+                    {state}
+                  </small>
                 </div>
                 <p className="engine-summary">{provider.summary}</p>
-                <div className="engine-platforms" aria-label={`${provider.label} destinations`}>
+                <div className="engine-platforms" aria-label={`${provider.label} supports ${provider.platforms.length} destinations`}>
                   {provider.platforms.map((platform) => (
                     <span key={platform} title={platformLabels[platform]}>
-                      <PlatformIcon platform={platform} size={18} muted={!active} />
+                      <PlatformIcon platform={platform} size={16} muted={!active} />
                     </span>
                   ))}
+                  <em>{provider.platforms.length}</em>
                 </div>
-                {provider.authorization_error && active && (
-                  <p className="setup-note" role="status">{provider.authorization_error}</p>
+                {provider.authorization_error && (
+                  <p className="engine-warning" role="status">{provider.authorization_error}</p>
                 )}
                 <div className="engine-actions">
                   {active
-                    ? <span className="engine-active-tag">Active engine</span>
+                    ? <span className="engine-active-tag">Active</span>
                     : <button
                         type="button"
                         className="quiet-action"
-                        disabled={!canExecute || busy !== null}
+                        disabled={!canExecute || busy !== null || !provider.configured}
+                        title={provider.configured ? undefined : "Save this engine's API key first"}
                         onClick={() => void activateProvider(provider)}
-                      >Use this engine</button>}
+                      >{busy === `${provider.id}-activate` ? "Switching…" : "Use this engine"}</button>}
                   <button
                     type="button"
                     className="quiet-action"
-                    aria-expanded={openProvider === provider.id}
-                    onClick={() => setOpenProvider(openProvider === provider.id ? null : provider.id)}
-                  >{openProvider === provider.id ? "Hide keys" : provider.configured ? "Replace keys" : "Add keys"}</button>
+                    disabled={busy !== null || !provider.configured}
+                    onClick={() => void testProvider(provider)}
+                  >{busy === `${provider.id}-test` ? "Testing…" : "Test key"}</button>
+                  <button
+                    type="button"
+                    className="quiet-action"
+                    aria-expanded={open}
+                    onClick={() => setOpenProvider(open ? null : provider.id)}
+                  >{open ? "Close" : provider.configured ? "Replace key" : "Add key"}</button>
                   <a className="quiet-action" href={provider.docs_url} target="_blank" rel="noopener noreferrer">Docs</a>
                 </div>
-                {openProvider === provider.id && (
+                {open && (
                   <div className="engine-credentials">
                     {provider.credential_fields.map((field) => (
                       <label key={field.id}>
-                        {field.label}
+                        <span>
+                          {field.label}
+                          <b className={field.configured ? "configured" : "missing"}>
+                            {field.configured ? "configured" : field.required ? "required" : "optional"}
+                          </b>
+                        </span>
                         <input
                           autoComplete={field.secret ? "new-password" : "off"}
                           disabled={!canExecute}
@@ -365,7 +449,7 @@ export default function PublishPage() {
                             ...current,
                             [provider.id]: { ...current[provider.id], [field.id]: event.target.value },
                           }))}
-                          placeholder={field.configured ? "Configured — enter to replace" : `Paste ${field.label.toLowerCase()}`}
+                          placeholder={field.configured ? "Enter a new value to replace" : `Paste ${field.label.toLowerCase()}`}
                           spellCheck={false}
                           type={field.secret ? "password" : "text"}
                           value={credentialDrafts[provider.id]?.[field.id] ?? ""}
@@ -379,14 +463,18 @@ export default function PublishPage() {
                         className="setup-primary"
                         disabled={!canExecute || busy === `${provider.id}-credentials`}
                         onClick={() => void saveCredentials(provider, !active)}
-                      >{active ? "Save to .env" : "Save and use this engine"}</button>
+                      >
+                        {busy === `${provider.id}-credentials`
+                          ? "Saving…"
+                          : active ? "Save to .env" : "Save and use this engine"}
+                      </button>
                       <a className="quiet-action" href={provider.dashboard_url} target="_blank" rel="noopener noreferrer">
                         Get a key
                       </a>
                     </div>
                     <p className="privacy-note">
-                      Written only to this machine&apos;s local <code>.env</code>. Saved values are never
-                      returned to this page.
+                      Written only to this machine&apos;s local <code>.env</code>. Saved values are
+                      never sent back to this page.
                     </p>
                   </div>
                 )}
@@ -394,83 +482,218 @@ export default function PublishPage() {
             );
           })}
         </div>
-        <div className="engine-footer">
+        {!canExecute && selected && (
           <p className="setup-note">
-            {activeProvider ? activeProvider.media_note : "Select an engine to see how media is delivered."}
+            Only workspace owners and approvers can change engines, save keys, or publish.
+            You can still review the setup and dry-run a delivery.
           </p>
-          <button
-            type="button"
-            className="quiet-action"
-            disabled={busy !== null || !canExecute || !connection?.authenticated}
-            onClick={() => void refreshAccounts()}
-          >Refresh connected accounts</button>
-        </div>
-        {!canExecute && selected && <p className="setup-note">Only workspace owners and approvers can change engines, save keys, or publish. You can still review the setup.</p>}
+        )}
       </section>
 
       <section className="publish-layout">
         <form className="publish-form" onSubmit={(event) => { event.preventDefault(); void submit(event.currentTarget, false); }}>
           <div className="section-heading">
-            <div><p className="eyebrow">CREATE DELIVERY</p><h2>Delivery details</h2></div>
-            <span>{accounts.length} account{accounts.length === 1 ? "" : "s"} available</span>
+            <div>
+              <p className="eyebrow">STEP 2 · DELIVERY</p>
+              <h2>What goes out</h2>
+            </div>
+            <span>{activeProvider ? `via ${activeProvider.label}` : "no engine selected"}</span>
           </div>
-          <label>Workspace<select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} required>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} / {workspace.role}</option>)}</select></label>
-          <label>Approved local MP4 path<input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" required /><small>Media must be under a configured publishing media directory.</small></label>
-          <label>
-            Public media URL{activeProvider?.requires_public_media ? "" : " (optional)"}
-            <input name="media_url" type="url" placeholder="https://cdn.example.com/approved-clip.mp4" required={activeProvider?.requires_public_media} />
-            <small>{activeProvider?.media_note}</small>
+
+          <label>Workspace
+            <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} required>
+              {workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} / {workspace.role}</option>)}
+            </select>
           </label>
-          <label>Title<input name="title" maxLength={200} /></label>
-          <label>Caption<textarea name="caption" rows={6} maxLength={5000} required /></label>
-          <label>Date and time<input name="date" type="datetime-local" required /></label>
-          <label>Visibility<select name="visibility" defaultValue="public"><option value="public">Public</option><option value="private">Private / self only</option></select></label>
+
+          {needsPublicMedia ? (
+            <label>Public media URL
+              <input name="media_url" type="url" placeholder="https://cdn.example.com/approved-clip.mp4" required />
+              <small>{activeProvider?.media_note}</small>
+            </label>
+          ) : (
+            <>
+              <label>Approved local MP4 path
+                <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" required />
+                <small>{activeProvider?.media_note ?? "Media must sit under a configured publishing media directory."}</small>
+              </label>
+              <label>Public media URL <i>optional</i>
+                <input name="media_url" type="url" placeholder="https://cdn.example.com/approved-clip.mp4" />
+                <small>Supply one to skip the upload and let the engine fetch the file instead.</small>
+              </label>
+            </>
+          )}
+
+          <label>Title <i>used by YouTube, Reddit and Pinterest</i><input name="title" maxLength={200} /></label>
+          <label>Caption<textarea name="caption" rows={5} maxLength={5000} required /></label>
+
+          <div className="delivery-mode" role="group" aria-label="Delivery mode">
+            <button
+              type="button"
+              className={schedule ? "" : "selected"}
+              aria-pressed={!schedule}
+              onClick={() => setSchedule(false)}
+            ><strong>Save as draft</strong><span>Nothing publishes until you approve it in the engine</span></button>
+            <button
+              type="button"
+              className={schedule ? "selected" : ""}
+              aria-pressed={schedule}
+              onClick={() => setSchedule(true)}
+            ><strong>Schedule</strong><span>The engine publishes automatically at the time below</span></button>
+          </div>
+
+          <div className="publish-grid">
+            <label>{schedule ? "Publish at" : "Reference time"}
+              <input name="date" type="datetime-local" required min={localDateTime(1)} defaultValue={localDateTime(60)} />
+              <small>{schedule ? "Must be in the future. Sent to the engine in UTC." : "Stored with the draft; the engine does not act on it."}</small>
+            </label>
+            <label>Visibility <i>TikTok and YouTube</i>
+              <select name="visibility" defaultValue="public">
+                <option value="public">Public</option>
+                <option value="private">Private / only me</option>
+              </select>
+            </label>
+          </div>
+
           <fieldset className="account-picker">
-            <legend>Publishing destinations</legend>
-            <p>Choose the connected profile or page for each platform {activeProvider ? `${activeProvider.label} supports` : "your engine supports"}.</p>
-            <div className="platform-grid">{platforms.map((platform) => {
-              const platformAccounts = accounts.filter((account) => account.platform === platform);
-              return (
-                <section key={platform} className={`platform-card${targets[platform] ? " chosen" : ""}`}>
-                  <div className="platform-card-head">
-                    <PlatformIcon platform={platform} muted={!platformAccounts.length} />
-                    <div>
-                      <strong>{platformLabels[platform]}</strong>
-                      <span>{platformAccounts.length ? `${platformAccounts.length} connected` : "Not connected"}</span>
-                    </div>
-                  </div>
-                  {platformAccounts.length ? (
-                    <div className="account-options">{platformAccounts.map((account) => (
-                      <button
-                        type="button"
-                        key={account.id}
-                        aria-pressed={targets[platform] === account.id}
-                        className={targets[platform] === account.id ? "selected" : ""}
-                        onClick={() => setTargets({ ...targets, [platform]: targets[platform] === account.id ? "" : account.id })}
-                      >{account.label}</button>
-                    ))}</div>
-                  ) : null}
-                </section>
-              );
-            })}</div>
+            <legend>
+              Destinations
+              <b>{chosen.length ? `${chosen.length} selected` : "none selected"}</b>
+            </legend>
+            {!connection?.authenticated ? (
+              <p className="picker-empty">
+                Save and activate an engine key above, then load its connected accounts.
+              </p>
+            ) : !accounts.length ? (
+              <div className="picker-empty">
+                <p>No destinations loaded for {activeProvider?.label} yet.</p>
+                <button
+                  type="button"
+                  className="quiet-action"
+                  disabled={busy !== null || !canExecute}
+                  onClick={() => void refreshAccounts()}
+                >{busy === "accounts" ? "Loading…" : "Load connected accounts"}</button>
+              </div>
+            ) : (
+              <>
+                <div className="platform-grid">{connectedPlatforms.map((platform) => {
+                  const platformAccounts = accounts.filter((account) => account.platform === platform);
+                  return (
+                    <section key={platform} className={`platform-card${targets[platform] ? " chosen" : ""}`}>
+                      <div className="platform-card-head">
+                        <PlatformIcon platform={platform} />
+                        <div>
+                          <strong>{platformLabels[platform]}</strong>
+                          <span>{platformAccounts.length} connected</span>
+                        </div>
+                      </div>
+                      <div className="account-options">{platformAccounts.map((account) => (
+                        <button
+                          type="button"
+                          key={account.id}
+                          aria-pressed={targets[platform] === account.id}
+                          className={targets[platform] === account.id ? "selected" : ""}
+                          title={account.label}
+                          onClick={() => setTargets({ ...targets, [platform]: targets[platform] === account.id ? "" : account.id })}
+                        >{account.label}</button>
+                      ))}</div>
+                    </section>
+                  );
+                })}</div>
+                <div className="picker-footer">
+                  <p>
+                    {activeProvider?.label} also supports{" "}
+                    {platforms.filter((platform) => !connectedPlatforms.includes(platform))
+                      .map((platform) => platformLabels[platform]).join(", ") || "no other platforms"}
+                    {platforms.length > connectedPlatforms.length ? " — connect them in its dashboard." : "."}
+                  </p>
+                  <button
+                    type="button"
+                    className="quiet-action"
+                    disabled={busy !== null || !canExecute}
+                    onClick={() => void refreshAccounts()}
+                  >{busy === "accounts" ? "Refreshing…" : "Refresh accounts"}</button>
+                </div>
+              </>
+            )}
           </fieldset>
-          <div className="publish-options"><label><input name="schedule" type="checkbox" /> Schedule instead of draft</label><label><input name="made_with_ai" type="checkbox" /> Disclose AI-generated media</label></div>
+
+          {chosen.includes("reddit") && (
+            <label>Subreddit
+              <input name="subreddit" placeholder="r/videos" required />
+              <small>Reddit rejects a submission without a target subreddit.</small>
+            </label>
+          )}
+          {chosen.includes("pinterest") && (
+            <label>Pinterest board
+              <input name="board" placeholder="Product launches" required />
+              <small>The board that should receive the pin.</small>
+            </label>
+          )}
+
+          <label className="checkbox-row">
+            <input name="made_with_ai" type="checkbox" /> Disclose AI-generated media
+            <small>Sets each platform&apos;s synthetic-media flag where the engine exposes one.</small>
+          </label>
+
           <div className="publish-actions">
-            <button disabled={busy !== null}>Generate dry-run preview</button>
+            <button disabled={busy !== null}>{busy === "preview" ? "Checking…" : "Dry-run this delivery"}</button>
             <button
               type="button"
               className="danger-action"
-              disabled={busy !== null || !canExecute}
+              disabled={busy !== null || !canExecute || !chosen.length}
               onClick={(event) => {
                 const form = event.currentTarget.form;
-                if (form && window.confirm(`Create the remote post or schedule on ${activeProvider?.label ?? "the active engine"}?`)) void submit(form, true);
+                const where = chosen.map((platform) => platformLabels[platform]).join(", ");
+                if (form && window.confirm(
+                  `${schedule ? "Schedule" : "Create a draft"} on ${activeProvider?.label} for ${where}?`,
+                )) void submit(form, true);
               }}
-            >Confirm and publish</button>
+            >{busy === "publish" ? "Submitting…" : schedule ? "Confirm and schedule" : "Confirm and draft"}</button>
           </div>
         </form>
+
         <aside className="publish-side">
-          <article><h2>Dry-run delivery</h2>{preview ? <dl className="preview-list">{Object.entries(preview).map(([key, value]) => <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{typeof value === "object" ? JSON.stringify(value) : String(value)}</dd></div>)}</dl> : <p>Generate a dry-run to inspect the delivery before publishing.</p>}</article>
-          <article><h2>Publishing jobs</h2>{jobs.length ? <div className="record-list">{jobs.map((job) => <div key={job.id}><strong>{job.payload.request?.caption ?? job.id}</strong><span>{job.status}</span>{job.error && <small>{job.error}</small>}</div>)}</div> : <p>No publishing jobs yet.</p>}</article>
+          <article>
+            <h2>Dry-run plan</h2>
+            {preview ? (
+              <div className="preview-card">
+                <p className="preview-lead">
+                  <strong>{preview.delivery === "draft" ? "Draft" : "Scheduled post"}</strong> via {preview.provider_label}
+                </p>
+                <dl className="preview-facts">
+                  <div><dt>When</dt><dd>{new Date(preview.date).toLocaleString()}</dd></div>
+                  <div><dt>Media</dt><dd>{preview.media_source}</dd></div>
+                  <div><dt>Visibility</dt><dd>{preview.visibility}</dd></div>
+                  {preview.made_with_ai && <div><dt>Disclosure</dt><dd>AI-generated</dd></div>}
+                </dl>
+                <ul className="preview-destinations">
+                  {preview.destinations.map((destination) => (
+                    <li key={destination.platform}>
+                      <PlatformIcon platform={destination.platform} size={18} />
+                      <div>
+                        <strong>{destination.label}</strong>
+                        {destination.notes.map((note) => <span key={note}>{note}</span>)}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p className="privacy-note">Nothing has been sent. {preview.media_handling}</p>
+              </div>
+            ) : <p>Dry-run first — it validates media, destinations and timing without contacting the engine.</p>}
+          </article>
+          <article>
+            <h2>Publishing jobs</h2>
+            {jobs.length ? (
+              <div className="record-list">{jobs.map((job) => (
+                <div key={job.id}>
+                  <strong>{job.payload?.request?.caption ?? job.id}</strong>
+                  <span>{job.status}{job.payload?.request?.provider ? ` · ${job.payload.request.provider.replace("_", ".")}` : ""}</span>
+                  {job.error && <small>{job.error}</small>}
+                </div>
+              ))}</div>
+            ) : <p>No publishing jobs yet.</p>}
+          </article>
         </aside>
       </section>
     </main>

@@ -298,3 +298,227 @@ def test_saving_credentials_writes_only_known_keys(monkeypatch, media_file: Path
 
     with pytest.raises(ValueError, match="cannot be empty"):
         publishing.save_provider_credentials("buffer", {"api_key": "  "})
+
+
+def test_scheduled_delivery_must_be_in_the_future(monkeypatch, media_file: Path) -> None:
+    past = datetime.now(UTC) - timedelta(minutes=5)
+    with pytest.raises(ValueError, match="in the future"):
+        publishing.preview_publish(request(media_file, schedule=True, date=past))
+    # A draft keeps its reference time even when that time has passed.
+    assert publishing.preview_publish(request(media_file, date=past))["delivery"] == "draft"
+
+
+def test_buffer_rejects_plain_http_media(monkeypatch, media_file: Path, tmp_path: Path) -> None:
+    use_provider(monkeypatch, tmp_path, "buffer")
+    with pytest.raises(ValueError, match="must be https"):
+        publishing.preview_publish(request(media_file, media_url="http://cdn.example.com/clip.mp4"))
+
+
+def test_preview_explains_each_destination(monkeypatch, media_file: Path, tmp_path: Path) -> None:
+    use_provider(monkeypatch, tmp_path, "zernio")
+    preview = publishing.preview_publish(
+        request(
+            media_file,
+            made_with_ai=True,
+            targets=[
+                publishing.PublishTarget(platform="tiktok", integration_id="a1"),
+                publishing.PublishTarget(platform="youtube", integration_id="a2"),
+            ],
+        )
+    )
+    plan = {item["platform"]: item["notes"] for item in preview["destinations"]}
+    assert preview["media_source"] == "approved local file"
+    assert "Privacy: everyone" in plan["tiktok"]
+    assert "AI-generated disclosure on" in plan["tiktok"]
+    assert "Uploaded as a Short" in plan["youtube"]
+    assert "Declared as synthetic media" in plan["youtube"]
+
+
+def test_zernio_sends_an_idempotency_key_and_reports_deduplication(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    use_provider(monkeypatch, tmp_path, "zernio")
+    seen: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        if path == "/posts":
+            seen["request_id"] = kwargs.get("request_id")
+            return {"existingPost": {"_id": "zer_original", "status": "scheduled"}}
+        return {"uploadUrl": "https://up.example.com", "publicUrl": "https://cdn/clip.mp4"}
+
+    monkeypatch.setattr(publishing, "_zernio_request", fake_request)
+    monkeypatch.setattr(publishing, "_http", lambda *args, **kwargs: None)
+
+    result = publishing._execute_publish(request(media_file), request_id="publish_abc123")
+    assert seen["request_id"] == "publish_abc123"
+    assert result["post_ids"] == ["zer_original"]
+    assert result["deduplicated"] is True
+
+
+def test_http_errors_carry_an_actionable_hint(monkeypatch, media_file: Path) -> None:
+    import io
+    import urllib.error
+
+    def fail(*args, **kwargs):
+        raise urllib.error.HTTPError(
+            "https://api.bundle.social/api/v1/post/",
+            401,
+            "Unauthorized",
+            {},  # type: ignore[arg-type]
+            io.BytesIO(b'{"message": "Invalid API key"}'),
+        )
+
+    monkeypatch.setattr(publishing.urllib.request, "urlopen", fail)
+    with pytest.raises(RuntimeError) as raised:
+        publishing._bundle_request("GET", "/team/")
+    assert "Invalid API key" in str(raised.value)
+    assert "Save a current key" in str(raised.value)
+
+
+def test_test_provider_probes_without_switching_engines(monkeypatch, media_file: Path) -> None:
+    monkeypatch.setattr(
+        publishing,
+        "_zernio_request",
+        lambda *args, **kwargs: {
+            "accounts": [
+                {"_id": "z1", "platform": "tiktok", "displayName": "Brand", "isActive": True}
+            ]
+        },
+    )
+    result = publishing.test_provider("zernio")
+    assert result["authenticated"] is True
+    assert result["account_count"] == 1
+    assert result["connected_platforms"] == ["tiktok"]
+    assert publishing.active_provider_id() == "bundle_social"
+
+
+def test_bundle_payload_matches_the_documented_contract(
+    monkeypatch, media_file: Path
+) -> None:
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        if path == "/upload/":
+            return {"id": "upl_1"}
+        sent["body"] = kwargs["body"]
+        return {"id": "post_1", "status": "DRAFT"}
+
+    monkeypatch.setattr(publishing, "_bundle_request", fake_request)
+    publishing._execute_publish(
+        request(
+            media_file,
+            title="Launch day",
+            made_with_ai=True,
+            targets=[
+                publishing.PublishTarget(platform="tiktok", integration_id="a1"),
+                publishing.PublishTarget(platform="youtube", integration_id="a2"),
+            ],
+        )
+    )
+    body = sent["body"]
+    # Required top-level fields the API rejects the post without.
+    assert body["title"] == "Launch day"
+    assert body["socialAccountTypes"] == ["TIKTOK", "YOUTUBE"]
+    assert "socialAccountIds" not in body
+    assert body["status"] == "DRAFT"
+    assert body["data"]["TIKTOK"] == {
+        "type": "VIDEO",
+        "text": "Launch clip",
+        "uploadIds": ["upl_1"],
+        "privacy": "PUBLIC_TO_EVERYONE",
+        "isAiGenerated": True,
+    }
+    youtube = body["data"]["YOUTUBE"]
+    assert youtube["privacy"] == "PUBLIC"  # uppercase enum, not "public"
+    assert youtube["type"] == "SHORT"
+    assert youtube["text"] == "Launch day"
+    assert youtube["description"] == "Launch clip"
+    assert youtube["containsSyntheticMedia"] is True
+
+
+def test_bundle_title_falls_back_to_the_first_caption_line(
+    monkeypatch, media_file: Path
+) -> None:
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        if path == "/upload/":
+            return {"id": "upl_1"}
+        sent["body"] = kwargs["body"]
+        return {"id": "post_1"}
+
+    monkeypatch.setattr(publishing, "_bundle_request", fake_request)
+    publishing._execute_publish(request(media_file, caption="First line\nSecond line"))
+    assert sent["body"]["title"] == "First line"
+
+
+def test_bundle_uses_from_url_when_media_is_already_hosted(
+    monkeypatch, media_file: Path
+) -> None:
+    calls: list[str] = []
+
+    def fake_request(method, path, **kwargs):
+        calls.append(path)
+        if path == "/upload/from-url":
+            return {"id": "upl_remote"}
+        return {"id": "post_1"}
+
+    monkeypatch.setattr(publishing, "_bundle_request", fake_request)
+    result = publishing._execute_publish(
+        request(media_file, media_url="https://cdn.example.com/clip.mp4")
+    )
+    assert "/upload/from-url" in calls
+    assert "/upload/" not in calls
+    assert result["upload_id"] == "upl_remote"
+
+
+def test_reddit_and_pinterest_require_their_extra_field(
+    monkeypatch, media_file: Path
+) -> None:
+    with pytest.raises(ValueError, match="subreddit"):
+        publishing.preview_publish(
+            request(
+                media_file,
+                targets=[publishing.PublishTarget(platform="reddit", integration_id="a1")],
+            )
+        )
+    with pytest.raises(ValueError, match="board name"):
+        publishing.preview_publish(
+            request(
+                media_file,
+                targets=[publishing.PublishTarget(platform="pinterest", integration_id="a1")],
+            )
+        )
+    ok = publishing.preview_publish(
+        request(
+            media_file,
+            subreddit="r/videos",
+            targets=[publishing.PublishTarget(platform="reddit", integration_id="a1")],
+        )
+    )
+    assert ok["destinations"][0]["platform"] == "reddit"
+
+
+def test_subreddit_input_is_normalised_to_a_bare_name() -> None:
+    for raw in ("r/videos", "/r/videos/", "https://www.reddit.com/r/videos"):
+        assert publishing.PublishRequest.model_validate(
+            {
+                "workspace_id": "w",
+                "video_path": "clip.mp4",
+                "caption": "c",
+                "date": datetime.now(UTC),
+                "targets": [{"platform": "reddit", "integration_id": "a1"}],
+                "subreddit": raw,
+            }
+        ).subreddit == "videos"
+
+
+def test_bundle_probe_uses_the_documented_entry_point(monkeypatch, media_file: Path) -> None:
+    seen: list[str] = []
+    monkeypatch.setattr(
+        publishing,
+        "_bundle_request",
+        lambda method, path, **kwargs: seen.append(path) or {"id": "org_1"},
+    )
+    assert publishing.provider_status("bundle_social")["authenticated"] is True
+    assert seen == ["/organization/"]

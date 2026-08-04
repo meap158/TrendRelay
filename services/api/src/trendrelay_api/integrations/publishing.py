@@ -55,6 +55,18 @@ PLATFORM_LABELS: dict[str, str] = {
 }
 ProviderId = Literal["bundle_social", "zernio", "buffer"]
 
+# bundle.social addresses platforms by an uppercase enum of its own.
+BUNDLE_TYPES: dict[str, str] = {
+    "tiktok": "TIKTOK", "instagram": "INSTAGRAM", "youtube": "YOUTUBE",
+    "facebook": "FACEBOOK", "twitter": "TWITTER", "linkedin": "LINKEDIN",
+    "threads": "THREADS", "pinterest": "PINTEREST", "reddit": "REDDIT",
+    "bluesky": "BLUESKY", "mastodon": "MASTODON", "telegram": "TELEGRAM",
+    "googlebusiness": "GOOGLE_BUSINESS",
+}
+# Destinations whose engines reject a post without an extra operator-supplied field.
+NEEDS_SUBREDDIT = "reddit"
+NEEDS_BOARD = "pinterest"
+
 
 @dataclass(frozen=True)
 class CredentialField:
@@ -220,7 +232,18 @@ class PublishRequest(BaseModel):
     visibility: Literal["public", "private"] = "public"
     provider: ProviderId | None = None
     media_url: str | None = Field(default=None, max_length=2000)
+    subreddit: str | None = Field(default=None, max_length=100)
+    board: str | None = Field(default=None, max_length=200)
     confirm_external_action: bool = False
+
+    @field_validator("subreddit")
+    @classmethod
+    def bare_subreddit(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        # Engines want the bare name, so accept the forms people actually paste.
+        name = value.strip().removeprefix("https://www.reddit.com").strip("/")
+        return name.removeprefix("r/").strip("/") or None
 
     @field_validator("targets")
     @classmethod
@@ -298,18 +321,41 @@ def _host(url: str) -> str:
     return url.split("/")[2] if "//" in url else url
 
 
+# Engine-independent meanings for the status codes all three APIs actually use,
+# so an operator reads a next step instead of a bare number.
+STATUS_HINTS: dict[int, str] = {
+    401: "The API key was rejected. Save a current key on the Publish screen.",
+    403: "The engine rejected the key or the account. Check the key is current and not "
+         "revoked, then reconnect the account in the engine's dashboard.",
+    404: "The engine could not find that account or post. Refresh connected accounts.",
+    409: "The engine treated this as a duplicate. Identical media and caption were "
+         "already sent to this account recently; change the caption or media to repost.",
+    413: "The media file is larger than the engine accepts.",
+    422: "The engine rejected the post contents. Its message above names the field.",
+    429: "Rate limited by the engine. Wait before retrying.",
+}
+
+
 def _error_message(url: str, error: urllib.error.HTTPError) -> str:
+    host = _host(url)
+    detail: Any = None
     try:
         detail = json.loads(error.read())
     except (json.JSONDecodeError, OSError, ValueError):
-        return f"{_host(url)} API error: {error}"
+        detail = None
+
+    message = ""
     if isinstance(detail, dict):
-        message = detail.get("message") or detail.get("error") or detail.get("detail")
-        if isinstance(message, dict):
-            message = message.get("message")
-        if message:
-            return f"{_host(url)} API error: {message}"
-    return f"{_host(url)} API error: {error}"
+        raw = detail.get("message") or detail.get("error") or detail.get("detail")
+        if isinstance(raw, dict):
+            raw = raw.get("message")
+        if raw:
+            message = str(raw).strip()
+    if not message:
+        message = f"HTTP {error.code}"
+
+    hint = STATUS_HINTS.get(error.code)
+    return f"{host}: {message}" + (f" {hint}" if hint else "")
 
 
 def approved_video_path(video_path: str) -> Path:
@@ -334,17 +380,38 @@ def approved_video_path(video_path: str) -> Path:
     return resolved
 
 
-def _validate_targets(provider: ProviderDefinition, request: PublishRequest) -> None:
+def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> None:
     unsupported = [
         target.platform for target in request.targets if target.platform not in provider.platforms
     ]
     if unsupported:
         names = ", ".join(PLATFORM_LABELS[platform] for platform in unsupported)
         raise ValueError(f"{provider.label} does not publish to {names}.")
-    if provider.requires_public_media and not request.media_url:
+    if provider.requires_public_media:
+        if not request.media_url:
+            raise ValueError(f"{provider.label} needs a public media URL. {provider.media_note}")
+        if not request.media_url.startswith("https://"):
+            raise ValueError(
+                f"{provider.label} fetches media over the public internet, so the URL must be "
+                "https."
+            )
+    if request.schedule and request.date <= datetime.now(UTC):
+        raise ValueError("Scheduled deliveries need a date and time in the future.")
+    chosen = {target.platform for target in request.targets}
+    if NEEDS_SUBREDDIT in chosen and not request.subreddit:
         raise ValueError(
-            f"{provider.label} needs a public media URL. {provider.media_note}"
+            "Reddit needs a target subreddit; every engine rejects the post without one."
         )
+    if NEEDS_BOARD in chosen and not request.board:
+        raise ValueError("Pinterest needs a destination board name.")
+
+
+def _post_title(request: PublishRequest) -> str:
+    """A title is mandatory on some engines, so fall back to the caption's first line."""
+    if request.title and request.title.strip():
+        return request.title.strip()
+    first_line = request.caption.strip().splitlines()[0] if request.caption.strip() else ""
+    return (first_line or "Untitled")[:200]
 
 
 # --------------------------------------------------------------------------- #
@@ -389,34 +456,98 @@ def _bundle_upload(video: Path) -> str:
     return upload_id
 
 
-def _bundle_publish(request: PublishRequest, video: Path) -> dict[str, Any]:
+def _bundle_upload_from_url(media_url: str) -> str:
+    """bundle.social can fetch hosted media itself, skipping a local re-upload."""
+    result = _bundle_request(
+        "POST",
+        "/upload/from-url",
+        body={"teamId": _required_credential(PROVIDERS["bundle_social"], "team_id"),
+              "url": media_url},
+        content_type="application/json",
+        timeout=300,
+    )
+    upload_id = (result or {}).get("id")
+    if not upload_id:
+        raise RuntimeError("bundle.social did not return an upload ID for that media URL.")
+    return upload_id
+
+
+def _bundle_platform_data(
+    platform: str, request: PublishRequest, upload_id: str, title: str
+) -> dict[str, Any]:
+    """Per-platform payload for POST /post/, keyed exactly as the API documents it."""
+    uploads = [upload_id]
+    caption = request.caption
+    public = request.visibility == "public"
+    if platform == "tiktok":
+        return {
+            "type": "VIDEO",
+            "text": caption,
+            "uploadIds": uploads,
+            "privacy": "PUBLIC_TO_EVERYONE" if public else "SELF_ONLY",
+            "isAiGenerated": request.made_with_ai,
+        }
+    if platform == "youtube":
+        return {
+            "type": "SHORT",
+            "uploadIds": uploads,
+            "text": title[:100],
+            "description": caption,
+            "privacy": "PUBLIC" if public else "PRIVATE",
+            "containsSyntheticMedia": request.made_with_ai,
+        }
+    if platform == "instagram":
+        return {
+            "type": "REEL",
+            "text": caption,
+            "uploadIds": uploads,
+            "isAiGenerated": request.made_with_ai,
+        }
+    if platform == "facebook":
+        return {"type": "REEL", "text": caption, "uploadIds": uploads}
+    if platform == "twitter":
+        return {"text": caption, "uploadIds": uploads, "isAiGenerated": request.made_with_ai}
+    if platform == "pinterest":
+        return {
+            "text": title[:100],
+            "description": caption,
+            "boardName": request.board or "",
+            "uploadIds": uploads,
+            "isAiGenerated": request.made_with_ai,
+        }
+    if platform == "reddit":
+        # Reddit's `text` is the submission title; the body goes in `description`.
+        return {
+            "sr": request.subreddit or "",
+            "text": title[:300],
+            "description": caption,
+            "uploadIds": uploads,
+        }
+    # linkedin and threads share the plain text-plus-media shape.
+    return {"text": caption, "uploadIds": uploads}
+
+
+def _bundle_publish(request: PublishRequest, video: Path | None) -> dict[str, Any]:
     provider = PROVIDERS["bundle_social"]
-    upload_id = _bundle_upload(video)
+    upload_id = (
+        _bundle_upload_from_url(request.media_url) if request.media_url
+        else _bundle_upload(video)  # type: ignore[arg-type]
+    )
+    title = _post_title(request)
     post: dict[str, Any] = {
         "teamId": _required_credential(provider, "team_id"),
+        "title": title[:200],
         "postDate": request.date.isoformat(),
         "status": "SCHEDULED" if request.schedule else "DRAFT",
-        "data": {},
-        "socialAccountIds": [],
-    }
-    for target in request.targets:
-        key = target.platform.upper()
-        data: dict[str, Any] = {"uploadIds": [upload_id], "text": request.caption}
-        if request.title and key in {"YOUTUBE", "REDDIT", "PINTEREST"}:
-            data["title"] = request.title
-        if key == "YOUTUBE":
-            data["type"] = "SHORT"
-            data["privacyStatus"] = request.visibility
-        if key in {"INSTAGRAM", "FACEBOOK"}:
-            data["type"] = "REEL"
-        if key == "TIKTOK":
-            data["privacyLevel"] = (
-                "PUBLIC_TO_EVERYONE" if request.visibility == "public" else "SELF_ONLY"
+        # The API selects a team's connected account by platform type, not by ID.
+        "socialAccountTypes": [BUNDLE_TYPES[target.platform] for target in request.targets],
+        "data": {
+            BUNDLE_TYPES[target.platform]: _bundle_platform_data(
+                target.platform, request, upload_id, title
             )
-            if request.made_with_ai:
-                data["brandContentToggle"] = True
-        post["data"][key] = data
-        post["socialAccountIds"].append(target.integration_id)
+            for target in request.targets
+        },
+    }
     result = _bundle_request(
         "POST", "/post/", body=post, content_type="application/json", timeout=120
     )
@@ -458,8 +589,15 @@ def _zernio_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _zernio_request(method: str, path: str, **kwargs: Any) -> Any:
-    return _http(method, f"{ZERNIO_API}{path}", headers=_zernio_headers(), **kwargs)
+def _zernio_request(
+    method: str, path: str, *, request_id: str | None = None, **kwargs: Any
+) -> Any:
+    headers = _zernio_headers()
+    if request_id:
+        # Zernio treats a repeated x-request-id as a retry of the same logical
+        # call and returns the original post instead of creating a second one.
+        headers["x-request-id"] = request_id
+    return _http(method, f"{ZERNIO_API}{path}", headers=headers, **kwargs)
 
 
 def _zernio_upload(video: Path) -> str:
@@ -487,7 +625,9 @@ def _zernio_upload(video: Path) -> str:
     return public_url
 
 
-def _zernio_publish(request: PublishRequest, video: Path | None) -> dict[str, Any]:
+def _zernio_publish(
+    request: PublishRequest, video: Path | None, request_id: str | None = None
+) -> dict[str, Any]:
     media_url = request.media_url
     if not media_url:
         if video is None:
@@ -511,12 +651,15 @@ def _zernio_publish(request: PublishRequest, video: Path | None) -> dict[str, An
         if target.platform == "youtube":
             specific["visibility"] = request.visibility
             specific["containsSyntheticMedia"] = request.made_with_ai
-            if request.title:
-                specific["title"] = request.title[:100]
+            specific["title"] = _post_title(request)[:100]
         if target.platform in {"instagram", "facebook"}:
             specific["contentType"] = "reel"
-        if target.platform in {"reddit", "pinterest"} and request.title:
-            specific["title"] = request.title
+        if target.platform == "reddit":
+            specific["subreddit"] = request.subreddit
+            specific["title"] = _post_title(request)[:300]
+        if target.platform == "pinterest":
+            specific["boardId"] = request.board
+            specific["title"] = _post_title(request)[:100]
         if specific:
             entry["platformSpecificData"] = specific
         post["platforms"].append(entry)
@@ -533,13 +676,20 @@ def _zernio_publish(request: PublishRequest, video: Path | None) -> dict[str, An
             "video_made_with_ai": request.made_with_ai,
         }
     result = _zernio_request(
-        "POST", "/posts", body=post, content_type="application/json", timeout=180
+        "POST",
+        "/posts",
+        body=post,
+        content_type="application/json",
+        timeout=180,
+        request_id=request_id,
     ) or {}
-    created = result.get("post") or result.get("existingPost") or {}
+    existing = result.get("existingPost")
+    created = result.get("post") or existing or {}
     return {
         "post_ids": [str(created.get("_id", ""))],
         "media_url": media_url,
         "post_status": created.get("status"),
+        "deduplicated": bool(existing),
     }
 
 
@@ -672,12 +822,10 @@ def _buffer_publish(request: PublishRequest) -> dict[str, Any]:
 
 
 def _needs_local_media(provider: ProviderDefinition, request: PublishRequest) -> bool:
-    """bundle.social always uploads the reviewed local file; Zernio only when no
-    public URL was supplied; Buffer never accepts an upload."""
+    """Buffer never accepts an upload; the other two only read the reviewed local
+    file when no public URL was supplied (both can ingest a URL themselves)."""
     if provider.requires_public_media:
         return False
-    if provider.id == "bundle_social":
-        return True
     return not request.media_url
 
 
@@ -699,7 +847,8 @@ def discover_integrations(provider_id: str | None = None) -> dict[str, Any]:
 
 def _authenticate(provider: ProviderDefinition) -> None:
     if provider.id == "bundle_social":
-        _bundle_request("GET", "/team/", timeout=10)
+        # The documented entry point: no team ID needed, and a bad key answers 403.
+        _bundle_request("GET", "/organization/", timeout=10)
     elif provider.id == "zernio":
         _zernio_request("GET", "/accounts?limit=1", timeout=10)
     else:
@@ -801,6 +950,22 @@ def save_provider_credentials(provider_id: str, values: dict[str, str]) -> dict[
     return {"provider": provider.id, "written_keys": written}
 
 
+def test_provider(provider_id: str) -> dict[str, Any]:
+    """Probe one engine's credentials without changing the active engine."""
+    status = provider_status(provider_id, probe=True)
+    if status["authenticated"]:
+        try:
+            accounts = discover_integrations(provider_id)["accounts"]
+        except RuntimeError:
+            accounts = []
+        status["account_count"] = len(accounts)
+        status["connected_platforms"] = sorted({account["platform"] for account in accounts})
+    else:
+        status["account_count"] = 0
+        status["connected_platforms"] = []
+    return status
+
+
 def set_active_provider(provider_id: str) -> dict[str, Any]:
     provider = resolve_provider(provider_id)
     write_env_values({"PUBLISHING_PROVIDER": provider.id})
@@ -812,36 +977,72 @@ def set_active_provider(provider_id: str) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 
 
+def _delivery_plan(
+    provider: ProviderDefinition, request: PublishRequest
+) -> list[dict[str, Any]]:
+    """Explain, per destination, exactly what the engine will be asked to do."""
+    public = request.visibility == "public"
+    plan: list[dict[str, Any]] = []
+    for target in request.targets:
+        notes: list[str] = []
+        if provider.id == "buffer":
+            notes.append(
+                "Queued at the requested time" if request.schedule
+                else "Saved to the channel's draft queue"
+            )
+        else:
+            if target.platform in {"instagram", "facebook"}:
+                notes.append("Delivered as a Reel")
+            if target.platform == "youtube":
+                notes.append("Uploaded as a Short")
+                notes.append(f"Visibility: {'public' if public else 'private'}")
+                if request.made_with_ai:
+                    notes.append("Declared as synthetic media")
+            if target.platform == "tiktok":
+                notes.append(f"Privacy: {'everyone' if public else 'only me'}")
+                if request.made_with_ai:
+                    notes.append("AI-generated disclosure on")
+            if target.platform in {"reddit", "pinterest"}:
+                notes.append("Title required" if not request.title else "Title sent")
+        plan.append(
+            {
+                "platform": target.platform,
+                "label": PLATFORM_LABELS[target.platform],
+                "integration_id": target.integration_id,
+                "notes": notes,
+            }
+        )
+    return plan
+
+
 def preview_publish(request: PublishRequest) -> dict[str, Any]:
     provider = resolve_provider(request.provider)
-    _validate_targets(provider, request)
-    if _needs_local_media(provider, request):
+    _validate_request(provider, request)
+    uses_local_media = _needs_local_media(provider, request)
+    if uses_local_media:
         approved_video_path(request.video_path)
     return {
         "operation_id": token_hex(12),
         "status": "dry_run",
         "provider": provider.id,
         "provider_label": provider.label,
-        "video_path": request.video_path,
+        "delivery": "scheduled post" if request.schedule else "draft",
+        "date": request.date.isoformat(),
+        "media_source": "approved local file" if uses_local_media else "public media URL",
+        "video_path": request.video_path if uses_local_media else None,
         "media_url": request.media_url,
         "media_handling": provider.media_note,
         "caption": request.caption,
         "title": request.title,
-        "date": request.date.isoformat(),
-        "schedule": request.schedule,
         "visibility": request.visibility,
         "made_with_ai": request.made_with_ai,
-        "delivery": "scheduled post" if request.schedule else "draft",
-        "targets": [
-            {"platform": target.platform, "integration_id": target.integration_id}
-            for target in request.targets
-        ],
+        "destinations": _delivery_plan(provider, request),
     }
 
 
-def _execute_publish(request: PublishRequest) -> dict[str, Any]:
+def _execute_publish(request: PublishRequest, request_id: str | None = None) -> dict[str, Any]:
     provider = resolve_provider(request.provider)
-    _validate_targets(provider, request)
+    _validate_request(provider, request)
     video = (
         approved_video_path(request.video_path)
         if _needs_local_media(provider, request)
@@ -850,7 +1051,7 @@ def _execute_publish(request: PublishRequest) -> dict[str, Any]:
     if provider.id == "bundle_social":
         result = _bundle_publish(request, video)  # type: ignore[arg-type]
     elif provider.id == "zernio":
-        result = _zernio_publish(request, video)
+        result = _zernio_publish(request, video, request_id)
     else:
         result = _buffer_publish(request)
     return {"status": "created", "provider": provider.id, **result}
@@ -893,7 +1094,9 @@ def run_publish_job(job_id: str) -> None:
         return
     request = PublishRequest.model_validate(record["payload"]["request"])
     try:
-        result = _execute_publish(request)
+        # The job ID is stable, so an engine that honours idempotency keys returns
+        # the original post rather than creating a second one.
+        result = _execute_publish(request, request_id=job_id)
         complete_job(job_id, worker_id, result, factory=JOB_SESSION_FACTORY)
     except Exception as error:
         fail_job(job_id, worker_id, str(error), factory=JOB_SESSION_FACTORY)

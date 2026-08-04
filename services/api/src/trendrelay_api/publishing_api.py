@@ -23,6 +23,7 @@ from trendrelay_api.integrations.publishing import (
     run_publish_job,
     save_provider_credentials,
     set_active_provider,
+    test_provider,
 )
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/publishing", tags=["publishing"])
@@ -88,6 +89,20 @@ def save_credentials(
     except EnvWriteError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     return {"result": result, "connection": connection_status()}
+
+
+@router.post("/providers/test")
+def test_provider_credentials(
+    workspace_id: str,
+    body: ProviderSelection,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    try:
+        return {"provider": test_provider(body.provider)}
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.post("/providers/activate")
