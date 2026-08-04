@@ -532,7 +532,8 @@ const S: Record<string, React.CSSProperties> = {
   metricRow: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    flexWrap: "wrap" as const,
+    gap: "6px 8px",
     fontSize: "12px",
     color: "#5f6368",
   },
@@ -540,11 +541,26 @@ const S: Record<string, React.CSSProperties> = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    flexWrap: "wrap" as const,
+    gap: "8px 12px",
     marginTop: "auto",
-    paddingTop: "8px",
+    paddingTop: "10px",
     borderTop: "1px solid #f1f3f4",
     fontSize: "12px",
     color: "#80868b",
+  },
+  cardSource: {
+    flex: "1 1 auto",
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap" as const,
+  },
+  cardActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    flex: "0 0 auto",
   },
   cardAction: {
     display: "inline-flex",
@@ -563,10 +579,15 @@ const S: Record<string, React.CSSProperties> = {
     transition: "background 150ms, border-color 150ms",
   },
   link: {
+    display: "inline-flex",
+    alignItems: "center",
+    minHeight: "30px",
+    padding: "0 4px",
     color: "#006b4e",
     textDecoration: "none",
     fontSize: "12px",
     fontWeight: 500,
+    whiteSpace: "nowrap" as const,
   },
   jobsSection: {
     maxWidth: "960px",
@@ -1244,12 +1265,16 @@ export default function ResearchDashboard() {
                   <p style={S.cardSummary}>{item.summary}</p>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <div style={S.metricRow}>
-                      <span style={{ minWidth: "56px" }}>Relevance</span>
+                    <div style={{ ...S.metricRow, flexWrap: "nowrap" }}>
+                      <span style={{ flex: "0 0 56px" }}>Relevance</span>
                       <div style={barTrack()}>
                         <div style={barFill(pct, color)} />
                       </div>
-                      <span>{Math.round(pct)}%</span>
+                      <span style={{
+                        flex: "0 0 32px",
+                        textAlign: "right",
+                        fontVariantNumeric: "tabular-nums",
+                      }}>{Math.round(pct)}%</span>
                     </div>
                     {item.metrics && item.metrics.length > 0 && (
                       <div style={S.metricRow}>
@@ -1271,8 +1296,8 @@ export default function ResearchDashboard() {
                   </div>
 
                   <div style={S.cardFooter}>
-                    <span>{item.source}</span>
-                    <div style={{ display: "flex", gap: "12px" }}>
+                    <span style={S.cardSource} title={item.source}>{item.source}</span>
+                    <div style={S.cardActions}>
                       {item.topic && (
                         <button
                           type="button"
