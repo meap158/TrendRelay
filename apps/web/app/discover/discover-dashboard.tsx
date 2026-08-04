@@ -80,6 +80,36 @@ type MetaBriefing = {
   summary: { active_campaigns: number; ads_analyzed: number };
   signals: { winners: AdSignal[]; bleeders: AdSignal[]; fatigue: AdSignal[] };
 };
+type TikTokTrendItem = {
+  rank: number | null;
+  name: string;
+  category: string | null;
+  descriptors: string[];
+  metrics: Record<string, number>;
+  url?: string;
+};
+type TikTokResult = {
+  category: string;
+  category_label: string;
+  region: string;
+  period_days: number;
+  final_url: string;
+  extraction: string;
+  item_count: number;
+  items: TikTokTrendItem[];
+  notes: string[];
+  collected_at?: string | null;
+  cached?: boolean;
+};
+
+type TikTokCategory = {
+  id: string;
+  label: string;
+  description: string;
+  available: boolean;
+  unavailable_reason: string;
+};
+
 type InspirationKind = "trend" | "ad" | "account" | "starter";
 type Inspiration = {
   id: string;
@@ -93,6 +123,13 @@ type Inspiration = {
   metrics?: string[];
   topic?: string;
   relevance?: number;
+};
+
+const TIKTOK_CATEGORY_ICONS: Record<string, string> = {
+  hashtag: "#",
+  video: "🔥",
+  song: "🎵",
+  creator: "👑",
 };
 
 const AFFILIATE_STARTERS: Inspiration[] = [
@@ -130,6 +167,10 @@ const AFFILIATE_STARTERS: Inspiration[] = [
     topic: "Affiliate skincare dupes",
   }
 ];
+
+function compactNumber(value: number): string {
+  return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
 
 function formatRange(range?: Range | null, currency?: string | null): string {
   if (!range || (range.lower_bound == null && range.upper_bound == null)) {
@@ -482,6 +523,8 @@ export default function ResearchDashboard() {
   const [query, setQuery] = useState("");
   const [queryMode, setQueryMode] = useState<"trends" | "ads">("trends");
   const [adResult, setAdResult] = useState<AdSearchResult | null>(null);
+  const [tiktokResult, setTiktokResult] = useState<TikTokResult | null>(null);
+  const [tiktokCategories, setTiktokCategories] = useState<TikTokCategory[]>([]);
   const [briefing, setBriefing] = useState<MetaBriefing | null>(null);
   const [feedFilter, setFeedFilter] = useState<"all" | "trend" | "ad" | "account">("all");
   const [busy, setBusy] = useState<string | null>(null);
@@ -595,6 +638,28 @@ export default function ResearchDashboard() {
     [adResult],
   );
 
+  const tiktokInspirations = useMemo<Inspiration[]>(
+    () =>
+      (tiktokResult?.items ?? []).map((item, index) => ({
+        id: `tiktok-${tiktokResult?.category}-${item.rank ?? index}-${item.name}`,
+        kind: "trend" as const,
+        label: `TikTok ${tiktokResult?.category_label ?? "trend"}`,
+        title: item.name,
+        summary:
+          [item.category, ...(item.descriptors ?? []).slice(1)].filter(Boolean).join(" · ") ||
+          `Ranked ${item.rank ?? index + 1} in ${tiktokResult?.region} over the last ${tiktokResult?.period_days} days.`,
+        source: "TikTok Creative Center",
+        href: item.url ?? tiktokResult?.final_url,
+        topic: item.name,
+        metrics: Object.entries(item.metrics).map(
+          ([key, value]) => `${key[0].toUpperCase()}${key.slice(1)}: ${compactNumber(value)}`,
+        ),
+        // Rank 1 is the strongest signal the page offers; degrade evenly from there.
+        relevance: item.rank ? Math.max(100 - (item.rank - 1) * 8, 20) : 50,
+      })),
+    [tiktokResult],
+  );
+
   const accountInspirations = useMemo<Inspiration[]>(
     () =>
       briefing
@@ -628,10 +693,15 @@ export default function ResearchDashboard() {
 
   const liveInspirations = useMemo(
     () => {
-      const items = [...adInspirations, ...trendInspirations, ...accountInspirations];
+      const items = [
+        ...tiktokInspirations,
+        ...adInspirations,
+        ...trendInspirations,
+        ...accountInspirations,
+      ];
       return items.length > 0 ? items : AFFILIATE_STARTERS;
     },
-    [accountInspirations, adInspirations, trendInspirations],
+    [accountInspirations, adInspirations, tiktokInspirations, trendInspirations],
   );
   const visibleInspirations = liveInspirations.filter(
     (item) => feedFilter === "all" || item.kind === feedFilter,
@@ -658,30 +728,38 @@ export default function ResearchDashboard() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${apiBaseUrl()}/api/research/tiktok/status`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { provider?: { categories?: TikTokCategory[] } } | null) => {
+        if (!cancelled && payload?.provider?.categories) {
+          setTiktokCategories(payload.provider.categories);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   async function fetchTiktokDiscovery(category: string) {
-    if (!window.confirm(`Crawl TikTok Creative Center for trending ${category}?`)) return;
+    if (!window.confirm(`Read TikTok Creative Center's public ${category} trends?`)) return;
     setBusy("tiktok");
     setError(null);
     try {
-      const response = await fetch(`${apiBaseUrl()}/api/research/tiktok/discovery/${category}`, { method: "GET" });
-      const payload = (await response.json()) as { result?: { items: Array<{ title: string, source: string, metrics: { relevance: number } }> }, detail?: string };
-      if (!response.ok || !payload.result) throw new Error(payload.detail ?? "TikTok discovery failed.");
-      
-      const mockedInspirations = payload.result.items.map((item, idx) => ({
-        id: `tiktok-${category}-${idx}`,
-        kind: "trend" as const,
-        label: "TikTok Creative Center",
-        title: item.title,
-        summary: `Crawled from the ${category} discovery page.`,
-        source: item.source,
-        metrics: [],
-        relevance: item.metrics.relevance,
-      }));
-      setBriefing(null);
-      setAdResult(null);
-      // Let's hackily reuse adInspirations/accountInspirations rendering by pretending this is a special adResult
-      setAdResult({ query: `TikTok ${category}`, country: "US", collected: 3, ads: mockedInspirations.map(m => ({ id: m.id, creatives: [{ title: m.title, body: m.summary }] })) });
+      const response = await fetch(
+        `${apiBaseUrl()}/api/research/tiktok/discovery/${category}?region=US&period=7&limit=10`,
+      );
+      const payload = (await response.json()) as { result?: TikTokResult; detail?: string };
+      if (!response.ok || !payload.result) {
+        throw new Error(payload.detail ?? "TikTok Creative Center could not be read.");
+      }
+      setTiktokResult(payload.result);
+      setFeedFilter("trend");
+      if (payload.result.notes.length) setError(payload.result.notes.join(" "));
     } catch (reason) {
+      setTiktokResult(null);
       setError(reason instanceof Error ? reason.message : "TikTok discovery failed.");
     } finally {
       setBusy(null);
@@ -878,18 +956,26 @@ export default function ResearchDashboard() {
         </div>
 
         <div style={S.quickLinksRow}>
-          <button type="button" onClick={() => void fetchTiktokDiscovery("music")} style={S.quickLinkBtn}>
-            🎵 Viral TikTok Sounds
-          </button>
-          <button type="button" onClick={() => void fetchTiktokDiscovery("hashtag")} style={S.quickLinkBtn}>
-            # Popular Hashtags
-          </button>
-          <button type="button" onClick={() => void fetchTiktokDiscovery("creator")} style={S.quickLinkBtn}>
-            👑 Trending Creators
-          </button>
-          <button type="button" onClick={() => void fetchTiktokDiscovery("video")} style={S.quickLinkBtn}>
-            🔥 Hot content
-          </button>
+          {(tiktokCategories.length
+            ? tiktokCategories
+            : [{ id: "hashtag", label: "Hashtags", description: "", available: true, unavailable_reason: "" }]
+          ).map((category) => (
+            <button
+              key={category.id}
+              type="button"
+              disabled={!category.available || busy === "tiktok"}
+              title={category.available ? category.description : category.unavailable_reason}
+              onClick={() => void fetchTiktokDiscovery(category.id)}
+              style={
+                category.available
+                  ? S.quickLinkBtn
+                  : { ...S.quickLinkBtn, opacity: 0.45, cursor: "not-allowed" }
+              }
+            >
+              {TIKTOK_CATEGORY_ICONS[category.id] ?? "•"} {category.label}
+              {category.available ? "" : " (retired)"}
+            </button>
+          ))}
         </div>
       </div>
 

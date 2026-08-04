@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from trendrelay_api import __version__
 from trendrelay_api.attribution_api import router as attribution_router
@@ -40,6 +40,14 @@ from trendrelay_api.integrations.meta_ads_kit import (
 )
 from trendrelay_api.integrations.meta_ads_kit import (
     run_briefing as run_meta_ads_briefing,
+)
+from trendrelay_api.integrations.tiktok_creative import (
+    TikTokTrendRequest,
+    TikTokUnavailable,
+    fetch_tiktok_trends,
+)
+from trendrelay_api.integrations.tiktok_creative import (
+    provider_status as tiktok_provider_status,
 )
 from trendrelay_api.media_api import router as media_router
 from trendrelay_api.media_library_api import router as media_library_router
@@ -265,6 +273,35 @@ async def meta_ads_library_search(
         result = await asyncio.to_thread(search_meta_ad_library, body)
     except RuntimeError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+    return {"result": result}
+
+
+@app.get("/api/research/tiktok/status", tags=["research"])
+async def tiktok_status() -> dict[str, object]:
+    return {"provider": await asyncio.to_thread(tiktok_provider_status)}
+
+
+@app.get("/api/research/tiktok/discovery/{category}", tags=["research"])
+async def tiktok_discovery(
+    category: str,
+    request: Request,
+    region: str = Query(default="US", min_length=2, max_length=2),
+    period: int = Query(default=7),
+    limit: int = Query(default=10, ge=1, le=50),
+    refresh: bool = Query(default=False),
+) -> dict[str, object]:
+    require_local_mutation(request)
+    try:
+        trend_request = TikTokTrendRequest(
+            category=category, region=region, period=period, limit=limit
+        )
+    except ValidationError as error:
+        raise HTTPException(status_code=422, detail=f"Invalid TikTok query: {error}") from error
+    try:
+        result = await asyncio.to_thread(fetch_tiktok_trends, trend_request, not refresh)
+    except TikTokUnavailable as error:
+        # The page rendered nothing usable; that is a provider state, not a bug.
+        raise HTTPException(status_code=503, detail=str(error)) from error
     return {"result": result}
 
 
