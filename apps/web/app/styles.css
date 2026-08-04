@@ -204,7 +204,9 @@ nav strong { color: #1c2b33; }
 .setup-primary { border: 1px solid #006b4e; border-radius: 6px; padding: 9px 13px; background: #006b4e; color: #fff; font: inherit; font-weight: 800; text-decoration: none; cursor: pointer; }
 .setup-primary:disabled { cursor: wait; opacity: 0.55; }
 .privacy-note { margin: 16px 0 0; color: #7c8792; font-size: 0.72rem; }
-@media (max-width: 600px) { .setup-wizard-heading { display: grid; } .setup-step { grid-template-columns: 28px 1fr; } .setup-step small { grid-column: 2; justify-self: start; } }
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.refresh-button { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; padding: 0; }
+.refresh-button svg.spinning { animation: spin 1s linear infinite; }
 
 .publish-page { padding-top: 24px; }
 .publish-page .publish-heading, .publish-page .section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }

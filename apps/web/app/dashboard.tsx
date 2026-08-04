@@ -547,7 +547,12 @@ export default function Dashboard() {
           <div><p className="step-kicker">STEP 2</p><h2>Downloads</h2><p>Active batches update automatically every few seconds.</p></div>
           <div className="queue-heading-actions">
             {jobs.length > 0 && <button type="button" className="text-action clear-downloads-button" disabled={clearingHistory || jobsBusy} onClick={() => void clearUnavailableDownloads()}>{clearingHistory ? "Clearing…" : "Clear missing files"}</button>}
-            <button type="button" className="secondary-button refresh-button" disabled={jobsBusy} onClick={() => void refreshJobs()}>{jobsBusy ? "Refreshing…" : "Refresh"}</button>
+            <button type="button" className="secondary-button refresh-button" aria-label="Refresh downloads" title="Refresh downloads" disabled={jobsBusy} onClick={() => void refreshJobs()}>
+              <svg className={jobsBusy ? "spinning" : ""} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+                <path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+              </svg>
+            </button>
           </div>
         </div>
         <div className="queue-filters" role="group" aria-label="Filter downloads">
