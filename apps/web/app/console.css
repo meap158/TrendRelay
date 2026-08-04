@@ -46,15 +46,18 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .app-nav a { display: flex; align-items: center; padding: 0 16px; border-radius: 4px; color: var(--text); font-size: 13px; font-weight: 500; text-decoration: none; border-bottom: 3px solid transparent; }
 .app-nav a:hover { background: var(--panel-raised); }
 .app-nav a.active { border-bottom-color: var(--link); color: var(--link); background: transparent; }
-.workspace-section-nav { display: grid; grid-template-columns: minmax(250px, .8fr) minmax(420px, 1.2fr); align-items: stretch; gap: 0; overflow: hidden; margin: 20px 0 24px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 1px 2px rgba(0,0,0,.04); }
-.workspace-section-context { display: grid; align-content: center; gap: 4px; min-width: 0; padding: 13px 16px; border-right: 1px solid var(--line-strong); }
+.workspace-section-nav { position: sticky; top: 52px; z-index: 90; display: flex; flex-wrap: wrap; align-items: center; gap: 0; margin: 12px 0 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+@media (max-width: 900px) {
+  .workspace-section-nav { top: 92px; }
+}
+.workspace-section-context { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-right: 1px solid var(--line-strong); }
 .workspace-section-context span { color: var(--green); font-size: 10px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
-.workspace-section-context p { overflow: hidden; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-section-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.workspace-section-links a { position: relative; display: grid; align-content: center; gap: 3px; min-width: 0; min-height: 58px; padding: 9px 16px 9px 19px; border-right: 1px solid var(--line-strong); color: var(--text); text-decoration: none; }
+.workspace-section-context p { display: none; }
+.workspace-section-links { display: flex; flex: 1 1 auto; flex-wrap: wrap; }
+.workspace-section-links a { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 10px 14px; border-right: 1px solid var(--line-strong); color: var(--text); text-decoration: none; }
 .workspace-section-links a:last-child { border-right: 0; }
 .workspace-section-links a:hover { background: var(--panel-raised); }
-.workspace-section-links a::before { position: absolute; inset: 9px auto 9px 8px; width: 3px; border-radius: 999px; background: transparent; content: ""; }
+.workspace-section-links a::before { position: absolute; inset: auto 0 0 0; height: 3px; border-radius: 999px 999px 0 0; background: transparent; content: ""; }
 .workspace-section-links a.active { background: #f4f7fb; }
 .workspace-section-links a.active::before { background: var(--link); }
 .workspace-section-links strong { overflow: hidden; color: inherit; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
@@ -193,6 +196,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .app-nav { grid-column: 1 / -1; order: 3; overflow-x: auto; padding-bottom: 4px; height: 48px; border-top: 1px solid var(--line-strong); margin-top: 8px; }
   .console-grid { grid-template-columns: 1fr; }
   .quick-actions { grid-template-columns: repeat(2, 1fr); }
+  .workspace-section-nav { top: 112px; }
 }
 
 @media (max-width: 640px) {
@@ -643,9 +647,8 @@ html { scroll-behavior: smooth; }
 }
 
 @media (max-width: 700px) {
-  .workspace-section-nav { grid-template-columns: 1fr; margin: 12px 0 18px; }
-  .workspace-section-context { padding: 10px 12px; border-right: 0; border-bottom: 1px solid var(--line-strong); }
-  .workspace-section-context p { white-space: normal; }
-  .workspace-section-links a { min-height: 52px; padding: 8px 10px 8px 16px; }
-  .workspace-section-links a::before { left: 6px; }
+  .workspace-section-nav { margin: 12px 0 0; top: 92px; z-index: 90; }
+  .workspace-section-context { width: 100%; border-right: 0; border-bottom: 1px solid var(--line-strong); padding: 8px 12px; }
+  .workspace-section-links { width: 100%; }
+  .workspace-section-links a { flex: 1 1 auto; justify-content: center; text-align: center; flex-direction: column; gap: 2px; padding: 8px; }
 }

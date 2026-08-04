@@ -8,12 +8,11 @@ import { WorkspaceSectionNav } from "../workspace-section-nav";
 
 type Workspace = { id: string; name: string; role: string };
 type ViewMode = "gallery" | "list";
-type GroupBy = "none" | "channel" | "source" | "rights";
+type GroupBy = "none" | "channel" | "source";
 type Facet = { value: string; label: string; count: number };
 type LibraryFacets = {
   channels: Facet[];
   platforms: Facet[];
-  rights: Facet[];
   media_kinds: Facet[];
 };
 type Version = { kind: "original" | "proxy" | "thumbnail" | "audio"; path: string; size_bytes: number };
@@ -44,7 +43,6 @@ type Asset = {
   published_at?: string | null;
   caption?: string | null;
   hashtags: string[];
-  rights_status: string;
   publishable: boolean;
   original_path: string;
   size_bytes: number;
@@ -323,13 +321,12 @@ export default function LibraryPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [status, setStatus] = useState<Status | null>(null);
   const [query, setQuery] = useState("");
-  const [rightsFilter, setRightsFilter] = useState("");
   const [channelFilter, setChannelFilter] = useState("");
   const [platformFilter, setPlatformFilter] = useState("");
   const [mediaKind, setMediaKind] = useState<"" | Asset["media_kind"]>("");
   const [sortOrder, setSortOrder] = useState("newest");
   const [groupBy, setGroupBy] = useState<GroupBy>("none");
-  const [facets, setFacets] = useState<LibraryFacets>({ channels: [], platforms: [], rights: [], media_kinds: [] });
+  const [facets, setFacets] = useState<LibraryFacets>({ channels: [], platforms: [], media_kinds: [] });
   const [total, setTotal] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>("gallery");
   const [continueVideoPlayback, setContinueVideoPlayback] = useState(false);
@@ -355,8 +352,7 @@ export default function LibraryPage() {
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const canImport = ["owner", "editor", "approver"].includes(workspace?.role ?? "");
   const canEnrich = ["owner", "editor", "analyst"].includes(workspace?.role ?? "");
-  const canReviewRights = ["owner", "approver"].includes(workspace?.role ?? "");
-  const activeFilterCount = [query.trim(), rightsFilter, channelFilter, platformFilter, mediaKind].filter(Boolean).length;
+  const activeFilterCount = [query.trim(), channelFilter, platformFilter, mediaKind].filter(Boolean).length;
   const mediaTotal = facets.media_kinds.reduce((sum, facet) => sum + facet.count, 0);
   const mediaCount = (kind: Asset["media_kind"]) => facets.media_kinds.find((facet) => facet.value === kind)?.count ?? 0;
   const groupedAssets = groupBy === "none"
@@ -364,9 +360,7 @@ export default function LibraryPage() {
     : Array.from(assets.reduce((groups, asset) => {
       const label = groupBy === "channel"
         ? asset.creator || "Unassigned channel"
-        : groupBy === "source"
-          ? asset.platform || asset.source_type || "Other sources"
-          : asset.rights_status || "Unknown rights";
+        : asset.platform || asset.source_type || "Other sources";
       const items = groups.get(label) ?? [];
       items.push(asset);
       groups.set(label, items);
@@ -377,7 +371,6 @@ export default function LibraryPage() {
     if (!nextWorkspace) return;
     const params = new URLSearchParams();
     if (query.trim()) params.set("q", query.trim());
-    if (rightsFilter) params.set("rights_status", rightsFilter);
     if (channelFilter === "__unassigned__") params.set("creator_missing", "true");
     else if (channelFilter) params.set("creator", channelFilter);
     if (platformFilter === "__other__") params.set("platform_missing", "true");
@@ -407,22 +400,17 @@ export default function LibraryPage() {
         ? current
         : (assetBody.assets[0]?.id ?? ""),
     );
-  }, [apiFetch, channelFilter, mediaKind, platformFilter, query, rightsFilter, sortOrder, workspaceId]);
+  }, [apiFetch, channelFilter, mediaKind, platformFilter, query, sortOrder, workspaceId]);
 
   function clearFilters() {
     setQuery("");
-    setRightsFilter("");
     setChannelFilter("");
     setPlatformFilter("");
     setMediaKind("");
   }
 
   function groupTotal(label: string, loadedCount: number) {
-    const source = groupBy === "channel"
-      ? facets.channels
-      : groupBy === "source"
-        ? facets.platforms
-        : facets.rights;
+    const source = groupBy === "channel" ? facets.channels : facets.platforms;
     return source.find((facet) => facet.label === label)?.count ?? loadedCount;
   }
 
@@ -433,7 +421,6 @@ export default function LibraryPage() {
         <span>
           <strong>{asset.title}</strong>
           <small>{asset.creator ? `${asset.creator} · ` : ""}{asset.platform ?? asset.source_type} · {displayDuration(asset.duration_ms)} · {displaySize(asset.size_bytes)}</small>
-          <em className={`rights-badge ${asset.publishable ? "publishable" : "reference"}`}>{asset.rights_status}</em>
         </span>
       </button>
     );
@@ -537,7 +524,6 @@ export default function LibraryPage() {
     setError("");
     setMessage("");
     const form = new FormData(event.currentTarget);
-    const rightsStatus = String(form.get("rights_status"));
     try {
       const body = await json<{ job: Job }>(
         await apiFetch(`/api/workspaces/${workspaceId}/media/library/imports`, {
@@ -557,7 +543,6 @@ export default function LibraryPage() {
                 .filter(([, value]) => Number.isFinite(value) && Number(value) >= 0),
             ),
             hashtags: String(form.get("hashtags") ?? "").split(",").map((item) => item.trim()).filter(Boolean),
-            rights_status: rightsStatus,
             confirm_external_action: true,
           }),
         }),
@@ -605,33 +590,6 @@ export default function LibraryPage() {
     }
   }
 
-  async function updateRights(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selected) return;
-    const form = new FormData(event.currentTarget);
-    const nextStatus = String(form.get("rights_status"));
-    if (!window.confirm(`Record this asset as “${nextStatus}”?`)) return;
-    setBusy("rights");
-    setError("");
-    try {
-      const body = await json<{ asset: Asset }>(
-        await apiFetch(`/api/workspaces/${workspaceId}/media/library/assets/${selected.id}/rights`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            rights_status: nextStatus,
-            confirm_external_action: true,
-          }),
-        }),
-      );
-      setAssets((current) => current.map((asset) => asset.id === body.asset.id ? body.asset : asset));
-      setMessage("Rights record updated and audited.");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Rights update failed.");
-    } finally {
-      setBusy("");
-    }
-  }
 
   async function openAssetFolder(asset: Asset) {
     setBusy("folder");
@@ -659,8 +617,35 @@ export default function LibraryPage() {
         <header className="library-heading">
           <div>
             <p className="section-kicker">Creative intelligence</p>
-            <h1>Media Library</h1>
-            <p>Keep originals immutable, review usage rights, and turn reference clips into searchable creative recipes.</p>
+            <h1>
+              Media Library
+              <span className="library-status-dots">
+                <span
+                  className={`library-status-dot ${status?.runtime.local_derivatives ? "ready" : "setup"}`}
+                  role="img"
+                  tabIndex={0}
+                  aria-label={`Media processing: ${status?.runtime.local_derivatives ? "ready" : "setup required"}`}
+                >
+                  <span className="library-status-tooltip" aria-hidden="true">
+                    Media processing: {status?.runtime.local_derivatives ? "ready" : "setup required"}
+                  </span>
+                </span>
+                <span
+                  className="library-status-dot setup"
+                  role="img"
+                  tabIndex={0}
+                  aria-label={`Transcription: reviewed text import. ${status?.transcription.reason ?? ""}`}
+                >
+                  <span className="library-status-tooltip" aria-hidden="true">
+                    Transcription: reviewed text import
+                    {status?.transcription.reason
+                      ? <span className="library-status-reason">{status.transcription.reason}</span>
+                      : null}
+                  </span>
+                </span>
+              </span>
+            </h1>
+            <p>Keep originals immutable and turn reference clips into searchable creative recipes.</p>
           </div>
           <label>Workspace
             <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
@@ -672,16 +657,6 @@ export default function LibraryPage() {
 
       {error && <p className="error-banner">{error}</p>}
       {message && <p className="campaign-message">{message}</p>}
-
-      <section className="library-status">
-        <span className={status?.runtime.local_derivatives ? "ready" : "warning"}>
-          Media processing: {status?.runtime.local_derivatives ? "ready" : "setup required"}
-        </span>
-        <span className="warning">
-          Transcription: reviewed text import
-        </span>
-        <small>{status?.transcription.reason}</small>
-      </section>
 
       <section className="library-layout">
         <aside className="library-browser">
@@ -721,18 +696,11 @@ export default function LibraryPage() {
                 {facets.platforms.map((facet) => <option key={facet.value || "__other__"} value={facet.value || "__other__"}>{facet.label} ({facet.count})</option>)}
               </select>
             </label>
-            <label>Usage rights
-              <select aria-label="Filter by usage rights" value={rightsFilter} onChange={(event) => setRightsFilter(event.target.value)}>
-                <option value="">All rights</option>
-                {facets.rights.map((facet) => <option key={facet.value} value={facet.value}>{facet.label} ({facet.count})</option>)}
-              </select>
-            </label>
             <label>Group
               <select aria-label="Group library" value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)}>
                 <option value="none">No grouping</option>
                 <option value="channel">Channel</option>
                 <option value="source">Source</option>
-                <option value="rights">Usage rights</option>
               </select>
             </label>
             {activeFilterCount > 0 && <button type="button" className="library-clear-filters" onClick={clearFilters}>Clear {activeFilterCount}</button>}

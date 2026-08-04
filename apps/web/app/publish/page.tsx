@@ -351,13 +351,36 @@ export default function PublishPage() {
           </p>
         </div>
         <div className="publish-heading-side">
-          <span className={connection?.service_ready ? "connection-badge ready" : "connection-badge"}>
-            {checking ? "Checking…" : connection?.service_ready ? "Engine connected" : "Not connected"}
-          </span>
-          {activeProvider && (
-            <a className="secondary-link" href={activeProvider.dashboard_url} target="_blank" rel="noopener noreferrer">
-              Open {activeProvider.label}
-            </a>
+          {activeProvider ? (
+            <div
+              className="active-engine-chip"
+              style={{ "--engine-accent": activeProvider.accent } as React.CSSProperties}
+            >
+              <ProviderMark provider={activeProvider.id} size={28} />
+              <div>
+                <strong>{activeProvider.label}</strong>
+                <span className={activeProvider.authenticated ? "ready" : ""}>
+                  {checking
+                    ? "checking…"
+                    : activeProvider.authenticated
+                      ? "connected"
+                      : activeProvider.configured
+                        ? "key saved, not verified"
+                        : "needs a key"}
+                </span>
+              </div>
+              <a href={activeProvider.dashboard_url} target="_blank" rel="noopener noreferrer">
+                Dashboard
+              </a>
+            </div>
+          ) : (
+            <span className="connection-badge">{checking ? "Checking…" : "No engine"}</span>
+          )}
+          {connection && (
+            <p className="engine-tally">
+              {connection.providers.filter((provider) => provider.configured).length} of{" "}
+              {connection.providers.length} engines hold a key · switch below
+            </p>
           )}
         </div>
       </header>
