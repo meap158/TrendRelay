@@ -110,7 +110,7 @@ type TikTokCategory = {
   unavailable_reason: string;
 };
 
-type InspirationKind = "trend" | "ad" | "account" | "starter";
+type InspirationKind = "trend" | "ad" | "account";
 type Inspiration = {
   id: string;
   kind: InspirationKind;
@@ -125,48 +125,32 @@ type Inspiration = {
   relevance?: number;
 };
 
+const TIKTOK_REGIONS: ReadonlyArray<readonly [string, string]> = [
+  ["US", "United States"],
+  ["GB", "United Kingdom"],
+  ["DE", "Germany"],
+  ["FR", "France"],
+  ["ES", "Spain"],
+  ["IT", "Italy"],
+  ["BR", "Brazil"],
+  ["MX", "Mexico"],
+  ["CA", "Canada"],
+  ["AU", "Australia"],
+  ["JP", "Japan"],
+  ["ID", "Indonesia"],
+];
+const TIKTOK_PERIODS: ReadonlyArray<readonly [number, string]> = [
+  [7, "Last 7 days"],
+  [30, "Last 30 days"],
+  [120, "Last 120 days"],
+];
+
 const TIKTOK_CATEGORY_ICONS: Record<string, string> = {
   hashtag: "#",
   video: "🔥",
   song: "🎵",
   creator: "👑",
 };
-
-const AFFILIATE_STARTERS: Inspiration[] = [
-  {
-    id: "starter-1",
-    kind: "starter",
-    label: "TikTok Shop Trend",
-    title: "#TikTokMadeMeBuyIt - Viral Home Gadgets",
-    summary: "High conversion rates on aesthetic home organization and cleaning tools. Audiences engage heavily with ASMR-style restock videos.",
-    source: "Affiliate Signals",
-    metrics: ["Conversion potential: Very High", "Avg. Commission: 10-15%"],
-    relevance: 95,
-    topic: "Home organization gadgets",
-  },
-  {
-    id: "starter-2",
-    kind: "starter",
-    label: "Amazon Associates",
-    title: "Travel Essentials - Packing Hacks",
-    summary: "Packing cubes and travel tech accessories are showing a sustained spike in affiliate demand heading into the season.",
-    source: "Affiliate Signals",
-    metrics: ["Conversion potential: High", "Avg. Commission: 4%"],
-    relevance: 88,
-    topic: "Amazon travel essentials",
-  },
-  {
-    id: "starter-3",
-    kind: "starter",
-    label: "Creator Commission",
-    title: "Skincare Dupes - Drugstore vs High-end",
-    summary: "Side-by-side comparison formats of popular luxury skincare alternatives remain top performers for creator affiliate links.",
-    source: "Affiliate Signals",
-    metrics: ["Conversion potential: High", "Engagement rate: 8.5%"],
-    relevance: 92,
-    topic: "Affiliate skincare dupes",
-  }
-];
 
 function compactNumber(value: number): string {
   return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
@@ -290,6 +274,108 @@ const S: Record<string, React.CSSProperties> = {
     background: "transparent",
     color: "#202124",
     fontFamily: "inherit",
+  },
+  tiktokHead: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: "16px",
+    flexWrap: "wrap" as const,
+  },
+  tiktokControls: {
+    display: "flex",
+    gap: "8px",
+    alignItems: "center",
+    flexWrap: "wrap" as const,
+  },
+  tiktokSelect: {
+    border: "1px solid #dadce0",
+    borderRadius: "16px",
+    padding: "6px 12px",
+    fontSize: "12px",
+    background: "#fff",
+    color: "#3c4043",
+    fontFamily: "inherit",
+    cursor: "pointer",
+  },
+  tiktokNote: {
+    margin: "0 0 12px",
+    padding: "8px 12px",
+    borderLeft: "3px solid #f5c33b",
+    background: "#fffdf5",
+    color: "#5f6368",
+    fontSize: "12px",
+    lineHeight: 1.5,
+  },
+  tiktokList: {
+    display: "grid",
+    gap: "1px",
+    background: "#e8eaed",
+    border: "1px solid #e8eaed",
+    borderRadius: "12px",
+    overflow: "hidden",
+  },
+  tiktokRow: {
+    display: "grid",
+    gridTemplateColumns: "28px minmax(0, 1fr) auto auto",
+    alignItems: "center",
+    gap: "12px",
+    padding: "12px 16px",
+    background: "#fff",
+  },
+  tiktokRank: {
+    color: "#80868b",
+    fontSize: "12px",
+    fontVariantNumeric: "tabular-nums" as const,
+    textAlign: "center" as const,
+  },
+  tiktokBody: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    minWidth: 0,
+    flexWrap: "wrap" as const,
+  },
+  tiktokName: {
+    fontSize: "14px",
+    color: "#202124",
+    fontWeight: 500,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap" as const,
+    maxWidth: "100%",
+  },
+  tiktokTag: {
+    fontSize: "11px",
+    color: "#5f6368",
+    background: "#f1f3f4",
+    borderRadius: "10px",
+    padding: "2px 8px",
+  },
+  tiktokMetrics: {
+    display: "flex",
+    gap: "14px",
+    color: "#5f6368",
+    fontSize: "12px",
+    whiteSpace: "nowrap" as const,
+  },
+  tiktokMetric: {
+    fontVariantNumeric: "tabular-nums" as const,
+  },
+  tiktokExplore: {
+    border: "1px solid #dadce0",
+    borderRadius: "14px",
+    background: "#fff",
+    color: "#3c4043",
+    fontSize: "11px",
+    fontFamily: "inherit",
+    padding: "4px 10px",
+    cursor: "pointer",
+  },
+  tiktokSource: {
+    margin: "12px 0 0",
+    color: "#80868b",
+    fontSize: "11px",
   },
   quickLinksRow: {
     display: "flex",
@@ -460,6 +546,22 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: "12px",
     color: "#80868b",
   },
+  cardAction: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    minHeight: "30px",
+    border: "1px solid transparent",
+    borderRadius: "15px",
+    padding: "0 14px",
+    background: "#e8f0fe",
+    color: "#1a56c4",
+    fontSize: "12px",
+    fontWeight: 500,
+    fontFamily: "inherit",
+    cursor: "pointer",
+    transition: "background 150ms, border-color 150ms",
+  },
   link: {
     color: "#006b4e",
     textDecoration: "none",
@@ -525,6 +627,8 @@ export default function ResearchDashboard() {
   const [adResult, setAdResult] = useState<AdSearchResult | null>(null);
   const [tiktokResult, setTiktokResult] = useState<TikTokResult | null>(null);
   const [tiktokCategories, setTiktokCategories] = useState<TikTokCategory[]>([]);
+  const [tiktokRegion, setTiktokRegion] = useState("US");
+  const [tiktokPeriod, setTiktokPeriod] = useState(7);
   const [briefing, setBriefing] = useState<MetaBriefing | null>(null);
   const [feedFilter, setFeedFilter] = useState<"all" | "trend" | "ad" | "account">("all");
   const [busy, setBusy] = useState<string | null>(null);
@@ -638,28 +742,6 @@ export default function ResearchDashboard() {
     [adResult],
   );
 
-  const tiktokInspirations = useMemo<Inspiration[]>(
-    () =>
-      (tiktokResult?.items ?? []).map((item, index) => ({
-        id: `tiktok-${tiktokResult?.category}-${item.rank ?? index}-${item.name}`,
-        kind: "trend" as const,
-        label: `TikTok ${tiktokResult?.category_label ?? "trend"}`,
-        title: item.name,
-        summary:
-          [item.category, ...(item.descriptors ?? []).slice(1)].filter(Boolean).join(" · ") ||
-          `Ranked ${item.rank ?? index + 1} in ${tiktokResult?.region} over the last ${tiktokResult?.period_days} days.`,
-        source: "TikTok Creative Center",
-        href: item.url ?? tiktokResult?.final_url,
-        topic: item.name,
-        metrics: Object.entries(item.metrics).map(
-          ([key, value]) => `${key[0].toUpperCase()}${key.slice(1)}: ${compactNumber(value)}`,
-        ),
-        // Rank 1 is the strongest signal the page offers; degrade evenly from there.
-        relevance: item.rank ? Math.max(100 - (item.rank - 1) * 8, 20) : 50,
-      })),
-    [tiktokResult],
-  );
-
   const accountInspirations = useMemo<Inspiration[]>(
     () =>
       briefing
@@ -693,15 +775,10 @@ export default function ResearchDashboard() {
 
   const liveInspirations = useMemo(
     () => {
-      const items = [
-        ...tiktokInspirations,
-        ...adInspirations,
-        ...trendInspirations,
-        ...accountInspirations,
-      ];
-      return items.length > 0 ? items : AFFILIATE_STARTERS;
+      const items = [...adInspirations, ...trendInspirations, ...accountInspirations];
+      return items;
     },
-    [accountInspirations, adInspirations, tiktokInspirations, trendInspirations],
+    [accountInspirations, adInspirations, trendInspirations],
   );
   const visibleInspirations = liveInspirations.filter(
     (item) => feedFilter === "all" || item.kind === feedFilter,
@@ -743,21 +820,30 @@ export default function ResearchDashboard() {
     };
   }, []);
 
-  async function fetchTiktokDiscovery(category: string) {
-    if (!window.confirm(`Read TikTok Creative Center's public ${category} trends?`)) return;
+  async function fetchTiktokDiscovery(
+    category: string,
+    options: { region?: string; period?: number; refresh?: boolean } = {},
+  ) {
+    const region = options.region ?? tiktokRegion;
+    const period = options.period ?? tiktokPeriod;
     setBusy("tiktok");
     setError(null);
     try {
+      const query = new URLSearchParams({
+        region,
+        period: String(period),
+        limit: "20",
+        refresh: String(Boolean(options.refresh)),
+      });
       const response = await fetch(
-        `${apiBaseUrl()}/api/research/tiktok/discovery/${category}?region=US&period=7&limit=10`,
+        `${apiBaseUrl()}/api/research/tiktok/discovery/${category}?${query}`,
       );
       const payload = (await response.json()) as { result?: TikTokResult; detail?: string };
       if (!response.ok || !payload.result) {
         throw new Error(payload.detail ?? "TikTok Creative Center could not be read.");
       }
+      // Notes explain what TikTok served; they are context, not a failure.
       setTiktokResult(payload.result);
-      setFeedFilter("trend");
-      if (payload.result.notes.length) setError(payload.result.notes.join(" "));
     } catch (reason) {
       setTiktokResult(null);
       setError(reason instanceof Error ? reason.message : "TikTok discovery failed.");
@@ -979,6 +1065,123 @@ export default function ResearchDashboard() {
         </div>
       </div>
 
+      {(tiktokResult || busy === "tiktok") && (
+        <div style={S.section}>
+          <div style={S.tiktokHead}>
+            <div>
+              <h2 style={S.sectionTitle}>
+                TikTok {tiktokResult?.category_label ?? "trends"}
+              </h2>
+              <p style={S.sectionSub}>
+                {busy === "tiktok"
+                  ? "Rendering TikTok Creative Center…"
+                  : [
+                      `${tiktokResult?.item_count ?? 0} public ${
+                        tiktokResult?.item_count === 1 ? "entry" : "entries"
+                      }`,
+                      tiktokResult?.region,
+                      `last ${tiktokResult?.period_days} days`,
+                      tiktokResult?.cached ? "cached" : "freshly read",
+                    ].join(" · ")}
+              </p>
+            </div>
+            <div style={S.tiktokControls}>
+              <select
+                aria-label="TikTok region"
+                style={S.tiktokSelect}
+                value={tiktokRegion}
+                disabled={busy === "tiktok"}
+                onChange={(event) => {
+                  const region = event.target.value;
+                  setTiktokRegion(region);
+                  if (tiktokResult) {
+                    void fetchTiktokDiscovery(tiktokResult.category, { region });
+                  }
+                }}
+              >
+                {TIKTOK_REGIONS.map(([code, label]) => (
+                  <option key={code} value={code}>{label}</option>
+                ))}
+              </select>
+              <select
+                aria-label="TikTok period"
+                style={S.tiktokSelect}
+                value={tiktokPeriod}
+                disabled={busy === "tiktok"}
+                onChange={(event) => {
+                  const period = Number(event.target.value);
+                  setTiktokPeriod(period);
+                  if (tiktokResult) {
+                    void fetchTiktokDiscovery(tiktokResult.category, { period });
+                  }
+                }}
+              >
+                {TIKTOK_PERIODS.map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                style={S.quickLinkBtn}
+                disabled={busy === "tiktok" || !tiktokResult}
+                onClick={() => {
+                  if (tiktokResult) {
+                    void fetchTiktokDiscovery(tiktokResult.category, { refresh: true });
+                  }
+                }}
+              >
+                {busy === "tiktok" ? "Reading…" : "↻ Refresh"}
+              </button>
+            </div>
+          </div>
+
+          {tiktokResult?.notes.map((note) => (
+            <p key={note} style={S.tiktokNote}>{note}</p>
+          ))}
+
+          {tiktokResult && tiktokResult.items.length > 0 && (
+            <div style={S.tiktokList}>
+              {tiktokResult.items.map((item, index) => (
+                <div key={`${item.name}-${index}`} style={S.tiktokRow}>
+                  <span style={S.tiktokRank}>{item.rank ?? index + 1}</span>
+                  <div style={S.tiktokBody}>
+                    <span style={S.tiktokName} title={item.name}>{item.name}</span>
+                    {item.category && <span style={S.tiktokTag}>{item.category}</span>}
+                  </div>
+                  <div style={S.tiktokMetrics}>
+                    {Object.entries(item.metrics).map(([key, value]) => (
+                      <span key={key} style={S.tiktokMetric}>
+                        <b>{compactNumber(value)}</b> {key}
+                      </span>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    style={S.tiktokExplore}
+                    onClick={() => exploreTopic(item.name.replace(/^#/, ""))}
+                  >
+                    Research
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tiktokResult && (
+            <p style={S.tiktokSource}>
+              Read from{" "}
+              <a href={tiktokResult.final_url} target="_blank" rel="noreferrer">
+                TikTok Creative Center
+              </a>
+              {tiktokResult.collected_at
+                ? ` at ${new Date(tiktokResult.collected_at).toLocaleTimeString()}`
+                : ""}
+              {" "}· public data only, nothing was posted.
+            </p>
+          )}
+        </div>
+      )}
+
       {visibleInspirations.length > 0 && (
         <div style={S.section}>
           <h2 style={S.sectionTitle}>Results</h2>
@@ -1073,10 +1276,24 @@ export default function ResearchDashboard() {
                       {item.topic && (
                         <button
                           type="button"
-                          className="quiet-action"
+                          style={S.cardAction}
                           onClick={() => exploreTopic(item.topic!)}
                         >
-                          Explore
+                          <svg
+                            width="13"
+                            height="13"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <circle cx="11" cy="11" r="7" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                          </svg>
+                          Research
                         </button>
                       )}
                       {item.href && (
@@ -1107,10 +1324,15 @@ export default function ResearchDashboard() {
         </div>
       )}
 
-      {liveInspirations.length === 0 && !busy && (
+      {liveInspirations.length === 0 && !tiktokResult && !busy && (
         <div style={{ ...S.empty, ...S.section }}>
-          <p style={{ color: "#80868b", fontSize: "15px" }}>
-            Start by searching a topic or product above.
+          <p style={{ color: "#5f6368", fontSize: "15px", margin: "0 0 6px" }}>
+            Nothing collected yet.
+          </p>
+          <p style={{ color: "#80868b", fontSize: "13px", margin: 0 }}>
+            Search a topic to run 30-day research, switch to Ads to read the public Meta Ad
+            Library, or open a TikTok Creative Center list above. Every card below is read from
+            a live source — TrendRelay does not seed the feed with examples.
           </p>
         </div>
       )}

@@ -17,7 +17,8 @@ nav strong { color: #1c2b33; }
 .tools-page h1 { max-width: 900px; }
 .registry-summary { display: flex; flex-wrap: wrap; gap: 10px; margin: 32px 0 54px; }
 .registry-summary span, .tool-meta span, .tool-meta a, .capabilities span { border: 1px solid #cbd2d9; border-radius: 999px; padding: 7px 11px; color: #606770; font-size: 0.75rem; text-decoration: none; }
-.registry-error, .block-reason { border-left: 3px solid #e13333; padding: 12px 16px; color: #ffc1af; background: #f8d7da; }
+/* Deep red on the pink wash: ~8.6:1, so a failure message stays readable. */
+.registry-error, .block-reason { border-left: 3px solid #e13333; padding: 12px 16px; color: #721c24; background: #f8d7da; overflow-wrap: anywhere; line-height: 1.5; }
 .tool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 18px; }
 .tool-card { display: flex; flex-direction: column; min-height: 430px; padding: 24px; border: 1px solid #cbd2d9; border-radius: 18px; background: linear-gradient(145deg, #ffffff, #f5f6f7); }
 .tool-card-top, .tool-meta, .capabilities, .tool-footer, .tool-actions, .status-stack { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
@@ -27,7 +28,7 @@ nav strong { color: #1c2b33; }
 .license-state { padding: 5px 8px; border-radius: 5px; font-weight: 800; }
 .license-state.allowed { color: #006b4e; background: #e6f6ee; }
 .license-state.conditional { color: #8a6302; background: #fff8e1; }
-.license-state.blocked { color: #e13333; background: #f8d7da; }
+.license-state.blocked { color: #a3162a; background: #f8d7da; }
 .tool-meta { margin: 18px 0; font-family: ui-monospace, monospace; }
 .capabilities { align-items: flex-start; }
 .capabilities span { border-radius: 7px; }
@@ -173,7 +174,7 @@ nav strong { color: #1c2b33; }
 .setup-step small { border-radius: 999px; padding: 5px 8px; color: #606770; background: #eef0f2; font-weight: 800; text-transform: uppercase; }
 .setup-step.ready small { color: #006b4e; background: #e6f6ee; }
 .setup-step.setup-required small, .setup-step.optional small { color: #8a6302; background: #fff8e1; }
-.setup-step.blocked small { color: #e13333; background: #f8d7da; }
+.setup-step.blocked small { color: #a3162a; background: #f8d7da; }
 .secret-checklist { margin: 18px 0; padding: 16px; border: 1px solid #dadde1; border-radius: 6px; background: #fafbfc; }
 .oauth-provider-list { display: grid; gap: 10px; margin: 18px 0; }
 .oauth-provider-intro { padding: 4px 2px 8px; }
