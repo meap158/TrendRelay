@@ -269,6 +269,18 @@ nav strong { color: #1c2b33; }
 .engine-credentials input { min-height: 32px; border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; }
 .engine-credentials small { color: var(--muted); font-size: 11px; line-height: 1.45; }
 .engine-credential-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.hosting-card { display: grid; gap: 12px; margin-top: 12px; padding: 14px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel-raised); }
+.hosting-card.ready { box-shadow: inset 3px 0 0 var(--green); }
+.hosting-card.needed { border-color: var(--amber); box-shadow: inset 3px 0 0 var(--amber); }
+.hosting-head { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 12px; }
+.hosting-head h3 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 4px; font-size: 14px; font-weight: 500; }
+.hosting-head h3 span { color: var(--muted); font-size: 11px; font-weight: 400; }
+.hosting-head p { max-width: 68ch; margin: 0; color: var(--muted); line-height: 1.5; }
+.hosting-status { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.hosting-status b { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.hosting-status b.configured { color: var(--green); }
+.hosting-status b.missing { color: var(--muted); }
+.hosting-status .quiet-action { background: transparent; color: var(--muted); }
 .setup-note, .account-picker > p { margin: 0; color: var(--muted); line-height: 1.5; }
 .step-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .step-actions .quiet-action, .engine-actions .quiet-action,

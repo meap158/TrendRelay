@@ -12,6 +12,7 @@ from trendrelay_api.auth import CurrentUser, current_user, require_governed_assu
 from trendrelay_api.database import get_session
 from trendrelay_api.env_store import EnvWriteError
 from trendrelay_api.foundation import membership, require_role
+from trendrelay_api.integrations import media_hosting
 from trendrelay_api.integrations.publishing import (
     PublishRequest,
     connection_status,
@@ -44,6 +45,11 @@ class ProviderCredentials(ProviderSelection):
     values: dict[str, str] = Field(default_factory=dict)
     confirm_external_action: bool = False
     activate: bool = False
+
+
+class HostingCredentials(BaseModel):
+    values: dict[str, str] = Field(default_factory=dict)
+    confirm_external_action: bool = False
 
 
 def validate_workspace(body: PublishRequest, workspace_id: str) -> None:
@@ -89,6 +95,29 @@ def save_credentials(
     except EnvWriteError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     return {"result": result, "connection": connection_status()}
+
+
+@router.post("/media-hosting/credentials")
+def save_media_hosting_credentials(
+    workspace_id: str,
+    body: HostingCredentials,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Store object-storage settings so fetch-only engines can reach local media."""
+    require_local_request(request)
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(status_code=400, detail="Saving credentials requires confirmation.")
+    try:
+        result = media_hosting.save_credentials(body.values)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except EnvWriteError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {"result": result, "connection": connection_status(probe=False)}
 
 
 @router.post("/providers/test")

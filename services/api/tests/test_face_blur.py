@@ -673,3 +673,87 @@ def test_render_is_encoded_in_a_codec_browsers_can_play(tmp_path, monkeypatch) -
     assert "h264" in video_line, video_line
     # An odd dimension or the wrong pixel format also fails to decode widely.
     assert "yuv420p" in video_line, video_line
+
+
+# --- what actually gets published ------------------------------------------- #
+
+
+def test_publishing_uploads_the_blurred_cut_not_the_original(
+    tmp_path, blur_jobs, monkeypatch
+) -> None:
+    """An upload is permanent and public, so the cut is decided server-side.
+
+    The interface promises handoffs use the blurred version. If that promise
+    lived only in the interface, a stale path or a direct API call would publish
+    the faces the blur exists to hide.
+    """
+    from trendrelay_api.integrations import publishing
+
+    monkeypatch.setattr(publishing, "SessionFactory", blur_jobs)
+    original = _write_clip(tmp_path / "clip.mp4")
+    asset_id = _library_asset(blur_jobs, "w1", original)
+    blurred = tmp_path / "clip-blurred.mp4"
+    blurred.write_bytes(b"blurred-bytes")
+
+    from trendrelay_api.media_models import MediaAssetVersion
+
+    with blur_jobs.begin() as session:
+        session.add(
+            MediaAssetVersion(
+                workspace_id="w1",
+                asset_id=asset_id,
+                version_kind="blurred",
+                path=str(blurred),
+                sha256="c" * 64,
+                mime_type="video/mp4",
+                size_bytes=blurred.stat().st_size,
+            )
+        )
+
+    source, digest, was_blurred = publishing.publishable_source("w1", original)
+
+    assert was_blurred is True
+    assert source == blurred, "the original must never be the file that is uploaded"
+    assert digest == "c" * 64
+
+
+def test_publishing_sends_the_original_when_no_blurred_cut_exists(
+    tmp_path, blur_jobs, monkeypatch
+) -> None:
+    from trendrelay_api.integrations import publishing
+
+    monkeypatch.setattr(publishing, "SessionFactory", blur_jobs)
+    original = _write_clip(tmp_path / "clip.mp4")
+    _library_asset(blur_jobs, "w1", original)
+
+    source, _digest, was_blurred = publishing.publishable_source("w1", original)
+
+    assert was_blurred is False
+    assert source == original
+
+
+def test_a_missing_blurred_file_refuses_rather_than_falling_back(
+    tmp_path, blur_jobs, monkeypatch
+) -> None:
+    """Falling back to the original here would publish the faces silently."""
+    from trendrelay_api.integrations import publishing
+    from trendrelay_api.media_models import MediaAssetVersion
+
+    monkeypatch.setattr(publishing, "SessionFactory", blur_jobs)
+    original = _write_clip(tmp_path / "clip.mp4")
+    asset_id = _library_asset(blur_jobs, "w1", original)
+    with blur_jobs.begin() as session:
+        session.add(
+            MediaAssetVersion(
+                workspace_id="w1",
+                asset_id=asset_id,
+                version_kind="blurred",
+                path=str(tmp_path / "deleted.mp4"),
+                sha256="d" * 64,
+                mime_type="video/mp4",
+                size_bytes=1,
+            )
+        )
+
+    with pytest.raises(ValueError, match="blurred version but its file is missing"):
+        publishing.publishable_source("w1", original)

@@ -44,7 +44,15 @@ type Provider = {
   credential_fields: CredentialField[];
   account_count?: number;
 };
+type MediaHosting = {
+  label: string;
+  configured: boolean;
+  required: boolean;
+  reason: string | null;
+  credential_fields: CredentialField[];
+};
 type Connection = {
+  media_hosting: MediaHosting;
   active_provider: PublishingProvider;
   configured: boolean;
   authenticated: boolean;
@@ -97,6 +105,8 @@ export default function PublishPage() {
   const [targets, setTargets] = useState<Record<string, string>>({});
   const [credentialDrafts, setCredentialDrafts] = useState<Record<string, Record<string, string>>>({});
   const [openProvider, setOpenProvider] = useState<string | null>(null);
+  const [hostingDraft, setHostingDraft] = useState<Record<string, string>>({});
+  const [hostingOpen, setHostingOpen] = useState(false);
   const [delivery, setDelivery] = useState<"draft" | "schedule" | "now">("draft");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -115,6 +125,10 @@ export default function PublishPage() {
   const chosen = connectedPlatforms.filter((platform) =>
     accounts.some((account) => account.id === targets[platform]));
   const needsPublicMedia = activeProvider?.requires_public_media ?? false;
+  const hosting = connection?.media_hosting ?? null;
+  // With storage configured the engine still fetches, but TrendRelay does the
+  // hosting, so a local path is enough and no URL has to be found by hand.
+  const hostsLocalMedia = needsPublicMedia && (hosting?.configured ?? false);
   const checking = !connection && !error;
 
   useEffect(() => {
@@ -165,8 +179,12 @@ export default function PublishPage() {
     if (!localDate) throw new Error("Choose a date and time.");
     const mediaUrl = String(form.get("media_url") ?? "").trim();
     const localPath = String(form.get("video_path") ?? "").trim();
-    if (needsPublicMedia && !mediaUrl) {
-      throw new Error(`${activeProvider?.label} needs a public media URL. ${activeProvider?.media_note}`);
+    if (needsPublicMedia && !mediaUrl && !(hostsLocalMedia && localPath)) {
+      throw new Error(
+        hostsLocalMedia
+          ? "Enter the approved local MP4 path, or a public media URL."
+          : `${activeProvider?.label} needs a public media URL. ${activeProvider?.media_note}`,
+      );
     }
     if (!needsPublicMedia && !localPath && !mediaUrl) {
       throw new Error("Enter the approved local MP4 path.");
@@ -232,6 +250,44 @@ export default function PublishPage() {
       );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Credentials could not be saved.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveHosting() {
+    const fields = hosting?.credential_fields ?? [];
+    const missing = fields.filter(
+      (field) => field.required && !field.configured && !hostingDraft[field.id]?.trim(),
+    );
+    if (missing.length) {
+      setError(`Enter the ${missing.map((field) => field.label).join(", ")}.`);
+      return;
+    }
+    const payload = Object.fromEntries(
+      Object.entries(hostingDraft).filter(([, value]) => value.trim().length > 0),
+    );
+    if (!Object.keys(payload).length) {
+      setError("Nothing new to save for media hosting.");
+      return;
+    }
+    if (!window.confirm("Write the media hosting settings to this machine's .env file?")) return;
+    setBusy("hosting-credentials");
+    setError(null);
+    setNotice(null);
+    try {
+      const body = await json<{ connection: Connection; result: { written_keys: string[] } }>(
+        await apiFetch(`/api/workspaces/${workspaceId}/publishing/media-hosting/credentials`, {
+          method: "POST",
+          body: JSON.stringify({ values: payload, confirm_external_action: true }),
+        }),
+      );
+      setHostingDraft({});
+      setConnection(body.connection);
+      setHostingOpen(false);
+      setNotice(`Saved ${body.result.written_keys.join(", ")} to .env. Local clips can now be published to engines that fetch media.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Media hosting could not be saved.");
     } finally {
       setBusy(null);
     }
@@ -508,6 +564,76 @@ export default function PublishPage() {
             );
           })}
         </div>
+        {hosting && (
+          <article className={`hosting-card${hosting.configured ? " ready" : hosting.required ? " needed" : ""}`}>
+            <div className="hosting-head">
+              <div>
+                <h3>Media hosting <span>{hosting.label}</span></h3>
+                <p>
+                  {hosting.configured
+                    ? "Local clips are uploaded automatically for engines that fetch rather than accept an upload."
+                    : hosting.required
+                      ? `${activeProvider?.label} downloads your video instead of accepting an upload, so it needs a public URL. Add storage and TrendRelay will host the file for you.`
+                      : "Not needed by the active engine. Add it if you switch to one that fetches media, such as Buffer."}
+                </p>
+              </div>
+              <div className="hosting-status">
+                <b className={hosting.configured ? "configured" : "missing"}>
+                  {hosting.configured ? "configured" : "not set up"}
+                </b>
+                <button
+                  type="button"
+                  className="quiet-action"
+                  aria-expanded={hostingOpen}
+                  onClick={() => setHostingOpen(!hostingOpen)}
+                >{hostingOpen ? "Close" : hosting.configured ? "Replace keys" : "Set up"}</button>
+              </div>
+            </div>
+            {hostingOpen && (
+              <div className="engine-credentials">
+                {hosting.credential_fields.map((field) => (
+                  <label key={field.id}>
+                    <span>
+                      {field.label}
+                      <b className={field.configured ? "configured" : "missing"}>
+                        {field.configured ? "configured" : field.required ? "required" : "optional"}
+                      </b>
+                    </span>
+                    <input
+                      autoComplete={field.secret ? "new-password" : "off"}
+                      disabled={!canExecute}
+                      onChange={(event) => setHostingDraft((current) => ({
+                        ...current,
+                        [field.id]: event.target.value,
+                      }))}
+                      placeholder={field.configured ? "Enter a new value to replace" : `Paste ${field.label.toLowerCase()}`}
+                      spellCheck={false}
+                      type={field.secret ? "password" : "text"}
+                      value={hostingDraft[field.id] ?? ""}
+                    />
+                    <small>{field.help} Stored as <code>{field.key}</code>.</small>
+                  </label>
+                ))}
+                <div className="engine-credential-actions">
+                  <button
+                    type="button"
+                    className="setup-primary"
+                    disabled={!canExecute || busy === "hosting-credentials"}
+                    onClick={() => void saveHosting()}
+                  >{busy === "hosting-credentials" ? "Saving…" : "Save to .env"}</button>
+                  <a className="quiet-action" href="https://dash.cloudflare.com/?to=/:account/r2" target="_blank" rel="noopener noreferrer">
+                    Open R2
+                  </a>
+                </div>
+                <p className="privacy-note">
+                  Uploaded files are readable by anyone holding the link, which is what lets the
+                  engine fetch them. Use a bucket kept for publishing, and note that a clip with a
+                  blurred version always uploads the blurred cut.
+                </p>
+              </div>
+            )}
+          </article>
+        )}
         {!canExecute && selected && (
           <p className="setup-note">
             Only workspace owners and approvers can change engines, save keys, or publish.
@@ -532,11 +658,25 @@ export default function PublishPage() {
             </select>
           </label>
 
-          {needsPublicMedia ? (
+          {needsPublicMedia && !hostsLocalMedia ? (
             <label>Public media URL
               <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" required />
               <small>{activeProvider?.media_note}</small>
             </label>
+          ) : needsPublicMedia ? (
+            <>
+              <label>Approved local MP4 path
+                <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" />
+                <small>
+                  Uploaded to {hosting?.label} when the post runs, so {activeProvider?.label} can
+                  fetch it. If the clip has a blurred version, that is the cut that gets uploaded.
+                </small>
+              </label>
+              <label>Public media URL <i>optional</i>
+                <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" />
+                <small>Supply one to use media you already host instead.</small>
+              </label>
+            </>
           ) : (
             <>
               <label>Approved local MP4 path

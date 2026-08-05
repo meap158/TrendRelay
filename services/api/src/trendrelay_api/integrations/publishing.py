@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field, field_validator
 from trendrelay_api.config import get_settings
 from trendrelay_api.database import SessionFactory
 from trendrelay_api.env_store import configured_keys, effective_value, write_env_values
+from trendrelay_api.integrations import media_hosting
 from trendrelay_api.jobs import (
     claim_job,
     complete_job,
@@ -397,7 +398,14 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
         raise ValueError(f"{provider.label} does not publish to {names}.")
     if provider.requires_public_media:
         if not request.media_url:
-            raise ValueError(f"{provider.label} needs a public media URL. {provider.media_note}")
+            if media_hosting.status()["configured"]:
+                # The adapter will host the reviewed cut itself at execution
+                # time, so an operator is not asked to find a URL by hand.
+                return
+            raise ValueError(
+                f"{provider.label} needs a public media URL. {provider.media_note} "
+                "Configure media hosting to have TrendRelay publish the file for you."
+            )
         if not request.media_url.startswith("https://"):
             raise ValueError(
                 f"{provider.label} fetches media over the public internet, so the URL must be "
@@ -866,6 +874,58 @@ def _needs_local_media(provider: ProviderDefinition, request: PublishRequest) ->
     return not request.media_url
 
 
+def publishable_source(workspace_id: str, path: Path) -> tuple[Path, str, bool]:
+    """Resolve a local file to the cut that is safe to publish.
+
+    An asset with a blurred version publishes that version, decided here rather
+    than trusting whatever path a caller passed. The interface already promises
+    handoffs use the blurred cut; if that promise lived only in the interface,
+    a stale path or a direct API call would publish the faces the blur exists to
+    hide - and an upload makes that permanent.
+
+    Returns the file to send, its digest, and whether a blurred cut was chosen.
+    """
+    from sqlalchemy import select
+
+    from trendrelay_api.media_library import file_sha256
+    from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
+
+    with SessionFactory() as session:
+        asset = session.scalar(
+            select(MediaAsset).where(
+                MediaAsset.workspace_id == workspace_id,
+                MediaAsset.original_path == str(path),
+            )
+        )
+        if asset is not None:
+            blurred = session.scalars(
+                select(MediaAssetVersion)
+                .where(
+                    MediaAssetVersion.asset_id == asset.id,
+                    MediaAssetVersion.version_kind == "blurred",
+                )
+                .order_by(MediaAssetVersion.created_at.desc())
+            ).first()
+            if blurred is not None:
+                cut = Path(blurred.path)
+                if cut.is_file():
+                    return cut, blurred.sha256, True
+                raise ValueError(
+                    "This asset has a blurred version but its file is missing, so "
+                    "publishing would send the unblurred original. Re-run Blur faces."
+                )
+    return path, file_sha256(path), False
+
+
+def host_media_for_engine(request: PublishRequest) -> dict[str, Any]:
+    """Upload the publishable cut so a fetch-only engine can reach it."""
+    source, digest, blurred = publishable_source(
+        request.workspace_id, approved_video_path(request.video_path)
+    )
+    hosted = media_hosting.upload(source, digest)
+    return {**hosted, "blurred": blurred}
+
+
 def discover_integrations(provider_id: str | None = None) -> dict[str, Any]:
     provider = resolve_provider(provider_id)
     readers = {
@@ -947,7 +1007,11 @@ def connection_status(probe: bool = True) -> dict[str, Any]:
         for identifier in PROVIDERS
     ]
     current = next(item for item in providers if item["id"] == active)
+    hosting = media_hosting.status()
     return {
+        # Only surfaced as a blocker for engines that fetch rather than accept an
+        # upload; the others publish fine without a bucket.
+        "media_hosting": hosting | {"required": current["requires_public_media"]},
         "active_provider": active,
         "configured": current["configured"],
         "authenticated": current["authenticated"],
@@ -962,6 +1026,8 @@ def connection_status(probe: bool = True) -> dict[str, Any]:
             if not current["configured"]
             else f"Connect social accounts in {current['label']}, then refresh"
             if not current["authenticated"]
+            else f"Add media hosting so {current['label']} can fetch your videos"
+            if current["requires_public_media"] and not hosting["configured"]
             else "Choose destinations and publish"
         ),
         "providers": providers,
@@ -1087,12 +1153,28 @@ def _execute_publish(request: PublishRequest, request_id: str | None = None) -> 
         if _needs_local_media(provider, request)
         else None
     )
+    hosted: dict[str, Any] | None = None
+    if provider.requires_public_media and not request.media_url:
+        # Host the reviewed cut now rather than at request time, so a scheduled
+        # job uploads what the asset actually looks like when it goes out.
+        hosted = host_media_for_engine(request)
+        request = request.model_copy(update={"media_url": hosted["url"]})
+
     if provider.id == "bundle_social":
         result = _bundle_publish(request, video)  # type: ignore[arg-type]
     elif provider.id == "zernio":
         result = _zernio_publish(request, video, request_id)
     else:
         result = _buffer_publish(request)
+    if hosted:
+        result = {
+            **result,
+            "hosted_media": {
+                "url": hosted["url"],
+                "sha256": hosted["sha256"],
+                "blurred": hosted["blurred"],
+            },
+        }
     return {"status": "created", "provider": provider.id, **result}
 
 
