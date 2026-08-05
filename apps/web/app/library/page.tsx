@@ -340,6 +340,8 @@ export default function LibraryPage() {
     faces_tracked?: number;
     warning?: string | null;
     preview?: boolean;
+    version_registered?: boolean;
+    version_note?: string;
     error?: string | null;
   } | null>(null);
   const [error, setError] = useState("");
@@ -601,6 +603,16 @@ export default function LibraryPage() {
   }
 
 
+  function blurredVersion(asset: Asset) {
+    // Latest wins when a clip was re-blurred with different settings.
+    const blurred = asset.versions.filter((version) => version.kind === "blurred");
+    return blurred.length ? blurred[blurred.length - 1] : null;
+  }
+
+  function handoffPath(asset: Asset) {
+    return blurredVersion(asset)?.path ?? asset.original_path;
+  }
+
   async function blurFaces(asset: Asset, previewOnly: boolean) {
     // A preview is cheap and reversible, so it runs on one click. The full
     // render replaces what Publish sends, so that one still asks.
@@ -660,6 +672,10 @@ export default function LibraryPage() {
         error: job.error,
         ...(job.result ?? {}),
       } as typeof blurResult);
+      if (job.status === "succeeded" && (job.result as { version_registered?: boolean } | null)?.version_registered) {
+        // The asset gained a version; reload so the detail and handoffs see it.
+        await refresh();
+      }
       return;
     }
     setBlurNote("Still rendering. It will appear here when the worker finishes.");
@@ -730,7 +746,6 @@ export default function LibraryPage() {
       </div>
 
       {error && <p className="error-banner">{error}</p>}
-      {blurNote && <p className="campaign-message">{blurNote}</p>}
       {blurResult && (
         <div className="blur-result">
           <strong>
@@ -759,6 +774,13 @@ export default function LibraryPage() {
           )}
           {blurResult.preview && blurResult.status === "succeeded" && (
             <small>Happy with it? Use <b>Blur faces</b> to render the whole clip.</small>
+          )}
+          {blurResult.status === "succeeded" && !blurResult.preview && (
+            <small>
+              {blurResult.version_registered
+                ? "Grouped as a blurred version of this asset. Handoffs now use it."
+                : blurResult.version_note ?? null}
+            </small>
           )}
         </div>
       )}
@@ -923,7 +945,7 @@ export default function LibraryPage() {
                       ? "Render six seconds with faces blurred, so you can see it first"
                       : "Face blurring applies to video"}
                     onClick={() => void blurFaces(selected, true)}
-                  >{busy === "blur-preview" ? "Previewing…" : "Preview blur"}</button>
+                  >{busy === "blur-preview" ? "Rendering preview…" : "Preview blur"}</button>
                   <button
                     type="button"
                     className="secondary-button"
@@ -933,9 +955,21 @@ export default function LibraryPage() {
                       : "Face blurring applies to video"}
                     onClick={() => void blurFaces(selected, false)}
                   >{busy === "blur" ? "Blurring…" : "Blur faces"}</button>
-                  <Link className="primary-action" href={`/studio?source=${encodeURIComponent(selected.original_path)}`}>Auto-edit in Studio</Link>
-                  <Link href={`/campaigns?video=${encodeURIComponent(selected.original_path)}`}>Plan campaign</Link>
-                  <Link href={`/publish?video=${encodeURIComponent(selected.original_path)}`}>Prepare to publish</Link>
+                  {busy.startsWith("blur") && (
+                    <span className="blur-progress" role="status">
+                      <i aria-hidden="true" />
+                      {busy === "blur-preview"
+                        ? "Rendering a six-second preview…"
+                        : "Blurring the whole clip…"}
+                    </span>
+                  )}
+                  <Link href={`/campaigns?video=${encodeURIComponent(handoffPath(selected))}`}>Plan campaign</Link>
+                  <Link href={`/publish?video=${encodeURIComponent(handoffPath(selected))}`}>Prepare to publish</Link>
+                  {blurredVersion(selected) && (
+                    <em className="handoff-note" title={handoffPath(selected)}>
+                      Handoffs use the blurred version
+                    </em>
+                  )}
                   {selectedSourceLinks.map((url, index, links) => {
                     const label = selected.platform === "douyin"
                       ? `${selected.creator ? `${selected.creator}'s ` : ""}original Douyin video`

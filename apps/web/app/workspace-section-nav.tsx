@@ -39,6 +39,10 @@ export function WorkspaceSectionNav({ area }: { area: WorkspaceArea }) {
   const pathname = usePathname();
   const config = AREAS[area];
 
+  // A strip with one destination navigates nowhere; the page's own heading
+  // already says where you are.
+  if (config.items.length < 2) return null;
+
   return (
     <nav className="workspace-section-nav" aria-label={`${config.eyebrow} sections`}>
       <div className="workspace-section-context">

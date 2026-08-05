@@ -50,6 +50,15 @@ MAX_GAP_FRAMES = 12
 PADDING_RATIO = 0.18
 # Below this, an operator is looking at a clip where faces were missed outright.
 COVERAGE_WARNING = 0.9
+# Detection cost grows with pixels, and a face is still obvious at this width.
+# A 1080x1920 frame searched at full size takes seconds per frame, which turns a
+# six-second preview into minutes; detecting on a downscaled copy and scaling
+# the boxes back is the difference between usable and abandoned.
+DETECT_WIDTH = 640
+# A proxy exists to be watched, not kept. Re-encoding a 4K master at full size
+# costs minutes; at this width it costs seconds and still shows whether a face
+# is covered.
+PREVIEW_WIDTH = 720
 
 
 @dataclass(frozen=True)
@@ -82,12 +91,23 @@ def pad_box(box: Box, frame_size: tuple[int, int], ratio: float = PADDING_RATIO)
     return left, top, max(0, right - left), max(0, bottom - top)
 
 
+# A Gaussian wide enough to hide a 4K close-up costs seconds per frame, and
+# past this width it changes nothing an eye can see.
+MAX_KERNEL = 31
+
+
 def blur_kernel(box: Box, ratio: float = 0.6) -> int:
     """An odd Gaussian kernel scaled to the face, as OpenCV requires."""
     _, _, box_width, box_height = box
     size = int(round(max(box_width, box_height) * ratio))
-    size = max(size, 9)
+    size = max(9, min(size, MAX_KERNEL))
     return size if size % 2 else size + 1
+
+
+def mosaic_size(box: Box) -> int:
+    """Cells across the face. Fewer cells destroy more of it."""
+    _, _, box_width, box_height = box
+    return max(1, min(12, max(box_width, box_height) // 12))
 
 
 def _interpolate(start: Box, end: Box, step: int, total: int) -> Box:
@@ -268,6 +288,16 @@ FFMPEG = (
 YUNET_MODEL = PROJECT_ROOT / ".data" / "models" / "face_detection_yunet.onnx"
 
 
+def _scale_box(box: Box, factor: float) -> Box:
+    x, y, width, height = box
+    return (
+        int(round(x * factor)),
+        int(round(y * factor)),
+        int(round(width * factor)),
+        int(round(height * factor)),
+    )
+
+
 class _CascadeDetector:
     """OpenCV's bundled cascade behind the same call shape as YuNet.
 
@@ -288,14 +318,26 @@ class _CascadeDetector:
         self._neighbours = max(2, int(round(settings.confidence * 8)))
 
     def detect(self, frame: Any) -> tuple[Any, Any]:
-        grey = self._cv2.cvtColor(frame, self._cv2.COLOR_BGR2GRAY)
+        cv2 = self._cv2
+        height, width = frame.shape[:2]
+        # Search a downscaled copy, then map the boxes back to full size.
+        scale = min(1.0, DETECT_WIDTH / float(width)) if width else 1.0
+        search = frame
+        if scale < 1.0:
+            search = cv2.resize(
+                frame, (int(width * scale), int(height * scale)), interpolation=cv2.INTER_AREA
+            )
+        grey = cv2.cvtColor(search, cv2.COLOR_BGR2GRAY)
+        cv2.equalizeHist(grey, grey)
         found = self._cascade.detectMultiScale(
-            grey, scaleFactor=1.1, minNeighbors=self._neighbours, minSize=(24, 24)
+            grey, scaleFactor=1.15, minNeighbors=self._neighbours, minSize=(24, 24)
         )
         if len(found) == 0:
             return None, None
+        factor = 1.0 / scale if scale else 1.0
+        boxes = [_scale_box((int(x), int(y), int(w), int(h)), factor) for x, y, w, h in found]
         return None, self._numpy.array(
-            [[x, y, w, h, 1.0] for x, y, w, h in found], dtype="float32"
+            [[x, y, w, h, 1.0] for x, y, w, h in boxes], dtype="float32"
         )
 
 
@@ -341,9 +383,20 @@ def apply_blur(cv2: Any, frame: Any, box: Box, settings: BlurSettings) -> None:
     region = frame[y : y + box_height, x : x + box_width]
     if region.size == 0:
         return
+    # Collapse the region to a handful of cells and stretch it back. This throws
+    # the detail away rather than smoothing it, and its cost does not grow with
+    # the size of the face the way a wide Gaussian does.
+    cells = mosaic_size((x, y, box_width, box_height))
+    small = cv2.resize(region, (cells, cells), interpolation=cv2.INTER_AREA)
+    coarse = cv2.resize(
+        small, (box_width, box_height), interpolation=cv2.INTER_NEAREST
+    )
     kernel = blur_kernel((x, y, box_width, box_height), settings.kernel_ratio)
-    blurred = cv2.GaussianBlur(region, (kernel, kernel), 0)
-    frame[y : y + box_height, x : x + box_width] = blurred
+    # A short blur over the blocks avoids a mosaic that reads as a deliberate
+    # graphic; the information is already gone by this point.
+    frame[y : y + box_height, x : x + box_width] = cv2.GaussianBlur(
+        coarse, (kernel, kernel), 0
+    )
 
 
 def _remux_audio(silent_video: Path, original: Path, destination: Path) -> bool:
@@ -394,9 +447,15 @@ def render_blurred(
     if not source.is_file():
         raise FaceBlurUnavailable(f"No such media file: {source}")
 
-    capture = cv2.VideoCapture(str(source))
-    if not capture.isOpened():
-        raise FaceBlurUnavailable(f"OpenCV could not read {source.name}.")
+    def _open() -> Any:
+        capture = cv2.VideoCapture(str(source))
+        if not capture.isOpened():
+            raise FaceBlurUnavailable(f"OpenCV could not read {source.name}.")
+        return capture
+
+    # Pass one keeps only the boxes. Holding decoded frames would cost megabytes
+    # each and exhaust memory on any real clip, so the file is read twice.
+    capture = _open()
     try:
         fps = capture.get(cv2.CAP_PROP_FPS) or 25.0
         width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -404,10 +463,9 @@ def render_blurred(
         limit = int(fps * preview_seconds) if preview_seconds else None
         detector = _detector(cv2, (width, height), settings)
 
-        frames: list[Any] = []
         timeline: list[list[Box]] = []
         detected_frames = 0
-        while limit is None or len(frames) < limit:
+        while limit is None or len(timeline) < limit:
             ok, frame = capture.read()
             if not ok:
                 break
@@ -415,11 +473,10 @@ def render_blurred(
             if boxes:
                 detected_frames += 1
             timeline.append(boxes)
-            frames.append(frame)
     finally:
         capture.release()
 
-    if not frames:
+    if not timeline:
         raise FaceBlurUnavailable(f"{source.name} contained no readable frames.")
 
     # Every face gets its own bridged timeline, so a second person in shot is
@@ -429,22 +486,36 @@ def render_blurred(
         for track in associate_tracks(timeline, settings.max_gap_frames)
     ]
     covered_frames = [
-        any(track[index] is not None for track in tracks) for index in range(len(frames))
+        any(track[index] is not None for track in tracks) for index in range(len(timeline))
     ]
+
     destination.parent.mkdir(parents=True, exist_ok=True)
     silent = destination.with_suffix(".silent.mp4")
+    # The blur is applied at full size either way; only a proxy is scaled down,
+    # and only after blurring, so the preview shows what the master will be.
+    out_scale = min(1.0, PREVIEW_WIDTH / float(width)) if preview_seconds and width else 1.0
+    out_size = (
+        (int(width * out_scale), int(height * out_scale)) if out_scale < 1.0 else (width, height)
+    )
+    capture = _open()
     writer = cv2.VideoWriter(
-        str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
+        str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, out_size
     )
     try:
-        for index, frame in enumerate(frames):
+        for index in range(len(timeline)):
+            ok, frame = capture.read()
+            if not ok:
+                break
             for track in tracks:
                 box = track[index]
                 if box is not None:
                     apply_blur(cv2, frame, box, settings)
+            if out_scale < 1.0:
+                frame = cv2.resize(frame, out_size, interpolation=cv2.INTER_AREA)
             writer.write(frame)
     finally:
         writer.release()
+        capture.release()
 
     if _remux_audio(silent, source, destination):
         silent.unlink(missing_ok=True)
@@ -460,7 +531,7 @@ def render_blurred(
     return {
         "source": str(source),
         "output": str(destination),
-        "frames": len(frames),
+        "frames": len(timeline),
         "frames_with_detection": detected_frames,
         "frames_covered": sum(1 for covered in covered_frames if covered),
         "faces_tracked": len(tracks),
@@ -510,6 +581,72 @@ def blur_output_path(workspace_id: str, source: Path, preview: bool) -> Path:
     return BLUR_ROOT / workspace_id / f"{source.stem}-blurred{suffix}"
 
 
+def _register_blurred_version(
+    workspace_id: str, source: Path, output: Path
+) -> dict[str, Any]:
+    """Attach a finished render to its source asset as a `blurred` version.
+
+    Grouping keeps the Library at one row per subject instead of a list of
+    near-duplicates. A source outside the Library (a raw download, say) has no
+    asset to attach to; the render still exists and the result says why it was
+    not grouped.
+    """
+    from sqlalchemy import select
+
+    from trendrelay_api.media_library import file_sha256
+    from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
+
+    with JOB_SESSION_FACTORY.begin() as session:
+        asset = session.scalar(
+            select(MediaAsset).where(
+                MediaAsset.workspace_id == workspace_id,
+                MediaAsset.original_path == str(source),
+            )
+        )
+        if asset is None:
+            return {
+                "version_registered": False,
+                "version_note": (
+                    "The source is not a Library asset, so the render stays unattached."
+                ),
+            }
+        digest = file_sha256(output)
+        existing = session.scalar(
+            select(MediaAssetVersion).where(
+                MediaAssetVersion.asset_id == asset.id,
+                MediaAssetVersion.version_kind == "blurred",
+                MediaAssetVersion.sha256 == digest,
+            )
+        )
+        if existing:
+            # Re-rendering identical content must not stack duplicate rows.
+            return {
+                "version_registered": True,
+                "asset_id": asset.id,
+                "version_id": existing.id,
+                "version_note": "This exact render was already attached.",
+            }
+        version = MediaAssetVersion(
+            workspace_id=workspace_id,
+            asset_id=asset.id,
+            version_kind="blurred",
+            path=str(output),
+            sha256=digest,
+            mime_type="video/mp4",
+            size_bytes=output.stat().st_size,
+            duration_ms=asset.duration_ms,
+            width=asset.width,
+            height=asset.height,
+        )
+        session.add(version)
+        session.flush()
+        return {
+            "version_registered": True,
+            "asset_id": asset.id,
+            "version_id": version.id,
+        }
+
+
 def create_blur_job(request: FaceBlurRequest) -> dict[str, Any]:
     if not request.confirm_external_action:
         raise PermissionError("Blurring rewrites media and needs explicit confirmation.")
@@ -546,6 +683,17 @@ def run_blur_job(job_id: str, worker_id: str = "face-blur-worker") -> None:
             request.settings(),
             request.preview_seconds,
         )
+        if not request.preview_seconds:
+            # A preview covers only the opening seconds; storing it as a
+            # version of the whole asset would misrepresent the asset.
+            result = {
+                **result,
+                **_register_blurred_version(
+                    payload["workspace_id"],
+                    Path(payload["source"]),
+                    Path(payload["output"]),
+                ),
+            }
         complete_job(
             job_id, worker_id, {**result, "tag": BLUR_TAG}, factory=JOB_SESSION_FACTORY
         )

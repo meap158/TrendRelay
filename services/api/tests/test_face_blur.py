@@ -24,10 +24,14 @@ def test_padding_grows_the_box_and_stays_inside_the_frame() -> None:
 
 def test_kernel_scales_with_the_face_and_stays_odd() -> None:
     """A fixed radius either smears the frame or leaves features readable."""
-    small = face_blur.blur_kernel((0, 0, 40, 40))
-    large = face_blur.blur_kernel((0, 0, 400, 400))
+    small = face_blur.blur_kernel((0, 0, 12, 12))
+    large = face_blur.blur_kernel((0, 0, 40, 40))
 
     assert large > small
+    # Capped: a wider Gaussian costs seconds per 4K frame and adds nothing.
+    assert face_blur.blur_kernel((0, 0, 4000, 4000)) == face_blur.MAX_KERNEL
+    # Coarser cells for a bigger face, so detail is destroyed either way.
+    assert face_blur.mosaic_size((0, 0, 400, 400)) >= face_blur.mosaic_size((0, 0, 40, 40))
     assert small % 2 == 1 and large % 2 == 1
     # Even a tiny face must be blurred beyond recognition.
     assert face_blur.blur_kernel((0, 0, 4, 4)) >= 9
@@ -117,7 +121,7 @@ def test_the_module_imports_without_opencv(without_opencv) -> None:
 def test_geometry_still_works_without_opencv(without_opencv) -> None:
     """The parts that decide the privacy guarantee are pure by design."""
     assert face_blur.pad_box((10, 10, 20, 20), (100, 100), ratio=0.5) == (0, 0, 40, 40)
-    assert face_blur.blur_kernel((0, 0, 100, 100)) == 61
+    assert face_blur.blur_kernel((0, 0, 100, 100)) == face_blur.MAX_KERNEL
     assert face_blur.bridge_gaps([(0, 0, 2, 2), None, (4, 0, 2, 2)])[1] == (2, 0, 2, 2)
     assert face_blur.coverage_ratio([(0, 0, 1, 1), None]) == 0.5
 
@@ -380,6 +384,9 @@ def blur_jobs(monkeypatch, tmp_path):
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool
 
+    # Registering a version touches media_assets; importing the models is what
+    # puts their tables into the shared metadata before create_all runs.
+    import trendrelay_api.media_models  # noqa: F401
     from trendrelay_api.models import Base
 
     engine = create_engine(
@@ -478,3 +485,147 @@ def test_preview_route_confines_reads_to_the_blur_output(tmp_path, monkeypatch) 
     assert not traversal.is_relative_to(workspace_root)
     # Another workspace's renders are out of reach too.
     assert not (root / "w2" / "other.mp4").resolve().is_relative_to(workspace_root)
+
+
+# --- grouping the render as a version of its asset -------------------------- #
+
+
+def _library_asset(factory, workspace_id: str, source: Path):
+    from trendrelay_api.media_models import MediaAsset
+
+    with factory.begin() as session:
+        asset = MediaAsset(
+            workspace_id=workspace_id,
+            title="Clip under review",
+            media_kind="video",
+            source_type="test-fixture",
+            source_url=None,
+            platform=None,
+            creator=None,
+            published_at=None,
+            caption=None,
+            hashtags=[],
+            audio_identifier=None,
+            engagement={},
+            original_path=str(source),
+            original_sha256="a" * 64,
+            mime_type="video/mp4",
+            size_bytes=100,
+            duration_ms=1200,
+            width=160,
+            height=120,
+            video_codec=None,
+            audio_codec=None,
+            has_audio=True,
+            created_by="owner",
+        )
+        session.add(asset)
+        session.flush()
+        return asset.id
+
+
+def _blurred_versions(factory, asset_id):
+    from sqlalchemy import select
+
+    from trendrelay_api.media_models import MediaAssetVersion
+
+    with factory() as session:
+        return list(
+            session.scalars(
+                select(MediaAssetVersion).where(
+                    MediaAssetVersion.asset_id == asset_id,
+                    MediaAssetVersion.version_kind == "blurred",
+                )
+            )
+        )
+
+
+def test_a_full_render_becomes_a_version_of_its_asset(
+    tmp_path, blur_jobs, monkeypatch
+) -> None:
+    """One row per subject: the render groups under the asset it came from."""
+    source = _write_clip(tmp_path / "clip.mp4")
+    asset_id = _library_asset(blur_jobs, "w1", source)
+    monkeypatch.setattr(
+        face_blur, "_detector", lambda *_a, **_k: _FixedDetector((40, 40, 40, 40))
+    )
+    job = face_blur.create_blur_job(
+        face_blur.FaceBlurRequest(
+            workspace_id="w1", source_path=str(source), confirm_external_action=True
+        )
+    )
+
+    face_blur.run_blur_job(job["id"])
+
+    from trendrelay_api.jobs import get_job_record
+
+    done = get_job_record(job["id"], factory=blur_jobs)
+    assert done["result"]["version_registered"] is True
+    assert done["result"]["asset_id"] == asset_id
+    versions = _blurred_versions(blur_jobs, asset_id)
+    assert len(versions) == 1
+    assert versions[0].path == done["result"]["output"]
+    assert versions[0].id == done["result"]["version_id"]
+
+
+def test_rerendering_identical_content_does_not_stack_versions(
+    tmp_path, blur_jobs, monkeypatch
+) -> None:
+    source = _write_clip(tmp_path / "clip.mp4")
+    asset_id = _library_asset(blur_jobs, "w1", source)
+    monkeypatch.setattr(
+        face_blur, "_detector", lambda *_a, **_k: _FixedDetector((40, 40, 40, 40))
+    )
+    for _ in range(2):
+        job = face_blur.create_blur_job(
+            face_blur.FaceBlurRequest(
+                workspace_id="w1", source_path=str(source), confirm_external_action=True
+            )
+        )
+        face_blur.run_blur_job(job["id"])
+
+    assert len(_blurred_versions(blur_jobs, asset_id)) == 1
+
+
+def test_a_preview_is_never_stored_as_a_version(tmp_path, blur_jobs, monkeypatch) -> None:
+    """Six seconds of a clip is not a version of the whole asset."""
+    source = _write_clip(tmp_path / "clip.mp4")
+    asset_id = _library_asset(blur_jobs, "w1", source)
+    monkeypatch.setattr(
+        face_blur, "_detector", lambda *_a, **_k: _FixedDetector((40, 40, 40, 40))
+    )
+    job = face_blur.create_blur_job(
+        face_blur.FaceBlurRequest(
+            workspace_id="w1",
+            source_path=str(source),
+            preview_seconds=1.0,
+            confirm_external_action=True,
+        )
+    )
+
+    face_blur.run_blur_job(job["id"])
+
+    assert _blurred_versions(blur_jobs, asset_id) == []
+
+
+def test_a_source_outside_the_library_still_renders_and_says_why(
+    tmp_path, blur_jobs, monkeypatch
+) -> None:
+    source = _write_clip(tmp_path / "loose.mp4")
+    monkeypatch.setattr(
+        face_blur, "_detector", lambda *_a, **_k: _FixedDetector((40, 40, 40, 40))
+    )
+    job = face_blur.create_blur_job(
+        face_blur.FaceBlurRequest(
+            workspace_id="w1", source_path=str(source), confirm_external_action=True
+        )
+    )
+
+    face_blur.run_blur_job(job["id"])
+
+    from trendrelay_api.jobs import get_job_record
+
+    done = get_job_record(job["id"], factory=blur_jobs)
+    assert done["status"] == "succeeded"
+    assert done["result"]["version_registered"] is False
+    assert "not a Library asset" in done["result"]["version_note"]
