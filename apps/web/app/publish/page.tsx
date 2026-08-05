@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
 import { useJobs } from "../jobs-provider";
 import {
@@ -87,6 +88,7 @@ export default function PublishPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
   const [videoPath, setVideoPath] = useState("");
+  const [mediaUrl, setMediaUrl] = useState("");
   const [accountBook, setAccountBook] = useState<{ provider: string | null; items: Account[] }>({
     provider: null,
     items: [],
@@ -532,7 +534,7 @@ export default function PublishPage() {
 
           {needsPublicMedia ? (
             <label>Public media URL
-              <input name="media_url" type="url" placeholder="https://cdn.example.com/approved-clip.mp4" required />
+              <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" required />
               <small>{activeProvider?.media_note}</small>
             </label>
           ) : (
@@ -542,7 +544,7 @@ export default function PublishPage() {
                 <small>{activeProvider?.media_note ?? "Media must sit under a configured publishing media directory."}</small>
               </label>
               <label>Public media URL <i>optional</i>
-                <input name="media_url" type="url" placeholder="https://cdn.example.com/approved-clip.mp4" />
+                <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" />
                 <small>Supply one to skip the upload and let the engine fetch the file instead.</small>
               </label>
             </>
@@ -679,6 +681,27 @@ export default function PublishPage() {
         </form>
 
         <aside className="publish-side">
+          <article className="publish-media-preview">
+            <h2>What will be sent</h2>
+            {videoPath || mediaUrl ? (
+              <>
+                <video
+                  className="blur-preview"
+                  controls
+                  preload="metadata"
+                  src={mediaUrl || `${apiBaseUrl()}/api/workspaces/${workspaceId}/media/library/face-blur/media?path=${encodeURIComponent(videoPath)}`}
+                />
+                <p className="privacy-note">
+                  {mediaUrl
+                    ? "Streaming the public URL the engine will fetch."
+                    : "Playing the local file this delivery will upload. If a blurred "
+                      + "version replaced the original, this is the blurred one."}
+                </p>
+              </>
+            ) : (
+              <p>Choose media above to see the frames that will go out.</p>
+            )}
+          </article>
           <article>
             <h2>Dry-run plan</h2>
             {preview ? (
