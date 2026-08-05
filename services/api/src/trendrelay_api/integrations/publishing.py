@@ -227,6 +227,7 @@ class PublishRequest(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     date: datetime
     schedule: bool = False
+    delivery: Literal["draft", "schedule", "now"] | None = None
     targets: list[PublishTarget] = Field(min_length=1, max_length=10)
     made_with_ai: bool = False
     visibility: Literal["public", "private"] = "public"
@@ -244,6 +245,13 @@ class PublishRequest(BaseModel):
         # Engines want the bare name, so accept the forms people actually paste.
         name = value.strip().removeprefix("https://www.reddit.com").strip("/")
         return name.removeprefix("r/").strip("/") or None
+
+    @property
+    def mode(self) -> str:
+        """Resolve the delivery, tolerating jobs stored before `delivery` existed."""
+        if self.delivery:
+            return self.delivery
+        return "schedule" if self.schedule else "draft"
 
     @field_validator("targets")
     @classmethod
@@ -395,7 +403,7 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
                 f"{provider.label} fetches media over the public internet, so the URL must be "
                 "https."
             )
-    if request.schedule and request.date <= datetime.now(UTC):
+    if request.mode == "schedule" and request.date <= datetime.now(UTC):
         raise ValueError("Scheduled deliveries need a date and time in the future.")
     chosen = {target.platform for target in request.targets}
     if NEEDS_SUBREDDIT in chosen and not request.subreddit:
@@ -538,7 +546,7 @@ def _bundle_publish(request: PublishRequest, video: Path | None) -> dict[str, An
         "teamId": _required_credential(provider, "team_id"),
         "title": title[:200],
         "postDate": request.date.isoformat(),
-        "status": "SCHEDULED" if request.schedule else "DRAFT",
+        "status": {"now": "PUBLISHED", "schedule": "SCHEDULED"}.get(request.mode, "DRAFT"),
         # The API selects a team's connected account by platform type, not by ID.
         "socialAccountTypes": [BUNDLE_TYPES[target.platform] for target in request.targets],
         "data": {
@@ -641,7 +649,9 @@ def _zernio_publish(
     }
     if request.title:
         post["title"] = request.title
-    if request.schedule:
+    if request.mode == "now":
+        post["publishNow"] = True
+    elif request.mode == "schedule":
         post["scheduledFor"] = request.date.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S")
     else:
         post["isDraft"] = True
@@ -812,7 +822,8 @@ def _buffer_publish(request: PublishRequest) -> dict[str, Any]:
     due_at = request.date.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     scheduling = (
         f"mode: customScheduled dueAt: {_graphql_literal(due_at)}"
-        if request.schedule
+        if request.mode == "schedule"
+        else "mode: shareNow" if request.mode == "now"
         else "mode: addToQueue saveToDraft: true"
     )
     assets = (
@@ -1013,7 +1024,8 @@ def _delivery_plan(
         notes: list[str] = []
         if provider.id == "buffer":
             notes.append(
-                "Queued at the requested time" if request.schedule
+                "Published immediately" if request.mode == "now"
+                else "Queued at the requested time" if request.mode == "schedule"
                 else "Saved to the channel's draft queue"
             )
         else:
@@ -1052,7 +1064,8 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
         "status": "dry_run",
         "provider": provider.id,
         "provider_label": provider.label,
-        "delivery": "scheduled post" if request.schedule else "draft",
+        "delivery": {"now": "immediate post", "schedule": "scheduled post"}
+        .get(request.mode, "draft"),
         "date": request.date.isoformat(),
         "media_source": "approved local file" if uses_local_media else "public media URL",
         "video_path": request.video_path if uses_local_media else None,

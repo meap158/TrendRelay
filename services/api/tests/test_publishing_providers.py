@@ -557,3 +557,52 @@ def test_buffer_sends_the_metadata_each_network_requires(
     assert "metadata: { facebook: { type: reel } }" in queries[1]
     assert 'metadata: { youtube: { title: "Launch title" } }' in queries[2]
     assert "metadata: { tiktok: { isAiGenerated: true } }" in queries[3]
+
+
+def test_publish_now_reaches_every_engine(monkeypatch, media_file: Path, tmp_path: Path) -> None:
+    """Immediate delivery is a third mode, not a variation of scheduling."""
+    sent: dict[str, object] = {}
+
+    def bundle(method, path, **kwargs):
+        if path == "/post/":
+            sent["bundle"] = kwargs["body"]["status"]
+            return {"id": "p1"}
+        return {"id": "upl"}
+
+    monkeypatch.setattr(publishing, "_bundle_request", bundle)
+    publishing._execute_publish(request(media_file, delivery="now"))
+    assert sent["bundle"] == "PUBLISHED"
+
+    use_provider(monkeypatch, tmp_path, "zernio")
+
+    def zernio(method, path, **kwargs):
+        if path == "/posts":
+            sent["zernio"] = kwargs["body"]
+            return {"post": {"_id": "z1"}}
+        return {"uploadUrl": "https://u", "publicUrl": "https://cdn/clip.mp4"}
+
+    monkeypatch.setattr(publishing, "_zernio_request", zernio)
+    monkeypatch.setattr(publishing, "_http", lambda *a, **k: None)
+    publishing._execute_publish(request(media_file, delivery="now"))
+    assert sent["zernio"]["publishNow"] is True
+    assert "scheduledFor" not in sent["zernio"]
+    assert "isDraft" not in sent["zernio"]
+
+    use_provider(monkeypatch, tmp_path, "buffer")
+    monkeypatch.setattr(
+        publishing,
+        "_buffer_graphql",
+        lambda query, **k: sent.__setitem__("buffer", query)
+        or {"createPost": {"post": {"id": "b1"}}},
+    )
+    publishing._execute_publish(
+        request(media_file, delivery="now", media_url="https://cdn.example.com/clip.mp4")
+    )
+    assert "mode: shareNow" in sent["buffer"]
+
+
+def test_stored_jobs_without_a_delivery_field_still_resolve(media_file: Path) -> None:
+    """Jobs written before `delivery` existed must keep their meaning."""
+    assert request(media_file).mode == "draft"
+    assert request(media_file, schedule=True).mode == "schedule"
+    assert request(media_file, delivery="now", schedule=False).mode == "now"

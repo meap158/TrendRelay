@@ -95,7 +95,7 @@ export default function PublishPage() {
   const [targets, setTargets] = useState<Record<string, string>>({});
   const [credentialDrafts, setCredentialDrafts] = useState<Record<string, Record<string, string>>>({});
   const [openProvider, setOpenProvider] = useState<string | null>(null);
-  const [schedule, setSchedule] = useState(false);
+  const [delivery, setDelivery] = useState<"draft" | "schedule" | "now">("draft");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -177,7 +177,8 @@ export default function PublishPage() {
       caption: form.get("caption"),
       title: form.get("title") || null,
       date: new Date(localDate).toISOString(),
-      schedule,
+      delivery,
+      schedule: delivery === "schedule",
       made_with_ai: form.get("made_with_ai") === "on",
       visibility: form.get("visibility") === "private" ? "private" : "public",
       subreddit: form.get("subreddit") || null,
@@ -551,24 +552,25 @@ export default function PublishPage() {
           <label>Caption<textarea name="caption" rows={5} maxLength={5000} required /></label>
 
           <div className="delivery-mode" role="group" aria-label="Delivery mode">
-            <button
-              type="button"
-              className={schedule ? "" : "selected"}
-              aria-pressed={!schedule}
-              onClick={() => setSchedule(false)}
-            ><strong>Save as draft</strong><span>Nothing publishes until you approve it in the engine</span></button>
-            <button
-              type="button"
-              className={schedule ? "selected" : ""}
-              aria-pressed={schedule}
-              onClick={() => setSchedule(true)}
-            ><strong>Schedule</strong><span>The engine publishes automatically at the time below</span></button>
+            {([
+              ["draft", "Save as draft", "Nothing publishes until you approve it in the engine"],
+              ["schedule", "Schedule", "The engine publishes automatically at the time below"],
+              ["now", "Publish now", "Goes live as soon as the engine accepts it"],
+            ] as const).map(([mode, title, hint]) => (
+              <button
+                key={mode}
+                type="button"
+                className={delivery === mode ? "selected" : ""}
+                aria-pressed={delivery === mode}
+                onClick={() => setDelivery(mode)}
+              ><strong>{title}</strong><span>{hint}</span></button>
+            ))}
           </div>
 
           <div className="publish-grid">
-            <label>{schedule ? "Publish at" : "Reference time"}
-              <input name="date" type="datetime-local" required min={localDateTime(1)} defaultValue={localDateTime(60)} />
-              <small>{schedule ? "Must be in the future. Sent to the engine in UTC." : "Stored with the draft; the engine does not act on it."}</small>
+            <label>{delivery === "schedule" ? "Publish at" : "Reference time"}
+              <input name="date" type="datetime-local" required min={delivery === "schedule" ? localDateTime(1) : undefined} defaultValue={localDateTime(60)} />
+              <small>{delivery === "schedule" ? "Must be in the future. Sent to the engine in UTC." : delivery === "now" ? "Not used; the post goes out immediately." : "Stored with the draft; the engine does not act on it."}</small>
             </label>
             <label>Visibility <i>TikTok and YouTube</i>
               <select name="visibility" defaultValue="public">
@@ -669,10 +671,10 @@ export default function PublishPage() {
                 const form = event.currentTarget.form;
                 const where = chosen.map((platform) => platformLabels[platform]).join(", ");
                 if (form && window.confirm(
-                  `${schedule ? "Schedule" : "Create a draft"} on ${activeProvider?.label} for ${where}?`,
+                  `${{ now: "Publish immediately", schedule: "Schedule", draft: "Create a draft" }[delivery]} on ${activeProvider?.label} for ${where}?`,
                 )) void submit(form, true);
               }}
-            >{busy === "publish" ? "Submitting…" : schedule ? "Confirm and schedule" : "Confirm and draft"}</button>
+            >{busy === "publish" ? "Submitting…" : delivery === "now" ? "Publish now" : delivery === "schedule" ? "Confirm and schedule" : "Confirm and draft"}</button>
           </div>
         </form>
 

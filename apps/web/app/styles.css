@@ -284,7 +284,7 @@ nav strong { color: #1c2b33; }
 .checkbox-row { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
 .checkbox-row small { grid-column: 2; color: var(--muted); font-size: 11px; }
 
-.delivery-mode { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.delivery-mode { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .delivery-mode button { display: grid; gap: 3px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); text-align: left; cursor: pointer; }
 .delivery-mode button:hover { background: var(--panel-raised); }
 .delivery-mode button strong { font-weight: 500; }
