@@ -235,6 +235,12 @@ def restart_exited_service(
         f"{service.name} watcher exited with code {return_code}; "
         f"restarting ({attempt}/{service.restart_limit})..."
     )
+    # The exiting process can outlive its own exit code and keep the socket, so
+    # the replacement would hit EADDRINUSE and exit, restart, and fail again
+    # until the budget ran out and took the whole stack down.
+    if service.port and not _port_is_free(service.port):
+        print(f"Freeing port {service.port} before restarting {service.name}...")
+        _kill_port_holders(service.port)
     replacement = start_service(service)
     replacement.restart_times = [*recent_restarts, restarted_at]
     return replacement

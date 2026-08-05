@@ -292,3 +292,42 @@ def test_readiness_allows_a_slow_first_render(monkeypatch) -> None:
 
     assert dev.wait_until_healthy(running, timeout=2) is True
     assert seen and seen[0] == service.ready_probe_timeout
+
+
+def test_a_restart_frees_a_port_the_old_process_still_holds(monkeypatch) -> None:
+    """A held socket used to make every restart fail with EADDRINUSE."""
+    service = dev.Service(
+        "Frontend", ["noop"], "green", "http://127.0.0.1:3001/",
+        restart_on_exit=True, port=3001,
+    )
+
+    class Exited:
+        def poll(self):
+            return 1
+
+    freed: list[int] = []
+    monkeypatch.setattr(dev, "_port_is_free", lambda _port: False)
+    monkeypatch.setattr(dev, "_kill_port_holders", lambda port: freed.append(port) or True)
+    monkeypatch.setattr(dev, "start_service", lambda definition: dev.RunningService(definition, Exited(), None))
+
+    dev.restart_exited_service(dev.RunningService(service, Exited(), None), now=100.0)
+
+    assert freed == [3001], "the port must be released before the replacement starts"
+
+
+def test_a_free_port_is_left_alone(monkeypatch) -> None:
+    """Nothing is killed when the socket is already available."""
+    service = dev.Service("Frontend", ["noop"], "green", restart_on_exit=True, port=3001)
+
+    class Exited:
+        def poll(self):
+            return 1
+
+    freed: list[int] = []
+    monkeypatch.setattr(dev, "_port_is_free", lambda _port: True)
+    monkeypatch.setattr(dev, "_kill_port_holders", lambda port: freed.append(port) or True)
+    monkeypatch.setattr(dev, "start_service", lambda definition: dev.RunningService(definition, Exited(), None))
+
+    dev.restart_exited_service(dev.RunningService(service, Exited(), None), now=100.0)
+
+    assert freed == []
