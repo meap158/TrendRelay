@@ -14,6 +14,7 @@ API_SOURCE = ROOT / "services" / "api" / "src"
 sys.path.insert(0, str(API_SOURCE))
 
 from trendrelay_api.integrations.douyin import run_download_job  # noqa: E402
+from trendrelay_api.integrations.face_blur import run_blur_job  # noqa: E402
 from trendrelay_api.integrations.last30days import run_job  # noqa: E402
 from trendrelay_api.integrations.openmontage_runtime import run_render_job  # noqa: E402
 from trendrelay_api.integrations.publishing import run_publish_job  # noqa: E402
@@ -27,6 +28,7 @@ def process_available() -> int:
     publishing_ids = recoverable_job_ids("social_publish")
     render_ids = recoverable_job_ids("openmontage_render")
     media_ids = recoverable_job_ids("media_ingest")
+    blur_ids = recoverable_job_ids("media_face_blur")
     for job_id in download_ids:
         run_download_job(job_id)
     for job_id in research_ids:
@@ -37,18 +39,22 @@ def process_available() -> int:
         run_render_job(job_id)
     for job_id in media_ids:
         run_ingest_job(job_id)
+    for job_id in blur_ids:
+        run_blur_job(job_id)
     return (
         len(download_ids)
         + len(research_ids)
         + len(publishing_ids)
         + len(render_ids)
         + len(media_ids)
+        + len(blur_ids)
     )
 
 
 def worker_main() -> None:
     print(
-        "Durable worker ready: douyin_download, trend_research, social_publish, openmontage_render, media_ingest",
+        "Durable worker ready: douyin_download, trend_research, social_publish, "
+        "openmontage_render, media_ingest, media_face_blur",
         flush=True,
     )
     try:

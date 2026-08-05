@@ -1,6 +1,7 @@
 import builtins
 import importlib
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -219,8 +220,11 @@ class _FixedDetector:
         self.calls += 1
         if index in self.miss_frames:
             return None, None
-        x, y, width, height = self.box
-        return None, np.array([[x, y, width, height, 0.99]], dtype="float32")
+        boxes = self.box if isinstance(self.box, list) else [self.box]
+        return None, np.array(
+            [[x, y, width, height, 0.99] for x, y, width, height in boxes],
+            dtype="float32",
+        )
 
 
 def test_render_destroys_the_pixels_rather_than_covering_them(tmp_path, monkeypatch) -> None:
@@ -305,3 +309,146 @@ def test_render_records_the_settings_that_produced_it(tmp_path, monkeypatch) -> 
 def test_a_missing_source_is_refused_before_any_work(tmp_path) -> None:
     with pytest.raises(face_blur.FaceBlurUnavailable, match="No such media file"):
         face_blur.render_blurred(tmp_path / "absent.mp4", tmp_path / "out.mp4")
+
+
+# --- more than one face ----------------------------------------------------- #
+
+
+def test_two_faces_become_two_tracks() -> None:
+    """Blurring only the first face would leave the second exposed."""
+    left, right = (10, 10, 20, 20), (100, 10, 20, 20)
+    tracks = face_blur.associate_tracks([[left, right], [left, right]])
+
+    assert len(tracks) == 2
+    assert {track[0] for track in tracks} == {left, right}
+
+
+def test_a_face_is_followed_as_it_moves_rather_than_restarting() -> None:
+    moving = [[(10, 10, 20, 20)], [(14, 10, 20, 20)], [(18, 10, 20, 20)]]
+
+    tracks = face_blur.associate_tracks(moving)
+
+    assert len(tracks) == 1, "overlapping boxes are the same face"
+    assert tracks[0][2] == (18, 10, 20, 20)
+
+
+def test_a_face_appearing_later_starts_its_own_track() -> None:
+    frames = [[(10, 10, 20, 20)], [(10, 10, 20, 20), (200, 200, 20, 20)]]
+
+    tracks = face_blur.associate_tracks(frames)
+
+    assert len(tracks) == 2
+    assert tracks[1][0] is None and tracks[1][1] == (200, 200, 20, 20)
+
+
+def test_render_blurs_every_face_not_just_the_first(tmp_path, monkeypatch) -> None:
+    import cv2
+    import numpy as np
+
+    source = _write_clip(tmp_path / "two.mp4", frames=6, size=(240, 120))
+    # Two separated checkerboards, one per face position.
+    capture = cv2.VideoCapture(str(source))
+    capture.release()
+    monkeypatch.setattr(
+        face_blur,
+        "_detector",
+        lambda *_a, **_k: _FixedDetector([(40, 40, 40, 40), (150, 40, 40, 40)]),
+    )
+
+    result = face_blur.render_blurred(source, tmp_path / "out.mp4")
+
+    assert result["faces_tracked"] == 2
+    capture = cv2.VideoCapture(str(tmp_path / "out.mp4"))
+    ok, frame = capture.read()
+    capture.release()
+    assert ok
+    # Both regions must be flattened, not only the first.
+    for x in (45, 155):
+        region = frame[45:75, x : x + 30].astype("float32")
+        assert float(np.var(region)) < 400
+
+
+# --- the durable job -------------------------------------------------------- #
+
+
+@pytest.fixture
+def blur_jobs(monkeypatch, tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from trendrelay_api.models import Base
+
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    monkeypatch.setattr(face_blur, "JOB_SESSION_FACTORY", factory)
+    monkeypatch.setattr(face_blur, "BLUR_ROOT", tmp_path / "out")
+    monkeypatch.setattr(face_blur, "_approved_source", lambda path: Path(path))
+    return factory
+
+
+def test_blurring_requires_explicit_confirmation(tmp_path, blur_jobs) -> None:
+    """It rewrites media, so it is never implicit."""
+    source = _write_clip(tmp_path / "clip.mp4")
+    request = face_blur.FaceBlurRequest(
+        workspace_id="w1", source_path=str(source), confirm_external_action=False
+    )
+
+    with pytest.raises(PermissionError, match="explicit confirmation"):
+        face_blur.create_blur_job(request)
+
+
+def test_job_renders_and_records_its_tag_and_coverage(
+    tmp_path, blur_jobs, monkeypatch
+) -> None:
+    source = _write_clip(tmp_path / "clip.mp4")
+    monkeypatch.setattr(
+        face_blur, "_detector", lambda *_a, **_k: _FixedDetector((40, 40, 40, 40))
+    )
+    job = face_blur.create_blur_job(
+        face_blur.FaceBlurRequest(
+            workspace_id="w1", source_path=str(source), confirm_external_action=True
+        )
+    )
+
+    face_blur.run_blur_job(job["id"])
+
+    from trendrelay_api.jobs import get_job_record
+
+    done = get_job_record(job["id"], factory=blur_jobs)
+    assert done["status"] == "succeeded"
+    assert done["result"]["tag"] == face_blur.BLUR_TAG
+    assert done["result"]["coverage"] == 1.0
+    assert done["result"]["reversible"] is False
+    assert Path(done["result"]["output"]).is_file()
+
+
+def test_a_failed_render_is_recorded_not_swallowed(tmp_path, blur_jobs) -> None:
+    job = face_blur.create_blur_job(
+        face_blur.FaceBlurRequest(
+            workspace_id="w1",
+            source_path=str(tmp_path / "missing.mp4"),
+            confirm_external_action=True,
+        )
+    )
+
+    face_blur.run_blur_job(job["id"])
+
+    from trendrelay_api.jobs import get_job_record
+
+    failed = get_job_record(job["id"], factory=blur_jobs)
+    assert failed["status"] in {"queued", "failed"}
+    assert "No such media file" in (failed.get("error") or "")
+
+
+def test_preview_and_full_renders_do_not_collide(tmp_path, blur_jobs) -> None:
+    """A proxy must never overwrite the real derivative."""
+    source = tmp_path / "clip.mp4"
+    preview = face_blur.blur_output_path("w1", source, preview=True)
+    full = face_blur.blur_output_path("w1", source, preview=False)
+
+    assert preview != full
+    assert preview.name.endswith(".preview.mp4")

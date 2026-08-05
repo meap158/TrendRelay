@@ -9,9 +9,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
-from pydantic import AnyHttpUrl, BaseModel, Field, field_validator
+from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -605,6 +605,48 @@ def asset_preview(
         "mime_type": version.mime_type,
         "content_base64": base64.b64encode(path.read_bytes()).decode("ascii"),
     }
+
+@router.get("/face-blur/status")
+def face_blur_status(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.face_blur import list_blur_jobs, runtime_status
+
+    return {"status": runtime_status(), "jobs": list_blur_jobs(workspace_id)}
+
+
+@router.post("/face-blur/jobs", status_code=202)
+def submit_face_blur(
+    workspace_id: str,
+    body: dict[str, Any],
+    background_tasks: BackgroundTasks,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    from trendrelay_api.integrations.face_blur import (
+        FaceBlurRequest,
+        FaceBlurUnavailable,
+        create_blur_job,
+        run_blur_job,
+        runtime_status,
+    )
+
+    if not runtime_status()["available"]:
+        raise HTTPException(status_code=409, detail=runtime_status()["reason"])
+    try:
+        request = FaceBlurRequest.model_validate({**body, "workspace_id": workspace_id})
+        job = create_blur_job(request)
+    except PermissionError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except (FaceBlurUnavailable, ValidationError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    background_tasks.add_task(run_blur_job, job["id"])
+    return {"job": job}
+
 
 @router.post("/assets/{asset_id}/enrichment", status_code=201)
 def enrich_asset(

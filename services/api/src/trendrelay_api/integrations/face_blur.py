@@ -24,8 +24,20 @@ import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from secrets import token_hex
 from typing import Any
 
+from pydantic import BaseModel, Field
+
+from trendrelay_api.database import SessionFactory
+from trendrelay_api.jobs import (
+    claim_job,
+    complete_job,
+    create_job_record,
+    fail_job,
+    get_job_record,
+    list_job_records,
+)
 from trendrelay_api.tool_registry import PROJECT_ROOT
 
 Box = tuple[int, int, int, int]  # x, y, width, height
@@ -117,6 +129,53 @@ def bridge_gaps(
     for index in range(known[-1] + 1, len(filled)):
         filled[index] = filled[known[-1]]
     return filled
+
+
+def _overlaps(first: Box, second: Box) -> float:
+    """Intersection over union, used to decide if two boxes are one face."""
+    ax, ay, aw, ah = first
+    bx, by, bw, bh = second
+    left, top = max(ax, bx), max(ay, by)
+    right, bottom = min(ax + aw, bx + bw), min(ay + ah, by + bh)
+    overlap = max(0, right - left) * max(0, bottom - top)
+    if not overlap:
+        return 0.0
+    return overlap / float(aw * ah + bw * bh - overlap)
+
+
+def associate_tracks(
+    per_frame: list[list[Box]], max_gap: int = MAX_GAP_FRAMES, min_overlap: float = 0.2
+) -> list[list[Box | None]]:
+    """Split per-frame detections into one timeline per face.
+
+    Two people in shot are two tracks. Bridging them together would blur a path
+    between their faces, and bridging only the first would leave the second
+    exposed, so each face is followed separately and gets its own gap handling.
+
+    Boxes are matched to the nearest recent track by overlap; anything that
+    matches nothing starts a track of its own.
+    """
+    tracks: list[list[Box | None]] = []
+    last_seen: list[int] = []
+    for index, boxes in enumerate(per_frame):
+        for track in tracks:
+            track.append(None)
+        for box in boxes:
+            best, best_score = -1, min_overlap
+            for position, track in enumerate(tracks):
+                if index - last_seen[position] > max_gap or track[index] is not None:
+                    continue
+                previous = track[last_seen[position]]
+                score = _overlaps(previous, box) if previous else 0.0
+                if score >= best_score:
+                    best, best_score = position, score
+            if best >= 0:
+                tracks[best][index] = box
+                last_seen[best] = index
+            else:
+                tracks.append([None] * index + [box])
+                last_seen.append(index)
+    return tracks
 
 
 def coverage_ratio(timeline: list[Box | None]) -> float:
@@ -303,7 +362,7 @@ def render_blurred(
         detector = _detector(cv2, (width, height), settings)
 
         frames: list[Any] = []
-        timeline: list[Box | None] = []
+        timeline: list[list[Box]] = []
         detected_frames = 0
         while limit is None or len(frames) < limit:
             ok, frame = capture.read()
@@ -312,9 +371,7 @@ def render_blurred(
             boxes = detect_boxes(detector, frame)
             if boxes:
                 detected_frames += 1
-            # One box per frame keeps the timeline simple; multi-face support
-            # widens this to a list per frame without changing the bridging.
-            timeline.append(boxes[0] if boxes else None)
+            timeline.append(boxes)
             frames.append(frame)
     finally:
         capture.release()
@@ -322,16 +379,26 @@ def render_blurred(
     if not frames:
         raise FaceBlurUnavailable(f"{source.name} contained no readable frames.")
 
-    bridged = bridge_gaps(timeline, settings.max_gap_frames)
+    # Every face gets its own bridged timeline, so a second person in shot is
+    # neither ignored nor smeared into the first.
+    tracks = [
+        bridge_gaps(track, settings.max_gap_frames)
+        for track in associate_tracks(timeline, settings.max_gap_frames)
+    ]
+    covered_frames = [
+        any(track[index] is not None for track in tracks) for index in range(len(frames))
+    ]
     destination.parent.mkdir(parents=True, exist_ok=True)
     silent = destination.with_suffix(".silent.mp4")
     writer = cv2.VideoWriter(
         str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
     )
     try:
-        for frame, box in zip(frames, bridged, strict=True):
-            if box is not None:
-                apply_blur(cv2, frame, box, settings)
+        for index, frame in enumerate(frames):
+            for track in tracks:
+                box = track[index]
+                if box is not None:
+                    apply_blur(cv2, frame, box, settings)
             writer.write(frame)
     finally:
         writer.release()
@@ -342,13 +409,18 @@ def render_blurred(
         # Better a silent blurred clip than an unblurred one.
         silent.replace(destination)
 
-    ratio = coverage_ratio(bridged)
+    ratio = (
+        sum(1 for covered in covered_frames if covered) / len(covered_frames)
+        if covered_frames
+        else 1.0
+    )
     return {
         "source": str(source),
         "output": str(destination),
         "frames": len(frames),
         "frames_with_detection": detected_frames,
-        "frames_covered": sum(1 for box in bridged if box is not None),
+        "frames_covered": sum(1 for covered in covered_frames if covered),
+        "faces_tracked": len(tracks),
         "coverage": round(ratio, 4),
         "warning": coverage_warning(ratio),
         "preview": preview_seconds is not None,
@@ -361,3 +433,82 @@ def render_blurred(
         },
         "reversible": False,
     }
+
+
+JOB_KIND = "media_face_blur"
+JOB_SESSION_FACTORY = SessionFactory
+BLUR_ROOT = PROJECT_ROOT / ".data" / "productions" / "face-blur"
+# The derivative is what Publish sends by default, so it is tagged where a
+# reviewer will see it rather than only recorded in the job.
+BLUR_TAG = "faces-blurred"
+
+
+class FaceBlurRequest(BaseModel):
+    workspace_id: str = Field(min_length=1, max_length=128)
+    source_path: str = Field(min_length=1, max_length=1000)
+    preview_seconds: float | None = Field(default=None, ge=0.5, le=30)
+    confidence: float = Field(default=0.6, ge=0.1, le=0.95)
+    padding_ratio: float = Field(default=PADDING_RATIO, ge=0.0, le=1.0)
+    confirm_external_action: bool = False
+
+    def settings(self) -> BlurSettings:
+        return BlurSettings(padding_ratio=self.padding_ratio, confidence=self.confidence)
+
+
+def _approved_source(path: str) -> Path:
+    """Reuse the publishing media roots, so only reviewed media can be blurred."""
+    from trendrelay_api.integrations.publishing import approved_video_path
+
+    return approved_video_path(path)
+
+
+def blur_output_path(workspace_id: str, source: Path, preview: bool) -> Path:
+    suffix = ".preview.mp4" if preview else ".mp4"
+    return BLUR_ROOT / workspace_id / f"{source.stem}-blurred{suffix}"
+
+
+def create_blur_job(request: FaceBlurRequest) -> dict[str, Any]:
+    if not request.confirm_external_action:
+        raise PermissionError("Blurring rewrites media and needs explicit confirmation.")
+    source = _approved_source(request.source_path)
+    job_id = f"blur_{token_hex(12)}"
+    payload = {
+        "workspace_id": request.workspace_id,
+        "request": request.model_dump(mode="json", exclude={"confirm_external_action"}),
+        "source": str(source),
+        "output": str(
+            blur_output_path(request.workspace_id, source, bool(request.preview_seconds))
+        ),
+    }
+    create_job_record(
+        job_id, request.workspace_id, JOB_KIND, payload, max_attempts=1,
+        factory=JOB_SESSION_FACTORY,
+    )
+    return get_job_record(job_id, factory=JOB_SESSION_FACTORY)
+
+
+def run_blur_job(job_id: str, worker_id: str = "face-blur-worker") -> None:
+    try:
+        record = claim_job(job_id, worker_id, lease_seconds=3600, factory=JOB_SESSION_FACTORY)
+    except (FileNotFoundError, PermissionError):
+        return
+    payload = record["payload"]
+    request = FaceBlurRequest.model_validate(
+        {**payload["request"], "confirm_external_action": True}
+    )
+    try:
+        result = render_blurred(
+            Path(payload["source"]),
+            Path(payload["output"]),
+            request.settings(),
+            request.preview_seconds,
+        )
+        complete_job(
+            job_id, worker_id, {**result, "tag": BLUR_TAG}, factory=JOB_SESSION_FACTORY
+        )
+    except Exception as error:
+        fail_job(job_id, worker_id, str(error), factory=JOB_SESSION_FACTORY)
+
+
+def list_blur_jobs(workspace_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    return list_job_records(workspace_id, JOB_KIND, limit, factory=JOB_SESSION_FACTORY)
