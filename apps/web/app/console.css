@@ -508,11 +508,14 @@ html { scroll-behavior: smooth; }
 .job-status.succeeded i { background: var(--green); }
 .job-status.failed, .job-status.empty, .job-status.cancelled { color: var(--red); }
 .job-status.failed i, .job-status.empty i, .job-status.cancelled i { background: var(--red); }
-.job-status.running, .job-status.in_progress, .job-status.processing { color: #8a6302; }
-.job-status.running i, .job-status.in_progress i, .job-status.processing i, .job-status.queued i, .job-status.pending i { background: var(--amber); }
+.job-status.running, .job-status.in_progress, .job-status.processing,
+.job-status.downloading_preparing { color: #8a6302; }
+.job-status.running i, .job-status.in_progress i, .job-status.processing i,
+.job-status.downloading_preparing i, .job-status.queued i, .job-status.pending i { background: var(--amber); }
 .job-progress { height: 4px; overflow: hidden; border-radius: 999px; background: var(--line-strong); }
 .job-progress span { display: block; width: 18%; height: 100%; border-radius: inherit; background: var(--link); }
-.job-progress.running span, .job-progress.in_progress span { width: 38%; animation: download-progress 1.8s ease-in-out infinite; }
+.job-progress.running span, .job-progress.in_progress span,
+.job-progress.downloading_preparing span { width: 38%; animation: download-progress 1.8s ease-in-out infinite; }
 .download-live-status { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; border: 1px solid #c8d8ee; border-radius: 5px; padding: 9px 11px; color: #214f87; background: #f5f8fd; }
 .download-live-status strong { font-weight: 650; }
 .download-live-status span { color: var(--muted); }
@@ -531,7 +534,8 @@ html { scroll-behavior: smooth; }
 @keyframes download-progress { 0% { transform: translateX(-110%); } 55% { transform: translateX(100%); } 100% { transform: translateX(265%); } }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .connection-badge.working i, .job-progress.running span, .job-progress.in_progress span { animation: none; }
+  .connection-badge.working i, .job-progress.running span, .job-progress.in_progress span,
+  .job-progress.downloading_preparing span { animation: none; }
 }
 @media (max-width: 900px) {
   .downloader-layout { grid-template-columns: 1fr; }

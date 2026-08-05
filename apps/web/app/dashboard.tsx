@@ -52,7 +52,9 @@ type MediaStatus = {
 };
 type QueueFilter = "all" | "active" | "completed" | "attention";
 
-const ACTIVE_STATUSES = new Set(["queued", "running", "in_progress", "pending", "processing"]);
+const ACTIVE_STATUSES = new Set([
+  "queued", "running", "in_progress", "pending", "processing", "downloading_preparing",
+]);
 const INITIAL_JOB_COUNT = 5;
 
 async function json<T>(response: Response): Promise<T> {
@@ -68,7 +70,13 @@ export function sourceUrls(value: string): string[] {
 }
 
 function effectiveStatus(job: DownloadJob): string {
-  if (job.status === "succeeded" && (job.library_progress?.active ?? 0) > 0) return "processing";
+  // The worker hands each finished source to the Library while it downloads the
+  // next one, so a running job can legitimately be doing both at once.
+  const preparing = (job.library_progress?.active ?? 0) > 0;
+  if (preparing && (job.status === "running" || job.status === "in_progress")) {
+    return "downloading_preparing";
+  }
+  if (job.status === "succeeded" && preparing) return "processing";
   if (job.status === "succeeded" && ((job.library_progress?.failed ?? 0) + (job.library_progress?.cancelled ?? 0)) > 0) return "partial";
   return job.status === "succeeded" && (job.result?.artifacts?.length ?? 0) === 0
     ? "empty"
@@ -82,6 +90,7 @@ function statusLabel(status: string): string {
     in_progress: "Downloading",
     pending: "Waiting",
     processing: "Preparing Library",
+    downloading_preparing: "Downloading + preparing",
     succeeded: "Downloaded",
     failed: "Needs attention",
     partial: "Needs attention",
@@ -577,6 +586,7 @@ export default function Dashboard() {
             const progress = job.progress;
             const libraryProgress = job.library_progress;
             const preparingLibrary = current === "processing";
+            const downloadingAndPreparing = current === "downloading_preparing";
             const libraryPercent = libraryProgress?.total ? Math.round((libraryProgress.succeeded / libraryProgress.total) * 100) : 0;
             const downloadCount = progressSummary(progress, current, artifacts, job.payload.request?.limit);
             const canOpenFolder = Boolean(job.payload.output_root && (progress?.folder_exists || (!progress && job.status === "succeeded")));
@@ -590,8 +600,8 @@ export default function Dashboard() {
                 </span>
               </summary>
               <div className="download-job-body">
-                {ACTIVE_STATUSES.has(current) && <div className={"job-progress " + current} aria-label={current === "queued" ? "Waiting to start" : preparingLibrary ? "Preparing downloaded media for Library" : "Download in progress"}><span style={preparingLibrary ? { width: `${libraryPercent}%` } : undefined} /></div>}
-                {progress?.folder_exists && <div className="download-live-status"><strong>{job.error && current === "queued" ? "Ready to resume" : preparingLibrary ? "Preparing Library" : ACTIVE_STATUSES.has(current) ? "Downloading now" : "Files on disk"}</strong><span>{preparingLibrary && libraryProgress ? libraryProgressBreakdown(libraryProgress) : progressBreakdown(progress)}</span></div>}
+                {ACTIVE_STATUSES.has(current) && <div className={"job-progress " + current} aria-label={current === "queued" ? "Waiting to start" : preparingLibrary ? "Preparing downloaded media for Library" : downloadingAndPreparing ? "Downloading while preparing earlier files for Library" : "Download in progress"}><span style={preparingLibrary ? { width: `${libraryPercent}%` } : undefined} /></div>}
+                {progress?.folder_exists && <div className="download-live-status"><strong>{job.error && current === "queued" ? "Ready to resume" : preparingLibrary ? "Preparing Library" : downloadingAndPreparing ? "Downloading now · preparing Library" : ACTIVE_STATUSES.has(current) ? "Downloading now" : "Files on disk"}</strong><span>{preparingLibrary && libraryProgress ? libraryProgressBreakdown(libraryProgress) : downloadingAndPreparing && libraryProgress ? `${progressBreakdown(progress)} · ${libraryProgressBreakdown(libraryProgress)}` : progressBreakdown(progress)}</span></div>}
                 {(sources.length > 0 || canOpenFolder || job.status === "succeeded") && <div className="download-job-actions">
                   {sources.length > 0 && <button type="button" className="secondary-button" onClick={() => reuseLinks(sources)}>Reuse {sources.length === 1 ? "link" : "links"}</button>}
                   {sources[0] && <a href={sources[0]} target="_blank" rel="noreferrer">Open source</a>}
