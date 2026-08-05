@@ -400,10 +400,13 @@ def apply_blur(cv2: Any, frame: Any, box: Box, settings: BlurSettings) -> None:
 
 
 def _remux_audio(silent_video: Path, original: Path, destination: Path) -> bool:
-    """Put the original audio back over the blurred frames.
+    """Re-encode the blurred frames to H.264 and put the original audio back.
 
-    OpenCV writes video only, so a blurred render arrives silent. Copying both
-    streams avoids a second lossy pass over the picture.
+    OpenCV writes video only, and its mp4v fourcc is MPEG-4 Part 2, which no
+    browser decodes - a copied stream plays as audio over a blank frame. The
+    picture is therefore encoded to H.264 here, which is also the only place a
+    second pass over it happens. Audio is copied, and faststart lets the result
+    play before it has fully downloaded.
     """
     if not FFMPEG.is_file():
         return False
@@ -412,7 +415,10 @@ def _remux_audio(silent_video: Path, original: Path, destination: Path) -> bool:
             str(FFMPEG), "-y",
             "-i", str(silent_video),
             "-i", str(original),
-            "-c:v", "copy", "-c:a", "copy",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            "-c:a", "copy",
             "-map", "0:v:0", "-map", "1:a:0?",
             "-shortest",
             str(destination),

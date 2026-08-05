@@ -647,3 +647,29 @@ def test_preview_endpoint_serves_both_cuts_the_same_way(tmp_path, blur_jobs, mon
     source = inspect.getsource(media_library_api.asset_preview)
     assert "content_base64" in source
     assert "blurred" in source
+
+
+def test_render_is_encoded_in_a_codec_browsers_can_play(tmp_path, monkeypatch) -> None:
+    """OpenCV's mp4v is MPEG-4 Part 2; a browser plays its audio over a blank frame."""
+    import subprocess
+
+    if not face_blur.FFMPEG.is_file():
+        pytest.skip("ffmpeg is not available in this checkout")
+
+    source = _write_clip(tmp_path / "clip.mp4")
+    destination = tmp_path / "blurred.mp4"
+    monkeypatch.setattr(
+        face_blur, "_detector", lambda *_a, **_k: _FixedDetector((40, 40, 40, 40))
+    )
+
+    face_blur.render_blurred(source, destination)
+
+    probe = subprocess.run(
+        [str(face_blur.FFMPEG), "-i", str(destination)],
+        capture_output=True,
+        text=True,
+    ).stderr
+    video_line = next(line for line in probe.splitlines() if "Video:" in line)
+    assert "h264" in video_line, video_line
+    # An odd dimension or the wrong pixel format also fails to decode widely.
+    assert "yuv420p" in video_line, video_line
