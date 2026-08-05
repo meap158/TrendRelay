@@ -506,11 +506,14 @@ def main() -> int:
                     if replacement.definition.health_url and not wait_until_healthy(
                         replacement, replacement.definition.health_timeout
                     ):
+                        # A dev server can crash and recompile slowly. Recycle it
+                        # and let the restart budget decide when to give up,
+                        # instead of taking the whole stack down on one miss.
                         print(
                             f"Restarted {replacement.definition.name} did not become "
-                            f"ready at {replacement.definition.health_url}."
+                            f"ready at {replacement.definition.health_url}; recycling it."
                         )
-                        return 1
+                        stop_service(replacement)
                 index += 1
             if reused and time.monotonic() >= next_health_check:
                 for service in list(reused):
