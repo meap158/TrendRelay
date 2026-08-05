@@ -147,6 +147,41 @@ Last updated: 2026-08-05
 
 ## Next recommended action
 
+Studio editing tools — designed, not built (requested 2026-08-06):
+
+Studio now matches the Library width, and the next step is a set of editing
+tools starting with face blurring. The groundwork that already exists: ffmpeg
+ships with the repo at `node_modules/ffmpeg-static`, originals are immutable by
+contract, and the leased SQL job queue plus the watch-reloaded worker already
+carry every other long render. What is missing is a vision runtime; the API has
+no OpenCV, and the repo's convention for heavy models is an isolated runtime
+installed from Tools, as Media AI already does for speech and OCR.
+
+The shape it should take:
+
+- Detection with OpenCV's bundled YuNet (`cv2.FaceDetectorYN`) rather than a
+  Haar cascade. It is small, current, and handles profile and partial faces that
+  Haar misses, which matters because a missed face is a privacy failure.
+- Blur the padded region, scale the Gaussian kernel to face size, and smooth
+  detections across frames. Per-frame detection alone flickers and drops faces
+  on brief misses; interpolating across short gaps and expanding the box is what
+  makes the result usable rather than merely demonstrable.
+- Burn the blur into re-encoded pixels, never an overlay, and write a new
+  derivative so the original stays untouched. A reversible blur is not a blur.
+- Preview before committing: render a short low-resolution proxy of the first
+  few seconds so an operator can confirm coverage without waiting for a full
+  encode, and let them re-run with a stronger setting if a face slips through.
+- Record provenance on the derivative: model, settings, faces detected, and the
+  proportion of frames covered. Tag it `faces-blurred` so the state is visible
+  in the Library and a reviewer can tell a blurred cut from an original at a
+  glance. Coverage below a threshold should be surfaced, not hidden, because a
+  partially blurred clip is the dangerous case.
+- Run it as a durable job (`media_face_blur`) through the existing queue and
+  worker, so it survives restarts like every other render.
+
+Open question for the operator: whether the blurred derivative replaces the
+original in downstream handoffs by default, or is offered alongside it.
+
 Open items from the 2026-08-05 session, in priority order:
 
 1. The Library detail pane's Studio/Campaign/Publish links are now ungated, but nothing has exercised a full Library-to-publish run end to end since the rights removal. Walk one asset through it.
