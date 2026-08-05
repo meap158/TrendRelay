@@ -773,7 +773,9 @@ def _zernio_publish(
 
 
 def _zernio_accounts() -> list[dict[str, str]]:
-    payload = _zernio_request("GET", "/accounts", timeout=30) or {}
+    # Zernio rejects the call unless page and limit arrive together, so send
+    # both rather than relying on a default that does not exist.
+    payload = _zernio_request("GET", "/accounts?page=1&limit=100", timeout=30) or {}
     accounts: list[dict[str, str]] = []
     for account in payload.get("accounts", []):
         platform = (account.get("platform") or "").lower()
@@ -1009,7 +1011,8 @@ def _authenticate(provider: ProviderDefinition) -> None:
         # The documented entry point: no team ID needed, and a bad key answers 403.
         _bundle_request("GET", "/organization/", timeout=10)
     elif provider.id == "zernio":
-        _zernio_request("GET", "/accounts?limit=1", timeout=10)
+        # Zernio rejects a limit without a page, so the probe sends both.
+        _zernio_request("GET", "/accounts?page=1&limit=1", timeout=10)
     else:
         _buffer_graphql("query { account { id } }", timeout=10)
 

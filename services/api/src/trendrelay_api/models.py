@@ -211,6 +211,32 @@ class PublicationPlan(Base):
     updated_at: Mapped[datetime] = mapped_column(default=utc_now)
 
 
+class PublishingSlot(Base):
+    """A recurring time this workspace likes to post at.
+
+    Slots are a workspace preference rather than a default: an invented posting
+    schedule is worse than none, because it looks considered while being
+    arbitrary. A workspace starts with no slots and adds the ones it wants.
+    """
+
+    __tablename__ = "publishing_slots"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "weekday", "hour", "minute", name="unique_slot"),
+        CheckConstraint("hour BETWEEN 0 AND 23", name="valid_slot_hour"),
+        CheckConstraint("minute BETWEEN 0 AND 59", name="valid_slot_minute"),
+        # -1 means every day; 0-6 pins the slot to one weekday, Monday first.
+        CheckConstraint("weekday BETWEEN -1 AND 6", name="valid_slot_weekday"),
+    )
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("slot"))
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    weekday: Mapped[int] = mapped_column(Integer, default=-1)
+    hour: Mapped[int] = mapped_column(Integer)
+    minute: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("audit"))

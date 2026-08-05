@@ -12,7 +12,7 @@ from trendrelay_api.auth import CurrentUser, current_user, require_governed_assu
 from trendrelay_api.database import get_session
 from trendrelay_api.env_store import EnvWriteError
 from trendrelay_api.foundation import membership, require_role
-from trendrelay_api.integrations import media_hosting
+from trendrelay_api.integrations import media_hosting, posting_slots
 from trendrelay_api.integrations.publishing import (
     PublishRequest,
     connection_status,
@@ -118,6 +118,48 @@ def save_media_hosting_credentials(
     except EnvWriteError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     return {"result": result, "connection": connection_status(probe=False)}
+
+
+class SlotEntry(BaseModel):
+    weekday: int = Field(default=-1, ge=-1, le=6)
+    time: str = Field(min_length=3, max_length=5)
+
+
+class SlotUpdate(BaseModel):
+    slots: list[SlotEntry] = Field(default_factory=list, max_length=40)
+
+
+@router.get("/slots")
+def publishing_slots(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """This workspace's posting times, plus the presets it can start from."""
+    membership(session, workspace_id, user.id)
+    return {
+        "slots": posting_slots.list_slots(workspace_id),
+        "presets": posting_slots.preset_payload(),
+    }
+
+
+# POST rather than PUT: the API is exposed to the local browser under a CORS
+# policy that allows GET and POST only, and every other route follows that.
+@router.post("/slots")
+def save_publishing_slots(
+    workspace_id: str,
+    body: SlotUpdate,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    try:
+        slots = posting_slots.replace_slots(
+            workspace_id, [entry.model_dump() for entry in body.slots]
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return {"slots": slots, "presets": posting_slots.preset_payload()}
 
 
 @router.post("/providers/test")

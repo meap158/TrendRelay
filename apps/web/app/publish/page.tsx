@@ -14,6 +14,20 @@ import {
   type PublishingProvider,
 } from "../publishing-icons";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
+import {
+  MediaPicker,
+  PostPreview,
+  SlotEditor,
+  WeekCalendar,
+  clipLength,
+  isBlurred,
+  localValue,
+  upcomingSlots,
+  type CalendarEntry,
+  type LibraryAsset,
+  type Slot,
+  type SlotPreset,
+} from "./composer";
 
 type Workspace = { id: string; name: string; role: string };
 type Account = { id: string; label: string; platform: PublishingPlatform };
@@ -89,37 +103,10 @@ async function json<T>(response: Response): Promise<T> {
   return body;
 }
 
-const pad = (part: number) => String(part).padStart(2, "0");
-
-/** `datetime-local` needs a naive local string, so build one from the clock. */
-function asLocalInput(value: Date) {
-  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
-}
-
 function localDateTime(offsetMinutes: number) {
   const value = new Date(Date.now() + offsetMinutes * 60_000);
   value.setSeconds(0, 0);
-  return asLocalInput(value);
-}
-
-/** The hours a slot preset offers, in local time. */
-const TIME_SLOTS = [9, 12, 15, 18, 21];
-
-/** The next occurrence of each slot hour, so a preset is never in the past. */
-function slotPresets(now: Date) {
-  return TIME_SLOTS.map((hour) => {
-    const at = new Date(now);
-    at.setHours(hour, 0, 0, 0);
-    const tomorrow = at.getTime() <= now.getTime();
-    if (tomorrow) at.setDate(at.getDate() + 1);
-    const suffix = hour < 12 ? "am" : "pm";
-    const display = hour % 12 === 0 ? 12 : hour % 12;
-    return {
-      value: asLocalInput(at),
-      label: `${display}${suffix}`,
-      day: tomorrow ? "Tomorrow" : "Today",
-    };
-  });
+  return localValue(value);
 }
 
 export default function PublishPage() {
@@ -142,11 +129,23 @@ export default function PublishPage() {
   const [hostingOpen, setHostingOpen] = useState(false);
   const [delivery, setDelivery] = useState<"draft" | "schedule" | "now">("draft");
   const [date, setDate] = useState(() => localDateTime(60));
-  // Recomputed when the schedule pane opens, so a slot never drifts into the past.
-  const [slots, setSlots] = useState(() => slotPresets(new Date()));
+  const [caption, setCaption] = useState("");
+  const [title, setTitle] = useState("");
+  // The clock is read when the schedule pane opens, so a slot never drifts past.
+  const [now, setNow] = useState(() => new Date());
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [slotPresets, setSlotPresets] = useState<SlotPreset[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [clip, setClip] = useState<LibraryAsset | null>(null);
+  const [thumbnail, setThumbnail] = useState("");
+  const [library, setLibrary] = useState<LibraryAsset[]>([]);
+  const [libraryState, setLibraryState] = useState<{ loading: boolean; failure: string | null }>({
+    loading: false,
+    failure: null,
+  });
 
   function chooseDelivery(mode: "draft" | "schedule" | "now") {
-    if (mode === "schedule") setSlots(slotPresets(new Date()));
+    if (mode === "schedule") setNow(new Date());
     setDelivery(mode);
   }
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -171,6 +170,39 @@ export default function PublishPage() {
   // hosting, so a local path is enough and no URL has to be found by hand.
   const hostsLocalMedia = needsPublicMedia && (hosting?.configured ?? false);
   const checking = !connection && !error;
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "your local time";
+  const quickSlots = useMemo(() => upcomingSlots(slots, now), [slots, now]);
+  // Only work that is still going to happen belongs on a calendar. A draft has
+  // no time to keep, and a failed post is history rather than a commitment -
+  // showing either would make the week look busier than it is.
+  const scheduled = useMemo<CalendarEntry[]>(
+    () =>
+      jobs
+        .filter((job) => {
+          const request = job.payload?.request;
+          if (!request?.date || job.status === "failed") return false;
+          return request.delivery === "schedule"
+            || (!request.delivery && request.schedule === true);
+        })
+        .map((job) => ({
+          at: new Date(job.payload.request.date),
+          label: job.payload.request.caption ?? "Scheduled post",
+          state: job.status,
+        }))
+        .filter((entry) => !Number.isNaN(entry.at.getTime())),
+    [jobs],
+  );
+  // The preview stands in for the first destination, which is the one being composed.
+  const previewPlatform = chosen[0] ?? null;
+  const previewType = previewPlatform
+    ? (activeProvider?.post_types?.[previewPlatform] ?? []).find(
+        (kind) => kind.id === (postTypes[previewPlatform]
+          ?? activeProvider?.post_types?.[previewPlatform]?.[0]?.id),
+      )
+    : null;
+  const previewHandle = previewPlatform
+    ? accounts.find((account) => account.id === targets[previewPlatform])?.label ?? ""
+    : "";
 
   useEffect(() => {
     queueMicrotask(() => setVideoPath(new URLSearchParams(window.location.search).get("video") ?? ""));
@@ -179,6 +211,20 @@ export default function PublishPage() {
   useEffect(() => {
     setActiveWorkspaceId(workspaceId || null);
   }, [workspaceId, setActiveWorkspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    let cancelled = false;
+    apiFetch(`/api/workspaces/${workspaceId}/publishing/slots`)
+      .then((response) => json<{ slots: Slot[]; presets: SlotPreset[] }>(response))
+      .then((body) => {
+        if (cancelled) return;
+        setSlots(body.slots);
+        setSlotPresets(body.presets);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [apiFetch, workspaceId]);
 
   useEffect(() => {
     if (!user) return;
@@ -295,6 +341,64 @@ export default function PublishPage() {
     } finally {
       setBusy(null);
     }
+  }
+
+  const loadLibrary = useCallback(
+    async (query: string) => {
+      setLibraryState({ loading: true, failure: null });
+      try {
+        const params = new URLSearchParams({ media_kind: "video", limit: "40" });
+        if (query.trim()) params.set("q", query.trim());
+        const body = await json<{ assets: LibraryAsset[] }>(
+          await apiFetch(`/api/workspaces/${workspaceId}/media/library/assets?${params}`),
+        );
+        setLibrary(body.assets ?? []);
+        setLibraryState({ loading: false, failure: null });
+      } catch (reason) {
+        setLibraryState({
+          loading: false,
+          failure: reason instanceof Error ? reason.message : "The library could not be read.",
+        });
+      }
+    },
+    [apiFetch, workspaceId],
+  );
+
+  function openPicker() {
+    setPickerOpen(true);
+    void loadLibrary("");
+  }
+
+  async function saveSlots(entries: { weekday: number; time: string }[]) {
+    setBusy("slots");
+    setError(null);
+    try {
+      const body = await json<{ slots: Slot[]; presets: SlotPreset[] }>(
+        await apiFetch(`/api/workspaces/${workspaceId}/publishing/slots`, {
+          method: "POST",
+          body: JSON.stringify({ slots: entries }),
+        }),
+      );
+      setSlots(body.slots);
+      setSlotPresets(body.presets);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Posting times could not be saved.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Take a clip from the library, and show the frame it will go out with. */
+  function pickClip(asset: LibraryAsset) {
+    setClip(asset);
+    setVideoPath(asset.original_path);
+    setPickerOpen(false);
+    setThumbnail("");
+    if (!asset.versions.some((version) => version.kind === "thumbnail")) return;
+    apiFetch(`/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/content/thumbnail`)
+      .then((response) => (response.ok ? response.blob() : Promise.reject(new Error("no frame"))))
+      .then((blob) => setThumbnail(URL.createObjectURL(blob)))
+      .catch(() => undefined);
   }
 
   async function saveHosting() {
@@ -708,7 +812,19 @@ export default function PublishPage() {
           ) : needsPublicMedia ? (
             <>
               <label>Approved local MP4 path
-                <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" />
+                <span className="field-with-action">
+                  <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" />
+                  <button type="button" className="quiet-action" onClick={openPicker}>
+                    Choose from library
+                  </button>
+                </span>
+                {clip && (
+                  <span className="chosen-clip">
+                    <b>{clip.title}</b>
+                    {clip.duration_ms ? <i>{clipLength(clip.duration_ms)}</i> : null}
+                    {isBlurred(clip) && <em className="blurred-tag">Faces blurred</em>}
+                  </span>
+                )}
                 <small>
                   Uploaded to {hosting?.label} when the post runs, so {activeProvider?.label} can
                   fetch it. If the clip has a blurred version, that is the cut that gets uploaded.
@@ -722,7 +838,19 @@ export default function PublishPage() {
           ) : (
             <>
               <label>Approved local MP4 path
-                <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" required />
+                <span className="field-with-action">
+                  <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" required />
+                  <button type="button" className="quiet-action" onClick={openPicker}>
+                    Choose from library
+                  </button>
+                </span>
+                {clip && (
+                  <span className="chosen-clip">
+                    <b>{clip.title}</b>
+                    {clip.duration_ms ? <i>{clipLength(clip.duration_ms)}</i> : null}
+                    {isBlurred(clip) && <em className="blurred-tag">Faces blurred</em>}
+                  </span>
+                )}
                 <small>{activeProvider?.media_note ?? "Media must sit under a configured publishing media directory."}</small>
               </label>
               <label>Public media URL <i>optional</i>
@@ -732,8 +860,8 @@ export default function PublishPage() {
             </>
           )}
 
-          <label>Title <i>used by YouTube, Reddit and Pinterest</i><input name="title" maxLength={200} /></label>
-          <label>Caption<textarea name="caption" rows={5} maxLength={5000} required /></label>
+          <label>Title <i>used by YouTube, Reddit and Pinterest</i><input name="title" maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+          <label>Caption<textarea name="caption" rows={5} maxLength={5000} required value={caption} onChange={(event) => setCaption(event.target.value)} /></label>
 
           <div className="delivery-mode" role="group" aria-label="Delivery mode">
             {([
@@ -771,10 +899,10 @@ export default function PublishPage() {
             </label>
           </div>
 
-          {delivery === "schedule" && (
-            <div className="time-slots" role="group" aria-label="Quick time slots">
-              <span>Quick slots</span>
-              {slots.map((slot) => (
+          {delivery === "schedule" && quickSlots.length > 0 && (
+            <div className="time-slots" role="group" aria-label="Next posting times">
+              <span>Next slots</span>
+              {quickSlots.map((slot) => (
                 <button
                   key={slot.value}
                   type="button"
@@ -784,6 +912,30 @@ export default function PublishPage() {
                 ><b>{slot.label}</b><i>{slot.day}</i></button>
               ))}
             </div>
+          )}
+
+          {delivery === "schedule" && (
+            <details className="schedule-planner" open={!slots.length}>
+              <summary>
+                Posting calendar
+                <b>{slots.length ? `${slots.length} slot${slots.length === 1 ? "" : "s"}` : "no slots set"}</b>
+              </summary>
+              <WeekCalendar
+                slots={slots}
+                entries={scheduled}
+                selected={date}
+                now={now}
+                onPick={(at) => setDate(localValue(at))}
+              />
+              <SlotEditor
+                slots={slots}
+                presets={slotPresets}
+                timezone={timezone}
+                canEdit={Boolean(canExecute)}
+                busy={busy === "slots"}
+                onSave={(entries) => void saveSlots(entries)}
+              />
+            </details>
           )}
 
           <fieldset className="account-picker">
@@ -924,6 +1076,23 @@ export default function PublishPage() {
               <p>Choose media above to see the frames that will go out.</p>
             )}
           </article>
+          {previewPlatform && (
+            <article>
+              <h2>How it will look</h2>
+              <PostPreview
+                platform={previewPlatform}
+                postTypeLabel={previewType?.label ?? "Post"}
+                handle={previewHandle}
+                caption={caption}
+                title={title}
+                thumbnail={thumbnail}
+              />
+              <p className="privacy-note">
+                A rehearsal of the caption and frame against this network&apos;s shape,
+                not a render of what {activeProvider?.label} will produce.
+              </p>
+            </article>
+          )}
           <article>
             <h2>Dry-run plan</h2>
             {preview ? (
@@ -969,6 +1138,18 @@ export default function PublishPage() {
           </article>
         </aside>
       </section>
+      {pickerOpen && workspaceId && (
+        <MediaPicker
+          assets={library}
+          workspaceId={workspaceId}
+          apiFetch={apiFetch}
+          loading={libraryState.loading}
+          failure={libraryState.failure}
+          onSearch={(query) => void loadLibrary(query)}
+          onPick={pickClip}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </main>
   );
 }
