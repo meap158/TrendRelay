@@ -182,7 +182,28 @@ The shape it should take:
 Open question for the operator: whether the blurred derivative replaces the
 original in downstream handoffs by default, or is offered alongside it.
 
-Requested 2026-08-06, not yet built - fold Studio into Assets:
+Next for blurring - make the render a version, not a second asset:
+
+The blurred output is currently a loose file under .data/productions/face-blur,
+referenced only by its job. The operator's expectation, and the better design,
+is that it is another version of the same video so the Library list stays one
+row per subject rather than filling with near-duplicates.
+
+media_asset_versions already models exactly this: it is keyed on
+(asset_id, version_kind, sha256) and today allows original, proxy, thumbnail
+and audio. Extending that check constraint with a `blurred` kind and writing
+the render as a version of its source asset is the whole change, plus a
+migration for the constraint. The detail view then offers the versions of one
+asset - original and blurred - and the list keeps a single entry, tagged so the
+blurred state is visible without opening it.
+
+Two consequences to decide with it: which version the handoffs to Campaigns and
+Publish resolve to by default (the intent so far is blurred), and whether a
+preview render is stored as a version at all or stays a throwaway proxy. A
+preview is a partial clip, so treating it as a version of the whole asset would
+misrepresent it.
+
+Requested 2026-08-06, partially done - fold Studio into Library:
 
 Studio should stop being its own tab. Everything it offers moves into
 Library > Assets, where the asset is already selected, and the tab is removed
