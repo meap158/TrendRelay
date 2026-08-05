@@ -205,7 +205,10 @@ nav strong { color: #1c2b33; }
 .setup-primary:disabled { cursor: wait; opacity: 0.55; }
 .privacy-note { margin: 16px 0 0; color: #7c8792; font-size: 0.72rem; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
-.refresh-button { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; padding: 0; }
+/* .secondary-button sets padding: 0 16px from a later sheet, which left a
+   38px icon button only 6px of content box and shrank the glyph. */
+.refresh-button, .secondary-button.refresh-button { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; padding: 0; }
+.refresh-button svg { flex: none; }
 .refresh-button svg.spinning { animation: spin 1s linear infinite; }
 
 .publish-page { padding-top: 24px; }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, Download } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
@@ -145,6 +145,26 @@ const TIKTOK_PERIODS: ReadonlyArray<readonly [number, string]> = [
   [30, "Last 30 days"],
   [120, "Last 120 days"],
 ];
+
+const TIKTOK_PREFERENCE_KEY = "trendrelay.discover.tiktok";
+
+type TikTokPreference = { category: string; region: string; period: number };
+
+function readTikTokPreference(): TikTokPreference | null {
+  try {
+    const stored = window.localStorage.getItem(TIKTOK_PREFERENCE_KEY);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as Partial<TikTokPreference>;
+    if (typeof parsed.category !== "string") return null;
+    return {
+      category: parsed.category,
+      region: typeof parsed.region === "string" ? parsed.region : "US",
+      period: typeof parsed.period === "number" ? parsed.period : 7,
+    };
+  } catch {
+    return null;
+  }
+}
 
 const TIKTOK_CATEGORY_ICONS: Record<string, string> = {
   hashtag: "#",
@@ -833,7 +853,8 @@ export default function ResearchDashboard() {
       .then((response) => (response.ok ? response.json() : null))
       .then((payload: { provider?: { categories?: TikTokCategory[] } } | null) => {
         if (!cancelled && payload?.provider?.categories) {
-          setTiktokCategories(payload.provider.categories);
+          // Retired tabs stay in the registry for honesty, not for the operator.
+          setTiktokCategories(payload.provider.categories.filter((item) => item.available));
         }
       })
       .catch(() => undefined);
@@ -841,6 +862,31 @@ export default function ResearchDashboard() {
       cancelled = true;
     };
   }, []);
+
+  // Open on the trend the operator last looked at, or the first live tab, and
+  // let the adapter's cache decide whether that costs a fresh render.
+  const autoLoadedRef = useRef(false);
+  useEffect(() => {
+    if (autoLoadedRef.current || tiktokCategories.length === 0) return;
+    autoLoadedRef.current = true;
+    const saved = readTikTokPreference();
+    const remembered = saved && tiktokCategories.some((item) => item.id === saved.category)
+      ? saved
+      : null;
+    const category = remembered ? remembered.category : tiktokCategories[0]!.id;
+    void (async () => {
+      if (remembered) {
+        setTiktokRegion(remembered.region);
+        setTiktokPeriod(remembered.period);
+      }
+      await fetchTiktokDiscovery(
+        category,
+        remembered ? { region: remembered.region, period: remembered.period } : {},
+      );
+    })();
+    // fetchTiktokDiscovery is re-created each render; the ref guards the one run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tiktokCategories]);
 
   async function fetchTiktokDiscovery(
     category: string,
@@ -866,6 +912,14 @@ export default function ResearchDashboard() {
       }
       // Notes explain what TikTok served; they are context, not a failure.
       setTiktokResult(payload.result);
+      try {
+        window.localStorage.setItem(
+          TIKTOK_PREFERENCE_KEY,
+          JSON.stringify({ category, region, period }),
+        );
+      } catch {
+        // A blocked storage quota must never break discovery.
+      }
     } catch (reason) {
       setTiktokResult(null);
       setError(reason instanceof Error ? reason.message : "TikTok discovery failed.");
