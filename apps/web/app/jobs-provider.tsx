@@ -5,7 +5,7 @@ import { useAuth } from "./auth-provider";
 import { apiBaseUrl } from "../lib/api";
 
 type JobStatus = "queued" | "running" | "succeeded" | "failed";
-type JobCategory = "fetch" | "media" | "render" | "publish" | "research";
+type JobCategory = "fetch" | "media" | "render" | "publish" | "research" | "blur";
 
 export type BaseJob = {
   id: string;
@@ -88,6 +88,23 @@ export function JobsProvider({ children }: { children: ReactNode }) {
           })))
           .catch(() => []);
         fetchPromises.push(fetchLibrary);
+        // Face blurring: a long render whose outcome belongs in notifications
+        // rather than pinned to the asset that started it.
+        const fetchBlur = apiFetch(`/api/workspaces/${activeWorkspaceId}/media/library/face-blur/status`)
+          .then(res => res.json())
+          .then(data => (data.jobs || []).map((j: any) => ({
+            id: j.id,
+            category: "blur" as JobCategory,
+            status: j.status,
+            created_at: j.created_at,
+            title: j.status === "succeeded" && j.result
+              ? `Faces blurred: ${Math.round((j.result.coverage ?? 0) * 100)}% of frames, ${j.result.faces_tracked ?? 0} face(s)`
+              : "Blurring faces",
+            error: j.error,
+            raw: j,
+          })))
+          .catch(() => []);
+        fetchPromises.push(fetchBlur);
         // Studio renders
         const fetchRenders = apiFetch(`/api/workspaces/${activeWorkspaceId}/studio/productions`)
           .then(res => res.json())

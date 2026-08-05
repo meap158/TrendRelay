@@ -767,29 +767,10 @@ export default function LibraryPage() {
       </div>
 
       {error && <p className="error-banner">{error}</p>}
-      {blurResult && (
-        <div className="blur-result">
-          <strong>
-            {blurResult.status === "succeeded" ? "Faces blurred" : "Blurring failed"}
-          </strong>
-          {blurResult.error && <small className="blur-warning">{blurResult.error}</small>}
-          {blurResult.coverage !== undefined && (
-            <small>
-              {Math.round((blurResult.coverage ?? 0) * 100)}% of frames covered
-              {blurResult.faces_tracked
-                ? ` · ${blurResult.faces_tracked} face${blurResult.faces_tracked === 1 ? "" : "s"} tracked`
-                : ""}
-            </small>
-          )}
-          {blurResult.warning && <small className="blur-warning">{blurResult.warning}</small>}
-          {blurResult.status === "succeeded" && (
-            <small>
-              {blurResult.version_registered
-                ? "Switch between Original and Faces blurred above. Handoffs use the blurred cut."
-                : blurResult.version_note ?? null}
-            </small>
-          )}
-        </div>
+      {blurResult?.status === "failed" && (
+        <p className="error-banner" role="alert">
+          Blurring failed. {blurResult.error}
+        </p>
       )}
       <section className="library-layout">
         <aside className="library-browser">
@@ -932,13 +913,13 @@ export default function LibraryPage() {
                   <h2>{selected.title}</h2>
                   <p>{selected.caption || "No source caption recorded."}</p>
                   <small>{selected.width && selected.height ? `${selected.width}×${selected.height} · ` : ""}{displaySize(selected.size_bytes)}</small>
-                </div>
-                <div className="library-actions">
                   <nav className="library-item-navigation" aria-label="Browse media">
                     <button type="button" disabled={selectedIndex <= 0} onClick={() => setSelectedId(assets[selectedIndex - 1]?.id ?? selectedId)}>← Previous</button>
                     <span>{selectedIndex + 1} of {assets.length}</span>
                     <button type="button" disabled={selectedIndex < 0 || selectedIndex >= assets.length - 1} onClick={() => setSelectedId(assets[selectedIndex + 1]?.id ?? selectedId)}>Next →</button>
                   </nav>
+                </div>
+                <div className="library-actions">
                   <button type="button" className="secondary-button library-open-folder" disabled={busy === "folder"} onClick={() => void openAssetFolder(selected)}>
                     {busy === "folder" ? "Opening…" : "Open folder"}
                   </button>
@@ -950,13 +931,10 @@ export default function LibraryPage() {
                       ? "Detect every face and burn the blur into a new render"
                       : "Face blurring applies to video"}
                     onClick={() => void blurFaces(selected)}
-                  >{busy === "blur" ? "Blurring…" : "Blur faces"}</button>
-                  {busy.startsWith("blur") && (
-                    <span className="blur-progress" role="status">
-                      <i aria-hidden="true" />
-                      Blurring the whole clip…
-                    </span>
-                  )}
+                  >
+                    {busy === "blur" && <i className="button-spinner" aria-hidden="true" />}
+                    {busy === "blur" ? "Blurring…" : "Blur faces"}
+                  </button>
                   <Link href={`/campaigns?video=${encodeURIComponent(handoffPath(selected))}`}>Plan campaign</Link>
                   <Link href={`/publish?video=${encodeURIComponent(handoffPath(selected))}`}>Prepare to publish</Link>
                   {blurredVersion(selected) && (
