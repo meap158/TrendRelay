@@ -43,7 +43,6 @@ type Asset = {
   published_at?: string | null;
   caption?: string | null;
   hashtags: string[];
-  publishable: boolean;
   original_path: string;
   size_bytes: number;
   duration_ms?: number | null;
@@ -809,13 +808,9 @@ export default function LibraryPage() {
                   <button type="button" className="secondary-button library-open-folder" disabled={busy === "folder"} onClick={() => void openAssetFolder(selected)}>
                     {busy === "folder" ? "Opening…" : "Open folder"}
                   </button>
-                  {selected.publishable && (
-                    <>
-                      <Link className="primary-action" href={`/studio?source=${encodeURIComponent(selected.original_path)}`}>Auto-edit in Studio</Link>
-                      <Link href={`/campaigns?video=${encodeURIComponent(selected.original_path)}`}>Plan campaign</Link>
-                      <Link href={`/publish?video=${encodeURIComponent(selected.original_path)}`}>Prepare to publish</Link>
-                    </>
-                  )}
+                  <Link className="primary-action" href={`/studio?source=${encodeURIComponent(selected.original_path)}`}>Auto-edit in Studio</Link>
+                  <Link href={`/campaigns?video=${encodeURIComponent(selected.original_path)}`}>Plan campaign</Link>
+                  <Link href={`/publish?video=${encodeURIComponent(selected.original_path)}`}>Prepare to publish</Link>
                   {selectedSourceLinks.map((url, index, links) => {
                     const label = selected.platform === "douyin"
                       ? `${selected.creator ? `${selected.creator}'s ` : ""}original Douyin video`

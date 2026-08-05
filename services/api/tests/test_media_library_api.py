@@ -104,7 +104,7 @@ def fake_processed(path: Path) -> dict:
     }
 
 
-def test_ingest_deduplicates_enriches_searches_and_governs_rights(
+def test_ingest_deduplicates_enriches_searches_and_plans(
     tmp_path: Path, monkeypatch
 ) -> None:
     source = tmp_path / "espresso-demo.mp4"
@@ -151,8 +151,6 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
                 "caption": "A portable espresso maker for travel.",
                 "engagement": {"likes": 1200, "comments": 44, "shares": 91},
                 "hashtags": ["coffee", "#travel"],
-                "rights_status": "unknown",
-                "rights_basis": "Downloaded for internal creative research only.",
                 "confirm_external_action": True,
             },
         )
@@ -171,7 +169,6 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
                 "path": str(source),
                 "title": "Duplicate title is ignored",
                 "source_url": "https://www.douyin.com/video/456",
-                "rights_status": "unknown",
                 "confirm_external_action": True,
             },
         )
@@ -193,7 +190,6 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
                 "media_kind": "image",
                 "platform": "douyin",
                 "creator": "Demo creator",
-                "rights_status": "unknown",
                 "digest": "1" * 64,
                 "duration_ms": None,
             },
@@ -203,7 +199,6 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
                 "media_kind": "audio",
                 "platform": "tiktok",
                 "creator": "Demo creator",
-                "rights_status": "licensed",
                 "digest": "2" * 64,
                 "duration_ms": 7_000,
             },
@@ -213,7 +208,6 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
                 "media_kind": "video",
                 "platform": "douyin",
                 "creator": "Other creator",
-                "rights_status": "unknown",
                 "digest": "3" * 64,
                 "duration_ms": 5_000,
             },
@@ -233,8 +227,6 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
                     hashtags=[],
                     audio_identifier=None,
                     engagement={},
-                    rights_status=item["rights_status"],
-                    rights_basis="Test fixture rights",
                     original_path=str(tmp_path / item["id"]),
                     original_sha256=item["digest"],
                     mime_type=f"{item['media_kind']}/test",
@@ -260,7 +252,8 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
     assert before.json()["total"] == 1
     asset = before.json()["assets"][0]
     assert asset["media_kind"] == "video"
-    assert asset["publishable"] is False
+    assert "publishable" not in asset
+    assert "rights_status" not in asset
     assert asset["original_sha256"] == media_library.file_sha256(source)
     assert asset["published_at"].startswith("2026-07-20T08:30:00")
     assert asset["engagement"]["likes"] == 1200
@@ -373,15 +366,6 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
         "scheduled_at": "2026-07-27T10:00:00+07:00",
         "timezone": "Asia/Bangkok",
     }
-    blocked_plan = asyncio.run(
-        request(
-            "POST",
-            f"/api/workspaces/{workspace_id}/campaigns/{campaign_id}/plans",
-            json=plan_payload,
-        )
-    )
-    assert blocked_plan.status_code == 409
-    assert "unknown" in blocked_plan.json()["detail"]
 
     enriched = asyncio.run(
         request(
@@ -416,37 +400,20 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
         request(
             "GET",
             f"/api/workspaces/{workspace_id}/media/library/assets",
-            params={"q": "hotel coffee", "rights_status": "unknown"},
+            params={"q": "hotel coffee"},
         )
     )
     assert search.status_code == 200
     assert search.json()["assets"][0]["id"] == asset_id
 
-    no_confirmation = asyncio.run(
+    retired_rights_control = asyncio.run(
         request(
             "POST",
             f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/rights",
-            json={
-                "rights_status": "licensed",
-                "rights_basis": "Written creator license dated 2026-07-26.",
-            },
+            json={"rights_status": "licensed", "confirm_external_action": True},
         )
     )
-    assert no_confirmation.status_code == 400
-
-    licensed = asyncio.run(
-        request(
-            "POST",
-            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/rights",
-            json={
-                "rights_status": "licensed",
-                "rights_basis": "Written creator license dated 2026-07-26.",
-                "confirm_external_action": True,
-            },
-        )
-    )
-    assert licensed.status_code == 200
-    assert licensed.json()["asset"]["publishable"] is True
+    assert retired_rights_control.status_code == 404
 
     allowed_plan = asyncio.run(
         request(
@@ -458,9 +425,7 @@ def test_ingest_deduplicates_enriches_searches_and_governs_rights(
     assert allowed_plan.status_code == 201, allowed_plan.text
 
 
-def test_import_is_loopback_only_and_publishable_rights_need_basis(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_import_is_loopback_only(tmp_path: Path, monkeypatch) -> None:
     source = tmp_path / "owned.mp4"
     source.write_bytes(b"owned-video")
     monkeypatch.setattr(
@@ -477,7 +442,6 @@ def test_import_is_loopback_only_and_publishable_rights_need_basis(
     payload = {
         "path": str(source),
         "title": "Owned launch clip",
-        "rights_status": "owned",
         "confirm_external_action": True,
     }
 
@@ -491,14 +455,14 @@ def test_import_is_loopback_only_and_publishable_rights_need_basis(
     )
     assert remote.status_code == 403
 
-    missing_basis = asyncio.run(
+    local = asyncio.run(
         request(
             "POST",
             f"/api/workspaces/{workspace_id}/media/library/imports",
             json=payload,
         )
     )
-    assert missing_basis.status_code == 422
+    assert local.status_code == 202, local.text
 
 
 def test_pinned_media_runtime_creates_hash_addressed_derivatives(

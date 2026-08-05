@@ -15,13 +15,12 @@ from pydantic import AnyHttpUrl, BaseModel, Field, field_validator
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
-from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
+from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, ensure_profile, membership, require_role
 from trendrelay_api.media_library import (
     FFMPEG,
     FFPROBE,
-    PUBLISHABLE_RIGHTS,
     create_ingest_job,
     list_ingest_jobs,
 )
@@ -38,13 +37,6 @@ router = APIRouter(
 )
 AuthenticatedUser = Annotated[CurrentUser, Depends(current_user)]
 DatabaseSession = Annotated[Session, Depends(get_session)]
-RightsStatus = Literal[
-    "owned",
-    "licensed",
-    "public-domain",
-    "unknown",
-    "prohibited",
-]
 
 STOP_WORDS = {
     "about",
@@ -101,8 +93,6 @@ class LibraryImport(BaseModel):
     hashtags: list[str] = Field(default_factory=list, max_length=100)
     audio_identifier: str | None = Field(default=None, max_length=300)
     engagement: dict[str, float] = Field(default_factory=dict)
-    rights_status: RightsStatus = "unknown"
-    rights_basis: str | None = Field(default=None, max_length=2000)
     confirm_external_action: bool = False
 
     @field_validator("title", "source_type")
@@ -119,17 +109,6 @@ class LibraryImport(BaseModel):
             if item and item.casefold() not in {current.casefold() for current in result}:
                 result.append(item[:80])
         return result
-
-
-class RightsUpdate(BaseModel):
-    rights_status: RightsStatus
-    rights_basis: str = Field(min_length=3, max_length=2000)
-    confirm_external_action: bool = False
-
-    @field_validator("rights_basis")
-    @classmethod
-    def normalize_basis(cls, value: str) -> str:
-        return " ".join(value.strip().split())
 
 
 class Enrichment(BaseModel):
@@ -241,9 +220,6 @@ def _asset_view(session: Session, item: MediaAsset) -> dict[str, Any]:
         "hashtags": item.hashtags,
         "audio_identifier": item.audio_identifier,
         "engagement": item.engagement,
-        "rights_status": item.rights_status,
-        "rights_basis": item.rights_basis,
-        "publishable": item.rights_status in PUBLISHABLE_RIGHTS,
         "original_path": item.original_path,
         "original_sha256": item.original_sha256,
         "mime_type": item.mime_type,
@@ -382,13 +358,6 @@ def import_asset(
     )
     if not body.confirm_external_action:
         raise HTTPException(status_code=400, detail="Media import requires confirmation.")
-    if body.rights_status in PUBLISHABLE_RIGHTS:
-        require_governed_assurance(user)
-        if not body.rights_basis or len(body.rights_basis.strip()) < 3:
-            raise HTTPException(
-                status_code=422,
-                detail="Publishable rights require a documented basis.",
-            )
     ensure_profile(session, user)
     try:
         job = create_ingest_job(
@@ -397,8 +366,7 @@ def import_asset(
             path=body.path,
             title=body.title,
             source_type=body.source_type,
-            rights_status=body.rights_status,
-            rights_basis=body.rights_basis,
+            rights_status="unknown",
             source_url=str(body.source_url) if body.source_url else None,
             platform=body.platform,
             creator=body.creator,
@@ -420,10 +388,7 @@ def import_asset(
         "media_library.import_queued",
         "media_asset",
         job.get("asset_id") or job.get("id") or "duplicate",
-        {
-            "rights_status": body.rights_status,
-            "duplicate": bool(job.get("duplicate")),
-        },
+        {"duplicate": bool(job.get("duplicate"))},
     )
     return {"job": job}
 
@@ -438,7 +403,6 @@ def list_assets(
     platform_missing: Annotated[bool, Query()] = False,
     creator: Annotated[str | None, Query(max_length=200)] = None,
     creator_missing: Annotated[bool, Query()] = False,
-    rights_status: Annotated[RightsStatus | None, Query()] = None,
     media_kind: Annotated[Literal["video", "audio", "image"] | None, Query()] = None,
     max_duration_seconds: Annotated[int | None, Query(ge=1, le=86_400)] = None,
     sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
@@ -464,8 +428,6 @@ def list_assets(
                     (MediaAsset.creator.is_(None))
                     | (func.trim(MediaAsset.creator) == "")
                 )
-        if omit != "rights" and rights_status:
-            values.append(MediaAsset.rights_status == rights_status)
         if omit != "media_kind" and media_kind:
             values.append(MediaAsset.media_kind == media_kind)
         if max_duration_seconds:
@@ -558,11 +520,6 @@ def list_assets(
                 missing_label="Other sources",
                 omit="platform",
             ),
-            "rights": facet(
-                MediaAsset.rights_status,
-                missing_label="Unknown rights",
-                omit="rights",
-            ),
             "media_kinds": facet(
                 MediaAsset.media_kind,
                 missing_label="Other media",
@@ -648,36 +605,6 @@ def asset_preview(
         "mime_type": version.mime_type,
         "content_base64": base64.b64encode(path.read_bytes()).decode("ascii"),
     }
-
-@router.post("/assets/{asset_id}/rights")
-def update_rights(
-    workspace_id: str,
-    asset_id: str,
-    body: RightsUpdate,
-    request: Request,
-    user: AuthenticatedUser,
-    session: DatabaseSession,
-) -> dict[str, Any]:
-    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
-    require_governed_assurance(user)
-    if not body.confirm_external_action:
-        raise HTTPException(status_code=400, detail="Rights changes require confirmation.")
-    item = _asset_record(session, workspace_id, asset_id)
-    previous = item.rights_status
-    item.rights_status = body.rights_status
-    item.rights_basis = body.rights_basis
-    audit(
-        session,
-        request,
-        workspace_id,
-        user.id,
-        "media_library.rights_changed",
-        "media_asset",
-        item.id,
-        {"from": previous, "to": item.rights_status},
-    )
-    return {"asset": _asset_view(session, item)}
-
 
 @router.post("/assets/{asset_id}/enrichment", status_code=201)
 def enrich_asset(

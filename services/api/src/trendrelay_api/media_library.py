@@ -38,7 +38,6 @@ VIDEO_SUFFIXES = {".mp4", ".mov", ".mkv", ".webm"}
 AUDIO_SUFFIXES = {".mp3", ".m4a", ".wav", ".aac", ".flac", ".ogg"}
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 SAFE_SUFFIXES = VIDEO_SUFFIXES | AUDIO_SUFFIXES | IMAGE_SUFFIXES
-PUBLISHABLE_RIGHTS = {"owned", "licensed", "public-domain"}
 
 
 def _now() -> str:
