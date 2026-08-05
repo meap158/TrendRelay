@@ -249,7 +249,7 @@ def runtime_status() -> dict[str, Any]:
         "available": True,
         "reason": None,
         "opencv_version": cv2.__version__,
-        "detector": "yunet",
+        "detector": detector_name(),
         "install_hint": INSTALL_HINT,
     }
 
@@ -262,9 +262,52 @@ FFMPEG = (
 )
 
 
+# YuNet is the better detector, but its weights are a separate ONNX file that
+# OpenCV does not ship. Drop one here and it is used automatically; without it
+# the truly bundled cascade keeps the tool working out of the box.
+YUNET_MODEL = PROJECT_ROOT / ".data" / "models" / "face_detection_yunet.onnx"
+
+
+class _CascadeDetector:
+    """OpenCV's bundled cascade behind the same call shape as YuNet.
+
+    Weaker than YuNet on profile and partially occluded faces, so the padding
+    and gap bridging around it matter more, not less.
+    """
+
+    def __init__(self, cv2: Any, settings: BlurSettings) -> None:
+        import numpy
+
+        self._cv2 = cv2
+        self._numpy = numpy
+        self._cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        )
+        # A lower confidence should widen the net, so it loosens the neighbour
+        # requirement rather than being ignored.
+        self._neighbours = max(2, int(round(settings.confidence * 8)))
+
+    def detect(self, frame: Any) -> tuple[Any, Any]:
+        grey = self._cv2.cvtColor(frame, self._cv2.COLOR_BGR2GRAY)
+        found = self._cascade.detectMultiScale(
+            grey, scaleFactor=1.1, minNeighbors=self._neighbours, minSize=(24, 24)
+        )
+        if len(found) == 0:
+            return None, None
+        return None, self._numpy.array(
+            [[x, y, w, h, 1.0] for x, y, w, h in found], dtype="float32"
+        )
+
+
+def detector_name() -> str:
+    return "yunet" if YUNET_MODEL.is_file() else "haar-cascade"
+
+
 def _detector(cv2: Any, frame_size: tuple[int, int], settings: BlurSettings) -> Any:
+    if not YUNET_MODEL.is_file():
+        return _CascadeDetector(cv2, settings)
     detector = cv2.FaceDetectorYN.create(
-        model="", config="", input_size=frame_size,
+        model=str(YUNET_MODEL), config="", input_size=frame_size,
         score_threshold=settings.confidence, nms_threshold=0.3, top_k=5000,
     )
     detector.setInputSize(frame_size)
@@ -424,7 +467,7 @@ def render_blurred(
         "coverage": round(ratio, 4),
         "warning": coverage_warning(ratio),
         "preview": preview_seconds is not None,
-        "detector": "yunet",
+        "detector": detector_name(),
         "settings": {
             "padding_ratio": settings.padding_ratio,
             "kernel_ratio": settings.kernel_ratio,

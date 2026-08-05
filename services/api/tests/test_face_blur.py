@@ -79,11 +79,14 @@ def test_coverage_is_reported_and_a_weak_result_is_named() -> None:
     assert warning is not None and "50%" in warning
 
 
-def test_yunet_detector_is_available_in_the_installed_opencv() -> None:
-    """The blur depends on a detector that ships with OpenCV, not a download."""
+def test_a_detector_is_usable_without_downloading_a_model() -> None:
+    """YuNet needs an ONNX file OpenCV does not ship, so a bundled cascade backs it."""
     import cv2
 
     assert hasattr(cv2, "FaceDetectorYN")
+    cascade = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    assert Path(cascade).is_file(), "the fallback detector must ship with OpenCV"
+    assert face_blur.detector_name() in {"yunet", "haar-cascade"}
 
 
 # --- the optional vision runtime ------------------------------------------- #
@@ -156,7 +159,7 @@ def test_status_reports_available_with_the_real_runtime() -> None:
 
     assert status["available"] is True
     assert status["reason"] is None
-    assert status["detector"] == "yunet"
+    assert status["detector"] in {"yunet", "haar-cascade"}
     assert status["opencv_version"].startswith("4.")
 
 
@@ -301,7 +304,7 @@ def test_render_records_the_settings_that_produced_it(tmp_path, monkeypatch) -> 
         source, tmp_path / "out.mp4", face_blur.BlurSettings(confidence=0.8)
     )
 
-    assert result["detector"] == "yunet"
+    assert result["detector"] in {"yunet", "haar-cascade"}
     assert result["settings"]["confidence"] == 0.8
     assert result["settings"]["padding_ratio"] == face_blur.PADDING_RATIO
 
