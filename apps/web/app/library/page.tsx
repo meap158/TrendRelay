@@ -331,6 +331,7 @@ export default function LibraryPage() {
   const [continueVideoPlayback, setContinueVideoPlayback] = useState(false);
   const autoSyncedWorkspaces = useRef(new Set<string>());
   const [busy, setBusy] = useState("");
+  const [blurNote, setBlurNote] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -590,6 +591,42 @@ export default function LibraryPage() {
   }
 
 
+  async function blurFaces(asset: Asset) {
+    // It writes a new file that becomes the default for handoffs, so it is
+    // never one unconfirmed click away.
+    if (!window.confirm(
+      `Blur every detected face in "${asset.title}"?\n\n`
+      + "This renders a new file. The original is not modified, but Campaigns and "
+      + "Publish will use the blurred version unless you change that in Studio.",
+    )) return;
+    setBusy("blur");
+    setError("");
+    setBlurNote(null);
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/media/library/face-blur/jobs`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source_path: asset.original_path,
+            confirm_external_action: true,
+          }),
+        },
+      );
+      const payload = (await response.json()) as { detail?: string };
+      if (!response.ok) throw new Error(payload.detail ?? "Face blurring could not start.");
+      setBlurNote(
+        "Blurring started. Track it in Studio, where you can watch the result and "
+        + "choose which version Publish sends.",
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Face blurring failed.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function openAssetFolder(asset: Asset) {
     setBusy("folder");
     setError("");
@@ -655,6 +692,7 @@ export default function LibraryPage() {
       </div>
 
       {error && <p className="error-banner">{error}</p>}
+      {blurNote && <p className="campaign-message">{blurNote}</p>}
       {message && <p className="campaign-message">{message}</p>}
 
       <section className="library-layout">
@@ -808,6 +846,15 @@ export default function LibraryPage() {
                   <button type="button" className="secondary-button library-open-folder" disabled={busy === "folder"} onClick={() => void openAssetFolder(selected)}>
                     {busy === "folder" ? "Opening…" : "Open folder"}
                   </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={busy === "blur" || selected.media_kind !== "video"}
+                    title={selected.media_kind === "video"
+                      ? "Detect every face and burn the blur into a new render"
+                      : "Face blurring applies to video"}
+                    onClick={() => void blurFaces(selected)}
+                  >{busy === "blur" ? "Blurring…" : "Blur faces"}</button>
                   <Link className="primary-action" href={`/studio?source=${encodeURIComponent(selected.original_path)}`}>Auto-edit in Studio</Link>
                   <Link href={`/campaigns?video=${encodeURIComponent(selected.original_path)}`}>Plan campaign</Link>
                   <Link href={`/publish?video=${encodeURIComponent(selected.original_path)}`}>Prepare to publish</Link>
