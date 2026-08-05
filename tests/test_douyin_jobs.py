@@ -1,5 +1,6 @@
 import json
 import subprocess
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -522,10 +523,15 @@ def test_worker_records_downloaded_media(
     assert queued[0]["engagement"]["origin_urls"] == request().urls
 
 
-def test_batch_downloads_each_source_before_starting_the_next(
+def test_downloads_do_not_wait_for_library_preparation(
     monkeypatch, tmp_path: Path, job_factory
 ) -> None:
-    """Each source is fetched and handed to the library before the next starts."""
+    """Fingerprinting and library queueing must not stall the next download.
+
+    Library preparation is held open until the final source has downloaded. If
+    downloading waited on preparation the batch could never reach that source
+    and this test would time out instead of passing.
+    """
     monkeypatch.setattr(douyin, "OUTPUT_ROOT", tmp_path / "downloads")
     monkeypatch.setattr(
         douyin,
@@ -550,41 +556,41 @@ def test_batch_downloads_each_source_before_starting_the_next(
     )
     job = douyin.create_download_job(batch, actor_user_id="user-1")
 
-    timeline: list[str] = []
+    downloads: list[str] = []
+    ingested: list[str] = []
+    all_downloaded = threading.Event()
 
     def fake_run(command, **_kwargs):
         # One source per invocation: the URL sits between "batch" and "--output".
         urls = command[command.index("batch") + 1 : command.index("--output")]
         assert len(urls) == 1, urls
         index = urls[0].rsplit("/", 1)[-1]
-        timeline.append(f"download:{index}")
+        downloads.append(index)
         output = Path(command[command.index("--output") + 1])
         output.mkdir(parents=True, exist_ok=True)
         (output / f"clip{index}.mp4").write_bytes(f"media-{index}".encode())
+        if len(downloads) == 3:
+            all_downloaded.set()
         return subprocess.CompletedProcess(command, 0, "done", "")
 
-    monkeypatch.setattr(
-        media_library,
-        "create_ingest_job",
-        lambda **kwargs: timeline.append(f"ingest:{Path(kwargs['path']).name}") or {
+    def blocking_ingest(**kwargs):
+        assert all_downloaded.wait(timeout=10), "downloads stalled behind library preparation"
+        ingested.append(Path(kwargs["path"]).name)
+        return {
             "id": f"media-{Path(kwargs['path']).name}",
             "status": "queued",
             "available_at": datetime.now(UTC),
-        },
-    )
+        }
+
+    monkeypatch.setattr(media_library, "create_ingest_job", blocking_ingest)
     monkeypatch.setattr(douyin.subprocess, "run", fake_run)
     completed = douyin.run_download_job(job["id"])
 
     assert completed["status"] == "succeeded"
-    # Interleaved, not "discover everything, then download everything".
-    assert timeline == [
-        "download:1",
-        "ingest:clip1.mp4",
-        "download:2",
-        "ingest:clip2.mp4",
-        "download:3",
-        "ingest:clip3.mp4",
-    ]
+    # Sources are still fetched one at a time, and in order.
+    assert downloads == ["1", "2", "3"]
+    # Every file still reaches the library exactly once.
+    assert sorted(ingested) == ["clip1.mp4", "clip2.mp4", "clip3.mp4"]
     names = sorted(item["name"] for item in completed["result"]["artifacts"])
     assert names == ["clip1.mp4", "clip2.mp4", "clip3.mp4"]
 

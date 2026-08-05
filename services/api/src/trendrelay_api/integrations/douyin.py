@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import threading
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -438,13 +439,15 @@ def _douyin_artifact_metadata(path: Path, output_root: Path | None) -> dict[str,
     return metadata
 
 
-def _new_artifacts(output_root: Path, seen_paths: set[str]) -> list[dict[str, Any]]:
-    """Return artifacts not yet seen, recording them in ``seen_paths``.
+def _scan_new_media(output_root: Path, seen_paths: set[str]) -> list[Path]:
+    """Record media files this job has not seen yet.
 
-    Re-scanning after every source is cheap, but re-hashing is not: only files
-    this pass has never seen are fingerprinted.
+    Deliberately cheap: it walks the folder and nothing more, so the next
+    source can start downloading without waiting on hashing. Callers must only
+    invoke it from the download thread, which keeps ``seen_paths`` single-owner
+    and makes the de-duplication exact without a lock.
     """
-    discovered: list[dict[str, Any]] = []
+    discovered: list[Path] = []
     for path in sorted(output_root.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in MEDIA_SUFFIXES:
             continue
@@ -452,15 +455,23 @@ def _new_artifacts(output_root: Path, seen_paths: set[str]) -> list[dict[str, An
         if resolved in seen_paths:
             continue
         seen_paths.add(resolved)
-        discovered.append(
+        discovered.append(path)
+    return discovered
+
+
+def _describe_media(paths: list[Path]) -> list[dict[str, Any]]:
+    """Fingerprint finished files. Slow, so it runs off the download path."""
+    described: list[dict[str, Any]] = []
+    for path in paths:
+        described.append(
             {
-                "path": resolved,
+                "path": str(path),
                 "name": path.name,
                 "size_bytes": path.stat().st_size,
                 "sha256": _fingerprint(path),
             }
         )
-    return discovered
+    return described
 
 
 def _download_source(url: str, output_root: Path, request: dict[str, Any]) -> tuple[int, str]:
@@ -704,8 +715,9 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
             raise RuntimeError("Invalid download output location")
         request = payload["request"]
 
-        # Every path a file can reach us by is recorded once, so a file already
-        # handed to the library is never collected or ingested a second time.
+        # Every path a file can reach us by is recorded once, on the download
+        # thread only, so a file already handed to the library is never
+        # collected or ingested a second time.
         seen_paths: set[str] = set()
         artifacts: list[dict[str, Any]] = []
         library_jobs: list[dict[str, Any]] = []
@@ -714,37 +726,54 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         blocked_sources = 0
         last_detail = ""
 
-        def absorb(new_artifacts: list[dict[str, Any]]) -> None:
-            """Hand each finished source to the library before the next starts."""
-            if not new_artifacts:
-                return
-            artifacts.extend(new_artifacts)
-            queued, errors = _queue_library_artifacts(payload, new_artifacts)
-            library_jobs.extend(queued)
-            library_errors.extend(errors)
+        Prepared = tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]
 
-        if payload.get("resume_from_disk"):
-            absorb(_new_artifacts(output_root, seen_paths))
-        else:
-            urls = list(request["urls"])
-            for position, url in enumerate(urls, start=1):
-                code, detail = _download_source(url, output_root, request)
-                last_detail = detail or last_detail
-                if code == 0 or code == 3 or "without saving any media" in detail.lower():
-                    if code != 0:
-                        # Nothing new from this source: already held, or blocked.
-                        blocked_sources += 1
-                else:
-                    source_errors.append(f"Source {position} of {len(urls)}: {detail[-500:]}")
-                # A source that downloaded nothing still yields an empty list.
-                absorb(_new_artifacts(output_root, seen_paths))
-                try:
-                    heartbeat_job(
-                        job_id, worker_id, lease_seconds=3600, factory=JOB_SESSION_FACTORY
-                    )
-                except PermissionError:
-                    # The lease was taken from us; stop rather than double-download.
-                    break
+        def prepare(paths: list[Path]) -> Prepared:
+            """Fingerprint one source's media and hand it to the library."""
+            described = _describe_media(paths)
+            queued, errors = _queue_library_artifacts(payload, described)
+            return described, queued, errors
+
+        # A single worker keeps library preparation ordered and never
+        # concurrent with itself, while still overlapping the next download.
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="douyin-ingest") as ingest:
+            pending: list[Future] = []
+
+            if payload.get("resume_from_disk"):
+                adopted = _scan_new_media(output_root, seen_paths)
+                if adopted:
+                    pending.append(ingest.submit(prepare, adopted))
+            else:
+                urls = list(request["urls"])
+                for position, url in enumerate(urls, start=1):
+                    code, detail = _download_source(url, output_root, request)
+                    last_detail = detail or last_detail
+                    if code == 0 or code == 3 or "without saving any media" in detail.lower():
+                        if code != 0:
+                            # Nothing new here: already held, or blocked.
+                            blocked_sources += 1
+                    else:
+                        source_errors.append(
+                            f"Source {position} of {len(urls)}: {detail[-500:]}"
+                        )
+                    new_paths = _scan_new_media(output_root, seen_paths)
+                    if new_paths:
+                        # Hash and register in the background; the next source
+                        # starts downloading immediately.
+                        pending.append(ingest.submit(prepare, new_paths))
+                    try:
+                        heartbeat_job(
+                            job_id, worker_id, lease_seconds=3600, factory=JOB_SESSION_FACTORY
+                        )
+                    except PermissionError:
+                        # The lease was taken from us; stop rather than double-download.
+                        break
+
+            for future in pending:
+                described, queued, errors = future.result()
+                artifacts.extend(described)
+                library_jobs.extend(queued)
+                library_errors.extend(errors)
 
         if not artifacts:
             if blocked_sources:
