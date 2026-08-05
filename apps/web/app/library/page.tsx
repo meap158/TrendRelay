@@ -205,28 +205,18 @@ function MediaPreview({
     let active = true;
     let objectUrl = "";
     const controller = new AbortController();
-    const showBlurred = cut === "blurred" && blurred;
-    const request = showBlurred
-      ? apiFetch(
-          `/api/workspaces/${workspaceId}/media/library/face-blur/media?path=${encodeURIComponent(blurred.path)}`,
-          { signal: controller.signal },
-        ).then(async (response) => {
-          if (!response.ok) throw new Error("Blurred version unavailable");
-          objectUrl = URL.createObjectURL(await response.blob());
-          return objectUrl;
-        })
-      : apiFetch(`/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/preview`, {
-          method: "POST",
-          signal: controller.signal,
-        })
-          .then((response) => json<{ mime_type: string; content_base64: string }>(response))
-          .then((preview) => {
-            objectUrl = URL.createObjectURL(
-              previewBlob(preview.content_base64, preview.mime_type),
-            );
-            return objectUrl;
-          });
-    request
+    const wanted = cut === "blurred" && blurred ? "blurred" : "original";
+    apiFetch(
+      `/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/preview?cut=${wanted}`,
+      { method: "POST", signal: controller.signal },
+    )
+      .then((response) => json<{ mime_type: string; content_base64: string }>(response))
+      .then((preview) => {
+        objectUrl = URL.createObjectURL(
+          previewBlob(preview.content_base64, preview.mime_type),
+        );
+        return objectUrl;
+      })
       .then((url) => { if (active) setSource(url); })
       .catch((reason) => {
         if (active && reason instanceof DOMException && reason.name === "AbortError") return;
@@ -463,6 +453,11 @@ export default function LibraryPage() {
         <span>
           <strong>{asset.title}</strong>
           <small>{asset.creator ? `${asset.creator} · ` : ""}{asset.platform ?? asset.source_type} · {displayDuration(asset.duration_ms)} · {displaySize(asset.size_bytes)}</small>
+          {asset.versions.some((version) => version.kind === "blurred") && (
+            <em className="blurred-tag" title="A blurred cut exists and is what handoffs send">
+              Faces blurred
+            </em>
+          )}
         </span>
       </button>
     );
@@ -693,7 +688,6 @@ export default function LibraryPage() {
       };
       const job = payload.jobs?.find((item) => item.id === jobId);
       if (!job || job.status === "queued" || job.status === "running") continue;
-      setBlurNote(null);
       setBlurResult({
         status: job.status,
         error: job.error,
@@ -705,7 +699,7 @@ export default function LibraryPage() {
       }
       return;
     }
-    setBlurNote("Still rendering. It will appear here when the worker finishes.");
+    setError("Still rendering. Reopen this asset shortly to see the result.");
   }
 
   async function openAssetFolder(asset: Asset) {
@@ -966,8 +960,8 @@ export default function LibraryPage() {
                   <Link href={`/campaigns?video=${encodeURIComponent(handoffPath(selected))}`}>Plan campaign</Link>
                   <Link href={`/publish?video=${encodeURIComponent(handoffPath(selected))}`}>Prepare to publish</Link>
                   {blurredVersion(selected) && (
-                    <em className="handoff-note" title={handoffPath(selected)}>
-                      Handoffs use the blurred version
+                    <em className="blurred-tag" title={handoffPath(selected)}>
+                      Faces blurred · handoffs send this cut
                     </em>
                   )}
                   {selectedSourceLinks.map((url, index, links) => {

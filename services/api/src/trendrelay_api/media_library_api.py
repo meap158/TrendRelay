@@ -577,21 +577,32 @@ def asset_preview(
     asset_id: str,
     user: AuthenticatedUser,
     session: DatabaseSession,
+    cut: Annotated[Literal["original", "blurred"], Query()] = "original",
 ) -> dict[str, str]:
+    """Return playable bytes for one cut of an asset.
+
+    Both cuts come back the same way so the player treats them identically; a
+    file served as a download would leave the browser to decide, and it decides
+    differently for a streamed file than for inline base64.
+    """
     membership(session, workspace_id, user.id)
     asset = _asset_record(session, workspace_id, asset_id)
     if asset.media_kind != "video":
         raise HTTPException(status_code=422, detail="Only videos have playable previews.")
+    wanted = ("blurred",) if cut == "blurred" else ("proxy", "original")
     versions = session.scalars(
         select(MediaAssetVersion).where(
             MediaAssetVersion.asset_id == asset_id,
-            MediaAssetVersion.version_kind.in_(("proxy", "original")),
+            MediaAssetVersion.version_kind.in_(wanted),
         )
     ).all()
-    version = next((item for item in versions if item.version_kind == "proxy"), None)
-    version = version or next(
-        (item for item in versions if item.version_kind == "original"), None
+    version = next(
+        (item for item in versions if item.version_kind == wanted[0]), None
     )
+    if version is None and len(wanted) > 1:
+        version = next(
+            (item for item in versions if item.version_kind == wanted[1]), None
+        )
     if not version:
         raise HTTPException(status_code=404, detail="Video preview not found.")
     try:

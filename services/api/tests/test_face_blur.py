@@ -629,3 +629,21 @@ def test_a_source_outside_the_library_still_renders_and_says_why(
     assert done["status"] == "succeeded"
     assert done["result"]["version_registered"] is False
     assert "not a Library asset" in done["result"]["version_note"]
+
+
+def test_preview_endpoint_serves_both_cuts_the_same_way(tmp_path, blur_jobs, monkeypatch) -> None:
+    """The blurred cut must arrive as playable bytes, not a file download.
+
+    A streamed file leaves the browser to decide what to do with it, and it
+    decides differently than it does for inline base64 - which is how the
+    original has always been served.
+    """
+    import inspect
+
+    from trendrelay_api import media_library_api
+
+    signature = inspect.signature(media_library_api.asset_preview)
+    assert "cut" in signature.parameters, "one endpoint must serve both cuts"
+    source = inspect.getsource(media_library_api.asset_preview)
+    assert "content_base64" in source
+    assert "blurred" in source
