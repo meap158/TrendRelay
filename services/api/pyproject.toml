@@ -14,14 +14,18 @@ dependencies = [
   "pydantic-settings>=2.7,<3",
   "psycopg[binary]>=3.2,<4",
   "SQLAlchemy>=2.0,<2.1",
-  # Headless: the API never opens a window, and the GUI build pulls in GTK.
-  "opencv-python-headless>=4.10,<5",
-  "numpy>=1.26,<3",
   "PyYAML>=6,<7",
   "uvicorn[standard]>=0.34,<1",
 ]
 
 [project.optional-dependencies]
+# Only Studio's face blur needs these, and it imports them lazily, so a machine
+# that never blurs does not carry ~40MB of native wheels to boot the API.
+# Headless: the API never opens a window, and the GUI build pulls in GTK.
+vision = [
+  "opencv-python-headless>=4.10,<5",
+  "numpy>=1.26,<3",
+]
 dev = [
   "httpx>=0.28,<1",
   "pytest>=8.3,<10",

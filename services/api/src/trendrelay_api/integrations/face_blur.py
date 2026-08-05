@@ -11,11 +11,17 @@ they are burned in.
 
 The blur is written into re-encoded pixels. Nothing here produces an overlay a
 downstream tool could strip.
+
+OpenCV is imported lazily and declared as the optional ``vision`` extra, so an
+install that never blurs a face does not carry native wheels to boot the API.
+Every geometry helper below is deliberately pure and works without it; only the
+detector needs the runtime.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 Box = tuple[int, int, int, int]  # x, y, width, height
 
@@ -128,3 +134,57 @@ def coverage_warning(ratio: float, threshold: float = COVERAGE_WARNING) -> str |
         "Review the preview before publishing, and re-run at a higher sensitivity "
         "if a face is visible."
     )
+
+
+class FaceBlurUnavailable(RuntimeError):
+    """Raised when the optional vision runtime is missing or too old."""
+
+
+INSTALL_HINT = (
+    "Install the optional vision runtime to blur faces: "
+    "pip install -e 'services/api[vision]'"
+)
+
+
+def _load_opencv() -> Any:
+    """Import OpenCV on demand, failing with something an operator can act on."""
+    try:
+        import cv2
+    except ImportError as error:  # pragma: no cover - exercised via monkeypatch
+        raise FaceBlurUnavailable(
+            f"Face blurring needs OpenCV, which is not installed. {INSTALL_HINT}"
+        ) from error
+    if not hasattr(cv2, "FaceDetectorYN"):
+        raise FaceBlurUnavailable(
+            f"OpenCV {getattr(cv2, '__version__', 'unknown')} has no YuNet detector. "
+            "Face blurring needs 4.10 or newer, because the bundled detector is "
+            f"what avoids a separate model download. {INSTALL_HINT}"
+        )
+    return cv2
+
+
+def runtime_status() -> dict[str, Any]:
+    """Report whether faces can be blurred, without raising.
+
+    Callers use this to show the tool as available or to explain what is
+    missing; it never throws, so a missing runtime cannot break a status page.
+    """
+    try:
+        cv2 = _load_opencv()
+    except FaceBlurUnavailable as error:
+        return {
+            "id": "face-blur",
+            "available": False,
+            "reason": str(error),
+            "opencv_version": None,
+            "detector": "yunet",
+            "install_hint": INSTALL_HINT,
+        }
+    return {
+        "id": "face-blur",
+        "available": True,
+        "reason": None,
+        "opencv_version": cv2.__version__,
+        "detector": "yunet",
+        "install_hint": INSTALL_HINT,
+    }
