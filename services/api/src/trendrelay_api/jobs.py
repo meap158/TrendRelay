@@ -218,6 +218,35 @@ def heartbeat_job(
         item.updated_at = timestamp
 
 
+def merge_running_result(
+    job_id: str,
+    worker_id: str,
+    patch: dict[str, Any],
+    *,
+    factory: SessionMaker = SessionFactory,
+) -> None:
+    """Publish partial results while a job is still running.
+
+    Readers derive live progress from ``result``, which otherwise stays empty
+    until completion. List values append so a long job can report work
+    incrementally; anything else replaces. A worker that no longer holds the
+    lease is ignored rather than raising, because this is progress reporting
+    and never the work itself.
+    """
+    with factory.begin() as session:
+        item = session.get(DurableJob, job_id)
+        if not item or item.status != "running" or item.lease_owner != worker_id:
+            return
+        current = dict(item.result or {})
+        for key, value in patch.items():
+            if isinstance(value, list):
+                current[key] = [*(current.get(key) or []), *value]
+            else:
+                current[key] = value
+        item.result = current
+        item.updated_at = now_utc()
+
+
 def complete_job(
     job_id: str,
     worker_id: str,

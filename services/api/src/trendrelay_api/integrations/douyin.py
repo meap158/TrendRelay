@@ -28,6 +28,7 @@ from trendrelay_api.jobs import (
     get_job_record,
     heartbeat_job,
     list_job_records,
+    merge_running_result,
 )
 from trendrelay_api.models import DurableJob
 from trendrelay_api.tool_registry import PROJECT_ROOT, list_tools
@@ -439,6 +440,14 @@ def _douyin_artifact_metadata(path: Path, output_root: Path | None) -> dict[str,
     return metadata
 
 
+def _compact_library_job(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: item[key]
+        for key in ("id", "status", "duplicate", "asset_id", "sha256")
+        if item.get(key) is not None
+    }
+
+
 def _scan_new_media(output_root: Path, seen_paths: set[str]) -> list[Path]:
     """Record media files this job has not seen yet.
 
@@ -732,6 +741,12 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
             """Fingerprint one source's media and hand it to the library."""
             described = _describe_media(paths)
             queued, errors = _queue_library_artifacts(payload, described)
+            merge_running_result(
+                job_id,
+                worker_id,
+                {"library_jobs": [_compact_library_job(item) for item in queued]},
+                factory=JOB_SESSION_FACTORY,
+            )
             return described, queued, errors
 
         # A single worker keeps library preparation ordered and never
@@ -800,14 +815,7 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
             "updated_at": _now(),
             "completed_at": _now(),
             "artifacts": artifacts,
-            "library_jobs": [
-                {
-                    key: item[key]
-                    for key in ("id", "status", "duplicate", "asset_id", "sha256")
-                    if item.get(key) is not None
-                }
-                for item in library_jobs
-            ],
+            "library_jobs": [_compact_library_job(item) for item in library_jobs],
             "library_errors": library_errors,
             "source_errors": source_errors,
             "summary": summary,
