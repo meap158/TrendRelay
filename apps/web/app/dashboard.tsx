@@ -36,7 +36,7 @@ type DownloadJob = {
     request?: { urls?: string[]; mode?: string; limit?: number };
     output_root?: string;
   };
-  result?: { artifacts?: Artifact[]; summary?: string } | null;
+  result?: { artifacts?: Artifact[]; summary?: string; creator_urls?: string[] } | null;
   progress?: DownloadProgress;
   library_progress?: LibraryProgress;
 };
@@ -234,6 +234,29 @@ export default function Dashboard() {
     completed: jobs.filter((job) => effectiveStatus(job) === "succeeded").length,
     attention: jobs.filter((job) => ["failed", "partial", "empty", "cancelled"].includes(effectiveStatus(job))).length,
   }), [jobs]);
+
+  function addCreatorProfiles(profiles: string[]) {
+    const staged = input.split(/\s+/).filter(Boolean);
+    const fresh = profiles.filter((profile) => !staged.includes(profile));
+    if (!fresh.length) {
+      setNotice(
+        profiles.length === 1
+          ? "That creator's profile is already in the list."
+          : "Those creator profiles are already in the list.",
+      );
+      return;
+    }
+    setInput([...staged, ...fresh].join("\n"));
+    setError(null);
+    setNotice(
+      `Added ${fresh.length} creator ${fresh.length === 1 ? "profile" : "profiles"}. ` +
+      "Downloading a profile fetches its whole catalogue, not just this clip.",
+    );
+    requestAnimationFrame(() => {
+      linkInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      linkInputRef.current?.focus();
+    });
+  }
 
   function reuseLinks(sources: string[]) {
     if (!sources.length) return;
@@ -589,6 +612,9 @@ export default function Dashboard() {
             const downloadingAndPreparing = current === "downloading_preparing";
             const libraryPercent = libraryProgress?.total ? Math.round((libraryProgress.succeeded / libraryProgress.total) * 100) : 0;
             const downloadCount = progressSummary(progress, current, artifacts, job.payload.request?.limit);
+            const creatorProfiles = (job.result?.creator_urls ?? []).filter(
+              (profile) => !sources.includes(profile),
+            );
             const canOpenFolder = Boolean(job.payload.output_root && (progress?.folder_exists || (!progress && job.status === "succeeded")));
             return <details key={job.id} className={"download-job " + current} open={ACTIVE_STATUSES.has(current) || undefined}>
               <summary>
@@ -604,6 +630,7 @@ export default function Dashboard() {
                 {progress?.folder_exists && <div className="download-live-status"><strong>{job.error && current === "queued" ? "Ready to resume" : preparingLibrary ? "Preparing Library" : downloadingAndPreparing ? "Downloading now · preparing Library" : ACTIVE_STATUSES.has(current) ? "Downloading now" : "Files on disk"}</strong><span>{libraryProgress && (preparingLibrary || downloadingAndPreparing) ? `${progressBreakdown(progress)} · ${libraryProgressBreakdown(libraryProgress)}` : progressBreakdown(progress)}</span></div>}
                 {(sources.length > 0 || canOpenFolder || job.status === "succeeded") && <div className="download-job-actions">
                   {sources.length > 0 && <button type="button" className="secondary-button" onClick={() => reuseLinks(sources)}>Reuse {sources.length === 1 ? "link" : "links"}</button>}
+                  {creatorProfiles.length > 0 && <button type="button" className="secondary-button" title="Add the creator's Douyin profile to the link box so you can fetch their whole catalogue" onClick={() => addCreatorProfiles(creatorProfiles)}>Add creator {creatorProfiles.length === 1 ? "profile" : `profiles (${creatorProfiles.length})`}</button>}
                   {sources[0] && <a href={sources[0]} target="_blank" rel="noreferrer">Open source</a>}
                   {canOpenFolder && <button type="button" className="secondary-button" onClick={() => void openFolder(job.payload.output_root!)}>Open folder</button>}
                   {job.status === "succeeded" && <Link href="/library">Open library</Link>}

@@ -408,6 +408,13 @@ def _douyin_artifact_metadata(path: Path, output_root: Path | None) -> dict[str,
                 payload.get("desc") or payload.get("item_title"), limit=5000
             )
             share_url = _clean_metadata_text(payload.get("share_url"), limit=2000)
+            sec_uid = _clean_metadata_text(
+                author.get("sec_uid") if isinstance(author, dict) else None, limit=200
+            )
+            if sec_uid and re.fullmatch(r"[A-Za-z0-9_-]{16,120}", sec_uid):
+                creator_url = f"https://www.douyin.com/user/{sec_uid}"
+                if _supported_source_url(creator_url):
+                    metadata["creator_url"] = creator_url
             if creator:
                 metadata["creator"] = creator
             if caption:
@@ -594,10 +601,11 @@ def _library_progress(job: dict[str, Any]) -> dict[str, int]:
     }
 def _queue_library_artifacts(
     payload: dict[str, Any], artifacts: list[dict[str, Any]]
-) -> tuple[list[dict[str, Any]], list[str]]:
+) -> tuple[list[dict[str, Any]], list[str], list[str]]:
+    """Queue library imports and report the creator profiles they came from."""
     actor = payload.get("actor_user_id")
     if not actor:
-        return [], []
+        return [], [], []
     from trendrelay_api.media_library import create_ingest_job
 
     source_urls = payload.get("request", {}).get("urls") or []
@@ -605,11 +613,15 @@ def _queue_library_artifacts(
     output_root = Path(str(output_root_value)) if output_root_value else None
     queued = []
     errors = []
+    creator_urls: list[str] = []
     for artifact in artifacts:
         try:
             artifact_path = Path(artifact["path"])
             metadata = _douyin_artifact_metadata(artifact_path, output_root)
             artifact_source_url = metadata.get("source_url")
+            creator_url = metadata.get("creator_url")
+            if creator_url:
+                creator_urls.append(creator_url)
             origin_urls = list(
                 dict.fromkeys(
                     url for url in [artifact_source_url, *source_urls] if url
@@ -642,7 +654,7 @@ def _queue_library_artifacts(
             )
         except Exception as error:
             errors.append(str(error)[-500:])
-    return queued, errors
+    return queued, errors, list(dict.fromkeys(creator_urls))
 
 
 def _remove_missing_library_assets(
@@ -700,7 +712,7 @@ def reconcile_downloads_to_library(workspace_id: str, actor_user_id: str) -> dic
         payload = dict(job.get("payload") or {})
         payload["workspace_id"] = workspace_id
         payload["actor_user_id"] = actor_user_id
-        batch, batch_errors = _queue_library_artifacts(payload, available_artifacts)
+        batch, batch_errors, _creators = _queue_library_artifacts(payload, available_artifacts)
         queued.extend(batch)
         errors.extend(batch_errors)
     removed_asset_ids = _remove_missing_library_assets(
@@ -732,22 +744,28 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         library_jobs: list[dict[str, Any]] = []
         library_errors: list[str] = []
         source_errors: list[str] = []
+        creator_urls: list[str] = []
         blocked_sources = 0
         last_detail = ""
 
-        Prepared = tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]
+        Prepared = tuple[
+            list[dict[str, Any]], list[dict[str, Any]], list[str], list[str]
+        ]
 
         def prepare(paths: list[Path]) -> Prepared:
             """Fingerprint one source's media and hand it to the library."""
             described = _describe_media(paths)
-            queued, errors = _queue_library_artifacts(payload, described)
+            queued, errors, creators = _queue_library_artifacts(payload, described)
             merge_running_result(
                 job_id,
                 worker_id,
-                {"library_jobs": [_compact_library_job(item) for item in queued]},
+                {
+                    "library_jobs": [_compact_library_job(item) for item in queued],
+                    "creator_urls": creators,
+                },
                 factory=JOB_SESSION_FACTORY,
             )
-            return described, queued, errors
+            return described, queued, errors, creators
 
         # A single worker keeps library preparation ordered and never
         # concurrent with itself, while still overlapping the next download.
@@ -785,10 +803,11 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
                         break
 
             for future in pending:
-                described, queued, errors = future.result()
+                described, queued, errors, creators = future.result()
                 artifacts.extend(described)
                 library_jobs.extend(queued)
                 library_errors.extend(errors)
+                creator_urls.extend(creators)
 
         if not artifacts:
             if blocked_sources:
@@ -817,6 +836,7 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
             "artifacts": artifacts,
             "library_jobs": [_compact_library_job(item) for item in library_jobs],
             "library_errors": library_errors,
+            "creator_urls": list(dict.fromkeys(creator_urls)),
             "source_errors": source_errors,
             "summary": summary,
         }

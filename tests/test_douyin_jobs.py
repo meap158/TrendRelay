@@ -221,7 +221,7 @@ def test_reconcile_downloads_queues_legacy_artifacts(monkeypatch, tmp_path: Path
         douyin,
         "_queue_library_artifacts",
         lambda payload, artifacts: (
-            received.append((payload, artifacts)) or ([{"id": "media-1"}], [])
+            received.append((payload, artifacts)) or ([{"id": "media-1"}], [], [])
         ),
     )
 
@@ -254,7 +254,7 @@ def test_reconcile_removes_library_assets_for_missing_downloads(
             }
         ],
     )
-    monkeypatch.setattr(douyin, "_queue_library_artifacts", lambda *_args: ([], []))
+    monkeypatch.setattr(douyin, "_queue_library_artifacts", lambda *_args: ([], [], []))
     removed: list[set[str]] = []
     monkeypatch.setattr(
         douyin,
@@ -453,7 +453,7 @@ def test_douyin_sidecar_metadata_flows_to_library(
         lambda **kwargs: queued.append(kwargs) or {"id": "media-1", "status": "queued"},
     )
 
-    jobs, errors = douyin._queue_library_artifacts(
+    jobs, errors, creator_urls = douyin._queue_library_artifacts(
         {
             "id": "download-1",
             "workspace_id": "workspace-1",
@@ -856,3 +856,44 @@ def test_library_progress_is_visible_while_the_batch_is_still_running(
     assert seen_mid_run and seen_mid_run[0] >= 1, "no library work was visible mid-run"
     # Completion still reports every library job exactly once.
     assert len(completed["result"]["library_jobs"]) == 2
+
+
+def test_creator_profile_link_is_derived_from_the_video_sidecar(tmp_path: Path) -> None:
+    """A single video already names its author, so the profile costs no call."""
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"media")
+    (tmp_path / "clip_data.json").write_text(
+        json.dumps(
+            {
+                "author": {
+                    "nickname": "Demo creator",
+                    "sec_uid": "MS4wLjABAAAAJSwsw8wjUxXKIK-tCGmYTq1hz5Jktmn1SMn8G5MrxQ2IofOE",
+                },
+                "desc": "A clip",
+                "share_url": "https://www.douyin.com/video/7413214856901315880",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    metadata = douyin._douyin_artifact_metadata(clip, tmp_path)
+
+    assert metadata["creator"] == "Demo creator"
+    assert metadata["creator_url"] == (
+        "https://www.douyin.com/user/"
+        "MS4wLjABAAAAJSwsw8wjUxXKIK-tCGmYTq1hz5Jktmn1SMn8G5MrxQ2IofOE"
+    )
+
+
+def test_creator_profile_link_is_omitted_when_the_author_id_is_unusable(
+    tmp_path: Path,
+) -> None:
+    """A malformed identifier must not become a link the user could act on."""
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"media")
+    (tmp_path / "clip_data.json").write_text(
+        json.dumps({"author": {"nickname": "Demo", "sec_uid": "../../evil?x=1"}}),
+        encoding="utf-8",
+    )
+
+    assert "creator_url" not in douyin._douyin_artifact_metadata(clip, tmp_path)
