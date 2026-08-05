@@ -7,4 +7,6 @@
 
 MediaCrawler supports browser-assisted public-post, creator, and comment research across Xiaohongshu, Douyin, Kuaishou, Bilibili, Weibo, Tieba, and Zhihu. Its normal setup uses Python/uv, Node.js, and optionally Playwright or an existing Chrome debugging session.
 
-The upstream license and README prohibit commercial use and large-scale crawling. TrendRelay is intended for affiliate-commercial workflows, so incorporating executable MediaCrawler code would be incompatible without separate written commercial permission. The catalog entry exists for architecture comparison and future licensing review only; the API, CLI, and UI deliberately refuse installation and activation.
+MediaCrawler is a normal catalogued source-checkout provider: installable and activatable from `/tools`, and off until an operator turns it on.
+
+Its upstream README asks against large-scale crawling, which shapes how TrendRelay uses it. Requests stay bounded and operator-initiated, the same posture as the other research providers: no background sweeps, no unattended schedules, and a limit on every collection.

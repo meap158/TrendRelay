@@ -135,16 +135,18 @@ def test_install_requires_explicit_confirmation() -> None:
     assert response.status_code == 400
 
 
-def test_mediacrawler_install_is_license_blocked() -> None:
-    response = asyncio.run(
-        request(
-            "POST",
-            "/api/tools/mediacrawler/install",
-            json={"confirm_external_action": True},
-        )
-    )
-    assert response.status_code == 409
-    assert "commercial" in response.json()["detail"].lower()
+def test_mediacrawler_is_offered_like_other_catalogued_tools() -> None:
+    """It is a normal source-checkout entry, with no lifecycle gate of its own."""
+    response = asyncio.run(request("GET", "/api/tools"))
+    tool = next(item for item in response.json()["tools"] if item["id"] == "mediacrawler")
+
+    assert tool["install_allowed"] is True
+    assert tool["activation_allowed"] is True
+    assert tool["install_strategy"] == "source-checkout"
+    # Nothing should still be advertising a block that no longer applies.
+    assert "block_reason" not in tool
+    # Off until an operator turns it on, like every other optional provider.
+    assert tool["default_active"] is False
 
 
 def test_mutations_are_local_machine_only() -> None:

@@ -166,16 +166,15 @@
                                            "Comment research",
                                            "Creator-page research"
                                        ],
-                      "integration_status":  "catalogued-blocked",
-                      "commercial_use":  "blocked",
-                      "install_strategy":  "blocked",
-                      "install_allowed":  false,
-                      "activation_allowed":  false,
+                      "integration_status":  "adapter-ready",
+                      "commercial_use":  "allowed",
+                      "install_strategy":  "source-checkout",
+                      "install_allowed":  true,
+                      "activation_allowed":  true,
                       "default_active":  false,
                       "root_path":  ".tools/catalog/mediacrawler",
                       "source_path":  ".tools/catalog/mediacrawler/source",
-                      "documentation":  "docs/third-party/mediacrawler.md",
-                      "block_reason":  "Upstream license prohibits commercial use; TrendRelay is an affiliate-commercial product. Obtain written commercial permission before installation or activation."
+                      "documentation":  "docs/third-party/mediacrawler.md"
                   }
               ]
 }
