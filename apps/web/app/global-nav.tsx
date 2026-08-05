@@ -121,14 +121,11 @@ export function GlobalNav() {
         <strong>TrendRelay</strong>
       </Link>
       <nav className="app-nav">
-        <Link className={pathname === "/" ? "active" : ""} href="/">Home</Link>
-        <Link className={libraryActive ? "active" : ""} href="/library">Library</Link>
         <Link className={discoverActive ? "active" : ""} href="/discover">Discover</Link>
-
-
-        <Link className={pathname === "/campaigns" ? "active" : ""} href="/campaigns">Campaigns</Link>
-
+        <Link className={pathname === "/" ? "active" : ""} href="/">Downloads</Link>
+        <Link className={libraryActive ? "active" : ""} href="/library">Library</Link>
         <Link className={publishActive ? "active" : ""} href="/publish">Publish</Link>
+        <Link className={pathname === "/campaigns" ? "active" : ""} href="/campaigns">Campaigns</Link>
         <Link className={pathname === "/tools" ? "active" : ""} href="/tools">Tools</Link>
       </nav>
 
