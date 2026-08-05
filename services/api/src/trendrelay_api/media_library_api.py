@@ -618,6 +618,30 @@ def face_blur_status(
     return {"status": runtime_status(), "jobs": list_blur_jobs(workspace_id)}
 
 
+@router.get("/face-blur/media")
+def face_blur_media(
+    workspace_id: str,
+    path: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> FileResponse:
+    """Serve a blurred render so it can be reviewed before it is trusted.
+
+    Confined to this workspace's blur output directory: the previewer must not
+    become a way to read arbitrary files off the machine.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.face_blur import BLUR_ROOT
+
+    root = (BLUR_ROOT / workspace_id).resolve()
+    resolved = Path(path).resolve()
+    if not resolved.is_relative_to(root) or resolved.suffix.lower() != ".mp4":
+        raise HTTPException(status_code=403, detail="Only blurred renders can be previewed.")
+    if not resolved.is_file():
+        raise HTTPException(status_code=404, detail="That render is no longer on disk.")
+    return FileResponse(resolved, media_type="video/mp4")
+
+
 @router.post("/face-blur/jobs", status_code=202)
 def submit_face_blur(
     workspace_id: str,

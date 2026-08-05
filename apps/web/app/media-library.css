@@ -194,3 +194,16 @@
 @media (max-width: 430px) {
   .library-gallery, .library-list { grid-template-columns: 1fr; }
 }
+
+/* Studio face-blur tool */
+.blur-tool { display: grid; gap: 12px; }
+.blur-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.blur-actions button { min-height: 34px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 12px; color: var(--text); background: var(--panel); font: inherit; cursor: pointer; }
+.blur-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.blur-use { display: grid; gap: 5px; font-size: 12px; font-weight: 600; }
+.blur-use select { border: 1px solid var(--line-strong); border-radius: 4px; padding: 7px 9px; font: inherit; }
+.blur-use small { color: var(--muted); font-weight: 400; line-height: 1.45; }
+.blur-result { display: grid; gap: 5px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 12px; }
+.blur-result small { color: var(--muted); }
+.blur-warning { color: #8a1c24; }
+.blur-preview { width: 100%; margin-top: 6px; border-radius: 4px; background: #111820; }

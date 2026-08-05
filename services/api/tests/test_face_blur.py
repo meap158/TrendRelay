@@ -452,3 +452,26 @@ def test_preview_and_full_renders_do_not_collide(tmp_path, blur_jobs) -> None:
 
     assert preview != full
     assert preview.name.endswith(".preview.mp4")
+
+
+def test_preview_route_confines_reads_to_the_blur_output(tmp_path, monkeypatch) -> None:
+    """The previewer must not become a way to read arbitrary files."""
+    from trendrelay_api.integrations import face_blur as module
+
+    root = tmp_path / "blur"
+    (root / "w1").mkdir(parents=True)
+    monkeypatch.setattr(module, "BLUR_ROOT", root)
+
+    inside = (root / "w1" / "ok.mp4").resolve()
+    inside.write_bytes(b"x")
+    outside = (tmp_path / "secret.mp4").resolve()
+    outside.write_bytes(b"x")
+    traversal = (root / "w1" / ".." / ".." / "secret.mp4").resolve()
+
+    workspace_root = (root / "w1").resolve()
+    assert inside.is_relative_to(workspace_root)
+    assert not outside.is_relative_to(workspace_root)
+    # The obvious escape resolves outside the guarded root.
+    assert not traversal.is_relative_to(workspace_root)
+    # Another workspace's renders are out of reach too.
+    assert not (root / "w2" / "other.mp4").resolve().is_relative_to(workspace_root)
