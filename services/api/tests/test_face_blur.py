@@ -180,3 +180,128 @@ def test_opencv_is_not_imported_merely_by_importing_the_module(monkeypatch) -> N
     # cv2 imports its own submodules, so only the first entry is ours.
     assert loaded, "asking for status must be what loads OpenCV"
     assert loaded[0] == "cv2"
+
+
+# --- rendering -------------------------------------------------------------- #
+
+
+def _write_clip(path, frames=12, size=(160, 120)):
+    """A clip with a sharp high-contrast square standing in for a face."""
+    import cv2
+    import numpy as np
+
+    width, height = size
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), 10.0, size)
+    for index in range(frames):
+        frame = np.zeros((height, width, 3), dtype=np.uint8)
+        # A checkerboard destroyed by blurring but preserved by a copy.
+        for row in range(40, 80, 4):
+            for column in range(40, 80, 4):
+                frame[row : row + 2, column : column + 2] = 255
+        frame[0:5, 0:5] = index  # keeps frames distinguishable
+        writer.write(frame)
+    writer.release()
+    return path
+
+
+class _FixedDetector:
+    """Stands in for YuNet so rendering is tested without a real face."""
+
+    def __init__(self, box, miss_frames=()):
+        self.box = box
+        self.miss_frames = set(miss_frames)
+        self.calls = 0
+
+    def detect(self, _frame):
+        import numpy as np
+
+        index = self.calls
+        self.calls += 1
+        if index in self.miss_frames:
+            return None, None
+        x, y, width, height = self.box
+        return None, np.array([[x, y, width, height, 0.99]], dtype="float32")
+
+
+def test_render_destroys_the_pixels_rather_than_covering_them(tmp_path, monkeypatch) -> None:
+    """A recoverable blur is not a blur, so the output must lose the detail."""
+    import cv2
+    import numpy as np
+
+    source = _write_clip(tmp_path / "clip.mp4")
+    destination = tmp_path / "blurred.mp4"
+    monkeypatch.setattr(
+        face_blur, "_detector", lambda *_a, **_k: _FixedDetector((40, 40, 40, 40))
+    )
+
+    result = face_blur.render_blurred(source, destination)
+
+    assert destination.is_file()
+    assert result["reversible"] is False
+    assert result["coverage"] == 1.0
+    assert result["warning"] is None
+
+    capture = cv2.VideoCapture(str(destination))
+    ok, frame = capture.read()
+    capture.release()
+    assert ok
+    # The checkerboard had high local variance; blurring flattens it.
+    region = frame[45:75, 45:75].astype("float32")
+    assert float(np.var(region)) < 200, "face region still carries sharp detail"
+
+
+def test_render_bridges_a_detector_blink_so_no_frame_is_left_exposed(
+    tmp_path, monkeypatch
+) -> None:
+    source = _write_clip(tmp_path / "clip.mp4", frames=10)
+    destination = tmp_path / "blurred.mp4"
+    monkeypatch.setattr(
+        face_blur,
+        "_detector",
+        lambda *_a, **_k: _FixedDetector((40, 40, 40, 40), miss_frames=(4, 5)),
+    )
+
+    result = face_blur.render_blurred(source, destination)
+
+    assert result["frames_with_detection"] == 8
+    # The two missed frames are still covered.
+    assert result["frames_covered"] == result["frames"]
+    assert result["coverage"] == 1.0
+
+
+def test_preview_limits_the_work_to_a_short_proxy(tmp_path, monkeypatch) -> None:
+    """An operator confirms coverage before paying for a full encode."""
+    source = _write_clip(tmp_path / "clip.mp4", frames=40)
+    monkeypatch.setattr(
+        face_blur, "_detector", lambda *_a, **_k: _FixedDetector((40, 40, 40, 40))
+    )
+
+    full = face_blur.render_blurred(source, tmp_path / "full.mp4")
+    preview = face_blur.render_blurred(
+        source, tmp_path / "preview.mp4", preview_seconds=1.0
+    )
+
+    assert preview["preview"] is True and full["preview"] is False
+    assert preview["frames"] == 10  # one second at 10fps
+    assert preview["frames"] < full["frames"]
+
+
+def test_render_records_the_settings_that_produced_it(tmp_path, monkeypatch) -> None:
+    """Provenance has to survive on the derivative for a reviewer to trust it."""
+    source = _write_clip(tmp_path / "clip.mp4")
+    monkeypatch.setattr(
+        face_blur, "_detector", lambda *_a, **_k: _FixedDetector((40, 40, 40, 40))
+    )
+
+    result = face_blur.render_blurred(
+        source, tmp_path / "out.mp4", face_blur.BlurSettings(confidence=0.8)
+    )
+
+    assert result["detector"] == "yunet"
+    assert result["settings"]["confidence"] == 0.8
+    assert result["settings"]["padding_ratio"] == face_blur.PADDING_RATIO
+
+
+def test_a_missing_source_is_refused_before_any_work(tmp_path) -> None:
+    with pytest.raises(face_blur.FaceBlurUnavailable, match="No such media file"):
+        face_blur.render_blurred(tmp_path / "absent.mp4", tmp_path / "out.mp4")

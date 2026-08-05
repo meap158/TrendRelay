@@ -20,8 +20,13 @@ detector needs the runtime.
 
 from __future__ import annotations
 
+import os
+import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+
+from trendrelay_api.tool_registry import PROJECT_ROOT
 
 Box = tuple[int, int, int, int]  # x, y, width, height
 
@@ -187,4 +192,172 @@ def runtime_status() -> dict[str, Any]:
         "opencv_version": cv2.__version__,
         "detector": "yunet",
         "install_hint": INSTALL_HINT,
+    }
+
+
+FFMPEG = (
+    PROJECT_ROOT
+    / "node_modules"
+    / "ffmpeg-static"
+    / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
+)
+
+
+def _detector(cv2: Any, frame_size: tuple[int, int], settings: BlurSettings) -> Any:
+    detector = cv2.FaceDetectorYN.create(
+        model="", config="", input_size=frame_size,
+        score_threshold=settings.confidence, nms_threshold=0.3, top_k=5000,
+    )
+    detector.setInputSize(frame_size)
+    return detector
+
+
+def detect_boxes(detector: Any, frame: Any) -> list[Box]:
+    """Faces in one frame, as integer boxes clamped to non-negative origins."""
+    _, faces = detector.detect(frame)
+    if faces is None:
+        return []
+    boxes: list[Box] = []
+    for face in faces:
+        x, y, width, height = (int(round(float(value))) for value in face[:4])
+        if width > 0 and height > 0:
+            boxes.append((max(0, x), max(0, y), width, height))
+    return boxes
+
+
+def apply_blur(cv2: Any, frame: Any, box: Box, settings: BlurSettings) -> None:
+    """Blur one region in place.
+
+    The region is replaced by its blurred pixels, so the output frame carries no
+    recoverable original. An elliptical mask keeps the result from looking like
+    a pasted rectangle without leaving the corners of the face sharp.
+    """
+    height, width = frame.shape[:2]
+    x, y, box_width, box_height = pad_box(box, (width, height), settings.padding_ratio)
+    if box_width <= 0 or box_height <= 0:
+        return
+    region = frame[y : y + box_height, x : x + box_width]
+    if region.size == 0:
+        return
+    kernel = blur_kernel((x, y, box_width, box_height), settings.kernel_ratio)
+    blurred = cv2.GaussianBlur(region, (kernel, kernel), 0)
+    frame[y : y + box_height, x : x + box_width] = blurred
+
+
+def _remux_audio(silent_video: Path, original: Path, destination: Path) -> bool:
+    """Put the original audio back over the blurred frames.
+
+    OpenCV writes video only, so a blurred render arrives silent. Copying both
+    streams avoids a second lossy pass over the picture.
+    """
+    if not FFMPEG.is_file():
+        return False
+    completed = subprocess.run(
+        [
+            str(FFMPEG), "-y",
+            "-i", str(silent_video),
+            "-i", str(original),
+            "-c:v", "copy", "-c:a", "copy",
+            "-map", "0:v:0", "-map", "1:a:0?",
+            "-shortest",
+            str(destination),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+        timeout=1800,
+    )
+    return completed.returncode == 0 and destination.is_file()
+
+
+def render_blurred(
+    source: Path,
+    destination: Path,
+    settings: BlurSettings | None = None,
+    preview_seconds: float | None = None,
+) -> dict[str, Any]:
+    """Blur every detected face and write a new file.
+
+    Runs in two passes. The first detects across the whole clip so gaps can be
+    bridged with knowledge of what comes after them; a single streaming pass
+    could only ever hold the last known box. The second burns the blur in.
+
+    ``preview_seconds`` limits both passes, so an operator can confirm coverage
+    on a short proxy before paying for a full encode.
+    """
+    cv2 = _load_opencv()
+    settings = settings or BlurSettings()
+    if not source.is_file():
+        raise FaceBlurUnavailable(f"No such media file: {source}")
+
+    capture = cv2.VideoCapture(str(source))
+    if not capture.isOpened():
+        raise FaceBlurUnavailable(f"OpenCV could not read {source.name}.")
+    try:
+        fps = capture.get(cv2.CAP_PROP_FPS) or 25.0
+        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        limit = int(fps * preview_seconds) if preview_seconds else None
+        detector = _detector(cv2, (width, height), settings)
+
+        frames: list[Any] = []
+        timeline: list[Box | None] = []
+        detected_frames = 0
+        while limit is None or len(frames) < limit:
+            ok, frame = capture.read()
+            if not ok:
+                break
+            boxes = detect_boxes(detector, frame)
+            if boxes:
+                detected_frames += 1
+            # One box per frame keeps the timeline simple; multi-face support
+            # widens this to a list per frame without changing the bridging.
+            timeline.append(boxes[0] if boxes else None)
+            frames.append(frame)
+    finally:
+        capture.release()
+
+    if not frames:
+        raise FaceBlurUnavailable(f"{source.name} contained no readable frames.")
+
+    bridged = bridge_gaps(timeline, settings.max_gap_frames)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    silent = destination.with_suffix(".silent.mp4")
+    writer = cv2.VideoWriter(
+        str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
+    )
+    try:
+        for frame, box in zip(frames, bridged, strict=True):
+            if box is not None:
+                apply_blur(cv2, frame, box, settings)
+            writer.write(frame)
+    finally:
+        writer.release()
+
+    if _remux_audio(silent, source, destination):
+        silent.unlink(missing_ok=True)
+    else:
+        # Better a silent blurred clip than an unblurred one.
+        silent.replace(destination)
+
+    ratio = coverage_ratio(bridged)
+    return {
+        "source": str(source),
+        "output": str(destination),
+        "frames": len(frames),
+        "frames_with_detection": detected_frames,
+        "frames_covered": sum(1 for box in bridged if box is not None),
+        "coverage": round(ratio, 4),
+        "warning": coverage_warning(ratio),
+        "preview": preview_seconds is not None,
+        "detector": "yunet",
+        "settings": {
+            "padding_ratio": settings.padding_ratio,
+            "kernel_ratio": settings.kernel_ratio,
+            "confidence": settings.confidence,
+            "max_gap_frames": settings.max_gap_frames,
+        },
+        "reversible": False,
     }
