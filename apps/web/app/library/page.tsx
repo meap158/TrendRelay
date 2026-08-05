@@ -16,7 +16,7 @@ type LibraryFacets = {
   platforms: Facet[];
   media_kinds: Facet[];
 };
-type Version = { kind: "original" | "proxy" | "thumbnail" | "audio"; path: string; size_bytes: number };
+type Version = { kind: "original" | "proxy" | "thumbnail" | "audio" | "blurred"; path: string; size_bytes: number };
 type Transcript = { id: string; kind: "speech" | "ocr"; language: string; text: string };
 type Analysis = {
   version: number;
@@ -193,23 +193,41 @@ function MediaPreview({
   const [source, setSource] = useState("");
   const [error, setError] = useState("");
   const [requested, setRequested] = useState(autoStart);
+  // A blurred cut is watched in the same player as the original, so the two are
+  // compared in place rather than in a second, smaller video somewhere else.
+  const [cut, setCut] = useState<"original" | "blurred">("original");
   const videoRef = useRef<HTMLVideoElement>(null);
   const navigatingRef = useRef(false);
+  const blurred = asset.versions.find((version) => version.kind === "blurred") ?? null;
 
   useEffect(() => {
     if (asset.media_kind !== "video" || !requested) return;
     let active = true;
     let objectUrl = "";
     const controller = new AbortController();
-    apiFetch(`/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/preview`, {
-      method: "POST",
-      signal: controller.signal,
-    })
-      .then((response) => json<{ mime_type: string; content_base64: string }>(response))
-      .then((preview) => {
-        objectUrl = URL.createObjectURL(previewBlob(preview.content_base64, preview.mime_type));
-        if (active) setSource(objectUrl);
-      })
+    const showBlurred = cut === "blurred" && blurred;
+    const request = showBlurred
+      ? apiFetch(
+          `/api/workspaces/${workspaceId}/media/library/face-blur/media?path=${encodeURIComponent(blurred.path)}`,
+          { signal: controller.signal },
+        ).then(async (response) => {
+          if (!response.ok) throw new Error("Blurred version unavailable");
+          objectUrl = URL.createObjectURL(await response.blob());
+          return objectUrl;
+        })
+      : apiFetch(`/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/preview`, {
+          method: "POST",
+          signal: controller.signal,
+        })
+          .then((response) => json<{ mime_type: string; content_base64: string }>(response))
+          .then((preview) => {
+            objectUrl = URL.createObjectURL(
+              previewBlob(preview.content_base64, preview.mime_type),
+            );
+            return objectUrl;
+          });
+    request
+      .then((url) => { if (active) setSource(url); })
       .catch((reason) => {
         if (active && reason instanceof DOMException && reason.name === "AbortError") return;
         if (active) setError(reason instanceof Error ? reason.message : "Video preview unavailable");
@@ -219,7 +237,7 @@ function MediaPreview({
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [apiFetch, asset.id, asset.media_kind, requested, workspaceId]);
+  }, [apiFetch, asset.id, asset.media_kind, blurred, cut, requested, workspaceId]);
 
   function startPlayback() {
     setError("");
@@ -300,6 +318,19 @@ function MediaPreview({
           />
         ) : <p>{error || "Loading video preview…"}</p>}
       </div>
+      {blurred && (
+        <div className="library-cut-switch" role="group" aria-label="Which cut to play">
+          {(["original", "blurred"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={cut === option ? "selected" : ""}
+              aria-pressed={cut === option}
+              onClick={() => { setError(""); setSource(""); setCut(option); setRequested(true); }}
+            >{option === "original" ? "Original" : "Faces blurred"}</button>
+          ))}
+        </div>
+      )}
       <nav className="library-preview-navigation" aria-label="Browse video previews">
         <button type="button" disabled={!hasPreviousVideo} onClick={() => navigateVideo(onPreviousVideo)} aria-label="Previous video" title="Previous video (Left arrow)">
           <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m12.5 4.5-5.5 5.5 5.5 5.5" /></svg>
@@ -332,7 +363,6 @@ export default function LibraryPage() {
   const [continueVideoPlayback, setContinueVideoPlayback] = useState(false);
   const autoSyncedWorkspaces = useRef(new Set<string>());
   const [busy, setBusy] = useState("");
-  const [blurNote, setBlurNote] = useState<string | null>(null);
   const [blurResult, setBlurResult] = useState<{
     status: string;
     output?: string;
@@ -428,7 +458,7 @@ export default function LibraryPage() {
 
   function renderAsset(asset: Asset) {
     return (
-      <button className={selectedId === asset.id ? "selected" : ""} key={asset.id} aria-label={`Open ${asset.title}`} aria-pressed={selectedId === asset.id} onClick={() => setSelectedId(asset.id)}>
+      <button className={`${selectedId === asset.id ? "selected" : ""}${asset.versions.some((version) => version.kind === "blurred") ? " has-versions" : ""}`} key={asset.id} aria-label={`Open ${asset.title}`} aria-pressed={selectedId === asset.id} onClick={() => setSelectedId(asset.id)}>
         <Thumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
         <span>
           <strong>{asset.title}</strong>
@@ -613,17 +643,16 @@ export default function LibraryPage() {
     return blurredVersion(asset)?.path ?? asset.original_path;
   }
 
-  async function blurFaces(asset: Asset, previewOnly: boolean) {
+  async function blurFaces(asset: Asset) {
     // A preview is cheap and reversible, so it runs on one click. The full
     // render replaces what Publish sends, so that one still asks.
-    if (!previewOnly && !window.confirm(
+    if (!window.confirm(
       `Blur every detected face in "${asset.title}"?\n\n`
       + "This renders a new file. The original is not modified, but Campaigns and "
       + "Publish will use the blurred version.",
     )) return;
-    setBusy(previewOnly ? "blur-preview" : "blur");
+    setBusy("blur");
     setError("");
-    setBlurNote(previewOnly ? "Rendering a six-second preview…" : "Blurring the full clip…");
     setBlurResult(null);
     try {
       const response = await apiFetch(
@@ -633,7 +662,6 @@ export default function LibraryPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             source_path: asset.original_path,
-            preview_seconds: previewOnly ? 6 : null,
             confirm_external_action: true,
           }),
         },
@@ -644,7 +672,6 @@ export default function LibraryPage() {
       }
       await followBlurJob(payload.job.id);
     } catch (reason) {
-      setBlurNote(null);
       setError(reason instanceof Error ? reason.message : "Face blurring failed.");
     } finally {
       setBusy("");
@@ -749,9 +776,7 @@ export default function LibraryPage() {
       {blurResult && (
         <div className="blur-result">
           <strong>
-            {blurResult.status === "succeeded"
-              ? blurResult.preview ? "Preview ready" : "Blurred render ready"
-              : "Blurring failed"}
+            {blurResult.status === "succeeded" ? "Faces blurred" : "Blurring failed"}
           </strong>
           {blurResult.error && <small className="blur-warning">{blurResult.error}</small>}
           {blurResult.coverage !== undefined && (
@@ -760,32 +785,18 @@ export default function LibraryPage() {
               {blurResult.faces_tracked
                 ? ` · ${blurResult.faces_tracked} face${blurResult.faces_tracked === 1 ? "" : "s"} tracked`
                 : ""}
-              {blurResult.preview ? " · first six seconds only" : ""}
             </small>
           )}
           {blurResult.warning && <small className="blur-warning">{blurResult.warning}</small>}
-          {blurResult.output && blurResult.status === "succeeded" && (
-            <video
-              className="blur-preview"
-              controls
-              preload="metadata"
-              src={`${apiBaseUrl()}/api/workspaces/${workspaceId}/media/library/face-blur/media?path=${encodeURIComponent(blurResult.output)}`}
-            />
-          )}
-          {blurResult.preview && blurResult.status === "succeeded" && (
-            <small>Happy with it? Use <b>Blur faces</b> to render the whole clip.</small>
-          )}
-          {blurResult.status === "succeeded" && !blurResult.preview && (
+          {blurResult.status === "succeeded" && (
             <small>
               {blurResult.version_registered
-                ? "Grouped as a blurred version of this asset. Handoffs now use it."
+                ? "Switch between Original and Faces blurred above. Handoffs use the blurred cut."
                 : blurResult.version_note ?? null}
             </small>
           )}
         </div>
       )}
-      {message && <p className="campaign-message">{message}</p>}
-
       <section className="library-layout">
         <aside className="library-browser">
           <div className="library-browser-toolbar">
@@ -942,25 +953,14 @@ export default function LibraryPage() {
                     className="secondary-button"
                     disabled={busy.startsWith("blur") || selected.media_kind !== "video"}
                     title={selected.media_kind === "video"
-                      ? "Render six seconds with faces blurred, so you can see it first"
-                      : "Face blurring applies to video"}
-                    onClick={() => void blurFaces(selected, true)}
-                  >{busy === "blur-preview" ? "Rendering preview…" : "Preview blur"}</button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={busy.startsWith("blur") || selected.media_kind !== "video"}
-                    title={selected.media_kind === "video"
                       ? "Detect every face and burn the blur into a new render"
                       : "Face blurring applies to video"}
-                    onClick={() => void blurFaces(selected, false)}
+                    onClick={() => void blurFaces(selected)}
                   >{busy === "blur" ? "Blurring…" : "Blur faces"}</button>
                   {busy.startsWith("blur") && (
                     <span className="blur-progress" role="status">
                       <i aria-hidden="true" />
-                      {busy === "blur-preview"
-                        ? "Rendering a six-second preview…"
-                        : "Blurring the whole clip…"}
+                      Blurring the whole clip…
                     </span>
                   )}
                   <Link href={`/campaigns?video=${encodeURIComponent(handoffPath(selected))}`}>Plan campaign</Link>
