@@ -182,6 +182,25 @@ The shape it should take:
 Open question for the operator: whether the blurred derivative replaces the
 original in downstream handoffs by default, or is offered alongside it.
 
+Requested 2026-08-06, not yet built - fold Studio into Assets:
+
+Studio should stop being its own tab. Everything it offers moves into
+Library > Assets, where the asset is already selected, and the tab is removed
+from the nav. Face blurring in particular should become one click on the asset
+with an instant preview rather than a form that asks for a path Assets already
+knows.
+
+What exists to move: the face-blur panel (preview, coverage, handoff choice)
+and the OpenMontage preflight form. Assets already has the blur action added in
+db4caf2 and the preview route; what it lacks is showing the result in place
+instead of pointing at Studio. The blur panel's status is fetched once on mount,
+so a finished render currently needs a reload - poll it, or refresh after
+submitting, before calling the one-click flow done.
+
+Note that Studio's preflight form still posts a pipeline, budget and manual
+segment plan. Those need somewhere to live in Assets, or an explicit decision
+to drop them, before /studio is deleted rather than merely unlinked.
+
 Open items from the 2026-08-05 session, in priority order:
 
 1. The Library detail pane's Studio/Campaign/Publish links are now ungated, but nothing has exercised a full Library-to-publish run end to end since the rights removal. Walk one asset through it.
