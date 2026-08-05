@@ -79,6 +79,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       controller.abort();
     };
   }, []);
+  // Every branch below clears `loading`, but each depends on a probe settling.
+  // A stalled probe used to leave the shell on "Loading workspace…" until a
+  // manual reload, so the flag is given a hard ceiling it cannot outlive.
+  useEffect(() => {
+    if (!loading) return;
+    const ceiling = window.setTimeout(() => setLoading(false), 6000);
+    return () => window.clearTimeout(ceiling);
+  }, [loading]);
+
   useEffect(() => {
     if (!localCheckComplete) return;
     if (localUser) return;
