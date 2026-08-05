@@ -122,7 +122,6 @@ export default function StudioPage() {
           workspace_id: workspaceId,
           title: data.get("title"),
           source_asset: data.get("source_asset"),
-          source_rights: data.get("source_rights"),
           pipeline: data.get("pipeline"),
           target_platforms: ["tiktok", "instagram", "youtube"],
           clip_count: segments.length,
@@ -205,7 +204,6 @@ export default function StudioPage() {
         <label>Workspace<select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} / {workspace.role}</option>)}</select></label>
         <label>Production title<input name="title" required minLength={2} /></label>
         <label>Approved local media path<input name="source_asset" required value={sourcePath} onChange={(event) => setSourcePath(event.target.value)} placeholder="C:\media\source.mp4" /></label>
-        <label>Rights basis<select name="source_rights"><option value="owned">Owned</option><option value="licensed">Licensed</option><option value="public-domain">Public domain</option></select></label>
         <label>Pipeline<select name="pipeline"><option value="clip-factory">Clip factory</option><option value="podcast-repurpose">Podcast repurpose</option></select></label>
         <label>Budget cap (USD)<input name="budget_usd" type="number" min="1" max="100" step="0.01" defaultValue="1" /></label>
         <h2>Manual clip plan</h2>

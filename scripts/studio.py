@@ -42,7 +42,6 @@ def parser() -> argparse.ArgumentParser:
     propose.add_argument("title")
     propose.add_argument("--source", required=True)
     propose.add_argument(
-        "--rights", required=True, choices=["owned", "licensed", "public-domain"]
     )
     propose.add_argument(
         "--pipeline",
@@ -108,7 +107,6 @@ def main() -> int:
                 workspace_id=args.workspace,
                 title=args.title,
                 source_asset=args.source,
-                source_rights=args.rights,
                 pipeline=args.pipeline,
                 target_platforms=args.platform or ["tiktok"],
                 clip_count=args.clips,

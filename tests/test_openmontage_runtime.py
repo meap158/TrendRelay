@@ -124,7 +124,6 @@ def test_render_worker_records_verified_artifact_provenance(
     assert result["artifacts"][0]["sha256"]
     assert result["library_jobs"][0]["id"] == "media-2"
     assert queued[0]["source_type"] == "openmontage-render"
-    assert queued[0]["rights_status"] == "unknown"
 
 
 def test_isolated_upstream_video_trimmer_smoke() -> None:

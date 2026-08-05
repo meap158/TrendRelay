@@ -647,7 +647,6 @@ def _queue_library_artifacts(
                         "download_source_path": artifact["path"],
                         "origin_urls": origin_urls,
                     },
-                    rights_status="unknown",
                     source_sha256=artifact.get("sha256"),
                     factory=JOB_SESSION_FACTORY,
                 )

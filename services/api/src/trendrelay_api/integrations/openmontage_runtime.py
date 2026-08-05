@@ -133,7 +133,6 @@ def create_render_job(request: RenderRequest, actor_user_id: str | None = None) 
         "created_at": _now(),
         "updated_at": _now(),
         "source": production["source"],
-        "source_rights": production["source"].get("rights_basis", "unknown"),
         "provider": production["provider"],
         "segments": [item.model_dump() for item in request.segments],
         "budget": {"cap_usd": production["plan"]["budget_cap_usd"], "actual_usd": 0.0},
@@ -165,9 +164,6 @@ def _queue_library_artifacts(
         return [], []
     from trendrelay_api.media_library import create_ingest_job
 
-    rights = payload.get("source_rights") or "unknown"
-    if rights not in {"owned", "licensed", "public-domain"}:
-        rights = "unknown"
     queued = []
     errors = []
     for index, artifact in enumerate(artifacts, start=1):
@@ -179,10 +175,6 @@ def _queue_library_artifacts(
                     path=artifact["path"],
                     title=f"OpenMontage clip {index:02d}",
                     source_type="openmontage-render",
-                    rights_status=rights,
-                    rights_basis=(
-                        f"Derived from a governed OpenMontage source with {rights} rights."
-                    ),
                     factory=JOB_SESSION_FACTORY,
                 )
             )

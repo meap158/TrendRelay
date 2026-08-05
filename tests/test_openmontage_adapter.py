@@ -71,14 +71,12 @@ def test_proposal_fingerprints_source_and_remains_non_executable(
     request = openmontage.ProductionRequest(
         title="Three product clips",
         source_asset=str(source),
-        source_rights="owned",
         confirm_external_action=True,
     )
     proposal = openmontage.create_proposal(request)
     assert proposal["status"] == "awaiting_approval"
     assert proposal["source"]["sha256"]
     assert proposal["execution"]["enabled"] is False
-    assert openmontage.get_production(proposal["id"])["source"]["rights_basis"] == "owned"
     monkeypatch.setattr(
         openmontage,
         "provider_status",
@@ -140,7 +138,6 @@ def test_core_operations_require_explicit_confirmation() -> None:
             openmontage.ProductionRequest(
                 title="Unconfirmed proposal",
                 source_asset="missing.mp4",
-                source_rights="owned",
             )
         )
     with pytest.raises(PermissionError):

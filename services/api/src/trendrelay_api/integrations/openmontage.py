@@ -33,7 +33,6 @@ class ProductionRequest(BaseModel):
     workspace_id: str = Field(default="local", min_length=1, max_length=80)
     title: str = Field(min_length=2, max_length=160)
     source_asset: str = Field(min_length=1, max_length=1000)
-    source_rights: Literal["owned", "licensed", "public-domain"]
     pipeline: Literal["clip-factory", "podcast-repurpose"] = "clip-factory"
     target_platforms: list[Literal["tiktok", "instagram", "youtube"]] = Field(
         default_factory=lambda: ["tiktok"], min_length=1, max_length=3
@@ -157,7 +156,6 @@ def create_proposal(request: ProductionRequest) -> dict[str, Any]:
             "path": str(asset),
             "sha256": fingerprint,
             "size_bytes": asset.stat().st_size,
-            "rights_basis": request.source_rights,
         },
         "plan": {
             "pipeline": pipeline,

@@ -307,8 +307,6 @@ def create_ingest_job(
     path: str,
     title: str,
     source_type: str,
-    rights_status: str,
-    rights_basis: str | None = None,
     source_url: str | None = None,
     platform: str | None = None,
     creator: str | None = None,
@@ -400,8 +398,6 @@ def create_ingest_job(
         "hashtags": hashtags or [],
         "audio_identifier": audio_identifier,
         "engagement": engagement or {},
-        "rights_status": rights_status,
-        "rights_basis": rights_basis,
         "created_at": _now(),
     }
     return create_job_record(
@@ -464,8 +460,6 @@ def run_ingest_job(
                 hashtags=payload.get("hashtags") or [],
                 audio_identifier=payload.get("audio_identifier"),
                 engagement=payload.get("engagement") or {},
-                rights_status=payload["rights_status"],
-                rights_basis=payload.get("rights_basis"),
                 original_path=processed["original"],
                 original_sha256=payload["source_sha256"],
                 mime_type=processed["mime_type"],

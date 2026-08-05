@@ -20,11 +20,6 @@ class MediaAsset(Base):
             name="unique_workspace_media_sha256",
         ),
         CheckConstraint(
-            "rights_status IN "
-            "('owned','licensed','public-domain','unknown','prohibited')",
-            name="valid_media_rights_status",
-        ),
-        CheckConstraint(
             "media_kind IN ('video','audio','image')",
             name="valid_media_kind",
         ),
@@ -44,8 +39,6 @@ class MediaAsset(Base):
     hashtags: Mapped[list[str]] = mapped_column(JSON, default=list)
     audio_identifier: Mapped[str | None] = mapped_column(String(300))
     engagement: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    rights_status: Mapped[str] = mapped_column(String(24), default="unknown", index=True)
-    rights_basis: Mapped[str | None] = mapped_column(String(2000))
     original_path: Mapped[str] = mapped_column(String(1200))
     original_sha256: Mapped[str] = mapped_column(String(64), index=True)
     mime_type: Mapped[str] = mapped_column(String(120))

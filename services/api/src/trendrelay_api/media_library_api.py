@@ -1,4 +1,4 @@
-"""Authenticated media library, rights review, enrichment, and search API."""
+"""Authenticated media library, enrichment, and search API."""
 
 from __future__ import annotations
 
@@ -366,7 +366,6 @@ def import_asset(
             path=body.path,
             title=body.title,
             source_type=body.source_type,
-            rights_status="unknown",
             source_url=str(body.source_url) if body.source_url else None,
             platform=body.platform,
             creator=body.creator,
