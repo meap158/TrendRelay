@@ -1,6 +1,6 @@
 # Agent Handover
 
-Last updated: 2026-08-04
+Last updated: 2026-08-05
 
 ## Current state
 
@@ -39,6 +39,10 @@ Last updated: 2026-08-04
 - `/library` is the persistent creative-intelligence layer: durable SHA-256-deduplicated ingestion, hash-addressed immutable originals, FFmpeg thumbnail/proxy/audio derivatives, authenticated content, reviewed transcript/OCR records, versioned creative recipes, rights review, search, and publishable Studio/Campaign handoffs. Contextual counted facets filter by media type, channel, source, and usage rights; each facet ignores only its own selection, full filtered totals are calculated before pagination, and results can be grouped with exact counts without duplicating immutable assets. Douyin and authenticated OpenMontage outputs queue into it automatically.
 - `/attribution` is the first-party revenue workbench: governed transparent links, HTTPS and parameter-collision controls, country routing, privacy-minimized click events, idempotent conversion CSV imports, campaign/creative-format summaries, and explicit measurement limitations. Public `/c/{code}/info` reveals the destination before `/c/{code}` records and redirects.
 
+- Douyin batches download one source at a time. `run_download_job` invokes `scripts/douyin.py batch` per URL and hands each finished source to the Media Library before starting the next, so files and ingest jobs appear while the batch is still running. Previously every URL went in one invocation and the pinned tool enumerated everything before writing a file. Three layers stop an item being fetched or ingested twice: the downloader's own de-duplicating database plus incremental flags, `_new_artifacts` recording every media path already collected (only unseen files are fingerprinted, so re-scanning after each source stays cheap), and the library's sha256 import de-dupe. A source yielding nothing new is counted, not fatal; a source that fails hard lands in `source_errors` and the batch continues. The worker heartbeats between sources to hold its lease.
+- `/discover` opens on a trend rather than empty space. The last TikTok category, region and period persist in `localStorage` under `trendrelay.discover.tiktok` and are restored on the next visit, falling back to the first live category. Retired Creative Center tabs (Songs, Creators) stay in the registry so the adapter can explain itself but are filtered out of the quick links. The adapter's cache decides whether a revisit costs a fresh render.
+- The Discover feed shows only what a provider returned. The former `AFFILIATE_STARTERS` cards carried invented conversion rates and commissions under an "Affiliate Signals" source and were shown whenever a provider returned nothing; they are gone and the empty state names the real sources instead.
+
 ## Decisions in force
 
 - Follow `SOP.md`; atomic descriptive commits and current README/handover files are mandatory.
@@ -68,6 +72,10 @@ Last updated: 2026-08-04
 - Keep downloaded content as reference media until rights and policy classification permits further use.
 - Library originals are immutable. Only owned, licensed, and public-domain assets may enter campaigns; owner/approver rights changes require confirmation, evidence, governed assurance, and an audit. Automatic transcription remains visibly unavailable until a reviewed provider is incorporated.
 - Attribution links are transparent, HTTPS-only, and fail closed. Existing affiliate parameters are preserved; configured campaign/platform parameters cannot collide. No raw IP, full referrer path, fingerprint, or network order reference is stored. Production requires `ATTRIBUTION_HASH_SECRET`; currency totals are never combined.
+
+- Usage rights are retired as a product concept. Removing the controls left the classification enforcing itself with nothing able to satisfy it: every import defaulted to `unknown`, which is not publishable, so the Library detail pane hid its Studio/Campaign/Publish links and `campaigns_api` rejected every plan with a 409. The campaign gate, the `/assets/{id}/rights` endpoint and `RightsUpdate`, the publishable-rights import gate, the `rights_status` filter and `rights` facet, `rights_status`/`publishable` on the asset view, `PUBLISHABLE_RIGHTS` and the `RightsStatus` literal are all removed. The `media_assets` columns stay with their `unknown` default as inert provenance; dropping them would need a migration and would discard history for no functional gain.
+- Buffer needs per-network metadata or it refuses the post. `InstagramPostMetadataInput` declares `type: PostType!` and `shouldShareToFeed: Boolean!`, Facebook declares `type: PostTypeFacebook!`, and YouTube requires a title on create. `_buffer_metadata` supplies them: Instagram and Facebook publish as Reels, matching the other two engines for short-form video, YouTube takes the title or the caption trimmed to 100 characters, and the AI-disclosure toggle reaches Instagram and TikTok through `isAiGenerated`. Enum values are bare GraphQL tokens, never quoted strings.
+- Error banners must stay readable. `.registry-error` painted `#ffc1af` on `#f8d7da`, a contrast ratio of 1.16:1, which made engine failures such as a bundle.social 403 invisible. It is `#721c24` at 8.25:1, and the two blocked badges sharing that pink wash moved from 3.33:1 to 5.81:1.
 
 ## Validation
 
@@ -133,6 +141,18 @@ Last updated: 2026-08-04
 
 - `update.cmd --no-pause` stopped before mutation against the current dirty workspace, then passed local-only end-to-end validation against a temporary tracked remote in both already-current and one-commit-behind states. The latter fast-forwarded exactly one commit through `git pull --ff-only --prune`; the temporary repositories were removed afterward.
 
+- Publishing-engine session (2026-08-05): `npm run check` passes 231 tests with ESLint, TypeScript and Ruff. New suites cover the three engines' payloads, the `.env` writer, the Douyin streaming batch (interleaving, no-double-ingest, keep-going-on-failure) and Buffer's per-network metadata. The streaming tests were confirmed to fail when the batch is collapsed back into a single invocation, so they detect the regression rather than merely passing.
+- Live checks this session: a Zernio key saved through the API reached a scratch `.env` without the secret appearing in the response, an unconfirmed save returned 400 and an unknown engine 422, and an engine switch persisted to `PUBLISHING_PROVIDER`. The Library assets endpoint returned 694 assets with no `publishable` or `rights_status` key and facets of channels/platforms/media_kinds only, and selecting an asset rendered all three handoff links. A Library import that previously failed `422 literal_error` now reaches business logic. TikTok Creative Center parsed live hashtag and video rows with posts and views intact. Twenty live Ad Library cards measured 0.00px between the Research and Source centres, identical bar geometry on every card, and no overflow.
+- Two environment traps cost time and are worth knowing. Next dev HMR appends updated CSS after existing rules, so cascade results are wrong until a hard reload; a padding fix appeared broken twice before reloading proved it correct. And `document.hasFocus()` is false in a hidden browser pane, so `:focus` styling cannot be verified there at all.
+
 ## Next recommended action
 
-Add a reviewed automatic transcription/OCR provider behind the existing Media Library contracts, then add platform-analytics synchronization and live affiliate-network adapters behind the attribution import contract. Keep the SQL leased queue until ADR 0010 triggers are observed, paid/networked OpenMontage providers disabled pending review, and MediaCrawler blocked unless written commercial permission is obtained.
+Open items from the 2026-08-05 session, in priority order:
+
+1. The Library detail pane's Studio/Campaign/Publish links are now ungated, but nothing has exercised a full Library-to-publish run end to end since the rights removal. Walk one asset through it.
+2. The Explore/Research action on generic Discover feed cards has never been seen rendered; it only appears once a research or ads provider returns results, and no provider is configured on this machine. It is typechecked and styled to match the TikTok panel's action pill.
+3. `.tools/` no longer holds a publishing service, but `media_assets.rights_status` and `rights_basis` remain as dead columns. Drop them with a migration only if the lost history is acceptable.
+4. `services/api/migrations/versions/20260722_0001_workspace_foundation.py` has a pre-existing Ruff import-order finding. It sits outside the linted paths and was deliberately not reformatted.
+5. `.claude/launch.json` (added so the dev server can be driven from an agent session) and `poc.py` are untracked. Commit or delete them.
+
+Then: add a reviewed automatic transcription/OCR provider behind the existing Media Library contracts, then add platform-analytics synchronization and live affiliate-network adapters behind the attribution import contract. Keep the SQL leased queue until ADR 0010 triggers are observed, paid/networked OpenMontage providers disabled pending review, and MediaCrawler blocked unless written commercial permission is obtained.
