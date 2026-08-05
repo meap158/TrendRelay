@@ -34,6 +34,8 @@ class Service:
     environment: dict[str, str] | None = None
     health_timeout: float = 30
     health_probe_timeout: float = 0.8
+    # Readiness may include a first compile; liveness polling stays snappy.
+    ready_probe_timeout: float = 15
     health_failure_limit: int = 3
     relay_output: bool = True
     port: int | None = None
@@ -370,7 +372,7 @@ def wait_until_healthy(running: RunningService, timeout: float = 30) -> bool:
     while time.monotonic() < deadline:
         if running.process.poll() is not None:
             return False
-        if service_is_healthy(service):
+        if service_is_healthy(service, service.ready_probe_timeout):
             return True
         time.sleep(0.25)
     return False

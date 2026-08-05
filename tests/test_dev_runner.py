@@ -76,7 +76,7 @@ def test_wait_until_healthy_retries_until_service_is_ready(monkeypatch) -> None:
         "Backend", ["python"], "cyan", "http://127.0.0.1:8080/healthz"
     )
     results = iter([False, False, True])
-    monkeypatch.setattr(dev, "service_is_healthy", lambda _service: next(results))
+    monkeypatch.setattr(dev, "service_is_healthy", lambda _service, *_timeout: next(results))
     monkeypatch.setattr(dev.time, "sleep", lambda _seconds: None)
 
     class Process:
@@ -264,3 +264,31 @@ def test_windows_launcher_no_longer_prepares_a_local_publishing_service() -> Non
 
     assert "postiz" not in launcher.lower()
     assert "postiz" not in (root / "scripts" / "dev.py").read_text(encoding="utf-8").lower()
+
+
+def test_readiness_allows_a_slow_first_render(monkeypatch) -> None:
+    """A dev server compiles the page on the first request.
+
+    Liveness polling stays on a short budget, but readiness must wait long
+    enough for that compile, or a healthy server is recycled as dead.
+    """
+    service = dev.Service("Frontend", ["noop"], "green", "http://127.0.0.1:3001/")
+    assert service.health_probe_timeout < 1
+    assert service.ready_probe_timeout >= 10
+
+    seen: list[float | None] = []
+
+    def probe(_service, timeout=None):
+        seen.append(timeout)
+        # Only a request allowed more than a second gets an answer.
+        return timeout is not None and timeout > 1
+
+    class Alive:
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(dev, "service_is_healthy", probe)
+    running = dev.RunningService(service, Alive(), None)
+
+    assert dev.wait_until_healthy(running, timeout=2) is True
+    assert seen and seen[0] == service.ready_probe_timeout
