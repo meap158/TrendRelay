@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
+import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 
@@ -332,6 +333,15 @@ export default function LibraryPage() {
   const autoSyncedWorkspaces = useRef(new Set<string>());
   const [busy, setBusy] = useState("");
   const [blurNote, setBlurNote] = useState<string | null>(null);
+  const [blurResult, setBlurResult] = useState<{
+    status: string;
+    output?: string;
+    coverage?: number;
+    faces_tracked?: number;
+    warning?: string | null;
+    preview?: boolean;
+    error?: string | null;
+  } | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -591,17 +601,18 @@ export default function LibraryPage() {
   }
 
 
-  async function blurFaces(asset: Asset) {
-    // It writes a new file that becomes the default for handoffs, so it is
-    // never one unconfirmed click away.
-    if (!window.confirm(
+  async function blurFaces(asset: Asset, previewOnly: boolean) {
+    // A preview is cheap and reversible, so it runs on one click. The full
+    // render replaces what Publish sends, so that one still asks.
+    if (!previewOnly && !window.confirm(
       `Blur every detected face in "${asset.title}"?\n\n`
       + "This renders a new file. The original is not modified, but Campaigns and "
-      + "Publish will use the blurred version unless you change that in Studio.",
+      + "Publish will use the blurred version.",
     )) return;
-    setBusy("blur");
+    setBusy(previewOnly ? "blur-preview" : "blur");
     setError("");
-    setBlurNote(null);
+    setBlurNote(previewOnly ? "Rendering a six-second preview…" : "Blurring the full clip…");
+    setBlurResult(null);
     try {
       const response = await apiFetch(
         `/api/workspaces/${workspaceId}/media/library/face-blur/jobs`,
@@ -610,21 +621,48 @@ export default function LibraryPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             source_path: asset.original_path,
+            preview_seconds: previewOnly ? 6 : null,
             confirm_external_action: true,
           }),
         },
       );
-      const payload = (await response.json()) as { detail?: string };
-      if (!response.ok) throw new Error(payload.detail ?? "Face blurring could not start.");
-      setBlurNote(
-        "Blurring started. Track it in Studio, where you can watch the result and "
-        + "choose which version Publish sends.",
-      );
+      const payload = (await response.json()) as { detail?: string; job?: { id: string } };
+      if (!response.ok || !payload.job) {
+        throw new Error(payload.detail ?? "Face blurring could not start.");
+      }
+      await followBlurJob(payload.job.id);
     } catch (reason) {
+      setBlurNote(null);
       setError(reason instanceof Error ? reason.message : "Face blurring failed.");
     } finally {
       setBusy("");
     }
+  }
+
+  async function followBlurJob(jobId: string) {
+    // The render finishes on the worker, so the panel follows it rather than
+    // making the operator reload to find out what happened.
+    const deadline = Date.now() + 15 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/media/library/face-blur/status`,
+      );
+      if (!response.ok) continue;
+      const payload = (await response.json()) as {
+        jobs?: Array<{ id: string; status: string; error?: string | null; result?: Record<string, unknown> | null }>;
+      };
+      const job = payload.jobs?.find((item) => item.id === jobId);
+      if (!job || job.status === "queued" || job.status === "running") continue;
+      setBlurNote(null);
+      setBlurResult({
+        status: job.status,
+        error: job.error,
+        ...(job.result ?? {}),
+      } as typeof blurResult);
+      return;
+    }
+    setBlurNote("Still rendering. It will appear here when the worker finishes.");
   }
 
   async function openAssetFolder(asset: Asset) {
@@ -693,6 +731,37 @@ export default function LibraryPage() {
 
       {error && <p className="error-banner">{error}</p>}
       {blurNote && <p className="campaign-message">{blurNote}</p>}
+      {blurResult && (
+        <div className="blur-result">
+          <strong>
+            {blurResult.status === "succeeded"
+              ? blurResult.preview ? "Preview ready" : "Blurred render ready"
+              : "Blurring failed"}
+          </strong>
+          {blurResult.error && <small className="blur-warning">{blurResult.error}</small>}
+          {blurResult.coverage !== undefined && (
+            <small>
+              {Math.round((blurResult.coverage ?? 0) * 100)}% of frames covered
+              {blurResult.faces_tracked
+                ? ` · ${blurResult.faces_tracked} face${blurResult.faces_tracked === 1 ? "" : "s"} tracked`
+                : ""}
+              {blurResult.preview ? " · first six seconds only" : ""}
+            </small>
+          )}
+          {blurResult.warning && <small className="blur-warning">{blurResult.warning}</small>}
+          {blurResult.output && blurResult.status === "succeeded" && (
+            <video
+              className="blur-preview"
+              controls
+              preload="metadata"
+              src={`${apiBaseUrl()}/api/workspaces/${workspaceId}/media/library/face-blur/media?path=${encodeURIComponent(blurResult.output)}`}
+            />
+          )}
+          {blurResult.preview && blurResult.status === "succeeded" && (
+            <small>Happy with it? Use <b>Blur faces</b> to render the whole clip.</small>
+          )}
+        </div>
+      )}
       {message && <p className="campaign-message">{message}</p>}
 
       <section className="library-layout">
@@ -849,11 +918,20 @@ export default function LibraryPage() {
                   <button
                     type="button"
                     className="secondary-button"
-                    disabled={busy === "blur" || selected.media_kind !== "video"}
+                    disabled={busy.startsWith("blur") || selected.media_kind !== "video"}
+                    title={selected.media_kind === "video"
+                      ? "Render six seconds with faces blurred, so you can see it first"
+                      : "Face blurring applies to video"}
+                    onClick={() => void blurFaces(selected, true)}
+                  >{busy === "blur-preview" ? "Previewing…" : "Preview blur"}</button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={busy.startsWith("blur") || selected.media_kind !== "video"}
                     title={selected.media_kind === "video"
                       ? "Detect every face and burn the blur into a new render"
                       : "Face blurring applies to video"}
-                    onClick={() => void blurFaces(selected)}
+                    onClick={() => void blurFaces(selected, false)}
                   >{busy === "blur" ? "Blurring…" : "Blur faces"}</button>
                   <Link className="primary-action" href={`/studio?source=${encodeURIComponent(selected.original_path)}`}>Auto-edit in Studio</Link>
                   <Link href={`/campaigns?video=${encodeURIComponent(selected.original_path)}`}>Plan campaign</Link>

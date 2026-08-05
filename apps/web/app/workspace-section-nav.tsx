@@ -18,8 +18,7 @@ const AREAS = {
     eyebrow: "Creative workspace",
     description: "Review source media and turn assets into finished clips.",
     items: [
-      { href: "/library", label: "Assets", description: "Media and clips" },
-      { href: "/studio", label: "Studio", description: "Clip production" },
+      { href: "/library", label: "Assets", description: "Media, blurring and clips" },
     ],
   },
   publish: {
