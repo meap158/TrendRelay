@@ -182,6 +182,27 @@ The shape it should take:
 Open question for the operator: whether the blurred derivative replaces the
 original in downstream handoffs by default, or is offered alongside it.
 
+Next - Douyin trending through MediaCrawler, requested 2026-08-06:
+
+The catalog entry is enabled; the adapter and the surface are not built. The
+goal is trending Douyin videos in Discover with a one-click handoff that puts a
+video or its channel into the Downloads link box.
+
+Follow the TikTok Creative Center adapter rather than inventing a second shape.
+It already establishes what this needs: a category registry, a cached bounded
+fetch, normalisation into ranked rows with metrics, and honest notes when a
+source serves less than it claims. The Discover panel and its region/period
+controls can be reused almost directly, and the one-click handoff already
+exists in Downloads - `addCreatorProfiles` appends URLs to the link box without
+replacing what is staged, and a trending row should use the same path so a
+queue being assembled is never discarded.
+
+Two constraints to build in from the start rather than retrofit. MediaCrawler
+drives a real browser session, so it belongs behind the durable job queue like
+every other long provider call, not inside a request. And its upstream README
+asks against large-scale crawling, so every collection needs an explicit limit
+and an operator behind it; no schedules, no background sweeps.
+
 Next for blurring - make the render a version, not a second asset:
 
 The blurred output is currently a loose file under .data/productions/face-blur,
