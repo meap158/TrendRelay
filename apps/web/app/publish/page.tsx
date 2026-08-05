@@ -89,12 +89,37 @@ async function json<T>(response: Response): Promise<T> {
   return body;
 }
 
+const pad = (part: number) => String(part).padStart(2, "0");
+
 /** `datetime-local` needs a naive local string, so build one from the clock. */
+function asLocalInput(value: Date) {
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
+}
+
 function localDateTime(offsetMinutes: number) {
   const value = new Date(Date.now() + offsetMinutes * 60_000);
   value.setSeconds(0, 0);
-  const pad = (part: number) => String(part).padStart(2, "0");
-  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
+  return asLocalInput(value);
+}
+
+/** The hours a slot preset offers, in local time. */
+const TIME_SLOTS = [9, 12, 15, 18, 21];
+
+/** The next occurrence of each slot hour, so a preset is never in the past. */
+function slotPresets(now: Date) {
+  return TIME_SLOTS.map((hour) => {
+    const at = new Date(now);
+    at.setHours(hour, 0, 0, 0);
+    const tomorrow = at.getTime() <= now.getTime();
+    if (tomorrow) at.setDate(at.getDate() + 1);
+    const suffix = hour < 12 ? "am" : "pm";
+    const display = hour % 12 === 0 ? 12 : hour % 12;
+    return {
+      value: asLocalInput(at),
+      label: `${display}${suffix}`,
+      day: tomorrow ? "Tomorrow" : "Today",
+    };
+  });
 }
 
 export default function PublishPage() {
@@ -116,6 +141,14 @@ export default function PublishPage() {
   const [hostingDraft, setHostingDraft] = useState<Record<string, string>>({});
   const [hostingOpen, setHostingOpen] = useState(false);
   const [delivery, setDelivery] = useState<"draft" | "schedule" | "now">("draft");
+  const [date, setDate] = useState(() => localDateTime(60));
+  // Recomputed when the schedule pane opens, so a slot never drifts into the past.
+  const [slots, setSlots] = useState(() => slotPresets(new Date()));
+
+  function chooseDelivery(mode: "draft" | "schedule" | "now") {
+    if (mode === "schedule") setSlots(slotPresets(new Date()));
+    setDelivery(mode);
+  }
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -713,14 +746,21 @@ export default function PublishPage() {
                 type="button"
                 className={delivery === mode ? "selected" : ""}
                 aria-pressed={delivery === mode}
-                onClick={() => setDelivery(mode)}
+                onClick={() => chooseDelivery(mode)}
               ><strong>{title}</strong><span>{hint}</span></button>
             ))}
           </div>
 
           <div className="publish-grid">
             <label>{delivery === "schedule" ? "Publish at" : "Reference time"}
-              <input name="date" type="datetime-local" required min={delivery === "schedule" ? localDateTime(1) : undefined} defaultValue={localDateTime(60)} />
+              <input
+                name="date"
+                type="datetime-local"
+                required
+                min={delivery === "schedule" ? localDateTime(1) : undefined}
+                value={date}
+                onChange={(event) => setDate(event.target.value)}
+              />
               <small>{delivery === "schedule" ? "Must be in the future. Sent to the engine in UTC." : delivery === "now" ? "Not used; the post goes out immediately." : "Stored with the draft; the engine does not act on it."}</small>
             </label>
             <label>Visibility <i>TikTok and YouTube</i>
@@ -730,6 +770,21 @@ export default function PublishPage() {
               </select>
             </label>
           </div>
+
+          {delivery === "schedule" && (
+            <div className="time-slots" role="group" aria-label="Quick time slots">
+              <span>Quick slots</span>
+              {slots.map((slot) => (
+                <button
+                  key={slot.value}
+                  type="button"
+                  aria-pressed={date === slot.value}
+                  className={date === slot.value ? "selected" : ""}
+                  onClick={() => setDate(slot.value)}
+                ><b>{slot.label}</b><i>{slot.day}</i></button>
+              ))}
+            </div>
+          )}
 
           <fieldset className="account-picker">
             <legend>
