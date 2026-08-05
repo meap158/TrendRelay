@@ -1,4 +1,6 @@
 .library-page { width: min(100% - 32px, 1480px); margin: 0 auto; padding: 24px 0 60px; }
+/* Studio is the other half of the creative workspace; keep it the same width. */
+.studio-page { width: min(100% - 32px, 1480px); margin: 0 auto; padding: 24px 0 60px; }
 .library-heading { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
 .library-heading h1 { display: flex; align-items: center; gap: 8px; margin: 2px 0 4px; font-size: 20px; font-weight: 550; }
 .library-heading p { margin: 0; color: var(--muted); }

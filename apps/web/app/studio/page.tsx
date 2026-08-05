@@ -113,10 +113,10 @@ export default function StudioPage() {
     finally { setBusy(false); }
   }
 
-  if (loading) return <main className="publish-page"><p>Checking your session...</p></main>;
-  if (!user) return <main className="publish-page"><Link className="primary-link" href="/sign-in?next=%2Fstudio">Sign in to open Studio</Link></main>;
+  if (loading) return <main className="publish-page studio-page"><p>Checking your session...</p></main>;
+  if (!user) return <main className="publish-page studio-page"><Link className="primary-link" href="/sign-in?next=%2Fstudio">Sign in to open Studio</Link></main>;
 
-  return <main className="publish-page">
+  return <main className="publish-page studio-page">
     <WorkspaceSectionNav area="library" />
     <header><p className="eyebrow">GOVERNED LOCAL PRODUCTION</p><h1>Turn approved assets into clips</h1><p className="lede">Create immutable OpenMontage preflights, then render deterministic short clips locally without provider credentials or network calls.</p></header>
     {error && <p className="registry-error" role="alert">{error}</p>}
