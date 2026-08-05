@@ -522,3 +522,38 @@ def test_bundle_probe_uses_the_documented_entry_point(monkeypatch, media_file: P
     )
     assert publishing.provider_status("bundle_social")["authenticated"] is True
     assert seen == ["/organization/"]
+
+
+def test_buffer_sends_the_metadata_each_network_requires(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    """Instagram and Facebook declare a non-null type; omitting it is rejected."""
+    use_provider(monkeypatch, tmp_path, "buffer")
+    queries: list[str] = []
+
+    def fake_graphql(query, **kwargs):
+        queries.append(query)
+        return {"createPost": {"post": {"id": f"buf_{len(queries)}"}}}
+
+    monkeypatch.setattr(publishing, "_buffer_graphql", fake_graphql)
+    publishing._execute_publish(
+        request(
+            media_file,
+            media_url="https://cdn.example.com/clip.mp4",
+            made_with_ai=True,
+            title="Launch title",
+            targets=[
+                publishing.PublishTarget(platform="instagram", integration_id="c1"),
+                publishing.PublishTarget(platform="facebook", integration_id="c2"),
+                publishing.PublishTarget(platform="youtube", integration_id="c3"),
+                publishing.PublishTarget(platform="tiktok", integration_id="c4"),
+            ],
+        )
+    )
+
+    assert "metadata: { instagram: { type: reel" in queries[0]
+    assert "shouldShareToFeed: true" in queries[0]
+    assert "isAiGenerated: true" in queries[0]
+    assert "metadata: { facebook: { type: reel } }" in queries[1]
+    assert 'metadata: { youtube: { title: "Launch title" } }' in queries[2]
+    assert "metadata: { tiktok: { isAiGenerated: true } }" in queries[3]

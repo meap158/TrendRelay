@@ -783,6 +783,31 @@ def _buffer_platform(service: str | None) -> str:
     return {"x": "twitter", "google_business": "googlebusiness"}.get(normalized, normalized)
 
 
+def _buffer_metadata(platform: str, request: PublishRequest) -> str:
+    """Per-network metadata Buffer requires before it will accept a post.
+
+    Instagram and Facebook both declare a non-null post type, and YouTube needs
+    a title on create, so omitting these is rejected outright rather than
+    defaulted. Enum values are bare GraphQL tokens, not strings.
+    """
+    disclosure = "true" if request.made_with_ai else "false"
+    title = _graphql_literal((request.title or request.caption)[:100])
+    fields = {
+        # Short-form video is what TrendRelay delivers, so Reel is the type.
+        "instagram": (
+            f"instagram: {{ type: reel shouldShareToFeed: true "
+            f"isAiGenerated: {disclosure} }}"
+        ),
+        "facebook": "facebook: { type: reel }",
+        "youtube": f"youtube: {{ title: {title} }}",
+        "tiktok": f"tiktok: {{ isAiGenerated: {disclosure} }}",
+        "threads": "threads: { type: post }",
+        "pinterest": f"pinterest: {{ title: {title} }}",
+    }
+    entry = fields.get(platform)
+    return f" metadata: {{ {entry} }}" if entry else ""
+
+
 def _buffer_publish(request: PublishRequest) -> dict[str, Any]:
     due_at = request.date.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     scheduling = (
@@ -797,11 +822,12 @@ def _buffer_publish(request: PublishRequest) -> dict[str, Any]:
     )
     post_ids: list[str] = []
     for target in request.targets:
+        metadata = _buffer_metadata(target.platform, request)
         mutation = (
             "mutation { createPost(input: { text: "
             f"{_graphql_literal(request.caption)} "
             f"channelId: {_graphql_literal(target.integration_id)} "
-            f"schedulingType: automatic {scheduling} {assets} }}) "
+            f"schedulingType: automatic {scheduling} {assets}{metadata} }}) "
             "{ ... on PostActionSuccess { post { id status dueAt } } "
             "... on MutationError { message } } }"
         )
