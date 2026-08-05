@@ -208,9 +208,60 @@ PROVIDERS: dict[str, ProviderDefinition] = {
 SUPPORTED_PLATFORMS = tuple(PLATFORM_LABELS)
 
 
+@dataclass(frozen=True)
+class PostType:
+    id: str
+    label: str
+    help: str
+
+
+# What each network will actually accept for a short-form video, in the order a
+# chooser should offer them; the first is the default. A network with one entry
+# has no choice to make and is not asked about.
+POST_TYPES: dict[str, tuple[PostType, ...]] = {
+    "instagram": (
+        PostType("reel", "Reel", "Full-screen video in Reels and, by default, the feed."),
+        PostType("story", "Story", "Disappears after 24 hours and is not added to the grid."),
+        PostType("post", "Feed post", "Video in the grid rather than in Reels."),
+    ),
+    "facebook": (
+        PostType("reel", "Reel", "Short vertical video in the Reels surface."),
+        PostType("story", "Story", "Disappears after 24 hours."),
+        PostType("post", "Feed post", "A normal timeline video post."),
+    ),
+    "youtube": (
+        PostType("short", "Short", "Under 60 seconds and vertical; appears in Shorts."),
+        PostType("video", "Video", "A standard upload with no Shorts treatment."),
+    ),
+    "threads": (PostType("post", "Post", "A thread with the video attached."),),
+    "tiktok": (PostType("video", "Video", "TikTok publishes video posts only."),),
+}
+DEFAULT_POST_TYPE = PostType("post", "Post", "A standard post with the video attached.")
+
+
+def post_types_for(platform: str) -> tuple[PostType, ...]:
+    return POST_TYPES.get(platform, (DEFAULT_POST_TYPE,))
+
+
+def resolve_post_type(platform: str, requested: str | None) -> PostType:
+    """Pick the post type for a destination, defaulting to the network's first."""
+    choices = post_types_for(platform)
+    if not requested:
+        return choices[0]
+    for choice in choices:
+        if choice.id == requested:
+            return choice
+    allowed = ", ".join(choice.id for choice in choices)
+    raise ValueError(
+        f"{PLATFORM_LABELS.get(platform, platform)} does not accept "
+        f"'{requested}' posts. Choose one of: {allowed}."
+    )
+
+
 class PublishTarget(BaseModel):
     platform: Platform
     integration_id: str = Field(min_length=1, max_length=200)
+    post_type: str | None = Field(default=None, max_length=20)
 
     @field_validator("integration_id")
     @classmethod
@@ -219,6 +270,11 @@ class PublishTarget(BaseModel):
         if any(character.isspace() for character in value):
             raise ValueError("integration_id cannot contain whitespace")
         return value
+
+    @property
+    def kind(self) -> PostType:
+        """The resolved post type; raises if the network cannot accept it."""
+        return resolve_post_type(self.platform, self.post_type)
 
 
 class PublishRequest(BaseModel):
@@ -396,17 +452,20 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
     if unsupported:
         names = ", ".join(PLATFORM_LABELS[platform] for platform in unsupported)
         raise ValueError(f"{provider.label} does not publish to {names}.")
+    for target in request.targets:
+        # Raises if the network cannot accept the requested type, so a bad
+        # choice is refused here rather than by the engine mid-delivery.
+        target.kind
     if provider.requires_public_media:
         if not request.media_url:
-            if media_hosting.status()["configured"]:
-                # The adapter will host the reviewed cut itself at execution
-                # time, so an operator is not asked to find a URL by hand.
-                return
-            raise ValueError(
-                f"{provider.label} needs a public media URL. {provider.media_note} "
-                "Configure media hosting to have TrendRelay publish the file for you."
-            )
-        if not request.media_url.startswith("https://"):
+            # The adapter hosts the reviewed cut itself at execution time, so an
+            # operator is not asked to find a URL by hand.
+            if not media_hosting.status()["configured"]:
+                raise ValueError(
+                    f"{provider.label} needs a public media URL. {provider.media_note} "
+                    "Configure media hosting to have TrendRelay publish the file for you."
+                )
+        elif not request.media_url.startswith("https://"):
             raise ValueError(
                 f"{provider.label} fetches media over the public internet, so the URL must be "
                 "https."
@@ -489,12 +548,14 @@ def _bundle_upload_from_url(media_url: str) -> str:
 
 
 def _bundle_platform_data(
-    platform: str, request: PublishRequest, upload_id: str, title: str
+    platform: str, request: PublishRequest, upload_id: str, title: str, kind: PostType
 ) -> dict[str, Any]:
     """Per-platform payload for POST /post/, keyed exactly as the API documents it."""
     uploads = [upload_id]
     caption = request.caption
     public = request.visibility == "public"
+    # bundle.social names post types in an uppercase enum of its own.
+    post_type = kind.id.upper()
     if platform == "tiktok":
         return {
             "type": "VIDEO",
@@ -505,7 +566,7 @@ def _bundle_platform_data(
         }
     if platform == "youtube":
         return {
-            "type": "SHORT",
+            "type": post_type,
             "uploadIds": uploads,
             "text": title[:100],
             "description": caption,
@@ -514,13 +575,13 @@ def _bundle_platform_data(
         }
     if platform == "instagram":
         return {
-            "type": "REEL",
+            "type": post_type,
             "text": caption,
             "uploadIds": uploads,
             "isAiGenerated": request.made_with_ai,
         }
     if platform == "facebook":
-        return {"type": "REEL", "text": caption, "uploadIds": uploads}
+        return {"type": post_type, "text": caption, "uploadIds": uploads}
     if platform == "twitter":
         return {"text": caption, "uploadIds": uploads, "isAiGenerated": request.made_with_ai}
     if platform == "pinterest":
@@ -559,7 +620,7 @@ def _bundle_publish(request: PublishRequest, video: Path | None) -> dict[str, An
         "socialAccountTypes": [BUNDLE_TYPES[target.platform] for target in request.targets],
         "data": {
             BUNDLE_TYPES[target.platform]: _bundle_platform_data(
-                target.platform, request, upload_id, title
+                target.platform, request, upload_id, title, target.kind
             )
             for target in request.targets
         },
@@ -671,7 +732,7 @@ def _zernio_publish(
             specific["containsSyntheticMedia"] = request.made_with_ai
             specific["title"] = _post_title(request)[:100]
         if target.platform in {"instagram", "facebook"}:
-            specific["contentType"] = "reel"
+            specific["contentType"] = target.kind.id
         if target.platform == "reddit":
             specific["subreddit"] = request.subreddit
             specific["title"] = _post_title(request)[:300]
@@ -801,7 +862,7 @@ def _buffer_platform(service: str | None) -> str:
     return {"x": "twitter", "google_business": "googlebusiness"}.get(normalized, normalized)
 
 
-def _buffer_metadata(platform: str, request: PublishRequest) -> str:
+def _buffer_metadata(platform: str, request: PublishRequest, kind: PostType) -> str:
     """Per-network metadata Buffer requires before it will accept a post.
 
     Instagram and Facebook both declare a non-null post type, and YouTube needs
@@ -810,16 +871,17 @@ def _buffer_metadata(platform: str, request: PublishRequest) -> str:
     """
     disclosure = "true" if request.made_with_ai else "false"
     title = _graphql_literal((request.title or request.caption)[:100])
+    # A Story is not added to the grid, so the feed cross-post only applies to a Reel.
+    share_to_feed = "true" if kind.id == "reel" else "false"
     fields = {
-        # Short-form video is what TrendRelay delivers, so Reel is the type.
         "instagram": (
-            f"instagram: {{ type: reel shouldShareToFeed: true "
+            f"instagram: {{ type: {kind.id} shouldShareToFeed: {share_to_feed} "
             f"isAiGenerated: {disclosure} }}"
         ),
-        "facebook": "facebook: { type: reel }",
+        "facebook": f"facebook: {{ type: {kind.id} }}",
         "youtube": f"youtube: {{ title: {title} }}",
         "tiktok": f"tiktok: {{ isAiGenerated: {disclosure} }}",
-        "threads": "threads: { type: post }",
+        "threads": f"threads: {{ type: {kind.id} }}",
         "pinterest": f"pinterest: {{ title: {title} }}",
     }
     entry = fields.get(platform)
@@ -841,7 +903,7 @@ def _buffer_publish(request: PublishRequest) -> dict[str, Any]:
     )
     post_ids: list[str] = []
     for target in request.targets:
-        metadata = _buffer_metadata(target.platform, request)
+        metadata = _buffer_metadata(target.platform, request, target.kind)
         mutation = (
             "mutation { createPost(input: { text: "
             f"{_graphql_literal(request.caption)} "
@@ -985,6 +1047,13 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
         "configured": configured,
         "authenticated": authenticated,
         "authorization_error": authorization_error,
+        "post_types": {
+            platform: [
+                {"id": kind.id, "label": kind.label, "help": kind.help}
+                for kind in post_types_for(platform)
+            ]
+            for platform in provider.platforms
+        },
         "credential_fields": [
             {
                 "id": field.id,
@@ -1087,18 +1156,18 @@ def _delivery_plan(
     public = request.visibility == "public"
     plan: list[dict[str, Any]] = []
     for target in request.targets:
-        notes: list[str] = []
+        kind = target.kind
+        notes: list[str] = [f"Delivered as a {kind.label}"]
         if provider.id == "buffer":
             notes.append(
                 "Published immediately" if request.mode == "now"
                 else "Queued at the requested time" if request.mode == "schedule"
                 else "Saved to the channel's draft queue"
             )
+            if target.platform == "instagram" and kind.id == "story":
+                notes.append("Not added to the grid")
         else:
-            if target.platform in {"instagram", "facebook"}:
-                notes.append("Delivered as a Reel")
             if target.platform == "youtube":
-                notes.append("Uploaded as a Short")
                 notes.append(f"Visibility: {'public' if public else 'private'}")
                 if request.made_with_ai:
                     notes.append("Declared as synthetic media")
@@ -1113,6 +1182,8 @@ def _delivery_plan(
                 "platform": target.platform,
                 "label": PLATFORM_LABELS[target.platform],
                 "integration_id": target.integration_id,
+                "post_type": kind.id,
+                "post_type_label": kind.label,
                 "notes": notes,
             }
         )

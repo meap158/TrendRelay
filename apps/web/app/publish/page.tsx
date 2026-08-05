@@ -26,7 +26,9 @@ type CredentialField = {
   help: string;
   configured: boolean;
 };
+type PostTypeOption = { id: string; label: string; help: string };
 type Provider = {
+  post_types: Record<string, PostTypeOption[]>;
   id: PublishingProvider;
   label: string;
   tagline: string;
@@ -62,7 +64,12 @@ type Connection = {
   supported_platforms: PublishingPlatform[];
   providers: Provider[];
 };
-type Destination = { platform: PublishingPlatform; label: string; notes: string[] };
+type Destination = {
+  platform: PublishingPlatform;
+  label: string;
+  post_type_label: string;
+  notes: string[];
+};
 type Preview = {
   provider_label: string;
   delivery: string;
@@ -105,6 +112,7 @@ export default function PublishPage() {
   const [targets, setTargets] = useState<Record<string, string>>({});
   const [credentialDrafts, setCredentialDrafts] = useState<Record<string, Record<string, string>>>({});
   const [openProvider, setOpenProvider] = useState<string | null>(null);
+  const [postTypes, setPostTypes] = useState<Record<string, string>>({});
   const [hostingDraft, setHostingDraft] = useState<Record<string, string>>({});
   const [hostingOpen, setHostingOpen] = useState(false);
   const [delivery, setDelivery] = useState<"draft" | "schedule" | "now">("draft");
@@ -173,6 +181,7 @@ export default function PublishPage() {
     const selectedTargets = chosen.map((platform) => ({
       platform,
       integration_id: targets[platform],
+      post_type: postTypes[platform] ?? null,
     }));
     if (!selectedTargets.length) throw new Error("Choose at least one connected destination.");
     const localDate = String(form.get("date") ?? "");
@@ -242,7 +251,7 @@ export default function PublishPage() {
       );
       setCredentialDrafts((current) => ({ ...current, [provider.id]: {} }));
       setConnection(body.connection);
-      if (activate) setTargets({});
+      if (activate) { setTargets({}); setPostTypes({}); }
       setOpenProvider(null);
       setNotice(
         `Saved ${body.result.written_keys.join(", ")} to .env.` +
@@ -764,6 +773,24 @@ export default function PublishPage() {
                           onClick={() => setTargets({ ...targets, [platform]: targets[platform] === account.id ? "" : account.id })}
                         >{account.label}</button>
                       ))}</div>
+                      {/* Only networks with a real choice are asked about. */}
+                      {targets[platform] && (activeProvider?.post_types?.[platform]?.length ?? 0) > 1 && (
+                        <div className="post-types" role="group" aria-label={`${platformLabels[platform]} post type`}>
+                          {activeProvider?.post_types[platform].map((kind) => {
+                            const active = (postTypes[platform] ?? activeProvider.post_types[platform][0].id) === kind.id;
+                            return (
+                              <button
+                                type="button"
+                                key={kind.id}
+                                aria-pressed={active}
+                                className={active ? "selected" : ""}
+                                title={kind.help}
+                                onClick={() => setPostTypes({ ...postTypes, [platform]: kind.id })}
+                              >{kind.label}</button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </section>
                   );
                 })}</div>
@@ -860,7 +887,10 @@ export default function PublishPage() {
                     <li key={destination.platform}>
                       <PlatformIcon platform={destination.platform} size={18} />
                       <div>
-                        <strong>{destination.label}</strong>
+                        <strong>
+                          {destination.label}
+                          <em>{destination.post_type_label}</em>
+                        </strong>
                         {destination.notes.map((note) => <span key={note}>{note}</span>)}
                       </div>
                     </li>

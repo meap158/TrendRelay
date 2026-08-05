@@ -322,6 +322,9 @@ nav strong { color: #1c2b33; }
 .account-options { display: grid; gap: 5px; align-content: start; }
 .account-options button { display: block; width: 100%; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .account-options button.selected { border-color: var(--green); background: var(--green-dark); color: var(--green); }
+.post-types { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.post-types button { flex: 1 1 auto; min-height: 26px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); font-size: 11px; }
+.post-types button.selected { border-color: var(--green); background: var(--green-dark); color: var(--green); font-weight: 500; }
 
 .preview-card { display: grid; gap: 12px; }
 .preview-lead { margin: 0; }
@@ -333,7 +336,8 @@ nav strong { color: #1c2b33; }
 .preview-destinations { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .preview-destinations li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 9px; align-items: start; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 6px; }
 .preview-destinations li > div { display: grid; gap: 2px; min-width: 0; }
-.preview-destinations strong { font-weight: 500; }
+.preview-destinations strong { display: flex; align-items: center; gap: 6px; font-weight: 500; }
+.preview-destinations strong em { border-radius: 999px; padding: 1px 7px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-style: normal; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .preview-destinations span { color: var(--muted); font-size: 11px; line-height: 1.4; }
 
 .publish-page button:focus-visible, .publish-page a:focus-visible, .publish-page input:focus-visible, .publish-page textarea:focus-visible, .publish-page select:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }

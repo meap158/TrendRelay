@@ -330,7 +330,7 @@ def test_preview_explains_each_destination(monkeypatch, media_file: Path, tmp_pa
     assert preview["media_source"] == "approved local file"
     assert "Privacy: everyone" in plan["tiktok"]
     assert "AI-generated disclosure on" in plan["tiktok"]
-    assert "Uploaded as a Short" in plan["youtube"]
+    assert "Delivered as a Short" in plan["youtube"]
     assert "Declared as synthetic media" in plan["youtube"]
 
 
@@ -606,3 +606,149 @@ def test_stored_jobs_without_a_delivery_field_still_resolve(media_file: Path) ->
     assert request(media_file).mode == "draft"
     assert request(media_file, schedule=True).mode == "schedule"
     assert request(media_file, delivery="now", schedule=False).mode == "now"
+
+
+# --- post types -------------------------------------------------------------- #
+
+
+def test_a_network_only_offers_the_types_it_can_actually_publish() -> None:
+    assert [kind.id for kind in publishing.post_types_for("instagram")] == [
+        "reel", "story", "post",
+    ]
+    # TikTok has no Story surface in any of these APIs, so there is no choice.
+    assert [kind.id for kind in publishing.post_types_for("tiktok")] == ["video"]
+    assert [kind.id for kind in publishing.post_types_for("linkedin")] == ["post"]
+
+
+def test_an_unset_post_type_falls_back_to_the_network_default() -> None:
+    assert publishing.resolve_post_type("instagram", None).id == "reel"
+    assert publishing.resolve_post_type("youtube", None).id == "short"
+
+
+def test_a_type_the_network_cannot_publish_is_refused_by_name() -> None:
+    with pytest.raises(ValueError, match="TikTok does not accept 'story' posts"):
+        publishing.resolve_post_type("tiktok", "story")
+
+
+def test_a_bad_post_type_is_caught_before_a_job_is_created(media_file: Path) -> None:
+    body = request(
+        media_file,
+        targets=[
+            publishing.PublishTarget(
+                platform="tiktok", integration_id="a1", post_type="story"
+            )
+        ],
+    )
+    with pytest.raises(ValueError, match="does not accept 'story'"):
+        publishing._validate_request(publishing.PROVIDERS["bundle_social"], body)
+
+
+def test_bundle_sends_the_chosen_type_rather_than_always_a_reel(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    use_provider(monkeypatch, tmp_path, "bundle_social")
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        if path == "/upload/":
+            return {"id": "upload-1"}
+        sent["body"] = kwargs.get("body")
+        return {"id": "post-1", "status": "DRAFT"}
+
+    monkeypatch.setattr(publishing, "_bundle_request", fake_request)
+    body = request(
+        media_file,
+        targets=[
+            publishing.PublishTarget(
+                platform="instagram", integration_id="a1", post_type="story"
+            )
+        ],
+    )
+
+    publishing._bundle_publish(body, media_file)
+
+    assert sent["body"]["data"]["INSTAGRAM"]["type"] == "STORY"
+
+
+def test_buffer_does_not_cross_post_a_story_to_the_feed(media_file: Path) -> None:
+    """A Story is not added to the grid, so shouldShareToFeed would be a lie."""
+    story = publishing._buffer_metadata(
+        "instagram", request(media_file), publishing.resolve_post_type("instagram", "story")
+    )
+    reel = publishing._buffer_metadata(
+        "instagram", request(media_file), publishing.resolve_post_type("instagram", "reel")
+    )
+
+    assert "type: story" in story
+    assert "shouldShareToFeed: false" in story
+    assert "type: reel" in reel
+    assert "shouldShareToFeed: true" in reel
+
+
+def test_zernio_forwards_the_type_as_its_content_type(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    use_provider(monkeypatch, tmp_path, "zernio")
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        sent["body"] = kwargs.get("body")
+        return {"post": {"_id": "p1", "status": "DRAFT"}}
+
+    monkeypatch.setattr(publishing, "_zernio_request", fake_request)
+    monkeypatch.setattr(publishing, "_zernio_upload", lambda video: "https://cdn/x.mp4")
+    body = request(
+        media_file,
+        targets=[
+            publishing.PublishTarget(
+                platform="facebook", integration_id="a1", post_type="post"
+            )
+        ],
+    )
+
+    publishing._zernio_publish(body, media_file)
+
+    assert sent["body"]["platforms"][0]["platformSpecificData"]["contentType"] == "post"
+
+
+def test_the_dry_run_names_the_post_type_for_every_destination(media_file: Path) -> None:
+    body = request(
+        media_file,
+        targets=[
+            publishing.PublishTarget(
+                platform="instagram", integration_id="a1", post_type="story"
+            )
+        ],
+    )
+
+    plan = publishing._delivery_plan(publishing.PROVIDERS["bundle_social"], body)
+
+    assert plan[0]["post_type"] == "story"
+    assert "Delivered as a Story" in plan[0]["notes"]
+
+
+def test_hosting_being_configured_does_not_skip_the_other_checks(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    """Buffer's media branch used to return early, hiding these failures."""
+    use_provider(monkeypatch, tmp_path, "buffer")
+    monkeypatch.setattr(
+        publishing.media_hosting, "status", lambda: {"configured": True}
+    )
+    buffer = publishing.PROVIDERS["buffer"]
+
+    past = request(
+        media_file,
+        delivery="schedule",
+        date=datetime.now(UTC) - timedelta(hours=1),
+        targets=[publishing.PublishTarget(platform="tiktok", integration_id="a1")],
+    )
+    with pytest.raises(ValueError, match="in the future"):
+        publishing._validate_request(buffer, past)
+
+    no_board = request(
+        media_file,
+        targets=[publishing.PublishTarget(platform="pinterest", integration_id="a1")],
+    )
+    with pytest.raises(ValueError, match="board name"):
+        publishing._validate_request(buffer, no_board)
