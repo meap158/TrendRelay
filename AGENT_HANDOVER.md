@@ -182,6 +182,86 @@ The shape it should take:
 Open question for the operator: whether the blurred derivative replaces the
 original in downstream handoffs by default, or is offered alongside it.
 
+Assessment - hosting media publicly for engines that only fetch (R2 vs Cloudinary):
+
+Buffer has no upload endpoint and fetches the file when the post goes out, so a
+local clip cannot reach it. Both candidates solve that; they differ in what
+they cost and what else they do.
+
+Cloudflare R2 is the better default. It is S3-compatible, so the upload is a
+few lines against an existing client, and egress is free - which matters
+because the engine downloads the whole video on every publish, and a scheduled
+post may be fetched long after upload. Public delivery comes from an r2.dev
+subdomain or a custom domain. It is storage and nothing more, which is the
+right scope: TrendRelay already transcodes with the bundled ffmpeg.
+
+Cloudinary is the better fit only if transformation is wanted - it returns a
+delivery URL immediately and can transcode and thumbnail on the fly. Its free
+tier meters bandwidth as credits, so video re-fetches draw down the same
+allowance that storage does. Given the H.264 pass already happens locally, its
+advantage is mostly redundant here.
+
+Two things to build in from the start:
+
+A signed or expiring URL is a silent failure, not an error. Buffer's own
+documentation warns that pre-signed links commonly work at `createPost` and
+expire before the post publishes, and the post then fails quietly. Whatever is
+used must be a plain, stable, public HTTPS URL, and the retention rule follows
+from it: the object cannot be deleted when the job completes, only once the
+post it feeds has actually gone out.
+
+This intersects face blurring directly, and getting it wrong is worse than the
+problem it solves. Uploading makes the file world-readable to anyone with the
+URL, effectively permanently. The upload must therefore take the same cut the
+handoff resolves to - the blurred version when one exists - and that has to be
+enforced where the upload happens, not only in the interface that chose it. A
+UI that shows "handoffs use the blurred cut" while the uploader reaches for
+`original_path` would publish exactly the faces the feature exists to hide.
+
+Next - Publish composer and scheduling, from the Publer reference shots:
+
+Two screenshots sit in `tmp/publer/` (`posting.png`, `calendar.png`). They are
+guidance for shape, not a look to copy. Five gaps they expose in `/publish`,
+roughly in order of how much they cost an operator today:
+
+- Media is a typed absolute path. Publer drops a file onto the composer. The
+  better fit here is neither: the Library already holds the asset, its blurred
+  version and its metadata, so Publish should pick from it rather than ask
+  anyone to type `.data\media\...`. This also answers the standing question of
+  how local media reaches Buffer, which cannot upload.
+- The post type is hardcoded. Instagram and Facebook are always sent as Reels
+  and YouTube as a Short, decided in `_buffer_metadata` and its two
+  counterparts. Publer offers Post / Reel / Story per network. The engines all
+  accept the choice; only the interface assumes it.
+- There is no live preview of the post itself. The dry-run plan describes the
+  delivery in text and the previewer plays the media, but neither shows how the
+  caption and media will read on the network. Publer renders it per network
+  with a desktop/mobile toggle.
+- First comment is unsupported, though every engine has it - Buffer exposes
+  `firstComment` on Instagram, Facebook, LinkedIn and YouTube, and the others
+  match. It is the usual place a hashtag block or affiliate link goes.
+- Scheduling is a single datetime input. Publer shows a week of day columns
+  with empty time slots seeded per day, so a post is created by clicking the
+  slot it will occupy.
+- Only one post shape exists. Every delivery is one MP4 with a caption, so
+  `PublishRequest` has `video_path`, `media_url` and nothing else. The three
+  engines all accept more than that, and what they accept differs, which is the
+  part to get right: text-only posts are universal; images and carousels are
+  broadly supported; threads exist on Buffer for X, Bluesky, Threads and
+  Mastodon, and on Zernio via `threadItems`; Stories are Instagram, Facebook and
+  Snapchat only; Pinterest additionally wants a board and destination link, and
+  Reddit a subreddit and flair. A post kind therefore cannot be a free choice -
+  it has to be intersected with the active engine and the chosen destinations,
+  the same way `_validate_request` already rejects a platform an engine does not
+  serve. Build that intersection before the composer, or the interface will
+  offer combinations the engine rejects at submit time.
+
+On that last point: do not build a second calendar. `/campaigns` already owns a
+timezone-aware content calendar, and a scheduling grid in Publish that does not
+know about it would let the two disagree about what goes out when. Either
+Publish borrows that calendar, or the slot presets live in Campaigns and hand
+off to Publish the way the rest of the pipeline does.
+
 Next - Douyin trending through MediaCrawler, requested 2026-08-06:
 
 The catalog entry is enabled; the adapter and the surface are not built. The
