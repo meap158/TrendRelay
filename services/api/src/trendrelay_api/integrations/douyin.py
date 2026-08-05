@@ -25,6 +25,7 @@ from trendrelay_api.jobs import (
     create_job_record,
     fail_job,
     get_job_record,
+    heartbeat_job,
     list_job_records,
 )
 from trendrelay_api.models import DurableJob
@@ -34,6 +35,8 @@ JOB_KIND = "douyin_download"
 JOB_SESSION_FACTORY = SessionFactory
 OUTPUT_ROOT = PROJECT_ROOT / ".data" / "downloads" / "douyin"
 DOWNLOAD_SCRIPT = PROJECT_ROOT / "scripts" / "douyin.py"
+# One source at a time, so a slow or blocked link cannot stall the whole batch.
+SOURCE_TIMEOUT_SECONDS = 1800
 COOKIE_FILE = PROJECT_ROOT / ".data" / "douyin" / "cookies.json"
 CONNECTION_STATUS_FILE = PROJECT_ROOT / ".data" / "douyin" / "connection-status.json"
 CONNECTION_LOG_FILE = PROJECT_ROOT / ".data" / "douyin" / "connection.log"
@@ -435,17 +438,59 @@ def _douyin_artifact_metadata(path: Path, output_root: Path | None) -> dict[str,
     return metadata
 
 
-def _collect_artifacts(output_root: Path) -> list[dict[str, Any]]:
-    return [
-        {
-            "path": str(path.resolve()),
-            "name": path.name,
-            "size_bytes": path.stat().st_size,
-            "sha256": _fingerprint(path),
-        }
-        for path in sorted(output_root.rglob("*"))
-        if path.is_file() and path.suffix.lower() in MEDIA_SUFFIXES
+def _new_artifacts(output_root: Path, seen_paths: set[str]) -> list[dict[str, Any]]:
+    """Return artifacts not yet seen, recording them in ``seen_paths``.
+
+    Re-scanning after every source is cheap, but re-hashing is not: only files
+    this pass has never seen are fingerprinted.
+    """
+    discovered: list[dict[str, Any]] = []
+    for path in sorted(output_root.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in MEDIA_SUFFIXES:
+            continue
+        resolved = str(path.resolve())
+        if resolved in seen_paths:
+            continue
+        seen_paths.add(resolved)
+        discovered.append(
+            {
+                "path": resolved,
+                "name": path.name,
+                "size_bytes": path.stat().st_size,
+                "sha256": _fingerprint(path),
+            }
+        )
+    return discovered
+
+
+def _download_source(url: str, output_root: Path, request: dict[str, Any]) -> tuple[int, str]:
+    """Run the pinned downloader for a single source and return (code, detail)."""
+    command = [
+        sys.executable,
+        str(DOWNLOAD_SCRIPT),
+        "batch",
+        url,
+        "--output",
+        str(output_root),
+        "--mode",
+        request["mode"],
+        "--limit",
+        str(request["limit"]),
     ]
+    if request["incremental"]:
+        command.append("--incremental")
+    completed = subprocess.run(
+        command,
+        cwd=PROJECT_ROOT,
+        env=_environment(),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+        timeout=SOURCE_TIMEOUT_SECONDS,
+    )
+    return completed.returncode, (completed.stderr or completed.stdout or "").strip()
 
 
 def _job_output_root(job: dict[str, Any]) -> Path | None:
@@ -658,56 +703,68 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         if output_root.parent != expected_parent:
             raise RuntimeError("Invalid download output location")
         request = payload["request"]
-        artifacts = (
-            _collect_artifacts(output_root) if payload.get("resume_from_disk") else []
-        )
-        detail = ""
-        if not artifacts:
-            command = [
-                sys.executable,
-                str(DOWNLOAD_SCRIPT),
-                "batch",
-                *request["urls"],
-                "--output",
-                str(output_root),
-                "--mode",
-                request["mode"],
-                "--limit",
-                str(request["limit"]),
-            ]
-            if request["incremental"]:
-                command.append("--incremental")
-            completed = subprocess.run(
-                command,
-                cwd=PROJECT_ROOT,
-                env=_environment(),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
-                timeout=3600,
-            )
-            detail = (completed.stderr or completed.stdout or "").strip()
-            if completed.returncode != 0:
-                if completed.returncode == 3 or "without saving any media" in detail.lower():
-                    _write_connection_status(
-                        "refresh_required",
-                        "Douyin rejected the saved session. Refresh the Douyin session and retry.",
+
+        # Every path a file can reach us by is recorded once, so a file already
+        # handed to the library is never collected or ingested a second time.
+        seen_paths: set[str] = set()
+        artifacts: list[dict[str, Any]] = []
+        library_jobs: list[dict[str, Any]] = []
+        library_errors: list[str] = []
+        source_errors: list[str] = []
+        blocked_sources = 0
+        last_detail = ""
+
+        def absorb(new_artifacts: list[dict[str, Any]]) -> None:
+            """Hand each finished source to the library before the next starts."""
+            if not new_artifacts:
+                return
+            artifacts.extend(new_artifacts)
+            queued, errors = _queue_library_artifacts(payload, new_artifacts)
+            library_jobs.extend(queued)
+            library_errors.extend(errors)
+
+        if payload.get("resume_from_disk"):
+            absorb(_new_artifacts(output_root, seen_paths))
+        else:
+            urls = list(request["urls"])
+            for position, url in enumerate(urls, start=1):
+                code, detail = _download_source(url, output_root, request)
+                last_detail = detail or last_detail
+                if code == 0 or code == 3 or "without saving any media" in detail.lower():
+                    if code != 0:
+                        # Nothing new from this source: already held, or blocked.
+                        blocked_sources += 1
+                else:
+                    source_errors.append(f"Source {position} of {len(urls)}: {detail[-500:]}")
+                # A source that downloaded nothing still yields an empty list.
+                absorb(_new_artifacts(output_root, seen_paths))
+                try:
+                    heartbeat_job(
+                        job_id, worker_id, lease_seconds=3600, factory=JOB_SESSION_FACTORY
                     )
-                    raise RuntimeError(
-                        "Douyin could not access this source. Refresh the Douyin session in "
-                        "TrendRelay, then retry with a specific video or profile link."
-                    )
-                raise RuntimeError(detail[-3000:] or "Download failed")
-            artifacts = _collect_artifacts(output_root)
+                except PermissionError:
+                    # The lease was taken from us; stop rather than double-download.
+                    break
+
         if not artifacts:
-            # Defense in depth: never report success for an empty folder.
+            if blocked_sources:
+                _write_connection_status(
+                    "refresh_required",
+                    "Douyin rejected the saved session. Refresh the Douyin session and retry.",
+                )
+                raise RuntimeError(
+                    "Douyin could not access these sources. Refresh the Douyin session in "
+                    "TrendRelay, then retry with a specific video or profile link."
+                )
             message = "Download finished without media files. Connect Douyin in the app and retry."
-            if detail:
-                message = f"{message}\n{detail[-2500:]}"
+            details = source_errors or ([last_detail] if last_detail else [])
+            if details:
+                message = f"{message}\n" + "\n".join(details)[-2500:]
             raise RuntimeError(message)
-        library_jobs, library_errors = _queue_library_artifacts(payload, artifacts)
+
+        summary = f"Fetched {len(artifacts)} media file(s)"
+        if source_errors:
+            summary = f"{summary}; {len(source_errors)} source(s) failed"
         result = {
             **payload,
             "status": "succeeded",
@@ -723,7 +780,8 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
                 for item in library_jobs
             ],
             "library_errors": library_errors,
-            "summary": f"Fetched {len(artifacts)} media file(s)",
+            "source_errors": source_errors,
+            "summary": summary,
         }
         return complete_job(job_id, worker_id, result, factory=JOB_SESSION_FACTORY)
     except Exception as error:

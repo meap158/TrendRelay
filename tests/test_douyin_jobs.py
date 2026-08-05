@@ -522,6 +522,173 @@ def test_worker_records_downloaded_media(
     assert queued[0]["engagement"]["origin_urls"] == request().urls
 
 
+def test_batch_downloads_each_source_before_starting_the_next(
+    monkeypatch, tmp_path: Path, job_factory
+) -> None:
+    """Each source is fetched and handed to the library before the next starts."""
+    monkeypatch.setattr(douyin, "OUTPUT_ROOT", tmp_path / "downloads")
+    monkeypatch.setattr(
+        douyin,
+        "provider_status",
+        lambda: {
+            "installed": True,
+            "active": True,
+            "revision": "pinned",
+            "cookies_ready": True,
+            "cookies": {"ready": True, "missing": []},
+        },
+    )
+    batch = douyin.DownloadRequest(
+        workspace_id="workspace-1",
+        urls=[
+            "https://www.douyin.com/video/1",
+            "https://www.douyin.com/video/2",
+            "https://www.douyin.com/video/3",
+        ],
+        limit=10,
+        confirm_external_action=True,
+    )
+    job = douyin.create_download_job(batch, actor_user_id="user-1")
+
+    timeline: list[str] = []
+
+    def fake_run(command, **_kwargs):
+        # One source per invocation: the URL sits between "batch" and "--output".
+        urls = command[command.index("batch") + 1 : command.index("--output")]
+        assert len(urls) == 1, urls
+        index = urls[0].rsplit("/", 1)[-1]
+        timeline.append(f"download:{index}")
+        output = Path(command[command.index("--output") + 1])
+        output.mkdir(parents=True, exist_ok=True)
+        (output / f"clip{index}.mp4").write_bytes(f"media-{index}".encode())
+        return subprocess.CompletedProcess(command, 0, "done", "")
+
+    monkeypatch.setattr(
+        media_library,
+        "create_ingest_job",
+        lambda **kwargs: timeline.append(f"ingest:{Path(kwargs['path']).name}") or {
+            "id": f"media-{Path(kwargs['path']).name}",
+            "status": "queued",
+            "available_at": datetime.now(UTC),
+        },
+    )
+    monkeypatch.setattr(douyin.subprocess, "run", fake_run)
+    completed = douyin.run_download_job(job["id"])
+
+    assert completed["status"] == "succeeded"
+    # Interleaved, not "discover everything, then download everything".
+    assert timeline == [
+        "download:1",
+        "ingest:clip1.mp4",
+        "download:2",
+        "ingest:clip2.mp4",
+        "download:3",
+        "ingest:clip3.mp4",
+    ]
+    names = sorted(item["name"] for item in completed["result"]["artifacts"])
+    assert names == ["clip1.mp4", "clip2.mp4", "clip3.mp4"]
+
+
+def test_batch_never_ingests_the_same_file_twice(
+    monkeypatch, tmp_path: Path, job_factory
+) -> None:
+    """A file already on disk is not re-collected when a later source runs."""
+    monkeypatch.setattr(douyin, "OUTPUT_ROOT", tmp_path / "downloads")
+    monkeypatch.setattr(
+        douyin,
+        "provider_status",
+        lambda: {
+            "installed": True,
+            "active": True,
+            "revision": "pinned",
+            "cookies_ready": True,
+            "cookies": {"ready": True, "missing": []},
+        },
+    )
+    batch = douyin.DownloadRequest(
+        workspace_id="workspace-1",
+        urls=["https://www.douyin.com/video/1", "https://www.douyin.com/video/2"],
+        limit=10,
+        confirm_external_action=True,
+    )
+    job = douyin.create_download_job(batch, actor_user_id="user-1")
+
+    def fake_run(command, **_kwargs):
+        output = Path(command[command.index("--output") + 1])
+        output.mkdir(parents=True, exist_ok=True)
+        # The first source writes the file; the second re-writes the same one,
+        # exactly as the upstream de-duplicating database would.
+        (output / "shared.mp4").write_bytes(b"identical-media")
+        return subprocess.CompletedProcess(command, 0, "done", "")
+
+    ingested: list[str] = []
+    monkeypatch.setattr(
+        media_library,
+        "create_ingest_job",
+        lambda **kwargs: ingested.append(kwargs["path"]) or {
+            "id": "media-1",
+            "status": "queued",
+            "available_at": datetime.now(UTC),
+        },
+    )
+    monkeypatch.setattr(douyin.subprocess, "run", fake_run)
+    completed = douyin.run_download_job(job["id"])
+
+    assert len(ingested) == 1
+    assert len(completed["result"]["artifacts"]) == 1
+
+
+def test_batch_keeps_going_when_one_source_fails(
+    monkeypatch, tmp_path: Path, job_factory
+) -> None:
+    """A blocked link must not discard the media its neighbours produced."""
+    monkeypatch.setattr(douyin, "OUTPUT_ROOT", tmp_path / "downloads")
+    monkeypatch.setattr(
+        douyin,
+        "provider_status",
+        lambda: {
+            "installed": True,
+            "active": True,
+            "revision": "pinned",
+            "cookies_ready": True,
+            "cookies": {"ready": True, "missing": []},
+        },
+    )
+    batch = douyin.DownloadRequest(
+        workspace_id="workspace-1",
+        urls=["https://www.douyin.com/video/1", "https://www.douyin.com/video/2"],
+        limit=10,
+        confirm_external_action=True,
+    )
+    job = douyin.create_download_job(batch, actor_user_id="user-1")
+
+    def fake_run(command, **_kwargs):
+        urls = command[command.index("batch") + 1 : command.index("--output")]
+        output = Path(command[command.index("--output") + 1])
+        output.mkdir(parents=True, exist_ok=True)
+        if urls[0].endswith("/1"):
+            return subprocess.CompletedProcess(command, 2, "", "network exploded")
+        (output / "clip2.mp4").write_bytes(b"second-source")
+        return subprocess.CompletedProcess(command, 0, "done", "")
+
+    monkeypatch.setattr(
+        media_library,
+        "create_ingest_job",
+        lambda **kwargs: {
+            "id": "media-2",
+            "status": "queued",
+            "available_at": datetime.now(UTC),
+        },
+    )
+    monkeypatch.setattr(douyin.subprocess, "run", fake_run)
+    completed = douyin.run_download_job(job["id"])
+
+    assert completed["status"] == "succeeded"
+    assert [item["name"] for item in completed["result"]["artifacts"]] == ["clip2.mp4"]
+    assert "network exploded" in completed["result"]["source_errors"][0]
+    assert "1 source(s) failed" in completed["result"]["summary"]
+
+
 def test_worker_fails_when_provider_exits_zero_without_media(
     monkeypatch, tmp_path: Path, job_factory
 ) -> None:
