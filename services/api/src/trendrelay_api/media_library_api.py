@@ -393,6 +393,132 @@ def import_asset(
     return {"job": job}
 
 
+class AssetFilter(BaseModel):
+    """The filter a library view is showing.
+
+    Shared by the list and by the select-all that acts on it: if the two built
+    the predicate separately, a selection could cover a different set than the
+    list on screen, which is the one mistake a bulk delete must not make.
+    """
+
+    q: str | None = None
+    platform: str | None = None
+    platform_missing: bool = False
+    creator: str | None = None
+    creator_missing: bool = False
+    media_kind: str | None = None
+    max_duration_seconds: int | None = None
+
+
+def asset_conditions(
+    workspace_id: str, filters: AssetFilter, *, omit: str | None = None
+) -> list[Any]:
+    """The WHERE clause for a library query, including the free-text search."""
+    values: list[Any] = [MediaAsset.workspace_id == workspace_id]
+    if omit != "platform":
+        if filters.platform:
+            values.append(MediaAsset.platform == filters.platform)
+        elif filters.platform_missing:
+            values.append(
+                (MediaAsset.platform.is_(None)) | (func.trim(MediaAsset.platform) == "")
+            )
+    if omit != "creator":
+        if filters.creator:
+            values.append(MediaAsset.creator == filters.creator)
+        elif filters.creator_missing:
+            values.append(
+                (MediaAsset.creator.is_(None)) | (func.trim(MediaAsset.creator) == "")
+            )
+    if omit != "media_kind" and filters.media_kind:
+        values.append(MediaAsset.media_kind == filters.media_kind)
+    if filters.max_duration_seconds:
+        values.append(MediaAsset.duration_ms <= filters.max_duration_seconds * 1000)
+    if filters.q and filters.q.strip():
+        escaped = (
+            filters.q.casefold().strip()
+            .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
+        pattern = f"%{escaped}%"
+        transcript_match = select(MediaTranscript.id).where(
+            MediaTranscript.asset_id == MediaAsset.id,
+            func.lower(MediaTranscript.text).like(pattern, escape="\\"),
+        ).exists()
+        analysis_match = select(CreativeAnalysis.id).where(
+            CreativeAnalysis.asset_id == MediaAsset.id,
+            or_(
+                func.lower(CreativeAnalysis.spoken_hook).like(pattern, escape="\\"),
+                func.lower(CreativeAnalysis.text_hook).like(pattern, escape="\\"),
+                func.lower(CreativeAnalysis.product_shown).like(pattern, escape="\\"),
+                func.lower(CreativeAnalysis.analyst_notes).like(pattern, escape="\\"),
+                func.lower(cast(CreativeAnalysis.keywords, String)).like(
+                    pattern, escape="\\"
+                ),
+            ),
+        ).exists()
+        values.append(
+            or_(
+                func.lower(MediaAsset.title).like(pattern, escape="\\"),
+                func.lower(MediaAsset.caption).like(pattern, escape="\\"),
+                func.lower(MediaAsset.creator).like(pattern, escape="\\"),
+                func.lower(MediaAsset.platform).like(pattern, escape="\\"),
+                func.lower(cast(MediaAsset.hashtags, String)).like(pattern, escape="\\"),
+                transcript_match,
+                analysis_match,
+            )
+        )
+    return values
+
+
+#: A select-all is bounded, but generously: the ids are a few bytes each, and
+#: the real guard is the per-action batch size, not the size of the selection.
+#: A cap that cannot cover an ordinary library just makes select-all a lie.
+MAX_SELECTABLE = 10_000
+
+
+@router.get("/assets/ids")
+def list_asset_ids(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    q: Annotated[str | None, Query(max_length=300)] = None,
+    platform: Annotated[str | None, Query(max_length=80)] = None,
+    platform_missing: Annotated[bool, Query()] = False,
+    creator: Annotated[str | None, Query(max_length=200)] = None,
+    creator_missing: Annotated[bool, Query()] = False,
+    media_kind: Annotated[Literal["video", "audio", "image"] | None, Query()] = None,
+    max_duration_seconds: Annotated[int | None, Query(ge=1, le=86_400)] = None,
+) -> dict[str, Any]:
+    """Every asset id the current filter matches, for a true select-all.
+
+    Ids only: the interface already has the rows it is showing, and fetching
+    two thousand full assets to tick two thousand boxes would be wasteful.
+    """
+    membership(session, workspace_id, user.id)
+    filters = AssetFilter(
+        q=q, platform=platform, platform_missing=platform_missing, creator=creator,
+        creator_missing=creator_missing, media_kind=media_kind,
+        max_duration_seconds=max_duration_seconds,
+    )
+    where = asset_conditions(workspace_id, filters)
+    matched = session.scalar(select(func.count(MediaAsset.id)).where(*where)) or 0
+    ids = list(
+        session.scalars(
+            select(MediaAsset.id)
+            .where(*where)
+            .order_by(MediaAsset.collected_at.desc())
+            .limit(MAX_SELECTABLE)
+        ).all()
+    )
+    return {
+        "asset_ids": ids,
+        "matched": matched,
+        # Said plainly rather than implied, so a partial selection is never
+        # mistaken for the whole filter.
+        "truncated": matched > len(ids),
+        "limit": MAX_SELECTABLE,
+    }
+
+
 @router.get("/assets")
 def list_assets(
     workspace_id: str,
@@ -409,64 +535,15 @@ def list_assets(
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> dict[str, Any]:
     membership(session, workspace_id, user.id)
+    filters = AssetFilter(
+        q=q, platform=platform, platform_missing=platform_missing, creator=creator,
+        creator_missing=creator_missing, media_kind=media_kind,
+        max_duration_seconds=max_duration_seconds,
+    )
 
     def conditions(*, omit: str | None = None) -> list[Any]:
-        values: list[Any] = [MediaAsset.workspace_id == workspace_id]
-        if omit != "platform":
-            if platform:
-                values.append(MediaAsset.platform == platform)
-            elif platform_missing:
-                values.append(
-                    (MediaAsset.platform.is_(None))
-                    | (func.trim(MediaAsset.platform) == "")
-                )
-        if omit != "creator":
-            if creator:
-                values.append(MediaAsset.creator == creator)
-            elif creator_missing:
-                values.append(
-                    (MediaAsset.creator.is_(None))
-                    | (func.trim(MediaAsset.creator) == "")
-                )
-        if omit != "media_kind" and media_kind:
-            values.append(MediaAsset.media_kind == media_kind)
-        if max_duration_seconds:
-            values.append(MediaAsset.duration_ms <= max_duration_seconds * 1000)
-        if q and q.strip():
-            escaped = (
-                q.casefold().strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            )
-            pattern = f"%{escaped}%"
-            transcript_match = select(MediaTranscript.id).where(
-                MediaTranscript.asset_id == MediaAsset.id,
-                func.lower(MediaTranscript.text).like(pattern, escape="\\"),
-            ).exists()
-            analysis_match = select(CreativeAnalysis.id).where(
-                CreativeAnalysis.asset_id == MediaAsset.id,
-                or_(
-                    func.lower(CreativeAnalysis.spoken_hook).like(pattern, escape="\\"),
-                    func.lower(CreativeAnalysis.text_hook).like(pattern, escape="\\"),
-                    func.lower(CreativeAnalysis.product_shown).like(pattern, escape="\\"),
-                    func.lower(CreativeAnalysis.analyst_notes).like(pattern, escape="\\"),
-                    func.lower(cast(CreativeAnalysis.keywords, String)).like(
-                        pattern, escape="\\"
-                    ),
-                ),
-            ).exists()
-            values.append(
-                or_(
-                    func.lower(MediaAsset.title).like(pattern, escape="\\"),
-                    func.lower(MediaAsset.caption).like(pattern, escape="\\"),
-                    func.lower(MediaAsset.creator).like(pattern, escape="\\"),
-                    func.lower(MediaAsset.platform).like(pattern, escape="\\"),
-                    func.lower(cast(MediaAsset.hashtags, String)).like(
-                        pattern, escape="\\"
-                    ),
-                    transcript_match,
-                    analysis_match,
-                )
-            )
-        return values
+        return asset_conditions(workspace_id, filters, omit=omit)
+
 
     order_by = {
         "newest": (MediaAsset.collected_at.desc(),),

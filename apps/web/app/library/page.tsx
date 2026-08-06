@@ -420,8 +420,8 @@ export default function LibraryPage() {
       return groups;
     }, new Map<string, Asset[]>())).sort((left, right) => right[1].length - left[1].length || left[0].localeCompare(right[0]));
 
-  const refresh = useCallback(async (nextWorkspace = workspaceId) => {
-    if (!nextWorkspace) return;
+  /** The filter the list is showing, so a select-all can ask for the same set. */
+  const filterParams = useCallback(() => {
     const params = new URLSearchParams();
     if (query.trim()) params.set("q", query.trim());
     if (channelFilter === "__unassigned__") params.set("creator_missing", "true");
@@ -429,6 +429,12 @@ export default function LibraryPage() {
     if (platformFilter === "__other__") params.set("platform_missing", "true");
     else if (platformFilter) params.set("platform", platformFilter);
     if (mediaKind) params.set("media_kind", mediaKind);
+    return params;
+  }, [channelFilter, mediaKind, platformFilter, query]);
+
+  const refresh = useCallback(async (nextWorkspace = workspaceId) => {
+    if (!nextWorkspace) return;
+    const params = filterParams();
     params.set("sort", sortOrder);
     params.set("limit", "100");
     const suffix = `?${params}`;
@@ -453,7 +459,7 @@ export default function LibraryPage() {
         ? current
         : (assetBody.assets[0]?.id ?? ""),
     );
-  }, [apiFetch, channelFilter, mediaKind, platformFilter, query, sortOrder, workspaceId]);
+  }, [apiFetch, filterParams, sortOrder, workspaceId]);
 
   function clearFilters() {
     setQuery("");
@@ -495,12 +501,38 @@ export default function LibraryPage() {
     setLastPicked(assetId);
   }
 
+  /** Select everything the filter matches, which is usually more than is loaded. */
+  async function selectAllMatching() {
+    if (!workspaceId) return;
+    setBusy("select-all");
+    setError("");
+    try {
+      const body = await json<{ asset_ids: string[]; matched: number; truncated: boolean }>(
+        await apiFetch(
+          `/api/workspaces/${workspaceId}/media/library/assets/ids?${filterParams()}`,
+        ),
+      );
+      setSelection(new Set(body.asset_ids));
+      setMessage(
+        body.truncated
+          ? `Selected the first ${body.asset_ids.length.toLocaleString()} of ${body.matched.toLocaleString()} matches. Narrow the filter to reach the rest.`
+          : `Selected all ${body.asset_ids.length.toLocaleString()} matching items.`,
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The selection could not be built.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function runBulkAction(action: BulkAction, only?: string[]) {
-    const ids = only ?? selectionList.map((asset) => asset.id);
+    const ids = only ?? Array.from(selection);
     if (!ids.length) return;
-    if (ids.length > action.max_batch) {
-      setError(`${action.label} runs on up to ${action.max_batch} items at a time. ${ids.length} are selected.`);
-      return;
+    // A selection can be larger than one request allows, so it is sent in
+    // batches rather than refused - the cap is the server's, not the operator's.
+    const batches: string[][] = [];
+    for (let at = 0; at < ids.length; at += action.max_batch) {
+      batches.push(ids.slice(at, at + action.max_batch));
     }
     const subject = `${ids.length} item${ids.length === 1 ? "" : "s"}`;
     const prompt = action.id === "delete"
@@ -511,13 +543,24 @@ export default function LibraryPage() {
     setError("");
     setMessage("");
     try {
-      const response = await apiFetch(`/api/workspaces/${workspaceId}/media/library/bulk`, {
-        method: "POST",
-        body: JSON.stringify({ action: action.id, asset_ids: ids, confirm_external_action: true }),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.detail ?? `${action.label} could not start.`);
-      const { queued, skipped, failed, missing } = body.counts;
+      const totals = { queued: 0, skipped: 0, failed: 0, missing: 0 };
+      for (const [index, batch] of batches.entries()) {
+        if (batches.length > 1) {
+          setMessage(`${action.verb}: batch ${index + 1} of ${batches.length}…`);
+        }
+        const response = await apiFetch(`/api/workspaces/${workspaceId}/media/library/bulk`, {
+          method: "POST",
+          body: JSON.stringify({
+            action: action.id, asset_ids: batch, confirm_external_action: true,
+          }),
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail ?? `${action.label} could not start.`);
+        for (const key of ["queued", "skipped", "failed", "missing"] as const) {
+          totals[key] += body.counts[key] ?? 0;
+        }
+      }
+      const { queued, skipped, failed, missing } = totals;
       // Every outcome is reported: a bare "queued" would hide that a third of
       // the selection was skipped for already being done.
       const parts = [`${queued} queued`];
@@ -963,7 +1006,7 @@ export default function LibraryPage() {
           </div>
 
           {assets.length > 0 && (
-            <div className={`library-selection-bar${selectionList.length ? " active" : ""}`}>
+            <div className={`library-selection-bar${selection.size ? " active" : ""}`}>
               <span
                 className="library-pick"
                 role="checkbox"
@@ -983,12 +1026,23 @@ export default function LibraryPage() {
               >{allLoadedSelected ? "✓" : ""}</span>
               {/* "Loaded" is stated rather than implied: the grid holds the
                   current page, not every asset the filter matches. */}
+              {/* The count is of everything picked, which after "all matching"
+                  is more than the page can show - so it counts the selection,
+                  not the ticks visible on screen. */}
               <strong>
-                {selectionList.length
-                  ? `${selectionList.length} selected`
+                {selection.size
+                  ? `${selection.size.toLocaleString()} selected`
                   : `Select from ${assets.length} loaded`}
               </strong>
-              {selectionList.length > 0 && (
+              {total > assets.length && (
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  busy={busy === "select-all"}
+                  onClick={() => void selectAllMatching()}
+                >Select all {total.toLocaleString()} matching</Button>
+              )}
+              {selection.size > 0 && (
                 <>
                   <Button variant="quiet" size="sm" onClick={() => setSelection(new Set())}>
                     Clear
@@ -1006,10 +1060,8 @@ export default function LibraryPage() {
                       >{action.label}</Button>
                     ))}
                   </span>
-                  {selectionList.length > 0 && bulkActions.some((a) => selectionList.length > a.max_batch) && (
-                    <Badge tone="warn">
-                      max {Math.min(...bulkActions.map((a) => a.max_batch))} per run
-                    </Badge>
+                  {selection.size > Math.min(...bulkActions.map((a) => a.max_batch), Infinity) && (
+                    <Badge tone="neutral">runs in batches</Badge>
                   )}
                 </>
               )}
