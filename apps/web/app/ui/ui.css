@@ -27,10 +27,18 @@
 .ui-button-sm { min-height: 28px; padding: 4px 10px; font-size: 11px; }
 .ui-button-md { min-height: 34px; padding: 7px 13px; font-size: 12px; }
 .ui-button-block { width: 100%; }
+/* Square regardless of size, so a padding rule elsewhere cannot squash it
+ * to a sliver - which is exactly what happened to the refresh icon. */
+.ui-button-icon { flex: none; padding: 0; }
+.ui-button-icon.ui-button-sm { width: 28px; }
+.ui-button-icon.ui-button-md { width: 34px; }
 
-.ui-button-primary { border-color: var(--green); background: var(--green); color: #fff; font-weight: 600; }
-.ui-button-primary:hover:not(:disabled) { filter: brightness(1.08); }
-.ui-button-secondary:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
+/* Primary is the app's --link blue, which dashboard, campaigns and library
+ * already used; the green primary on the publish screen was the outlier. */
+.ui-button-primary { border-color: var(--link); background: var(--link); color: #fff; font-weight: 600; }
+.ui-button-primary:hover:not(:disabled) { background: #2b457b; border-color: #2b457b; }
+.ui-button-secondary { border-color: var(--line-strong); background: #f0f2f5; }
+.ui-button-secondary:hover:not(:disabled) { background: #e4e6eb; }
 .ui-button-quiet { border-color: var(--line); background: transparent; color: var(--muted); }
 .ui-button-quiet:hover:not(:disabled) { border-color: var(--green); color: var(--green); background: var(--panel); }
 .ui-button-danger { border-color: #e13333; color: #a3162a; background: transparent; }

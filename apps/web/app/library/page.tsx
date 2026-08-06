@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
+import { Button } from "../ui/button";
 
 type Workspace = { id: string; name: string; role: string };
 type ViewMode = "gallery" | "list";
@@ -777,7 +778,7 @@ export default function LibraryPage() {
           <div className="library-browser-toolbar">
           <form className="library-search" onSubmit={(event) => { event.preventDefault(); void refresh(); }}>
             <input aria-label="Search library" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search titles, hooks, transcripts, or creators…" />
-            <button>Search</button>
+            <Button type="submit">Search</Button>
           </form>
 
           <nav className="library-category-bar" aria-label="Media categories">
@@ -817,12 +818,12 @@ export default function LibraryPage() {
                 <option value="source">Source</option>
               </select>
             </label>
-            {activeFilterCount > 0 && <button type="button" className="library-clear-filters" onClick={clearFilters}>Clear {activeFilterCount}</button>}
+            {activeFilterCount > 0 && <Button variant="quiet" size="sm" onClick={clearFilters}>Clear {activeFilterCount}</Button>}
           </div>
           <div className="library-collection-toolbar">
             <strong>{total} {total === 1 ? "item" : "items"}</strong>
             <div className="library-collection-actions">
-              {canImport && <button type="button" className="library-sync-button" disabled={busy === "sync"} onClick={() => void syncDownloads()}>{busy === "sync" ? "Refreshing…" : "Refresh downloads"}</button>}
+              {canImport && <Button variant="quiet" size="sm" busy={busy === "sync"} onClick={() => void syncDownloads()}>{busy === "sync" ? "Refreshing" : "Refresh downloads"}</Button>}
               <div className="library-view-switcher" role="group" aria-label="Library view">
                 <button type="button" className={viewMode === "gallery" ? "selected" : ""} aria-label="Gallery view" title="Gallery view" aria-pressed={viewMode === "gallery"} onClick={() => chooseView("gallery")}><span aria-hidden="true">▦</span></button>
                 <button type="button" className={viewMode === "list" ? "selected" : ""} aria-label="List view" title="List view" aria-pressed={viewMode === "list"} onClick={() => chooseView("list")}><span aria-hidden="true">☷</span></button>
@@ -863,7 +864,7 @@ export default function LibraryPage() {
                   <label>Comments<input name="comments" type="number" min={0} /></label>
                   <label>Shares<input name="shares" type="number" min={0} /></label>
                 </div>
-                <button className="primary-button" disabled={busy === "import"}>{busy === "import" ? "Queuing…" : "Import safely"}</button>
+                <Button type="submit" variant="primary" busy={busy === "import"}>{busy === "import" ? "Queuing" : "Import safely"}</Button>
               </form>
             </details>
           )}
@@ -914,27 +915,26 @@ export default function LibraryPage() {
                   <p>{selected.caption || "No source caption recorded."}</p>
                   <small>{selected.width && selected.height ? `${selected.width}×${selected.height} · ` : ""}{displaySize(selected.size_bytes)}</small>
                   <nav className="library-item-navigation" aria-label="Browse media">
-                    <button type="button" disabled={selectedIndex <= 0} onClick={() => setSelectedId(assets[selectedIndex - 1]?.id ?? selectedId)}>← Previous</button>
+                    <Button variant="quiet" size="sm" disabled={selectedIndex <= 0} onClick={() => setSelectedId(assets[selectedIndex - 1]?.id ?? selectedId)}>← Previous</Button>
                     <span>{selectedIndex + 1} of {assets.length}</span>
-                    <button type="button" disabled={selectedIndex < 0 || selectedIndex >= assets.length - 1} onClick={() => setSelectedId(assets[selectedIndex + 1]?.id ?? selectedId)}>Next →</button>
+                    <Button variant="quiet" size="sm" disabled={selectedIndex < 0 || selectedIndex >= assets.length - 1} onClick={() => setSelectedId(assets[selectedIndex + 1]?.id ?? selectedId)}>Next →</Button>
                   </nav>
                 </div>
                 <div className="library-actions">
-                  <button type="button" className="secondary-button library-open-folder" disabled={busy === "folder"} onClick={() => void openAssetFolder(selected)}>
-                    {busy === "folder" ? "Opening…" : "Open folder"}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
+                  <Button
+                    variant="secondary"
+                    busy={busy === "folder"}
+                    onClick={() => void openAssetFolder(selected)}
+                  >{busy === "folder" ? "Opening" : "Open folder"}</Button>
+                  <Button
+                    variant="secondary"
+                    busy={busy === "blur"}
                     disabled={busy.startsWith("blur") || selected.media_kind !== "video"}
                     title={selected.media_kind === "video"
                       ? "Detect every face and burn the blur into a new render"
                       : "Face blurring applies to video"}
                     onClick={() => void blurFaces(selected)}
-                  >
-                    {busy === "blur" && <i className="button-spinner" aria-hidden="true" />}
-                    {busy === "blur" ? "Blurring…" : "Blur faces"}
-                  </button>
+                  >{busy === "blur" ? "Blurring" : "Blur faces"}</Button>
                   <Link href={`/campaigns?video=${encodeURIComponent(handoffPath(selected))}`}>Plan campaign</Link>
                   <Link href={`/publish?video=${encodeURIComponent(handoffPath(selected))}`}>Prepare to publish</Link>
                   {blurredVersion(selected) && (
@@ -995,7 +995,7 @@ export default function LibraryPage() {
                       <label>Emotional angle<input name="emotional_angle" /></label>
                     </div>
                     <label>Analyst notes<textarea name="analyst_notes" rows={3} defaultValue={selected.analysis?.analyst_notes ?? ""} /></label>
-                    <button className="primary-button" disabled={busy === "enrich"}>{busy === "enrich" ? "Analyzing…" : "Save and derive recipe"}</button>
+                    <Button type="submit" variant="primary" busy={busy === "enrich"}>{busy === "enrich" ? "Analyzing" : "Save and derive recipe"}</Button>
                   </form>
                 </article>
               )}

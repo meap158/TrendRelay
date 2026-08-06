@@ -12,6 +12,8 @@ type Props = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> & {
   busy?: boolean;
   /** Stretch to the container instead of sizing to the label. */
   block?: boolean;
+  /** Square, for a button whose whole label is an icon. Needs aria-label. */
+  iconOnly?: boolean;
   selected?: boolean;
   children: ReactNode;
 };
@@ -29,6 +31,7 @@ export function Button({
   size = "md",
   busy = false,
   block = false,
+  iconOnly = false,
   selected = false,
   disabled,
   type = "button",
@@ -40,6 +43,7 @@ export function Button({
     `ui-button-${variant}`,
     `ui-button-${size}`,
     block ? "ui-button-block" : "",
+    iconOnly ? "ui-button-icon" : "",
     selected ? "is-selected" : "",
   ].filter(Boolean).join(" ");
 

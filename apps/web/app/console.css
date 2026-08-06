@@ -478,7 +478,6 @@ html { scroll-behavior: smooth; }
 
 .download-queue-card { margin-top: 18px; scroll-margin-top: 72px; }
 .queue-heading { display: flex; justify-content: space-between; gap: 20px; align-items: center; padding: 19px 22px 16px; }
-.refresh-button { min-height: 34px; }
 .queue-heading-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
 .clear-downloads-button { min-height: 34px; color: var(--muted); }
 .clear-downloads-button:hover { color: var(--red); }

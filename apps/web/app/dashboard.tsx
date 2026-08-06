@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { useAuth } from "./auth-provider";
+import { Button } from "./ui/button";
 import { useJobs } from "./jobs-provider";
 
 type Workspace = { id: string; name: string; role: string };
@@ -543,13 +544,13 @@ export default function Dashboard() {
               <strong>{connectionActive ? "Finish signing in to Douyin" : "Connect your Douyin session"}</strong>
               <span>{status?.douyin.connection?.message ?? "TrendRelay opens a dedicated login window and stores the session only on this computer."}</span>
             </div>
-            <button type="button" className="secondary-button" disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
-              {connecting || connectionActive ? "Waiting for sign-in…" : "Connect Douyin"}
-            </button>
+            <Button variant="secondary" busy={connecting} disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
+              {connecting || connectionActive ? "Waiting for sign-in" : "Connect Douyin"}
+            </Button>
           </div>}
           {providerReady && cookiesReady && refreshRequired && <div className="connection-callout warning">
             <div><strong>Refresh the Douyin session</strong><span>{status?.douyin.connection?.message}</span></div>
-            <button type="button" className="secondary-button" disabled={connecting || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>{connecting ? "Opening…" : "Refresh session"}</button>
+            <Button variant="secondary" busy={connecting} disabled={selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>{connecting ? "Opening" : "Refresh session"}</Button>
           </div>}
           {providerReady && cookiesReady && !refreshRequired && <div className="connection-callout connected">
             <div><strong>Ready to download</strong><span>Your Douyin session is stored locally. Refresh it only if downloads stop working.</span></div>
@@ -580,9 +581,14 @@ export default function Dashboard() {
           <div><p className="step-kicker">STEP 2</p><h2>Downloads</h2><p>Active batches update automatically every few seconds.</p></div>
           <div className="queue-heading-actions">
             {jobs.length > 0 && <button type="button" className="text-action clear-downloads-button" disabled={clearingHistory || jobsBusy} onClick={() => void clearUnavailableDownloads()}>{clearingHistory ? "Clearing…" : "Clear missing files"}</button>}
-            <button type="button" className="secondary-button refresh-button" aria-label="Refresh downloads" title="Refresh downloads" disabled={jobsBusy} onClick={() => void refreshJobs()}>
-              <RefreshCw className={jobsBusy ? "spinning" : ""} size={16} strokeWidth={2} />
-            </button>
+            <Button
+              variant="secondary"
+              iconOnly
+              aria-label="Refresh downloads"
+              title="Refresh downloads"
+              disabled={jobsBusy}
+              onClick={() => void refreshJobs()}
+            ><RefreshCw className={jobsBusy ? "spinning" : ""} size={16} strokeWidth={2} /></Button>
           </div>
         </div>
         <div className="queue-filters" role="group" aria-label="Filter downloads">
@@ -629,10 +635,10 @@ export default function Dashboard() {
                 {ACTIVE_STATUSES.has(current) && <div className={"job-progress " + current} aria-label={current === "queued" ? "Waiting to start" : preparingLibrary ? "Preparing downloaded media for Library" : downloadingAndPreparing ? "Downloading while preparing earlier files for Library" : "Download in progress"}><span style={preparingLibrary ? { width: `${libraryPercent}%` } : undefined} /></div>}
                 {progress?.folder_exists && <div className="download-live-status"><strong>{job.error && current === "queued" ? "Ready to resume" : preparingLibrary ? "Preparing Library" : downloadingAndPreparing ? "Downloading now · preparing Library" : ACTIVE_STATUSES.has(current) ? "Downloading now" : "Files on disk"}</strong><span>{libraryProgress && (preparingLibrary || downloadingAndPreparing) ? `${progressBreakdown(progress)} · ${libraryProgressBreakdown(libraryProgress)}` : progressBreakdown(progress)}</span></div>}
                 {(sources.length > 0 || canOpenFolder || job.status === "succeeded") && <div className="download-job-actions">
-                  {sources.length > 0 && <button type="button" className="secondary-button" onClick={() => reuseLinks(sources)}>Reuse {sources.length === 1 ? "link" : "links"}</button>}
-                  {creatorProfiles.length > 0 && <button type="button" className="secondary-button" title="Add the creator's Douyin profile to the link box so you can fetch their whole catalogue" onClick={() => addCreatorProfiles(creatorProfiles)}>Add creator {creatorProfiles.length === 1 ? "profile" : `profiles (${creatorProfiles.length})`}</button>}
+                  {sources.length > 0 && <Button variant="secondary" size="sm" onClick={() => reuseLinks(sources)}>Reuse {sources.length === 1 ? "link" : "links"}</Button>}
+                  {creatorProfiles.length > 0 && <Button variant="secondary" size="sm" title="Add the creator's Douyin profile to the link box so you can fetch their whole catalogue" onClick={() => addCreatorProfiles(creatorProfiles)}>Add creator {creatorProfiles.length === 1 ? "profile" : `profiles (${creatorProfiles.length})`}</Button>}
                   {sources[0] && <a href={sources[0]} target="_blank" rel="noreferrer">Open source</a>}
-                  {canOpenFolder && <button type="button" className="secondary-button" onClick={() => void openFolder(job.payload.output_root!)}>Open folder</button>}
+                  {canOpenFolder && <Button variant="secondary" size="sm" onClick={() => void openFolder(job.payload.output_root!)}>Open folder</Button>}
                   {job.status === "succeeded" && <Link href="/library">Open library</Link>}
                 </div>}
                 {job.result?.summary && current === "succeeded" && <p className="job-summary">{job.result.summary}. Files were also added to the media library.</p>}

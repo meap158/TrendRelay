@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { Button } from "../ui/button";
 
 type Workspace = { id: string; name: string; role: string };
 type Campaign = {
@@ -388,7 +389,7 @@ export default function CampaignsPage() {
                 <label>Markets<input name="markets" placeholder="TH, US" /></label>
                 <label>Languages<input name="languages" placeholder="en, th" /></label>
                 <label>Affiliate URL<input name="affiliate_url" type="url" /></label>
-                <button className="primary-button" disabled={busy === "campaign"}>Create campaign</button>
+                <Button type="submit" variant="primary" busy={busy === "campaign"}>Create campaign</Button>
               </form>
             </details>
           )}
@@ -407,10 +408,10 @@ export default function CampaignsPage() {
                 <div className="campaign-status-actions">
                   <Link href={`/attribution?campaign=${encodeURIComponent(selectedCampaign.id)}`}>Measure revenue</Link>
                   {canCreateCampaign && selectedCampaign.status !== "active" && (
-                    <button onClick={() => void setCampaignStatus("active")}>Activate</button>
+                    <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("active")}>Activate</Button>
                   )}
                   {canCreateCampaign && selectedCampaign.status !== "archived" && (
-                    <button onClick={() => void setCampaignStatus("archived")}>Archive</button>
+                    <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("archived")}>Archive</Button>
                   )}
                 </div>
               </section>
@@ -433,7 +434,7 @@ export default function CampaignsPage() {
                       <label>Disclosure<input name="disclosure" defaultValue="#ad" required /></label>
                     </div>
                     <small>Times use {timezone}. New plans require owner or approver review.</small>
-                    <button className="primary-button" disabled={busy === "plan"}>Send for approval</button>
+                    <Button type="submit" variant="primary" busy={busy === "plan"}>Send for approval</Button>
                   </form>
                 </details>
               )}
@@ -459,14 +460,14 @@ export default function CampaignsPage() {
                         <div className="calendar-actions">
                           {plan.state === "needs_approval" && canApprove && (
                             <>
-                              <button disabled={busy === plan.id} onClick={() => void decide(plan, "approve")}>Approve</button>
-                              <button disabled={busy === plan.id} onClick={() => void decide(plan, "reject")}>Reject</button>
+                              <Button variant="primary" size="sm" busy={busy === plan.id} onClick={() => void decide(plan, "approve")}>Approve</Button>
+                              <Button variant="danger" size="sm" busy={busy === plan.id} onClick={() => void decide(plan, "reject")}>Reject</Button>
                             </>
                           )}
                           {plan.state === "approved" && (
                             <>
-                              <button onClick={() => void copyPostingText(plan)}>Copy post</button>
-                              <button disabled={busy === `package-${plan.id}`} onClick={() => void exportPackage(plan)}>Export package</button>
+                              <Button variant="quiet" size="sm" onClick={() => void copyPostingText(plan)}>Copy post</Button>
+                              <Button variant="quiet" size="sm" busy={busy === `package-${plan.id}`} onClick={() => void exportPackage(plan)}>Export package</Button>
                               <Link href={`/publish?video=${encodeURIComponent(plan.video_path)}`}>Publish</Link>
                               {plan.deep_link && <a href={plan.deep_link} target="_blank" rel="noreferrer">Open {plan.platform}</a>}
                             </>
@@ -475,7 +476,7 @@ export default function CampaignsPage() {
                         {manualPackage && (
                           <div className="package-result">
                             <div><strong>{manualPackage.path}</strong><small>{size(manualPackage.bytes)} · SHA-256 {manualPackage.sha256.slice(0, 12)}</small></div>
-                            <button onClick={() => void openFolder(manualPackage.folder)}>Open folder</button>
+                            <Button variant="quiet" size="sm" onClick={() => void openFolder(manualPackage.folder)}>Open folder</Button>
                           </div>
                         )}
                       </div>
