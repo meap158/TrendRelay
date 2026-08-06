@@ -5,6 +5,21 @@
  * tokens already defined in console.css, so the look is unchanged.
  */
 
+/* --- utilities -------------------------------------------------------------- */
+/* Text for a screen reader only. Clipped rather than hidden, because
+ * display:none and visibility:hidden are both skipped by screen readers, which
+ * would defeat the point. */
+.sr-only {
+  position: absolute;
+  overflow: hidden;
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  white-space: nowrap;
+}
+
 /* --- button ---------------------------------------------------------------- */
 .ui-button {
   display: inline-flex;

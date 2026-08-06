@@ -310,6 +310,40 @@ nav strong { color: #1c2b33; }
 .post-preview-copy p { margin: 0; color: var(--text); line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
 .post-preview-note { margin: 0; color: var(--muted); line-height: 1.5; }
 
+/* --- upcoming posts rail -------------------------------------------------- */
+/* A day strip over a list: the question is "is anything going out on Thursday",
+ * and a flat list makes that a counting exercise. */
+.publish-side .upcoming { gap: 10px; padding: 12px; }
+.upcoming-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.upcoming-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+
+.upcoming-strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; }
+.upcoming-day { display: grid; justify-items: center; gap: 1px; padding: 6px 2px 5px; border: 1px solid transparent; border-radius: var(--radius); background: none; color: var(--muted); font: inherit; cursor: pointer; }
+.upcoming-day > span:not(.sr-only) { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.upcoming-day b { color: var(--text); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.upcoming-day:hover { background: var(--panel-raised); }
+.upcoming-day.selected { border-color: var(--link); background: #eaf0fb; color: var(--link); }
+.upcoming-day.selected b { color: var(--link); font-weight: 600; }
+/* The count is what makes the strip readable at a glance; without it every day
+ * looks identical until it has been opened. Under the date rather than over the
+ * corner, where at seven cells wide it sat on top of the weekday. An empty day
+ * still reserves the space, so the dates stay on one line across the strip. */
+.upcoming-day i { display: grid; place-items: center; min-width: 15px; height: 15px; margin-top: 1px; padding: 0 4px; border-radius: 999px; background: var(--link); color: #fff; font-size: 9px; font-style: normal; font-weight: 700; line-height: 1; }
+.upcoming-day i.empty { background: none; }
+
+.upcoming-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.upcoming-list > li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 8px 2px; border-top: 1px solid var(--line); }
+.upcoming-list > li:first-child { border-top: 0; }
+.upcoming-list time { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.upcoming-post { display: grid; gap: 4px; min-width: 0; }
+/* Two lines, then an ellipsis: a caption is long by nature and the rail is not
+ * where it gets read. */
+.upcoming-post strong { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 12px; font-weight: 500; line-height: 1.4; }
+.upcoming-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+.upcoming-empty { display: grid; justify-items: start; gap: 8px; padding: 14px 2px 4px; }
+.upcoming-empty p { margin: 0; color: var(--muted); font-size: 12px; }
+
 /* --- posting calendar ----------------------------------------------------- */
 /* The calendar is what choosing Schedule asked for, so it is not behind a
  * disclosure. Editing the times is the rare job and folds away instead. */

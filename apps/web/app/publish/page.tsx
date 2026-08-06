@@ -21,6 +21,7 @@ import {
   MediaPicker,
   PostPreview,
   SlotEditor,
+  UpcomingPosts,
   WeekCalendar,
   clipLength,
   isBlurred,
@@ -221,6 +222,10 @@ export default function PublishPage() {
           at: new Date(job.payload.request.date),
           label: job.payload.request.caption ?? "Scheduled post",
           state: job.status,
+          title: job.payload.request.title ?? null,
+          platforms: (job.payload.request.targets ?? [])
+            .map((target: { platform: PublishingPlatform }) => target.platform)
+            .filter(Boolean),
         }))
         .filter((entry) => !Number.isNaN(entry.at.getTime())),
     [jobs],
@@ -1432,6 +1437,23 @@ export default function PublishPage() {
         </form>
 
         <aside className="publish-side">
+          {/* First in the rail because it answers the question people arrive
+              with — what is already going out — before the composer's own
+              rehearsal of what they are writing now. */}
+          <UpcomingPosts
+            entries={scheduled}
+            slots={slots}
+            now={now}
+            onPickDay={(at) => { setDelivery("schedule"); setDate(localValue(at)); }}
+            onOpenCalendar={() => {
+              setDelivery("schedule");
+              queueMicrotask(() => {
+                document
+                  .querySelector(".schedule-planner")
+                  ?.scrollIntoView({ behavior: "smooth", block: "center" });
+              });
+            }}
+          />
           <article className="publish-media-preview">
             <h2>What will be sent</h2>
             {videoPath || mediaUrl ? (

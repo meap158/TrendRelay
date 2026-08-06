@@ -269,7 +269,14 @@ export function PostPreview({
   );
 }
 
-export type CalendarEntry = { at: Date; label: string; state: string };
+export type CalendarEntry = {
+  at: Date;
+  label: string;
+  state: string;
+  /** Where it is going, so the rail can show it without opening the post. */
+  platforms?: PublishingPlatform[];
+  title?: string | null;
+};
 export type Slot = {
   id: string;
   weekday: number;
@@ -347,6 +354,194 @@ export function upcomingSlots(slots: Slot[], now: Date, count = 5) {
     }
   }
   return found;
+}
+
+/**
+ * What is going out over the next few days, one day at a time.
+ *
+ * A day strip rather than a list, because the question this answers is "is
+ * anything going out on Thursday" and a flat list makes that a counting
+ * exercise. Each day carries how many posts it holds, so the busy and empty
+ * days are visible without selecting each one - the strip is the summary, not
+ * just a set of tabs.
+ *
+ * It opens on the first day that actually has something. Defaulting to today
+ * shows an empty state to anyone whose next post is on Friday, which reads as
+ * "nothing scheduled" when the truth is the opposite.
+ */
+export function UpcomingPosts({
+  entries,
+  slots,
+  now,
+  days = 7,
+  onPickDay,
+  onOpenCalendar,
+}: {
+  entries: CalendarEntry[];
+  /** This workspace's posting times, so a new post lands on one of them. */
+  slots: Slot[];
+  now: Date;
+  days?: number;
+  onPickDay: (at: Date) => void;
+  onOpenCalendar?: () => void;
+}) {
+  const strip = useMemo(() => {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    return Array.from({ length: days }, (_, offset) => {
+      const at = new Date(start);
+      at.setDate(at.getDate() + offset);
+      const posts = entries
+        .filter((entry) => sameDay(entry.at, at))
+        .sort((left, right) => left.at.getTime() - right.at.getTime());
+      return { at, offset, posts };
+    });
+  }, [days, entries, now]);
+
+  const firstBusy = strip.find((day) => day.posts.length)?.offset ?? 0;
+  const [picked, setPicked] = useState<number | null>(null);
+  const active = strip.find((day) => day.offset === (picked ?? firstBusy)) ?? strip[0];
+
+  return (
+    <article className="upcoming">
+      <header className="upcoming-head">
+        <h2>Upcoming posts</h2>
+        {onOpenCalendar && (
+          <Button
+            variant="quiet"
+            size="sm"
+            iconOnly
+            aria-label="Open the posting calendar"
+            title="Open the posting calendar"
+            onClick={onOpenCalendar}
+          >
+            <CalendarGlyph />
+          </Button>
+        )}
+      </header>
+
+      <div className="upcoming-strip" role="tablist" aria-label="Days">
+        {strip.map((day) => {
+          const selected = day.offset === active.offset;
+          return (
+            <button
+              key={day.offset}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              className={`upcoming-day${selected ? " selected" : ""}`}
+              onClick={() => setPicked(day.offset)}
+            >
+              <span>{day.at.toLocaleDateString([], { weekday: "short" })}</span>
+              <b>{String(day.at.getDate()).padStart(2, "0")}</b>
+              {/* The count is what makes the strip readable at a glance; without
+                  it every day looks the same until it is opened. It sits under
+                  the date rather than over the corner, where at this width it
+                  landed on top of the weekday. */}
+              <i aria-hidden="true" className={day.posts.length ? "" : "empty"}>
+                {day.posts.length || ""}
+              </i>
+              <span className="sr-only">
+                {day.posts.length
+                  ? `${day.posts.length} post${day.posts.length === 1 ? "" : "s"}`
+                  : "no posts"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {active.posts.length ? (
+        <ul className="upcoming-list">
+          {active.posts.map((entry, index) => (
+            <li key={`${entry.at.toISOString()}-${index}`}>
+              <time dateTime={entry.at.toISOString()}>
+                {entry.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </time>
+              <div className="upcoming-post">
+                <strong>{entry.title || entry.label}</strong>
+                <span className="upcoming-meta">
+                  {(entry.platforms ?? []).map((platform) => (
+                    <PlatformIcon key={platform} platform={platform} size={14} />
+                  ))}
+                  <Badge tone={entry.state === "succeeded" ? "good" : "neutral"}>
+                    {entry.state}
+                  </Badge>
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="upcoming-empty">
+          {/* Named by weekday, not by date. A partial date format leaves the
+              order to the locale, which turned "Saturday 8" into "8 Saturday";
+              inside a seven-day strip the weekday alone is unambiguous. */}
+          <p>
+            Nothing scheduled for{" "}
+            {active.offset === 0
+              ? "today"
+              : active.offset === 1
+                ? "tomorrow"
+                : active.at.toLocaleDateString([], { weekday: "long" })}.
+          </p>
+          {/* Fills the composer's date with this day rather than opening a blank
+              form, since the day was just chosen and asking again wastes it. */}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => onPickDay(firstFreeTime(active.at, slots, active.posts, now))}
+          >Schedule one</Button>
+        </div>
+      )}
+    </article>
+  );
+}
+
+/** Default time of 9am, used when this workspace has set no posting times. */
+const FALLBACK_HOUR = 9;
+
+/**
+ * The time a new post on this day should default to.
+ *
+ * The workspace's own posting slots come first — they exist precisely so this
+ * decision is already made — skipping any that are taken or already past.
+ * Falling back to "an hour from now" put a Saturday post at five in the morning
+ * because that happened to be an hour from the moment the button was pressed.
+ */
+function firstFreeTime(day: Date, slots: Slot[], taken: CalendarEntry[], now: Date): Date {
+  const busy = new Set(taken.map((entry) => `${entry.at.getHours()}:${entry.at.getMinutes()}`));
+  const candidates = slots
+    .filter((slot) => slot.weekday === EVERY_DAY || slot.weekday === weekdayIndex(day))
+    .sort((left, right) => left.hour - right.hour || left.minute - right.minute);
+
+  for (const slot of candidates) {
+    if (busy.has(`${slot.hour}:${slot.minute}`)) continue;
+    const at = new Date(day);
+    at.setHours(slot.hour, slot.minute, 0, 0);
+    if (at.getTime() > now.getTime()) return at;
+  }
+
+  const fallback = new Date(day);
+  fallback.setHours(FALLBACK_HOUR, 0, 0, 0);
+  // Today's nine o'clock may already be behind us, in which case the next hour
+  // is the only honest suggestion.
+  if (fallback.getTime() <= now.getTime()) {
+    fallback.setTime(now.getTime());
+    fallback.setHours(fallback.getHours() + 1, 0, 0, 0);
+  }
+  return fallback;
+}
+
+/** A small month page. Drawn rather than imported to match the icon set's weight. */
+function CalendarGlyph() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </svg>
+  );
 }
 
 /**
