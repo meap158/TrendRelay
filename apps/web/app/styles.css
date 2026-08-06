@@ -490,3 +490,11 @@ nav strong { color: #1c2b33; }
 .engine-summary strong { font-size: 13px; font-weight: 500; }
 .engine-summary span { color: var(--muted); font-size: 11px; }
 .section-heading-aside { display: flex; align-items: center; gap: 8px; }
+
+/* --- publishing job rows ---------------------------------------------------- */
+/* A status with no time cannot tell you whether a failure is current, so the
+ * row carries when it ran and where it was going. */
+.job-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.job-line i { color: var(--muted); font-style: normal; font-size: 11px; }
+.job-line time { margin-left: auto; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.job-error-line { color: #a3162a; line-height: 1.45; overflow-wrap: anywhere; }

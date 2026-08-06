@@ -115,6 +115,17 @@ function localDateTime(offsetMinutes: number) {
 }
 
 /** Where an unsent post is kept between reloads. */
+function sinceLabel(iso: string) {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const minutes = Math.round((Date.now() - then) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
 const DRAFT_KEY = "trendrelay.publish.draft";
 
 export default function PublishPage() {
@@ -677,42 +688,13 @@ export default function PublishPage() {
           <p className="eyebrow">DISTRIBUTION DESK</p>
           <h1>Deliver the approved clip</h1>
           <p className="lede">
-            Choose a publishing engine and save its API key here — TrendRelay writes it to this
-            machine&apos;s <code>.env</code>. Connect social accounts in the engine&apos;s own
-            dashboard, then pick destinations, dry-run the delivery, and draft or schedule.
+            Write the post, choose where it goes, and dry-run it before anything leaves this
+            machine. Engine keys live in your local <code>.env</code>.
           </p>
         </div>
         <div className="publish-heading-side">
-          {activeProvider ? (
-            <div
-              className="active-engine-chip"
-              style={{ "--engine-accent": activeProvider.accent } as React.CSSProperties}
-            >
-              <ProviderMark provider={activeProvider.id} size={28} />
-              <div>
-                <strong>{activeProvider.label}</strong>
-                <span className={activeProvider.authenticated ? "ready" : ""}>
-                  {checking
-                    ? "checking…"
-                    : activeProvider.authenticated
-                      ? "connected"
-                      : activeProvider.configured
-                        ? "key saved, not verified"
-                        : "needs a key"}
-                </span>
-              </div>
-              <a href={activeProvider.dashboard_url} target="_blank" rel="noopener noreferrer">
-                Dashboard
-              </a>
-            </div>
-          ) : (
+          {!activeProvider && (
             <span className="connection-badge">{checking ? "Checking…" : "No engine"}</span>
-          )}
-          {connection && (
-            <p className="engine-tally">
-              {connection.providers.filter((provider) => provider.configured).length} of{" "}
-              {connection.providers.length} engines hold a key · switch below
-            </p>
           )}
         </div>
       </header>
@@ -736,6 +718,12 @@ export default function PublishPage() {
           {hosting?.required && !hosting.configured && (
             <Badge tone="warn">media hosting needed</Badge>
           )}
+          <a
+            className={buttonClass({ variant: "quiet", size: "sm" })}
+            href={activeProvider.dashboard_url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >Dashboard</a>
           <Button variant="quiet" size="sm" onClick={() => setSetupOpen(true)}>
             Change engine
           </Button>
@@ -1324,13 +1312,28 @@ export default function PublishPage() {
           <article>
             <h2>Publishing jobs</h2>
             {jobs.length ? (
-              <div className="record-list">{jobs.map((job) => (
-                <div key={job.id}>
-                  <strong>{job.payload?.request?.caption ?? job.id}</strong>
-                  <span>{job.status}{job.payload?.request?.provider ? ` · ${job.payload.request.provider.replace("_", ".")}` : ""}</span>
-                  {job.error && <small>{job.error}</small>}
-                </div>
-              ))}</div>
+              <div className="record-list">{jobs.map((job) => {
+                const request = job.payload?.request;
+                const where = (request?.targets ?? [])
+                  .map((target: { platform: PublishingPlatform }) => platformLabels[target.platform])
+                  .filter(Boolean)
+                  .join(", ");
+                return (
+                  <div key={job.id}>
+                    <strong>{request?.caption ?? job.id}</strong>
+                    <span className="job-line">
+                      <Badge tone={
+                        job.status === "succeeded" ? "good"
+                          : job.status === "failed" ? "bad"
+                            : "neutral"
+                      }>{job.status}</Badge>
+                      {where && <i>{where}</i>}
+                      {job.created_at && <time dateTime={job.created_at}>{sinceLabel(job.created_at)}</time>}
+                    </span>
+                    {job.error && <small className="job-error-line">{job.error}</small>}
+                  </div>
+                );
+              })}</div>
             ) : <p>No publishing jobs yet.</p>}
           </article>
         </aside>
