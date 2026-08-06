@@ -1,0 +1,145 @@
+/* Shared interface components.
+ *
+ * Every rule here is scoped to a `ui-` class rather than an element, so a page
+ * stylesheet cannot reach in and resize a control. The values come from the
+ * tokens already defined in console.css, so the look is unchanged.
+ */
+
+/* --- button ---------------------------------------------------------------- */
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ui-button-sm { min-height: 28px; padding: 4px 10px; font-size: 11px; }
+.ui-button-md { min-height: 34px; padding: 7px 13px; font-size: 12px; }
+.ui-button-block { width: 100%; }
+
+.ui-button-primary { border-color: var(--green); background: var(--green); color: #fff; font-weight: 600; }
+.ui-button-primary:hover:not(:disabled) { filter: brightness(1.08); }
+.ui-button-secondary:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
+.ui-button-quiet { border-color: var(--line); background: transparent; color: var(--muted); }
+.ui-button-quiet:hover:not(:disabled) { border-color: var(--green); color: var(--green); background: var(--panel); }
+.ui-button-danger { border-color: #e13333; color: #a3162a; background: transparent; }
+.ui-button-danger:hover:not(:disabled) { background: #f8d7da; }
+
+.ui-button.is-selected { border-color: var(--green); background: var(--green-dark); color: var(--green); font-weight: 600; }
+.ui-button:disabled { cursor: not-allowed; opacity: .5; }
+.ui-button:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
+
+.ui-button-spinner {
+  width: 11px;
+  height: 11px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  opacity: .7;
+  animation: ui-spin .7s linear infinite;
+}
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ui-button-spinner { animation-duration: 2.4s; } }
+
+/* --- badge ----------------------------------------------------------------- */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.ui-badge-neutral { background: var(--panel-raised); color: var(--muted); }
+.ui-badge-good { background: var(--green-dark); color: var(--green); }
+.ui-badge-warn { background: #fdf5db; color: #7a5c00; }
+.ui-badge-bad { background: #f8d7da; color: #a3162a; }
+.ui-badge-accent { background: var(--green); color: #fff; }
+
+/* --- card ------------------------------------------------------------------ */
+.ui-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.ui-card-good { box-shadow: inset 3px 0 0 var(--green); }
+.ui-card-warn { border-color: var(--amber, #d8a200); box-shadow: inset 3px 0 0 var(--amber, #d8a200); }
+.ui-card-head { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 12px; }
+.ui-card-head h2 { margin: 0; font-size: 15px; font-weight: 500; }
+.ui-card-eyebrow { margin: 0 0 2px; color: var(--green); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.ui-card-aside { display: flex; align-items: center; gap: 6px; }
+
+/* --- field ----------------------------------------------------------------- */
+.ui-field { display: grid; gap: 6px; }
+.ui-field-label { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: .78rem; font-weight: 600; }
+.ui-field-label > span { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.ui-field-label i { color: var(--muted); font-style: normal; font-size: 11px; font-weight: 400; }
+.ui-field-note { color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.45; }
+.ui-field-row { display: flex; gap: 6px; }
+.ui-field-row > input, .ui-field-row > select { flex: 1 1 auto; min-width: 0; }
+.ui-field > input, .ui-field > select, .ui-field > textarea,
+.ui-field-row > input, .ui-field-row > select {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 7px 10px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+.ui-field > textarea { min-height: 88px; resize: vertical; }
+.ui-field :is(input, select, textarea):focus-visible { outline: 2px solid var(--green); outline-offset: -1px; border-color: var(--green); }
+
+/* --- choice row ------------------------------------------------------------ */
+.ui-choice-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* --- dialog ---------------------------------------------------------------- */
+.ui-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  /* Above the sticky section nav (90) and top bar (100), below notifications (140). */
+  z-index: 120;
+  background: rgba(28, 43, 51, .45);
+}
+.ui-dialog {
+  position: fixed;
+  z-index: 121;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(640px, calc(100vw - 48px));
+  max-height: min(80vh, 720px);
+  padding: 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 18px 48px rgba(28, 43, 51, .2);
+  overflow: hidden;
+}
+.ui-dialog-head { display: flex; flex: none; align-items: start; justify-content: space-between; gap: 12px; }
+.ui-dialog-head h2 { margin: 0 0 2px; font-size: 15px; font-weight: 500; }
+.ui-dialog-head p { margin: 0; color: var(--muted); }
+.ui-dialog-foot { display: flex; flex: none; justify-content: flex-end; gap: 8px; }
+.ui-dialog:focus-visible { outline: none; }

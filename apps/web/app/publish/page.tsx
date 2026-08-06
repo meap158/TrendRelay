@@ -14,6 +14,8 @@ import {
   type PublishingProvider,
 } from "../publishing-icons";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
+import { Button } from "../ui/button";
+import { Badge } from "../ui/primitives";
 import {
   MediaPicker,
   PostPreview,
@@ -638,26 +640,28 @@ export default function PublishPage() {
                 )}
                 <div className="engine-actions">
                   {active
-                    ? <span className="engine-active-tag">Active</span>
-                    : <button
-                        type="button"
-                        className="quiet-action"
-                        disabled={!canExecute || busy !== null || !provider.configured}
+                    ? <Badge tone="accent">Active</Badge>
+                    : <Button
+                        variant="quiet"
+                        size="sm"
+                        disabled={!canExecute || !provider.configured}
+                        busy={busy === `${provider.id}-activate`}
                         title={provider.configured ? undefined : "Save this engine's API key first"}
                         onClick={() => void activateProvider(provider)}
-                      >{busy === `${provider.id}-activate` ? "Switching…" : "Use this engine"}</button>}
-                  <button
-                    type="button"
-                    className="quiet-action"
+                      >{busy === `${provider.id}-activate` ? "Switching" : "Use this engine"}</Button>}
+                  <Button
+                    variant="quiet"
+                    size="sm"
                     disabled={busy !== null || !provider.configured}
+                    busy={busy === `${provider.id}-test`}
                     onClick={() => void testProvider(provider)}
-                  >{busy === `${provider.id}-test` ? "Testing…" : "Test key"}</button>
-                  <button
-                    type="button"
-                    className="quiet-action"
+                  >{busy === `${provider.id}-test` ? "Testing" : "Test key"}</Button>
+                  <Button
+                    variant="quiet"
+                    size="sm"
                     aria-expanded={open}
                     onClick={() => setOpenProvider(open ? null : provider.id)}
-                  >{open ? "Close" : provider.configured ? "Replace key" : "Add key"}</button>
+                  >{open ? "Close" : provider.configured ? "Replace key" : "Add key"}</Button>
                   <a className="quiet-action" href={provider.docs_url} target="_blank" rel="noopener noreferrer">Docs</a>
                 </div>
                 {open && (
@@ -686,16 +690,16 @@ export default function PublishPage() {
                       </label>
                     ))}
                     <div className="engine-credential-actions">
-                      <button
-                        type="button"
-                        className="setup-primary"
-                        disabled={!canExecute || busy === `${provider.id}-credentials`}
+                      <Button
+                        variant="primary"
+                        disabled={!canExecute}
+                        busy={busy === `${provider.id}-credentials`}
                         onClick={() => void saveCredentials(provider, !active)}
                       >
                         {busy === `${provider.id}-credentials`
-                          ? "Saving…"
+                          ? "Saving"
                           : active ? "Save to .env" : "Save and use this engine"}
-                      </button>
+                      </Button>
                       <a className="quiet-action" href={provider.dashboard_url} target="_blank" rel="noopener noreferrer">
                         Get a key
                       </a>
@@ -724,15 +728,15 @@ export default function PublishPage() {
                 </p>
               </div>
               <div className="hosting-status">
-                <b className={hosting.configured ? "configured" : "missing"}>
+                <Badge tone={hosting.configured ? "good" : "neutral"}>
                   {hosting.configured ? "configured" : "not set up"}
-                </b>
-                <button
-                  type="button"
-                  className="quiet-action"
+                </Badge>
+                <Button
+                  variant="quiet"
+                  size="sm"
                   aria-expanded={hostingOpen}
                   onClick={() => setHostingOpen(!hostingOpen)}
-                >{hostingOpen ? "Close" : hosting.configured ? "Replace keys" : "Set up"}</button>
+                >{hostingOpen ? "Close" : hosting.configured ? "Replace keys" : "Set up"}</Button>
               </div>
             </div>
             {hostingOpen && (
@@ -761,12 +765,12 @@ export default function PublishPage() {
                   </label>
                 ))}
                 <div className="engine-credential-actions">
-                  <button
-                    type="button"
-                    className="setup-primary"
-                    disabled={!canExecute || busy === "hosting-credentials"}
+                  <Button
+                    variant="primary"
+                    disabled={!canExecute}
+                    busy={busy === "hosting-credentials"}
                     onClick={() => void saveHosting()}
-                  >{busy === "hosting-credentials" ? "Saving…" : "Save to .env"}</button>
+                  >{busy === "hosting-credentials" ? "Saving" : "Save to .env"}</Button>
                   <a className="quiet-action" href="https://dash.cloudflare.com/?to=/:account/r2" target="_blank" rel="noopener noreferrer">
                     Open R2
                   </a>
@@ -811,13 +815,13 @@ export default function PublishPage() {
             </label>
           ) : needsPublicMedia ? (
             <>
-              <label>Approved local MP4 path
-                <span className="field-with-action">
-                  <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" />
-                  <button type="button" className="quiet-action" onClick={openPicker}>
-                    Choose from library
-                  </button>
-                </span>
+              <div className="ui-field">
+                <div className="field-with-action">
+                  <label>Approved local MP4 path
+                    <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" />
+                  </label>
+                  <Button variant="quiet" onClick={openPicker}>Choose from library</Button>
+                </div>
                 {clip && (
                   <span className="chosen-clip">
                     <b>{clip.title}</b>
@@ -825,11 +829,11 @@ export default function PublishPage() {
                     {isBlurred(clip) && <em className="blurred-tag">Faces blurred</em>}
                   </span>
                 )}
-                <small>
+                <small className="ui-field-note">
                   Uploaded to {hosting?.label} when the post runs, so {activeProvider?.label} can
                   fetch it. If the clip has a blurred version, that is the cut that gets uploaded.
                 </small>
-              </label>
+              </div>
               <label>Public media URL <i>optional</i>
                 <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" />
                 <small>Supply one to use media you already host instead.</small>
@@ -837,13 +841,13 @@ export default function PublishPage() {
             </>
           ) : (
             <>
-              <label>Approved local MP4 path
-                <span className="field-with-action">
-                  <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" required />
-                  <button type="button" className="quiet-action" onClick={openPicker}>
-                    Choose from library
-                  </button>
-                </span>
+              <div className="ui-field">
+                <div className="field-with-action">
+                  <label>Approved local MP4 path
+                    <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" required />
+                  </label>
+                  <Button variant="quiet" onClick={openPicker}>Choose from library</Button>
+                </div>
                 {clip && (
                   <span className="chosen-clip">
                     <b>{clip.title}</b>
@@ -851,8 +855,8 @@ export default function PublishPage() {
                     {isBlurred(clip) && <em className="blurred-tag">Faces blurred</em>}
                   </span>
                 )}
-                <small>{activeProvider?.media_note ?? "Media must sit under a configured publishing media directory."}</small>
-              </label>
+                <small className="ui-field-note">{activeProvider?.media_note ?? "Media must sit under a configured publishing media directory."}</small>
+              </div>
               <label>Public media URL <i>optional</i>
                 <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" />
                 <small>Supply one to skip the upload and let the engine fetch the file instead.</small>
@@ -872,7 +876,7 @@ export default function PublishPage() {
               <button
                 key={mode}
                 type="button"
-                className={delivery === mode ? "selected" : ""}
+                className={`delivery-option${delivery === mode ? " selected" : ""}`}
                 aria-pressed={delivery === mode}
                 onClick={() => chooseDelivery(mode)}
               ><strong>{title}</strong><span>{hint}</span></button>
@@ -950,12 +954,12 @@ export default function PublishPage() {
             ) : !accounts.length ? (
               <div className="picker-empty">
                 <p>No destinations loaded for {activeProvider?.label} yet.</p>
-                <button
-                  type="button"
-                  className="quiet-action"
-                  disabled={busy !== null || !canExecute}
+                <Button
+                  variant="quiet"
+                  disabled={!canExecute}
+                  busy={busy === "accounts"}
                   onClick={() => void refreshAccounts()}
-                >{busy === "accounts" ? "Loading…" : "Load connected accounts"}</button>
+                >{busy === "accounts" ? "Loading" : "Load connected accounts"}</Button>
               </div>
             ) : (
               <>
@@ -1008,12 +1012,13 @@ export default function PublishPage() {
                       .map((platform) => platformLabels[platform]).join(", ") || "no other platforms"}
                     {platforms.length > connectedPlatforms.length ? " — connect them in its dashboard." : "."}
                   </p>
-                  <button
-                    type="button"
-                    className="quiet-action"
-                    disabled={busy !== null || !canExecute}
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    disabled={!canExecute}
+                    busy={busy === "accounts"}
                     onClick={() => void refreshAccounts()}
-                  >{busy === "accounts" ? "Refreshing…" : "Refresh accounts"}</button>
+                  >{busy === "accounts" ? "Refreshing" : "Refresh accounts"}</Button>
                 </div>
               </>
             )}
@@ -1038,10 +1043,13 @@ export default function PublishPage() {
           </label>
 
           <div className="publish-actions">
-            <button disabled={busy !== null}>{busy === "preview" ? "Checking…" : "Dry-run this delivery"}</button>
-            <button
-              type="button"
-              className="danger-action"
+            <Button type="submit" variant="secondary" block busy={busy === "preview"} disabled={busy !== null}>
+              {busy === "preview" ? "Checking" : "Dry-run this delivery"}
+            </Button>
+            <Button
+              variant="danger"
+              block
+              busy={busy === "publish"}
               disabled={busy !== null || !canExecute || !chosen.length}
               onClick={(event) => {
                 const form = event.currentTarget.form;
@@ -1050,7 +1058,7 @@ export default function PublishPage() {
                   `${{ now: "Publish immediately", schedule: "Schedule", draft: "Create a draft" }[delivery]} on ${activeProvider?.label} for ${where}?`,
                 )) void submit(form, true);
               }}
-            >{busy === "publish" ? "Submitting…" : delivery === "now" ? "Publish now" : delivery === "schedule" ? "Confirm and schedule" : "Confirm and draft"}</button>
+            >{busy === "publish" ? "Submitting" : delivery === "now" ? "Publish now" : delivery === "schedule" ? "Confirm and schedule" : "Confirm and draft"}</Button>
           </div>
         </form>
 
@@ -1138,8 +1146,9 @@ export default function PublishPage() {
           </article>
         </aside>
       </section>
-      {pickerOpen && workspaceId && (
+      {workspaceId && (
         <MediaPicker
+          open={pickerOpen}
           assets={library}
           workspaceId={workspaceId}
           apiFetch={apiFetch}

@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { PlatformIcon, platformLabels, type PublishingPlatform } from "../publishing-icons";
+import { Button } from "../ui/button";
+import { Dialog } from "../ui/dialog";
+import { Badge } from "../ui/primitives";
 
 export type LibraryAsset = {
   id: string;
@@ -79,6 +82,7 @@ function AssetThumbnail({
  * Loading belongs to the caller so opening the panel is what triggers a read.
  */
 export function MediaPicker({
+  open,
   assets,
   workspaceId,
   apiFetch,
@@ -88,6 +92,7 @@ export function MediaPicker({
   onPick,
   onClose,
 }: {
+  open: boolean;
   assets: LibraryAsset[];
   workspaceId: string;
   apiFetch: Fetcher;
@@ -99,61 +104,51 @@ export function MediaPicker({
 }) {
   const [query, setQuery] = useState("");
 
-  useEffect(() => {
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", escape);
-    return () => window.removeEventListener("keydown", escape);
-  }, [onClose]);
-
+  // Stays mounted and is driven by `open`: unmounting it on close would cut
+  // short the sequence that returns focus to whatever opened it.
   return (
-    <div className="picker-backdrop" role="dialog" aria-modal="true" aria-label="Choose a clip">
-      <div className="picker-panel">
-        <header>
-          <div>
-            <h3>Choose a clip</h3>
-            <p>Videos in this workspace&apos;s library.</p>
-          </div>
-          <button type="button" className="quiet-action" onClick={onClose}>Close</button>
-        </header>
-        <form
-          className="picker-search"
-          onSubmit={(event) => { event.preventDefault(); onSearch(query); }}
-        >
-          <input
-            value={query}
-            placeholder="Search titles, creators and transcripts"
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          <button type="submit" className="quiet-action" disabled={loading}>
-            {loading ? "Searching…" : "Search"}
-          </button>
-        </form>
-        {failure && <p className="engine-warning" role="status">{failure}</p>}
-        {!failure && !loading && !assets.length && (
-          <p className="picker-empty">
-            No videos matched. Import clips in the Library tab, then pick one here.
-          </p>
-        )}
-        <ul className="picker-results">
-          {assets.map((asset) => (
-            <li key={asset.id}>
-              <button type="button" onClick={() => onPick(asset)}>
-                <AssetThumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
-                <span className="picker-meta">
-                  <strong>{asset.title}</strong>
-                  <small>
-                    {[asset.platform, asset.creator].filter(Boolean).join(" · ") || "No source recorded"}
-                  </small>
-                </span>
-                {isBlurred(asset) && <span className="blurred-tag">Faces blurred</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
+    <Dialog
+      open={open}
+      title="Choose a clip"
+      description="Videos in this workspace's library."
+      onClose={onClose}
+    >
+      <form
+        className="picker-search"
+        onSubmit={(event) => { event.preventDefault(); onSearch(query); }}
+      >
+        <input
+          value={query}
+          placeholder="Search titles, creators and transcripts"
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <Button type="submit" variant="quiet" busy={loading}>
+          {loading ? "Searching" : "Search"}
+        </Button>
+      </form>
+      {failure && <p className="engine-warning" role="status">{failure}</p>}
+      {!failure && !loading && !assets.length && (
+        <p className="picker-empty">
+          No videos matched. Import clips in the Library tab, then pick one here.
+        </p>
+      )}
+      <ul className="picker-results">
+        {assets.map((asset) => (
+          <li key={asset.id}>
+            <button type="button" className="picker-result" onClick={() => onPick(asset)}>
+              <AssetThumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
+              <span className="picker-meta">
+                <strong>{asset.title}</strong>
+                <small>
+                  {[asset.platform, asset.creator].filter(Boolean).join(" · ") || "No source recorded"}
+                </small>
+              </span>
+              {isBlurred(asset) && <Badge tone="accent">Faces blurred</Badge>}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Dialog>
   );
 }
 
@@ -337,19 +332,19 @@ export function WeekCalendar({
     <section className="week-calendar">
       <header>
         <strong>{range}</strong>
-        <div>
-          <button type="button" className="quiet-action" onClick={() => setOffset(offset - 1)}>
+        <div className="ui-choice-row">
+          <Button variant="quiet" size="sm" onClick={() => setOffset(offset - 1)}>
             ← Previous
-          </button>
-          <button
-            type="button"
-            className="quiet-action"
+          </Button>
+          <Button
+            variant="quiet"
+            size="sm"
             disabled={offset === 0}
             onClick={() => setOffset(0)}
-          >This week</button>
-          <button type="button" className="quiet-action" onClick={() => setOffset(offset + 1)}>
+          >This week</Button>
+          <Button variant="quiet" size="sm" onClick={() => setOffset(offset + 1)}>
             Next →
-          </button>
+          </Button>
         </div>
       </header>
       <div className="week-grid">
@@ -453,9 +448,9 @@ export function SlotEditor({
           <p>Times are {timezone}, the clock you are reading.</p>
         </div>
         {slots.length > 0 && canEdit && (
-          <button type="button" className="quiet-action" disabled={busy} onClick={() => onSave([])}>
+          <Button variant="quiet" size="sm" busy={busy} onClick={() => onSave([])}>
             Clear all
-          </button>
+          </Button>
         )}
       </div>
       {slots.length > 0 && (
@@ -467,6 +462,7 @@ export function SlotEditor({
               {canEdit && (
                 <button
                   type="button"
+                  className="slot-remove"
                   aria-label={`Remove ${slotLabel(slot)}`}
                   disabled={busy}
                   onClick={() => onSave(entries.filter((_entry, at) => at !== index))}
@@ -494,9 +490,9 @@ export function SlotEditor({
               <option key={name} value={index}>{name} only</option>
             ))}
           </select>
-          <button type="button" className="quiet-action" disabled={busy || !draft} onClick={add}>
+          <Button variant="quiet" size="sm" disabled={busy || !draft} onClick={add}>
             Add time
-          </button>
+          </Button>
         </div>
       )}
       {canEdit && (
@@ -507,7 +503,7 @@ export function SlotEditor({
               <button
                 key={preset.id}
                 type="button"
-                className="quiet-action"
+                className="slot-preset"
                 disabled={busy}
                 title={preset.summary}
                 onClick={() => onSave(preset.times.map((time) => ({ weekday: EVERY_DAY, time })))}

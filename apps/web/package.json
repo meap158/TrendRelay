@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.23",
     "@supabase/supabase-js": "^2.110.8",
     "@trendrelay/schemas": "*",
     "lucide-react": "^1.28.0",
