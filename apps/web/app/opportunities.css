@@ -38,7 +38,7 @@
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  padding: 22px;
+  padding: 16px;
 }
 
 .offer-import-panel {
