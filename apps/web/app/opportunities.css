@@ -37,7 +37,7 @@
 .opportunity-card {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 22px;
 }
 
@@ -80,7 +80,7 @@
   margin-top: 14px;
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--radius);
 }
 
 .import-summary small {
@@ -107,7 +107,7 @@
 
 .score-input-grid fieldset {
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--radius);
   display: grid;
   gap: 8px;
   padding: 12px;
@@ -121,7 +121,7 @@
 .offer-picker > label:not(:last-child) {
   align-items: center;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--radius);
   cursor: pointer;
   display: flex;
   gap: 10px;
@@ -187,7 +187,7 @@
 
 .score-breakdown details {
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--radius);
   padding: 10px 12px;
 }
 
