@@ -61,7 +61,10 @@ def recorder(monkeypatch):
         description="Test action.",
         roles=frozenset({"owner"}),
         max_batch=3,
-        enqueue=lambda workspace, asset, factory=None: (queued.append(asset.id), {"id": f"job_{asset.id}"})[1],
+        enqueue=lambda workspace, asset, factory=None: (
+            queued.append(asset.id),
+            {"id": f"job_{asset.id}"},
+        )[1],
         ineligible=lambda asset: (
             "Already has a blurred version" if "blurred" in asset.version_kinds else None
         ),

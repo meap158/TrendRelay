@@ -27,6 +27,7 @@ const AREAS = {
     items: [
       { href: "/publish", label: "Delivery", description: "Accounts and scheduling" },
       { href: "/attribution", label: "Attribution", description: "Links and revenue" },
+      { href: "/catalog", label: "Catalog", description: "Books and economics" },
     ],
   },
 } satisfies Record<WorkspaceArea, {

@@ -1,0 +1,62 @@
+/* Catalog: one row per book, with its editions folded underneath.
+   Scoped to .catalog-page throughout. Broad element selectors are what caused
+   the width bugs elsewhere in this app, so nothing here escapes the page. */
+
+.catalog-page { width: min(100% - 32px, 1480px); margin: 0 auto; padding: 16px 0 60px; display: grid; gap: 16px; }
+
+.catalog-head { display: flex; justify-content: space-between; gap: 24px; align-items: end; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.catalog-head h1 { margin: 0 0 6px; font-size: 24px; }
+.catalog-head p { margin: 0; max-width: 62ch; color: var(--muted); line-height: 1.45; }
+.catalog-head-controls { display: flex; gap: 8px; flex-shrink: 0; }
+.catalog-head-controls select { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 10px; color: var(--text); background: var(--panel); font: inherit; }
+
+/* Status sits inline above the content rather than in a banner of its own. */
+.catalog-page .console-error,
+.catalog-page .console-note { margin: 0; padding: 9px 12px; border-radius: var(--radius-sm); font-size: 13px; }
+.catalog-page .console-error { color: #a11; background: #f8d7da; }
+.catalog-page .console-note { color: var(--green); background: var(--green-dark); }
+
+/* Grouping suggestions */
+.catalog-suggestions { display: grid; gap: 12px; margin: 12px 0 0; padding: 0; list-style: none; }
+.catalog-suggestions > li { display: grid; gap: 7px; justify-items: start; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.catalog-suggestion-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; width: 100%; }
+.catalog-suggestion-head strong { font-size: 14px; }
+.catalog-suggestion-head span { display: block; color: var(--muted); font-size: 12px; }
+.catalog-suggestion-reason { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+
+.catalog-edition-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.catalog-edition-chips > li { display: flex; gap: 6px; align-items: baseline; border: 1px solid var(--line-strong); border-radius: 999px; padding: 3px 9px; background: var(--panel); font-size: 11px; }
+.catalog-edition-chips b { font-weight: 600; }
+.catalog-edition-chips code { color: var(--muted); font-family: ui-monospace, monospace; font-size: 10px; }
+
+/* Economics table */
+.catalog-empty { margin: 12px 0 0; max-width: 70ch; color: var(--muted); line-height: 1.5; }
+/* The table scrolls inside its own box so a narrow window never makes the whole
+   page scroll sideways. */
+.catalog-table-scroll { margin-top: 12px; overflow-x: auto; }
+.catalog-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.catalog-table th, .catalog-table td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.catalog-table thead th { border-bottom: 1px solid var(--line-strong); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+/* Figures line up on the right and share one glyph width, so a column of
+   amounts can be compared by eye instead of read one row at a time. */
+.catalog-table .numeric { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.catalog-no-data { color: var(--muted); font-style: italic; text-align: left; }
+
+.catalog-work-toggle { display: grid; gap: 2px; border: 0; padding: 0; color: inherit; background: none; font: inherit; text-align: left; cursor: pointer; }
+.catalog-work-toggle span { font-weight: 600; }
+.catalog-work-toggle small { color: var(--muted); font-weight: 400; }
+.catalog-work-toggle:hover span { color: var(--link); }
+.catalog-edition-count { display: block; margin-bottom: 4px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+.catalog-edition-row > td { padding: 0 10px 12px; background: var(--panel-raised); }
+.catalog-editions { display: grid; gap: 6px; margin: 0; padding: 10px 0 0; list-style: none; }
+.catalog-editions > li { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.catalog-editions > li > div { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; min-width: 0; }
+.catalog-editions strong { font-size: 12px; }
+.catalog-editions span { overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.catalog-editions code { color: var(--muted); font-family: ui-monospace, monospace; font-size: 11px; }
+
+@media (max-width: 860px) {
+  .catalog-head { flex-direction: column; align-items: stretch; }
+  .catalog-head-controls { flex-wrap: wrap; }
+}

@@ -11,6 +11,7 @@ from trendrelay_api import __version__
 from trendrelay_api.attribution_api import router as attribution_router
 from trendrelay_api.auth import LOCAL_ADMIN_EMAIL, LOCAL_ADMIN_ID, local_auth_allowed
 from trendrelay_api.campaigns_api import router as campaigns_router
+from trendrelay_api.catalog_api import router as catalog_router
 from trendrelay_api.config import get_settings
 from trendrelay_api.device_pairing import router as device_pairing_router
 from trendrelay_api.foundation import router as foundation_router
@@ -78,6 +79,7 @@ app = FastAPI(
 app.include_router(foundation_router)
 app.include_router(attribution_router)
 app.include_router(campaigns_router)
+app.include_router(catalog_router)
 app.include_router(device_pairing_router)
 app.include_router(publishing_router)
 app.include_router(media_router)

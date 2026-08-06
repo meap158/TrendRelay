@@ -25,6 +25,10 @@ class Product(Base):
         ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
     )
     catalog_key: Mapped[str] = mapped_column(String(64))
+    #: The trade identifier the product is sold under — an ISBN-13, ISBN-10 or
+    #: ASIN for a book. Distinct from `catalog_key`, which is TrendRelay's own
+    #: content hash for deduplicating imports and means nothing outside the app.
+    identifier: Mapped[str | None] = mapped_column(String(64), index=True)
     name: Mapped[str] = mapped_column(String(240))
     brand: Mapped[str | None] = mapped_column(String(160))
     category: Mapped[str | None] = mapped_column(String(160), index=True)

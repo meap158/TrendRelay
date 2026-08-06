@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from trendrelay_api.auth import CurrentUser, current_user
+from trendrelay_api.catalog_identifiers import identifier_from_url, parse_identifier
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, ensure_profile, membership, require_role
 from trendrelay_api.integrations.last30days import get_job
@@ -58,6 +59,9 @@ PENALTIES = {
 CSV_REQUIRED = {"product_name", "marketplace", "network", "affiliate_url"}
 CSV_OPTIONAL = {
     "brand",
+    # An ISBN-13, ISBN-10 or ASIN. Optional because most affiliate exports omit
+    # it, in which case it is read out of the product URL instead.
+    "identifier",
     "category",
     "merchant",
     "product_url",
@@ -422,6 +426,15 @@ def import_offers(
                 item.strip() for item in (row.get("restrictions") or "").split("|") if item.strip()
             ][:30]
             product_key = _key(marketplace, name, row.get("brand"), row.get("product_url"))
+            # A stated identifier wins; failing that the product link usually
+            # carries one, which is what makes grouping possible for the many
+            # exports that have no identifier column at all.
+            stated = parse_identifier(row.get("identifier"))
+            identifier = (
+                (stated.canonical or None)
+                if stated.valid
+                else (identifier_from_url(row.get("product_url")) or None)
+            )
             product = session.scalar(
                 select(Product).where(
                     Product.workspace_id == workspace_id,
@@ -432,6 +445,7 @@ def import_offers(
                 product = Product(
                     workspace_id=workspace_id,
                     catalog_key=product_key,
+                    identifier=identifier,
                     name=name,
                     brand=_clean(row.get("brand"), 160),
                     category=_clean(row.get("category"), 160),
@@ -442,6 +456,10 @@ def import_offers(
                 )
                 session.add(product)
                 session.flush()
+            elif identifier and not product.identifier:
+                # Backfill only. A later import that omits the identifier must
+                # not erase one an earlier import supplied.
+                product.identifier = identifier
             fingerprint = _key(network, affiliate_url)
             if session.scalar(
                 select(ProductOffer.id).where(
