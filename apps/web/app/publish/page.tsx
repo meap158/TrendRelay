@@ -965,10 +965,36 @@ export default function PublishPage() {
           </label>
 
           {needsPublicMedia && !hostsLocalMedia ? (
-            <label>Public media URL
-              <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" required />
-              <small>{activeProvider?.media_note}</small>
-            </label>
+            <div className="ui-field">
+              {/* The picker belongs here too. This engine fetches rather than
+                  uploads, but a clip still has to be chosen before anyone can
+                  know that hosting is what stands in the way. */}
+              <div className="field-with-action">
+                <label className="ui-field-label">Public media URL
+                  <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" required={!videoPath} />
+                </label>
+                <Button variant="quiet" onClick={openPicker}>Choose from library</Button>
+              </div>
+              {clip && (
+                <span className="chosen-clip">
+                  <b>{clip.title}</b>
+                  {clip.duration_ms ? <i>{clipLength(clip.duration_ms)}</i> : null}
+                  {isBlurred(clip) && <em className="blurred-tag">Faces blurred</em>}
+                </span>
+              )}
+              {videoPath && !mediaUrl ? (
+                <p className="publish-blocked" role="status">
+                  {activeProvider?.label} downloads the file rather than accepting an
+                  upload, so this clip needs somewhere public to sit.{" "}
+                  <button type="button" className="link-action" onClick={() => setHostingOpen(true)}>
+                    Set up media hosting
+                  </button>{" "}
+                  and TrendRelay will do it for you, or paste a URL you already host.
+                </p>
+              ) : (
+                <small className="ui-field-note">{activeProvider?.media_note}</small>
+              )}
+            </div>
           ) : needsPublicMedia ? (
             <>
               <div className="ui-field">

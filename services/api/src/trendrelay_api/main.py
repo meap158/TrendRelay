@@ -94,6 +94,10 @@ app.add_middleware(
     ),
     allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    # A response header is invisible to a cross-origin reader unless it is
+    # named here. Without this the blur preview read its face count as zero and
+    # said no face was found over a picture of a blurred face.
+    expose_headers=["X-Faces-Found"],
 )
 
 

@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import String, cast, func, or_, select
@@ -728,6 +728,53 @@ def face_blur_media(
     if not resolved.is_file():
         raise HTTPException(status_code=404, detail="That render is no longer on disk.")
     return FileResponse(resolved, media_type="video/mp4")
+
+
+@router.get("/face-blur/frame")
+def face_blur_frame(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    path: Annotated[str, Query(min_length=1, max_length=1000)],
+    padding_ratio: Annotated[float, Query(ge=0.0, le=1.0)] = 0.08,
+    confidence: Annotated[float, Query(ge=0.1, le=0.95)] = 0.6,
+) -> Response:
+    """One blurred frame, so coverage can be judged before a full render.
+
+    A still answers the only question being asked here - does the blur sit over
+    the face or over half the shoulders - and costs a decode rather than an
+    encode.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.face_blur import (
+        BlurSettings,
+        FaceBlurUnavailable,
+        _approved_source,
+        preview_frame,
+        runtime_status,
+    )
+
+    if not runtime_status()["available"]:
+        raise HTTPException(status_code=409, detail=runtime_status()["reason"])
+    try:
+        result = preview_frame(
+            _approved_source(path),
+            BlurSettings(padding_ratio=padding_ratio, confidence=confidence),
+        )
+    except FaceBlurUnavailable as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except (ValueError, PermissionError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return Response(
+        content=result["image"],
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "no-store",
+            # The count tells the caller whether an empty-looking preview means
+            # the blur is subtle or that nothing was found to blur.
+            "X-Faces-Found": str(result["faces"]),
+        },
+    )
 
 
 @router.post("/face-blur/jobs", status_code=202)

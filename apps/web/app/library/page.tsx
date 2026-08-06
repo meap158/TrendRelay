@@ -1,6 +1,6 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
@@ -9,6 +9,7 @@ import { useAuth } from "../auth-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, buttonClass } from "../ui/button";
 import { Badge } from "../ui/primitives";
+import { BlurSettings } from "./blur-settings";
 import { ClipEditor } from "./clip-editor";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 
@@ -352,6 +353,8 @@ type BulkAction = {
 const isSortOrder = oneOf("newest", "oldest", "title", "duration");
 const isGroupBy = oneOf("none", "channel", "source");
 const isViewMode = oneOf("gallery", "list");
+const isPadding = (value: unknown): value is number =>
+  typeof value === "number" && value >= 0 && value <= 0.4;
 
 export default function LibraryPage() {
   const { loading, user, apiFetch } = useAuth();
@@ -397,6 +400,11 @@ export default function LibraryPage() {
   const [lastPicked, setLastPicked] = useState<string | null>(null);
   const [bulkActions, setBulkActions] = useState<BulkAction[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [blurSettingsOpen, setBlurSettingsOpen] = useState(false);
+  /** How far past the detected face the blur reaches, kept between sessions. */
+  const [blurPadding, setBlurPadding] = usePersistedState(
+    "trendrelay.library.blurPadding", 0.08, isPadding,
+  );
 
   const selected = assets.find((asset) => asset.id === selectedId);
   const selectedSourceLinks = selected
@@ -843,6 +851,7 @@ export default function LibraryPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             source_path: asset.original_path,
+            padding_ratio: blurPadding,
             confirm_external_action: true,
           }),
         },
@@ -1208,6 +1217,14 @@ export default function LibraryPage() {
                   >{busy === "blur" ? "Blurring" : "Blur faces"}</Button>
                   <Button
                     variant="secondary"
+                    iconOnly
+                    aria-label="Blur settings"
+                    title="Check coverage on one frame and set how wide the blur sits"
+                    disabled={selected.media_kind !== "video"}
+                    onClick={() => setBlurSettingsOpen(true)}
+                  ><SlidersHorizontal size={15} strokeWidth={2} /></Button>
+                  <Button
+                    variant="secondary"
                     disabled={selected.media_kind !== "video"}
                     title={selected.media_kind === "video"
                       ? "Build and render a clip plan from this video"
@@ -1291,6 +1308,19 @@ export default function LibraryPage() {
           ) : <article className="library-summary"><p>Select an asset or import a local file to begin.</p></article>}
         </section>
       </section>
+      {workspaceId && selected && (
+        <BlurSettings
+          open={blurSettingsOpen}
+          workspaceId={workspaceId}
+          path={selected.original_path}
+          padding={blurPadding}
+          onPadding={setBlurPadding}
+          busy={busy === "blur"}
+          apiFetch={apiFetch}
+          onClose={() => setBlurSettingsOpen(false)}
+          onBlur={() => { setBlurSettingsOpen(false); void blurFaces(selected); }}
+        />
+      )}
       {workspaceId && selected && (
         <ClipEditor
           open={editorOpen}

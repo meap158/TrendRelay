@@ -47,7 +47,14 @@ Box = tuple[int, int, int, int]  # x, y, width, height
 MAX_GAP_FRAMES = 12
 # Faces drift between frames; padding covers the drift and the edges a tight box
 # leaves visible, especially hair and chin.
-PADDING_RATIO = 0.18
+# Grown on every side, so this much again is added to the width and to the
+# height. At 0.18 that is a box a third larger than the detector found,
+# which reads as covering the shoulders rather than the face; the detector
+# already returns a margin of its own. Adjustable per render.
+PADDING_RATIO = 0.08
+# The smallest thing worth calling a face, as a fraction of frame width.
+# Below this the cascade is matching texture, not people.
+MIN_FACE_RATIO = 0.06
 # Below this, an operator is looking at a clip where faces were missed outright.
 COVERAGE_WARNING = 0.9
 # Detection cost grows with pixels, and a face is still obvious at this width.
@@ -314,8 +321,9 @@ class _CascadeDetector:
             cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
         )
         # A lower confidence should widen the net, so it loosens the neighbour
-        # requirement rather than being ignored.
-        self._neighbours = max(2, int(round(settings.confidence * 8)))
+        # requirement rather than being ignored. The floor is higher than it
+        # was: at two neighbours the cascade calls almost any texture a face.
+        self._neighbours = max(5, int(round(settings.confidence * 12)))
 
     def detect(self, frame: Any) -> tuple[Any, Any]:
         cv2 = self._cv2
@@ -329,8 +337,16 @@ class _CascadeDetector:
             )
         grey = cv2.cvtColor(search, cv2.COLOR_BGR2GRAY)
         cv2.equalizeHist(grey, grey)
+        # A finer scale step and a floor proportional to the frame. The old
+        # 24px floor let a patterned shirt at any distance register as a face,
+        # which is how a torso ended up mosaicked; a real face in a vertical
+        # clip is a good deal larger than three percent of the frame width.
+        floor = max(24, int(grey.shape[1] * MIN_FACE_RATIO))
         found = self._cascade.detectMultiScale(
-            grey, scaleFactor=1.15, minNeighbors=self._neighbours, minSize=(24, 24)
+            grey,
+            scaleFactor=1.08,
+            minNeighbors=self._neighbours,
+            minSize=(floor, floor),
         )
         if len(found) == 0:
             return None, None
@@ -709,3 +725,89 @@ def run_blur_job(job_id: str, worker_id: str = "face-blur-worker") -> None:
 
 def list_blur_jobs(workspace_id: str, limit: int = 20) -> list[dict[str, Any]]:
     return list_job_records(workspace_id, JOB_KIND, limit, factory=JOB_SESSION_FACTORY)
+
+
+#: Where to look for a face when previewing. Each probe is one decode and one
+#: detection on a 640px copy, which is cheap enough to spread widely - a sparse
+#: set walked past faces that clips plainly had, and a preview showing no blur
+#: reads as "the blur is broken" rather than "this frame has nobody in it".
+PREVIEW_PROBES = (0.10, 0.20, 0.30, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85)
+
+
+def preview_frame(source: Path, settings: BlurSettings | None = None) -> dict[str, Any]:
+    """Blur one frame and return it as a JPEG, for judging coverage.
+
+    A still is the right unit for this question. Deciding whether the blur sits
+    too wide takes one look at one face, and a frame costs a decode where the
+    six-second proxy this replaced cost a whole encode.
+
+    Frames are probed until one holds a face, because a clip that opens on an
+    empty room would otherwise return a preview that shows nothing at all.
+    """
+    cv2 = _load_opencv()
+    settings = settings or BlurSettings()
+    if not source.is_file():
+        raise FaceBlurUnavailable(f"No such media file: {source}")
+
+    capture = cv2.VideoCapture(str(source))
+    if not capture.isOpened():
+        raise FaceBlurUnavailable(f"OpenCV could not open {source.name}.")
+    try:
+        total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        if width <= 0 or height <= 0:
+            raise FaceBlurUnavailable("That file carries no readable video track.")
+        detector = _detector(cv2, (width, height), settings)
+        scale = DETECT_WIDTH / width if width > DETECT_WIDTH else 1.0
+
+        chosen = None
+        for probe in PREVIEW_PROBES:
+            if total > 0:
+                capture.set(cv2.CAP_PROP_POS_FRAMES, int(total * probe))
+            found, frame = capture.read()
+            if not found:
+                continue
+            boxes = _scaled_boxes(cv2, detector, frame, scale)
+            chosen = (frame, boxes)
+            if boxes:
+                break
+            if total <= 0:
+                break
+        if chosen is None:
+            raise FaceBlurUnavailable("No frame could be read from that file.")
+
+        frame, boxes = chosen
+        for box in boxes:
+            apply_blur(cv2, frame, box, settings)
+        # Sent at preview width: this is looked at, not kept, and a 4K still is
+        # megabytes for a judgement an eye makes at a fraction of that.
+        if width > PREVIEW_WIDTH:
+            preview_height = int(round(height * PREVIEW_WIDTH / width))
+            frame = cv2.resize(
+                frame, (PREVIEW_WIDTH, preview_height), interpolation=cv2.INTER_AREA
+            )
+        encoded, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+        if not encoded:
+            raise FaceBlurUnavailable("The preview frame could not be encoded.")
+        return {
+            "image": bytes(buffer),
+            "faces": len(boxes),
+            "padding_ratio": settings.padding_ratio,
+        }
+    finally:
+        capture.release()
+
+
+def _scaled_boxes(cv2: Any, detector: Any, frame: Any, scale: float) -> list[Box]:
+    """Detect on a downscaled copy and scale the boxes back to full size."""
+    if scale >= 1.0:
+        return detect_boxes(detector, frame)
+    small = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    return [
+        (
+            int(round(x / scale)), int(round(y / scale)),
+            int(round(box_width / scale)), int(round(box_height / scale)),
+        )
+        for x, y, box_width, box_height in detect_boxes(detector, small)
+    ]

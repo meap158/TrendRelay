@@ -253,3 +253,20 @@
 .clip-editor-note { margin: 0; color: var(--green); font-size: 11px; }
 .clip-editor-problem { margin: 0; color: #a3162a; font-size: 11px; }
 @media (max-width: 700px) { .clip-editor-grid, .clip-editor-plan .segment-row { grid-template-columns: 1fr; } }
+
+/* --- blur settings ---------------------------------------------------------- */
+.blur-settings { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 260px); gap: 12px; min-height: 0; }
+.blur-frame { position: relative; display: grid; place-items: center; min-height: 220px; max-height: 46vh; border-radius: var(--radius); background: var(--panel-raised); overflow: hidden; }
+.blur-frame img { max-width: 100%; max-height: 46vh; object-fit: contain; }
+.blur-frame p { margin: 0; padding: 0 16px; color: var(--muted); text-align: center; }
+.blur-frame-busy { position: absolute; right: 8px; bottom: 8px; border-radius: var(--radius-sm); padding: 2px 7px; background: rgba(20, 28, 38, .78); color: #fff; font-size: 10px; }
+.blur-controls { display: grid; align-content: start; gap: 10px; }
+.blur-controls label { display: grid; gap: 5px; }
+.blur-controls label > span { display: grid; gap: 1px; font-size: 12px; font-weight: 600; }
+.blur-controls label b { color: var(--muted); font-size: 11px; font-weight: 400; }
+.blur-controls input[type="range"] { width: 100%; accent-color: var(--link); }
+.blur-controls small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.blur-faces { margin: 0; color: var(--muted); font-size: 11px; }
+.blur-detector-note { display: grid; gap: 5px; padding: 9px 10px; border-left: 3px solid var(--amber); background: #fdf9ec; }
+.blur-detector-note p { margin: 0; font-size: 11px; line-height: 1.5; }
+@media (max-width: 720px) { .blur-settings { grid-template-columns: 1fr; } }

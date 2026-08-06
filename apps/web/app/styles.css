@@ -400,9 +400,9 @@ nav strong { color: #1c2b33; }
 .time-slots { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .time-slots > span { margin-right: 2px; color: var(--muted); font-size: 11px; font-weight: 600; }
 /* The form sets every button to full width, which would stack these one per row. */
-.time-slots button { display: flex; align-items: baseline; gap: 5px; min-height: 32px; padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
-.time-slots button b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.time-slots button i { color: var(--muted); font-size: 10px; font-style: normal; }
+.time-slots button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 30px; padding: 0 12px; line-height: 1; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.time-slots button b { font-size: 12px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.time-slots button i { color: var(--muted); font-size: 10px; line-height: 1; font-style: normal; }
 .time-slots button.selected { border-color: var(--green); background: var(--green-dark); color: var(--green); }
 .time-slots button.selected i { color: var(--green); }
 /* Underlined tabs rather than a second row of pills: the account chips above
@@ -511,3 +511,5 @@ nav strong { color: #1c2b33; }
 .thread-index { display: grid; place-items: center; width: 20px; height: 20px; margin-top: 6px; border-radius: 999px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-weight: 700; }
 .publish-form .thread-part textarea { min-height: 52px; }
 .thread-note { color: var(--muted); font-size: 11px; line-height: 1.45; }
+/* An action that reads as part of the sentence it sits in. */
+.link-action { border: 0; padding: 0; background: transparent; color: var(--link); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
