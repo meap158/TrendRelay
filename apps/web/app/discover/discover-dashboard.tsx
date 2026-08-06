@@ -6,6 +6,7 @@ import { RefreshCw, Download } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
+import { buttonClass } from "../ui/button";
 import { useJobs } from "../jobs-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 
@@ -1087,7 +1088,7 @@ export default function ResearchDashboard() {
           />
           <button
             type="submit"
-            className="primary-button"
+            className={buttonClass({ variant: "primary" })}
             style={{ borderRadius: "20px" }}
             disabled={!canSearch}
           >
@@ -1398,7 +1399,7 @@ export default function ResearchDashboard() {
       {visibleInspirations.length === 0 && liveInspirations.length > 0 && (
         <div style={{ ...S.empty, ...S.section }}>
           <p>No signals of this type yet.</p>
-          <button type="button" className="quiet-action" onClick={() => setFeedFilter("all")}>
+          <button type="button" className={buttonClass({ variant: "quiet" })} onClick={() => setFeedFilter("all")}>
             Show all results
           </button>
         </div>

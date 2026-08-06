@@ -14,7 +14,7 @@ import {
   type PublishingProvider,
 } from "../publishing-icons";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
-import { Button } from "../ui/button";
+import { Button, buttonClass } from "../ui/button";
 import { Badge } from "../ui/primitives";
 import {
   MediaPicker,
@@ -542,7 +542,7 @@ export default function PublishPage() {
   }
 
   if (loading) return <main className="publish-page"><p>Checking your session…</p></main>;
-  if (!user) return <main className="publish-page"><Link className="primary-link" href="/sign-in?next=%2Fpublish">Sign in to publish</Link></main>;
+  if (!user) return <main className="publish-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Fpublish">Sign in to publish</Link></main>;
 
   return (
     <main className="publish-page">
@@ -662,7 +662,7 @@ export default function PublishPage() {
                     aria-expanded={open}
                     onClick={() => setOpenProvider(open ? null : provider.id)}
                   >{open ? "Close" : provider.configured ? "Replace key" : "Add key"}</Button>
-                  <a className="quiet-action" href={provider.docs_url} target="_blank" rel="noopener noreferrer">Docs</a>
+                  <a className={buttonClass({ variant: "quiet" })} href={provider.docs_url} target="_blank" rel="noopener noreferrer">Docs</a>
                 </div>
                 {open && (
                   <div className="engine-credentials">
@@ -700,7 +700,7 @@ export default function PublishPage() {
                           ? "Saving"
                           : active ? "Save to .env" : "Save and use this engine"}
                       </Button>
-                      <a className="quiet-action" href={provider.dashboard_url} target="_blank" rel="noopener noreferrer">
+                      <a className={buttonClass({ variant: "quiet" })} href={provider.dashboard_url} target="_blank" rel="noopener noreferrer">
                         Get a key
                       </a>
                     </div>
@@ -771,7 +771,7 @@ export default function PublishPage() {
                     busy={busy === "hosting-credentials"}
                     onClick={() => void saveHosting()}
                   >{busy === "hosting-credentials" ? "Saving" : "Save to .env"}</Button>
-                  <a className="quiet-action" href="https://dash.cloudflare.com/?to=/:account/r2" target="_blank" rel="noopener noreferrer">
+                  <a className={buttonClass({ variant: "quiet" })} href="https://dash.cloudflare.com/?to=/:account/r2" target="_blank" rel="noopener noreferrer">
                     Open R2
                   </a>
                 </div>

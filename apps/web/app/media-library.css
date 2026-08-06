@@ -87,7 +87,7 @@
 .recipe-grid dt { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .recipe-grid dd { margin: 4px 0 0; line-height: 1.4; }
 .library-enrichment > div > p { color: var(--muted); }
-.library-enrichment .primary-button { justify-self: start; }
+.library-enrichment .ui-button { justify-self: start; }
 @media (max-width: 1050px) {
   .library-layout { grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr); }
   .library-detail-grid { grid-template-columns: 1fr; }
@@ -138,12 +138,6 @@
 .library-gallery small { color: var(--muted); font-size: 10px; }
 .library-gallery .library-thumbnail-frame { width: 100%; height: auto; max-height: 132px; aspect-ratio: 16 / 9; border-radius: 0; }
 .library-gallery .library-thumbnail { width: 100%; height: 100%; border-radius: 0; }
-.library-item-navigation { display: grid; grid-template-columns: auto 1fr auto; align-items: center; width: 100%; margin-bottom: 3px; }
-.library-item-navigation span { color: var(--muted); text-align: center; font-size: 10px; }
-.library-item-navigation button { border: 0; padding: 5px; color: var(--link); background: transparent; font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
-.library-item-navigation button:disabled { color: var(--muted); cursor: default; opacity: 0.55; }
-.library-actions a.primary-action { border-color: var(--link); color: #fff; background: var(--link); }
-.library-actions a.primary-action:hover { color: #fff; filter: brightness(0.94); }
 @media (max-width: 700px) {
   .library-gallery, .library-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -212,7 +206,8 @@
 .library-cut-switch button.selected { border-color: var(--link); color: #fff; background: #2f4a7a; font-weight: 600; }
 .blurred-tag { justify-self: start; align-self: center; border-radius: 999px; padding: 2px 8px; color: #1a56c4; background: #e8f0fe; font-size: 10px; font-style: normal; font-weight: 600; white-space: nowrap; }
 /* Position sits with the heading; the action row holds only actions. */
-.library-item-navigation { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--muted); font-size: 11px; }
-.library-item-navigation button { min-height: 28px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 10px; color: var(--text); background: var(--panel); font: inherit; font-size: 11px; cursor: pointer; }
-.library-item-navigation button:disabled { opacity: .45; cursor: not-allowed; }
-.library-item-navigation span { font-variant-numeric: tabular-nums; }
+
+/* Metadata and the pager share one line, so browsing costs no extra height. */
+.library-meta-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.library-item-navigation { display: flex; align-items: center; gap: 4px; }
+.library-item-navigation span { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }

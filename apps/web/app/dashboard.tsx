@@ -5,7 +5,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { useAuth } from "./auth-provider";
-import { Button } from "./ui/button";
+import { Button, buttonClass } from "./ui/button";
 import { useJobs } from "./jobs-provider";
 
 type Workspace = { id: string; name: string; role: string };
@@ -466,7 +466,7 @@ export default function Dashboard() {
   }
 
   if (loading) return <main className="console-page"><div className="loading-panel">Loading workspace…</div></main>;
-  if (!user) return <main className="console-page"><section className="empty-console"><strong>TrendRelay</strong><h1>Sign in to manage media.</h1><p>Fetch source videos, prepare clips, and send approved posts from one workspace.</p><Link className="primary-button" href="/sign-in?next=%2F">Sign in</Link></section></main>;
+  if (!user) return <main className="console-page"><section className="empty-console"><strong>TrendRelay</strong><h1>Sign in to manage media.</h1><p>Fetch source videos, prepare clips, and send approved posts from one workspace.</p><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2F">Sign in</Link></section></main>;
 
   return <main className="console-page">
     <section className="console-heading downloader-heading">
@@ -483,7 +483,7 @@ export default function Dashboard() {
       </label>
     </section>
 
-    {!workspaceId && <section className="empty-console"><h2>Create a workspace first</h2><p>A workspace owns media, approvals, and publishing history.</p><Link className="primary-button" href="/workspaces">Create workspace</Link></section>}
+    {!workspaceId && <section className="empty-console"><h2>Create a workspace first</h2><p>A workspace owns media, approvals, and publishing history.</p><Link className={buttonClass({ variant: "primary" })} href="/workspaces">Create workspace</Link></section>}
     {workspaceId && <>
 
       <div className="console-messages" aria-live="polite">
@@ -519,7 +519,7 @@ export default function Dashboard() {
               />
               <div className="link-input-footer">
                 <span id="douyin-link-help">{urls.length ? urls.length + " Douyin " + (urls.length === 1 ? "link" : "links") + " detected" + (unsupportedCount ? " · " + unsupportedCount + " unsupported ignored" : "") : unsupportedCount ? "Use a specific video, profile, collection, music, or v.douyin.com share link" : "Video · Profile · Collection · Music"}</span>
-                <button type="button" className="paste-button" onClick={() => void pasteLinks()}>Paste from clipboard</button>
+                <Button variant="link" size="sm" onClick={() => void pasteLinks()}>Paste from clipboard</Button>
               </div>
             </div>
           </div>
@@ -537,7 +537,7 @@ export default function Dashboard() {
 
           {!providerReady && <div className="connection-callout warning">
             <div><strong>Install the Douyin downloader</strong><span>Enable the managed provider once, then return here.</span></div>
-            <Link className="secondary-button" href="/tools">Open Tools</Link>
+            <Link className={buttonClass({ variant: "secondary" })} href="/tools">Open Tools</Link>
           </div>}
           {providerReady && !cookiesReady && <div className="connection-callout warning">
             <div>
@@ -554,7 +554,7 @@ export default function Dashboard() {
           </div>}
           {providerReady && cookiesReady && !refreshRequired && <div className="connection-callout connected">
             <div><strong>Ready to download</strong><span>Your Douyin session is stored locally. Refresh it only if downloads stop working.</span></div>
-            <button type="button" className="text-action" disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
+            <button type="button" className={buttonClass({ variant: "link" })} disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
               {connecting || connectionActive ? "Refreshing…" : "Refresh session"}
             </button>
           </div>}
@@ -569,7 +569,7 @@ export default function Dashboard() {
           </details>
 
           <div className="download-submit-row">
-            <button className="primary-button download-button" disabled={busy}>
+            <button className={`${buttonClass({ variant: "primary" })} download-button`} disabled={busy}>
               {busy ? "Adding to queue…" : urls.length > 1 ? "Download " + urls.length + " sources" : "Start download"}
             </button>
             <small>Only download media you are authorized to retain and reuse.</small>
@@ -580,7 +580,7 @@ export default function Dashboard() {
         <div className="queue-heading">
           <div><p className="step-kicker">STEP 2</p><h2>Downloads</h2><p>Active batches update automatically every few seconds.</p></div>
           <div className="queue-heading-actions">
-            {jobs.length > 0 && <button type="button" className="text-action clear-downloads-button" disabled={clearingHistory || jobsBusy} onClick={() => void clearUnavailableDownloads()}>{clearingHistory ? "Clearing…" : "Clear missing files"}</button>}
+            {jobs.length > 0 && <button type="button" className={`${buttonClass({ variant: "link" })} clear-downloads-button`} disabled={clearingHistory || jobsBusy} onClick={() => void clearUnavailableDownloads()}>{clearingHistory ? "Clearing…" : "Clear missing files"}</button>}
             <Button
               variant="secondary"
               iconOnly
@@ -642,8 +642,8 @@ export default function Dashboard() {
                   {job.status === "succeeded" && <Link href="/library">Open library</Link>}
                 </div>}
                 {job.result?.summary && current === "succeeded" && <p className="job-summary">{job.result.summary}. Files were also added to the media library.</p>}
-                {job.error && <div className="job-error"><strong>{current === "queued" ? "Download ready to resume" : "Download stopped"}</strong><span>{friendlyDownloadError(job.error)}</span><div className="download-recovery-actions">{(progress?.files_downloaded ?? 0) > 0 && <button type="button" className="text-action" disabled={resumingJobId === job.id || current === "running"} onClick={() => void resumeDownload(job.id, true)}>{resumingJobId === job.id ? "Working…" : "Finish saved files"}</button>}<button type="button" className="text-action" disabled={resumingJobId === job.id || current === "running"} onClick={() => void resumeDownload(job.id)}>{resumingJobId === job.id ? "Working…" : "Resume download"}</button><button type="button" className="text-action" disabled={connecting || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>{connecting ? "Opening…" : "Refresh session"}</button><button type="button" className="text-action" onClick={() => reuseLinks(sources)}>Reuse {sources.length === 1 ? "link" : "links"}</button></div></div>}
-                {current === "empty" && !job.error && <div className="job-error"><strong>No media files were saved</strong><span>Refresh the Douyin session, then reuse these links.</span><button type="button" className="text-action" onClick={() => reuseLinks(sources)}>Reuse {sources.length === 1 ? "link" : "links"}</button></div>}
+                {job.error && <div className="job-error"><strong>{current === "queued" ? "Download ready to resume" : "Download stopped"}</strong><span>{friendlyDownloadError(job.error)}</span><div className="download-recovery-actions">{(progress?.files_downloaded ?? 0) > 0 && <button type="button" className={buttonClass({ variant: "link" })} disabled={resumingJobId === job.id || current === "running"} onClick={() => void resumeDownload(job.id, true)}>{resumingJobId === job.id ? "Working…" : "Finish saved files"}</button>}<button type="button" className={buttonClass({ variant: "link" })} disabled={resumingJobId === job.id || current === "running"} onClick={() => void resumeDownload(job.id)}>{resumingJobId === job.id ? "Working…" : "Resume download"}</button><button type="button" className={buttonClass({ variant: "link" })} disabled={connecting || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>{connecting ? "Opening…" : "Refresh session"}</button><button type="button" className={buttonClass({ variant: "link" })} onClick={() => reuseLinks(sources)}>Reuse {sources.length === 1 ? "link" : "links"}</button></div></div>}
+                {current === "empty" && !job.error && <div className="job-error"><strong>No media files were saved</strong><span>Refresh the Douyin session, then reuse these links.</span><button type="button" className={buttonClass({ variant: "link" })} onClick={() => reuseLinks(sources)}>Reuse {sources.length === 1 ? "link" : "links"}</button></div>}
                 {artifacts.length > 0 && <div className="artifact-list">
                   {artifacts.slice(0, 4).map((artifact) => <div className="artifact-row" key={artifact.path}>
                     <div><strong>{artifact.name}</strong><small>{size(artifact.size_bytes)}</small></div>

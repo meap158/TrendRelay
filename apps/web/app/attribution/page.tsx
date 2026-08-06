@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { buttonClass } from "../ui/button";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 
 type Workspace = { id: string; name: string; role: string };
@@ -247,7 +248,7 @@ export default function AttributionPage() {
   }
 
   if (loading) return <main className="attribution-page"><p>Opening attribution…</p></main>;
-  if (!user) return <main className="attribution-page"><Link className="primary-link" href="/sign-in?next=%2Fattribution">Sign in to open Attribution</Link></main>;
+  if (!user) return <main className="attribution-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Fattribution">Sign in to open Attribution</Link></main>;
 
   return (
     <main className="attribution-page">
@@ -368,7 +369,7 @@ export default function AttributionPage() {
               <label>Disclosure<textarea name="disclosure" rows={2} defaultValue="Affiliate link; we may earn a commission." required /></label>
               <label>Country destinations<textarea name="country_destinations" rows={3} placeholder={"TH=https://th.merchant.example/offer\nUS=https://us.merchant.example/offer"} /><small>Optional. One COUNTRY=https://destination line. Incoming query parameters are never forwarded.</small></label>
               <label>Expiry<input name="expires_at" type="datetime-local" /></label>
-              <button className="primary-button" disabled={busy === "link" || !campaignId}>{busy === "link" ? "Creating…" : "Create and copy"}</button>
+              <button className={buttonClass({ variant: "primary" })} disabled={busy === "link" || !campaignId}>{busy === "link" ? "Creating…" : "Create and copy"}</button>
             </form>
           </article>}
 
@@ -377,7 +378,7 @@ export default function AttributionPage() {
             <p>Use the network report’s tracking code and a timezone-aware conversion time. Order references are stored only as keyed hashes.</p>
             <form onSubmit={importConversions}>
               <textarea aria-label="Conversion CSV" rows={8} value={csvText} onChange={(event) => setCsvText(event.target.value)} />
-              <button className="primary-button" disabled={busy === "import"}>{busy === "import" ? "Importing…" : "Import report"}</button>
+              <button className={buttonClass({ variant: "primary" })} disabled={busy === "import"}>{busy === "import" ? "Importing…" : "Import report"}</button>
             </form>
           </article>}
 

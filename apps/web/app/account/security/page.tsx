@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../../auth-provider";
 import { supabaseBrowserClient } from "../../../lib/supabase";
+import { buttonClass } from "../../ui/button";
 
 type Factor = {
   id: string;
@@ -111,8 +112,8 @@ export default function AccountSecurityPage() {
   }
 
   if (loading) return <main className="auth-page"><p>Checking account security...</p></main>;
-  if (desktopAvailable) return <main className="auth-page"><section className="setup-card"><h1>Manage MFA in your browser.</h1><p>Desktop uses a paired device token. Open the browser app to enroll, verify, or remove an authenticator.</p><Link className="primary-link" href="/workspaces">Return to workspaces</Link></section></main>;
-  if (!user) return <main className="auth-page"><Link className="primary-link" href="/sign-in?next=%2Faccount%2Fsecurity">Sign in to manage MFA</Link></main>;
+  if (desktopAvailable) return <main className="auth-page"><section className="setup-card"><h1>Manage MFA in your browser.</h1><p>Desktop uses a paired device token. Open the browser app to enroll, verify, or remove an authenticator.</p><Link className={buttonClass({ variant: "primary" })} href="/workspaces">Return to workspaces</Link></section></main>;
+  if (!user) return <main className="auth-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Faccount%2Fsecurity">Sign in to manage MFA</Link></main>;
 
   const unverified = factors.filter((factor) => factor.status === "unverified");
   const challengeRequired = assurance?.currentLevel === "aal1" && assurance.nextLevel === "aal2";
@@ -127,7 +128,7 @@ export default function AccountSecurityPage() {
           {error && <p className="registry-error" role="alert">{error}</p>}
           {message && <p className="form-message" role="status">{message}</p>}
           {challengeRequired && <form className="stack-form" onSubmit={verify}><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} required /></label><button disabled={busy}>Verify and continue</button></form>}
-          {!challengeRequired && !enrollment && <button className="primary-link" disabled={busy || unverified.length > 0} onClick={enroll}>Add authenticator</button>}
+          {!challengeRequired && !enrollment && <button className={buttonClass({ variant: "primary" })} disabled={busy || unverified.length > 0} onClick={enroll}>Add authenticator</button>}
           {enrollment && <div className="mfa-enrollment"><Image src={enrollment.qrCode} alt="TOTP enrollment QR code" width={240} height={240} unoptimized /><p>Scan this code, or enter the secret manually:</p><code>{enrollment.secret}</code><form className="stack-form" onSubmit={verify}><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} required /></label><button disabled={busy}>Verify enrollment</button></form></div>}
         </article>
         <aside className="management-card">

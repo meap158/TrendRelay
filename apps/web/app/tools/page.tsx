@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { buttonClass } from "../ui/button";
 
 type Tool = {
   id: string;
@@ -370,10 +371,10 @@ export default function ToolsPage() {
           {setup.tool_id === "douyin-downloader" && setup.connection && <p className="connection-note">Douyin connection: <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
           <div className="setup-actions">
             {setup.actions.map((action) => action.kind === "navigate" && action.href ? (
-              <Link className="setup-primary" href={action.href} key={action.id}>{action.label}</Link>
+              <Link className={buttonClass({ variant: "primary" })} href={action.href} key={action.id}>{action.label}</Link>
             ) : (
               <button
-                className="setup-primary"
+                className={buttonClass({ variant: "primary" })}
                 disabled={busy === `${setup.tool_id}-${action.id}` || busy === "agent-reach-diagnostics"}
                 key={action.id}
                 onClick={() => void runSetupAction(action)}

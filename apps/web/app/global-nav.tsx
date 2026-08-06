@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useAuth } from "./auth-provider";
 import { type BaseJob, useJobs } from "./jobs-provider";
+import { Button } from "./ui/button";
 
 const READ_NOTIFICATIONS_KEY = "trendrelay:read-notifications:";
 const MAX_STORED_READ_KEYS = 300;
@@ -187,7 +188,7 @@ export function GlobalNav() {
             </section>
           )}
         </div>
-        {localMode ? <span className="local-admin-badge" title="Development-only loopback session">Local admin</span> : <button className="text-button" onClick={() => void signOut()}>Sign out</button>}
+        {localMode ? <span className="local-admin-badge" title="Development-only loopback session">Local admin</span> : <Button variant="link" size="sm" onClick={() => void signOut()}>Sign out</Button>}
       </div>
     </header>
   );

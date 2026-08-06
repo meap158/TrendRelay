@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "../auth-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
+import { Button } from "../ui/button";
 
 type Workspace = { id: string; name: string; role: string };
 type Offer = {
@@ -364,9 +365,9 @@ export default function OpportunitiesPage() {
             <input type="file" accept=".csv,text/csv" onChange={(event) => void loadCsv(event.target.files?.[0])} />
           </label>
           <textarea aria-label="Affiliate offer CSV" rows={8} value={csvText} onChange={(event) => setCsvText(event.target.value)} />
-          <button type="button" disabled={!canEdit || busy === "import"} onClick={() => void importCsv()}>
-            {busy === "import" ? "Importing…" : "Validate and import"}
-          </button>
+          <Button variant="primary" busy={busy === "import"} disabled={!canEdit} onClick={() => void importCsv()}>
+            {busy === "import" ? "Importing" : "Validate and import"}
+          </Button>
           {importResult && (
             <div className="import-summary">
               <strong>{importResult.created} created · {importResult.skipped} already present</strong>
@@ -421,7 +422,7 @@ export default function OpportunitiesPage() {
               </label>
             )}
           </div>
-          <button disabled={!canScore || busy === "score"}>{busy === "score" ? "Scoring…" : "Save explainable score"}</button>
+          <Button type="submit" variant="primary" busy={busy === "score"} disabled={!canScore}>{busy === "score" ? "Scoring" : "Save explainable score"}</Button>
         </form>
       </section>
 

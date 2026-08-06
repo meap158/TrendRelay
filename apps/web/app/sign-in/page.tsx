@@ -5,6 +5,7 @@ import { FormEvent, useState } from "react";
 
 import { useAuth } from "../auth-provider";
 import { authConfiguration, supabaseBrowserClient } from "../../lib/supabase";
+import { buttonClass } from "../ui/button";
 
 type Mode = "sign-in" | "sign-up";
 
@@ -118,7 +119,7 @@ export default function SignInPage() {
             <p className="eyebrow">DESKTOP DEVICE FLOW</p>
             <h2>{user ? "Desktop paired" : "Pair this desktop"}</h2>
             <p>{user ? `Signed in as ${user.email ?? user.id}.` : "TrendRelay will open your system browser for a ten-minute, one-time approval."}</p>
-            {user ? <Link className="primary-link" href="/workspaces">Open workspaces</Link> : <button className="primary-action" disabled={busy || authLoading} onClick={pair}>{busy || authLoading ? "Waiting for browser approval..." : "Pair securely in browser"}</button>}
+            {user ? <Link className={buttonClass({ variant: "primary" })} href="/workspaces">Open workspaces</Link> : <button className={buttonClass({ variant: "primary" })} disabled={busy || authLoading} onClick={pair}>{busy || authLoading ? "Waiting for browser approval..." : "Pair securely in browser"}</button>}
             {error && <p className="registry-error" role="alert">{error}</p>}
           </div>
         ) : !config.configured ? (
@@ -135,7 +136,7 @@ export default function SignInPage() {
             </div>
             <label>Email<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
             <label>Password<input type="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
-            <button className="primary-action" disabled={busy}>{busy ? "Working..." : mode === "sign-in" ? "Sign in" : "Create account"}</button>
+            <button className={buttonClass({ variant: "primary" })} disabled={busy}>{busy ? "Working..." : mode === "sign-in" ? "Sign in" : "Create account"}</button>
             <div className="auth-alternatives">
               <button type="button" disabled={busy} onClick={googleSignIn}>Continue with Google</button>
               <button type="button" disabled={busy} onClick={sendMagicLink}>Email a magic link</button>

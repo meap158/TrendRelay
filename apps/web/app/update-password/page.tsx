@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 
 import { supabaseBrowserClient } from "../../lib/supabase";
+import { buttonClass } from "../ui/button";
 
 export default function UpdatePasswordPage() {
   const [password, setPassword] = useState("");
@@ -28,7 +29,7 @@ export default function UpdatePasswordPage() {
         <p className="eyebrow">PASSWORD RECOVERY</p>
         <h1>Choose a new password.</h1>
         <label>New password<input type="password" autoComplete="new-password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
-        <button className="primary-action">Update password</button>
+        <button className={buttonClass({ variant: "primary" })}>Update password</button>
         {message && <p className="form-message" role="status">{message} <Link href="/workspaces">Open workspaces</Link></p>}
         {error && <p className="registry-error" role="alert">{error}</p>}
       </form>

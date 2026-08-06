@@ -5,6 +5,7 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { useAuth } from "../../auth-provider";
+import { buttonClass } from "../../ui/button";
 
 export default function AcceptInvitationPage() {
   return <Suspense fallback={<main className="auth-page"><p>Loading invitation...</p></main>}><AcceptInvitationContent /></Suspense>;
@@ -44,9 +45,9 @@ function AcceptInvitationContent() {
         <h1>Join a trusted workspace.</h1>
         {!configured && <p>Configure Supabase authentication before accepting an invitation.</p>}
         {configured && loading && <p>Checking your signed-in account...</p>}
-        {configured && !loading && !user && <><p>Sign in with the exact email address that received this invitation.</p><Link className="primary-link" href={`/sign-in?next=${encodeURIComponent(returnPath)}`}>Sign in to accept</Link></>}
+        {configured && !loading && !user && <><p>Sign in with the exact email address that received this invitation.</p><Link className={buttonClass({ variant: "primary" })} href={`/sign-in?next=${encodeURIComponent(returnPath)}`}>Sign in to accept</Link></>}
         {configured && !loading && user && !token && <p className="registry-error" role="alert">This invitation link has no token.</p>}
-        {configured && !loading && user && token && !message && <button className="primary-action" disabled={busy} onClick={accept}>{busy ? "Joining..." : `Accept as ${user.email ?? user.id}`}</button>}
+        {configured && !loading && user && token && !message && <button className={buttonClass({ variant: "primary" })} disabled={busy} onClick={accept}>{busy ? "Joining..." : `Accept as ${user.email ?? user.id}`}</button>}
         {message && <p className="form-message" role="status">{message} <Link href="/workspaces">Open workspaces</Link></p>}
         {error && <p className="registry-error" role="alert">{error}</p>}
       </section>

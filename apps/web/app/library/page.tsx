@@ -6,7 +6,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
-import { Button } from "../ui/button";
+import { Button, buttonClass } from "../ui/button";
 
 type Workspace = { id: string; name: string; role: string };
 type ViewMode = "gallery" | "list";
@@ -720,7 +720,7 @@ export default function LibraryPage() {
   }
 
   if (loading) return <main className="library-page"><p>Opening media library…</p></main>;
-  if (!user) return <main className="library-page"><Link className="primary-link" href="/sign-in?next=%2Flibrary">Sign in to open Library</Link></main>;
+  if (!user) return <main className="library-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Flibrary">Sign in to open Library</Link></main>;
 
   return (
     <main className="library-page">
@@ -913,12 +913,33 @@ export default function LibraryPage() {
                   </p>
                   <h2>{selected.title}</h2>
                   <p>{selected.caption || "No source caption recorded."}</p>
-                  <small>{selected.width && selected.height ? `${selected.width}×${selected.height} · ` : ""}{displaySize(selected.size_bytes)}</small>
-                  <nav className="library-item-navigation" aria-label="Browse media">
-                    <Button variant="quiet" size="sm" disabled={selectedIndex <= 0} onClick={() => setSelectedId(assets[selectedIndex - 1]?.id ?? selectedId)}>← Previous</Button>
-                    <span>{selectedIndex + 1} of {assets.length}</span>
-                    <Button variant="quiet" size="sm" disabled={selectedIndex < 0 || selectedIndex >= assets.length - 1} onClick={() => setSelectedId(assets[selectedIndex + 1]?.id ?? selectedId)}>Next →</Button>
-                  </nav>
+                  {/* The pager shares the metadata line rather than taking a
+                      row of its own; the clip and its details are what deserve
+                      the vertical space. */}
+                  <div className="library-meta-line">
+                    <small>{selected.width && selected.height ? `${selected.width}×${selected.height} · ` : ""}{displaySize(selected.size_bytes)}</small>
+                    <nav className="library-item-navigation" aria-label="Browse media">
+                      <Button
+                        variant="quiet"
+                        size="sm"
+                        iconOnly
+                        aria-label="Previous item"
+                        title="Previous item"
+                        disabled={selectedIndex <= 0}
+                        onClick={() => setSelectedId(assets[selectedIndex - 1]?.id ?? selectedId)}
+                      >‹</Button>
+                      <span>{selectedIndex + 1} of {assets.length}</span>
+                      <Button
+                        variant="quiet"
+                        size="sm"
+                        iconOnly
+                        aria-label="Next item"
+                        title="Next item"
+                        disabled={selectedIndex < 0 || selectedIndex >= assets.length - 1}
+                        onClick={() => setSelectedId(assets[selectedIndex + 1]?.id ?? selectedId)}
+                      >›</Button>
+                    </nav>
+                  </div>
                 </div>
                 <div className="library-actions">
                   <Button

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiBaseUrl } from "../../lib/api";
 
 import { useAuth } from "../auth-provider";
+import { buttonClass } from "../ui/button";
 import { useJobs } from "../jobs-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 
@@ -160,7 +161,7 @@ export default function StudioPage() {
   }
 
   if (loading) return <main className="publish-page studio-page"><p>Checking your session...</p></main>;
-  if (!user) return <main className="publish-page studio-page"><Link className="primary-link" href="/sign-in?next=%2Fstudio">Sign in to open Studio</Link></main>;
+  if (!user) return <main className="publish-page studio-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Fstudio">Sign in to open Studio</Link></main>;
 
   async function blurFaces(previewOnly: boolean) {
     if (!sourcePath.trim()) {
@@ -234,7 +235,7 @@ export default function StudioPage() {
                 >{blurBusy === "preview" ? "Rendering…" : "Preview 6s"}</button>
                 <button
                   type="button"
-                  className="setup-primary"
+                  className={buttonClass({ variant: "primary" })}
                   disabled={blurBusy !== null || !workspaceId}
                   onClick={() => void blurFaces(false)}
                 >{blurBusy === "render" ? "Blurring…" : "Blur whole clip"}</button>
