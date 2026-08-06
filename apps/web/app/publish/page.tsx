@@ -28,6 +28,7 @@ import {
   upcomingSlots,
   type CalendarEntry,
   type LibraryAsset,
+  type PickerFilters,
   type Slot,
   type SlotPreset,
 } from "./composer";
@@ -224,6 +225,15 @@ export default function PublishPage() {
         .filter((entry) => !Number.isNaN(entry.at.getTime())),
     [jobs],
   );
+  const scheduledTimes = useMemo(
+    () => scheduled.map((entry) => localValue(entry.at)),
+    [scheduled],
+  );
+  const nextFree = useMemo(() => {
+    const taken = new Set(scheduledTimes);
+    return quickSlots.find((slot) => !taken.has(slot.value)) ?? null;
+  }, [quickSlots, scheduledTimes]);
+
   // The preview stands in for the first destination, which is the one being composed.
   const previewPlatform = chosen[0] ?? null;
   const previewType = previewPlatform
@@ -452,11 +462,13 @@ export default function PublishPage() {
   }
 
   const loadLibrary = useCallback(
-    async (query: string) => {
+    async (query: string, filters: PickerFilters = {}) => {
       setLibraryState({ loading: true, failure: null });
       try {
         const params = new URLSearchParams({ media_kind: "video", limit: "40" });
         if (query.trim()) params.set("q", query.trim());
+        if (filters.hasVersion) params.set("has_version", filters.hasVersion);
+        if (filters.maxSeconds) params.set("max_duration_seconds", String(filters.maxSeconds));
         const body = await json<{ assets: LibraryAsset[] }>(
           await apiFetch(`/api/workspaces/${workspaceId}/media/library/assets?${params}`),
         );
@@ -1210,6 +1222,15 @@ export default function PublishPage() {
           {delivery === "schedule" && quickSlots.length > 0 && (
             <div className="time-slots" role="group" aria-label="Next posting times">
               <span>Next slots</span>
+              {nextFree && (
+                <button
+                  type="button"
+                  className={`slot-next${date === nextFree.value ? " selected" : ""}`}
+                  aria-pressed={date === nextFree.value}
+                  title="The soonest slot with nothing queued in it"
+                  onClick={() => setDate(nextFree.value)}
+                ><b>Next free</b><i>{nextFree.day} {nextFree.label}</i></button>
+              )}
               {quickSlots.map((slot) => (
                 <button
                   key={slot.value}
@@ -1223,27 +1244,54 @@ export default function PublishPage() {
           )}
 
           {delivery === "schedule" && (
-            <details className="schedule-planner" open={!slots.length}>
-              <summary>
-                Posting calendar
-                <b>{slots.length ? `${slots.length} slot${slots.length === 1 ? "" : "s"}` : "no slots set"}</b>
-              </summary>
-              <WeekCalendar
-                slots={slots}
-                entries={scheduled}
-                selected={date}
-                now={now}
-                onPick={(at) => setDate(localValue(at))}
-              />
-              <SlotEditor
-                slots={slots}
-                presets={slotPresets}
-                timezone={timezone}
-                canEdit={Boolean(canExecute)}
-                busy={busy === "slots"}
-                onSave={(entries) => void saveSlots(entries)}
-              />
-            </details>
+            <div className="schedule-planner">
+              {slots.length ? (
+                <WeekCalendar
+                  slots={slots}
+                  entries={scheduled}
+                  selected={date}
+                  now={now}
+                  onPick={(at) => setDate(localValue(at))}
+                />
+              ) : (
+                /* An empty week is not a calendar, so the thing that fills it
+                   is offered here rather than behind the editor below. */
+                <div className="planner-empty">
+                  <div>
+                    <strong>No posting times yet</strong>
+                    <span>Pick a rhythm to fill the calendar, or set times by hand below.</span>
+                  </div>
+                  <div className="planner-empty-presets">
+                    {slotPresets.map((preset) => (
+                      <Button
+                        key={preset.id}
+                        variant="secondary"
+                        size="sm"
+                        busy={busy === "slots"}
+                        disabled={!canExecute}
+                        title={preset.summary}
+                        onClick={() => void saveSlots(
+                          preset.times.map((time) => ({ weekday: -1, time })))}
+                      >{preset.label}</Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <details className="planner-editor">
+                <summary>
+                  Posting times
+                  <b>{slots.length ? `${slots.length} per day` : "none set"}</b>
+                </summary>
+                <SlotEditor
+                  slots={slots}
+                  presets={slotPresets}
+                  timezone={timezone}
+                  canEdit={Boolean(canExecute)}
+                  busy={busy === "slots"}
+                  onSave={(entries) => void saveSlots(entries)}
+                />
+              </details>
+            </div>
           )}
 
           <fieldset className="account-picker">
@@ -1490,7 +1538,7 @@ export default function PublishPage() {
           apiFetch={apiFetch}
           loading={libraryState.loading}
           failure={libraryState.failure}
-          onSearch={(query) => void loadLibrary(query)}
+          onSearch={(query, filters) => void loadLibrary(query, filters)}
           onPick={pickClip}
           onClose={() => setPickerOpen(false)}
         />

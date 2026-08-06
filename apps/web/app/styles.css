@@ -311,9 +311,19 @@ nav strong { color: #1c2b33; }
 .post-preview-note { margin: 0; color: var(--muted); line-height: 1.5; }
 
 /* --- posting calendar ----------------------------------------------------- */
-.schedule-planner { border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel); }
-.schedule-planner > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; font-weight: 500; cursor: pointer; }
-.schedule-planner > summary b { border-radius: 999px; padding: 2px 8px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+/* The calendar is what choosing Schedule asked for, so it is not behind a
+ * disclosure. Editing the times is the rare job and folds away instead. */
+.schedule-planner { display: grid; gap: 8px; padding-top: 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel); }
+.planner-editor > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 11px; font-weight: 600; cursor: pointer; }
+.planner-editor > summary b { border-radius: 999px; padding: 2px 8px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.planner-empty { display: grid; gap: 8px; padding: 4px 12px 8px; }
+.planner-empty strong { display: block; font-size: 12px; font-weight: 600; }
+.planner-empty span { color: var(--muted); font-size: 11px; }
+.planner-empty-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.publish-form .slot-next { display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: auto; min-height: 30px; padding: 0 12px; line-height: 1; border: 1px solid var(--green); border-radius: 999px; background: var(--green-dark); color: var(--green); font: inherit; cursor: pointer; }
+.slot-next b { font-size: 12px; font-weight: 600; }
+.slot-next i { font-size: 10px; font-style: normal; opacity: .85; }
+.publish-form .slot-next.selected { background: var(--green); color: #fff; }
 .week-calendar { display: grid; gap: 10px; padding: 0 12px 12px; }
 .week-calendar > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .week-calendar > header > div { display: flex; gap: 4px; }
@@ -513,3 +523,9 @@ nav strong { color: #1c2b33; }
 .thread-note { color: var(--muted); font-size: 11px; line-height: 1.45; }
 /* An action that reads as part of the sentence it sits in. */
 .link-action { border: 0; padding: 0; background: transparent; color: var(--link); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+/* Filters sit under the search they refine, not in a panel of their own. */
+.picker-filters { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 5px; }
+.picker-filters button { min-height: 26px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
+.picker-filters button:hover { border-color: var(--link); color: var(--link); }
+.picker-filters button.selected { border-color: var(--link); background: #eef2fb; color: var(--link); font-weight: 600; }
+.picker-filters select { min-height: 26px; margin-left: auto; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; }

@@ -408,6 +408,9 @@ class AssetFilter(BaseModel):
     creator_missing: bool = False
     media_kind: str | None = None
     max_duration_seconds: int | None = None
+    #: "blurred" keeps only assets that already have that cut; "none" keeps
+    #: only those without one. Publishing usually wants one or the other.
+    has_version: str | None = None
 
 
 def asset_conditions(
@@ -433,6 +436,13 @@ def asset_conditions(
         values.append(MediaAsset.media_kind == filters.media_kind)
     if filters.max_duration_seconds:
         values.append(MediaAsset.duration_ms <= filters.max_duration_seconds * 1000)
+    if filters.has_version:
+        wanted = "blurred" if filters.has_version == "none" else filters.has_version
+        exists = select(MediaAssetVersion.id).where(
+            MediaAssetVersion.asset_id == MediaAsset.id,
+            MediaAssetVersion.version_kind == wanted,
+        ).exists()
+        values.append(~exists if filters.has_version == "none" else exists)
     if filters.q and filters.q.strip():
         escaped = (
             filters.q.casefold().strip()
@@ -487,6 +497,7 @@ def list_asset_ids(
     creator_missing: Annotated[bool, Query()] = False,
     media_kind: Annotated[Literal["video", "audio", "image"] | None, Query()] = None,
     max_duration_seconds: Annotated[int | None, Query(ge=1, le=86_400)] = None,
+    has_version: Annotated[Literal["blurred", "none"] | None, Query()] = None,
 ) -> dict[str, Any]:
     """Every asset id the current filter matches, for a true select-all.
 
@@ -497,7 +508,7 @@ def list_asset_ids(
     filters = AssetFilter(
         q=q, platform=platform, platform_missing=platform_missing, creator=creator,
         creator_missing=creator_missing, media_kind=media_kind,
-        max_duration_seconds=max_duration_seconds,
+        max_duration_seconds=max_duration_seconds, has_version=has_version,
     )
     where = asset_conditions(workspace_id, filters)
     matched = session.scalar(select(func.count(MediaAsset.id)).where(*where)) or 0
@@ -531,6 +542,7 @@ def list_assets(
     creator_missing: Annotated[bool, Query()] = False,
     media_kind: Annotated[Literal["video", "audio", "image"] | None, Query()] = None,
     max_duration_seconds: Annotated[int | None, Query(ge=1, le=86_400)] = None,
+    has_version: Annotated[Literal["blurred", "none"] | None, Query()] = None,
     sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> dict[str, Any]:
@@ -538,7 +550,7 @@ def list_assets(
     filters = AssetFilter(
         q=q, platform=platform, platform_missing=platform_missing, creator=creator,
         creator_missing=creator_missing, media_kind=media_kind,
-        max_duration_seconds=max_duration_seconds,
+        max_duration_seconds=max_duration_seconds, has_version=has_version,
     )
 
     def conditions(*, omit: str | None = None) -> list[Any]:

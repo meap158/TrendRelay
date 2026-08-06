@@ -132,3 +132,53 @@ def test_the_count_a_select_all_reports_is_the_count_it_would_select(session) ->
     selected = session.scalars(select(MediaAsset.id).where(*where)).all()
 
     assert counted == len(selected) == 2
+
+
+# --- filtering by a derived cut ----------------------------------------------- #
+
+
+def add_version(session, asset_id, kind="blurred"):
+    from trendrelay_api.media_models import MediaAssetVersion
+
+    session.add(
+        MediaAssetVersion(
+            workspace_id="w1", asset_id=asset_id, version_kind=kind,
+            path=f"C:/media/{asset_id}-{kind}.mp4", sha256=f"{asset_id}{kind}".ljust(64, "0"),
+            mime_type="video/mp4", size_bytes=1,
+        )
+    )
+    session.commit()
+
+
+def test_blurred_only_keeps_assets_that_have_that_cut(session) -> None:
+    add(session, "a1")
+    add(session, "a2")
+    add_version(session, "a1")
+
+    assert matching(session, AssetFilter(has_version="blurred")) == {"a1"}
+
+
+def test_none_keeps_only_the_assets_without_one(session) -> None:
+    """The inverse matters as much: it is the queue of what still needs doing."""
+    add(session, "a1")
+    add(session, "a2")
+    add_version(session, "a1")
+
+    assert matching(session, AssetFilter(has_version="none")) == {"a2"}
+
+
+def test_another_kind_of_version_does_not_count_as_blurred(session) -> None:
+    add(session, "a1")
+    add_version(session, "a1", kind="thumbnail")
+
+    assert matching(session, AssetFilter(has_version="blurred")) == set()
+    assert matching(session, AssetFilter(has_version="none")) == {"a1"}
+
+
+def test_the_cut_filter_combines_with_the_others(session) -> None:
+    add(session, "a1", kind="video")
+    add(session, "a2", kind="audio")
+    add_version(session, "a1")
+    add_version(session, "a2")
+
+    assert matching(session, AssetFilter(has_version="blurred", media_kind="video")) == {"a1"}

@@ -25,6 +25,12 @@ type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 /** Marks a drag as carrying one of our own library paths. */
 export const MEDIA_DRAG_TYPE = "application/x-trendrelay-media";
 
+/** What the picker narrows by, beyond the free-text search. */
+export type PickerFilters = {
+  hasVersion?: "blurred" | "none";
+  maxSeconds?: number;
+};
+
 export function clipLength(durationMs: number | null) {
   if (!durationMs) return "";
   const total = Math.round(durationMs / 1000);
@@ -101,11 +107,18 @@ export function MediaPicker({
   apiFetch: Fetcher;
   loading: boolean;
   failure: string | null;
-  onSearch: (query: string) => void;
+  onSearch: (query: string, filters: PickerFilters) => void;
   onPick: (asset: LibraryAsset) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const [filters, setFilters] = useState<PickerFilters>({});
+
+  /** Applied on change, because narrowing the list is a new search either way. */
+  function apply(next: PickerFilters) {
+    setFilters(next);
+    onSearch(query, next);
+  }
 
   // Stays mounted and is driven by `open`: unmounting it on close would cut
   // short the sequence that returns focus to whatever opened it.
@@ -118,7 +131,7 @@ export function MediaPicker({
     >
       <form
         className="picker-search"
-        onSubmit={(event) => { event.preventDefault(); onSearch(query); }}
+        onSubmit={(event) => { event.preventDefault(); onSearch(query, filters); }}
       >
         <input
           value={query}
@@ -129,6 +142,38 @@ export function MediaPicker({
           {loading ? "Searching" : "Search"}
         </Button>
       </form>
+
+      {/* The blurred cut is the one a handoff sends, so whether a clip has one
+          is the question worth asking most often here. */}
+      <div className="picker-filters" role="group" aria-label="Filter clips">
+        {([
+          [undefined, "All clips"],
+          ["blurred", "Faces blurred"],
+          ["none", "Not blurred"],
+        ] as const).map(([value, label]) => (
+          <button
+            key={label}
+            type="button"
+            className={filters.hasVersion === value ? "selected" : ""}
+            aria-pressed={filters.hasVersion === value}
+            onClick={() => apply({ ...filters, hasVersion: value })}
+          >{label}</button>
+        ))}
+        <select
+          aria-label="Longest clip"
+          value={filters.maxSeconds ?? ""}
+          onChange={(event) => apply({
+            ...filters,
+            maxSeconds: event.target.value ? Number(event.target.value) : undefined,
+          })}
+        >
+          <option value="">Any length</option>
+          <option value="15">Up to 15s</option>
+          <option value="30">Up to 30s</option>
+          <option value="60">Up to 1m</option>
+          <option value="180">Up to 3m</option>
+        </select>
+      </div>
       {failure && <p className="engine-warning" role="status">{failure}</p>}
       {!failure && !loading && !assets.length && (
         <p className="picker-empty">
