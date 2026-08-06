@@ -1091,7 +1091,7 @@ export default function PublishPage() {
                       ))}</div>
                       {/* Only networks with a real choice are asked about. */}
                       {targets[platform] && (activeProvider?.post_types?.[platform]?.length ?? 0) > 1 && (
-                        <div className="post-types" role="group" aria-label={`${platformLabels[platform]} post type`}>
+                        <div className="post-types" role="tablist" aria-label={`${platformLabels[platform]} post type`}>
                           {activeProvider?.post_types[platform].map((kind) => {
                             const active = (postTypes[platform] ?? activeProvider.post_types[platform][0].id) === kind.id;
                             return (
@@ -1151,12 +1151,11 @@ export default function PublishPage() {
             <p className="publish-blocked" role="status">{blockedReason}</p>
           )}
           <div className="publish-actions">
-            <Button type="submit" variant="secondary" block busy={busy === "preview"} disabled={busy !== null}>
-              {busy === "preview" ? "Checking" : "Dry-run this delivery"}
+            <Button type="submit" variant="secondary" busy={busy === "preview"} disabled={busy !== null}>
+              {busy === "preview" ? "Checking" : "Dry-run"}
             </Button>
             <Button
-              variant="danger"
-              block
+              variant={delivery === "now" ? "danger" : "primary"}
               busy={busy === "publish"}
               disabled={busy !== null || Boolean(blockedReason)}
               title={blockedReason ?? undefined}
