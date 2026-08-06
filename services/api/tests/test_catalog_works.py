@@ -373,7 +373,7 @@ def test_ad_spend_lands_on_the_work_and_produces_roas_over_all_editions() -> Non
     )
     assert imported.status_code == 200
     assert imported.json()["written"] == 1
-    assert imported.json()["unmatched_count"] == 0
+    assert imported.json()["skipped_count"] == 0
 
     for index, key in enumerate(("paperback", "hardcover", "ebook")):
         add_conversion(
@@ -427,8 +427,9 @@ def test_reimporting_the_same_spend_day_updates_rather_than_doubles_it() -> None
     assert corrected.json() == {
         "written": 0,
         "updated": 1,
-        "unmatched": [],
-        "unmatched_count": 0,
+        "skipped": [],
+        "skipped_count": 0,
+        "skipped_spend_cents": {},
     }
 
     work = request("GET", f"/api/workspaces/{workspace_id}/catalog/works").json()["works"][0]
@@ -455,7 +456,8 @@ def test_spend_naming_an_unknown_book_is_reported_rather_than_dropped() -> None:
             ]
         },
     )
-    assert response.json()["unmatched"] == ["B00NOTMINE"]
+    assert response.json()["skipped"][0]["label"] == "B00NOTMINE"
+    assert response.json()["skipped"][0]["method"] == "unresolved"
     assert response.json()["written"] == 0
 
 
@@ -592,6 +594,208 @@ def test_revenue_outside_an_advertised_campaign_moves_tacos_but_not_roas() -> No
     # which is why it is the lower number for a book with organic sales.
     assert usd["royalty_cents"] == 40_000
     assert usd["tacos"] == 0.25
+
+
+def spend_row(**overrides) -> dict:
+    return {
+        "external_reference": "ad-1",
+        "spend_date": "2026-07-15",
+        "currency": "USD",
+        "spend_cents": 10_000,
+        **overrides,
+    }
+
+
+def test_spend_resolves_from_an_identifier_in_the_campaign_name() -> None:
+    workspace_id = create_workspace()
+    seed_three_editions(workspace_id)
+    request("POST", f"/api/workspaces/{workspace_id}/catalog/works/group", json={})
+
+    # The shape a real Meta export has: names, no identifier column.
+    imported = request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/ad-spend/import",
+        json={"rows": [spend_row(campaign_name="B0H9CLBXDP | Quiet Ledger | Prospecting")]},
+    )
+    assert imported.json()["written"] == 1
+    assert imported.json()["skipped_count"] == 0
+
+    work = request("GET", f"/api/workspaces/{workspace_id}/catalog/works").json()["works"][0]
+    assert work["currencies"][0]["spend_cents"] == 10_000
+
+
+def test_a_title_only_match_is_held_back_until_it_is_accepted() -> None:
+    workspace_id = create_workspace()
+    seed_three_editions(workspace_id)
+    request("POST", f"/api/workspaces/{workspace_id}/catalog/works/group", json={})
+
+    preview = request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/ad-spend/resolve",
+        json={"rows": [spend_row(campaign_name="The Quiet Ledger - US - Broad")]},
+    ).json()
+    assert preview["needs_confirming"] == 1
+    assert preview["ready"] == 0
+    assert preview["rows"][0]["method"] == "title"
+
+    held = request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/ad-spend/import",
+        json={"rows": [spend_row(campaign_name="The Quiet Ledger - US - Broad")]},
+    ).json()
+    assert held["written"] == 0
+    assert held["skipped_count"] == 1
+    # The amount, not just the row count: one campaign can be most of a budget.
+    assert held["skipped_spend_cents"] == {"USD": 10_000}
+
+    accepted = request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/ad-spend/import",
+        json={
+            "rows": [spend_row(campaign_name="The Quiet Ledger - US - Broad")],
+            "accept_suggested": True,
+        },
+    ).json()
+    assert accepted["written"] == 1
+
+
+def test_mapping_a_campaign_corrects_spend_already_imported() -> None:
+    workspace_id = create_workspace()
+    seed_three_editions(workspace_id)
+    other = add_product(
+        workspace_id, key="other", name="Tidewrack", author="Ana Roe", identifier="9780306406157"
+    )
+    second = add_product(
+        workspace_id,
+        key="other-2",
+        name="Tidewrack (Kindle Edition)",
+        author="Ana Roe",
+        identifier="B00TIDEAAA",
+    )
+    request("POST", f"/api/workspaces/{workspace_id}/catalog/works/group", json={})
+    merged = request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/works/merge",
+        json={"product_ids": [other, second], "title": "Tidewrack", "author": "Ana Roe"},
+    ).json()
+
+    request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/ad-spend/import",
+        json={"rows": [spend_row(campaign_name="B0H9CLBXDP evergreen")]},
+    )
+
+    # The campaign was mislabelled: it actually advertised the other book. The
+    # decision has to reach the spend already imported, not only the next batch.
+    mapped = request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/ad-spend/mappings",
+        json={"campaign_name": "B0H9CLBXDP evergreen", "work_id": merged["work_id"]},
+    ).json()
+    assert mapped["moved_entries"] == 1
+
+    works = request("GET", f"/api/workspaces/{workspace_id}/catalog/works").json()["works"]
+    by_title = {item["title"]: item for item in works}
+    assert by_title["Tidewrack"]["currencies"][0]["spend_cents"] == 10_000
+    assert by_title["The Quiet Ledger"]["currencies"] == []
+
+
+def test_a_stored_mapping_beats_the_identifier_in_the_name() -> None:
+    workspace_id = create_workspace()
+    seed_three_editions(workspace_id)
+    other = add_product(
+        workspace_id, key="other", name="Tidewrack", author="Ana Roe", identifier="9780306406157"
+    )
+    second = add_product(
+        workspace_id,
+        key="other-2",
+        name="Tidewrack (Kindle Edition)",
+        author="Ana Roe",
+        identifier="B00TIDEAAA",
+    )
+    request("POST", f"/api/workspaces/{workspace_id}/catalog/works/group", json={})
+    merged = request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/works/merge",
+        json={"product_ids": [other, second], "title": "Tidewrack", "author": "Ana Roe"},
+    ).json()
+    request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/ad-spend/mappings",
+        json={"campaign_name": "B0H9CLBXDP evergreen", "work_id": merged["work_id"]},
+    )
+
+    preview = request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/ad-spend/resolve",
+        json={"rows": [spend_row(campaign_name="B0H9CLBXDP evergreen")]},
+    ).json()
+    # A person decided this, so reading the ASIN out of the name must not undo it.
+    assert preview["rows"][0]["method"] == "mapping"
+    assert preview["rows"][0]["work_id"] == merged["work_id"]
+
+
+def test_a_campaign_naming_two_books_is_left_for_a_person() -> None:
+    workspace_id = create_workspace()
+    seed_three_editions(workspace_id)
+    other = add_product(
+        workspace_id, key="other", name="Tidewrack", author="Ana Roe", identifier="9780306406157"
+    )
+    second = add_product(
+        workspace_id,
+        key="other-2",
+        name="Tidewrack (Kindle Edition)",
+        author="Ana Roe",
+        identifier="B00TIDEAAA",
+    )
+    request("POST", f"/api/workspaces/{workspace_id}/catalog/works/group", json={})
+    request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/works/merge",
+        json={"product_ids": [other, second], "title": "Tidewrack", "author": "Ana Roe"},
+    )
+
+    result = request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/ad-spend/import",
+        json={
+            "rows": [spend_row(campaign_name="B0H9CLBXDP + 9780306406157 bundle")],
+            "accept_suggested": True,
+        },
+    ).json()
+    # Splitting one budget between two books would be an invention, so it waits.
+    assert result["written"] == 0
+    assert result["skipped"][0]["method"] == "ambiguous"
+
+
+def test_spend_naming_nothing_recognisable_is_reported_with_its_amount() -> None:
+    workspace_id = create_workspace()
+    seed_three_editions(workspace_id)
+    request("POST", f"/api/workspaces/{workspace_id}/catalog/works/group", json={})
+
+    result = request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/ad-spend/import",
+        json={"rows": [spend_row(campaign_name="Summer promo 3", spend_cents=42_000)]},
+    ).json()
+    assert result["written"] == 0
+    assert result["skipped"][0]["method"] == "unresolved"
+    assert result["skipped_spend_cents"] == {"USD": 42_000}
+
+
+def test_a_row_naming_no_book_at_all_is_rejected_outright() -> None:
+    workspace_id = create_workspace()
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/ad-spend/import",
+        json={"rows": [{
+            "external_reference": "ad-1",
+            "spend_date": "2026-07-15",
+            "currency": "USD",
+            "spend_cents": 100,
+        }]},
+    )
+    assert response.status_code == 422
 
 
 def test_a_work_with_spend_but_no_revenue_reports_no_ratio_rather_than_zero() -> None:

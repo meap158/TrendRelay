@@ -16,10 +16,11 @@ from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from trendrelay_api.ad_attribution import Resolution, campaign_key, resolve
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.catalog_identifiers import (
     ONIX_PRODUCT_FORM,
@@ -27,7 +28,12 @@ from trendrelay_api.catalog_identifiers import (
     parse_identifier,
     work_key,
 )
-from trendrelay_api.catalog_models import AdSpendEntry, CatalogWork, WorkEdition
+from trendrelay_api.catalog_models import (
+    AdCampaignMapping,
+    AdSpendEntry,
+    CatalogWork,
+    WorkEdition,
+)
 from trendrelay_api.catalog_works import (
     AUTO_GROUP_CONFIDENCE,
     WorkEconomics,
@@ -73,11 +79,19 @@ class DetachRequest(BaseModel):
 
 
 class SpendRow(BaseModel):
-    """One day of spend as an ad platform's insights export reports it."""
+    """One day of spend as an ad platform's insights export reports it.
 
-    #: The book this spend was for, named by any identifier one of its editions
-    #: carries. An ISBN-13, an ISBN-10 or an ASIN all resolve to the same work.
-    identifier: str = Field(min_length=1, max_length=64)
+    Either name the book directly with an identifier, or supply the ad platform's
+    own names and let them be resolved. Real exports only ever have the second,
+    which is why the names are what the import is built around.
+    """
+
+    #: Any identifier one of the book's editions carries. An ISBN-13, an ISBN-10
+    #: or an ASIN all resolve to the same work. Wins over the names when given.
+    identifier: str | None = Field(default=None, max_length=64)
+    campaign_name: str | None = Field(default=None, max_length=400)
+    adset_name: str | None = Field(default=None, max_length=400)
+    ad_name: str | None = Field(default=None, max_length=400)
     #: The platform's own id for the ad or ad set. Re-importing the same window
     #: updates these rows rather than adding a second copy of the spend.
     external_reference: str = Field(min_length=1, max_length=200)
@@ -93,10 +107,34 @@ class SpendRow(BaseModel):
     def _upper(cls, value: str) -> str:
         return value.upper()
 
+    @model_validator(mode="after")
+    def _needs_something_to_resolve_by(self) -> SpendRow:
+        if not (self.identifier or self.campaign_name or self.adset_name or self.ad_name):
+            raise ValueError(
+                "A spend row needs an identifier or an ad, ad set or campaign name."
+            )
+        return self
+
+    @property
+    def label(self) -> str:
+        return self.campaign_name or self.ad_name or self.identifier or self.external_reference
+
 
 class SpendImport(BaseModel):
     source: str = Field(default="meta", min_length=1, max_length=40)
     rows: list[SpendRow] = Field(min_length=1, max_length=MAX_SPEND_ROWS)
+    #: Import rows whose book was guessed from the campaign name. Off by default:
+    #: spend attributed to the wrong book is worse than spend left out, because
+    #: it flatters one book's return while dragging down another's.
+    accept_suggested: bool = False
+
+
+class MappingRequest(BaseModel):
+    """Record that this campaign advertises this book."""
+
+    campaign_name: str = Field(min_length=1, max_length=400)
+    work_id: str = Field(min_length=1, max_length=64)
+    source: str = Field(default="meta", min_length=1, max_length=40)
 
 
 def _candidates(session: Session, workspace_id: str) -> list[Any]:
@@ -420,36 +458,25 @@ def import_ad_spend(
 ) -> dict[str, Any]:
     """Record daily ad spend against the book it was spent on.
 
-    Rows name an edition by its identifier and are stored against that edition's
-    *work*, because the campaign was for the book: a reader who clicks an ad buys
-    whichever format suits them, so charging the cost to one format would make
-    every format's numbers wrong.
+    Spend is stored against the *work*, never one edition: the campaign was for
+    the book, and a reader who clicks an ad buys whichever format suits them, so
+    charging the cost to one format would make every format's numbers wrong.
+
+    Rows that cannot be attributed are returned rather than skipped quietly.
+    Spend that fails to attach makes every book's return look better than it is,
+    which is the one failure here that the numbers themselves would not show.
     """
     require_role(membership(session, workspace_id, user.id), EDITORS)
     ensure_profile(session, user)
 
-    editions = session.execute(
-        select(WorkEdition).where(
-            WorkEdition.workspace_id == workspace_id,
-            WorkEdition.work_id.is_not(None),
-        )
-    ).scalars().all()
-    by_identifier: dict[str, WorkEdition] = {}
-    for edition in editions:
-        if edition.identifier:
-            by_identifier[edition.identifier] = edition
-
     written = 0
     updated = 0
-    unmatched: list[str] = []
+    skipped: list[dict[str, Any]] = []
 
     for row in body.rows:
-        identifier = parse_identifier(row.identifier)
-        edition = by_identifier.get(identifier.canonical) or by_identifier.get(identifier.value)
-        if edition is None:
-            # Reported rather than dropped silently: unattributed spend makes
-            # every ratio look better than it is, so it has to be visible.
-            unmatched.append(row.identifier)
+        outcome = _resolve_row(session, workspace_id=workspace_id, source=body.source, row=row)
+        if outcome.work_id is None or (not outcome.automatic and not body.accept_suggested):
+            skipped.append(_skip_view(row, outcome))
             continue
 
         existing = session.execute(
@@ -465,11 +492,13 @@ def import_ad_spend(
             session.add(
                 AdSpendEntry(
                     workspace_id=workspace_id,
-                    work_id=edition.work_id,
-                    product_id=edition.product_id,
+                    work_id=outcome.work_id,
+                    product_id=None,
                     campaign_id=row.campaign_id,
                     source=body.source,
                     external_reference=row.external_reference,
+                    campaign_key=outcome.campaign_key or None,
+                    campaign_name=row.campaign_name,
                     spend_date=row.spend_date,
                     currency=row.currency,
                     spend_cents=row.spend_cents,
@@ -480,9 +509,10 @@ def import_ad_spend(
             )
             written += 1
         else:
-            existing.work_id = edition.work_id
-            existing.product_id = edition.product_id
+            existing.work_id = outcome.work_id
             existing.campaign_id = row.campaign_id
+            existing.campaign_key = outcome.campaign_key or None
+            existing.campaign_name = row.campaign_name
             existing.currency = row.currency
             existing.spend_cents = row.spend_cents
             existing.impressions = row.impressions
@@ -502,13 +532,222 @@ def import_ad_spend(
             "source": body.source,
             "written": written,
             "updated": updated,
-            "unmatched": len(unmatched),
+            "skipped": len(skipped),
         },
     )
     session.commit()
     return {
         "written": written,
         "updated": updated,
-        "unmatched": unmatched[:50],
-        "unmatched_count": len(unmatched),
+        "skipped": skipped[:100],
+        "skipped_count": len(skipped),
+        "skipped_spend_cents": _skipped_totals(skipped),
     }
+
+
+def _resolve_row(
+    session: Session, *, workspace_id: str, source: str, row: SpendRow
+) -> Resolution:
+    """Which book this row belongs to, preferring a stated identifier."""
+    if row.identifier:
+        identifier = parse_identifier(row.identifier)
+        edition = session.execute(
+            select(WorkEdition).where(
+                WorkEdition.workspace_id == workspace_id,
+                WorkEdition.work_id.is_not(None),
+                WorkEdition.identifier.in_(
+                    [value for value in {identifier.canonical, identifier.value} if value]
+                ),
+            )
+        ).scalars().first()
+        if edition is not None:
+            return Resolution(
+                work_id=edition.work_id,
+                method="identifier",
+                confidence=100,
+                reason=f"Row names {row.identifier}.",
+                campaign_key=campaign_key(row.campaign_name),
+            )
+        return Resolution(
+            work_id=None,
+            method="unresolved",
+            confidence=0,
+            reason=f"No grouped book carries {row.identifier}.",
+            campaign_key=campaign_key(row.campaign_name),
+        )
+
+    return resolve(
+        session,
+        workspace_id=workspace_id,
+        source=source,
+        campaign_name=row.campaign_name,
+        adset_name=row.adset_name,
+        ad_name=row.ad_name,
+    )
+
+
+def _skip_view(row: SpendRow, outcome: Resolution) -> dict[str, Any]:
+    return {
+        "label": row.label,
+        "campaign_name": row.campaign_name,
+        "campaign_key": outcome.campaign_key,
+        "external_reference": row.external_reference,
+        "spend_date": row.spend_date.isoformat(),
+        "currency": row.currency,
+        "spend_cents": row.spend_cents,
+        "method": outcome.method,
+        "reason": outcome.reason,
+        # Present for a guessed match, so the interface can offer "this campaign
+        # is that book" as one click rather than a search.
+        "suggested_work_id": outcome.work_id if not outcome.automatic else None,
+    }
+
+
+def _skipped_totals(skipped: list[dict[str, Any]]) -> dict[str, int]:
+    """How much spend went unattributed, per currency.
+
+    A count of rows understates this — one campaign can be most of a budget — and
+    the amount is what decides whether the ratios above are worth reading.
+    """
+    totals: dict[str, int] = {}
+    for item in skipped:
+        totals[item["currency"]] = totals.get(item["currency"], 0) + item["spend_cents"]
+    return totals
+
+
+@router.post("/ad-spend/resolve")
+def resolve_ad_spend(
+    workspace_id: str,
+    body: SpendImport,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Say what each row would attribute to, without writing anything.
+
+    Worth having as its own call: an import that silently drops a third of a
+    budget looks identical to one that worked, and this is how that gets seen
+    before the numbers are trusted.
+    """
+    membership(session, workspace_id, user.id)
+
+    rows = []
+    for row in body.rows:
+        outcome = _resolve_row(session, workspace_id=workspace_id, source=body.source, row=row)
+        rows.append(
+            {
+                **_skip_view(row, outcome),
+                "work_id": outcome.work_id,
+                "automatic": outcome.automatic,
+                "confidence": outcome.confidence,
+            }
+        )
+    return {
+        "rows": rows,
+        "ready": sum(1 for item in rows if item["automatic"]),
+        "needs_confirming": sum(
+            1 for item in rows if item["work_id"] and not item["automatic"]
+        ),
+        "unresolved": sum(1 for item in rows if not item["work_id"]),
+    }
+
+
+@router.get("/ad-spend/mappings")
+def list_mappings(
+    workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
+) -> dict[str, Any]:
+    """Every campaign whose book somebody has settled."""
+    membership(session, workspace_id, user.id)
+    rows = session.execute(
+        select(AdCampaignMapping, CatalogWork)
+        .join(CatalogWork, CatalogWork.id == AdCampaignMapping.work_id)
+        .where(AdCampaignMapping.workspace_id == workspace_id)
+        .order_by(AdCampaignMapping.campaign_name)
+    ).all()
+    return {
+        "mappings": [
+            {
+                "id": mapping.id,
+                "campaign_name": mapping.campaign_name,
+                "campaign_key": mapping.campaign_key,
+                "source": mapping.source,
+                "work_id": work.id,
+                "work_title": work.title,
+                "origin": mapping.origin,
+            }
+            for mapping, work in rows
+        ]
+    }
+
+
+@router.post("/ad-spend/mappings")
+def create_mapping(
+    workspace_id: str,
+    body: MappingRequest,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Settle which book a campaign advertises, for this import and every later one."""
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    ensure_profile(session, user)
+
+    work = session.get(CatalogWork, body.work_id)
+    if work is None or work.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="That book was not found.")
+
+    key = campaign_key(body.campaign_name)
+    if not key:
+        raise HTTPException(status_code=422, detail="That campaign name has nothing to match on.")
+
+    existing = session.execute(
+        select(AdCampaignMapping).where(
+            AdCampaignMapping.workspace_id == workspace_id,
+            AdCampaignMapping.source == body.source,
+            AdCampaignMapping.campaign_key == key,
+        )
+    ).scalar_one_or_none()
+
+    if existing is None:
+        existing = AdCampaignMapping(
+            workspace_id=workspace_id,
+            work_id=work.id,
+            source=body.source,
+            campaign_key=key,
+            campaign_name=body.campaign_name,
+            origin="manual",
+            created_by=user.id,
+        )
+        session.add(existing)
+    else:
+        existing.work_id = work.id
+        existing.campaign_name = body.campaign_name
+        existing.origin = "manual"
+        existing.updated_at = datetime.now(tz=None)
+
+    # Spend already imported under a different answer is corrected too, so the
+    # decision applies to the history rather than only to what comes next.
+    moved = 0
+    for entry in session.execute(
+        select(AdSpendEntry).where(
+            AdSpendEntry.workspace_id == workspace_id,
+            AdSpendEntry.source == body.source,
+            AdSpendEntry.campaign_key == key,
+            AdSpendEntry.work_id != work.id,
+        )
+    ).scalars():
+        entry.work_id = work.id
+        entry.updated_at = datetime.now(tz=None)
+        moved += 1
+
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "catalog.ad_spend.mapped",
+        "ad_campaign_mapping",
+        work.id,
+        {"campaign_name": body.campaign_name, "moved_entries": moved},
+    )
+    session.commit()
+    return {"work_id": work.id, "campaign_key": key, "moved_entries": moved}
