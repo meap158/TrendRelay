@@ -1,5 +1,6 @@
 "use client";
 
+import { Check } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
@@ -9,6 +10,7 @@ import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, buttonClass } from "../ui/button";
 import { Badge } from "../ui/primitives";
 import { ClipEditor } from "./clip-editor";
+import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 
 type Workspace = { id: string; name: string; role: string };
 type ViewMode = "gallery" | "list";
@@ -347,6 +349,10 @@ type BulkAction = {
   reason: string | null;
 };
 
+const isSortOrder = oneOf("newest", "oldest", "title", "duration");
+const isGroupBy = oneOf("none", "channel", "source");
+const isViewMode = oneOf("gallery", "list");
+
 export default function LibraryPage() {
   const { loading, user, apiFetch } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -359,11 +365,17 @@ export default function LibraryPage() {
   const [channelFilter, setChannelFilter] = useState("");
   const [platformFilter, setPlatformFilter] = useState("");
   const [mediaKind, setMediaKind] = useState<"" | Asset["media_kind"]>("");
-  const [sortOrder, setSortOrder] = useState("newest");
-  const [groupBy, setGroupBy] = useState<GroupBy>("none");
+  const [sortOrder, setSortOrder] = usePersistedState(
+    "trendrelay.library.sort", "newest", isSortOrder,
+  );
+  const [groupBy, setGroupBy] = usePersistedState<GroupBy>(
+    "trendrelay.library.groupBy", "none", isGroupBy,
+  );
   const [facets, setFacets] = useState<LibraryFacets>({ channels: [], platforms: [], media_kinds: [] });
   const [total, setTotal] = useState(0);
-  const [viewMode, setViewMode] = useState<ViewMode>("gallery");
+  const [viewMode, setViewMode] = usePersistedState<ViewMode>(
+    "trendrelay.library.view", "gallery", isViewMode,
+  );
   const [continueVideoPlayback, setContinueVideoPlayback] = useState(false);
   const autoSyncedWorkspaces = useRef(new Set<string>());
   const [busy, setBusy] = useState("");
@@ -597,7 +609,7 @@ export default function LibraryPage() {
             event.stopPropagation();
             toggleSelection(asset.id, event.shiftKey);
           }}
-        >{selection.has(asset.id) ? "✓" : ""}</span>
+        >{selection.has(asset.id) && <Check size={12} strokeWidth={3.5} aria-hidden="true" />}</span>
         <Thumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
         <span>
           <strong>{asset.title}</strong>
@@ -962,7 +974,7 @@ export default function LibraryPage() {
               <button type="button" className={mediaKind === "audio" ? "selected" : ""} aria-pressed={mediaKind === "audio"} onClick={() => setMediaKind("audio")}>Audio <span>{mediaCount("audio")}</span></button>
             </div>
             <label>Sort
-              <select aria-label="Sort media" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}>
+              <select aria-label="Sort media" value={sortOrder} onChange={(event) => { if (isSortOrder(event.target.value)) setSortOrder(event.target.value); }}>
                 <option value="newest">Newest</option>
                 <option value="oldest">Oldest</option>
                 <option value="title">Title</option>
@@ -1023,7 +1035,7 @@ export default function LibraryPage() {
                     ? new Set()
                     : new Set(assets.map((asset) => asset.id)));
                 }}
-              >{allLoadedSelected ? "✓" : ""}</span>
+              >{allLoadedSelected && <Check size={12} strokeWidth={3.5} aria-hidden="true" />}</span>
               {/* "Loaded" is stated rather than implied: the grid holds the
                   current page, not every asset the filter matches. */}
               {/* The count is of everything picked, which after "all matching"

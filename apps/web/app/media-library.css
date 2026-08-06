@@ -24,7 +24,7 @@
 .library-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .library-list > button { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px; color: var(--text); background: var(--panel); text-align: left; cursor: pointer; }
 .library-list > button.selected { border-color: var(--link); background: #f0f3f8; }
-.library-list > button > span { display: grid; gap: 5px; align-content: center; min-width: 0; }
+.library-list > button > span:not(.library-pick) { display: grid; gap: 5px; align-content: center; min-width: 0; }
 .library-list strong, .library-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .library-list small { color: var(--muted); font-size: 10px; }
 .library-thumbnail { width: 92px; height: 58px; border-radius: var(--radius-sm); object-fit: cover; background: #edf0f3; }
@@ -133,7 +133,9 @@
 .library-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .library-gallery > button { display: grid; min-width: 0; overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); padding: 0; }
 .library-gallery > button.selected { border-color: var(--link); box-shadow: 0 0 0 2px rgba(26, 86, 219, 0.14); }
-.library-gallery > button > span { display: grid; gap: 5px; min-width: 0; padding: 8px; }
+/* The tick is also a direct span of the card, and this rule is the more
+ * specific of the two, so it was giving the checkbox the caption's padding. */
+.library-gallery > button > span:not(.library-pick) { display: grid; gap: 5px; min-width: 0; padding: 8px; }
 .library-gallery strong, .library-gallery small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .library-gallery small { color: var(--muted); font-size: 10px; }
 .library-gallery .library-thumbnail-frame { width: 100%; height: auto; max-height: 132px; aspect-ratio: 16 / 9; border-radius: 0; }
@@ -215,7 +217,10 @@
 /* --- batch selection -------------------------------------------------------- */
 /* The tick sits on the card but is its own control, so choosing items never
  * competes with opening one. */
-.library-pick { display: grid; place-items: center; width: 18px; height: 18px; flex: none; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: transparent; font-size: 12px; font-weight: 700; line-height: 1; cursor: pointer; }
+/* A drawn tick rather than a text one: the ✓ character carries its own
+ * baseline and never sits centred in a box this small. */
+.library-pick { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: none; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: transparent; cursor: pointer; }
+.library-pick svg { display: block; }
 .library-pick:hover { border-color: var(--link); }
 .library-pick[aria-checked="true"] { border-color: var(--link); background: var(--link); color: #fff; }
 .library-pick:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }

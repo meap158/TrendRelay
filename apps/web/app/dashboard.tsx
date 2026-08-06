@@ -6,6 +6,9 @@ import { RefreshCw } from "lucide-react";
 
 import { useAuth } from "./auth-provider";
 import { Button, buttonClass } from "./ui/button";
+import { numberIn, oneOf, subsetOf, usePersistedState } from "./ui/use-persisted-state";
+
+const isDownloadMode = oneOf("post", "like", "mix", "music");
 import { useJobs } from "./jobs-provider";
 
 type Workspace = { id: string; name: string; role: string };
@@ -204,10 +207,18 @@ export default function Dashboard() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState("post");
-  /** Video is always fetched; these are the extras fetched alongside it. */
-  const [mediaKinds, setMediaKinds] = useState<string[]>(["video", "image", "audio"]);
-  const [limit, setLimit] = useState(0);
+  // Download options are a standing preference, not a per-visit choice. The
+  // same guard checks what is restored and what the select hands back.
+  const [mode, setMode] = usePersistedState(
+    "trendrelay.downloads.mode", "post", isDownloadMode,
+  );
+  /** Video is always fetched; cover images and audio are opt-in extras. */
+  const [mediaKinds, setMediaKinds] = usePersistedState<string[]>(
+    "trendrelay.downloads.mediaKinds", ["video"], subsetOf("video", "image", "audio"),
+  );
+  const [limit, setLimit] = usePersistedState(
+    "trendrelay.downloads.limit", 0, numberIn(0, 10, 20, 50, 100),
+  );
   const [status, setStatus] = useState<MediaStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -577,7 +588,7 @@ export default function Dashboard() {
           <details className="download-options">
             <summary>Download options <span>{modeLabel(mode)} · {limit === 0 ? "all videos" : `up to ${limit} per source`} · {mediaKinds.length === 3 ? "video, images and audio" : mediaKinds.length === 1 ? "video only" : `video and ${mediaKinds.includes("image") ? "images" : "audio"}`}</span></summary>
             <div className="download-options-grid">
-              <label><span>Content from profiles</span><select value={mode} onChange={(event) => setMode(event.target.value)}><option value="post">Published posts</option><option value="like">Liked videos</option><option value="mix">Collections</option><option value="music">Music videos</option></select></label>
+              <label><span>Content from profiles</span><select value={mode} onChange={(event) => { if (isDownloadMode(event.target.value)) setMode(event.target.value); }}><option value="post">Published posts</option><option value="like">Liked videos</option><option value="mix">Collections</option><option value="music">Music videos</option></select></label>
               <fieldset><legend>Videos per source</legend><div className="limit-presets">{[0, 10, 20, 50, 100].map((value) => <button key={value} type="button" className={limit === value ? "selected" : ""} aria-pressed={limit === value} onClick={() => setLimit(value)}>{value === 0 ? "All" : value}</button>)}</div></fieldset>
               <fieldset>
                 <legend>What to fetch</legend>

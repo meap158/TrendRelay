@@ -896,14 +896,15 @@ def test_creator_profile_link_is_omitted_when_the_author_id_is_unusable(
 # --- which kinds get fetched ------------------------------------------------- #
 
 
-def test_all_three_kinds_are_requested_by_default() -> None:
+def test_only_video_is_requested_by_default() -> None:
+    """The extras are two more files per post, so they are opted into."""
     from trendrelay_api.integrations.douyin import DownloadRequest
 
     request = DownloadRequest(
         workspace_id="w1", urls=["https://v.douyin.com/abc/"], confirm_external_action=True
     )
 
-    assert request.media_kinds == ["video", "image", "audio"]
+    assert request.media_kinds == ["video"]
 
 
 def test_choosing_video_only_drops_the_extras_from_the_command(monkeypatch, tmp_path) -> None:

@@ -97,9 +97,11 @@ class DownloadRequest(BaseModel):
     #: Which kinds to fetch. The video itself is always fetched, since a Douyin
     #: post is a video; the cover image and the audio track are extras the
     #: downloader only requests when asked, so leaving one out saves the
-    #: bandwidth rather than downloading and discarding it.
+    #: bandwidth rather than downloading and discarding it. The default is video
+    #: alone: the extras are two more files per post and a library full of
+    #: covers is what most of this workspace turned out to be.
     media_kinds: list[Literal["video", "image", "audio"]] = Field(
-        default_factory=lambda: ["video", "image", "audio"], min_length=1, max_length=3
+        default_factory=lambda: ["video"], min_length=1, max_length=3
     )
     confirm_external_action: bool = False
 
@@ -526,6 +528,9 @@ def _download_source(url: str, output_root: Path, request: dict[str, Any]) -> tu
         "--limit",
         str(request["limit"]),
     ]
+    # A payload without the field predates it and was queued when everything was
+    # fetched, so it keeps that behaviour rather than being changed after the
+    # fact. New requests default to video alone.
     kinds = request.get("media_kinds") or ["video", "image", "audio"]
     if "image" in kinds:
         command.append("--covers")
