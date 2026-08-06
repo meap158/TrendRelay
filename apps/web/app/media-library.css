@@ -211,3 +211,19 @@
 .library-meta-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .library-item-navigation { display: flex; align-items: center; gap: 4px; }
 .library-item-navigation span { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* --- batch selection -------------------------------------------------------- */
+/* The tick sits on the card but is its own control, so choosing items never
+ * competes with opening one. */
+.library-pick { display: grid; place-items: center; width: 18px; height: 18px; flex: none; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: transparent; font-size: 12px; font-weight: 700; line-height: 1; cursor: pointer; }
+.library-pick:hover { border-color: var(--link); }
+.library-pick[aria-checked="true"] { border-color: var(--link); background: var(--link); color: #fff; }
+.library-pick:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+.library-collection button.picked { border-color: var(--link); box-shadow: inset 0 0 0 1px var(--link); }
+.library-gallery .library-pick { position: absolute; top: 7px; left: 7px; z-index: 1; }
+.library-gallery > button { position: relative; }
+.library-selection-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.library-selection-bar.active { border-color: var(--link); background: #f4f7fd; }
+.library-selection-bar > strong { font-size: 11px; font-weight: 600; }
+.library-selection-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.library-selection-note { margin-left: auto; color: var(--muted); font-size: 11px; }

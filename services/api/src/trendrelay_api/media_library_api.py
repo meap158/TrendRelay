@@ -15,6 +15,7 @@ from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, field_valida
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
+from trendrelay_api import bulk_actions
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, ensure_profile, membership, require_role
@@ -680,6 +681,67 @@ def submit_face_blur(
         raise HTTPException(status_code=422, detail=str(error)) from error
     background_tasks.add_task(run_blur_job, job["id"])
     return {"job": job}
+
+
+class BulkRequest(BaseModel):
+    action: str = Field(min_length=1, max_length=60)
+    asset_ids: list[str] = Field(min_length=1, max_length=200)
+    confirm_external_action: bool = False
+
+
+@router.get("/bulk-actions")
+def list_bulk_actions(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """The tools that can run over a selection, and why one is unavailable."""
+    membership(session, workspace_id, user.id)
+    return {"actions": bulk_actions.catalogue()}
+
+
+@router.post("/bulk", status_code=202)
+def run_bulk_action(
+    workspace_id: str,
+    body: BulkRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Queue one job per eligible asset and report the outcome of each."""
+    try:
+        action = bulk_actions.resolve(body.action)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    require_role(membership(session, workspace_id, user.id), set(action.roles))
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{action.label} rewrites media and needs explicit confirmation.",
+        )
+    try:
+        outcome = bulk_actions.run(workspace_id, body.action, body.asset_ids)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+    from trendrelay_api.integrations.face_blur import run_blur_job
+
+    for job_id in outcome["job_ids"]:
+        background_tasks.add_task(run_blur_job, job_id)
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        f"media_library.bulk.{action.id}",
+        "media_asset",
+        ",".join(body.asset_ids[:10]),
+        {"counts": outcome["counts"]},
+    )
+    return outcome
 
 
 @router.post("/assets/{asset_id}/enrichment", status_code=201)

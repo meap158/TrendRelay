@@ -7,6 +7,7 @@ import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, buttonClass } from "../ui/button";
+import { Badge } from "../ui/primitives";
 
 type Workspace = { id: string; name: string; role: string };
 type ViewMode = "gallery" | "list";
@@ -334,6 +335,17 @@ function MediaPreview({
     </article>
   );
 }
+type BulkAction = {
+  id: string;
+  label: string;
+  verb: string;
+  description: string;
+  media_kinds: string[];
+  max_batch: number;
+  available: boolean;
+  reason: string | null;
+};
+
 export default function LibraryPage() {
   const { loading, user, apiFetch } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -367,6 +379,10 @@ export default function LibraryPage() {
   } | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  /** Anchor for shift-click range selection. */
+  const [lastPicked, setLastPicked] = useState<string | null>(null);
+  const [bulkActions, setBulkActions] = useState<BulkAction[]>([]);
 
   const selected = assets.find((asset) => asset.id === selectedId);
   const selectedSourceLinks = selected
@@ -447,9 +463,94 @@ export default function LibraryPage() {
     return source.find((facet) => facet.label === label)?.count ?? loadedCount;
   }
 
+  /** Ids the batch tools will act on. Kept apart from `selectedId`, which is
+      the one asset being previewed - browsing and selecting are different jobs. */
+  // Scoped to what is on screen, so an id left over from another filter can
+  // never be acted on - and comes back if that filter is restored.
+  const selectionList = assets.filter((asset) => selection.has(asset.id));
+  const allLoadedSelected = assets.length > 0 && selectionList.length === assets.length;
+  const deleteAction = bulkActions.find((action) => action.id === "delete");
+
+  function toggleSelection(assetId: string, extend: boolean) {
+    const next = new Set(selection);
+    if (extend && lastPicked) {
+      // Shift-click fills the run between the anchor and here, which is the
+      // only bearable way to choose forty items out of two thousand.
+      const from = assets.findIndex((asset) => asset.id === lastPicked);
+      const to = assets.findIndex((asset) => asset.id === assetId);
+      if (from >= 0 && to >= 0) {
+        const [start, end] = from < to ? [from, to] : [to, from];
+        for (const asset of assets.slice(start, end + 1)) next.add(asset.id);
+        setSelection(next);
+        return;
+      }
+    }
+    if (next.has(assetId)) next.delete(assetId);
+    else next.add(assetId);
+    setSelection(next);
+    setLastPicked(assetId);
+  }
+
+  async function runBulkAction(action: BulkAction, only?: string[]) {
+    const ids = only ?? selectionList.map((asset) => asset.id);
+    if (!ids.length) return;
+    if (ids.length > action.max_batch) {
+      setError(`${action.label} runs on up to ${action.max_batch} items at a time. ${ids.length} are selected.`);
+      return;
+    }
+    const subject = `${ids.length} item${ids.length === 1 ? "" : "s"}`;
+    const prompt = action.id === "delete"
+      ? `Delete ${subject} from the library? ${action.description}`
+      : `${action.label} on ${subject}?`;
+    if (!window.confirm(prompt)) return;
+    setBusy(`bulk-${action.id}`);
+    setError("");
+    setMessage("");
+    try {
+      const response = await apiFetch(`/api/workspaces/${workspaceId}/media/library/bulk`, {
+        method: "POST",
+        body: JSON.stringify({ action: action.id, asset_ids: ids, confirm_external_action: true }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail ?? `${action.label} could not start.`);
+      const { queued, skipped, failed, missing } = body.counts;
+      // Every outcome is reported: a bare "queued" would hide that a third of
+      // the selection was skipped for already being done.
+      const parts = [`${queued} queued`];
+      if (skipped) parts.push(`${skipped} skipped`);
+      if (failed) parts.push(`${failed} failed`);
+      if (missing) parts.push(`${missing} missing`);
+      setMessage(`${action.verb}: ${parts.join(" · ")}.`);
+      if (queued) {
+        setSelection(new Set());
+        // Deleting changes the list itself, so it has to be read again.
+        if (action.id === "delete") await refresh(workspaceId);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : `${action.label} could not start.`);
+    } finally {
+      setBusy("");
+    }
+  }
+
   function renderAsset(asset: Asset) {
     return (
-      <button className={`${selectedId === asset.id ? "selected" : ""}${asset.versions.some((version) => version.kind === "blurred") ? " has-versions" : ""}`} key={asset.id} aria-label={`Open ${asset.title}`} aria-pressed={selectedId === asset.id} onClick={() => setSelectedId(asset.id)}>
+      <button className={`${selectedId === asset.id ? "selected" : ""}${asset.versions.some((version) => version.kind === "blurred") ? " has-versions" : ""}${selection.has(asset.id) ? " picked" : ""}`} key={asset.id} aria-label={`Open ${asset.title}`} aria-pressed={selectedId === asset.id} onClick={() => setSelectedId(asset.id)}>
+        {/* A separate control, so selecting never hijacks opening a clip. */}
+        <span
+          className="library-pick"
+          role="checkbox"
+          tabIndex={0}
+          aria-checked={selection.has(asset.id)}
+          aria-label={`Select ${asset.title}`}
+          onClick={(event) => { event.stopPropagation(); toggleSelection(asset.id, event.shiftKey); }}
+          onKeyDown={(event) => {
+            if (event.key !== " " && event.key !== "Enter") return;
+            event.preventDefault();
+            event.stopPropagation();
+            toggleSelection(asset.id, event.shiftKey);
+          }}
+        >{selection.has(asset.id) ? "✓" : ""}</span>
         <Thumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
         <span>
           <strong>{asset.title}</strong>
@@ -481,6 +582,18 @@ export default function LibraryPage() {
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Workspaces unavailable."));
     return () => { cancelled = true; };
   }, [apiFetch, user]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    let cancelled = false;
+    // The tools come from the server registry rather than being listed here,
+    // so adding one does not mean editing this page.
+    apiFetch(`/api/workspaces/${workspaceId}/media/library/bulk-actions`)
+      .then((response) => json<{ actions: BulkAction[] }>(response))
+      .then((body) => { if (!cancelled) setBulkActions(body.actions); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [apiFetch, workspaceId]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -832,6 +945,62 @@ export default function LibraryPage() {
           </div>
           </div>
 
+          {assets.length > 0 && (
+            <div className={`library-selection-bar${selectionList.length ? " active" : ""}`}>
+              <span
+                className="library-pick"
+                role="checkbox"
+                tabIndex={0}
+                aria-checked={allLoadedSelected}
+                aria-label={allLoadedSelected ? "Clear selection" : "Select all loaded"}
+                onClick={() => setSelection(allLoadedSelected
+                  ? new Set()
+                  : new Set(assets.map((asset) => asset.id)))}
+                onKeyDown={(event) => {
+                  if (event.key !== " " && event.key !== "Enter") return;
+                  event.preventDefault();
+                  setSelection(allLoadedSelected
+                    ? new Set()
+                    : new Set(assets.map((asset) => asset.id)));
+                }}
+              >{allLoadedSelected ? "✓" : ""}</span>
+              {/* "Loaded" is stated rather than implied: the grid holds the
+                  current page, not every asset the filter matches. */}
+              <strong>
+                {selectionList.length
+                  ? `${selectionList.length} selected`
+                  : `Select from ${assets.length} loaded`}
+              </strong>
+              {selectionList.length > 0 && (
+                <>
+                  <Button variant="quiet" size="sm" onClick={() => setSelection(new Set())}>
+                    Clear
+                  </Button>
+                  <span className="library-selection-tools">
+                    {bulkActions.map((action) => (
+                      <Button
+                        key={action.id}
+                        variant={action.id === "delete" ? "danger" : "secondary"}
+                        size="sm"
+                        busy={busy === `bulk-${action.id}`}
+                        disabled={!canImport || !action.available}
+                        title={action.available ? action.description : action.reason ?? undefined}
+                        onClick={() => void runBulkAction(action)}
+                      >{action.label}</Button>
+                    ))}
+                  </span>
+                  {selectionList.length > 0 && bulkActions.some((a) => selectionList.length > a.max_batch) && (
+                    <Badge tone="warn">
+                      max {Math.min(...bulkActions.map((a) => a.max_batch))} per run
+                    </Badge>
+                  )}
+                </>
+              )}
+              {/* The outcome reads back where the run was started rather than as
+                  a banner elsewhere; per-asset progress is in notifications. */}
+              {message && <span className="library-selection-note" role="status">{message}</span>}
+            </div>
+          )}
           <div className={`library-collection ${groupBy === "none" ? `library-${viewMode}` : "library-grouped"}`}>
             {groupBy === "none"
               ? assets.map(renderAsset)
@@ -956,6 +1125,15 @@ export default function LibraryPage() {
                       : "Face blurring applies to video"}
                     onClick={() => void blurFaces(selected)}
                   >{busy === "blur" ? "Blurring" : "Blur faces"}</Button>
+                  {deleteAction && (
+                    <Button
+                      variant="danger"
+                      busy={busy === `bulk-${deleteAction.id}`}
+                      disabled={!canImport}
+                      title={deleteAction.description}
+                      onClick={() => void runBulkAction(deleteAction, [selected.id])}
+                    >Delete</Button>
+                  )}
                   <Link href={`/campaigns?video=${encodeURIComponent(handoffPath(selected))}`}>Plan campaign</Link>
                   <Link href={`/publish?video=${encodeURIComponent(handoffPath(selected))}`}>Prepare to publish</Link>
                   {blurredVersion(selected) && (
