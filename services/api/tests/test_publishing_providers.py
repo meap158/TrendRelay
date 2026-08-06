@@ -946,3 +946,127 @@ def test_the_dry_run_says_where_a_first_comment_will_land(media_file: Path) -> N
 
     assert "First comment posted after" in plan["instagram"]
     assert "No first comment - this network does not take one" in plan["tiktok"]
+
+
+# --- threads and approval ----------------------------------------------------- #
+
+
+def test_the_caption_leads_the_thread_because_buffer_wants_the_root(
+    media_file: Path,
+) -> None:
+    """Buffer's array is the whole thread, root included, and the root must
+    match the post's own text."""
+    meta = _buffer_meta(media_file, "twitter", caption="One", thread=["Two", "Three"])
+
+    assert 'thread: [{ text: "One" }, { text: "Two" }, { text: "Three" }]' in meta
+
+
+def test_every_network_that_declares_a_thread_gets_one(media_file: Path) -> None:
+    for platform in ("twitter", "threads", "mastodon", "bluesky"):
+        meta = _buffer_meta(media_file, platform, thread=["Reply"])
+        assert "thread: [" in meta, platform
+
+
+def test_a_network_without_a_thread_field_is_not_sent_one(media_file: Path) -> None:
+    for platform in ("instagram", "facebook", "youtube", "tiktok", "pinterest"):
+        meta = _buffer_meta(media_file, platform, thread=["Reply"])
+        assert "thread:" not in meta, platform
+
+
+def test_blank_replies_are_dropped_rather_than_published_empty(media_file: Path) -> None:
+    body = request(media_file, thread=["Real", "   ", ""])
+
+    assert body.thread == ["Real"]
+
+
+def test_each_reply_is_measured_against_the_limit_on_its_own(media_file: Path) -> None:
+    """A thread is one post per part, so the limit is per part, not per thread."""
+    body = request(
+        media_file,
+        caption="short",
+        thread=["x" * 300],
+        targets=[publishing.PublishTarget(platform="twitter", integration_id="a1")],
+    )
+
+    with pytest.raises(ValueError, match="per post and reply 1 is 300"):
+        publishing._validate_request(publishing.PROVIDERS["buffer"], body)
+
+
+def test_a_thread_within_the_limit_passes_even_though_the_total_exceeds_it(
+    media_file: Path,
+) -> None:
+    body = request(
+        media_file,
+        caption="x" * 270,
+        thread=["y" * 270, "z" * 270],
+        media_url="https://cdn.example.com/clip.mp4",
+        targets=[publishing.PublishTarget(platform="twitter", integration_id="a1")],
+    )
+
+    publishing._validate_request(publishing.PROVIDERS["buffer"], body)
+
+
+def test_an_engine_that_cannot_thread_says_so(media_file: Path) -> None:
+    body = request(media_file, thread=["Reply"])
+
+    with pytest.raises(ValueError, match="Zernio does not publish threads"):
+        publishing._validate_request(publishing.PROVIDERS["zernio"], body)
+
+
+def test_a_thread_with_no_threadable_destination_is_refused(media_file: Path) -> None:
+    body = request(
+        media_file,
+        thread=["Reply"],
+        targets=[publishing.PublishTarget(platform="instagram", integration_id="a1")],
+    )
+
+    with pytest.raises(ValueError, match="None of the chosen destinations take a thread"):
+        publishing._validate_request(publishing.PROVIDERS["buffer"], body)
+
+
+def test_approval_cannot_be_asked_for_on_a_post_meant_to_go_out(
+    media_file: Path,
+) -> None:
+    """Buffer holds an approval request as a draft, so the two contradict."""
+    body = request(media_file, needs_approval=True, delivery="now")
+
+    with pytest.raises(ValueError, match="cannot also be scheduled or published"):
+        publishing._validate_request(publishing.PROVIDERS["buffer"], body)
+
+
+def test_approval_rides_along_with_a_draft(monkeypatch, media_file: Path, tmp_path: Path) -> None:
+    use_provider(monkeypatch, tmp_path, "buffer")
+    queries: list[str] = []
+    monkeypatch.setattr(
+        publishing,
+        "_buffer_graphql",
+        lambda query, **kwargs: (
+            queries.append(query),
+            {"createPost": {"post": {"id": "p1"}}},
+        )[1],
+    )
+
+    publishing._buffer_publish(
+        request(media_file, needs_approval=True, media_url="https://cdn/x.mp4")
+    )
+
+    assert "saveToDraft: true needsApproval: true" in queries[0]
+
+
+def test_the_dry_run_names_the_thread_and_the_hold(media_file: Path) -> None:
+    body = request(
+        media_file,
+        thread=["Two", "Three"],
+        needs_approval=True,
+        targets=[
+            publishing.PublishTarget(platform="twitter", integration_id="a1"),
+            publishing.PublishTarget(platform="instagram", integration_id="a2"),
+        ],
+    )
+
+    plan = {item["platform"]: item["notes"] for item in
+            publishing._delivery_plan(publishing.PROVIDERS["buffer"], body)}
+
+    assert "Thread of 3 posts" in plan["twitter"]
+    assert "Caption only - this network does not take a thread" in plan["instagram"]
+    assert "Held for approval" in plan["twitter"]

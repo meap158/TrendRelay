@@ -498,3 +498,16 @@ nav strong { color: #1c2b33; }
 .job-line i { color: var(--muted); font-style: normal; font-size: 11px; }
 .job-line time { margin-left: auto; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .job-error-line { color: #a3162a; line-height: 1.45; overflow-wrap: anywhere; }
+
+/* --- thread composer -------------------------------------------------------- */
+/* Each reply is its own post, so each carries its own count against the
+ * network's per-post limit rather than sharing the caption's. */
+.thread-composer { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius); }
+.thread-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.thread-head strong { font-size: 12px; font-weight: 600; }
+.thread-head span { color: var(--muted); font-size: 11px; }
+.thread-part { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: start; }
+.thread-part > div { display: grid; gap: 4px; min-width: 0; }
+.thread-index { display: grid; place-items: center; width: 20px; height: 20px; margin-top: 6px; border-radius: 999px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-weight: 700; }
+.publish-form .thread-part textarea { min-height: 52px; }
+.thread-note { color: var(--muted); font-size: 11px; line-height: 1.45; }

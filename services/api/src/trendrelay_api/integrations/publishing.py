@@ -298,6 +298,13 @@ POST_TYPES: dict[str, tuple[PostType, ...]] = {
 # has no such field for the others, so offering it there would be a promise the
 # engine cannot keep. Hashtags in a first comment keep them out of the caption
 # while still counting for reach, which is why anyone wants this.
+# Buffer's schema declares a thread array on exactly these four networks. A
+# thread is one post per reply, so each part is measured against the network's
+# caption limit on its own rather than the whole thread being measured once.
+THREAD_PLATFORMS = frozenset({"twitter", "threads", "mastodon", "bluesky"})
+#: Long enough for any real thread, short enough that a runaway loop is caught.
+MAX_THREAD_PARTS = 25
+
 FIRST_COMMENT_PLATFORMS = frozenset({"instagram", "facebook", "linkedin"})
 
 # YouTube requires a category on create. 22 is People & Blogs, the general
@@ -368,10 +375,22 @@ class PublishRequest(BaseModel):
     #: Posted as a reply immediately after the post, where the engine supports
     #: it. The usual use is hashtags, kept out of the caption itself.
     first_comment: str | None = Field(default=None, max_length=2000)
+    #: Replies after the caption, which is itself the first post of the thread.
+    thread: list[str] = Field(default_factory=list, max_length=MAX_THREAD_PARTS)
+    #: Send the post for approval rather than scheduling it. Buffer treats an
+    #: approval request as a draft, so it cannot be combined with a live send.
+    needs_approval: bool = False
     youtube_category_id: str = Field(default=DEFAULT_YOUTUBE_CATEGORY, max_length=4)
     subreddit: str | None = Field(default=None, max_length=100)
     board: str | None = Field(default=None, max_length=200)
     confirm_external_action: bool = False
+
+    @field_validator("thread")
+    @classmethod
+    def tidy_thread(cls, values: list[str]) -> list[str]:
+        # A blank reply would publish an empty post, so it is dropped rather
+        # than sent; trailing blanks are what an editor leaves behind.
+        return [part.strip() for part in values if part and part.strip()]
 
     @field_validator("youtube_category_id")
     @classmethod
@@ -553,9 +572,41 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
     # used to take was to truncate a title to fit, which published something
     # the operator did not write and never told them.
     chosen_platforms = [target.platform for target in request.targets]
+
+    if request.thread:
+        if provider.id != "buffer":
+            raise ValueError(
+                f"{provider.label} does not publish threads. Remove the replies, or "
+                "switch to Buffer for the networks that support them."
+            )
+        threadable = [
+            platform for platform in set(chosen_platforms) if platform in THREAD_PLATFORMS
+        ]
+        if not threadable:
+            names = ", ".join(sorted(PLATFORM_LABELS[p] for p in set(chosen_platforms)))
+            raise ValueError(
+                f"None of the chosen destinations take a thread ({names}). "
+                "Remove the replies, or add a destination that does."
+            )
+
+    if request.needs_approval and request.mode != "draft":
+        # Buffer treats an approval request as a draft, so asking for approval
+        # on a post that is meant to go out is a contradiction, not a warning.
+        raise ValueError(
+            "A post sent for approval is held as a draft, so it cannot also be "
+            "scheduled or published now. Choose Save as draft."
+        )
+
     for platform in sorted(set(chosen_platforms)):
         limits = limits_for(platform)
         label = PLATFORM_LABELS.get(platform, platform)
+        # Each part of a thread is its own post, so each is measured on its own.
+        for index, part in enumerate(request.thread, start=2):
+            if platform in THREAD_PLATFORMS and len(part) > limits.caption:
+                raise ValueError(
+                    f"{label} allows {limits.caption:,} characters per post and reply "
+                    f"{index - 1} is {len(part):,}. Shorten it or split it again."
+                )
         if len(request.caption) > limits.caption:
             raise ValueError(
                 f"{label} allows {limits.caption:,} characters in a caption and this one "
@@ -993,6 +1044,15 @@ def _buffer_metadata(platform: str, request: PublishRequest, kind: PostType) -> 
         if request.first_comment and platform in FIRST_COMMENT_PLATFORMS
         else ""
     )
+    # Buffer wants every part of the thread including the root, and the root has
+    # to be the same text as the post itself, so the caption leads the array.
+    thread = ""
+    if request.thread and platform in THREAD_PLATFORMS:
+        parts = ", ".join(
+            f"{{ text: {_graphql_literal(part)} }}"
+            for part in [request.caption, *request.thread]
+        )
+        thread = f" thread: [{parts}]"
     fields = {
         "instagram": (
             f"instagram: {{ type: {kind.id} shouldShareToFeed: {share_to_feed} "
@@ -1009,7 +1069,10 @@ def _buffer_metadata(platform: str, request: PublishRequest, kind: PostType) -> 
         ),
         # TikTok's input declares no post type.
         "tiktok": f"tiktok: {{ isAiGenerated: {disclosure} }}",
-        "threads": f"threads: {{ type: {kind.id} }}",
+        "threads": f"threads: {{ type: {kind.id}{thread} }}",
+        "twitter": f"twitter: {{ isAiGenerated: {disclosure}{thread} }}",
+        "mastodon": f"mastodon: {{{thread} }}" if thread else "",
+        "bluesky": f"bluesky: {{{thread} }}" if thread else "",
         # boardServiceId is required on create; it is the board the operator
         # already had to name for the other engines and was never sent here.
         "pinterest": (
@@ -1029,6 +1092,9 @@ def _buffer_publish(request: PublishRequest) -> dict[str, Any]:
         else "mode: shareNow" if request.mode == "now"
         else "mode: addToQueue saveToDraft: true"
     )
+    # Only ever sent alongside a draft, which validation has already enforced.
+    if request.needs_approval:
+        scheduling += " needsApproval: true"
     assets = (
         "assets: [{ video: { url: "
         f"{_graphql_literal(request.media_url or '')}"
@@ -1181,6 +1247,11 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
         "configured": configured,
         "authenticated": authenticated,
         "authorization_error": authorization_error,
+        "thread_platforms": sorted(
+            set(provider.platforms) & THREAD_PLATFORMS
+        ) if provider.id == "buffer" else [],
+        "max_thread_parts": MAX_THREAD_PARTS,
+        "supports_approval": provider.id == "buffer",
         "first_comment_platforms": sorted(
             set(provider.platforms) & FIRST_COMMENT_PLATFORMS
         ) if provider.id == "buffer" else [],
@@ -1314,6 +1385,14 @@ def _delivery_plan(
             )
             if target.platform == "instagram" and kind.id == "story":
                 notes.append("Not added to the grid")
+            if request.thread:
+                notes.append(
+                    f"Thread of {len(request.thread) + 1} posts"
+                    if target.platform in THREAD_PLATFORMS
+                    else "Caption only - this network does not take a thread"
+                )
+            if request.needs_approval:
+                notes.append("Held for approval")
             if request.first_comment:
                 notes.append(
                     "First comment posted after"

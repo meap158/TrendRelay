@@ -49,6 +49,9 @@ type Provider = {
   post_types: Record<string, PostTypeOption[]>;
   limits: Record<string, PlatformLimit>;
   first_comment_platforms: string[];
+  thread_platforms: string[];
+  max_thread_parts: number;
+  supports_approval: boolean;
   id: PublishingProvider;
   label: string;
   tagline: string;
@@ -152,6 +155,9 @@ export default function PublishPage() {
   const [date, setDate] = useState(() => localDateTime(60));
   const [caption, setCaption] = useState("");
   const [firstComment, setFirstComment] = useState("");
+  /** Replies after the caption, which is itself the first post of the thread. */
+  const [thread, setThread] = useState<string[]>([]);
+  const [needsApproval, setNeedsApproval] = useState(false);
   const [title, setTitle] = useState("");
   // The clock is read when the schedule pane opens, so a slot never drifts past.
   const [now, setNow] = useState(() => new Date());
@@ -282,6 +288,8 @@ export default function PublishPage() {
         if (!handoff && typeof saved.videoPath === "string") setVideoPath(saved.videoPath);
         if (typeof saved.mediaUrl === "string") setMediaUrl(saved.mediaUrl);
         if (typeof saved.firstComment === "string") setFirstComment(saved.firstComment);
+        if (Array.isArray(saved.thread)) setThread(saved.thread.filter(
+          (part: unknown) => typeof part === "string"));
       } catch {
         // A draft that cannot be read is not worth reporting; start clean.
       } finally {
@@ -295,7 +303,7 @@ export default function PublishPage() {
     // empty, and saving that would erase the draft this page exists to bring
     // back - the save would win the race against its own restore.
     if (!draftRestored.current) return;
-    const draft = { caption, title, videoPath, mediaUrl, firstComment };
+    const draft = { caption, title, videoPath, mediaUrl, firstComment, thread };
     const empty = !caption && !title && !videoPath && !mediaUrl && !firstComment;
     try {
       if (empty) window.localStorage.removeItem(DRAFT_KEY);
@@ -303,7 +311,7 @@ export default function PublishPage() {
     } catch {
       // Storage can be full or blocked; losing a draft is not worth an error.
     }
-  }, [caption, title, videoPath, mediaUrl, firstComment]);
+  }, [caption, title, videoPath, mediaUrl, firstComment, thread]);
 
   useEffect(() => {
     setActiveWorkspaceId(workspaceId || null);
@@ -381,6 +389,8 @@ export default function PublishPage() {
       media_url: mediaUrl || null,
       caption: form.get("caption"),
       first_comment: firstComment.trim() || null,
+      thread: thread.map((part) => part.trim()).filter(Boolean),
+      needs_approval: needsApproval,
       title: form.get("title") || null,
       date: new Date(localDate).toISOString(),
       delivery,
@@ -665,6 +675,7 @@ export default function PublishPage() {
         setCaption("");
         setTitle("");
         setFirstComment("");
+        setThread([]);
         setPreview(null);
         setNotice("Publishing job created. Track its status below or from Jobs.");
       } else {
@@ -1039,6 +1050,70 @@ export default function PublishPage() {
           </label>
 
           {(() => {
+            const threaders = chosen.filter((platform) =>
+              (activeProvider?.thread_platforms ?? []).includes(platform));
+            if (!threaders.length && !thread.length) return null;
+            const limit = threaders.length
+              ? Math.min(...threaders.map((p) => activeProvider?.limits?.[p]?.caption ?? 2200))
+              : null;
+            return (
+              <div className="thread-composer">
+                <div className="thread-head">
+                  <strong>Thread</strong>
+                  <span>
+                    {thread.length
+                      ? `${thread.length + 1} posts on ${threaders.map((p) => platformLabels[p]).join(", ")}`
+                      : `Add replies for ${threaders.map((p) => platformLabels[p]).join(", ")}`}
+                  </span>
+                </div>
+                {thread.map((part, index) => {
+                  const over = limit ? part.length - limit : 0;
+                  return (
+                    <div className="thread-part" key={index}>
+                      <span className="thread-index">{index + 2}</span>
+                      <div>
+                        <textarea
+                          rows={2}
+                          value={part}
+                          placeholder={`Reply ${index + 1}`}
+                          onChange={(event) => setThread(thread.map(
+                            (item, at) => (at === index ? event.target.value : item)))}
+                        />
+                        {limit && (
+                          <small className={`char-count${over > 0 ? " over" : ""}`}>
+                            {part.length} / {limit}
+                          </small>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="slot-remove"
+                        aria-label={`Remove reply ${index + 1}`}
+                        onClick={() => setThread(thread.filter((_item, at) => at !== index))}
+                      >×</button>
+                    </div>
+                  );
+                })}
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  disabled={thread.length >= (activeProvider?.max_thread_parts ?? 25) - 1}
+                  onClick={() => setThread([...thread, ""])}
+                >Add reply</Button>
+                {/* Each part is its own post, so the limit is per part - which
+                    is the opposite of how a single caption is counted. */}
+                {thread.length > 0 && chosen.length > threaders.length && (
+                  <small className="thread-note">
+                    {chosen.filter((p) => !threaders.includes(p))
+                      .map((p) => platformLabels[p]).join(", ")}{" "}
+                    will receive the caption only.
+                  </small>
+                )}
+              </div>
+            );
+          })()}
+
+          {(() => {
             const carriers = chosen.filter((platform) =>
               (activeProvider?.first_comment_platforms ?? []).includes(platform));
             if (!carriers.length) return null;
@@ -1237,6 +1312,20 @@ export default function PublishPage() {
             <label>Pinterest board
               <input name="board" placeholder="Product launches" required />
               <small>The board that should receive the pin.</small>
+            </label>
+          )}
+
+          {activeProvider?.supports_approval && delivery === "draft" && (
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={needsApproval}
+                onChange={(event) => setNeedsApproval(event.target.checked)}
+              /> Send for approval
+              <small>
+                Held in {activeProvider.label} for a teammate to approve. Only works where
+                that channel&apos;s posting policy asks for approval.
+              </small>
             </label>
           )}
 
