@@ -205,6 +205,8 @@ export default function Dashboard() {
   const [workspaceId, setWorkspaceId] = useState("");
   const [input, setInput] = useState("");
   const [mode, setMode] = useState("post");
+  /** Video is always fetched; these are the extras fetched alongside it. */
+  const [mediaKinds, setMediaKinds] = useState<string[]>(["video", "image", "audio"]);
   const [limit, setLimit] = useState(0);
   const [status, setStatus] = useState<MediaStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -386,6 +388,7 @@ export default function Dashboard() {
           workspace_id: workspaceId,
           urls,
           mode,
+          media_kinds: mediaKinds,
           limit,
           incremental: true,
           confirm_external_action: true,
@@ -560,12 +563,34 @@ export default function Dashboard() {
           </div>}
 
           <details className="download-options">
-            <summary>Download options <span>{modeLabel(mode)} · {limit === 0 ? "all videos" : `up to ${limit} per source`}</span></summary>
+            <summary>Download options <span>{modeLabel(mode)} · {limit === 0 ? "all videos" : `up to ${limit} per source`} · {mediaKinds.length === 3 ? "video, images and audio" : mediaKinds.length === 1 ? "video only" : `video and ${mediaKinds.includes("image") ? "images" : "audio"}`}</span></summary>
             <div className="download-options-grid">
               <label><span>Content from profiles</span><select value={mode} onChange={(event) => setMode(event.target.value)}><option value="post">Published posts</option><option value="like">Liked videos</option><option value="mix">Collections</option><option value="music">Music videos</option></select></label>
               <fieldset><legend>Videos per source</legend><div className="limit-presets">{[0, 10, 20, 50, 100].map((value) => <button key={value} type="button" className={limit === value ? "selected" : ""} aria-pressed={limit === value} onClick={() => setLimit(value)}>{value === 0 ? "All" : value}</button>)}</div></fieldset>
+              <fieldset>
+                <legend>What to fetch</legend>
+                <div className="limit-presets">
+                  {([
+                    ["video", "Video", "The post itself; always fetched"],
+                    ["image", "Cover images", "One still per post"],
+                    ["audio", "Audio track", "The sound a post uses"],
+                  ] as const).map(([kind, label, hint]) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      title={hint}
+                      className={mediaKinds.includes(kind) ? "selected" : ""}
+                      aria-pressed={mediaKinds.includes(kind)}
+                      disabled={kind === "video"}
+                      onClick={() => setMediaKinds(mediaKinds.includes(kind)
+                        ? mediaKinds.filter((item) => item !== kind)
+                        : [...mediaKinds, kind])}
+                    >{label}</button>
+                  ))}
+                </div>
+              </fieldset>
             </div>
-            <p>All videos is the default. TrendRelay keeps paging through the source and skips files already downloaded.</p>
+            <p>All videos is the default. TrendRelay keeps paging through the source and skips files already downloaded. Unticking an extra means it is never requested, rather than fetched and thrown away.</p>
           </details>
 
           <div className="download-submit-row">

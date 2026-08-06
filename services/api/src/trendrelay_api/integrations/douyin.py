@@ -94,7 +94,29 @@ class DownloadRequest(BaseModel):
     mode: Literal["post", "like", "mix", "music"] = "post"
     limit: int = Field(default=0, ge=0, le=100)
     incremental: bool = True
+    #: Which kinds to fetch. The video itself is always fetched, since a Douyin
+    #: post is a video; the cover image and the audio track are extras the
+    #: downloader only requests when asked, so leaving one out saves the
+    #: bandwidth rather than downloading and discarding it.
+    media_kinds: list[Literal["video", "image", "audio"]] = Field(
+        default_factory=lambda: ["video", "image", "audio"], min_length=1, max_length=3
+    )
     confirm_external_action: bool = False
+
+    @field_validator("media_kinds")
+    @classmethod
+    def video_is_always_fetched(
+        cls, value: list[str]
+    ) -> list[str]:
+        # Refusing video would leave nothing to download from a video platform,
+        # so it is stated rather than silently added back.
+        if "video" not in value:
+            raise ValueError(
+                "Video is always downloaded; choose which extras to add alongside it."
+            )
+        # Deduped but not reordered: a default is not passed through a
+        # validator, so sorting here would give the same choice two orderings.
+        return list(dict.fromkeys(value))
 
     @field_validator("workspace_id")
     @classmethod
@@ -504,6 +526,11 @@ def _download_source(url: str, output_root: Path, request: dict[str, Any]) -> tu
         "--limit",
         str(request["limit"]),
     ]
+    kinds = request.get("media_kinds") or ["video", "image", "audio"]
+    if "image" in kinds:
+        command.append("--covers")
+    if "audio" in kinds:
+        command.append("--music")
     if request["incremental"]:
         command.append("--incremental")
     completed = subprocess.run(

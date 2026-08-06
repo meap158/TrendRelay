@@ -891,3 +891,111 @@ def test_creator_profile_link_is_omitted_when_the_author_id_is_unusable(
     )
 
     assert "creator_url" not in douyin._douyin_artifact_metadata(clip, tmp_path)
+
+
+# --- which kinds get fetched ------------------------------------------------- #
+
+
+def test_all_three_kinds_are_requested_by_default() -> None:
+    from trendrelay_api.integrations.douyin import DownloadRequest
+
+    request = DownloadRequest(
+        workspace_id="w1", urls=["https://v.douyin.com/abc/"], confirm_external_action=True
+    )
+
+    assert request.media_kinds == ["video", "image", "audio"]
+
+
+def test_choosing_video_only_drops_the_extras_from_the_command(monkeypatch, tmp_path) -> None:
+    """Declining an extra must save the bandwidth, not download and discard it."""
+    from trendrelay_api.integrations import douyin
+
+    seen: dict[str, list[str]] = {}
+
+    class Completed:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(command, **kwargs):
+        seen["command"] = command
+        return Completed()
+
+    monkeypatch.setattr(douyin.subprocess, "run", fake_run)
+    douyin._download_source(
+        "https://v.douyin.com/abc/",
+        tmp_path,
+        {"mode": "post", "limit": 0, "incremental": False, "media_kinds": ["video"]},
+    )
+
+    assert "--covers" not in seen["command"]
+    assert "--music" not in seen["command"]
+
+
+def test_asking_for_images_and_audio_adds_both_flags(monkeypatch, tmp_path) -> None:
+    from trendrelay_api.integrations import douyin
+
+    seen: dict[str, list[str]] = {}
+
+    class Completed:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    monkeypatch.setattr(
+        douyin.subprocess, "run",
+        lambda command, **kwargs: (seen.update(command=command), Completed())[1],
+    )
+    douyin._download_source(
+        "https://v.douyin.com/abc/",
+        tmp_path,
+        {
+            "mode": "post", "limit": 0, "incremental": False,
+            "media_kinds": ["video", "image", "audio"],
+        },
+    )
+
+    assert "--covers" in seen["command"]
+    assert "--music" in seen["command"]
+
+
+def test_a_request_without_video_is_refused_by_name() -> None:
+    """Douyin posts are videos, so dropping video would leave nothing to fetch."""
+    import pytest
+    from pydantic import ValidationError
+
+    from trendrelay_api.integrations.douyin import DownloadRequest
+
+    with pytest.raises(ValidationError, match="Video is always downloaded"):
+        DownloadRequest(
+            workspace_id="w1",
+            urls=["https://v.douyin.com/abc/"],
+            media_kinds=["audio"],
+            confirm_external_action=True,
+        )
+
+
+def test_an_older_request_without_media_kinds_still_fetches_everything(
+    monkeypatch, tmp_path
+) -> None:
+    """A job queued before this option existed must not lose its extras."""
+    from trendrelay_api.integrations import douyin
+
+    seen: dict[str, list[str]] = {}
+
+    class Completed:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    monkeypatch.setattr(
+        douyin.subprocess, "run",
+        lambda command, **kwargs: (seen.update(command=command), Completed())[1],
+    )
+    douyin._download_source(
+        "https://v.douyin.com/abc/", tmp_path,
+        {"mode": "post", "limit": 0, "incremental": False},
+    )
+
+    assert "--covers" in seen["command"]
+    assert "--music" in seen["command"]

@@ -391,6 +391,10 @@ def build_config(args: argparse.Namespace, urls: list[str]) -> dict[str, object]
         "database": True,
         "database_path": str(DEFAULT_DATABASE.resolve()),
         "folderstyle": True,
+        # Extras the downloader only requests when asked, so declining one
+        # saves the bandwidth rather than fetching and discarding it.
+        "cover": bool(getattr(args, "covers", False)),
+        "music": bool(getattr(args, "music", False)),
         "progress": {"quiet_logs": not args.verbose},
         "cookies": cookies,
     }
@@ -545,6 +549,16 @@ def build_parser() -> argparse.ArgumentParser:
     batch.add_argument("--threads", type=positive_integer, default=5)
     batch.add_argument("--retries", type=non_negative_integer, default=3)
     batch.add_argument("--proxy", default="")
+    batch.add_argument(
+        "--covers",
+        action="store_true",
+        help="Also fetch each post's cover image.",
+    )
+    batch.add_argument(
+        "--music",
+        action="store_true",
+        help="Also fetch each post's audio track.",
+    )
     batch.add_argument("--incremental", action="store_true")
     batch.add_argument("--verbose", action="store_true")
     batch.add_argument("--dry-run", action="store_true")
