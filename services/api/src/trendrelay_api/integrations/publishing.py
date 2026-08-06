@@ -56,6 +56,64 @@ PLATFORM_LABELS: dict[str, str] = {
 }
 ProviderId = Literal["bundle_social", "zernio", "buffer"]
 
+# What each network accepts, so an over-long post is refused here instead of
+# after the engine has already been called. These are TrendRelay's own figures
+# and a platform can change one without notice, so they are surfaced to the
+# operator rather than applied silently: the counter shows the binding limit
+# while typing, and the error names the network it came from.
+@dataclass(frozen=True)
+class PlatformLimits:
+    caption: int
+    #: None where the network has no separate title field.
+    title: int | None = None
+
+
+PLATFORM_LIMITS: dict[str, PlatformLimits] = {
+    "tiktok": PlatformLimits(caption=2200),
+    "instagram": PlatformLimits(caption=2200),
+    "youtube": PlatformLimits(caption=5000, title=100),
+    "facebook": PlatformLimits(caption=5000),
+    "twitter": PlatformLimits(caption=280),
+    "linkedin": PlatformLimits(caption=3000),
+    "threads": PlatformLimits(caption=500),
+    "pinterest": PlatformLimits(caption=500, title=100),
+    "reddit": PlatformLimits(caption=40000, title=300),
+    "bluesky": PlatformLimits(caption=300),
+    "mastodon": PlatformLimits(caption=500),
+    "telegram": PlatformLimits(caption=4096),
+    "googlebusiness": PlatformLimits(caption=1500),
+}
+DEFAULT_LIMITS = PlatformLimits(caption=2200)
+
+
+def limits_for(platform: str) -> PlatformLimits:
+    return PLATFORM_LIMITS.get(platform, DEFAULT_LIMITS)
+
+
+def binding_limits(platforms: list[str]) -> dict[str, Any]:
+    """The tightest caption and title limits across the chosen destinations.
+
+    Posting one caption to several networks means the shortest limit governs,
+    and knowing which network imposes it is what lets an operator decide
+    whether to trim or to drop that destination.
+    """
+    if not platforms:
+        return {"caption": None, "caption_platform": None, "title": None, "title_platform": None}
+    captions = [(limits_for(platform).caption, platform) for platform in platforms]
+    caption_limit, caption_owner = min(captions)
+    titles = [
+        (limits_for(platform).title, platform)
+        for platform in platforms
+        if limits_for(platform).title is not None
+    ]
+    title_limit, title_owner = min(titles) if titles else (None, None)
+    return {
+        "caption": caption_limit,
+        "caption_platform": caption_owner,
+        "title": title_limit,
+        "title_platform": title_owner,
+    }
+
 # bundle.social addresses platforms by an uppercase enum of its own.
 BUNDLE_TYPES: dict[str, str] = {
     "tiktok": "TIKTOK", "instagram": "INSTAGRAM", "youtube": "YOUTUBE",
@@ -453,9 +511,28 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
         names = ", ".join(PLATFORM_LABELS[platform] for platform in unsupported)
         raise ValueError(f"{provider.label} does not publish to {names}.")
     for target in request.targets:
-        # Raises if the network cannot accept the requested type, so a bad
-        # choice is refused here rather than by the engine mid-delivery.
-        target.kind
+        # Resolving raises if the network cannot accept the requested type, so a
+        # bad choice is refused here rather than by the engine mid-delivery.
+        resolve_post_type(target.platform, target.post_type)
+
+    # Length is checked before anything is uploaded. The alternative the code
+    # used to take was to truncate a title to fit, which published something
+    # the operator did not write and never told them.
+    chosen_platforms = [target.platform for target in request.targets]
+    for platform in sorted(set(chosen_platforms)):
+        limits = limits_for(platform)
+        label = PLATFORM_LABELS.get(platform, platform)
+        if len(request.caption) > limits.caption:
+            raise ValueError(
+                f"{label} allows {limits.caption:,} characters in a caption and this one "
+                f"is {len(request.caption):,}. Shorten it or drop that destination."
+            )
+        title = request.title or ""
+        if limits.title is not None and len(title) > limits.title:
+            raise ValueError(
+                f"{label} allows {limits.title} characters in a title and this one is "
+                f"{len(title)}. Shorten it or drop that destination."
+            )
     if provider.requires_public_media:
         if not request.media_url:
             # The adapter hosts the reviewed cut itself at execution time, so an
@@ -568,7 +645,7 @@ def _bundle_platform_data(
         return {
             "type": post_type,
             "uploadIds": uploads,
-            "text": title[:100],
+            "text": title,
             "description": caption,
             "privacy": "PUBLIC" if public else "PRIVATE",
             "containsSyntheticMedia": request.made_with_ai,
@@ -586,7 +663,7 @@ def _bundle_platform_data(
         return {"text": caption, "uploadIds": uploads, "isAiGenerated": request.made_with_ai}
     if platform == "pinterest":
         return {
-            "text": title[:100],
+            "text": title,
             "description": caption,
             "boardName": request.board or "",
             "uploadIds": uploads,
@@ -596,7 +673,7 @@ def _bundle_platform_data(
         # Reddit's `text` is the submission title; the body goes in `description`.
         return {
             "sr": request.subreddit or "",
-            "text": title[:300],
+            "text": title,
             "description": caption,
             "uploadIds": uploads,
         }
@@ -1050,6 +1127,13 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
         "configured": configured,
         "authenticated": authenticated,
         "authorization_error": authorization_error,
+        "limits": {
+            platform: {
+                "caption": limits_for(platform).caption,
+                "title": limits_for(platform).title,
+            }
+            for platform in provider.platforms
+        },
         "post_types": {
             platform: [
                 {"id": kind.id, "label": kind.label, "help": kind.help}
@@ -1212,7 +1296,11 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
         "media_url": request.media_url,
         "media_handling": provider.media_note,
         "caption": request.caption,
+        "caption_length": len(request.caption),
         "title": request.title,
+        # The tightest limit across the chosen destinations, so the dry run
+        # states how much headroom is left rather than only that it fits.
+        "limits": binding_limits([target.platform for target in request.targets]),
         "visibility": request.visibility,
         "made_with_ai": request.made_with_ai,
         "destinations": _delivery_plan(provider, request),

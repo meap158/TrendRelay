@@ -752,3 +752,103 @@ def test_hosting_being_configured_does_not_skip_the_other_checks(
     )
     with pytest.raises(ValueError, match="board name"):
         publishing._validate_request(buffer, no_board)
+
+
+# --- length limits ----------------------------------------------------------- #
+
+
+def test_the_tightest_caption_limit_governs_and_names_its_network() -> None:
+    """One caption goes to every destination, so the shortest limit is the real one."""
+    binding = publishing.binding_limits(["instagram", "twitter", "linkedin"])
+
+    assert binding["caption"] == 280
+    assert binding["caption_platform"] == "twitter"
+
+
+def test_the_title_limit_ignores_networks_that_have_no_title() -> None:
+    binding = publishing.binding_limits(["tiktok", "youtube", "reddit"])
+
+    assert binding["title"] == 100
+    assert binding["title_platform"] == "youtube"
+
+
+def test_no_destinations_means_no_binding_limit() -> None:
+    assert publishing.binding_limits([])["caption"] is None
+
+
+def test_a_caption_too_long_for_one_network_is_refused_before_upload(
+    media_file: Path,
+) -> None:
+    body = request(
+        media_file,
+        caption="x" * 300,
+        targets=[publishing.PublishTarget(platform="twitter", integration_id="a1")],
+    )
+
+    with pytest.raises(ValueError, match="X / Twitter allows 280 characters"):
+        publishing._validate_request(publishing.PROVIDERS["bundle_social"], body)
+
+
+def test_the_same_caption_is_fine_for_a_network_that_allows_it(media_file: Path) -> None:
+    body = request(
+        media_file,
+        caption="x" * 300,
+        targets=[publishing.PublishTarget(platform="instagram", integration_id="a1")],
+    )
+
+    publishing._validate_request(publishing.PROVIDERS["bundle_social"], body)
+
+
+def test_an_over_long_title_is_refused_rather_than_trimmed(media_file: Path) -> None:
+    """Truncating published words the operator never wrote, and said nothing."""
+    body = request(
+        media_file,
+        title="t" * 150,
+        targets=[publishing.PublishTarget(platform="youtube", integration_id="a1")],
+    )
+
+    with pytest.raises(ValueError, match="YouTube allows 100 characters in a title"):
+        publishing._validate_request(publishing.PROVIDERS["bundle_social"], body)
+
+
+def test_a_title_that_fits_reaches_the_engine_whole(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    use_provider(monkeypatch, tmp_path, "bundle_social")
+    title = "t" * 100
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        if path == "/upload/":
+            return {"id": "upload-1"}
+        sent["body"] = kwargs.get("body")
+        return {"id": "post-1", "status": "DRAFT"}
+
+    monkeypatch.setattr(publishing, "_bundle_request", fake_request)
+    body = request(
+        media_file,
+        title=title,
+        targets=[publishing.PublishTarget(platform="youtube", integration_id="a1")],
+    )
+
+    publishing._bundle_publish(body, media_file)
+
+    assert sent["body"]["data"]["YOUTUBE"]["text"] == title
+
+
+def test_the_dry_run_reports_how_much_headroom_is_left(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    use_provider(monkeypatch, tmp_path, "zernio")
+
+    preview = publishing.preview_publish(
+        request(
+            media_file,
+            caption="hello",
+            targets=[publishing.PublishTarget(platform="twitter", integration_id="a1")],
+        )
+    )
+
+    assert preview["caption_length"] == 5
+    assert preview["limits"]["caption"] == 280
+    assert preview["limits"]["caption_platform"] == "twitter"

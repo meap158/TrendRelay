@@ -458,3 +458,12 @@ nav strong { color: #1c2b33; }
   .access-guide-grid { grid-template-columns: 1fr; }
   .access-guides-heading { align-items: stretch; flex-direction: column; }
 }
+
+/* --- length counters and the reason a submit is unavailable ----------------- */
+/* The count sits under the field it governs and names the network imposing the
+ * limit, because "280" alone does not say which destination to drop. */
+.char-count { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.char-count i { font-style: normal; font-size: 10px; }
+.char-count.close { color: #7a5c00; }
+.char-count.over { color: #a3162a; font-weight: 600; }
+.publish-blocked { display: flex; align-items: center; gap: 6px; margin: 0; padding: 7px 10px; border-left: 3px solid var(--amber); background: #fdf9ec; color: var(--text); font-size: 11px; line-height: 1.45; }

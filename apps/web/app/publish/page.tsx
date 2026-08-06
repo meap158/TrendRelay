@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
@@ -43,8 +43,10 @@ type CredentialField = {
   configured: boolean;
 };
 type PostTypeOption = { id: string; label: string; help: string };
+type PlatformLimit = { caption: number; title: number | null };
 type Provider = {
   post_types: Record<string, PostTypeOption[]>;
+  limits: Record<string, PlatformLimit>;
   id: PublishingProvider;
   label: string;
   tagline: string;
@@ -111,6 +113,9 @@ function localDateTime(offsetMinutes: number) {
   return localValue(value);
 }
 
+/** Where an unsent post is kept between reloads. */
+const DRAFT_KEY = "trendrelay.publish.draft";
+
 export default function PublishPage() {
   const { loading, user, apiFetch } = useAuth();
   const { jobs: allJobs, setActiveWorkspaceId, refresh: refreshJobs } = useJobs();
@@ -129,6 +134,7 @@ export default function PublishPage() {
   const [postTypes, setPostTypes] = useState<Record<string, string>>({});
   const [hostingDraft, setHostingDraft] = useState<Record<string, string>>({});
   const [hostingOpen, setHostingOpen] = useState(false);
+  const draftRestored = useRef(false);
   const [delivery, setDelivery] = useState<"draft" | "schedule" | "now">("draft");
   const [date, setDate] = useState(() => localDateTime(60));
   const [caption, setCaption] = useState("");
@@ -202,13 +208,83 @@ export default function PublishPage() {
           ?? activeProvider?.post_types?.[previewPlatform]?.[0]?.id),
       )
     : null;
+  /** One caption goes to every destination, so the shortest limit is the real
+      one - and knowing which network sets it is what lets you decide whether to
+      trim or to drop that destination. */
+  const providerLimits = activeProvider?.limits ?? {};
+  const chosenLimits = chosen
+    .map((platform) => ({ platform, ...providerLimits[platform] }))
+    .filter((entry) => typeof entry.caption === "number");
+  const captionLimit = chosenLimits.length
+    ? chosenLimits.reduce((tightest, entry) => (tightest.caption <= entry.caption ? tightest : entry))
+    : null;
+  const titledLimits = chosenLimits.filter((entry) => typeof entry.title === "number");
+  const titleLimit = titledLimits.length
+    ? titledLimits.reduce((tightest, entry) => ((tightest.title ?? 0) <= (entry.title ?? 0) ? tightest : entry))
+    : null;
+  const captionOver = captionLimit ? caption.length - captionLimit.caption : 0;
+  const titleOver = titleLimit ? title.length - (titleLimit.title ?? 0) : 0;
+
+  const scheduledAt = delivery === "schedule" && date ? new Date(date) : null;
+  // Compared against the clock read when the schedule pane opened, since
+  // reading it during render would make the same props draw differently.
+  const scheduledInPast = Boolean(scheduledAt && scheduledAt.getTime() <= now.getTime());
+
+  /** Why the submit is unavailable, so it is never dead without explanation. */
+  const blockedReason = !canExecute
+    ? "Only owners and approvers can publish"
+    : !chosen.length
+      ? "Choose at least one destination"
+      : !caption.trim()
+        ? "Write a caption"
+        : captionOver > 0
+          ? `Caption is ${captionOver} over the ${platformLabels[captionLimit!.platform as PublishingPlatform]} limit`
+          : titleOver > 0
+            ? `Title is ${titleOver} over the ${platformLabels[titleLimit!.platform as PublishingPlatform]} limit`
+            : scheduledInPast
+              ? "Pick a time in the future"
+              : null;
+
   const previewHandle = previewPlatform
     ? accounts.find((account) => account.id === targets[previewPlatform])?.label ?? ""
     : "";
 
   useEffect(() => {
-    queueMicrotask(() => setVideoPath(new URLSearchParams(window.location.search).get("video") ?? ""));
+    queueMicrotask(() => {
+      const handoff = new URLSearchParams(window.location.search).get("video");
+      if (handoff) setVideoPath(handoff);
+      // A caption is the expensive part of a post to retype, and this page is
+      // reloaded often - after saving a key, after switching engine. Restore
+      // what was being written unless a handoff is bringing its own clip.
+      try {
+        const saved = JSON.parse(window.localStorage.getItem(DRAFT_KEY) ?? "null");
+        if (!saved) return;
+        if (typeof saved.caption === "string") setCaption(saved.caption);
+        if (typeof saved.title === "string") setTitle(saved.title);
+        if (!handoff && typeof saved.videoPath === "string") setVideoPath(saved.videoPath);
+        if (typeof saved.mediaUrl === "string") setMediaUrl(saved.mediaUrl);
+      } catch {
+        // A draft that cannot be read is not worth reporting; start clean.
+      } finally {
+        draftRestored.current = true;
+      }
+    });
   }, []);
+
+  useEffect(() => {
+    // Nothing is written until the restore has run. On mount these fields are
+    // empty, and saving that would erase the draft this page exists to bring
+    // back - the save would win the race against its own restore.
+    if (!draftRestored.current) return;
+    const draft = { caption, title, videoPath, mediaUrl };
+    const empty = !caption && !title && !videoPath && !mediaUrl;
+    try {
+      if (empty) window.localStorage.removeItem(DRAFT_KEY);
+      else window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      // Storage can be full or blocked; losing a draft is not worth an error.
+    }
+  }, [caption, title, videoPath, mediaUrl]);
 
   useEffect(() => {
     setActiveWorkspaceId(workspaceId || null);
@@ -525,6 +601,11 @@ export default function PublishPage() {
       if (execute) {
         await json(await apiFetch(`/api/workspaces/${workspaceId}/publishing/jobs`, { method: "POST", body: JSON.stringify(body) }));
         await refreshJobs();
+        // The post has been handed to the engine, so it is no longer a draft
+        // and should not reappear the next time this page loads.
+        setCaption("");
+        setTitle("");
+        setPreview(null);
         setNotice("Publishing job created. Track its status below or from Jobs.");
       } else {
         const result = await json<{ preview: Preview }>(await apiFetch(
@@ -864,8 +945,24 @@ export default function PublishPage() {
             </>
           )}
 
-          <label>Title <i>used by YouTube, Reddit and Pinterest</i><input name="title" maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-          <label>Caption<textarea name="caption" rows={5} maxLength={5000} required value={caption} onChange={(event) => setCaption(event.target.value)} /></label>
+          <label>Title <i>used by YouTube, Reddit and Pinterest</i>
+            <input name="title" maxLength={300} value={title} onChange={(event) => setTitle(event.target.value)} />
+            {titleLimit && (
+              <small className={`char-count${titleOver > 0 ? " over" : ""}`}>
+                {title.length} / {titleLimit.title}
+                <i>tightest: {platformLabels[titleLimit.platform as PublishingPlatform]}</i>
+              </small>
+            )}
+          </label>
+          <label>Caption
+            <textarea name="caption" rows={5} maxLength={5000} required value={caption} onChange={(event) => setCaption(event.target.value)} />
+            {captionLimit && (
+              <small className={`char-count${captionOver > 0 ? " over" : captionOver > -20 ? " close" : ""}`}>
+                {caption.length.toLocaleString()} / {captionLimit.caption.toLocaleString()}
+                <i>tightest: {platformLabels[captionLimit.platform as PublishingPlatform]}</i>
+              </small>
+            )}
+          </label>
 
           <div className="delivery-mode" role="group" aria-label="Delivery mode">
             {([
@@ -893,7 +990,15 @@ export default function PublishPage() {
                 value={date}
                 onChange={(event) => setDate(event.target.value)}
               />
-              <small>{delivery === "schedule" ? "Must be in the future. Sent to the engine in UTC." : delivery === "now" ? "Not used; the post goes out immediately." : "Stored with the draft; the engine does not act on it."}</small>
+              <small>
+                {delivery === "schedule"
+                  ? scheduledInPast
+                    ? "That time has passed — choose a later one."
+                    : `Goes out ${scheduledAt?.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })} your time.`
+                  : delivery === "now"
+                    ? "Not used; the post goes out immediately."
+                    : "Stored with the draft; the engine does not act on it."}
+              </small>
             </label>
             <label>Visibility <i>TikTok and YouTube</i>
               <select name="visibility" defaultValue="public">
@@ -1042,6 +1147,9 @@ export default function PublishPage() {
             <small>Sets each platform&apos;s synthetic-media flag where the engine exposes one.</small>
           </label>
 
+          {blockedReason && (
+            <p className="publish-blocked" role="status">{blockedReason}</p>
+          )}
           <div className="publish-actions">
             <Button type="submit" variant="secondary" block busy={busy === "preview"} disabled={busy !== null}>
               {busy === "preview" ? "Checking" : "Dry-run this delivery"}
@@ -1050,7 +1158,8 @@ export default function PublishPage() {
               variant="danger"
               block
               busy={busy === "publish"}
-              disabled={busy !== null || !canExecute || !chosen.length}
+              disabled={busy !== null || Boolean(blockedReason)}
+              title={blockedReason ?? undefined}
               onClick={(event) => {
                 const form = event.currentTarget.form;
                 const where = chosen.map((platform) => platformLabels[platform]).join(", ");
