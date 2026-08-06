@@ -294,6 +294,23 @@ POST_TYPES: dict[str, tuple[PostType, ...]] = {
     "threads": (PostType("post", "Post", "A thread with the video attached."),),
     "tiktok": (PostType("video", "Video", "TikTok publishes video posts only."),),
 }
+# Buffer accepts a first comment on exactly these three networks; its schema
+# has no such field for the others, so offering it there would be a promise the
+# engine cannot keep. Hashtags in a first comment keep them out of the caption
+# while still counting for reach, which is why anyone wants this.
+FIRST_COMMENT_PLATFORMS = frozenset({"instagram", "facebook", "linkedin"})
+
+# YouTube requires a category on create. 22 is People & Blogs, the general
+# bucket short-form creator video falls into; the rest are offered for choice.
+YOUTUBE_CATEGORIES: dict[str, str] = {
+    "1": "Film & Animation", "2": "Autos & Vehicles", "10": "Music",
+    "15": "Pets & Animals", "17": "Sports", "19": "Travel & Events",
+    "20": "Gaming", "22": "People & Blogs", "23": "Comedy",
+    "24": "Entertainment", "25": "News & Politics", "26": "Howto & Style",
+    "27": "Education", "28": "Science & Technology", "29": "Nonprofits & Activism",
+}
+DEFAULT_YOUTUBE_CATEGORY = "22"
+
 DEFAULT_POST_TYPE = PostType("post", "Post", "A standard post with the video attached.")
 
 
@@ -348,9 +365,26 @@ class PublishRequest(BaseModel):
     visibility: Literal["public", "private"] = "public"
     provider: ProviderId | None = None
     media_url: str | None = Field(default=None, max_length=2000)
+    #: Posted as a reply immediately after the post, where the engine supports
+    #: it. The usual use is hashtags, kept out of the caption itself.
+    first_comment: str | None = Field(default=None, max_length=2000)
+    youtube_category_id: str = Field(default=DEFAULT_YOUTUBE_CATEGORY, max_length=4)
     subreddit: str | None = Field(default=None, max_length=100)
     board: str | None = Field(default=None, max_length=200)
     confirm_external_action: bool = False
+
+    @field_validator("youtube_category_id")
+    @classmethod
+    def known_category(cls, value: str) -> str:
+        if value not in YOUTUBE_CATEGORIES:
+            allowed = ", ".join(sorted(YOUTUBE_CATEGORIES, key=int))
+            raise ValueError(f"YouTube category must be one of: {allowed}.")
+        return value
+
+    @field_validator("first_comment")
+    @classmethod
+    def tidy_first_comment(cls, value: str | None) -> str | None:
+        return (value or "").strip() or None
 
     @field_validator("subreddit")
     @classmethod
@@ -944,24 +978,44 @@ def _buffer_platform(service: str | None) -> str:
 def _buffer_metadata(platform: str, request: PublishRequest, kind: PostType) -> str:
     """Per-network metadata Buffer requires before it will accept a post.
 
-    Instagram and Facebook both declare a non-null post type, and YouTube needs
-    a title on create, so omitting these is rejected outright rather than
-    defaulted. Enum values are bare GraphQL tokens, not strings.
+    Each field here is one Buffer's schema declares for that network, and only
+    for that network: Facebook takes no AI disclosure, TikTok takes no post
+    type, and YouTube and Pinterest each require a field on create that has no
+    default. Sending a field a network does not declare is rejected outright.
+    Enum values are bare GraphQL tokens, not strings.
     """
     disclosure = "true" if request.made_with_ai else "false"
     title = _graphql_literal((request.title or request.caption)[:100])
     # A Story is not added to the grid, so the feed cross-post only applies to a Reel.
     share_to_feed = "true" if kind.id == "reel" else "false"
+    comment = (
+        f" firstComment: {_graphql_literal(request.first_comment)}"
+        if request.first_comment and platform in FIRST_COMMENT_PLATFORMS
+        else ""
+    )
     fields = {
         "instagram": (
             f"instagram: {{ type: {kind.id} shouldShareToFeed: {share_to_feed} "
+            f"isAiGenerated: {disclosure}{comment} }}"
+        ),
+        # Facebook's input declares no isAiGenerated; sending one is rejected.
+        "facebook": f"facebook: {{ type: {kind.id}{comment} }}",
+        "linkedin": f"linkedin: {{{comment} }}" if comment else "",
+        # categoryId is required on create and has no default.
+        "youtube": (
+            f"youtube: {{ title: {title} "
+            f"categoryId: {_graphql_literal(request.youtube_category_id)} "
             f"isAiGenerated: {disclosure} }}"
         ),
-        "facebook": f"facebook: {{ type: {kind.id} }}",
-        "youtube": f"youtube: {{ title: {title} }}",
+        # TikTok's input declares no post type.
         "tiktok": f"tiktok: {{ isAiGenerated: {disclosure} }}",
         "threads": f"threads: {{ type: {kind.id} }}",
-        "pinterest": f"pinterest: {{ title: {title} }}",
+        # boardServiceId is required on create; it is the board the operator
+        # already had to name for the other engines and was never sent here.
+        "pinterest": (
+            f"pinterest: {{ title: {title} "
+            f"boardServiceId: {_graphql_literal(request.board or '')} }}"
+        ),
     }
     entry = fields.get(platform)
     return f" metadata: {{ {entry} }}" if entry else ""
@@ -1127,6 +1181,13 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
         "configured": configured,
         "authenticated": authenticated,
         "authorization_error": authorization_error,
+        "first_comment_platforms": sorted(
+            set(provider.platforms) & FIRST_COMMENT_PLATFORMS
+        ) if provider.id == "buffer" else [],
+        "youtube_categories": [
+            {"id": key, "label": label}
+            for key, label in sorted(YOUTUBE_CATEGORIES.items(), key=lambda item: int(item[0]))
+        ],
         "limits": {
             platform: {
                 "caption": limits_for(platform).caption,
@@ -1253,6 +1314,12 @@ def _delivery_plan(
             )
             if target.platform == "instagram" and kind.id == "story":
                 notes.append("Not added to the grid")
+            if request.first_comment:
+                notes.append(
+                    "First comment posted after"
+                    if target.platform in FIRST_COMMENT_PLATFORMS
+                    else "No first comment - this network does not take one"
+                )
         else:
             if target.platform == "youtube":
                 notes.append(f"Visibility: {'public' if public else 'private'}")

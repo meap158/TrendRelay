@@ -48,6 +48,7 @@ type PlatformLimit = { caption: number; title: number | null };
 type Provider = {
   post_types: Record<string, PostTypeOption[]>;
   limits: Record<string, PlatformLimit>;
+  first_comment_platforms: string[];
   id: PublishingProvider;
   label: string;
   tagline: string;
@@ -150,6 +151,7 @@ export default function PublishPage() {
   const [delivery, setDelivery] = useState<"draft" | "schedule" | "now">("draft");
   const [date, setDate] = useState(() => localDateTime(60));
   const [caption, setCaption] = useState("");
+  const [firstComment, setFirstComment] = useState("");
   const [title, setTitle] = useState("");
   // The clock is read when the schedule pane opens, so a slot never drifts past.
   const [now, setNow] = useState(() => new Date());
@@ -279,6 +281,7 @@ export default function PublishPage() {
         if (typeof saved.title === "string") setTitle(saved.title);
         if (!handoff && typeof saved.videoPath === "string") setVideoPath(saved.videoPath);
         if (typeof saved.mediaUrl === "string") setMediaUrl(saved.mediaUrl);
+        if (typeof saved.firstComment === "string") setFirstComment(saved.firstComment);
       } catch {
         // A draft that cannot be read is not worth reporting; start clean.
       } finally {
@@ -292,15 +295,15 @@ export default function PublishPage() {
     // empty, and saving that would erase the draft this page exists to bring
     // back - the save would win the race against its own restore.
     if (!draftRestored.current) return;
-    const draft = { caption, title, videoPath, mediaUrl };
-    const empty = !caption && !title && !videoPath && !mediaUrl;
+    const draft = { caption, title, videoPath, mediaUrl, firstComment };
+    const empty = !caption && !title && !videoPath && !mediaUrl && !firstComment;
     try {
       if (empty) window.localStorage.removeItem(DRAFT_KEY);
       else window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     } catch {
       // Storage can be full or blocked; losing a draft is not worth an error.
     }
-  }, [caption, title, videoPath, mediaUrl]);
+  }, [caption, title, videoPath, mediaUrl, firstComment]);
 
   useEffect(() => {
     setActiveWorkspaceId(workspaceId || null);
@@ -377,6 +380,7 @@ export default function PublishPage() {
       video_path: localPath || "unused",
       media_url: mediaUrl || null,
       caption: form.get("caption"),
+      first_comment: firstComment.trim() || null,
       title: form.get("title") || null,
       date: new Date(localDate).toISOString(),
       delivery,
@@ -660,6 +664,7 @@ export default function PublishPage() {
         // and should not reappear the next time this page loads.
         setCaption("");
         setTitle("");
+        setFirstComment("");
         setPreview(null);
         setNotice("Publishing job created. Track its status below or from Jobs.");
       } else {
@@ -1032,6 +1037,30 @@ export default function PublishPage() {
               </small>
             )}
           </label>
+
+          {(() => {
+            const carriers = chosen.filter((platform) =>
+              (activeProvider?.first_comment_platforms ?? []).includes(platform));
+            if (!carriers.length) return null;
+            return (
+              <label>First comment <i>optional</i>
+                <textarea
+                  name="first_comment"
+                  rows={2}
+                  maxLength={2000}
+                  placeholder="#hashtags that would clutter the caption"
+                  value={firstComment}
+                  onChange={(event) => setFirstComment(event.target.value)}
+                />
+                <small>
+                  Posted as a reply straight after the post on{" "}
+                  {carriers.map((platform) => platformLabels[platform]).join(", ")}.
+                  {chosen.length > carriers.length
+                    && " The other destinations do not take one and will be skipped."}
+                </small>
+              </label>
+            );
+          })()}
 
           <div className="delivery-mode" role="group" aria-label="Delivery mode">
             {([

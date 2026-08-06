@@ -555,7 +555,9 @@ def test_buffer_sends_the_metadata_each_network_requires(
     assert "shouldShareToFeed: true" in queries[0]
     assert "isAiGenerated: true" in queries[0]
     assert "metadata: { facebook: { type: reel } }" in queries[1]
-    assert 'metadata: { youtube: { title: "Launch title" } }' in queries[2]
+    # categoryId is required on create, so the payload carries it.
+    assert 'youtube: { title: "Launch title"' in queries[2]
+    assert 'categoryId: "22"' in queries[2]
     assert "metadata: { tiktok: { isAiGenerated: true } }" in queries[3]
 
 
@@ -852,3 +854,95 @@ def test_the_dry_run_reports_how_much_headroom_is_left(
     assert preview["caption_length"] == 5
     assert preview["limits"]["caption"] == 280
     assert preview["limits"]["caption_platform"] == "twitter"
+
+
+# --- what Buffer's schema actually declares ---------------------------------- #
+
+
+def _buffer_meta(media_file: Path, platform: str, **overrides) -> str:
+    body = request(media_file, **overrides)
+    return publishing._buffer_metadata(
+        platform, body, publishing.resolve_post_type(platform, None)
+    )
+
+
+def test_pinterest_carries_the_board_buffer_requires(media_file: Path) -> None:
+    """boardServiceId is required on create; the board was collected and dropped."""
+    meta = _buffer_meta(media_file, "pinterest", board="board-123")
+
+    assert 'boardServiceId: "board-123"' in meta
+
+
+def test_youtube_carries_the_category_buffer_requires(media_file: Path) -> None:
+    """categoryId is required on create and has no default at the API."""
+    meta = _buffer_meta(media_file, "youtube")
+
+    assert f'categoryId: "{publishing.DEFAULT_YOUTUBE_CATEGORY}"' in meta
+
+
+def test_a_youtube_category_outside_the_documented_list_is_refused(
+    media_file: Path,
+) -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="YouTube category must be one of"):
+        request(media_file, youtube_category_id="999")
+
+
+def test_facebook_is_not_sent_an_ai_flag_it_does_not_declare(media_file: Path) -> None:
+    """Buffer rejects a field the network's input type does not define."""
+    meta = _buffer_meta(media_file, "facebook", made_with_ai=True)
+
+    assert "isAiGenerated" not in meta
+
+
+def test_tiktok_is_not_sent_a_post_type_it_does_not_declare(media_file: Path) -> None:
+    meta = _buffer_meta(media_file, "tiktok")
+
+    assert "type:" not in meta
+
+
+def test_a_first_comment_reaches_the_three_networks_that_take_one(
+    media_file: Path,
+) -> None:
+    for platform in ("instagram", "facebook", "linkedin"):
+        meta = _buffer_meta(media_file, platform, first_comment="#winter #layering")
+        assert 'firstComment: "#winter #layering"' in meta, platform
+
+
+def test_a_first_comment_is_dropped_where_buffer_has_no_field_for_it(
+    media_file: Path,
+) -> None:
+    """Sending it anyway would be rejected; silently keeping it would mislead."""
+    for platform in ("tiktok", "youtube", "threads", "pinterest"):
+        meta = _buffer_meta(media_file, platform, first_comment="#winter")
+        assert "firstComment" not in meta, platform
+
+
+def test_no_first_comment_means_no_empty_field(media_file: Path) -> None:
+    meta = _buffer_meta(media_file, "linkedin")
+
+    assert meta == ""
+
+
+def test_whitespace_is_not_a_first_comment(media_file: Path) -> None:
+    body = request(media_file, first_comment="   ")
+
+    assert body.first_comment is None
+
+
+def test_the_dry_run_says_where_a_first_comment_will_land(media_file: Path) -> None:
+    body = request(
+        media_file,
+        first_comment="#winter",
+        targets=[
+            publishing.PublishTarget(platform="instagram", integration_id="a1"),
+            publishing.PublishTarget(platform="tiktok", integration_id="a2"),
+        ],
+    )
+
+    plan = {item["platform"]: item["notes"] for item in
+            publishing._delivery_plan(publishing.PROVIDERS["buffer"], body)}
+
+    assert "First comment posted after" in plan["instagram"]
+    assert "No first comment - this network does not take one" in plan["tiktok"]
