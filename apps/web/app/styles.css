@@ -473,3 +473,20 @@ nav strong { color: #1c2b33; }
 .char-count.close { color: #7a5c00; }
 .char-count.over { color: #a3162a; font-weight: 600; }
 .publish-blocked { display: flex; align-items: center; gap: 6px; margin: 0; padding: 7px 10px; border-left: 3px solid var(--amber); background: #fdf9ec; color: var(--text); font-size: 11px; line-height: 1.45; }
+
+/* --- media dropzone --------------------------------------------------------- */
+/* The whole field is the target, so a clip dragged out of the picker can be
+ * released anywhere over it rather than onto a small strip. */
+.field-with-action.dropzone { border-radius: var(--radius); padding: 3px; margin: -3px; transition: background 120ms, box-shadow 120ms; }
+.field-with-action.dropzone.over { background: var(--green-dark); box-shadow: inset 0 0 0 2px var(--green); }
+.picker-result[draggable="true"] { cursor: grab; }
+.picker-result[draggable="true"]:active { cursor: grabbing; }
+
+/* --- collapsed engine setup ------------------------------------------------- */
+/* Configured once, then in the way. A line is enough to say which engine is
+ * live and how to change it, which gives the composer the top of the page. */
+.engine-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.engine-summary > div { display: grid; gap: 1px; margin-right: auto; min-width: 0; }
+.engine-summary strong { font-size: 13px; font-weight: 500; }
+.engine-summary span { color: var(--muted); font-size: 11px; }
+.section-heading-aside { display: flex; align-items: center; gap: 8px; }

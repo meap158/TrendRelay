@@ -22,6 +22,9 @@ export type LibraryAsset = {
 
 type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 
+/** Marks a drag as carrying one of our own library paths. */
+export const MEDIA_DRAG_TYPE = "application/x-trendrelay-media";
+
 export function clipLength(durationMs: number | null) {
   if (!durationMs) return "";
   const total = Math.round(durationMs / 1000);
@@ -135,7 +138,19 @@ export function MediaPicker({
       <ul className="picker-results">
         {assets.map((asset) => (
           <li key={asset.id}>
-            <button type="button" className="picker-result" onClick={() => onPick(asset)}>
+            <button
+              type="button"
+              className="picker-result"
+              draggable
+              onDragStart={(event) => {
+                // The path is what the field takes, and a plain-text payload
+                // means the same drag also works into any text input.
+                event.dataTransfer.setData("text/plain", asset.original_path);
+                event.dataTransfer.setData(MEDIA_DRAG_TYPE, asset.original_path);
+                event.dataTransfer.effectAllowed = "copy";
+              }}
+              onClick={() => onPick(asset)}
+            >
               <AssetThumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
               <span className="picker-meta">
                 <strong>{asset.title}</strong>

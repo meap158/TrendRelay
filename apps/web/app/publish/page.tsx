@@ -17,6 +17,7 @@ import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, buttonClass } from "../ui/button";
 import { Badge } from "../ui/primitives";
 import {
+  MEDIA_DRAG_TYPE,
   MediaPicker,
   PostPreview,
   SlotEditor,
@@ -144,6 +145,10 @@ export default function PublishPage() {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [slotPresets, setSlotPresets] = useState<SlotPreset[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  /** Engine setup is configured once and then in the way; it folds down to a
+      line as soon as the active engine can actually publish. */
+  const [setupOpen, setSetupOpen] = useState(false);
   const [clip, setClip] = useState<LibraryAsset | null>(null);
   const [thumbnail, setThumbnail] = useState("");
   const [library, setLibrary] = useState<LibraryAsset[]>([]);
@@ -442,6 +447,29 @@ export default function PublishPage() {
     [apiFetch, workspaceId],
   );
 
+  /** Accepts a drag from the library picker, and says so when a file is
+      dropped instead - a browser gives no filesystem path for one, so it has
+      to be imported before it can be published. */
+  function dropMedia(event: React.DragEvent) {
+    event.preventDefault();
+    setDragOver(false);
+    const path = event.dataTransfer.getData(MEDIA_DRAG_TYPE)
+      || event.dataTransfer.getData("text/plain");
+    if (path) {
+      setVideoPath(path.trim());
+      setClip(null);
+      setThumbnail("");
+      setNotice("Clip taken from the library.");
+      return;
+    }
+    if (event.dataTransfer.files.length) {
+      setError(
+        "A file dropped from your computer has no path TrendRelay can read. "
+        + "Import it in Library first, then drag it from there.",
+      );
+    }
+  }
+
   function openPicker() {
     setPickerOpen(true);
     void loadLibrary("");
@@ -566,11 +594,25 @@ export default function PublishPage() {
     }
   }
 
-  async function refreshAccounts() {
+  const autoLoaded = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!workspaceId || !activeProvider?.authenticated) return;
+    if (accountBook.provider === activeProvider.id) return;
+    if (autoLoaded.current === activeProvider.id) return;
+    autoLoaded.current = activeProvider.id;
+    // Deferred so the fetch does not run inside the render that scheduled it.
+    queueMicrotask(() => void refreshAccounts({ quiet: true }));
+    // refreshAccounts is stable for a given engine and guarded by the ref
+    // above, so re-running on its identity would only repeat the same call.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, activeProvider, accountBook.provider]);
+
+  async function refreshAccounts(options: { quiet?: boolean } = {}) {
     if (!workspaceId || !activeProvider) return;
     setBusy("accounts");
     setError(null);
-    setNotice(null);
+    if (!options.quiet) setNotice(null);
     try {
       const result = await json<{ accounts: Account[] }>(await apiFetch(
         `/api/workspaces/${workspaceId}/publishing/integrations`,
@@ -581,9 +623,11 @@ export default function PublishPage() {
         platform,
         result.accounts.some((account) => account.id === current[platform]) ? current[platform] : "",
       ])));
-      setNotice(result.accounts.length
-        ? `${result.accounts.length} connected account${result.accounts.length === 1 ? "" : "s"} loaded from ${activeProvider.label}.`
-        : `${activeProvider.label} has no supported accounts yet. Connect them in its dashboard, then refresh.`);
+      if (!options.quiet || !result.accounts.length) {
+        setNotice(result.accounts.length
+          ? `${result.accounts.length} connected account${result.accounts.length === 1 ? "" : "s"} loaded from ${activeProvider.label}.`
+          : `${activeProvider.label} has no supported accounts yet. Connect them in its dashboard, then refresh.`);
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not refresh connected accounts.");
     } finally {
@@ -678,13 +722,39 @@ export default function PublishPage() {
         {error && <p className="registry-error" role="alert">{error}</p>}
       </div>
 
+      {activeProvider?.authenticated && !setupOpen ? (
+        <div className="engine-summary">
+          <ProviderMark provider={activeProvider.id} size={22} />
+          <div>
+            <strong>{activeProvider.label}</strong>
+            <span>
+              {accounts.length
+                ? `${accounts.length} destination${accounts.length === 1 ? "" : "s"} available`
+                : connection?.next_step}
+            </span>
+          </div>
+          {hosting?.required && !hosting.configured && (
+            <Badge tone="warn">media hosting needed</Badge>
+          )}
+          <Button variant="quiet" size="sm" onClick={() => setSetupOpen(true)}>
+            Change engine
+          </Button>
+        </div>
+      ) : (
       <section className="engine-setup" aria-labelledby="engine-setup-title">
         <div className="section-heading">
           <div>
             <p className="eyebrow">STEP 1 · PUBLISHING ENGINE</p>
             <h2 id="engine-setup-title">Choose and configure an API</h2>
           </div>
-          {connection && <span>{connection.next_step}</span>}
+          <div className="section-heading-aside">
+            {connection && <span>{connection.next_step}</span>}
+            {activeProvider?.authenticated && (
+              <Button variant="quiet" size="sm" onClick={() => setSetupOpen(false)}>
+                Done
+              </Button>
+            )}
+          </div>
         </div>
         <div className="engine-grid">
           {connection?.providers.map((provider) => {
@@ -872,6 +942,7 @@ export default function PublishPage() {
           </p>
         )}
       </section>
+      )}
 
       <section className="publish-layout">
         <form className="publish-form" onSubmit={(event) => { event.preventDefault(); void submit(event.currentTarget, false); }}>
@@ -897,7 +968,12 @@ export default function PublishPage() {
           ) : needsPublicMedia ? (
             <>
               <div className="ui-field">
-                <div className="field-with-action">
+                <div
+                  className={`field-with-action dropzone${dragOver ? " over" : ""}`}
+                  onDragOver={(event) => { event.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={dropMedia}
+                >
                   <label>Approved local MP4 path
                     <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" />
                   </label>
@@ -923,7 +999,12 @@ export default function PublishPage() {
           ) : (
             <>
               <div className="ui-field">
-                <div className="field-with-action">
+                <div
+                  className={`field-with-action dropzone${dragOver ? " over" : ""}`}
+                  onDragOver={(event) => { event.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={dropMedia}
+                >
                   <label>Approved local MP4 path
                     <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" required />
                   </label>
