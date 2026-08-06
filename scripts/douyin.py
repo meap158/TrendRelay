@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -420,6 +421,103 @@ def list_media_files(root: Path) -> set[Path]:
     }
 
 
+def trending(args: argparse.Namespace) -> int:
+    """Read Douyin's hot-search board and print it as JSON on stdout.
+
+    The provider writes a JSONL snapshot of its own; this reads that file back
+    and emits one object, so the caller gets a result without having to know
+    the provider's directory layout or its timestamped filenames.
+    """
+    # stdout carries the JSON result and nothing else, so the readiness notes
+    # these helpers print are sent to stderr where a human still sees them.
+    with contextlib.redirect_stdout(sys.stderr):
+        if check_provider() != 0:
+            return 1
+        cookies, _source = resolve_cookies()
+        if not cookies_are_ready(cookies):
+            print(cookie_setup_message(), file=sys.stderr)
+            return 4
+
+    args.output.mkdir(parents=True, exist_ok=True)
+    runtime_dir = ROOT / ".data" / "douyin" / "runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    config = {
+        "link": [],
+        "path": str(args.output.resolve()),
+        "mode": ["post"],
+        "cookies": cookies,
+        "proxy": args.proxy,
+        "progress": {"quiet_logs": True},
+    }
+    config_path: Path | None = None
+    before = _hot_board_snapshots(args.output)
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", prefix="discovery-", dir=runtime_dir,
+            encoding="utf-8", delete=False,
+        ) as config_file:
+            json.dump(config, config_file, ensure_ascii=False, indent=2)
+            config_path = Path(config_file.name)
+        # The board is Chinese text and the provider prints it as it goes. On a
+        # cp1252 console that raises UnicodeEncodeError before any result is
+        # written, so the child is told to speak UTF-8.
+        environment = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+        completed = subprocess.run(
+            [str(tool_executable()), "--config", str(config_path), "--hot-board", str(args.limit)],
+            cwd=SOURCE_DIR,
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=args.timeout,
+        )
+        if completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout or "").strip()
+            # The tail, not the head: a traceback puts the exception last, and
+            # printing the first 600 characters showed only the call stack.
+            print(detail[-1500:] or "The provider could not read the board.", file=sys.stderr)
+            return 1
+    finally:
+        if config_path is not None:
+            config_path.unlink(missing_ok=True)
+
+    fresh = sorted(set(_hot_board_snapshots(args.output)) - set(before))
+    if not fresh:
+        print("The provider reported success but wrote no snapshot.", file=sys.stderr)
+        return 1
+    items = _read_jsonl(fresh[-1])
+    # Escaped rather than raw: this is read by another process, and a console
+    # or pipe using the Windows default codepage cannot encode Chinese titles.
+    # JSON escapes decode back to the same string everywhere.
+    print(json.dumps(
+        {"items": items, "count": len(items), "snapshot": str(fresh[-1])},
+        ensure_ascii=True,
+    ))
+    return 0
+
+
+def _hot_board_snapshots(output: Path) -> list[Path]:
+    board = output / "hot_board"
+    return sorted(board.glob("*.jsonl")) if board.is_dir() else []
+
+
+def _read_jsonl(path: Path) -> list[dict]:
+    items: list[dict] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            items.append(parsed)
+    return items
+
+
 def batch_download(args: argparse.Namespace) -> int:
     try:
         urls = collect_urls(args.urls, args.file)
@@ -562,6 +660,15 @@ def build_parser() -> argparse.ArgumentParser:
     batch.add_argument("--incremental", action="store_true")
     batch.add_argument("--verbose", action="store_true")
     batch.add_argument("--dry-run", action="store_true")
+
+    hot = subparsers.add_parser(
+        "trending", help="Read Douyin's hot-search board as JSON."
+    )
+    hot.add_argument("--limit", type=non_negative_integer, default=50)
+    hot.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    hot.add_argument("--proxy", default="")
+    hot.add_argument("--timeout", type=positive_integer, default=180)
+    hot.set_defaults(handler=trending)
     return parser
 
 
@@ -581,6 +688,8 @@ def main() -> int:
         return login_provider()
     if args.command == "connect":
         return connect_provider()
+    if args.command == "trending":
+        return trending(args)
     return batch_download(args)
 
 

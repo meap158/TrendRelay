@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -59,6 +59,27 @@ def media_status(
             "reason": "A reviewed TikTok acquisition provider is not installed.",
         },
     }
+
+
+@router.get("/douyin/trending")
+def douyin_trending_board(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> dict[str, Any]:
+    """Douyin's hot-search board, for the Discover panel.
+
+    Read on request rather than on a schedule: the board is only fetched when
+    an operator asks to see it, which keeps this a look rather than a sweep.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.douyin_trending import TrendingUnavailable, fetch
+
+    try:
+        return fetch(limit=limit)
+    except TrendingUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
 
 
 @router.post("/douyin/connection", status_code=202)

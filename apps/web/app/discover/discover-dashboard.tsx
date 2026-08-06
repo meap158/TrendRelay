@@ -659,6 +659,17 @@ const COLORS_BY_KIND: Record<string, string> = {
   starter: "#9334e6",
 };
 
+type DouyinTrend = {
+  rank: number;
+  term: string;
+  hot_value: number;
+  video_id: string | null;
+  video_url: string | null;
+  search_url: string;
+  downloadable: boolean;
+};
+type DouyinBoard = { count: number; fetched_at: string; items: DouyinTrend[] };
+
 export default function ResearchDashboard() {
   const { apiFetch } = useAuth();
   const { jobs: allJobs, refresh: refreshJobs, setActiveWorkspaceId } = useJobs();
@@ -676,6 +687,29 @@ export default function ResearchDashboard() {
   const [feedFilter, setFeedFilter] = useState<"all" | "trend" | "ad" | "account">("all");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [douyinBoard, setDouyinBoard] = useState<DouyinBoard | null>(null);
+  const [douyinError, setDouyinError] = useState<string | null>(null);
+
+  /** Read on demand, so this stays a look at the board rather than a sweep. */
+  async function loadDouyinBoard() {
+    if (!workspaceId) return;
+    setBusy("douyin");
+    setDouyinError(null);
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/media/douyin/trending?limit=20`,
+      );
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail ?? "The Douyin board could not be read.");
+      setDouyinBoard(body);
+    } catch (reason) {
+      setDouyinError(
+        reason instanceof Error ? reason.message : "The Douyin board could not be read.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
 
   const jobs = useMemo(
     () =>
@@ -1140,6 +1174,76 @@ export default function ResearchDashboard() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div style={S.section}>
+        <div style={S.tiktokHead}>
+          <div>
+            <h2 style={S.sectionTitle}>Douyin hot search</h2>
+            <p style={S.sectionSub}>
+              {douyinBoard
+                ? `${douyinBoard.count} terms · read ${new Date(douyinBoard.fetched_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+                : "What is trending on Douyin right now, from your connected session."}
+            </p>
+          </div>
+          <div style={S.tiktokControls}>
+            <button
+              type="button"
+              style={S.quickLinkBtn}
+              disabled={busy === "douyin" || !workspaceId}
+              onClick={() => void loadDouyinBoard()}
+            >
+              {busy === "douyin" ? "Reading…" : douyinBoard ? "↻ Refresh" : "Read the board"}
+            </button>
+          </div>
+        </div>
+
+        {douyinError && <p style={S.tiktokNote}>{douyinError}</p>}
+
+        {douyinBoard && douyinBoard.items.length > 0 && (
+          <div style={S.tiktokList}>
+            {douyinBoard.items.map((item) => (
+              <div key={`${item.rank}-${item.term}`} style={S.tiktokRow}>
+                <span style={S.tiktokRank}>{item.rank}</span>
+                <div style={S.tiktokBody}>
+                  <span style={S.tiktokName} title={item.term}>{item.term}</span>
+                </div>
+                <div style={S.tiktokMetrics}>
+                  {item.hot_value > 0 && (
+                    <span style={S.tiktokMetric}>
+                      <b>{compactNumber(item.hot_value)}</b> heat
+                    </span>
+                  )}
+                </div>
+                {/* Only a term the board attached a video to can go straight to
+                    Downloads; the rest open the search so a clip can be picked. */}
+                {item.downloadable && item.video_url ? (
+                  <Link
+                    href={`/?add=${encodeURIComponent(item.video_url)}`}
+                    style={S.tiktokExplore}
+                    title="Send this video to Downloads"
+                  >
+                    Download
+                  </Link>
+                ) : (
+                  <a
+                    href={item.search_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={S.tiktokExplore}
+                    title="The board attached no video to this term"
+                  >
+                    Open search
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {douyinBoard && douyinBoard.items.length === 0 && !douyinError && (
+          <p style={S.tiktokNote}>The board came back empty. Try again shortly.</p>
+        )}
       </div>
 
       {(tiktokResult || busy === "tiktok") && (

@@ -277,6 +277,18 @@ export default function Dashboard() {
   }, [workspaceId, setActiveWorkspaceId]);
 
   useEffect(() => {
+    // Discover hands a trending video over as ?add=, so arriving here means
+    // the link box should already hold it rather than asking for a paste.
+    queueMicrotask(() => {
+      const handoff = new URLSearchParams(window.location.search).get("add");
+      if (!handoff) return;
+      setInput(handoff);
+      setNotice("Link brought over from Discover — review it, then start the download.");
+      window.history.replaceState({}, "", window.location.pathname);
+    });
+  }, []);
+
+  useEffect(() => {
     if (!workspaceId) return;
     let cancelled = false;
     const fetchStatus = async () => {
