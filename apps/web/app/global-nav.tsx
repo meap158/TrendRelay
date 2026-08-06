@@ -104,7 +104,7 @@ export function GlobalNav() {
     notificationButtonRef.current?.focus();
   }
   const discoverActive = pathname === "/discover" || pathname.startsWith("/discover/") || pathname === "/opportunities" || pathname.startsWith("/opportunities/");
-  const libraryActive = pathname === "/library" || pathname.startsWith("/library/") || pathname === "/studio" || pathname.startsWith("/studio/");
+  const libraryActive = pathname === "/library" || pathname.startsWith("/library/");
   const publishActive = pathname === "/publish" || pathname.startsWith("/publish/") || pathname === "/attribution" || pathname.startsWith("/attribution/");
 
   return (

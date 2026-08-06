@@ -684,7 +684,7 @@ export default function Dashboard() {
                 {artifacts.length > 0 && <div className="artifact-list">
                   {artifacts.slice(0, 4).map((artifact) => <div className="artifact-row" key={artifact.path}>
                     <div><strong>{artifact.name}</strong><small>{size(artifact.size_bytes)}</small></div>
-                    <div><Link href={"/studio?source=" + encodeURIComponent(artifact.path)}>Prepare</Link><Link href={"/campaigns?video=" + encodeURIComponent(artifact.path)}>Plan</Link><Link href={"/publish?video=" + encodeURIComponent(artifact.path)}>Publish</Link></div>
+                    <div><Link href={"/library?asset=" + encodeURIComponent(artifact.path)}>Open in Library</Link><Link href={"/campaigns?video=" + encodeURIComponent(artifact.path)}>Plan</Link><Link href={"/publish?video=" + encodeURIComponent(artifact.path)}>Publish</Link></div>
                   </div>)}
                   {artifacts.length > 4 && <p className="more-artifacts">+ {artifacts.length - 4} more files in this batch</p>}
                 </div>}

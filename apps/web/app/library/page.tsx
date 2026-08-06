@@ -8,6 +8,7 @@ import { useAuth } from "../auth-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, buttonClass } from "../ui/button";
 import { Badge } from "../ui/primitives";
+import { ClipEditor } from "./clip-editor";
 
 type Workspace = { id: string; name: string; role: string };
 type ViewMode = "gallery" | "list";
@@ -383,6 +384,7 @@ export default function LibraryPage() {
   /** Anchor for shift-click range selection. */
   const [lastPicked, setLastPicked] = useState<string | null>(null);
   const [bulkActions, setBulkActions] = useState<BulkAction[]>([]);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const selected = assets.find((asset) => asset.id === selectedId);
   const selectedSourceLinks = selected
@@ -400,6 +402,8 @@ export default function LibraryPage() {
   const selectedVideoIndex = videoAssets.findIndex((asset) => asset.id === selectedId);
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const canImport = ["owner", "editor", "approver"].includes(workspace?.role ?? "");
+  // Approving a plan commits render spend, so it is the narrower pair.
+  const canApprove = ["owner", "approver"].includes(workspace?.role ?? "");
   const canEnrich = ["owner", "editor", "analyst"].includes(workspace?.role ?? "");
   const activeFilterCount = [query.trim(), channelFilter, platformFilter, mediaKind].filter(Boolean).length;
   const mediaTotal = facets.media_kinds.reduce((sum, facet) => sum + facet.count, 0);
@@ -568,6 +572,19 @@ export default function LibraryPage() {
   function chooseView(nextView: ViewMode) {
     setViewMode(nextView);
   }
+
+  useEffect(() => {
+    // Downloads links a rendered artifact here by path; select it once the
+    // list has loaded so the asset opens rather than the library's default.
+    queueMicrotask(() => {
+      const wanted = new URLSearchParams(window.location.search).get("asset");
+      if (!wanted) return;
+      const match = assets.find((asset) => asset.original_path === wanted);
+      if (!match) return;
+      setSelectedId(match.id);
+      window.history.replaceState({}, "", window.location.pathname);
+    });
+  }, [assets]);
 
   useEffect(() => {
     if (!user) return;
@@ -1125,6 +1142,14 @@ export default function LibraryPage() {
                       : "Face blurring applies to video"}
                     onClick={() => void blurFaces(selected)}
                   >{busy === "blur" ? "Blurring" : "Blur faces"}</Button>
+                  <Button
+                    variant="secondary"
+                    disabled={selected.media_kind !== "video"}
+                    title={selected.media_kind === "video"
+                      ? "Build and render a clip plan from this video"
+                      : "Clip plans apply to video"}
+                    onClick={() => setEditorOpen(true)}
+                  >Advanced editor</Button>
                   {deleteAction && (
                     <Button
                       variant="danger"
@@ -1202,6 +1227,18 @@ export default function LibraryPage() {
           ) : <article className="library-summary"><p>Select an asset or import a local file to begin.</p></article>}
         </section>
       </section>
+      {workspaceId && selected && (
+        <ClipEditor
+          open={editorOpen}
+          workspaceId={workspaceId}
+          assetPath={selected.original_path}
+          assetTitle={selected.title}
+          durationMs={selected.duration_ms ?? null}
+          canApprove={canApprove}
+          apiFetch={apiFetch}
+          onClose={() => setEditorOpen(false)}
+        />
+      )}
     </main>
   );
 }

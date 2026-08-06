@@ -227,3 +227,20 @@
 .library-selection-bar > strong { font-size: 11px; font-weight: 600; }
 .library-selection-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
 .library-selection-note { margin-left: auto; color: var(--muted); font-size: 11px; }
+
+/* --- advanced clip editor --------------------------------------------------- */
+.clip-editor-body { display: grid; gap: 12px; min-height: 0; overflow-y: auto; }
+.clip-editor-form { display: grid; gap: 12px; }
+.clip-editor-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.clip-editor-plan { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius); }
+.clip-editor-plan-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.clip-editor-plan-head strong { font-size: 12px; font-weight: 600; }
+.clip-editor-plan-head span { color: var(--muted); font-size: 11px; }
+.clip-editor-plan .segment-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: end; }
+.clip-editor-plans { display: grid; gap: 5px; padding-top: 10px; border-top: 1px solid var(--line); }
+.clip-editor-plans > strong { font-size: 12px; font-weight: 600; }
+.clip-editor-plan-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.clip-editor-plan-row > span:first-child { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clip-editor-note { margin: 0; color: var(--green); font-size: 11px; }
+.clip-editor-problem { margin: 0; color: #a3162a; font-size: 11px; }
+@media (max-width: 700px) { .clip-editor-grid, .clip-editor-plan .segment-row { grid-template-columns: 1fr; } }

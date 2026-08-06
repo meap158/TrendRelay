@@ -319,7 +319,7 @@ export default function ToolsPage() {
                 {guidedSetup.has(tool.id) && (
                   <button disabled={busy === `${tool.id}-setup`} onClick={() => void loadSetup(tool.id)}>Setup</button>
                 )}
-                {tool.id === "openmontage" && tool.installed && <Link href="/studio">Open Studio</Link>}
+                {tool.id === "openmontage" && tool.installed && <Link href="/library">Open Library</Link>}
                 {!tool.present && tool.install_allowed && (
                   <button disabled={busy === tool.id} onClick={() => void mutate(tool, "install")}>Install</button>
                 )}
