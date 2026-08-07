@@ -6,6 +6,7 @@ import { useAuth } from "../auth-provider";
 import { SpendImport } from "./spend-import";
 import { Button } from "../ui/button";
 import { Badge, Card } from "../ui/primitives";
+import { StatusToasts, useStatus } from "../ui/status";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 
@@ -102,8 +103,9 @@ export default function CatalogPage() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState("");
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  // Reported over the page. In flow these shifted everything below them each
+  // time an action finished, which reads as the interface flinching.
+  const { messages: statusMessages, succeed, fail, dismiss } = useStatus();
   const [sort, setSort] = usePersistedState("trendrelay.catalog.sort", "title", isSort);
 
   const workspace = workspaces.find((item) => item.id === workspaceId);
@@ -132,9 +134,9 @@ export default function CatalogPage() {
         setWorkspaceId(body.workspaces[0]?.id ?? "");
       })
       .catch((reason) =>
-        setError(reason instanceof Error ? reason.message : "Workspaces unavailable."));
+        fail(reason instanceof Error ? reason.message : "Workspaces unavailable."));
     return () => { cancelled = true; };
-  }, [apiFetch, user]);
+  }, [apiFetch, user, fail]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -142,23 +144,21 @@ export default function CatalogPage() {
     // synchronously here is the cascading-render pattern React warns about.
     queueMicrotask(() => {
       refresh(workspaceId).catch((reason) =>
-        setError(reason instanceof Error ? reason.message : "Catalog unavailable."));
+        fail(reason instanceof Error ? reason.message : "Catalog unavailable."));
     });
-  }, [refresh, workspaceId]);
+  }, [refresh, workspaceId, fail]);
 
   const run = useCallback(async (label: string, work: () => Promise<string>) => {
     setBusy(label);
-    setError("");
-    setMessage("");
     try {
-      setMessage(await work());
+      succeed(await work());
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "That did not work.");
+      fail(reason instanceof Error ? reason.message : "That did not work.");
     } finally {
       setBusy("");
     }
-  }, [refresh]);
+  }, [refresh, succeed, fail]);
 
   const group = useCallback((keys: string[]) => run("group", async () => {
     const body = await json<{ works_created: number; editions_linked: number }>(
@@ -234,9 +234,6 @@ export default function CatalogPage() {
           </select>
         </div>
       </header>
-
-      {error && <p className="console-error" role="alert">{error}</p>}
-      {message && <p className="console-note" role="status">{message}</p>}
 
       {(ready.length > 0 || pending.length > 0) && (
         <Card
@@ -424,6 +421,7 @@ export default function CatalogPage() {
           </div>
         )}
       </Card>
+      <StatusToasts messages={statusMessages} onDismiss={dismiss} />
     </main>
   );
 }

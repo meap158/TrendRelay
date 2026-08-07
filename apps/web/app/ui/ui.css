@@ -20,6 +20,22 @@
   white-space: nowrap;
 }
 
+/* --- status toasts ---------------------------------------------------------- */
+/* Fixed, so announcing the result of an action never reflows the page under the
+ * hand that triggered it. Bottom-right keeps it clear of the sticky top bar and
+ * of the content being read. */
+.status-toasts { position: fixed; right: 16px; bottom: 16px; z-index: 140; display: grid; gap: 8px; max-width: min(420px, calc(100vw - 32px)); pointer-events: none; }
+.status-toast { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 11px 13px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); box-shadow: 0 6px 20px rgb(28 43 51 / 18%); pointer-events: auto; }
+.status-toast p { margin: 0; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.status-toast button { border: 0; padding: 0 2px; background: none; color: var(--muted); font-size: 15px; line-height: 1; cursor: pointer; }
+.status-toast button:hover { color: var(--text); }
+.status-toast-good { border-color: #b7d9cd; background: var(--green-dark); color: var(--green); }
+.status-toast-bad { border-color: #f1b7bb; background: #fff0f1; color: #8c1d26; }
+@media (prefers-reduced-motion: no-preference) {
+  .status-toast { animation: status-toast-in .18s ease-out; }
+  @keyframes status-toast-in { from { opacity: 0; transform: translateY(6px); } }
+}
+
 /* --- asset filters ---------------------------------------------------------- */
 /* One rule set for the Library page and the Publish picker. They previously had
  * a grid of fixed columns and a row of pill buttons respectively, which is how

@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
 import { buttonClass } from "../ui/button";
+import { StatusToasts, useStatus } from "../ui/status";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 
 type Workspace = { id: string; name: string; role: string };
@@ -110,8 +111,9 @@ export default function AttributionPage() {
   const [campaignId, setCampaignId] = useState("");
   const [csvText, setCsvText] = useState(csvTemplate);
   const [busy, setBusy] = useState("");
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  // Reported over the page. Rendered in flow, these shifted everything below
+  // them whenever an action finished, which reads as the interface flinching.
+  const { messages: statusMessages, succeed, fail, dismiss } = useStatus();
 
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const canCreate = ["owner", "editor", "approver"].includes(workspace?.role ?? "");
@@ -152,24 +154,24 @@ export default function AttributionPage() {
         setWorkspaces(body.workspaces);
         setWorkspaceId(body.workspaces[0]?.id ?? "");
       })
-      .catch((reason) => setError(reason instanceof Error ? reason.message : "Workspaces unavailable."));
+      .catch((reason) => fail(reason instanceof Error ? reason.message : "Workspaces unavailable."));
     return () => { cancelled = true; };
-  }, [apiFetch, user]);
+  }, [apiFetch, user, fail]);
 
   useEffect(() => {
     if (!workspaceId) return;
     queueMicrotask(() => {
       void refresh(workspaceId).catch((reason) =>
-        setError(reason instanceof Error ? reason.message : "Attribution unavailable."),
+        fail(reason instanceof Error ? reason.message : "Attribution unavailable."),
       );
     });
-  }, [refresh, workspaceId]);
+  }, [refresh, workspaceId, fail]);
 
   async function createLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy("link");
-    setError("");
-    setMessage("");
+    fail("");
+    succeed("");
     const form = new FormData(event.currentTarget);
     try {
       const expiry = String(form.get("expires_at") ?? "");
@@ -193,13 +195,13 @@ export default function AttributionPage() {
       );
       try {
         await navigator.clipboard.writeText(body.link.url);
-        setMessage("Tracking link created and copied. The destination host and disclosure remain visible.");
+        succeed("Tracking link created and copied. The destination host and disclosure remain visible.");
       } catch {
-        setMessage(`Tracking link created: ${body.link.url}`);
+        succeed(`Tracking link created: ${body.link.url}`);
       }
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Tracking link creation failed.");
+      fail(reason instanceof Error ? reason.message : "Tracking link creation failed.");
     } finally {
       setBusy("");
     }
@@ -208,7 +210,7 @@ export default function AttributionPage() {
   async function setLinkStatus(link: TrackingLink, status: TrackingLink["status"]) {
     if (!window.confirm(`${status === "active" ? "Activate" : "Disable"} tracking link ${link.code}?`)) return;
     setBusy(link.id);
-    setError("");
+    fail("");
     try {
       await json(
         await apiFetch(`/api/workspaces/${workspaceId}/attribution/links/${link.id}/status`, {
@@ -217,10 +219,10 @@ export default function AttributionPage() {
           body: JSON.stringify({ status, confirm_external_action: true }),
         }),
       );
-      setMessage(`Tracking link ${status === "active" ? "activated" : "disabled"}.`);
+      succeed(`Tracking link ${status === "active" ? "activated" : "disabled"}.`);
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Status update failed.");
+      fail(reason instanceof Error ? reason.message : "Status update failed.");
     } finally {
       setBusy("");
     }
@@ -229,7 +231,7 @@ export default function AttributionPage() {
   async function importConversions(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy("import");
-    setError("");
+    fail("");
     try {
       const result = await json<{ created: number; updated: number; matched_clicks: number }>(
         await apiFetch(`/api/workspaces/${workspaceId}/attribution/conversions/import`, {
@@ -238,10 +240,10 @@ export default function AttributionPage() {
           body: JSON.stringify({ csv_text: csvText, confirm_external_action: true }),
         }),
       );
-      setMessage(`${result.created} conversion(s) added, ${result.updated} updated, ${result.matched_clicks} matched to clicks.`);
+      succeed(`${result.created} conversion(s) added, ${result.updated} updated, ${result.matched_clicks} matched to clicks.`);
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Conversion import failed.");
+      fail(reason instanceof Error ? reason.message : "Conversion import failed.");
     } finally {
       setBusy("");
     }
@@ -264,8 +266,6 @@ export default function AttributionPage() {
         </select></label>
       </header>
 
-      {error && <p className="error-banner">{error}</p>}
-      {message && <p className="campaign-message">{message}</p>}
 
       <section className="attribution-totals">
         <article><span>Active links</span><strong>{summary?.totals.active_links ?? 0}</strong><small>{summary?.totals.links ?? 0} total</small></article>
@@ -388,6 +388,7 @@ export default function AttributionPage() {
           </article>
         </aside>
       </section>
+      <StatusToasts messages={statusMessages} onDismiss={dismiss} />
     </main>
   );
 }

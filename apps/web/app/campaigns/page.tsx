@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { StatusToasts, useStatus } from "../ui/status";
 import { Button } from "../ui/button";
 
 type Workspace = { id: string; name: string; role: string };
@@ -83,8 +84,9 @@ export default function CampaignsPage() {
   const [videoPath, setVideoPath] = useState("");
   const [packages, setPackages] = useState<Record<string, ManualPackage>>({});
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  // Reported over the page. Rendered in flow, these shifted everything below
+  // them whenever an action finished, which reads as the interface flinching.
+  const { messages: statusMessages, succeed, fail, dismiss } = useStatus();
 
   const selectedWorkspace = workspaces.find((item) => item.id === workspaceId);
   const selectedCampaign = campaigns.find((item) => item.id === campaignId);
@@ -131,13 +133,13 @@ export default function CampaignsPage() {
       })
       .catch((reason: unknown) => {
         if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : "Could not load workspaces.");
+          fail(reason instanceof Error ? reason.message : "Could not load workspaces.");
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [apiFetch, user]);
+  }, [apiFetch, user, fail]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -162,17 +164,17 @@ export default function CampaignsPage() {
       })
       .catch((reason: unknown) => {
         if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : "Could not load campaigns.");
+          fail(reason instanceof Error ? reason.message : "Could not load campaigns.");
         }
       });
     return () => { cancelled = true; };
-  }, [apiFetch, workspaceId]);
+  }, [apiFetch, workspaceId, fail]);
 
   async function createCampaign(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy("campaign");
-    setError(null);
-    setMessage(null);
+    fail(null);
+    succeed(null);
     try {
       const formElement = event.currentTarget;
       const form = new FormData(formElement);
@@ -192,9 +194,9 @@ export default function CampaignsPage() {
       formElement.reset();
       await refresh(workspaceId);
       setCampaignId(body.campaign.id);
-      setMessage("Campaign created. Add its first publication plan.");
+      succeed("Campaign created. Add its first publication plan.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Campaign creation failed.");
+      fail(reason instanceof Error ? reason.message : "Campaign creation failed.");
     } finally {
       setBusy(null);
     }
@@ -204,8 +206,8 @@ export default function CampaignsPage() {
     event.preventDefault();
     if (!campaignId) return;
     setBusy("plan");
-    setError(null);
-    setMessage(null);
+    fail(null);
+    succeed(null);
     try {
       const formElement = event.currentTarget;
       const form = new FormData(formElement);
@@ -232,9 +234,9 @@ export default function CampaignsPage() {
       setVideoPath("");
       formElement.reset();
       await refresh(workspaceId);
-      setMessage("Publication plan is ready for owner or approver review.");
+      succeed("Publication plan is ready for owner or approver review.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Publication plan failed.");
+      fail(reason instanceof Error ? reason.message : "Publication plan failed.");
     } finally {
       setBusy(null);
     }
@@ -243,7 +245,7 @@ export default function CampaignsPage() {
   async function setCampaignStatus(status: Campaign["status"]) {
     if (!campaignId) return;
     setBusy(`campaign-${status}`);
-    setError(null);
+    fail(null);
     try {
       await json(
         await apiFetch(
@@ -253,7 +255,7 @@ export default function CampaignsPage() {
       );
       await refresh(workspaceId);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Campaign status update failed.");
+      fail(reason instanceof Error ? reason.message : "Campaign status update failed.");
     } finally {
       setBusy(null);
     }
@@ -264,7 +266,7 @@ export default function CampaignsPage() {
       return;
     }
     setBusy(plan.id);
-    setError(null);
+    fail(null);
     try {
       await json(
         await apiFetch(
@@ -275,7 +277,7 @@ export default function CampaignsPage() {
       );
       await refresh(workspaceId);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Approval failed.");
+      fail(reason instanceof Error ? reason.message : "Approval failed.");
     } finally {
       setBusy(null);
     }
@@ -284,7 +286,7 @@ export default function CampaignsPage() {
   async function exportPackage(plan: PublicationPlan) {
     if (!window.confirm(`Build a local manual posting package for “${plan.title}”?`)) return;
     setBusy(`package-${plan.id}`);
-    setError(null);
+    fail(null);
     try {
       const body = await json<{ package: ManualPackage }>(
         await apiFetch(
@@ -297,9 +299,9 @@ export default function CampaignsPage() {
         ),
       );
       setPackages((current) => ({ ...current, [plan.id]: body.package }));
-      setMessage("Manual posting package created locally.");
+      succeed("Manual posting package created locally.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Package export failed.");
+      fail(reason instanceof Error ? reason.message : "Package export failed.");
     } finally {
       setBusy(null);
     }
@@ -314,7 +316,7 @@ export default function CampaignsPage() {
         }),
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not open package folder.");
+      fail(reason instanceof Error ? reason.message : "Could not open package folder.");
     }
   }
 
@@ -326,7 +328,7 @@ export default function CampaignsPage() {
       plan.affiliate_url ?? "",
     ].filter(Boolean).join("\n\n");
     await navigator.clipboard.writeText(text);
-    setMessage("Caption, hashtags, disclosure, and link copied.");
+    succeed("Caption, hashtags, disclosure, and link copied.");
   }
 
   if (loading) {
@@ -357,8 +359,6 @@ export default function CampaignsPage() {
           </select>
         </label>
       </header>
-      {error && <p className="inline-error" role="alert">{error}</p>}
-      {message && <p className="campaign-message" role="status">{message}</p>}
 
       <section className="campaign-layout">
         <aside className="campaign-sidebar">
@@ -493,6 +493,7 @@ export default function CampaignsPage() {
           )}
         </div>
       </section>
+      <StatusToasts messages={statusMessages} onDismiss={dismiss} />
     </main>
   );
 }

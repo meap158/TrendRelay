@@ -8,6 +8,7 @@ import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, buttonClass } from "../ui/button";
+import { StatusToasts, useStatus } from "../ui/status";
 import { Badge } from "../ui/primitives";
 import { BlurSettings } from "./blur-settings";
 import { ClipEditor } from "./clip-editor";
@@ -399,7 +400,10 @@ export default function LibraryPage() {
     version_note?: string;
     error?: string | null;
   } | null>(null);
-  const [error, setError] = useState("");
+  // Errors are reported over the page: in flow they shifted everything below
+  // them whenever an action finished. The bulk-action outcome below is not a
+  // banner — it reads back inline where the run was started — so it stays put.
+  const { messages: statusMessages, fail, dismiss } = useStatus();
   const [message, setMessage] = useState("");
   const [selection, setSelection] = useState<Set<string>>(new Set());
   /** Anchor for shift-click range selection. */
@@ -519,7 +523,7 @@ export default function LibraryPage() {
   async function selectAllMatching() {
     if (!workspaceId) return;
     setBusy("select-all");
-    setError("");
+    fail("");
     try {
       const body = await json<{ asset_ids: string[]; matched: number; truncated: boolean }>(
         await apiFetch(
@@ -533,7 +537,7 @@ export default function LibraryPage() {
           : `Selected all ${body.asset_ids.length.toLocaleString()} matching items.`,
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The selection could not be built.");
+      fail(reason instanceof Error ? reason.message : "The selection could not be built.");
     } finally {
       setBusy("");
     }
@@ -554,7 +558,7 @@ export default function LibraryPage() {
       : `${action.label} on ${subject}?`;
     if (!window.confirm(prompt)) return;
     setBusy(`bulk-${action.id}`);
-    setError("");
+    fail("");
     setMessage("");
     try {
       const totals = { queued: 0, skipped: 0, failed: 0, missing: 0 };
@@ -588,7 +592,7 @@ export default function LibraryPage() {
         if (action.id === "delete") await refresh(workspaceId);
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : `${action.label} could not start.`);
+      fail(reason instanceof Error ? reason.message : `${action.label} could not start.`);
     } finally {
       setBusy("");
     }
@@ -653,9 +657,9 @@ export default function LibraryPage() {
         setWorkspaces(body.workspaces);
         setWorkspaceId(body.workspaces[0]?.id ?? "");
       })
-      .catch((reason) => setError(reason instanceof Error ? reason.message : "Workspaces unavailable."));
+      .catch((reason) => fail(reason instanceof Error ? reason.message : "Workspaces unavailable."));
     return () => { cancelled = true; };
-  }, [apiFetch, user]);
+  }, [apiFetch, user, fail]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -673,10 +677,10 @@ export default function LibraryPage() {
     if (!workspaceId) return;
     queueMicrotask(() => {
       void refresh(workspaceId).catch((reason) =>
-        setError(reason instanceof Error ? reason.message : "Library unavailable."),
+        fail(reason instanceof Error ? reason.message : "Library unavailable."),
       );
     });
-  }, [refresh, workspaceId]);
+  }, [refresh, workspaceId, fail]);
 
   useEffect(() => {
     if (!workspaceId || !canImport || autoSyncedWorkspaces.current.has(workspaceId)) return;
@@ -698,16 +702,16 @@ export default function LibraryPage() {
             setMessage(`${body.sync.removed_asset_ids.length} removed media items were cleared from Library.`);
           }
           if (body.sync.errors.length) {
-            setError(`${body.sync.errors.length} downloaded media items could not be prepared.`);
+            fail(`${body.sync.errors.length} downloaded media items could not be prepared.`);
           }
           await refresh(workspaceId);
         } catch (reason) {
           autoSyncedWorkspaces.current.delete(workspaceId);
-          setError(reason instanceof Error ? reason.message : "Downloaded media could not be synchronized.");
+          fail(reason instanceof Error ? reason.message : "Downloaded media could not be synchronized.");
         }
       })();
     });
-  }, [apiFetch, canImport, refresh, workspaceId]);
+  }, [apiFetch, canImport, refresh, workspaceId, fail]);
 
   useEffect(() => {
     if (!jobs.some((job) => ["queued", "running"].includes(job.status))) return;
@@ -717,7 +721,7 @@ export default function LibraryPage() {
 
   async function syncDownloads() {
     setBusy("sync");
-    setError("");
+    fail("");
     setMessage("");
     try {
       const body = await json<{ sync: { queued: Job[]; errors: string[]; removed_asset_ids: string[] } }>(
@@ -734,10 +738,10 @@ export default function LibraryPage() {
         : removedCount
           ? `${removedCount} removed media items were cleared from Library.`
           : "Downloaded media is already up to date.");
-      if (body.sync.errors.length) setError(`${body.sync.errors.length} media items could not be queued.`);
+      if (body.sync.errors.length) fail(`${body.sync.errors.length} media items could not be queued.`);
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Downloaded media could not be added.");
+      fail(reason instanceof Error ? reason.message : "Downloaded media could not be added.");
     } finally {
       setBusy("");
     }
@@ -746,7 +750,7 @@ export default function LibraryPage() {
   async function importMedia(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy("import");
-    setError("");
+    fail("");
     setMessage("");
     const form = new FormData(event.currentTarget);
     try {
@@ -775,7 +779,7 @@ export default function LibraryPage() {
       setMessage(body.job.asset_id ? "That file is already safely stored." : "Import queued. Derivatives will appear automatically.");
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Import failed.");
+      fail(reason instanceof Error ? reason.message : "Import failed.");
     } finally {
       setBusy("");
     }
@@ -785,7 +789,7 @@ export default function LibraryPage() {
     event.preventDefault();
     if (!selected) return;
     setBusy("enrich");
-    setError("");
+    fail("");
     const form = new FormData(event.currentTarget);
     try {
       const body = await json<{ asset: Asset }>(
@@ -809,7 +813,7 @@ export default function LibraryPage() {
       setAssets((current) => current.map((asset) => asset.id === body.asset.id ? body.asset : asset));
       setMessage("Reviewed transcript and creative recipe saved.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Enrichment failed.");
+      fail(reason instanceof Error ? reason.message : "Enrichment failed.");
     } finally {
       setBusy("");
     }
@@ -835,7 +839,7 @@ export default function LibraryPage() {
       + "Publish will use the blurred version.",
     )) return;
     setBusy("blur");
-    setError("");
+    fail("");
     setBlurResult(null);
     try {
       const response = await apiFetch(
@@ -856,7 +860,7 @@ export default function LibraryPage() {
       }
       await followBlurJob(payload.job.id);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Face blurring failed.");
+      fail(reason instanceof Error ? reason.message : "Face blurring failed.");
     } finally {
       setBusy("");
     }
@@ -888,12 +892,12 @@ export default function LibraryPage() {
       }
       return;
     }
-    setError("Still rendering. Reopen this asset shortly to see the result.");
+    fail("Still rendering. Reopen this asset shortly to see the result.");
   }
 
   async function openAssetFolder(asset: Asset) {
     setBusy("folder");
-    setError("");
+    fail("");
     try {
       await json(await apiFetch("/api/tools/open-folder", {
         method: "POST",
@@ -901,7 +905,7 @@ export default function LibraryPage() {
         body: JSON.stringify({ path: asset.original_path }),
       }));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The media folder could not be opened.");
+      fail(reason instanceof Error ? reason.message : "The media folder could not be opened.");
     } finally {
       setBusy("");
     }
@@ -955,7 +959,6 @@ export default function LibraryPage() {
         </header>
       </div>
 
-      {error && <p className="error-banner">{error}</p>}
       {blurResult?.status === "failed" && (
         <p className="error-banner" role="alert">
           Blurring failed. {blurResult.error}
@@ -1319,6 +1322,7 @@ export default function LibraryPage() {
           onClose={() => setEditorOpen(false)}
         />
       )}
+      <StatusToasts messages={statusMessages} onDismiss={dismiss} />
     </main>
   );
 }

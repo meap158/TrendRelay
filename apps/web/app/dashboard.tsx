@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 
 import { useAuth } from "./auth-provider";
 import { Button, buttonClass } from "./ui/button";
+import { StatusToasts, useStatus } from "./ui/status";
 import { numberIn, oneOf, subsetOf, usePersistedState } from "./ui/use-persisted-state";
 
 const isDownloadMode = oneOf("post", "like", "mix", "music");
@@ -226,8 +227,10 @@ export default function Dashboard() {
   const [resumingJobId, setResumingJobId] = useState("");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
   const [visibleJobCount, setVisibleJobCount] = useState(INITIAL_JOB_COUNT);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // Announced over the page rather than inside it. Rendering these in flow
+  // pushed everything below them down by 57px and pulled it back up again, so
+  // an action reporting itself moved the row holding the button that ran it.
+  const { messages: statusMessages, succeed, fail, dismiss, clear: clearStatus } = useStatus();
   const linkInputRef = useRef<HTMLTextAreaElement>(null);
 
   const jobs = useMemo(
@@ -253,7 +256,7 @@ export default function Dashboard() {
     const staged = input.split(/\s+/).filter(Boolean);
     const fresh = profiles.filter((profile) => !staged.includes(profile));
     if (!fresh.length) {
-      setNotice(
+      succeed(
         profiles.length === 1
           ? "That creator's profile is already in the list."
           : "Those creator profiles are already in the list.",
@@ -261,8 +264,7 @@ export default function Dashboard() {
       return;
     }
     setInput([...staged, ...fresh].join("\n"));
-    setError(null);
-    setNotice(
+    succeed(
       `Added ${fresh.length} creator ${fresh.length === 1 ? "profile" : "profiles"}. ` +
       "Downloading a profile fetches its whole catalogue, not just this clip.",
     );
@@ -275,8 +277,7 @@ export default function Dashboard() {
   function reuseLinks(sources: string[]) {
     if (!sources.length) return;
     setInput(sources.join("\n"));
-    setError(null);
-    setNotice(`${sources.length} ${sources.length === 1 ? "link is" : "links are"} ready to download again.`);
+    succeed(`${sources.length} ${sources.length === 1 ? "link is" : "links are"} ready to download again.`);
     requestAnimationFrame(() => {
       linkInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       linkInputRef.current?.focus();
@@ -294,9 +295,11 @@ export default function Dashboard() {
       const handoff = new URLSearchParams(window.location.search).get("add");
       if (!handoff) return;
       setInput(handoff);
-      setNotice("Link brought over from Discover — review it, then start the download.");
+      succeed("Link brought over from Discover — review it, then start the download.");
       window.history.replaceState({}, "", window.location.pathname);
     });
+    // The handoff is read once, on arrival; succeed is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -307,7 +310,7 @@ export default function Dashboard() {
         const body = await json<MediaStatus>(await apiFetch("/api/workspaces/" + workspaceId + "/media/status"));
         if (!cancelled) setStatus(body);
       } catch (reason) {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "Media service unavailable.");
+        if (!cancelled) fail(reason instanceof Error ? reason.message : "Media service unavailable.");
       }
     };
     void fetchStatus();
@@ -316,7 +319,7 @@ export default function Dashboard() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [apiFetch, workspaceId]);
+  }, [apiFetch, workspaceId, fail]);
 
   useEffect(() => {
     if (!user) return;
@@ -326,8 +329,8 @@ export default function Dashboard() {
         setWorkspaces(body.workspaces);
         setWorkspaceId((current) => current || body.workspaces[0]?.id || "");
       })
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load workspaces."));
-  }, [apiFetch, user]);
+      .catch((reason: unknown) => fail(reason instanceof Error ? reason.message : "Could not load workspaces."));
+  }, [apiFetch, user, fail]);
 
   const selectedWorkspace = workspaces.find((item) => item.id === workspaceId);
   const providerReady = Boolean(status?.douyin.installed && status?.douyin.active);
@@ -340,8 +343,7 @@ export default function Dashboard() {
   async function connectDouyin() {
     if (!workspaceId) return;
     setConnecting(true);
-    setError(null);
-    setNotice(null);
+    clearStatus();
     try {
       const body = await json<{ connection: { state: string; message: string } }>(
         await apiFetch("/api/workspaces/" + workspaceId + "/media/douyin/connection", {
@@ -353,25 +355,25 @@ export default function Dashboard() {
         ...current,
         douyin: { ...current.douyin, connection: body.connection },
       } : current);
-      setNotice("Douyin opened in a separate window. Finish signing in there; TrendRelay will detect it automatically.");
+      succeed("Douyin opened in a separate window. Finish signing in there; TrendRelay will detect it automatically.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Douyin connection could not start.");
+      fail(reason instanceof Error ? reason.message : "Douyin connection could not start.");
     } finally {
       setConnecting(false);
     }
   }
 
   async function pasteLinks() {
-    setError(null);
+    clearStatus();
     try {
       const text = await navigator.clipboard.readText();
       if (!text.trim()) {
-        setError("Your clipboard does not contain any text.");
+        fail("Your clipboard does not contain any text.");
         return;
       }
       setInput((current) => current.trim() ? current.trim() + "\n" + text.trim() : text.trim());
     } catch {
-      setError("Clipboard access was not available. Paste into the box with Ctrl+V instead.");
+      fail("Clipboard access was not available. Paste into the box with Ctrl+V instead.");
     }
   }
 
@@ -387,12 +389,12 @@ export default function Dashboard() {
   async function fetchMedia(event: FormEvent) {
     event.preventDefault();
     if (!urls.length) {
-      setError("Paste a specific Douyin video, profile, collection, music, or v.douyin.com share link.");
+      fail("Paste a specific Douyin video, profile, collection, music, or v.douyin.com share link.");
       requestAnimationFrame(() => linkInputRef.current?.focus());
       return;
     }
     if (!canFetch) {
-      setError(
+      fail(
         refreshRequired
           ? "Refresh the Douyin session before starting this download."
           : providerReady
@@ -402,8 +404,7 @@ export default function Dashboard() {
       return;
     }
     setBusy(true);
-    setError(null);
-    setNotice(null);
+    clearStatus();
     try {
       await json(await apiFetch("/api/workspaces/" + workspaceId + "/media/douyin/downloads", {
         method: "POST",
@@ -420,32 +421,31 @@ export default function Dashboard() {
       setInput("");
       setQueueFilter("active");
       setVisibleJobCount(INITIAL_JOB_COUNT);
-      setNotice(urls.length === 1 ? "Download added to the queue." : urls.length + " downloads added to the queue.");
+      succeed(urls.length === 1 ? "Download added to the queue." : urls.length + " downloads added to the queue.");
       await refreshJobs();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Download could not start.");
+      fail(reason instanceof Error ? reason.message : "Download could not start.");
     } finally {
       setBusy(false);
     }
   }
 
   async function openFolder(path: string) {
-    setError(null);
+    clearStatus();
     try {
       await json(await apiFetch("/api/tools/open-folder", {
         method: "POST",
         body: JSON.stringify({ path }),
       }));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The download folder could not be opened.");
+      fail(reason instanceof Error ? reason.message : "The download folder could not be opened.");
     }
   }
 
   async function clearUnavailableDownloads() {
     if (!window.confirm("Clear download history with no files on disk? Active downloads and jobs with retained files will stay.")) return;
     setClearingHistory(true);
-    setError(null);
-    setNotice(null);
+    clearStatus();
     try {
       const body = await json<{
         cleanup: {
@@ -460,11 +460,11 @@ export default function Dashboard() {
       const removed = body.cleanup.removed_job_ids.length;
       const active = body.cleanup.preserved_active_job_ids.length;
       const retained = body.cleanup.preserved_on_disk_job_ids.length;
-      setNotice(`${removed} ${removed === 1 ? "download" : "downloads"} cleared. ${retained} with files and ${active} active kept.`);
+      succeed(`${removed} ${removed === 1 ? "download" : "downloads"} cleared. ${retained} with files and ${active} active kept.`);
       setVisibleJobCount(INITIAL_JOB_COUNT);
       await refreshJobs();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Download history could not be cleared.");
+      fail(reason instanceof Error ? reason.message : "Download history could not be cleared.");
     } finally {
       setClearingHistory(false);
     }
@@ -472,20 +472,22 @@ export default function Dashboard() {
 
   async function resumeDownload(jobId: string, fromSavedFiles = false) {
     setResumingJobId(jobId);
-    setError(null);
-    setNotice(null);
+    clearStatus();
     try {
       await json(await apiFetch(`/api/workspaces/${workspaceId}/media/downloads/${jobId}/resume`, {
         method: "POST",
         body: JSON.stringify({ confirm_external_action: true, from_saved_files: fromSavedFiles }),
       }));
-      setNotice(fromSavedFiles
+      succeed(fromSavedFiles
         ? "Finishing the files already saved. No new Douyin request is needed."
         : "Download resumed. Existing files will be kept while TrendRelay checks for anything missing.");
-      setQueueFilter("active");
       await refreshJobs();
+      // Only once the refreshed jobs agree it is active. Switching first
+      // filtered the old list, which still had this job as failed, so the row
+      // under the cursor disappeared and came back.
+      selectQueueFilter("active");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The download could not be resumed.");
+      fail(reason instanceof Error ? reason.message : "The download could not be resumed.");
     } finally {
       setResumingJobId("");
     }
@@ -512,10 +514,6 @@ export default function Dashboard() {
     {!workspaceId && <section className="empty-console"><h2>Create a workspace first</h2><p>A workspace owns media, approvals, and publishing history.</p><Link className={buttonClass({ variant: "primary" })} href="/workspaces">Create workspace</Link></section>}
     {workspaceId && <>
 
-      <div className="console-messages" aria-live="polite">
-        {error && <p className="inline-error" role="alert"><strong>Something needs attention.</strong><span>{error}</span></p>}
-        {notice && <p className="inline-notice"><strong>All set.</strong><span>{notice}</span></p>}
-      </div>
 
       <section className="downloader-layout">
         <form id="add-links" className="download-composer" onSubmit={fetchMedia}>
@@ -707,5 +705,6 @@ export default function Dashboard() {
       </section>
       </section>
     </>}
+    <StatusToasts messages={statusMessages} onDismiss={dismiss} />
   </main>;
 }
