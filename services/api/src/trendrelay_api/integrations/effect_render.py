@@ -21,8 +21,12 @@ import shutil
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
+from secrets import token_hex
 from typing import Any
 
+from pydantic import BaseModel, Field
+
+from trendrelay_api.database import SessionFactory
 from trendrelay_api.integrations import face_blur
 from trendrelay_api.integrations.effects import (
     Effect,
@@ -30,9 +34,23 @@ from trendrelay_api.integrations.effects import (
     EffectParam,
     RecipeStep,
     build_filtergraph,
+    read_recipe,
     register,
     render_stream,
 )
+from trendrelay_api.jobs import (
+    claim_job,
+    complete_job,
+    create_job_record,
+    fail_job,
+    get_job_record,
+    list_job_records,
+)
+from trendrelay_api.tool_registry import PROJECT_ROOT
+
+JOB_KIND = "media_effect_render"
+JOB_SESSION_FACTORY = SessionFactory
+RENDER_ROOT = PROJECT_ROOT / ".data" / "productions" / "edits"
 
 #: The recipe steps that produce a privacy-relevant cut. A render containing one
 #: is stored as a `blurred` version rather than an `edited` one, because the
@@ -163,3 +181,140 @@ def render_recipe(
     report["size_bytes"] = destination.stat().st_size
     report["version_kind"] = version_kind_for(steps)
     return report
+
+
+# --------------------------------------------------------------------------- #
+# Running a render as a durable job
+# --------------------------------------------------------------------------- #
+
+
+class EffectRenderRequest(BaseModel):
+    workspace_id: str = Field(min_length=1, max_length=128)
+    source_path: str = Field(min_length=1, max_length=1000)
+    steps: list[dict[str, Any]] = Field(min_length=1, max_length=24)
+    preview_seconds: float | None = Field(default=None, ge=0.5, le=30)
+    confirm_external_action: bool = False
+
+
+def render_output_path(workspace_id: str, source: Path, preview: bool) -> Path:
+    stem = source.stem[:60]
+    suffix = "-preview" if preview else ""
+    # A short random tail rather than a content hash: the name is needed before
+    # the file exists, and two recipes over one source must not collide.
+    return RENDER_ROOT / workspace_id / f"{stem}-{token_hex(4)}{suffix}.mp4"
+
+
+def create_render_job(request: EffectRenderRequest) -> dict[str, Any]:
+    if not request.confirm_external_action:
+        raise PermissionError("Rendering writes a new media file and needs confirmation.")
+    # Validated before anything is queued, so a bad recipe fails at the request
+    # rather than in a worker minutes later.
+    steps = read_recipe(request.steps)
+    source = face_blur._approved_source(request.source_path)
+    job_id = f"edit_{token_hex(12)}"
+    output = render_output_path(request.workspace_id, source, bool(request.preview_seconds))
+    create_job_record(
+        job_id,
+        request.workspace_id,
+        JOB_KIND,
+        {
+            "workspace_id": request.workspace_id,
+            "request": request.model_dump(mode="json", exclude={"confirm_external_action"}),
+            "source": str(source),
+            "output": str(output),
+            "effects": [step.effect.id for step in steps],
+        },
+        max_attempts=1,
+        factory=JOB_SESSION_FACTORY,
+    )
+    return get_job_record(job_id, factory=JOB_SESSION_FACTORY)
+
+
+def run_render_job(job_id: str, worker_id: str = "effect-render-worker") -> None:
+    try:
+        record = claim_job(job_id, worker_id, lease_seconds=3600, factory=JOB_SESSION_FACTORY)
+    except (FileNotFoundError, PermissionError):
+        return
+    payload = record["payload"]
+    try:
+        steps = read_recipe(payload["request"]["steps"])
+        output = Path(payload["output"])
+        output.parent.mkdir(parents=True, exist_ok=True)
+        result = render_recipe(
+            Path(payload["source"]),
+            output,
+            steps,
+            preview_seconds=payload["request"].get("preview_seconds"),
+        )
+        if not payload["request"].get("preview_seconds"):
+            # A preview covers only the opening seconds, so registering it as a
+            # version of the whole asset would misrepresent the asset.
+            result = {
+                **result,
+                **_register_version(
+                    payload["workspace_id"],
+                    Path(payload["source"]),
+                    output,
+                    version_kind_for(steps),
+                ),
+            }
+        complete_job(job_id, worker_id, result, factory=JOB_SESSION_FACTORY)
+    except Exception as error:
+        fail_job(job_id, worker_id, str(error), factory=JOB_SESSION_FACTORY)
+
+
+def _register_version(
+    workspace_id: str, source: Path, output: Path, version_kind: str
+) -> dict[str, Any]:
+    """Attach a finished render to its source asset.
+
+    The same grouping face blur already does, generalised over the kind: the
+    Library stays one row per subject rather than growing a near-duplicate for
+    every edit.
+    """
+    from sqlalchemy import select
+
+    from trendrelay_api.media_library import file_sha256
+    from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
+
+    with JOB_SESSION_FACTORY.begin() as session:
+        asset = session.scalar(
+            select(MediaAsset).where(
+                MediaAsset.workspace_id == workspace_id,
+                MediaAsset.original_path == str(source),
+            )
+        )
+        if asset is None:
+            return {
+                "version_registered": False,
+                "version_note": (
+                    "The source is not a Library asset, so the render stays unattached."
+                ),
+            }
+        digest = file_sha256(output)
+        existing = session.scalar(
+            select(MediaAssetVersion).where(
+                MediaAssetVersion.asset_id == asset.id,
+                MediaAssetVersion.version_kind == version_kind,
+                MediaAssetVersion.sha256 == digest,
+            )
+        )
+        if existing:
+            # Re-rendering identical content must not stack duplicate rows.
+            return {"version_registered": True, "asset_id": asset.id, "version_id": existing.id}
+        version = MediaAssetVersion(
+            workspace_id=workspace_id,
+            asset_id=asset.id,
+            version_kind=version_kind,
+            path=str(output),
+            sha256=digest,
+            mime_type="video/mp4",
+            size_bytes=output.stat().st_size,
+        )
+        session.add(version)
+        session.flush()
+        return {"version_registered": True, "asset_id": asset.id, "version_id": version.id}
+
+
+def list_render_jobs(workspace_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    return list_job_records(workspace_id, JOB_KIND, limit, factory=JOB_SESSION_FACTORY)

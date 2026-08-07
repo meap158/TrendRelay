@@ -1044,13 +1044,16 @@ export default function LibraryPage() {
                   ? `${selection.size.toLocaleString()} selected`
                   : `Select from ${assets.length} loaded`}
               </strong>
-              {total > assets.length && (
+              {total > assets.length && selection.size < total && (
                 <Button
                   variant="quiet"
                   size="sm"
                   busy={busy === "select-all"}
                   onClick={() => void selectAllMatching()}
                 >Select all {total.toLocaleString()} matching</Button>
+              )}
+              {total > assets.length && selection.size >= total && (
+                <Badge tone="good">every match selected</Badge>
               )}
               {selection.size > 0 && (
                 <>
@@ -1158,6 +1161,11 @@ export default function LibraryPage() {
                         </a>
                       ) : <span className="library-channel-name">Channel: {selected.creator}</span>}
                     </>}
+                    {blurredVersion(selected) && (
+                      <em className="blurred-tag" title={`Handoffs send this cut: ${handoffPath(selected)}`}>
+                        Faces blurred
+                      </em>
+                    )}
                   </p>
                   <h2>{selected.title}</h2>
                   <p>{selected.caption || "No source caption recorded."}</p>
@@ -1231,11 +1239,6 @@ export default function LibraryPage() {
                   )}
                   <Link href={`/campaigns?video=${encodeURIComponent(handoffPath(selected))}`}>Plan campaign</Link>
                   <Link href={`/publish?video=${encodeURIComponent(handoffPath(selected))}`}>Prepare to publish</Link>
-                  {blurredVersion(selected) && (
-                    <em className="blurred-tag" title={handoffPath(selected)}>
-                      Faces blurred · handoffs send this cut
-                    </em>
-                  )}
                   {selectedSourceLinks.map((url, index, links) => {
                     const label = selected.platform === "douyin"
                       ? `${selected.creator ? `${selected.creator}'s ` : ""}original Douyin video`

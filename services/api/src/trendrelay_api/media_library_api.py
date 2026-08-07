@@ -31,6 +31,7 @@ from trendrelay_api.media_models import (
     MediaAssetVersion,
     MediaTranscript,
 )
+from trendrelay_api.models import utc_now
 
 router = APIRouter(
     prefix="/api/workspaces/{workspace_id}/media/library",
@@ -843,6 +844,132 @@ def submit_face_blur(
         raise HTTPException(status_code=422, detail=str(error)) from error
     background_tasks.add_task(run_blur_job, job["id"])
     return {"job": job}
+
+
+class RecipeRequest(BaseModel):
+    """The edit an asset carries. Ordered, because the effects do not commute."""
+
+    steps: list[dict[str, Any]] = Field(default_factory=list, max_length=24)
+
+
+@router.get("/effects")
+def list_effects(
+    workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
+) -> dict[str, Any]:
+    """Every effect and its settings, as declared.
+
+    The interface builds its form from this rather than hard-coding controls, so
+    an effect added to the registry appears without any frontend change.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations import effect_render  # noqa: F401  registers frame effects
+    from trendrelay_api.integrations.effects import describe
+
+    return {"effects": describe()}
+
+
+def _recipe_row(session: Session, workspace_id: str, asset_id: str) -> Any:
+    from trendrelay_api.media_models import MediaEditRecipe
+
+    return session.scalar(
+        select(MediaEditRecipe).where(
+            MediaEditRecipe.workspace_id == workspace_id,
+            MediaEditRecipe.asset_id == asset_id,
+        )
+    )
+
+
+@router.get("/assets/{asset_id}/recipe")
+def get_recipe(
+    workspace_id: str, asset_id: str, user: AuthenticatedUser, session: DatabaseSession
+) -> dict[str, Any]:
+    membership(session, workspace_id, user.id)
+    _asset_record(session, workspace_id, asset_id)
+    row = _recipe_row(session, workspace_id, asset_id)
+    return {"steps": row.steps if row else [], "updated_at": row.updated_at if row else None}
+
+
+@router.post("/assets/{asset_id}/recipe")
+def save_recipe(
+    workspace_id: str,
+    asset_id: str,
+    body: RecipeRequest,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Store the edit without rendering it.
+
+    Saving and rendering are separate on purpose: an edit is cheap to keep and
+    expensive to produce, so the recipe survives being put down and picked up
+    without paying for an encode each time.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    ensure_profile(session, user)
+    _asset_record(session, workspace_id, asset_id)
+
+    from trendrelay_api.integrations import effect_render  # noqa: F401  registers frame effects
+    from trendrelay_api.integrations.effects import EffectError, read_recipe
+    from trendrelay_api.media_models import MediaEditRecipe
+
+    try:
+        # Validated on the way in, so a stored recipe is always renderable.
+        steps = read_recipe(body.steps)
+    except EffectError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    normalised = [{"effect": step.effect.id, "values": step.values} for step in steps]
+    row = _recipe_row(session, workspace_id, asset_id)
+    if row is None:
+        row = MediaEditRecipe(
+            workspace_id=workspace_id,
+            asset_id=asset_id,
+            steps=normalised,
+            created_by=user.id,
+        )
+        session.add(row)
+    else:
+        row.steps = normalised
+        row.updated_at = utc_now()
+    session.commit()
+    return {"steps": normalised}
+
+
+@router.post("/effects/render", status_code=202)
+def submit_render(
+    workspace_id: str,
+    body: dict[str, Any],
+    background_tasks: BackgroundTasks,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Render a recipe into a new version of its source."""
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    from trendrelay_api.integrations.effect_render import (
+        EffectRenderRequest,
+        create_render_job,
+        run_render_job,
+    )
+    from trendrelay_api.integrations.effects import EffectError
+
+    try:
+        request = EffectRenderRequest.model_validate({**body, "workspace_id": workspace_id})
+        job = create_render_job(request)
+    except PermissionError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except (EffectError, ValidationError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    background_tasks.add_task(run_render_job, job["id"])
+    return {"job": job}
+
+
+@router.get("/effects/jobs")
+def list_effect_render_jobs(
+    workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
+) -> dict[str, Any]:
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.effect_render import list_render_jobs
+
+    return {"jobs": list_render_jobs(workspace_id)}
 
 
 class BulkRequest(BaseModel):
