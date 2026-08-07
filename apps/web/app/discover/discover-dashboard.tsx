@@ -367,6 +367,12 @@ const S: Record<string, React.CSSProperties> = {
   boardTerm: {
     display: "-webkit-box", overflow: "hidden", WebkitBoxOrient: "vertical",
     WebkitLineClamp: 2, fontSize: 12, fontWeight: 600, lineHeight: 1.35,
+    color: "#1c2b33", textDecoration: "none",
+  } as const,
+  // The list already sizes its own name; this only makes it read as a link.
+  boardTermLink: {
+    overflow: "hidden", color: "#1c2b33", fontSize: 13, fontWeight: 600,
+    textDecoration: "none", textOverflow: "ellipsis", whiteSpace: "nowrap",
   } as const,
   boardMeta: { color: "#606770", fontSize: 10 } as const,
   boardAction: {
@@ -1298,7 +1304,16 @@ export default function ResearchDashboard() {
                   <span style={S.boardRank}>{item.rank}</span>
                 </div>
                 <div style={S.boardBody}>
-                  <span style={S.boardTerm} title={item.term}>{item.term}</span>
+                  <a
+                    href={item.video_url ?? item.search_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="board-term-link"
+                    style={S.boardTerm}
+                    title={item.video_url
+                      ? `Open this video on Douyin: ${item.term}`
+                      : `Search Douyin for ${item.term}`}
+                  >{item.term}</a>
                   <span style={S.boardMeta}>
                     {item.hot_value > 0 && <>{compactNumber(item.hot_value)} heat</>}
                     {item.hot_value > 0 && item.view_count > 0 && " · "}
@@ -1331,7 +1346,16 @@ export default function ResearchDashboard() {
               <div key={`${item.rank}-${item.term}`} style={S.tiktokRow}>
                 <span style={S.tiktokRank}>{item.rank}</span>
                 <div style={S.tiktokBody}>
-                  <span style={S.tiktokName} title={item.term}>{item.term}</span>
+                  <a
+                    href={item.video_url ?? item.search_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="board-term-link"
+                    style={S.boardTermLink}
+                    title={item.video_url
+                      ? `Open this video on Douyin: ${item.term}`
+                      : `Search Douyin for ${item.term}`}
+                  >{item.term}</a>
                 </div>
                 <div style={S.tiktokMetrics}>
                   {item.hot_value > 0 && (

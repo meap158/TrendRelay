@@ -655,3 +655,8 @@ html { scroll-behavior: smooth; }
   .workspace-section-links { width: 100%; }
   .workspace-section-links a { flex: 1 1 auto; justify-content: center; text-align: center; flex-direction: column; gap: 2px; padding: 8px; }
 }
+
+/* The Douyin board's term opens the video on Douyin. Inline styles cannot carry
+ * a hover, and without one nothing says the text is clickable. */
+.board-term-link:hover { color: var(--link) !important; text-decoration: underline !important; }
+.board-term-link:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 2px; }
