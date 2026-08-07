@@ -777,12 +777,17 @@ def face_blur_frame(
     path: Annotated[str, Query(min_length=1, max_length=1000)],
     padding_ratio: Annotated[float, Query(ge=0.0, le=1.0)] = 0.08,
     confidence: Annotated[float, Query(ge=0.1, le=0.95)] = 0.6,
+    at: Annotated[float | None, Query(ge=0.0, le=1.0)] = None,
 ) -> Response:
     """One blurred frame, so coverage can be judged before a full render.
 
     A still answers the only question being asked here - does the blur sit over
     the face or over half the shoulders - and costs a decode rather than an
     encode.
+
+    Without `at` the clip is searched for a frame holding a face. With it, that
+    exact point is read instead: the automatic choice is a good opening guess,
+    but only the operator knows which moment they are unsure about.
     """
     membership(session, workspace_id, user.id)
     from trendrelay_api.integrations.face_blur import (
@@ -799,6 +804,7 @@ def face_blur_frame(
         result = preview_frame(
             _approved_source(path),
             BlurSettings(padding_ratio=padding_ratio, confidence=confidence),
+            at_ratio=at,
         )
     except FaceBlurUnavailable as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -812,6 +818,10 @@ def face_blur_frame(
             # The count tells the caller whether an empty-looking preview means
             # the blur is subtle or that nothing was found to blur.
             "X-Faces-Found": str(result["faces"]),
+            # Where the frame came from and how long the clip runs, so the seek
+            # control can place itself without a second request.
+            "X-Frame-Position": str(result["position"]),
+            "X-Clip-Duration": str(result.get("duration_seconds") or ""),
         },
     )
 

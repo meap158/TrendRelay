@@ -734,7 +734,11 @@ def list_blur_jobs(workspace_id: str, limit: int = 20) -> list[dict[str, Any]]:
 PREVIEW_PROBES = (0.10, 0.20, 0.30, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85)
 
 
-def preview_frame(source: Path, settings: BlurSettings | None = None) -> dict[str, Any]:
+def preview_frame(
+    source: Path,
+    settings: BlurSettings | None = None,
+    at_ratio: float | None = None,
+) -> dict[str, Any]:
     """Blur one frame and return it as a JPEG, for judging coverage.
 
     A still is the right unit for this question. Deciding whether the blur sits
@@ -743,6 +747,11 @@ def preview_frame(source: Path, settings: BlurSettings | None = None) -> dict[st
 
     Frames are probed until one holds a face, because a clip that opens on an
     empty room would otherwise return a preview that shows nothing at all.
+
+    ``at_ratio`` overrides that search and reads the frame at that point in the
+    clip instead. Probing answers "is the blur the right size", but only the
+    operator knows which moment they are worried about — the turn of a head, the
+    one shot where a second face walks in — and no automatic choice finds it.
     """
     cv2 = _load_opencv()
     settings = settings or BlurSettings()
@@ -762,14 +771,17 @@ def preview_frame(source: Path, settings: BlurSettings | None = None) -> dict[st
         scale = DETECT_WIDTH / width if width > DETECT_WIDTH else 1.0
 
         chosen = None
-        for probe in PREVIEW_PROBES:
+        # A requested position is honoured even if it holds no face: being shown
+        # that this moment has nothing to blur is the answer to the question.
+        probes = PREVIEW_PROBES if at_ratio is None else (min(max(at_ratio, 0.0), 0.999),)
+        for probe in probes:
             if total > 0:
                 capture.set(cv2.CAP_PROP_POS_FRAMES, int(total * probe))
             found, frame = capture.read()
             if not found:
                 continue
             boxes = _scaled_boxes(cv2, detector, frame, scale)
-            chosen = (frame, boxes)
+            chosen = (frame, boxes, probe)
             if boxes:
                 break
             if total <= 0:
@@ -777,7 +789,7 @@ def preview_frame(source: Path, settings: BlurSettings | None = None) -> dict[st
         if chosen is None:
             raise FaceBlurUnavailable("No frame could be read from that file.")
 
-        frame, boxes = chosen
+        frame, boxes, position = chosen
         for box in boxes:
             apply_blur(cv2, frame, box, settings)
         # Sent at preview width: this is looked at, not kept, and a 4K still is
@@ -790,10 +802,15 @@ def preview_frame(source: Path, settings: BlurSettings | None = None) -> dict[st
         encoded, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
         if not encoded:
             raise FaceBlurUnavailable("The preview frame could not be encoded.")
+        fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
         return {
             "image": bytes(buffer),
             "faces": len(boxes),
             "padding_ratio": settings.padding_ratio,
+            # Where this frame actually came from, so a seek control can show
+            # the position it landed on rather than the one it asked for.
+            "position": round(position, 4),
+            "duration_seconds": round(total / fps, 3) if total > 0 and fps > 0 else None,
         }
     finally:
         capture.release()
