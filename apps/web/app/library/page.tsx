@@ -13,6 +13,7 @@ import { StatusToasts, useStatus } from "../ui/status";
 import { Badge } from "../ui/primitives";
 import { BlurSettings } from "./blur-settings";
 import { ClipEditor } from "./clip-editor";
+import { EffectEditor } from "./effect-editor";
 import {
   AssetFilters,
   EMPTY_FACETS,
@@ -411,6 +412,7 @@ export default function LibraryPage() {
   const [lastPicked, setLastPicked] = useState<string | null>(null);
   const [bulkActions, setBulkActions] = useState<BulkAction[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [effectsOpen, setEffectsOpen] = useState(false);
   const [blurSettingsOpen, setBlurSettingsOpen] = useState(false);
   /** How far past the detected face the blur reaches, kept between sessions. */
   const [blurPadding, setBlurPadding] = usePersistedState(
@@ -1228,12 +1230,17 @@ export default function LibraryPage() {
                   ><ActionIcon name="blurSettings" /></Button>
                   <Button
                     variant="secondary"
+                    title="Stack effects on this asset without touching the original"
+                    onClick={() => setEffectsOpen(true)}
+                  ><ActionIcon name="edit" />Effects</Button>
+                  <Button
+                    variant="secondary"
                     disabled={selected.media_kind !== "video"}
                     title={selected.media_kind === "video"
                       ? "Build and render a clip plan from this video"
                       : "Clip plans apply to video"}
                     onClick={() => setEditorOpen(true)}
-                  ><ActionIcon name="clip" />Advanced editor</Button>
+                  ><ActionIcon name="clip" />Clip plan</Button>
                   {deleteAction && (
                     <Button
                       variant="danger"
@@ -1317,6 +1324,19 @@ export default function LibraryPage() {
           apiFetch={apiFetch}
           onClose={() => setBlurSettingsOpen(false)}
           onBlur={() => { setBlurSettingsOpen(false); void blurFaces(selected); }}
+        />
+      )}
+      {workspaceId && selected && (
+        <EffectEditor
+          open={effectsOpen}
+          workspaceId={workspaceId}
+          assetId={selected.id}
+          assetPath={selected.original_path}
+          mediaKind={selected.media_kind}
+          canEdit={canImport}
+          apiFetch={apiFetch}
+          onClose={() => setEffectsOpen(false)}
+          onRendered={(text) => setMessage(text)}
         />
       )}
       {workspaceId && selected && (
