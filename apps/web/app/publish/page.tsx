@@ -45,7 +45,17 @@ type Delivery = "draft" | "schedule" | "now";
 const isDelivery = oneOf<Delivery>("draft", "schedule", "now");
 
 type Workspace = { id: string; name: string; role: string };
-type Account = { id: string; label: string; platform: PublishingPlatform };
+type Account = {
+  id: string;
+  label: string;
+  platform: PublishingPlatform;
+  /** The engine that reaches this account, and so will deliver to it. */
+  provider: PublishingProvider;
+  provider_label: string;
+};
+type EngineReach = {
+  id: string; label: string; reachable: boolean; reason: string | null; account_count: number;
+};
 type CredentialField = {
   id: string;
   key: string;
@@ -151,10 +161,11 @@ export default function PublishPage() {
   const [workspaceId, setWorkspaceId] = useState("");
   const [videoPath, setVideoPath] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
-  const [accountBook, setAccountBook] = useState<{ provider: string | null; items: Account[] }>({
-    provider: null,
-    items: [],
-  });
+  // Accounts from every engine at once, each carrying its own, so one post can
+  // reach a TikTok on one engine and a YouTube on another.
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [engineReach, setEngineReach] = useState<EngineReach[]>([]);
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [connection, setConnection] = useState<Connection | null>(null);
   const [targets, setTargets] = useState<Record<string, string>>({});
   const [credentialDrafts, setCredentialDrafts] = useState<Record<string, Record<string, string>>>({});
@@ -206,11 +217,19 @@ export default function PublishPage() {
   const canExecute = selected?.role === "owner" || selected?.role === "approver";
   const jobs = allJobs.filter((job) => job.category === "publish").map((job) => job.raw);
   const activeProvider = connection?.providers.find((item) => item.id === connection.active_provider) ?? null;
-  const platforms = useMemo(() => activeProvider?.platforms ?? [], [activeProvider]);
-  // Destinations belong to one engine, so a switch invalidates the whole book.
-  const accounts = accountBook.provider === activeProvider?.id ? accountBook.items : [];
-  const connectedPlatforms = platforms.filter((platform) =>
-    accounts.some((account) => account.platform === platform));
+  const providerById = useMemo(
+    () => new Map((connection?.providers ?? []).map((item) => [item.id, item])),
+    [connection],
+  );
+  /** The engine that will deliver a destination, read from the account itself. */
+  const engineFor = (accountId: string) =>
+    accounts.find((item) => item.id === accountId)?.provider ?? null;
+  // Every network any engine can reach, rather than one engine's list.
+  const platforms = useMemo(
+    () => [...new Set(accounts.map((account) => account.platform))],
+    [accounts],
+  );
+  const connectedPlatforms = platforms;
   const chosen = connectedPlatforms.filter((platform) =>
     accounts.some((account) => account.id === targets[platform]));
   const needsPublicMedia = activeProvider?.requires_public_media ?? false;
@@ -256,10 +275,14 @@ export default function PublishPage() {
 
   // The preview stands in for the first destination, which is the one being composed.
   const previewPlatform = chosen[0] ?? null;
+  const postTypesFor = (platform: string) => {
+    const engine = engineFor(targets[platform] ?? "");
+    return (engine ? providerById.get(engine)?.post_types?.[platform] : undefined) ?? [];
+  };
   const previewType = previewPlatform
-    ? (activeProvider?.post_types?.[previewPlatform] ?? []).find(
+    ? (postTypesFor(previewPlatform)).find(
         (kind) => kind.id === (postTypes[previewPlatform]
-          ?? activeProvider?.post_types?.[previewPlatform]?.[0]?.id),
+          ?? postTypesFor(previewPlatform)[0]?.id),
       )
     : null;
   /** One caption goes to every destination, so the shortest limit is the real
@@ -396,6 +419,9 @@ export default function PublishPage() {
       platform,
       integration_id: targets[platform],
       post_type: postTypes[platform] ?? null,
+      // Taken from the chosen account rather than from one active engine, which
+      // is what lets a single post go out through several at once.
+      provider: engineFor(targets[platform]),
     }));
     if (!selectedTargets.length) throw new Error("Choose at least one connected destination.");
     const localDate = String(form.get("date") ?? "");
@@ -652,39 +678,46 @@ export default function PublishPage() {
     }
   }
 
-  const autoLoaded = useRef<string | null>(null);
+  const autoLoaded = useRef(false);
 
   useEffect(() => {
-    if (!workspaceId || !activeProvider?.authenticated) return;
-    if (accountBook.provider === activeProvider.id) return;
-    if (autoLoaded.current === activeProvider.id) return;
-    autoLoaded.current = activeProvider.id;
+    if (!workspaceId || !connection?.configured || autoLoaded.current) return;
+    autoLoaded.current = true;
     // Deferred so the fetch does not run inside the render that scheduled it.
     queueMicrotask(() => void refreshAccounts({ quiet: true }));
-    // refreshAccounts is stable for a given engine and guarded by the ref
-    // above, so re-running on its identity would only repeat the same call.
+    // Loaded once per page; the ref is the guard, so re-running on the
+    // callback's identity would only repeat the same call.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, activeProvider, accountBook.provider]);
+  }, [workspaceId, connection?.configured]);
 
   async function refreshAccounts(options: { quiet?: boolean } = {}) {
-    if (!workspaceId || !activeProvider) return;
+    if (!workspaceId) return;
     setBusy("accounts");
     setError(null);
     if (!options.quiet) setNotice(null);
     try {
-      const result = await json<{ accounts: Account[] }>(await apiFetch(
-        `/api/workspaces/${workspaceId}/publishing/integrations`,
-        { method: "POST", body: JSON.stringify({ confirm_external_action: true, provider: activeProvider.id }) },
+      // Every engine at once: a post can address destinations on more than one,
+      // so offering only the active engine's accounts would hide the rest.
+      const result = await json<{ accounts: Account[]; engines: EngineReach[] }>(await apiFetch(
+        `/api/workspaces/${workspaceId}/publishing/integrations/all`,
+        { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
       ));
-      setAccountBook({ provider: activeProvider.id, items: result.accounts });
-      setTargets((current) => Object.fromEntries(platforms.map((platform) => [
-        platform,
-        result.accounts.some((account) => account.id === current[platform]) ? current[platform] : "",
-      ])));
+      setAccounts(result.accounts);
+      setEngineReach(result.engines);
+      setAccountsLoaded(true);
+      setTargets((current) => Object.fromEntries(
+        [...new Set(result.accounts.map((account) => account.platform))].map((platform) => [
+          platform,
+          result.accounts.some((account) => account.id === current[platform])
+            ? current[platform]
+            : "",
+        ]),
+      ));
+      const reachable = result.engines.filter((engine) => engine.reachable);
       if (!options.quiet || !result.accounts.length) {
         setNotice(result.accounts.length
-          ? `${result.accounts.length} connected account${result.accounts.length === 1 ? "" : "s"} loaded from ${activeProvider.label}.`
-          : `${activeProvider.label} has no supported accounts yet. Connect them in its dashboard, then refresh.`);
+          ? `${result.accounts.length} connected account${result.accounts.length === 1 ? "" : "s"} across ${reachable.length} engine${reachable.length === 1 ? "" : "s"}.`
+          : "No connected accounts yet. Connect them in an engine's dashboard, then refresh.");
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not refresh connected accounts.");
@@ -1326,7 +1359,9 @@ export default function PublishPage() {
               </p>
             ) : !accounts.length ? (
               <div className="picker-empty">
-                <p>No destinations loaded for {activeProvider?.label} yet.</p>
+                <p>{accountsLoaded
+                  ? "No engine returned a connected account. Connect channels in an engine's dashboard, then load again."
+                  : "No destinations loaded yet."}</p>
                 <Button
                   variant="quiet"
                   disabled={!canExecute}
@@ -1336,6 +1371,15 @@ export default function PublishPage() {
               </div>
             ) : (
               <>
+                {engineReach.some((engine) => !engine.reachable && engine.account_count === 0
+                  && engine.reason && !engine.reason.startsWith("No key")) && (
+                  <p className="engine-warning" role="status">
+                    Some engines could not be read, so their accounts are missing here:{" "}
+                    {engineReach.filter((engine) => !engine.reachable && engine.reason
+                      && !engine.reason.startsWith("No key"))
+                      .map((engine) => `${engine.label} (${engine.reason})`).join("; ")}
+                  </p>
+                )}
                 <div className="platform-grid">{connectedPlatforms.map((platform) => {
                   const platformAccounts = accounts.filter((account) => account.platform === platform);
                   return (
@@ -1344,7 +1388,11 @@ export default function PublishPage() {
                         <PlatformIcon platform={platform} />
                         <div>
                           <strong>{platformLabels[platform]}</strong>
-                          <span>{platformAccounts.length} connected</span>
+                          <span>
+                            {platformAccounts.length} connected
+                            {new Set(platformAccounts.map((item) => item.provider)).size > 1
+                              && " · more than one engine"}
+                          </span>
                         </div>
                       </div>
                       <div className="account-options">{platformAccounts.map((account) => (
@@ -1355,13 +1403,13 @@ export default function PublishPage() {
                           className={targets[platform] === account.id ? "selected" : ""}
                           title={account.label}
                           onClick={() => setTargets({ ...targets, [platform]: targets[platform] === account.id ? "" : account.id })}
-                        >{account.label}</button>
+                        ><span>{account.label}</span><i>{account.provider_label}</i></button>
                       ))}</div>
                       {/* Only networks with a real choice are asked about. */}
-                      {targets[platform] && (activeProvider?.post_types?.[platform]?.length ?? 0) > 1 && (
+                      {targets[platform] && postTypesFor(platform).length > 1 && (
                         <div className="post-types" role="tablist" aria-label={`${platformLabels[platform]} post type`}>
-                          {activeProvider?.post_types[platform].map((kind) => {
-                            const active = (postTypes[platform] ?? activeProvider.post_types[platform][0].id) === kind.id;
+                          {postTypesFor(platform).map((kind) => {
+                            const active = (postTypes[platform] ?? postTypesFor(platform)[0]?.id) === kind.id;
                             return (
                               <button
                                 type="button"

@@ -443,7 +443,13 @@ nav strong { color: #1c2b33; }
 .platform-card-head span { color: var(--muted); font-size: 11px; }
 .platform-icon, .provider-mark { display: block; flex: none; }
 .account-options { display: grid; gap: 5px; align-content: start; }
-.account-options button { display: block; width: 100%; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+/* Two lines now: the channel, and the engine that reaches it. The same network
+ * can be connected through more than one engine, and two identically named
+ * channels are otherwise indistinguishable. */
+.account-options button { display: grid; gap: 1px; width: 100%; overflow: hidden; text-align: left; }
+.account-options button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-options button > i { color: var(--muted); font-size: 10px; font-style: normal; }
+.account-options button.selected > i { color: inherit; opacity: .8; }
 .account-options button.selected { border-color: var(--green); background: var(--green-dark); color: var(--green); }
 .time-slots { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .time-slots > span { margin-right: 2px; color: var(--muted); font-size: 11px; font-weight: 600; }

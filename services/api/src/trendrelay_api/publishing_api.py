@@ -17,6 +17,7 @@ from trendrelay_api.integrations.publishing import (
     PublishRequest,
     connection_status,
     create_publish_job,
+    discover_all_integrations,
     discover_integrations,
     list_publish_jobs,
     preview_publish,
@@ -212,6 +213,25 @@ def publishing_integrations(
         raise HTTPException(status_code=422, detail=str(error)) from error
     except RuntimeError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.post("/integrations/all")
+def publishing_integrations_all(
+    workspace_id: str,
+    body: ExternalConfirmation,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Connected accounts across every configured engine.
+
+    One post can address destinations on several engines, so the page needs all
+    of them together rather than whichever engine happens to be active.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(status_code=400, detail="Discovery requires explicit confirmation.")
+    return discover_all_integrations()
 
 
 @router.post("/preview")
