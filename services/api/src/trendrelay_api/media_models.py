@@ -64,7 +64,7 @@ class MediaAssetVersion(Base):
             name="unique_asset_version_hash",
         ),
         CheckConstraint(
-            "version_kind IN ('original','proxy','thumbnail','audio','blurred')",
+            "version_kind IN ('original','proxy','thumbnail','audio','blurred','edited')",
             name="valid_media_version_kind",
         ),
     )
@@ -86,6 +86,40 @@ class MediaAssetVersion(Base):
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
+
+
+class MediaEditRecipe(Base):
+    """The edit an asset is carrying, kept rather than burned in.
+
+    Non-destructive by design: the original is never touched and the recipe is
+    what is stored, so an edit can be reopened, reordered and re-rendered. Every
+    editor worth using works this way, and it is also what makes the effect list
+    expandable — a recipe is data, so a new effect needs no new column.
+
+    One per asset, which is the working edit. Named presets are a different
+    thing and would be their own table rather than a flag on this one.
+    """
+
+    __tablename__ = "media_edit_recipes"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "asset_id", name="unique_asset_edit_recipe"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: new_id("recipe")
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    asset_id: Mapped[str] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="CASCADE"), index=True
+    )
+    #: Ordered [{"effect": id, "values": {...}}]. Order is meaningful: rotating
+    #: then flipping is not flipping then rotating.
+    steps: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    created_by: Mapped[str] = mapped_column(ForeignKey("user_profiles.id"))
+    created_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(default=utc_now)
 
 
 class MediaTranscript(Base):

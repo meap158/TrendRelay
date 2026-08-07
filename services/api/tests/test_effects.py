@@ -171,7 +171,11 @@ def test_only_speed_declares_that_it_retimes() -> None:
 
 def test_every_effect_describes_itself_completely() -> None:
     described = {item["id"]: item for item in describe()}
-    assert set(described) == {"flip", "rotate", "colour", "speed"}
+    # A superset, not an exact match: the registry is meant to grow, and
+    # importing the module that registers a frame effect is what adds it. A test
+    # asserting the exact contents would fail on import order rather than on
+    # anything being wrong.
+    assert {"flip", "rotate", "colour", "speed"} <= set(described)
     for effect in described.values():
         assert effect["label"] and effect["summary"]
         assert effect["stage"] in {"stream", "frame"}
