@@ -7,6 +7,7 @@ import { RefreshCw, Download } from "lucide-react";
 import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
 import { buttonClass } from "../ui/button";
+import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 import { useJobs } from "../jobs-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 
@@ -329,6 +330,50 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: "12px",
     lineHeight: 1.5,
   },
+  // --- Douyin board, gallery view -----------------------------------------
+  // A picture is what makes a trending term legible at a glance; the ranked
+  // list stays available for reading many of them quickly.
+  boardViewToggle: { display: "flex", gap: 2, padding: 2, borderRadius: 999, background: "#eef0f3" } as const,
+  boardViewButton: {
+    minHeight: 24, padding: "3px 10px", border: 0, borderRadius: 999,
+    background: "transparent", color: "#606770", font: "inherit", fontSize: 11,
+    fontWeight: 600, cursor: "pointer",
+  } as const,
+  boardViewButtonOn: { background: "#ffffff", color: "#1c2b33", boxShadow: "0 1px 2px rgb(28 43 51 / 18%)" } as const,
+  boardGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+    gap: 10,
+    marginTop: 12,
+  } as const,
+  boardCard: {
+    display: "grid", gridTemplateRows: "auto 1fr", overflow: "hidden",
+    border: "1px solid #cbd2d9", borderRadius: 8, background: "#ffffff",
+  } as const,
+  boardThumb: {
+    position: "relative", aspectRatio: "3 / 4", overflow: "hidden", background: "#eef0f3",
+  } as const,
+  boardImage: { width: "100%", height: "100%", objectFit: "cover", display: "block" } as const,
+  boardNoImage: {
+    position: "absolute", inset: 0, display: "grid", placeItems: "center",
+    color: "#98a2ad", fontSize: 11,
+  } as const,
+  boardRank: {
+    position: "absolute", top: 6, left: 6, display: "grid", placeItems: "center",
+    minWidth: 20, height: 20, padding: "0 5px", borderRadius: 999,
+    background: "rgb(0 0 0 / 62%)", color: "#ffffff", fontSize: 10, fontWeight: 700,
+  } as const,
+  boardBody: { display: "grid", alignContent: "start", gap: 4, padding: "8px 9px 10px" } as const,
+  boardTerm: {
+    display: "-webkit-box", overflow: "hidden", WebkitBoxOrient: "vertical",
+    WebkitLineClamp: 2, fontSize: 12, fontWeight: 600, lineHeight: 1.35,
+  } as const,
+  boardMeta: { color: "#606770", fontSize: 10 } as const,
+  boardAction: {
+    justifySelf: "start", marginTop: 2, borderRadius: 4, padding: "3px 8px",
+    background: "#eef2fb", color: "#385898", fontSize: 11, fontWeight: 600,
+    textDecoration: "none",
+  } as const,
   tiktokList: {
     display: "grid",
     gap: "1px",
@@ -667,8 +712,12 @@ type DouyinTrend = {
   video_url: string | null;
   search_url: string;
   downloadable: boolean;
+  /** The board's own thumbnail: a signed URL that expires, so never stored. */
+  cover_url: string | null;
+  view_count: number;
 };
 type DouyinBoard = { count: number; fetched_at: string; items: DouyinTrend[] };
+const isBoardView = oneOf("gallery", "list");
 
 export default function ResearchDashboard() {
   const { apiFetch } = useAuth();
@@ -689,8 +738,13 @@ export default function ResearchDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [douyinBoard, setDouyinBoard] = useState<DouyinBoard | null>(null);
   const [douyinError, setDouyinError] = useState<string | null>(null);
+  const [douyinView, setDouyinView] = usePersistedState<"gallery" | "list">(
+    "trendrelay.discover.douyinView", "gallery", isBoardView,
+  );
+  /** Read once per visit; the ref is what stops a re-render asking again. */
+  const douyinAutoRead = useRef(false);
 
-  /** Read on demand, so this stays a look at the board rather than a sweep. */
+  /** Read once on arrival, then on demand. */
   async function loadDouyinBoard() {
     if (!workspaceId) return;
     setBusy("douyin");
@@ -710,6 +764,16 @@ export default function ResearchDashboard() {
       setBusy(null);
     }
   }
+
+  useEffect(() => {
+    if (!workspaceId || douyinAutoRead.current) return;
+    douyinAutoRead.current = true;
+    // Deferred so the read does not run inside the render that scheduled it.
+    queueMicrotask(() => void loadDouyinBoard());
+    // Once per workspace; the ref is the guard, so the callback's identity
+    // changing would only repeat the same read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
 
   const jobs = useMemo(
     () =>
@@ -1187,6 +1251,20 @@ export default function ResearchDashboard() {
             </p>
           </div>
           <div style={S.tiktokControls}>
+            <div style={S.boardViewToggle} role="group" aria-label="Board layout">
+              {(["gallery", "list"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={douyinView === mode}
+                  style={{
+                    ...S.boardViewButton,
+                    ...(douyinView === mode ? S.boardViewButtonOn : null),
+                  }}
+                  onClick={() => setDouyinView(mode)}
+                >{mode === "gallery" ? "Gallery" : "List"}</button>
+              ))}
+            </div>
             <button
               type="button"
               style={S.quickLinkBtn}
@@ -1200,7 +1278,54 @@ export default function ResearchDashboard() {
 
         {douyinError && <p style={S.tiktokNote}>{douyinError}</p>}
 
-        {douyinBoard && douyinBoard.items.length > 0 && (
+        {douyinBoard && douyinBoard.items.length > 0 && douyinView === "gallery" && (
+          <div style={S.boardGrid}>
+            {douyinBoard.items.map((item) => (
+              <article key={`${item.rank}-${item.term}`} style={S.boardCard}>
+                <div style={S.boardThumb}>
+                  {item.cover_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.cover_url}
+                      alt=""
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      style={S.boardImage}
+                    />
+                  ) : (
+                    <span style={S.boardNoImage}>no image</span>
+                  )}
+                  <span style={S.boardRank}>{item.rank}</span>
+                </div>
+                <div style={S.boardBody}>
+                  <span style={S.boardTerm} title={item.term}>{item.term}</span>
+                  <span style={S.boardMeta}>
+                    {item.hot_value > 0 && <>{compactNumber(item.hot_value)} heat</>}
+                    {item.hot_value > 0 && item.view_count > 0 && " · "}
+                    {item.view_count > 0 && <>{compactNumber(item.view_count)} views</>}
+                  </span>
+                  {item.downloadable && item.video_url ? (
+                    <Link
+                      href={`/?add=${encodeURIComponent(item.video_url)}`}
+                      style={S.boardAction}
+                      title="Send this video to Downloads"
+                    >Download</Link>
+                  ) : (
+                    <a
+                      href={item.search_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={S.boardAction}
+                      title="The board attached no video to this term"
+                    >Open search</a>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+
+        {douyinBoard && douyinBoard.items.length > 0 && douyinView === "list" && (
           <div style={S.tiktokList}>
             {douyinBoard.items.map((item) => (
               <div key={`${item.rank}-${item.term}`} style={S.tiktokRow}>

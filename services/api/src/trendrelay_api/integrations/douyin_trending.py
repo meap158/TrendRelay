@@ -35,6 +35,10 @@ class TrendingItem:
     hot_value: int
     #: The video the board attaches to this term, when it attaches one.
     video_id: str | None
+    #: The board's own thumbnail. A signed URL with an expiry, so it is worth
+    #: showing as soon as the board is read and worth nothing stored.
+    cover_url: str | None = None
+    view_count: int = 0
 
     @property
     def video_url(self) -> str | None:
@@ -57,6 +61,8 @@ class TrendingItem:
             "video_url": self.video_url,
             "search_url": self.search_url,
             "downloadable": self.video_id is not None,
+            "cover_url": self.cover_url,
+            "view_count": self.view_count,
         }
 
 
@@ -70,12 +76,20 @@ def _parse(payload: dict[str, Any]) -> list[TrendingItem]:
             continue
         group = raw.get("group_id")
         video_id = str(group) if group not in (None, "", 0) else None
+        cover = raw.get("word_cover")
+        urls = cover.get("url_list") if isinstance(cover, dict) else None
+        cover_url = next(
+            (url for url in urls or [] if isinstance(url, str) and url.startswith("https://")),
+            None,
+        )
         items.append(
             TrendingItem(
                 rank=len(items) + 1,
                 term=term,
                 hot_value=int(raw.get("hot_value") or 0),
                 video_id=video_id,
+                cover_url=cover_url,
+                view_count=int(raw.get("view_count") or 0),
             )
         )
     return items
