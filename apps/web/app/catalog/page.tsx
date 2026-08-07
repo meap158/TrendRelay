@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { SpendImport } from "./spend-import";
 import { Button } from "../ui/button";
 import { Badge, Card } from "../ui/primitives";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
@@ -287,6 +288,18 @@ export default function CatalogPage() {
             ))}
           </ul>
         </Card>
+      )}
+
+      {/* Only once there are books to attribute spend to. Before that the
+          import has nothing to resolve against and would reject every row. */}
+      {workspaceId && works.length > 0 && (
+        <SpendImport
+          workspaceId={workspaceId}
+          works={works}
+          canEdit={Boolean(canEdit)}
+          apiFetch={apiFetch}
+          onImported={() => void refresh()}
+        />
       )}
 
       <Card

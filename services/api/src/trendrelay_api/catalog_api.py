@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from trendrelay_api.ad_attribution import Resolution, campaign_key, resolve
+from trendrelay_api.ad_spend_csv import parse_spend_csv
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.catalog_identifiers import (
     ONIX_PRODUCT_FORM,
@@ -127,6 +128,19 @@ class SpendImport(BaseModel):
     #: spend attributed to the wrong book is worse than spend left out, because
     #: it flatters one book's return while dragging down another's.
     accept_suggested: bool = False
+
+
+class SpendCsvImport(BaseModel):
+    """A spend report pasted straight out of Ads Manager."""
+
+    csv_text: str = Field(min_length=1, max_length=2_000_000)
+    source: str = Field(default="meta", min_length=1, max_length=40)
+    #: Used only when the export names no currency of its own. Exports usually
+    #: write it into the amount column's header, which is read first.
+    default_currency: str | None = Field(default=None, min_length=3, max_length=3)
+    accept_suggested: bool = False
+    #: Parse and resolve without writing, so a partial import is seen first.
+    dry_run: bool = False
 
 
 class MappingRequest(BaseModel):
@@ -648,6 +662,64 @@ def resolve_ad_spend(
             1 for item in rows if item["work_id"] and not item["automatic"]
         ),
         "unresolved": sum(1 for item in rows if not item["work_id"]),
+    }
+
+
+@router.post("/ad-spend/import-csv")
+def import_ad_spend_csv(
+    workspace_id: str,
+    body: SpendCsvImport,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Import a spend report exported from an ad platform.
+
+    The shape a person actually has. Rows that will not parse come back with
+    their line numbers alongside whatever did import, because a spend file that
+    loses a third of its rows produces ratios that look entirely reasonable.
+    """
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    ensure_profile(session, user)
+
+    parsed = parse_spend_csv(body.csv_text, default_currency=body.default_currency)
+    if not parsed.rows and parsed.problems:
+        return {
+            "written": 0,
+            "updated": 0,
+            "skipped": [],
+            "skipped_count": 0,
+            "skipped_spend_cents": {},
+            "problems": parsed.problems[:100],
+            "problem_count": len(parsed.problems),
+            "parsed_rows": 0,
+        }
+
+    if len(parsed.rows) > MAX_SPEND_ROWS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"That report has {len(parsed.rows)} rows; import at most "
+                f"{MAX_SPEND_ROWS} at a time."
+            ),
+        )
+
+    spend = SpendImport(
+        source=body.source,
+        rows=[SpendRow(**row) for row in parsed.rows],
+        accept_suggested=body.accept_suggested,
+    )
+    outcome = (
+        resolve_ad_spend(workspace_id, spend, user, session)
+        if body.dry_run
+        else import_ad_spend(workspace_id, spend, request, user, session)
+    )
+    return {
+        **outcome,
+        "problems": parsed.problems[:100],
+        "problem_count": len(parsed.problems),
+        "parsed_rows": len(parsed.rows),
+        "currency_from_header": parsed.header_currency,
     }
 
 

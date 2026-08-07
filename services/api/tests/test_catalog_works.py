@@ -783,6 +783,79 @@ def test_spend_naming_nothing_recognisable_is_reported_with_its_amount() -> None
     assert result["skipped_spend_cents"] == {"USD": 42_000}
 
 
+def test_a_pasted_meta_export_imports_and_reports_its_bad_rows() -> None:
+    workspace_id = create_workspace()
+    seed_three_editions(workspace_id)
+    request("POST", f"/api/workspaces/{workspace_id}/catalog/works/group", json={})
+
+    csv_text = (
+        'Reporting starts,Campaign name,Ad Set Name,Ad name,"Amount spent (USD)",'
+        "Impressions,Link clicks\n"
+        '2026-07-15,B0H9CLBXDP | Ledger,Broad,Hook A,"1,234.56","45,300",812\n'
+        "2026-07-16,B0H9CLBXDP | Ledger,Broad,Hook A,98.40,3100,55\n"
+        "not-a-date,B0H9CLBXDP | Ledger,Broad,Hook A,10.00,100,1\n"
+    )
+    result = request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/ad-spend/import-csv",
+        json={"csv_text": csv_text},
+    ).json()
+
+    assert result["parsed_rows"] == 2
+    assert result["written"] == 2
+    assert result["currency_from_header"] == "USD"
+    # The unreadable row is named rather than dropped, alongside what did land.
+    assert result["problem_count"] == 1
+    assert result["problems"][0]["line"] == 4
+
+    work = request("GET", f"/api/workspaces/{workspace_id}/catalog/works").json()["works"][0]
+    assert work["currencies"][0]["spend_cents"] == 123_456 + 9_840
+    assert work["currencies"][0]["clicks"] == 867
+
+
+def test_reimporting_the_same_export_updates_rather_than_doubling_the_spend() -> None:
+    workspace_id = create_workspace()
+    seed_three_editions(workspace_id)
+    request("POST", f"/api/workspaces/{workspace_id}/catalog/works/group", json={})
+
+    csv_text = (
+        "Day,Campaign name,Amount spent (USD)\n"
+        "2026-07-15,B0H9CLBXDP | Ledger,100.00\n"
+    )
+    path = f"/api/workspaces/{workspace_id}/catalog/ad-spend/import-csv"
+    request("POST", path, json={"csv_text": csv_text})
+    again = request("POST", path, json={"csv_text": csv_text}).json()
+
+    # No ad id in this export, so the reference is derived — and it has to be
+    # stable or an overlapping window would double the budget.
+    assert again["written"] == 0
+    assert again["updated"] == 1
+    work = request("GET", f"/api/workspaces/{workspace_id}/catalog/works").json()["works"][0]
+    assert work["currencies"][0]["spend_cents"] == 10_000
+
+
+def test_a_dry_run_of_a_pasted_export_writes_nothing() -> None:
+    workspace_id = create_workspace()
+    seed_three_editions(workspace_id)
+    request("POST", f"/api/workspaces/{workspace_id}/catalog/works/group", json={})
+
+    csv_text = (
+        "Day,Campaign name,Amount spent (USD)\n"
+        "2026-07-15,B0H9CLBXDP | Ledger,100.00\n"
+        "2026-07-15,Summer promo,40.00\n"
+    )
+    preview = request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/catalog/ad-spend/import-csv",
+        json={"csv_text": csv_text, "dry_run": True},
+    ).json()
+
+    assert preview["ready"] == 1
+    assert preview["unresolved"] == 1
+    work = request("GET", f"/api/workspaces/{workspace_id}/catalog/works").json()["works"][0]
+    assert work["currencies"] == []
+
+
 def test_a_row_naming_no_book_at_all_is_rejected_outright() -> None:
     workspace_id = create_workspace()
     response = request(
