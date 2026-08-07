@@ -14,6 +14,7 @@ import {
   type PublishingProvider,
 } from "../publishing-icons";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
+import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 import {
   EMPTY_FACETS,
   assetFilterParams,
@@ -39,6 +40,9 @@ import {
   type Slot,
   type SlotPreset,
 } from "./composer";
+
+type Delivery = "draft" | "schedule" | "now";
+const isDelivery = oneOf<Delivery>("draft", "schedule", "now");
 
 type Workspace = { id: string; name: string; role: string };
 type Account = { id: string; label: string; platform: PublishingPlatform };
@@ -159,7 +163,11 @@ export default function PublishPage() {
   const [hostingDraft, setHostingDraft] = useState<Record<string, string>>({});
   const [hostingOpen, setHostingOpen] = useState(false);
   const draftRestored = useRef(false);
-  const [delivery, setDelivery] = useState<"draft" | "schedule" | "now">("draft");
+  // Publishing now is what most posts are for, and the choice is a habit
+  // rather than a per-post decision, so it is remembered between sessions.
+  const [delivery, setDelivery] = usePersistedState<Delivery>(
+    "trendrelay.publish.delivery", "now", isDelivery,
+  );
   const [date, setDate] = useState(() => localDateTime(60));
   const [caption, setCaption] = useState("");
   const [firstComment, setFirstComment] = useState("");
@@ -185,7 +193,7 @@ export default function PublishPage() {
     failure: null,
   });
 
-  function chooseDelivery(mode: "draft" | "schedule" | "now") {
+  function chooseDelivery(mode: Delivery) {
     if (mode === "schedule") setNow(new Date());
     setDelivery(mode);
   }
