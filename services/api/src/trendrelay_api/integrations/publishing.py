@@ -344,6 +344,9 @@ class PublishTarget(BaseModel):
     platform: Platform
     integration_id: str = Field(min_length=1, max_length=200)
     post_type: str | None = Field(default=None, max_length=20)
+    #: Which engine delivers this destination. None means the request's own
+    #: engine, so a post naming a single engine behaves exactly as before.
+    provider: ProviderId | None = None
 
     @field_validator("integration_id")
     @classmethod
@@ -1368,6 +1371,29 @@ def set_active_provider(provider_id: str) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 
 
+def grouped_targets(request: PublishRequest) -> dict[str, list[PublishTarget]]:
+    """The destinations of one post, split by the engine that will deliver them.
+
+    A workspace can have accounts on several engines at once — a brand's own
+    channels on one, a client's on another — and forcing a post through a single
+    engine meant sending it twice and reconciling the results by hand.
+
+    Insertion-ordered, so the engines are attempted in the order the
+    destinations were chosen rather than an arbitrary one.
+    """
+    default = request.provider or active_provider_id()
+    groups: dict[str, list[PublishTarget]] = {}
+    for target in request.targets:
+        groups.setdefault(target.provider or default, []).append(target)
+    return groups
+
+
+def _scoped_request(request: PublishRequest, provider_id: str,
+                    targets: list[PublishTarget]) -> PublishRequest:
+    """The same post, addressed to one engine's destinations."""
+    return request.model_copy(update={"targets": targets, "provider": provider_id})
+
+
 def _delivery_plan(
     provider: ProviderDefinition, request: PublishRequest
 ) -> list[dict[str, Any]]:
@@ -1424,23 +1450,55 @@ def _delivery_plan(
 
 
 def preview_publish(request: PublishRequest) -> dict[str, Any]:
-    provider = resolve_provider(request.provider)
-    _validate_request(provider, request)
-    uses_local_media = _needs_local_media(provider, request)
+    groups = grouped_targets(request)
+    scoped = {
+        provider_id: _scoped_request(request, provider_id, targets)
+        for provider_id, targets in groups.items()
+    }
+    providers: dict[str, ProviderDefinition] = {}
+    for provider_id, part in scoped.items():
+        provider = resolve_provider(provider_id)
+        _validate_request(provider, part)
+        providers[provider_id] = provider
+
+    lead = providers[next(iter(scoped))]
+    uses_local_media = any(
+        _needs_local_media(providers[provider_id], part)
+        for provider_id, part in scoped.items()
+    )
     if uses_local_media:
         approved_video_path(request.video_path)
+    # Every destination across every engine, so the dry run reads as one post
+    # rather than one report per engine.
+    destinations = [
+        item
+        for provider_id, part in scoped.items()
+        for item in _delivery_plan(providers[provider_id], part)
+    ]
     return {
         "operation_id": token_hex(12),
         "status": "dry_run",
-        "provider": provider.id,
-        "provider_label": provider.label,
+        "provider": lead.id,
+        "provider_label": lead.label,
+        "engines": [
+            {
+                "id": provider_id,
+                "label": providers[provider_id].label,
+                "platforms": [target.platform for target in part.targets],
+                "requires_public_media": providers[provider_id].requires_public_media,
+                "media_note": providers[provider_id].media_note,
+            }
+            for provider_id, part in scoped.items()
+        ],
         "delivery": {"now": "immediate post", "schedule": "scheduled post"}
         .get(request.mode, "draft"),
         "date": request.date.isoformat(),
         "media_source": "approved local file" if uses_local_media else "public media URL",
         "video_path": request.video_path if uses_local_media else None,
         "media_url": request.media_url,
-        "media_handling": provider.media_note,
+        "media_handling": " ".join(
+            dict.fromkeys(item.media_note for item in providers.values())
+        ),
         "caption": request.caption,
         "caption_length": len(request.caption),
         "title": request.title,
@@ -1449,41 +1507,105 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
         "limits": binding_limits([target.platform for target in request.targets]),
         "visibility": request.visibility,
         "made_with_ai": request.made_with_ai,
-        "destinations": _delivery_plan(provider, request),
+        "destinations": destinations,
     }
 
 
-def _execute_publish(request: PublishRequest, request_id: str | None = None) -> dict[str, Any]:
-    provider = resolve_provider(request.provider)
-    _validate_request(provider, request)
+def _dispatch(
+    provider: ProviderDefinition, request: PublishRequest, request_id: str | None
+) -> dict[str, Any]:
+    """Hand one engine the destinations that belong to it."""
     video = (
         approved_video_path(request.video_path)
         if _needs_local_media(provider, request)
         else None
     )
-    hosted: dict[str, Any] | None = None
-    if provider.requires_public_media and not request.media_url:
-        # Host the reviewed cut now rather than at request time, so a scheduled
-        # job uploads what the asset actually looks like when it goes out.
-        hosted = host_media_for_engine(request)
-        request = request.model_copy(update={"media_url": hosted["url"]})
-
     if provider.id == "bundle_social":
-        result = _bundle_publish(request, video)  # type: ignore[arg-type]
-    elif provider.id == "zernio":
-        result = _zernio_publish(request, video, request_id)
-    else:
-        result = _buffer_publish(request)
-    if hosted:
-        result = {
-            **result,
-            "hosted_media": {
-                "url": hosted["url"],
-                "sha256": hosted["sha256"],
-                "blurred": hosted["blurred"],
-            },
+        return _bundle_publish(request, video)  # type: ignore[arg-type]
+    if provider.id == "zernio":
+        return _zernio_publish(request, video, request_id)
+    return _buffer_publish(request)
+
+
+def _execute_publish(request: PublishRequest, request_id: str | None = None) -> dict[str, Any]:
+    groups = grouped_targets(request)
+    scoped = {
+        provider_id: _scoped_request(request, provider_id, targets)
+        for provider_id, targets in groups.items()
+    }
+
+    # Every engine is validated before any of them is called. A post that is
+    # going to be rejected by the second engine must not already be live on the
+    # first, and nothing here can be taken back once it has been sent.
+    providers = {}
+    for provider_id, part in scoped.items():
+        provider = resolve_provider(provider_id)
+        _validate_request(provider, part)
+        providers[provider_id] = provider
+
+    hosted: dict[str, Any] | None = None
+    if any(item.requires_public_media for item in providers.values()) and not request.media_url:
+        # Hosted once and shared: the engines are sending the same cut, and
+        # uploading it per engine would pay for the same bytes repeatedly.
+        # Done now rather than at request time so a scheduled job sends what the
+        # asset actually looks like when it goes out.
+        hosted = host_media_for_engine(request)
+        scoped = {
+            provider_id: part.model_copy(update={"media_url": hosted["url"]})
+            for provider_id, part in scoped.items()
         }
-    return {"status": "created", "provider": provider.id, **result}
+
+    deliveries: list[dict[str, Any]] = []
+    for provider_id, part in scoped.items():
+        try:
+            outcome = _dispatch(providers[provider_id], part, request_id)
+            deliveries.append({
+                "provider": provider_id,
+                "provider_label": providers[provider_id].label,
+                "status": "created",
+                "platforms": [target.platform for target in part.targets],
+                **outcome,
+            })
+        except Exception as error:
+            # Recorded rather than raised: an engine that has already accepted
+            # the post cannot be un-sent because a later one refused, and a
+            # blanket failure here would invite a retry that double-posts.
+            deliveries.append({
+                "provider": provider_id,
+                "provider_label": providers[provider_id].label,
+                "status": "failed",
+                "platforms": [target.platform for target in part.targets],
+                "error": str(error),
+            })
+
+    sent = [item for item in deliveries if item["status"] == "created"]
+    failed = [item for item in deliveries if item["status"] == "failed"]
+    if not sent:
+        # Nothing reached any engine, so this is an ordinary failure and safe to
+        # surface as one.
+        raise RuntimeError("; ".join(f"{item['provider']}: {item['error']}" for item in failed))
+
+    result: dict[str, Any] = {
+        "status": "partial" if failed else "created",
+        "provider": next(iter(scoped)),
+        "engines": [item["provider"] for item in deliveries],
+        "deliveries": deliveries,
+    }
+    if failed:
+        result["partial_note"] = (
+            f"Sent through {len(sent)} of {len(deliveries)} engines. "
+            "The rest were not sent; retrying would repost where it succeeded."
+        )
+    # Single-engine callers keep reading the fields they always did.
+    if len(deliveries) == 1 and not failed:
+        result = {**deliveries[0], **result, "status": "created"}
+    if hosted:
+        result["hosted_media"] = {
+            "url": hosted["url"],
+            "sha256": hosted["sha256"],
+            "blurred": hosted["blurred"],
+        }
+    return result
 
 
 def create_publish_job(request: PublishRequest) -> dict[str, Any]:
