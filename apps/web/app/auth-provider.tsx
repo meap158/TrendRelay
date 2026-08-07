@@ -39,6 +39,15 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/**
+ * How long the local-session probe may run before it is abandoned.
+ *
+ * Generous rather than tight: this is a call to localhost, and the only time it
+ * is slow is the first request after the API starts, when giving up early would
+ * report a signed-in operator as signed out.
+ */
+const LOCAL_PROBE_MS = 5000;
+
 function identity(status: DesktopStatus): AuthUser | null {
   return status.paired ? { id: status.userId, email: status.email } : null;
 }
@@ -54,10 +63,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [mfaRequired, setMfaRequired] = useState(false);
   const [loading, setLoading] = useState(true);
   const [event, setEvent] = useState<AuthChangeEvent | null>(null);
+  /** Bumped to run the local-session probe again after a stalled attempt. */
+  const [probeAttempt, setProbeAttempt] = useState(0);
 
   useEffect(() => {
+    let replaced = false;
     const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 2000);
+    const timer = window.setTimeout(() => controller.abort(), LOCAL_PROBE_MS);
     fetch(`${apiBaseUrl()}/api/auth/local-session`, {
       cache: "no-store",
       signal: controller.signal,
@@ -66,26 +78,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ? response.json() as Promise<{ enabled: boolean; user: AuthUser | null }>
         : { enabled: false, user: null })
       .then((result) => {
+        if (replaced) return;
         setLocalUser(result.enabled ? result.user : null);
         if (result.enabled) setLoading(false);
       })
-      .catch(() => setLocalUser(null))
+      .catch(() => { if (!replaced) setLocalUser(null); })
       .finally(() => {
         window.clearTimeout(timer);
-        setLocalCheckComplete(true);
+        if (!replaced) setLocalCheckComplete(true);
       });
     return () => {
+      replaced = true;
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, []);
-  // Every branch below clears `loading`, but each depends on a probe settling.
-  // A stalled probe used to leave the shell on "Loading workspace…" until a
-  // manual reload, so the flag is given a hard ceiling it cannot outlive.
+  }, [probeAttempt]);
+
+  // A hidden tab has its timers throttled - a one-second timeout measured two,
+  // and it degrades from there - so every deadline below can be deferred
+  // indefinitely. That is what left the shell on "Loading workspace…" until a
+  // manual reload: the probe never settled and neither did the timer meant to
+  // rescue it. Looking at the tab is a signal the browser does deliver on time,
+  // so it is what retries the probe.
   useEffect(() => {
     if (!loading) return;
-    const ceiling = window.setTimeout(() => setLoading(false), 6000);
-    return () => window.clearTimeout(ceiling);
+    function retry() {
+      if (document.visibilityState !== "hidden") setProbeAttempt((count) => count + 1);
+    }
+    // Three ways of coming back to a stuck tab, all of them real events the
+    // browser delivers on time: switching to it, focusing the window, and
+    // returning through history. Any of them means somebody is looking at this
+    // and it should not still say "Loading workspace…".
+    document.addEventListener("visibilitychange", retry);
+    window.addEventListener("focus", retry);
+    window.addEventListener("pageshow", retry);
+    // Still kept, for a tab that is visible the whole time and simply never
+    // gets an answer. A backstop now rather than the only way out.
+    const ceiling = window.setTimeout(() => setLoading(false), 8000);
+    return () => {
+      document.removeEventListener("visibilitychange", retry);
+      window.removeEventListener("focus", retry);
+      window.removeEventListener("pageshow", retry);
+      window.clearTimeout(ceiling);
+    };
   }, [loading]);
 
   useEffect(() => {
