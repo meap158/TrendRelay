@@ -366,8 +366,14 @@ nav strong { color: #1c2b33; }
 .week-day-head b { color: var(--muted); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .week-day-head i { font-size: 12px; font-style: normal; font-weight: 600; font-variant-numeric: tabular-nums; }
 .week-slot { position: relative; width: 100%; min-height: 24px; padding: 2px 4px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); background: transparent; color: var(--muted); font: inherit; font-size: 11px; font-variant-numeric: tabular-nums; cursor: pointer; }
-.week-slot:hover:not(:disabled) { border-style: solid; border-color: var(--green); color: var(--green); }
+/* Not on a selected slot. `:hover:not(:disabled)` outweighs `.selected`, so it
+ * recoloured the label green over the green fill selection had already given
+ * it, and the time vanished into its own background. */
+.week-slot:hover:not(:disabled):not(.selected) { border-style: solid; border-color: var(--green); color: var(--green); }
 .week-slot.selected { border-style: solid; border-color: var(--green); background: var(--green); color: #fff; font-weight: 600; }
+/* Selected is already green on green, so hovering deepens the fill rather than
+ * touching the text. */
+.week-slot.selected:hover:not(:disabled) { border-color: #00553e; background: #00553e; }
 .week-slot.taken { border-style: solid; border-color: var(--line-strong); background: var(--panel-raised); color: var(--text); }
 .week-slot:disabled { border-style: dotted; opacity: .45; cursor: default; }
 .week-slot em { margin-left: 4px; border-radius: 999px; padding: 0 4px; background: var(--green); color: #fff; font-size: 9px; font-style: normal; font-weight: 700; }
