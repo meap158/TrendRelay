@@ -32,6 +32,8 @@ type AuthContextValue = {
   desktopAvailable: boolean;
   mfaRequired: boolean;
   localMode: boolean;
+  /** Run the session probe again after it stalled. */
+  retryAuth: () => void;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   pairDesktop: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -206,6 +208,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.clearTimeout(assuranceTimer);
     };
   }, [client, desktopAvailable, session]);
+  const retryAuth = useCallback(() => {
+    setLoading(true);
+    setLocalCheckComplete(false);
+    setProbeAttempt((count) => count + 1);
+  }, []);
+
   const apiFetch = useCallback(
     async (path: string, init: RequestInit = {}) => {
       if (localUser) {
@@ -273,6 +281,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       desktopAvailable,
       mfaRequired,
       localMode: Boolean(localUser),
+      retryAuth,
       apiFetch,
       pairDesktop,
       signOut,

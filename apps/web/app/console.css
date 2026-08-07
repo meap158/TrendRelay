@@ -177,6 +177,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .quick-actions strong { font-size: 13px; font-weight: 500; color: var(--link); }
 .quick-actions a:hover { background: #f0f2f5; }
 .loading-panel, .empty-console { max-width: 540px; margin: 10vh auto; padding: 32px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+/* Once the wait turns into an explanation it is a small stack, not a line. */
+.loading-panel { display: grid; justify-items: start; gap: 8px; }
+.loading-panel strong { font-size: 15px; }
+.loading-panel span { color: var(--muted); line-height: 1.5; }
 .empty-console h1 { margin: 16px 0 8px; font-weight: 500; font-size: 20px; }
 .empty-console h2 { margin: 12px 0; font-size: 16px; font-weight: 500; }
 .empty-console p { margin-bottom: 24px; color: var(--muted); line-height: 1.5; font-size: 14px; }

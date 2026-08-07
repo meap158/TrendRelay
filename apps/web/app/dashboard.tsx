@@ -203,7 +203,7 @@ function isVisibleForFilter(job: DownloadJob, filter: QueueFilter): boolean {
 }
 
 export default function Dashboard() {
-  const { loading, user, apiFetch } = useAuth();
+  const { loading, user, apiFetch, retryAuth } = useAuth();
   const { jobs: allJobs, busy: jobsBusy, setActiveWorkspaceId, refresh: refreshJobs } = useJobs();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
@@ -493,7 +493,15 @@ export default function Dashboard() {
     }
   }
 
-  if (loading) return <main className="console-page"><div className="loading-panel">Loading workspace…</div></main>;
+  // The retry is offered from the first frame rather than after a delay. Every
+  // way of measuring that delay is a timer, and a hidden tab freezes the page's
+  // timers - which is what made this hang in the first place. A button that is
+  // briefly redundant beats an escape hatch that shares the fault it escapes.
+  if (loading) return <main className="console-page"><div className="loading-panel">
+    <strong>Loading workspace…</strong>
+    <span>Waiting on TrendRelay&apos;s local API. If it is restarting this can hang.</span>
+    <Button variant="secondary" size="sm" onClick={retryAuth}>Try again</Button>
+  </div></main>;
   if (!user) return <main className="console-page"><section className="empty-console"><strong>TrendRelay</strong><h1>Sign in to manage media.</h1><p>Fetch source videos, prepare clips, and send approved posts from one workspace.</p><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2F">Sign in</Link></section></main>;
 
   return <main className="console-page">
