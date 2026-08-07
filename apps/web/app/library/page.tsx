@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, SlidersHorizontal } from "lucide-react";
+import { Check } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
@@ -8,6 +8,7 @@ import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, buttonClass } from "../ui/button";
+import { ActionIcon, bulkActionIcon } from "../ui/action-icons";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Badge } from "../ui/primitives";
 import { BlurSettings } from "./blur-settings";
@@ -1070,7 +1071,12 @@ export default function LibraryPage() {
                         disabled={!canImport || !action.available}
                         title={action.available ? action.description : action.reason ?? undefined}
                         onClick={() => void runBulkAction(action)}
-                      >{action.label}</Button>
+                      >
+                        {bulkActionIcon(action.id) && (
+                          <ActionIcon name={bulkActionIcon(action.id)!} />
+                        )}
+                        {action.label}
+                      </Button>
                     ))}
                   </span>
                   {selection.size > Math.min(...bulkActions.map((a) => a.max_batch), Infinity) && (
@@ -1202,7 +1208,7 @@ export default function LibraryPage() {
                     variant="secondary"
                     busy={busy === "folder"}
                     onClick={() => void openAssetFolder(selected)}
-                  >{busy === "folder" ? "Opening" : "Open folder"}</Button>
+                  ><ActionIcon name="openFolder" />{busy === "folder" ? "Opening" : "Open folder"}</Button>
                   <Button
                     variant="secondary"
                     busy={busy === "blur"}
@@ -1211,7 +1217,7 @@ export default function LibraryPage() {
                       ? "Detect every face and burn the blur into a new render"
                       : "Face blurring applies to video"}
                     onClick={() => void blurFaces(selected)}
-                  >{busy === "blur" ? "Blurring" : "Blur faces"}</Button>
+                  ><ActionIcon name="blur" />{busy === "blur" ? "Blurring" : "Blur faces"}</Button>
                   <Button
                     variant="secondary"
                     iconOnly
@@ -1219,7 +1225,7 @@ export default function LibraryPage() {
                     title="Check coverage on one frame and set how wide the blur sits"
                     disabled={selected.media_kind !== "video"}
                     onClick={() => setBlurSettingsOpen(true)}
-                  ><SlidersHorizontal size={15} strokeWidth={2} /></Button>
+                  ><ActionIcon name="blurSettings" /></Button>
                   <Button
                     variant="secondary"
                     disabled={selected.media_kind !== "video"}
@@ -1227,7 +1233,7 @@ export default function LibraryPage() {
                       ? "Build and render a clip plan from this video"
                       : "Clip plans apply to video"}
                     onClick={() => setEditorOpen(true)}
-                  >Advanced editor</Button>
+                  ><ActionIcon name="clip" />Advanced editor</Button>
                   {deleteAction && (
                     <Button
                       variant="danger"
@@ -1235,10 +1241,10 @@ export default function LibraryPage() {
                       disabled={!canImport}
                       title={deleteAction.description}
                       onClick={() => void runBulkAction(deleteAction, [selected.id])}
-                    >Delete</Button>
+                    ><ActionIcon name="delete" />Delete</Button>
                   )}
-                  <Link href={`/campaigns?video=${encodeURIComponent(handoffPath(selected))}`}>Plan campaign</Link>
-                  <Link href={`/publish?video=${encodeURIComponent(handoffPath(selected))}`}>Prepare to publish</Link>
+                  <Link href={`/campaigns?video=${encodeURIComponent(handoffPath(selected))}`}><ActionIcon name="campaign" />Plan campaign</Link>
+                  <Link href={`/publish?video=${encodeURIComponent(handoffPath(selected))}`}><ActionIcon name="publish" />Prepare to publish</Link>
                   {selectedSourceLinks.map((url, index, links) => {
                     const label = selected.platform === "douyin"
                       ? `${selected.creator ? `${selected.creator}'s ` : ""}original Douyin video`
