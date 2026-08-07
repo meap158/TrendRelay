@@ -93,6 +93,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .notification-item.read { background: var(--panel); }
 .notification-item-topline, .notification-item footer { display: flex; justify-content: space-between; gap: 12px; align-items: center; min-width: 0; }
 .notification-category { color: var(--muted); font-size: 9px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; }
+/* The repeat count sits with the category, since it qualifies what the row is
+ * rather than what happened to it. */
+.notification-repeat { margin-right: auto; border-radius: 999px; padding: 1px 6px; background: var(--panel-raised); color: var(--muted); font-size: 9px; font-weight: 700; }
 .notification-status { flex: 0 0 auto; border-radius: 999px; padding: 3px 6px; color: #876300; background: #fff4cc; font-size: 9px; font-weight: 700; text-transform: capitalize; }
 .notification-status.status-succeeded { color: var(--green); background: var(--green-dark); }
 .notification-status.status-failed { color: #9d2626; background: #fde8e8; }
