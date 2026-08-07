@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from trendrelay_api.media_library_api import AssetFilter, asset_conditions
+from trendrelay_api.media_library_api import AssetFilter, _effect_facet, asset_conditions
 from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.models import Base
 
@@ -182,3 +182,43 @@ def test_the_cut_filter_combines_with_the_others(session) -> None:
     add_version(session, "a2")
 
     assert matching(session, AssetFilter(has_version="blurred", media_kind="video")) == {"a1"}
+
+
+# --- the effects facet --------------------------------------------------------- #
+
+
+def effects(session, filters, workspace="w1"):
+    return {
+        item["value"]: item["count"]
+        for item in _effect_facet(session, asset_conditions(workspace, filters))
+    }
+
+
+def test_the_effect_facet_splits_the_library_in_two(session) -> None:
+    add(session, "a1")
+    add(session, "a2")
+    add(session, "a3")
+    add_version(session, "a1")
+
+    counts = effects(session, AssetFilter())
+    assert counts == {"blurred": 1, "none": 2}
+    # Every asset is on exactly one side, so the two always sum to the total.
+    assert sum(counts.values()) == 3
+
+
+def test_the_effect_facet_is_counted_within_the_rest_of_the_filter(session) -> None:
+    # Like every other facet: the number says what narrowing by an effect would
+    # leave, not how much of the whole library has one.
+    add(session, "a1", kind="video")
+    add(session, "a2", kind="audio")
+    add_version(session, "a1")
+    add_version(session, "a2")
+
+    assert effects(session, AssetFilter(media_kind="video")) == {"blurred": 1, "none": 0}
+
+
+def test_a_version_of_another_kind_is_not_counted_as_an_effect(session) -> None:
+    add(session, "a1")
+    add_version(session, "a1", kind="thumbnail")
+
+    assert effects(session, AssetFilter()) == {"blurred": 0, "none": 1}

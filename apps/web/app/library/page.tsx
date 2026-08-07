@@ -11,17 +11,20 @@ import { Button, buttonClass } from "../ui/button";
 import { Badge } from "../ui/primitives";
 import { BlurSettings } from "./blur-settings";
 import { ClipEditor } from "./clip-editor";
+import {
+  AssetFilters,
+  EMPTY_FACETS,
+  activeFilterCount,
+  assetFilterParams,
+  type AssetFacets,
+  type AssetFilterValues,
+} from "../ui/asset-filters";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 
 type Workspace = { id: string; name: string; role: string };
 type ViewMode = "gallery" | "list";
 type GroupBy = "none" | "channel" | "source";
-type Facet = { value: string; label: string; count: number };
-type LibraryFacets = {
-  channels: Facet[];
-  platforms: Facet[];
-  media_kinds: Facet[];
-};
+
 type Version = { kind: "original" | "proxy" | "thumbnail" | "audio" | "blurred"; path: string; size_bytes: number };
 type Transcript = { id: string; kind: "speech" | "ocr"; language: string; text: string };
 type Analysis = {
@@ -364,17 +367,20 @@ export default function LibraryPage() {
   const [selectedId, setSelectedId] = useState("");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [status, setStatus] = useState<Status | null>(null);
-  const [query, setQuery] = useState("");
-  const [channelFilter, setChannelFilter] = useState("");
-  const [platformFilter, setPlatformFilter] = useState("");
-  const [mediaKind, setMediaKind] = useState<"" | Asset["media_kind"]>("");
+  // One object rather than four separate states, so the list, the select-all
+  // and the Publish picker all describe a filter the same way.
+  const [filters, setFilters] = useState<AssetFilterValues>({});
+  const query = filters.query ?? "";
+  const mediaKind = filters.mediaKind ?? "";
+  const patchFilters = (next: Partial<AssetFilterValues>) =>
+    setFilters((current) => ({ ...current, ...next }));
   const [sortOrder, setSortOrder] = usePersistedState(
     "trendrelay.library.sort", "newest", isSortOrder,
   );
   const [groupBy, setGroupBy] = usePersistedState<GroupBy>(
     "trendrelay.library.groupBy", "none", isGroupBy,
   );
-  const [facets, setFacets] = useState<LibraryFacets>({ channels: [], platforms: [], media_kinds: [] });
+  const [facets, setFacets] = useState<AssetFacets>(EMPTY_FACETS);
   const [total, setTotal] = useState(0);
   const [viewMode, setViewMode] = usePersistedState<ViewMode>(
     "trendrelay.library.view", "gallery", isViewMode,
@@ -425,7 +431,7 @@ export default function LibraryPage() {
   // Approving a plan commits render spend, so it is the narrower pair.
   const canApprove = ["owner", "approver"].includes(workspace?.role ?? "");
   const canEnrich = ["owner", "editor", "analyst"].includes(workspace?.role ?? "");
-  const activeFilterCount = [query.trim(), channelFilter, platformFilter, mediaKind].filter(Boolean).length;
+  const filterCount = activeFilterCount(filters);
   const mediaTotal = facets.media_kinds.reduce((sum, facet) => sum + facet.count, 0);
   const mediaCount = (kind: Asset["media_kind"]) => facets.media_kinds.find((facet) => facet.value === kind)?.count ?? 0;
   const groupedAssets = groupBy === "none"
@@ -441,16 +447,7 @@ export default function LibraryPage() {
     }, new Map<string, Asset[]>())).sort((left, right) => right[1].length - left[1].length || left[0].localeCompare(right[0]));
 
   /** The filter the list is showing, so a select-all can ask for the same set. */
-  const filterParams = useCallback(() => {
-    const params = new URLSearchParams();
-    if (query.trim()) params.set("q", query.trim());
-    if (channelFilter === "__unassigned__") params.set("creator_missing", "true");
-    else if (channelFilter) params.set("creator", channelFilter);
-    if (platformFilter === "__other__") params.set("platform_missing", "true");
-    else if (platformFilter) params.set("platform", platformFilter);
-    if (mediaKind) params.set("media_kind", mediaKind);
-    return params;
-  }, [channelFilter, mediaKind, platformFilter, query]);
+  const filterParams = useCallback(() => assetFilterParams(filters), [filters]);
 
   const refresh = useCallback(async (nextWorkspace = workspaceId) => {
     if (!nextWorkspace) return;
@@ -459,7 +456,7 @@ export default function LibraryPage() {
     params.set("limit", "100");
     const suffix = `?${params}`;
     const [assetBody, jobBody, statusBody] = await Promise.all([
-      json<{ assets: Asset[]; total?: number; facets?: LibraryFacets }>(
+      json<{ assets: Asset[]; total?: number; facets?: AssetFacets }>(
         await apiFetch(`/api/workspaces/${nextWorkspace}/media/library/assets${suffix}`),
       ),
       json<{ jobs: Job[] }>(
@@ -482,10 +479,7 @@ export default function LibraryPage() {
   }, [apiFetch, filterParams, sortOrder, workspaceId]);
 
   function clearFilters() {
-    setQuery("");
-    setChannelFilter("");
-    setPlatformFilter("");
-    setMediaKind("");
+    setFilters({});
   }
 
   function groupTotal(label: string, loadedCount: number) {
@@ -971,16 +965,16 @@ export default function LibraryPage() {
         <aside className="library-browser">
           <div className="library-browser-toolbar">
           <form className="library-search" onSubmit={(event) => { event.preventDefault(); void refresh(); }}>
-            <input aria-label="Search library" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search titles, hooks, transcripts, or creators…" />
+            <input aria-label="Search library" value={query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder="Search titles, hooks, transcripts, or creators…" />
             <Button type="submit">Search</Button>
           </form>
 
           <nav className="library-category-bar" aria-label="Media categories">
             <div className="library-category-tabs">
-              <button type="button" className={!mediaKind ? "selected" : ""} aria-pressed={!mediaKind} onClick={() => setMediaKind("")}>All <span>{mediaTotal}</span></button>
-              <button type="button" className={mediaKind === "video" ? "selected" : ""} aria-pressed={mediaKind === "video"} onClick={() => setMediaKind("video")}>Videos <span>{mediaCount("video")}</span></button>
-              <button type="button" className={mediaKind === "image" ? "selected" : ""} aria-pressed={mediaKind === "image"} onClick={() => setMediaKind("image")}>Images <span>{mediaCount("image")}</span></button>
-              <button type="button" className={mediaKind === "audio" ? "selected" : ""} aria-pressed={mediaKind === "audio"} onClick={() => setMediaKind("audio")}>Audio <span>{mediaCount("audio")}</span></button>
+              <button type="button" className={!mediaKind ? "selected" : ""} aria-pressed={!mediaKind} onClick={() => patchFilters({ mediaKind: "" })}>All <span>{mediaTotal}</span></button>
+              <button type="button" className={mediaKind === "video" ? "selected" : ""} aria-pressed={mediaKind === "video"} onClick={() => patchFilters({ mediaKind: "video" })}>Videos <span>{mediaCount("video")}</span></button>
+              <button type="button" className={mediaKind === "image" ? "selected" : ""} aria-pressed={mediaKind === "image"} onClick={() => patchFilters({ mediaKind: "image" })}>Images <span>{mediaCount("image")}</span></button>
+              <button type="button" className={mediaKind === "audio" ? "selected" : ""} aria-pressed={mediaKind === "audio"} onClick={() => patchFilters({ mediaKind: "audio" })}>Audio <span>{mediaCount("audio")}</span></button>
             </div>
             <label>Sort
               <select aria-label="Sort media" value={sortOrder} onChange={(event) => { if (isSortOrder(event.target.value)) setSortOrder(event.target.value); }}>
@@ -992,19 +986,12 @@ export default function LibraryPage() {
             </label>
           </nav>
 
-          <div className="library-facet-row" aria-label="Library categories">
-            <label>Channel
-              <select aria-label="Filter by channel" value={channelFilter} onChange={(event) => setChannelFilter(event.target.value)}>
-                <option value="">All channels</option>
-                {facets.channels.map((facet) => <option key={facet.value || "__unassigned__"} value={facet.value || "__unassigned__"}>{facet.label} ({facet.count})</option>)}
-              </select>
-            </label>
-            <label>Source
-              <select aria-label="Filter by source" value={platformFilter} onChange={(event) => setPlatformFilter(event.target.value)}>
-                <option value="">All sources</option>
-                {facets.platforms.map((facet) => <option key={facet.value || "__other__"} value={facet.value || "__other__"}>{facet.label} ({facet.count})</option>)}
-              </select>
-            </label>
+          <AssetFilters
+            values={filters}
+            facets={facets}
+            fields={["channel", "platform", "effect"]}
+            onChange={setFilters}
+          >
             <label>Group
               <select aria-label="Group library" value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)}>
                 <option value="none">No grouping</option>
@@ -1012,8 +999,7 @@ export default function LibraryPage() {
                 <option value="source">Source</option>
               </select>
             </label>
-            {activeFilterCount > 0 && <Button variant="quiet" size="sm" onClick={clearFilters}>Clear {activeFilterCount}</Button>}
-          </div>
+          </AssetFilters>
           <div className="library-collection-toolbar">
             <strong>{total} {total === 1 ? "item" : "items"}</strong>
             <div className="library-collection-actions">

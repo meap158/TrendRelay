@@ -285,6 +285,13 @@ def test_ingest_deduplicates_enriches_searches_and_plans(
         {"value": "audio", "label": "audio", "count": 1},
         {"value": "image", "label": "image", "count": 1},
     ]
+    # Counted against the rest of the filter like every other facet, so the
+    # numbers say what narrowing by an effect would actually leave: two videos,
+    # neither of which has a blurred cut rendered yet.
+    assert categorized.json()["facets"]["effects"] == [
+        {"value": "blurred", "label": "Faces blurred", "count": 0},
+        {"value": "none", "label": "No effects", "count": 2},
+    ]
 
     by_channel = asyncio.run(
         request(

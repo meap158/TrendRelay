@@ -277,8 +277,6 @@ nav strong { color: #1c2b33; }
 .hosting-status b.configured { color: var(--green); }
 .hosting-status b.missing { color: var(--muted); }
 /* --- media picker --------------------------------------------------------- */
-.picker-search { display: flex; gap: 6px; }
-.picker-search input { flex: 1 1 auto; min-height: 34px; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; font: inherit; }
 .picker-results { display: grid; align-content: start; gap: 6px; min-height: 0; flex: 1 1 auto; margin: 0; padding: 0; list-style: none; overflow-y: auto; }
 .picker-result { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: transparent; text-align: left; font: inherit; cursor: pointer; }
 .picker-result:hover { border-color: var(--green); background: var(--green-dark); }
@@ -557,9 +555,3 @@ nav strong { color: #1c2b33; }
 .thread-note { color: var(--muted); font-size: 11px; line-height: 1.45; }
 /* An action that reads as part of the sentence it sits in. */
 .link-action { border: 0; padding: 0; background: transparent; color: var(--link); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
-/* Filters sit under the search they refine, not in a panel of their own. */
-.picker-filters { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 5px; }
-.picker-filters button { min-height: 26px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
-.picker-filters button:hover { border-color: var(--link); color: var(--link); }
-.picker-filters button.selected { border-color: var(--link); background: #eef2fb; color: var(--link); font-weight: 600; }
-.picker-filters select { min-height: 26px; margin-left: auto; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; }

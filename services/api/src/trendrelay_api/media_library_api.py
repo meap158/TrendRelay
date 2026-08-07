@@ -614,8 +614,34 @@ def list_assets(
                 missing_label="Other media",
                 omit="media_kind",
             ),
+            # Not a column but a related row, so it is counted on its own rather
+            # than through `facet`. It belongs beside the others because it is
+            # the same kind of question: how much of this library has it.
+            "effects": _effect_facet(session, conditions(omit="has_version")),
         },
     }
+
+
+def _effect_facet(session: Session, where: list[Any]) -> list[dict[str, Any]]:
+    """How many assets carry a rendered effect, and how many do not.
+
+    Counted against the rest of the active filter, like every other facet, so
+    the numbers describe what narrowing by an effect would actually leave.
+    """
+    blurred_exists = select(MediaAssetVersion.id).where(
+        MediaAssetVersion.asset_id == MediaAsset.id,
+        MediaAssetVersion.version_kind == "blurred",
+    ).exists()
+    blurred = session.scalar(
+        select(func.count(MediaAsset.id)).where(*where, blurred_exists)
+    ) or 0
+    plain = session.scalar(
+        select(func.count(MediaAsset.id)).where(*where, ~blurred_exists)
+    ) or 0
+    return [
+        {"value": "blurred", "label": "Faces blurred", "count": blurred},
+        {"value": "none", "label": "No effects", "count": plain},
+    ]
 
 @router.get("/assets/{asset_id}")
 def get_asset(

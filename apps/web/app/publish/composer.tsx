@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { PlatformIcon, platformLabels, type PublishingPlatform } from "../publishing-icons";
+import {
+  AssetFilters,
+  type AssetFacets,
+  type AssetFilterValues,
+} from "../ui/asset-filters";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
@@ -25,7 +30,13 @@ type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 /** Marks a drag as carrying one of our own library paths. */
 export const MEDIA_DRAG_TYPE = "application/x-trendrelay-media";
 
-/** What the picker narrows by, beyond the free-text search. */
+/**
+ * The picker only ever offers videos, so that is where clearing returns to
+ * rather than to nothing at all.
+ */
+export const PICKER_BASE: AssetFilterValues = { mediaKind: "video" };
+
+/** @deprecated Superseded by AssetFilterValues, shared with the Library page. */
 export type PickerFilters = {
   hasVersion?: "blurred" | "none";
   maxSeconds?: number;
@@ -97,6 +108,7 @@ export function MediaPicker({
   apiFetch,
   loading,
   failure,
+  facets,
   onSearch,
   onPick,
   onClose,
@@ -107,17 +119,17 @@ export function MediaPicker({
   apiFetch: Fetcher;
   loading: boolean;
   failure: string | null;
-  onSearch: (query: string, filters: PickerFilters) => void;
+  facets: AssetFacets;
+  onSearch: (filters: AssetFilterValues) => void;
   onPick: (asset: LibraryAsset) => void;
   onClose: () => void;
 }) {
-  const [query, setQuery] = useState("");
-  const [filters, setFilters] = useState<PickerFilters>({});
+  const [filters, setFilters] = useState<AssetFilterValues>(PICKER_BASE);
 
   /** Applied on change, because narrowing the list is a new search either way. */
-  function apply(next: PickerFilters) {
+  function apply(next: AssetFilterValues) {
     setFilters(next);
-    onSearch(query, next);
+    onSearch(next);
   }
 
   // Stays mounted and is driven by `open`: unmounting it on close would cut
@@ -129,51 +141,15 @@ export function MediaPicker({
       description="Videos in this workspace's library."
       onClose={onClose}
     >
-      <form
-        className="picker-search"
-        onSubmit={(event) => { event.preventDefault(); onSearch(query, filters); }}
-      >
-        <input
-          value={query}
-          placeholder="Search titles, creators and transcripts"
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        <Button type="submit" variant="quiet" busy={loading}>
-          {loading ? "Searching" : "Search"}
-        </Button>
-      </form>
-
-      {/* The blurred cut is the one a handoff sends, so whether a clip has one
-          is the question worth asking most often here. */}
-      <div className="picker-filters" role="group" aria-label="Filter clips">
-        {([
-          [undefined, "All clips"],
-          ["blurred", "Faces blurred"],
-          ["none", "Not blurred"],
-        ] as const).map(([value, label]) => (
-          <button
-            key={label}
-            type="button"
-            className={filters.hasVersion === value ? "selected" : ""}
-            aria-pressed={filters.hasVersion === value}
-            onClick={() => apply({ ...filters, hasVersion: value })}
-          >{label}</button>
-        ))}
-        <select
-          aria-label="Longest clip"
-          value={filters.maxSeconds ?? ""}
-          onChange={(event) => apply({
-            ...filters,
-            maxSeconds: event.target.value ? Number(event.target.value) : undefined,
-          })}
-        >
-          <option value="">Any length</option>
-          <option value="15">Up to 15s</option>
-          <option value="30">Up to 30s</option>
-          <option value="60">Up to 1m</option>
-          <option value="180">Up to 3m</option>
-        </select>
-      </div>
+      {/* The same control the Library uses, minus the media kind: this dialog
+          only ever offers videos, so a kind selector here would be a lie. */}
+      <AssetFilters
+        values={filters}
+        facets={facets}
+        fields={["query", "effect", "channel", "platform", "length"]}
+        cleared={PICKER_BASE}
+        onChange={apply}
+      />
       {failure && <p className="engine-warning" role="status">{failure}</p>}
       {!failure && !loading && !assets.length && (
         <p className="picker-empty">

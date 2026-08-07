@@ -14,11 +14,18 @@ import {
   type PublishingProvider,
 } from "../publishing-icons";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
+import {
+  EMPTY_FACETS,
+  assetFilterParams,
+  type AssetFacets,
+  type AssetFilterValues,
+} from "../ui/asset-filters";
 import { Button, buttonClass } from "../ui/button";
 import { Badge } from "../ui/primitives";
 import {
   MEDIA_DRAG_TYPE,
   MediaPicker,
+  PICKER_BASE,
   PostPreview,
   SlotEditor,
   UpcomingPosts,
@@ -29,7 +36,6 @@ import {
   upcomingSlots,
   type CalendarEntry,
   type LibraryAsset,
-  type PickerFilters,
   type Slot,
   type SlotPreset,
 } from "./composer";
@@ -173,6 +179,7 @@ export default function PublishPage() {
   const [clip, setClip] = useState<LibraryAsset | null>(null);
   const [thumbnail, setThumbnail] = useState("");
   const [library, setLibrary] = useState<LibraryAsset[]>([]);
+  const [libraryFacets, setLibraryFacets] = useState<AssetFacets>(EMPTY_FACETS);
   const [libraryState, setLibraryState] = useState<{ loading: boolean; failure: string | null }>({
     loading: false,
     failure: null,
@@ -467,17 +474,18 @@ export default function PublishPage() {
   }
 
   const loadLibrary = useCallback(
-    async (query: string, filters: PickerFilters = {}) => {
+    async (filters: AssetFilterValues = PICKER_BASE) => {
       setLibraryState({ loading: true, failure: null });
       try {
-        const params = new URLSearchParams({ media_kind: "video", limit: "40" });
-        if (query.trim()) params.set("q", query.trim());
-        if (filters.hasVersion) params.set("has_version", filters.hasVersion);
-        if (filters.maxSeconds) params.set("max_duration_seconds", String(filters.maxSeconds));
-        const body = await json<{ assets: LibraryAsset[] }>(
+        // Built by the shared serialiser, so the picker and the Library page
+        // cannot express the same filter as two different requests.
+        const params = assetFilterParams(filters);
+        params.set("limit", "40");
+        const body = await json<{ assets: LibraryAsset[]; facets?: AssetFacets }>(
           await apiFetch(`/api/workspaces/${workspaceId}/media/library/assets?${params}`),
         );
         setLibrary(body.assets ?? []);
+        if (body.facets) setLibraryFacets(body.facets);
         setLibraryState({ loading: false, failure: null });
       } catch (reason) {
         setLibraryState({
@@ -514,7 +522,7 @@ export default function PublishPage() {
 
   function openPicker() {
     setPickerOpen(true);
-    void loadLibrary("");
+    void loadLibrary();
   }
 
   async function saveSlots(entries: { weekday: number; time: string }[]) {
@@ -1560,7 +1568,8 @@ export default function PublishPage() {
           apiFetch={apiFetch}
           loading={libraryState.loading}
           failure={libraryState.failure}
-          onSearch={(query, filters) => void loadLibrary(query, filters)}
+          facets={libraryFacets}
+          onSearch={(filters) => void loadLibrary(filters)}
           onPick={pickClip}
           onClose={() => setPickerOpen(false)}
         />
