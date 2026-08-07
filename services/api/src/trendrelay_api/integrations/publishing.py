@@ -1190,18 +1190,67 @@ def host_media_for_engine(request: PublishRequest) -> dict[str, Any]:
     return {**hosted, "blurred": blurred}
 
 
+ACCOUNT_READERS = {
+    "bundle_social": lambda: _bundle_accounts(),
+    "zernio": lambda: _zernio_accounts(),
+    "buffer": lambda: _buffer_accounts(),
+}
+
+
 def discover_integrations(provider_id: str | None = None) -> dict[str, Any]:
     provider = resolve_provider(provider_id)
-    readers = {
-        "bundle_social": _bundle_accounts,
-        "zernio": _zernio_accounts,
-        "buffer": _buffer_accounts,
-    }
-    accounts = readers[provider.id]()
+    accounts = [
+        {**account, "provider": provider.id, "provider_label": provider.label}
+        for account in ACCOUNT_READERS[provider.id]()
+    ]
     return {
         "provider": provider.id,
         "accounts": sorted(
             accounts, key=lambda item: (item["platform"], item["label"].casefold(), item["id"])
+        ),
+    }
+
+
+def discover_all_integrations() -> dict[str, Any]:
+    """Every account reachable right now, whichever engine reaches it.
+
+    Each account says which engine owns it, because that is what lets one post
+    address destinations on several engines at once. An engine that cannot be
+    read is reported rather than omitted: silently returning fewer accounts
+    would look like the accounts had gone away.
+    """
+    accounts: list[dict[str, Any]] = []
+    engines: list[dict[str, Any]] = []
+    for provider_id, provider in PROVIDERS.items():
+        status = provider_status(provider_id, probe=False)
+        if not status["configured"]:
+            engines.append({
+                "id": provider_id, "label": provider.label,
+                "reachable": False, "reason": "No key saved for this engine.",
+                "account_count": 0,
+            })
+            continue
+        try:
+            found = [
+                {**account, "provider": provider_id, "provider_label": provider.label}
+                for account in ACCOUNT_READERS[provider_id]()
+            ]
+        except Exception as error:
+            engines.append({
+                "id": provider_id, "label": provider.label,
+                "reachable": False, "reason": str(error), "account_count": 0,
+            })
+            continue
+        accounts.extend(found)
+        engines.append({
+            "id": provider_id, "label": provider.label,
+            "reachable": True, "reason": None, "account_count": len(found),
+        })
+    return {
+        "engines": engines,
+        "accounts": sorted(
+            accounts,
+            key=lambda item: (item["platform"], item["provider"], item["label"].casefold()),
         ),
     }
 

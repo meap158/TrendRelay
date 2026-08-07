@@ -137,9 +137,13 @@ def test_bundle_accounts_are_normalized(monkeypatch, media_file: Path) -> None:
     )
     result = publishing.discover_integrations("bundle_social")
     assert result["provider"] == "bundle_social"
+    # Each account names the engine that reaches it, which is what lets one post
+    # address destinations on more than one engine at a time.
     assert result["accounts"] == [
-        {"id": "a1", "platform": "tiktok", "label": "TrendRelay"},
-        {"id": "a3", "platform": "youtube", "label": "Video Channel"},
+        {"id": "a1", "platform": "tiktok", "label": "TrendRelay",
+         "provider": "bundle_social", "provider_label": "Bundle.social"},
+        {"id": "a3", "platform": "youtube", "label": "Video Channel",
+         "provider": "bundle_social", "provider_label": "Bundle.social"},
     ]
 
 
