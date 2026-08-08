@@ -89,11 +89,18 @@ function lookup(source: unknown, path: string): unknown {
  * split, and the languages here that need more than one/other — Russian and
  * Arabic — are handled by `Intl.PluralRules` choosing the category, with the
  * dictionary supplying whichever categories that language uses.
+ *
+ * The body pattern alternates between non-brace runs and whole `{…}` groups.
+ * It cannot be `[^}]*`: that consumes the first form's opening brace, so the
+ * closing `\}` lands on that form's own brace and the match ends after
+ * `{count, plural, one {# video`. No form parses out of that, every plural
+ * rendered as the empty string, and whatever followed was left on the page as
+ * literal ICU syntax.
  */
 function interpolate(template: string, values: Values | undefined, tag: string): string {
   if (!values) return template;
   return template.replace(
-    /\{(\w+)(?:,\s*plural,\s*([^}]*(?:\{[^}]*\}[^}]*)*))?\}/g,
+    /\{(\w+)(?:,\s*plural,\s*((?:[^{}]|\{[^{}]*\})*))?\}/g,
     (whole, name: string, pluralBody: string | undefined) => {
       const value = values[name];
       if (value === undefined) return whole;
