@@ -593,6 +593,80 @@ export const ja: Messages = {
     },
   },
 
+  auth: {
+    eyebrow: "安全なワークスペースへのアクセス",
+    heading: "すべての情報を、正しいワークスペースの中に。",
+    intro:
+      "Supabase Auth でログインします。TrendRelay はすべての API リクエストを独立して検証し、ワークスペースの権限をサーバー側で適用します。",
+    deviceFlow: "デスクトップのデバイス連携",
+    openWorkspaces: "ワークスペースを開く",
+    setupRequired: "設定が必要です",
+    connectSupabase: "Supabase プロジェクトを接続",
+    envInstructions:
+      "{publicUrl} と {publicKey}、およびバックエンドの {serverUrl} をローカルの {file} に追加し、再起動してください。",
+    signIn: "ログイン",
+    createAccount: "アカウントを作成",
+    email: "メールアドレス",
+    password: "パスワード",
+    continueWithGoogle: "Google で続行",
+    magicLink: "ログインリンクをメールで送る",
+    resetPassword: "パスワードを再設定",
+    accountAction: "アカウント操作",
+    newPassword: "新しいパスワード",
+    updatePassword: "パスワードを更新",
+    recoveryEyebrow: "パスワードの回復",
+    chooseNewPassword: "新しいパスワードを設定してください。",
+  },
+
+  mfa: {
+    checking: "アカウントのセキュリティを確認しています...",
+    manageInBrowser: "多要素認証はブラウザで管理します。",
+    desktopNote:
+      "デスクトップ版はペアリング済みのデバイストークンを使います。認証アプリの登録・確認・削除はブラウザ版で行ってください。",
+    returnToWorkspaces: "ワークスペースに戻る",
+    signInPrompt: "多要素認証を管理するにはログインしてください",
+    eyebrow: "認証の保証レベル",
+    currentSession: "現在のセッション:",
+    sixDigitNote:
+      "認証アプリは SMS もメールも使わずに 6 桁のコードを生成します。",
+    sixDigitCode: "6 桁のコード",
+    verifyAndContinue: "確認して続行",
+    addAuthenticator: "認証アプリを追加",
+    scanOrEnter: "このコードを読み取るか、シークレットを手入力してください:",
+    verifyEnrollment: "登録を確認",
+    factors: "登録済みの認証手段",
+    noFactor: "認証手段はまだ登録されていません。",
+    discardUnfinished: "別の登録を始める前に、未完了の設定を破棄してください。",
+    removalNeedsAal2:
+      "確認済みの認証手段を削除するには AAL2 のセッションが必要です。唯一の回復手段を削除する前に、2 つ目を登録してください。",
+    qrAlt: "TOTP 登録用 QR コード",
+  },
+
+  device: {
+    loading: "ペアリング情報を読み込み中...",
+    heading: "デバイスをペアリング",
+    eyebrow: "デスクトップの認可",
+    approveOnlyThis: "目の前にあるデバイスだけを承認してください。",
+    configureFirst:
+      "デスクトップをペアリングする前に Supabase 認証を設定してください。",
+    checkingSession: "ブラウザのセッションを確認しています...",
+    signInFirst: "このコードを確認する前にログインしてください。",
+    signInToContinue: "ログインして続行",
+    pairingCode: "ペアリングコード",
+    approveDevice: "このデバイスを承認",
+  },
+
+  invitation: {
+    loading: "招待を読み込み中...",
+    eyebrow: "ワークスペースへの招待",
+    heading: "信頼されたワークスペースに参加する。",
+    configureFirst: "招待を受ける前に Supabase 認証を設定してください。",
+    checkingAccount: "ログイン中のアカウントを確認しています...",
+    useExactEmail: "この招待を受け取ったメールアドレスでログインしてください。",
+    signInToAccept: "ログインして参加",
+    noToken: "この招待リンクにはトークンがありません。",
+  },
+
   effects: {
     title: "編集",
     unavailable: "この環境では利用できません",

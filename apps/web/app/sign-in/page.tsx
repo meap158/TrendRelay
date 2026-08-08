@@ -6,6 +6,7 @@ import { FormEvent, useState } from "react";
 import { useAuth } from "../auth-provider";
 import { authConfiguration, supabaseBrowserClient } from "../../lib/supabase";
 import { buttonClass } from "../ui/button";
+import { useT } from "../i18n-provider";
 
 type Mode = "sign-in" | "sign-up";
 
@@ -15,6 +16,7 @@ function safeNextPath(): string {
 }
 
 export default function SignInPage() {
+  const t = useT();
   const config = authConfiguration();
   const { desktopAvailable, loading: authLoading, user, pairDesktop } = useAuth();
   const client = supabaseBrowserClient();
@@ -110,37 +112,37 @@ export default function SignInPage() {
     <main className="auth-page">
       <section className="auth-shell">
         <div className="auth-intro">
-          <p className="eyebrow">SECURE WORKSPACE ACCESS</p>
-          <h1>Keep every signal inside the right workspace.</h1>
-          <p>Sign in through Supabase Auth. TrendRelay verifies every API request independently and applies workspace roles server-side.</p>
+          <p className="eyebrow">{t("auth.eyebrow")}</p>
+          <h1>{t("auth.heading")}</h1>
+          <p>{t("auth.intro")}</p>
         </div>
         {desktopAvailable ? (
           <div className="auth-card" role="status">
-            <p className="eyebrow">DESKTOP DEVICE FLOW</p>
+            <p className="eyebrow">{t("auth.deviceFlow")}</p>
             <h2>{user ? "Desktop paired" : "Pair this desktop"}</h2>
             <p>{user ? `Signed in as ${user.email ?? user.id}.` : "TrendRelay will open your system browser for a ten-minute, one-time approval."}</p>
-            {user ? <Link className={buttonClass({ variant: "primary" })} href="/workspaces">Open workspaces</Link> : <button className={buttonClass({ variant: "primary" })} disabled={busy || authLoading} onClick={pair}>{busy || authLoading ? "Waiting for browser approval..." : "Pair securely in browser"}</button>}
+            {user ? <Link className={buttonClass({ variant: "primary" })} href="/workspaces">{t("auth.openWorkspaces")}</Link> : <button className={buttonClass({ variant: "primary" })} disabled={busy || authLoading} onClick={pair}>{busy || authLoading ? "Waiting for browser approval..." : "Pair securely in browser"}</button>}
             {error && <p className="registry-error" role="alert">{error}</p>}
           </div>
         ) : !config.configured ? (
           <div className="setup-card" role="status">
-            <span>Setup required</span>
-            <h2>Connect a Supabase project</h2>
+            <span>{t("auth.setupRequired")}</span>
+            <h2>{t("auth.connectSupabase")}</h2>
             <p>Add <code>NEXT_PUBLIC_SUPABASE_URL</code>, <code>NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</code>, and backend <code>SUPABASE_URL</code> to local <code>.env</code>, then restart.</p>
           </div>
         ) : (
           <form className="auth-card" onSubmit={submit}>
-            <div className="mode-switch" aria-label="Account action">
-              <button type="button" className={mode === "sign-in" ? "selected" : ""} onClick={() => setMode("sign-in")}>Sign in</button>
-              <button type="button" className={mode === "sign-up" ? "selected" : ""} onClick={() => setMode("sign-up")}>Create account</button>
+            <div className="mode-switch" aria-label={t("auth.accountAction")}>
+              <button type="button" className={mode === "sign-in" ? "selected" : ""} onClick={() => setMode("sign-in")}>{t("auth.signIn")}</button>
+              <button type="button" className={mode === "sign-up" ? "selected" : ""} onClick={() => setMode("sign-up")}>{t("auth.createAccount")}</button>
             </div>
-            <label>Email<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
-            <label>Password<input type="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+            <label>{t("auth.email")}<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
+            <label>{t("auth.password")}<input type="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
             <button className={buttonClass({ variant: "primary" })} disabled={busy}>{busy ? "Working..." : mode === "sign-in" ? "Sign in" : "Create account"}</button>
             <div className="auth-alternatives">
-              <button type="button" disabled={busy} onClick={googleSignIn}>Continue with Google</button>
-              <button type="button" disabled={busy} onClick={sendMagicLink}>Email a magic link</button>
-              {mode === "sign-in" && <button type="button" disabled={busy} onClick={resetPassword}>Reset password</button>}
+              <button type="button" disabled={busy} onClick={googleSignIn}>{t("auth.continueWithGoogle")}</button>
+              <button type="button" disabled={busy} onClick={sendMagicLink}>{t("auth.magicLink")}</button>
+              {mode === "sign-in" && <button type="button" disabled={busy} onClick={resetPassword}>{t("auth.resetPassword")}</button>}
             </div>
             {message && <p className="form-message" role="status">{message}</p>}
             {error && <p className="registry-error" role="alert">{error}</p>}

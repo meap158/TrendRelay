@@ -590,6 +590,80 @@ export const ar: Messages = {
     },
   },
 
+  auth: {
+    eyebrow: "وصول آمن إلى مساحة العمل",
+    heading: "أبقِ كل بياناتك داخل مساحة العمل الصحيحة.",
+    intro:
+      "سجّل الدخول عبر Supabase Auth. يتحقق TrendRelay من كل طلب برمجي بشكل مستقل ويطبّق أدوار مساحة العمل على الخادم.",
+    deviceFlow: "تدفّق أجهزة سطح المكتب",
+    openWorkspaces: "فتح مساحات العمل",
+    setupRequired: "يلزم الإعداد",
+    connectSupabase: "اربط مشروع Supabase",
+    envInstructions:
+      "أضف {publicUrl} و{publicKey}، إضافة إلى {serverUrl} في الخلفية، إلى ملف {file} المحلي، ثم أعد التشغيل.",
+    signIn: "تسجيل الدخول",
+    createAccount: "إنشاء حساب",
+    email: "البريد الإلكتروني",
+    password: "كلمة المرور",
+    continueWithGoogle: "المتابعة عبر Google",
+    magicLink: "إرسال رابط دخول بالبريد",
+    resetPassword: "إعادة تعيين كلمة المرور",
+    accountAction: "إجراء على الحساب",
+    newPassword: "كلمة مرور جديدة",
+    updatePassword: "تحديث كلمة المرور",
+    recoveryEyebrow: "استعادة كلمة المرور",
+    chooseNewPassword: "اختر كلمة مرور جديدة.",
+  },
+
+  mfa: {
+    checking: "جارٍ التحقق من أمان الحساب...",
+    manageInBrowser: "أدر المصادقة متعددة العوامل من المتصفح.",
+    desktopNote:
+      "يستخدم تطبيق سطح المكتب رمز جهاز مقترن. افتح تطبيق المتصفح لإضافة تطبيق مصادقة أو التحقق منه أو إزالته.",
+    returnToWorkspaces: "العودة إلى مساحات العمل",
+    signInPrompt: "سجّل الدخول لإدارة المصادقة متعددة العوامل",
+    eyebrow: "مستوى توكيد المصادقة",
+    currentSession: "الجلسة الحالية:",
+    sixDigitNote:
+      "تنشئ تطبيقات المصادقة رموزًا من ست خانات دون رسائل نصية أو بريد.",
+    sixDigitCode: "رمز من ست خانات",
+    verifyAndContinue: "التحقق والمتابعة",
+    addAuthenticator: "إضافة تطبيق مصادقة",
+    scanOrEnter: "امسح هذا الرمز، أو أدخل السر يدويًا:",
+    verifyEnrollment: "تأكيد التسجيل",
+    factors: "عوامل المصادقة",
+    noFactor: "لم يُسجَّل أي عامل مصادقة.",
+    discardUnfinished: "تخلَّ عن الإعداد غير المكتمل قبل بدء تسجيل آخر.",
+    removalNeedsAal2:
+      "تتطلب إزالة عامل مُتحقَّق منه جلسة AAL2. سجّل عاملًا ثانيًا قبل إزالة وسيلة الاستعادة الوحيدة لديك.",
+    qrAlt: "رمز QR لتسجيل TOTP",
+  },
+
+  device: {
+    loading: "جارٍ تحميل الاقتران...",
+    heading: "اقتران جهاز",
+    eyebrow: "تفويض سطح المكتب",
+    approveOnlyThis: "لا توافق إلا على الجهاز الذي أمامك.",
+    configureFirst: "اضبط مصادقة Supabase قبل اقتران جهاز سطح مكتب.",
+    checkingSession: "جارٍ التحقق من جلسة متصفحك...",
+    signInFirst: "سجّل الدخول قبل مراجعة هذا الرمز.",
+    signInToContinue: "سجّل الدخول للمتابعة",
+    pairingCode: "رمز الاقتران",
+    approveDevice: "الموافقة على هذا الجهاز",
+  },
+
+  invitation: {
+    loading: "جارٍ تحميل الدعوة...",
+    eyebrow: "دعوة إلى مساحة عمل",
+    heading: "انضم إلى مساحة عمل موثوقة.",
+    configureFirst: "اضبط مصادقة Supabase قبل قبول أي دعوة.",
+    checkingAccount: "جارٍ التحقق من الحساب الذي سجّلت الدخول به...",
+    useExactEmail:
+      "سجّل الدخول بعنوان البريد نفسه الذي وصلت إليه هذه الدعوة.",
+    signInToAccept: "سجّل الدخول للقبول",
+    noToken: "لا يحتوي رابط الدعوة هذا على رمز.",
+  },
+
   effects: {
     title: "التحرير",
     unavailable: "غير متاح على هذا الجهاز",

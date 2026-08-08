@@ -6,12 +6,15 @@ import { useSearchParams } from "next/navigation";
 
 import { useAuth } from "../../auth-provider";
 import { buttonClass } from "../../ui/button";
+import { useT } from "../../i18n-provider";
 
 export default function AcceptInvitationPage() {
-  return <Suspense fallback={<main className="auth-page"><p>Loading invitation...</p></main>}><AcceptInvitationContent /></Suspense>;
+  const t = useT();
+  return <Suspense fallback={<main className="auth-page"><p>{t("invitation.loading")}</p></main>}><AcceptInvitationContent /></Suspense>;
 }
 
 function AcceptInvitationContent() {
+  const t = useT();
   const { configured, loading, user, apiFetch } = useAuth();
   const token = useSearchParams().get("token") ?? "";
   const [busy, setBusy] = useState(false);
@@ -41,14 +44,14 @@ function AcceptInvitationContent() {
   return (
     <main className="auth-page">
       <section className="setup-card">
-        <p className="eyebrow">WORKSPACE INVITATION</p>
-        <h1>Join a trusted workspace.</h1>
-        {!configured && <p>Configure Supabase authentication before accepting an invitation.</p>}
-        {configured && loading && <p>Checking your signed-in account...</p>}
-        {configured && !loading && !user && <><p>Sign in with the exact email address that received this invitation.</p><Link className={buttonClass({ variant: "primary" })} href={`/sign-in?next=${encodeURIComponent(returnPath)}`}>Sign in to accept</Link></>}
-        {configured && !loading && user && !token && <p className="registry-error" role="alert">This invitation link has no token.</p>}
+        <p className="eyebrow">{t("invitation.eyebrow")}</p>
+        <h1>{t("invitation.heading")}</h1>
+        {!configured && <p>{t("invitation.configureFirst")}</p>}
+        {configured && loading && <p>{t("invitation.checkingAccount")}</p>}
+        {configured && !loading && !user && <><p>{t("invitation.useExactEmail")}</p><Link className={buttonClass({ variant: "primary" })} href={`/sign-in?next=${encodeURIComponent(returnPath)}`}>{t("invitation.signInToAccept")}</Link></>}
+        {configured && !loading && user && !token && <p className="registry-error" role="alert">{t("invitation.noToken")}</p>}
         {configured && !loading && user && token && !message && <button className={buttonClass({ variant: "primary" })} disabled={busy} onClick={accept}>{busy ? "Joining..." : `Accept as ${user.email ?? user.id}`}</button>}
-        {message && <p className="form-message" role="status">{message} <Link href="/workspaces">Open workspaces</Link></p>}
+        {message && <p className="form-message" role="status">{message} <Link href="/workspaces">{t("auth.openWorkspaces")}</Link></p>}
         {error && <p className="registry-error" role="alert">{error}</p>}
       </section>
     </main>

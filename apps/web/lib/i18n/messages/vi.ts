@@ -597,6 +597,83 @@ export const vi: Messages = {
     },
   },
 
+  auth: {
+    eyebrow: "TRUY CẬP KHÔNG GIAN LÀM VIỆC AN TOÀN",
+    heading: "Giữ mọi dữ liệu trong đúng không gian làm việc.",
+    intro:
+      "Đăng nhập qua Supabase Auth. TrendRelay xác minh độc lập từng yêu cầu API và áp dụng vai trò không gian làm việc ở phía máy chủ.",
+    deviceFlow: "LUỒNG THIẾT BỊ MÁY TÍNH",
+    openWorkspaces: "Mở không gian làm việc",
+    setupRequired: "Cần thiết lập",
+    connectSupabase: "Kết nối một dự án Supabase",
+    envInstructions:
+      "Thêm {publicUrl} và {publicKey}, cùng {serverUrl} ở phía máy chủ, vào tệp {file} cục bộ, rồi khởi động lại.",
+    signIn: "Đăng nhập",
+    createAccount: "Tạo tài khoản",
+    email: "Email",
+    password: "Mật khẩu",
+    continueWithGoogle: "Tiếp tục với Google",
+    magicLink: "Gửi liên kết đăng nhập qua email",
+    resetPassword: "Đặt lại mật khẩu",
+    accountAction: "Thao tác tài khoản",
+    newPassword: "Mật khẩu mới",
+    updatePassword: "Cập nhật mật khẩu",
+    recoveryEyebrow: "KHÔI PHỤC MẬT KHẨU",
+    chooseNewPassword: "Chọn mật khẩu mới.",
+  },
+
+  mfa: {
+    checking: "Đang kiểm tra bảo mật tài khoản...",
+    manageInBrowser: "Quản lý xác thực hai lớp trong trình duyệt.",
+    desktopNote:
+      "Ứng dụng máy tính dùng mã thiết bị đã ghép nối. Hãy mở ứng dụng trình duyệt để đăng ký, xác minh hoặc gỡ trình xác thực.",
+    returnToWorkspaces: "Quay lại không gian làm việc",
+    signInPrompt: "Đăng nhập để quản lý xác thực hai lớp",
+    eyebrow: "MỨC ĐỘ ĐẢM BẢO XÁC THỰC",
+    currentSession: "Phiên hiện tại:",
+    sixDigitNote:
+      "Ứng dụng xác thực tạo mã sáu chữ số mà không cần SMS hay email.",
+    sixDigitCode: "Mã sáu chữ số",
+    verifyAndContinue: "Xác minh và tiếp tục",
+    addAuthenticator: "Thêm trình xác thực",
+    scanOrEnter: "Quét mã này, hoặc nhập khóa bí mật thủ công:",
+    verifyEnrollment: "Xác minh đăng ký",
+    factors: "Các phương thức xác thực",
+    noFactor: "Chưa đăng ký phương thức xác thực nào.",
+    discardUnfinished:
+      "Hãy hủy phần thiết lập còn dang dở trước khi bắt đầu đăng ký mới.",
+    removalNeedsAal2:
+      "Việc gỡ một phương thức đã xác minh cần phiên AAL2. Hãy đăng ký phương thức thứ hai trước khi gỡ đường khôi phục duy nhất của bạn.",
+    qrAlt: "Mã QR đăng ký TOTP",
+  },
+
+  device: {
+    loading: "Đang tải phần ghép nối...",
+    heading: "Ghép nối thiết bị",
+    eyebrow: "ỦY QUYỀN MÁY TÍNH",
+    approveOnlyThis: "Chỉ phê duyệt thiết bị đang ở trước mặt bạn.",
+    configureFirst:
+      "Hãy cấu hình xác thực Supabase trước khi ghép nối máy tính.",
+    checkingSession: "Đang kiểm tra phiên trình duyệt của bạn...",
+    signInFirst: "Hãy đăng nhập trước khi xem mã này.",
+    signInToContinue: "Đăng nhập để tiếp tục",
+    pairingCode: "Mã ghép nối",
+    approveDevice: "Phê duyệt thiết bị này",
+  },
+
+  invitation: {
+    loading: "Đang tải lời mời...",
+    eyebrow: "LỜI MỜI VÀO KHÔNG GIAN LÀM VIỆC",
+    heading: "Tham gia một không gian làm việc tin cậy.",
+    configureFirst:
+      "Hãy cấu hình xác thực Supabase trước khi chấp nhận lời mời.",
+    checkingAccount: "Đang kiểm tra tài khoản đã đăng nhập...",
+    useExactEmail:
+      "Hãy đăng nhập bằng đúng địa chỉ email đã nhận lời mời này.",
+    signInToAccept: "Đăng nhập để chấp nhận",
+    noToken: "Liên kết lời mời này không có mã.",
+  },
+
   effects: {
     title: "Chỉnh sửa",
     unavailable: "Không khả dụng trên máy này",

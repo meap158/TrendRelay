@@ -7,6 +7,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useAuth } from "../../auth-provider";
 import { supabaseBrowserClient } from "../../../lib/supabase";
 import { buttonClass } from "../../ui/button";
+import { useT } from "../../i18n-provider";
 
 type Factor = {
   id: string;
@@ -25,6 +26,7 @@ function safeNextPath(): string {
 }
 
 export default function AccountSecurityPage() {
+  const t = useT();
   const { desktopAvailable, loading, user } = useAuth();
   const client = supabaseBrowserClient();
   const [factors, setFactors] = useState<Factor[]>([]);
@@ -111,9 +113,9 @@ export default function AccountSecurityPage() {
     setBusy(false);
   }
 
-  if (loading) return <main className="auth-page"><p>Checking account security...</p></main>;
-  if (desktopAvailable) return <main className="auth-page"><section className="setup-card"><h1>Manage MFA in your browser.</h1><p>Desktop uses a paired device token. Open the browser app to enroll, verify, or remove an authenticator.</p><Link className={buttonClass({ variant: "primary" })} href="/workspaces">Return to workspaces</Link></section></main>;
-  if (!user) return <main className="auth-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Faccount%2Fsecurity">Sign in to manage MFA</Link></main>;
+  if (loading) return <main className="auth-page"><p>{t("mfa.checking")}</p></main>;
+  if (desktopAvailable) return <main className="auth-page"><section className="setup-card"><h1>{t("mfa.manageInBrowser")}</h1><p>{t("mfa.desktopNote")}</p><Link className={buttonClass({ variant: "primary" })} href="/workspaces">{t("mfa.returnToWorkspaces")}</Link></section></main>;
+  if (!user) return <main className="auth-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Faccount%2Fsecurity">{t("mfa.signInPrompt")}</Link></main>;
 
   const unverified = factors.filter((factor) => factor.status === "unverified");
   const challengeRequired = assurance?.currentLevel === "aal1" && assurance.nextLevel === "aal2";
@@ -122,20 +124,20 @@ export default function AccountSecurityPage() {
     <main className="auth-page security-page">
       <section className="security-grid">
         <article className="setup-card">
-          <p className="eyebrow">AUTHENTICATOR ASSURANCE</p>
+          <p className="eyebrow">{t("mfa.eyebrow")}</p>
           <h1>{challengeRequired ? "Verify your second factor." : "Protect your account with TOTP."}</h1>
           <p>Current session: <strong>{assurance?.currentLevel ?? "checking"}</strong>. Authenticator apps generate six-digit codes without SMS or email.</p>
           {error && <p className="registry-error" role="alert">{error}</p>}
           {message && <p className="form-message" role="status">{message}</p>}
-          {challengeRequired && <form className="stack-form" onSubmit={verify}><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} required /></label><button disabled={busy}>Verify and continue</button></form>}
-          {!challengeRequired && !enrollment && <button className={buttonClass({ variant: "primary" })} disabled={busy || unverified.length > 0} onClick={enroll}>Add authenticator</button>}
-          {enrollment && <div className="mfa-enrollment"><Image src={enrollment.qrCode} alt="TOTP enrollment QR code" width={240} height={240} unoptimized /><p>Scan this code, or enter the secret manually:</p><code>{enrollment.secret}</code><form className="stack-form" onSubmit={verify}><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} required /></label><button disabled={busy}>Verify enrollment</button></form></div>}
+          {challengeRequired && <form className="stack-form" onSubmit={verify}><label>{t("mfa.sixDigitCode")}<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} required /></label><button disabled={busy}>{t("mfa.verifyAndContinue")}</button></form>}
+          {!challengeRequired && !enrollment && <button className={buttonClass({ variant: "primary" })} disabled={busy || unverified.length > 0} onClick={enroll}>{t("mfa.addAuthenticator")}</button>}
+          {enrollment && <div className="mfa-enrollment"><Image src={enrollment.qrCode} alt={t("mfa.qrAlt")} width={240} height={240} unoptimized /><p>{t("mfa.scanOrEnter")}</p><code>{enrollment.secret}</code><form className="stack-form" onSubmit={verify}><label>{t("mfa.sixDigitCode")}<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} required /></label><button disabled={busy}>{t("mfa.verifyEnrollment")}</button></form></div>}
         </article>
         <aside className="management-card">
-          <h2>Authenticator factors</h2>
-          {factors.length === 0 ? <p>No authenticator factor is enrolled.</p> : <div className="record-list">{factors.map((factor) => <div key={factor.id}><strong>{factor.friendly_name ?? "Authenticator"}</strong><span>{factor.factor_type} / {factor.status}</span><button type="button" disabled={busy || (factor.status === "verified" && assurance?.currentLevel !== "aal2")} onClick={() => removeFactor(factor.id)}>{factor.status === "verified" ? "Remove" : "Discard setup"}</button></div>)}</div>}
-          {unverified.length > 0 && <small>Discard the unfinished setup before starting another enrollment.</small>}
-          <small>Removing a verified factor requires an AAL2 session. Enroll a second factor before removing your only recovery path.</small>
+          <h2>{t("mfa.factors")}</h2>
+          {factors.length === 0 ? <p>{t("mfa.noFactor")}</p> : <div className="record-list">{factors.map((factor) => <div key={factor.id}><strong>{factor.friendly_name ?? "Authenticator"}</strong><span>{factor.factor_type} / {factor.status}</span><button type="button" disabled={busy || (factor.status === "verified" && assurance?.currentLevel !== "aal2")} onClick={() => removeFactor(factor.id)}>{factor.status === "verified" ? "Remove" : "Discard setup"}</button></div>)}</div>}
+          {unverified.length > 0 && <small>{t("mfa.discardUnfinished")}</small>}
+          <small>{t("mfa.removalNeedsAal2")}</small>
         </aside>
       </section>
     </main>

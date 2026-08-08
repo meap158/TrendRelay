@@ -607,6 +607,83 @@ export const fr: Messages = {
     },
   },
 
+  auth: {
+    eyebrow: "ACCÈS SÉCURISÉ À L'ESPACE DE TRAVAIL",
+    heading: "Gardez chaque signal dans le bon espace de travail.",
+    intro:
+      "Connectez-vous via Supabase Auth. TrendRelay vérifie chaque requête d'API de façon indépendante et applique les rôles de l'espace de travail côté serveur.",
+    deviceFlow: "FLUX D'APPAREIL BUREAU",
+    openWorkspaces: "Ouvrir les espaces de travail",
+    setupRequired: "Configuration requise",
+    connectSupabase: "Connecter un projet Supabase",
+    envInstructions:
+      "Ajoutez {publicUrl} et {publicKey}, ainsi que {serverUrl} côté serveur, au fichier {file} local, puis redémarrez.",
+    signIn: "Se connecter",
+    createAccount: "Créer un compte",
+    email: "E-mail",
+    password: "Mot de passe",
+    continueWithGoogle: "Continuer avec Google",
+    magicLink: "Envoyer un lien de connexion par e-mail",
+    resetPassword: "Réinitialiser le mot de passe",
+    accountAction: "Action sur le compte",
+    newPassword: "Nouveau mot de passe",
+    updatePassword: "Mettre à jour le mot de passe",
+    recoveryEyebrow: "RÉCUPÉRATION DU MOT DE PASSE",
+    chooseNewPassword: "Choisissez un nouveau mot de passe.",
+  },
+
+  mfa: {
+    checking: "Vérification de la sécurité du compte...",
+    manageInBrowser: "Gérez la double authentification dans votre navigateur.",
+    desktopNote:
+      "L'application de bureau utilise un jeton d'appareil apparié. Ouvrez l'application web pour ajouter, vérifier ou supprimer un authentificateur.",
+    returnToWorkspaces: "Revenir aux espaces de travail",
+    signInPrompt: "Connectez-vous pour gérer la double authentification",
+    eyebrow: "NIVEAU D'ASSURANCE DE L'AUTHENTIFICATION",
+    currentSession: "Session actuelle :",
+    sixDigitNote:
+      "Les applications d'authentification génèrent des codes à six chiffres, sans SMS ni e-mail.",
+    sixDigitCode: "Code à six chiffres",
+    verifyAndContinue: "Vérifier et continuer",
+    addAuthenticator: "Ajouter un authentificateur",
+    scanOrEnter: "Scannez ce code, ou saisissez le secret manuellement :",
+    verifyEnrollment: "Vérifier l'inscription",
+    factors: "Facteurs d'authentification",
+    noFactor: "Aucun facteur d'authentification n'est enregistré.",
+    discardUnfinished:
+      "Abandonnez la configuration inachevée avant d'en commencer une autre.",
+    removalNeedsAal2:
+      "Supprimer un facteur vérifié exige une session AAL2. Enregistrez un second facteur avant de supprimer votre unique moyen de récupération.",
+    qrAlt: "QR code d'inscription TOTP",
+  },
+
+  device: {
+    loading: "Chargement de l'appairage...",
+    heading: "Appairer un appareil",
+    eyebrow: "AUTORISATION BUREAU",
+    approveOnlyThis: "N'approuvez que l'appareil qui est devant vous.",
+    configureFirst:
+      "Configurez l'authentification Supabase avant d'appairer un poste de bureau.",
+    checkingSession: "Vérification de votre session de navigateur...",
+    signInFirst: "Connectez-vous avant d'examiner ce code.",
+    signInToContinue: "Se connecter pour continuer",
+    pairingCode: "Code d'appairage",
+    approveDevice: "Approuver cet appareil",
+  },
+
+  invitation: {
+    loading: "Chargement de l'invitation...",
+    eyebrow: "INVITATION À UN ESPACE DE TRAVAIL",
+    heading: "Rejoindre un espace de travail de confiance.",
+    configureFirst:
+      "Configurez l'authentification Supabase avant d'accepter une invitation.",
+    checkingAccount: "Vérification de votre compte connecté...",
+    useExactEmail:
+      "Connectez-vous avec l'adresse e-mail exacte qui a reçu cette invitation.",
+    signInToAccept: "Se connecter pour accepter",
+    noToken: "Ce lien d'invitation ne contient aucun jeton.",
+  },
+
   effects: {
     title: "Édition",
     unavailable: "Indisponible sur cette machine",

@@ -577,6 +577,78 @@ export const zh: Messages = {
     },
   },
 
+  auth: {
+    eyebrow: "安全的工作区访问",
+    heading: "让每一份数据都待在正确的工作区里。",
+    intro:
+      "通过 Supabase Auth 登录。TrendRelay 会独立校验每个 API 请求，并在服务端应用工作区角色。",
+    deviceFlow: "桌面设备流程",
+    openWorkspaces: "打开工作区",
+    setupRequired: "需要先配置",
+    connectSupabase: "连接一个 Supabase 项目",
+    envInstructions:
+      "把 {publicUrl} 和 {publicKey}，以及后端的 {serverUrl}，加入本地 {file} 文件，然后重启。",
+    signIn: "登录",
+    createAccount: "创建账号",
+    email: "邮箱",
+    password: "密码",
+    continueWithGoogle: "使用 Google 继续",
+    magicLink: "通过邮件发送登录链接",
+    resetPassword: "重置密码",
+    accountAction: "账号操作",
+    newPassword: "新密码",
+    updatePassword: "更新密码",
+    recoveryEyebrow: "密码找回",
+    chooseNewPassword: "请设置一个新密码。",
+  },
+
+  mfa: {
+    checking: "正在检查账号安全设置…",
+    manageInBrowser: "请在浏览器中管理多重验证。",
+    desktopNote:
+      "桌面端使用已配对的设备令牌。请打开浏览器版应用来添加、验证或移除验证器。",
+    returnToWorkspaces: "返回工作区",
+    signInPrompt: "登录后即可管理多重验证",
+    eyebrow: "验证保障等级",
+    currentSession: "当前会话：",
+    sixDigitNote: "验证器应用无需短信或邮件即可生成六位验证码。",
+    sixDigitCode: "六位验证码",
+    verifyAndContinue: "验证并继续",
+    addAuthenticator: "添加验证器",
+    scanOrEnter: "扫描此二维码，或手动输入密钥：",
+    verifyEnrollment: "验证绑定",
+    factors: "验证方式",
+    noFactor: "尚未绑定任何验证方式。",
+    discardUnfinished: "请先放弃未完成的设置，再开始新的绑定。",
+    removalNeedsAal2:
+      "移除已验证的方式需要 AAL2 会话。在移除唯一的找回途径前，请先绑定第二种方式。",
+    qrAlt: "TOTP 绑定二维码",
+  },
+
+  device: {
+    loading: "正在加载配对信息…",
+    heading: "配对设备",
+    eyebrow: "桌面端授权",
+    approveOnlyThis: "只批准你眼前的这台设备。",
+    configureFirst: "配对桌面端之前，请先配置 Supabase 身份验证。",
+    checkingSession: "正在检查你的浏览器会话…",
+    signInFirst: "查看此验证码前请先登录。",
+    signInToContinue: "登录以继续",
+    pairingCode: "配对码",
+    approveDevice: "批准这台设备",
+  },
+
+  invitation: {
+    loading: "正在加载邀请…",
+    eyebrow: "工作区邀请",
+    heading: "加入一个受信任的工作区。",
+    configureFirst: "接受邀请之前，请先配置 Supabase 身份验证。",
+    checkingAccount: "正在检查你已登录的账号…",
+    useExactEmail: "请使用收到此邀请的那个邮箱地址登录。",
+    signInToAccept: "登录以接受邀请",
+    noToken: "此邀请链接不含令牌。",
+  },
+
   effects: {
     title: "编辑",
     unavailable: "当前设备不可用",

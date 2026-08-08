@@ -597,6 +597,83 @@ export const en = {
     },
   },
 
+  auth: {
+    eyebrow: "SECURE WORKSPACE ACCESS",
+    heading: "Keep every signal inside the right workspace.",
+    intro:
+      "Sign in through Supabase Auth. TrendRelay verifies every API request independently and applies workspace roles server-side.",
+    deviceFlow: "DESKTOP DEVICE FLOW",
+    openWorkspaces: "Open workspaces",
+    setupRequired: "Setup required",
+    connectSupabase: "Connect a Supabase project",
+    envInstructions:
+      "Add {publicUrl} and {publicKey}, and backend {serverUrl}, to local {file}, then restart.",
+    signIn: "Sign in",
+    createAccount: "Create account",
+    email: "Email",
+    password: "Password",
+    continueWithGoogle: "Continue with Google",
+    magicLink: "Email a magic link",
+    resetPassword: "Reset password",
+    accountAction: "Account action",
+    newPassword: "New password",
+    updatePassword: "Update password",
+    recoveryEyebrow: "PASSWORD RECOVERY",
+    chooseNewPassword: "Choose a new password.",
+  },
+
+  mfa: {
+    checking: "Checking account security...",
+    manageInBrowser: "Manage MFA in your browser.",
+    desktopNote:
+      "Desktop uses a paired device token. Open the browser app to enroll, verify, or remove an authenticator.",
+    returnToWorkspaces: "Return to workspaces",
+    signInPrompt: "Sign in to manage MFA",
+    eyebrow: "AUTHENTICATOR ASSURANCE",
+    currentSession: "Current session:",
+    sixDigitNote:
+      "Authenticator apps generate six-digit codes without SMS or email.",
+    sixDigitCode: "Six-digit code",
+    verifyAndContinue: "Verify and continue",
+    addAuthenticator: "Add authenticator",
+    scanOrEnter: "Scan this code, or enter the secret manually:",
+    verifyEnrollment: "Verify enrollment",
+    factors: "Authenticator factors",
+    noFactor: "No authenticator factor is enrolled.",
+    discardUnfinished:
+      "Discard the unfinished setup before starting another enrollment.",
+    removalNeedsAal2:
+      "Removing a verified factor requires an AAL2 session. Enroll a second factor before removing your only recovery path.",
+    qrAlt: "TOTP enrollment QR code",
+  },
+
+  device: {
+    loading: "Loading pairing...",
+    heading: "Pair a device",
+    eyebrow: "DESKTOP AUTHORIZATION",
+    approveOnlyThis: "Approve only the device in front of you.",
+    configureFirst:
+      "Configure Supabase authentication before pairing a desktop.",
+    checkingSession: "Checking your browser session...",
+    signInFirst: "Sign in before reviewing this code.",
+    signInToContinue: "Sign in to continue",
+    pairingCode: "Pairing code",
+    approveDevice: "Approve this device",
+  },
+
+  invitation: {
+    loading: "Loading invitation...",
+    eyebrow: "WORKSPACE INVITATION",
+    heading: "Join a trusted workspace.",
+    configureFirst:
+      "Configure Supabase authentication before accepting an invitation.",
+    checkingAccount: "Checking your signed-in account...",
+    useExactEmail:
+      "Sign in with the exact email address that received this invitation.",
+    signInToAccept: "Sign in to accept",
+    noToken: "This invitation link has no token.",
+  },
+
   effects: {
     title: "Editing",
     unavailable: "Not available on this machine",
