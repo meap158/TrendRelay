@@ -205,7 +205,7 @@ a.ui-button { text-decoration: none; }
 /* On/off that takes effect immediately. The native input stays in the tree and
    is only visually replaced, so focus, keyboard and screen-reader behaviour are
    the platform's rather than reimplemented here. */
-.ui-switch { display: inline-flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
+.ui-switch { position: relative; display: inline-flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
 /* Not display:none, which would take it out of the focus order. */
 .ui-switch input { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
 .ui-switch-track { position: relative; flex: none; width: 34px; height: 20px; border-radius: 999px; background: var(--line-strong); transition: background .16s ease; }

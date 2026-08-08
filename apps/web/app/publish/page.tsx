@@ -407,6 +407,14 @@ export default function PublishPage() {
   const usableEngines = (connection?.providers ?? []).filter(
     (item) => ["ready", "off", "no-accounts"].includes(engineState(item).state));
   /**
+   * Engines whose key works and that are switched on, channels or not.
+   *
+   * "Nothing is switched on" and "what is switched on has no channels yet" are
+   * different problems with different fixes, and reporting the second as the
+   * first sent you to a switch that was already on.
+   */
+  const switchedOnEngines = usableEngines.filter((item) => !engineOff(item.id));
+  /**
    * Engines that have been set up but cannot deliver right now.
    *
    * Surfaced rather than omitted. An engine whose key was revoked simply stops
@@ -1029,20 +1037,24 @@ export default function PublishPage() {
       {usableEngines.length > 0 && !setupOpen ? (
         <div className="engine-summary">
           <span className="engine-summary-marks">
-            {(connectedEngines.length ? connectedEngines : usableEngines).map((provider) => (
+            {(switchedOnEngines.length ? switchedOnEngines : usableEngines).map((provider) => (
               <ProviderMark key={provider.id} provider={provider.id} size={22} />
             ))}
           </span>
           <div>
-            <strong>{connectedEngines.length
-              ? engineNames(connectedEngines)
+            <strong>{switchedOnEngines.length
+              ? engineNames(switchedOnEngines)
               : t("publish.noEngineOn")}</strong>
             <span>
-              {!connectedEngines.length
+              {/* Three different situations, not one. Nothing switched on is a
+                  switch to flip; switched on with no destinations is channels
+                  to connect at the engine. Collapsing them sent you to a
+                  control that was already in the right position. */}
+              {!switchedOnEngines.length
                 ? t("publish.noEngineOnHelp")
                 : accounts.length
                   ? t("publish.destinationsAcross", {
-                      destinations: accounts.length, engines: connectedEngines.length,
+                      destinations: accounts.length, engines: switchedOnEngines.length,
                     })
                   : connection?.next_step}
             </span>
@@ -1083,7 +1095,10 @@ export default function PublishPage() {
           {connection?.providers.map((provider) => {
             const isDefault = provider.id === connection.active_provider;
             const status = engineState(provider);
-            const usable = status.state === "ready" || status.state === "no-accounts";
+            // "off" counts as usable: it is only ever reported for an engine
+            // whose key works. Leaving it out disabled the switch the moment it
+            // was switched off, so it could never be switched back on.
+            const usable = ["ready", "no-accounts", "off"].includes(status.state);
             const open = openProvider === provider.id;
             return (
               <article
