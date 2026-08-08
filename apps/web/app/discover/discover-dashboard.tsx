@@ -737,6 +737,9 @@ type DouyinTrend = {
   hot_value: number;
   /** The topic the term belongs to. Not a video, despite looking like one. */
   topic_id: string | null;
+  /** Names the topic's own page, which Douyin serves without an account. This
+      is what makes a term downloadable for someone who never signs in. */
+  sentence_id: string | null;
   search_url: string;
   /** The board's own thumbnail: a signed URL that expires, so never stored. */
   cover_url: string | null;
@@ -758,7 +761,10 @@ type TopicNote = {
 };
 
 /** FastAPI carries a structured detail for the sign-in case and a plain string
-    everywhere else, so both shapes have to be read. */
+    everywhere else, so both shapes have to be read.
+ *
+ * The sign-in case should now be rare: every board term carries a topic id, and
+ * that route needs no account. It survives for terms that arrive without one. */
 function readTopicFailure(detail: unknown): TopicNote {
   if (detail && typeof detail === "object" && "message" in detail) {
     const shaped = detail as { message?: unknown; login_required?: unknown };
@@ -835,7 +841,7 @@ export default function ResearchDashboard() {
    * does the search server-side and hands the real video URLs to the same
    * download job everything else uses.
    */
-  async function downloadTopic(term: string) {
+  async function downloadTopic(term: string, sentenceId: string | null) {
     if (!workspaceId || topicBusy) return;
     setTopicBusy(term);
     setTopicNote(null);
@@ -848,6 +854,10 @@ export default function ResearchDashboard() {
           body: JSON.stringify({
             workspace_id: workspaceId,
             term,
+            // Sent when the board has one: it routes the download through the
+            // topic page, which needs no Douyin account. Without it the server
+            // falls back to search, which does.
+            sentence_id: sentenceId,
             limit: topicCount,
             confirm_external_action: true,
           }),
@@ -1412,7 +1422,10 @@ export default function ResearchDashboard() {
             {topicNote.loginRequired && (
               <>
                 {" "}
-                <Link href="/tools" style={S.topicNoteLink}>Open Tools to sign in</Link>
+                Terms from the board above do not need one.{" "}
+                <Link href="/tools" style={S.topicNoteLink}>
+                  Connect an account in Tools
+                </Link>
               </>
             )}
           </p>
@@ -1456,7 +1469,7 @@ export default function ResearchDashboard() {
                       type="button"
                       style={S.boardDownload}
                       disabled={topicBusy !== null || !workspaceId}
-                      onClick={() => void downloadTopic(item.term)}
+                      onClick={() => void downloadTopic(item.term, item.sentence_id)}
                       title={`Search this term and download its top ${topicCount} videos`}
                     >
                       {topicBusy === item.term ? "Queueing…" : (
@@ -1510,7 +1523,7 @@ export default function ResearchDashboard() {
                     type="button"
                     style={S.boardDownload}
                     disabled={topicBusy !== null || !workspaceId}
-                    onClick={() => void downloadTopic(item.term)}
+                    onClick={() => void downloadTopic(item.term, item.sentence_id)}
                     title={`Search this term and download its top ${topicCount} videos`}
                   >
                     {topicBusy === item.term ? "Queueing…" : (
