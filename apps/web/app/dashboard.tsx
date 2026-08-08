@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { useAuth } from "./auth-provider";
+import { useT } from "./i18n-provider";
 import { Button, buttonClass } from "./ui/button";
 import { ActionIcon } from "./ui/action-icons";
 import { StatusToasts, useStatus } from "./ui/status";
@@ -204,6 +205,7 @@ function isVisibleForFilter(job: DownloadJob, filter: QueueFilter): boolean {
 }
 
 export default function Dashboard() {
+  const t = useT();
   const { loading, user, apiFetch, retryAuth } = useAuth();
   const { jobs: allJobs, busy: jobsBusy, setActiveWorkspaceId, refresh: refreshJobs } = useJobs();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -499,35 +501,35 @@ export default function Dashboard() {
   // timers - which is what made this hang in the first place. A button that is
   // briefly redundant beats an escape hatch that shares the fault it escapes.
   if (loading) return <main className="console-page"><div className="loading-panel">
-    <strong>Loading workspace…</strong>
+    <strong>{t("workspace.loading")}</strong>
     <span>Waiting on TrendRelay&apos;s local API. If it is restarting this can hang.</span>
     <div className="loading-panel-actions">
-      <Button variant="secondary" size="sm" onClick={retryAuth}>Try again</Button>
+      <Button variant="secondary" size="sm" onClick={retryAuth}>{t("downloads.tryAgain")}</Button>
       {/* A plain anchor on purpose. next/link navigates on the client, which
           needs the React that may be the thing that died; a real navigation
           does not. */}
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-      <a className={buttonClass({ variant: "quiet", size: "sm" })} href="/">Reload</a>
+      <a className={buttonClass({ variant: "quiet", size: "sm" })} href="/">{t("common.reload")}</a>
     </div>
   </div></main>;
-  if (!user) return <main className="console-page"><section className="empty-console"><strong>TrendRelay</strong><h1>Sign in to manage media.</h1><p>Fetch source videos, prepare clips, and send approved posts from one workspace.</p><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2F">Sign in</Link></section></main>;
+  if (!user) return <main className="console-page"><section className="empty-console"><strong>TrendRelay</strong><h1>{t("downloads.signInPrompt")}</h1><p>{t("downloads.signInIntro")}</p><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2F">{t("nav.signIn")}</Link></section></main>;
 
   return <main className="console-page">
     <section className="console-heading downloader-heading">
       <div>
-        <p className="eyebrow">MEDIA ACQUISITION</p>
-        <h1>Download from Douyin</h1>
-        <p>Paste videos, profiles, or collections. TrendRelay downloads them in the background and adds the files to your library.</p>
+        <p className="eyebrow">{t("downloads.eyebrowAcquisition")}</p>
+        <h1>{t("downloads.heading")}</h1>
+        <p>{t("downloads.intro")}</p>
       </div>
       <label className="workspace-control">
-        <span>Workspace</span>
+        <span>{t("workspace.select")}</span>
         <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
           {workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} · {workspace.role}</option>)}
         </select>
       </label>
     </section>
 
-    {!workspaceId && <section className="empty-console"><h2>Create a workspace first</h2><p>A workspace owns media, approvals, and publishing history.</p><Link className={buttonClass({ variant: "primary" })} href="/workspaces">Create workspace</Link></section>}
+    {!workspaceId && <section className="empty-console"><h2>{t("downloads.workspaceFirst")}</h2><p>{t("downloads.workspaceOwns")}</p><Link className={buttonClass({ variant: "primary" })} href="/workspaces">{t("downloads.createWorkspace")}</Link></section>}
     {workspaceId && <>
 
 
@@ -536,8 +538,8 @@ export default function Dashboard() {
           <div className="download-card-heading">
             <div>
               <p className="step-kicker">STEP 1</p>
-              <h2>Add Douyin links</h2>
-              <p>Paste a copied share message or put one link on each line.</p>
+              <h2>{t("downloads.addLinks")}</h2>
+              <p>{t("downloads.addLinksHelp")}</p>
             </div>
             <span className={"connection-badge " + (canFetch ? "ready" : connectionActive ? "working" : "setup")}>
               <i aria-hidden="true" />
@@ -546,7 +548,7 @@ export default function Dashboard() {
           </div>
 
           <div className="link-input-field">
-            <label className="link-input-label" htmlFor="douyin-links">Douyin links</label>
+            <label className="link-input-label" htmlFor="douyin-links">{t("downloads.linksLabel")}</label>
             <div className="link-input-shell">
               <textarea
                 ref={linkInputRef}
@@ -559,25 +561,25 @@ export default function Dashboard() {
               />
               <div className="link-input-footer">
                 <span id="douyin-link-help">{urls.length ? urls.length + " Douyin " + (urls.length === 1 ? "link" : "links") + " detected" + (unsupportedCount ? " · " + unsupportedCount + " unsupported ignored" : "") : unsupportedCount ? "Use a specific video, profile, collection, music, or v.douyin.com share link" : "Video · Profile · Collection · Music"}</span>
-                <Button variant="link" size="sm" onClick={() => void pasteLinks()}><ActionIcon name="copy" />Paste from clipboard</Button>
+                <Button variant="link" size="sm" onClick={() => void pasteLinks()}><ActionIcon name="copy" />{t("downloads.pasteFromClipboard")}</Button>
               </div>
             </div>
           </div>
 
-          {urls.length > 0 && <section className="detected-sources" aria-label="Detected Douyin sources">
-            <div className="detected-heading"><strong>Ready to download</strong><span>{urls.length} {urls.length === 1 ? "source" : "sources"}</span></div>
+          {urls.length > 0 && <section className="detected-sources" aria-label={t("downloads.detectedSources")}>
+            <div className="detected-heading"><strong>{t("downloads.readyToDownload")}</strong><span>{urls.length} {urls.length === 1 ? "source" : "sources"}</span></div>
             <ul>
               {urls.map((url) => <li key={url}>
                 <span className="source-kind">{sourceType(url)}</span>
                 <span className="source-address" title={url}>{shortSource(url)}</span>
-                <button type="button" onClick={() => removeSource(url)} aria-label={"Remove " + shortSource(url)}>Remove</button>
+                <button type="button" onClick={() => removeSource(url)} aria-label={"Remove " + shortSource(url)}>{t("downloads.remove")}</button>
               </li>)}
             </ul>
           </section>}
 
           {!providerReady && <div className="connection-callout warning">
-            <div><strong>Install the Douyin downloader</strong><span>Enable the managed provider once, then return here.</span></div>
-            <Link className={buttonClass({ variant: "secondary" })} href="/tools">Open Tools</Link>
+            <div><strong>{t("downloads.installProvider")}</strong><span>{t("downloads.installProviderHelp")}</span></div>
+            <Link className={buttonClass({ variant: "secondary" })} href="/tools">{t("downloads.openTools")}</Link>
           </div>}
           {providerReady && !cookiesReady && <div className="connection-callout warning">
             <div>
@@ -589,11 +591,11 @@ export default function Dashboard() {
             </Button>
           </div>}
           {providerReady && cookiesReady && refreshRequired && <div className="connection-callout warning">
-            <div><strong>Refresh the Douyin session</strong><span>{status?.douyin.connection?.message}</span></div>
+            <div><strong>{t("downloads.refreshSession")}</strong><span>{status?.douyin.connection?.message}</span></div>
             <Button variant="secondary" busy={connecting} disabled={selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}><ActionIcon name="refresh" />{connecting ? "Opening" : "Refresh session"}</Button>
           </div>}
           {providerReady && cookiesReady && !refreshRequired && <div className="connection-callout connected">
-            <div><strong>Ready to download</strong><span>Your Douyin session is stored locally. Refresh it only if downloads stop working.</span></div>
+            <div><strong>{t("downloads.readyToDownload")}</strong><span>{t("downloads.refreshSessionHelp")}</span></div>
             <button type="button" className={buttonClass({ variant: "link" })} disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
               {connecting || connectionActive ? "Refreshing…" : "Refresh session"}
             </button>
@@ -602,10 +604,10 @@ export default function Dashboard() {
           <details className="download-options">
             <summary>Download options <span>{modeLabel(mode)} · {limit === 0 ? "all videos" : `up to ${limit} per source`} · {mediaKinds.length === 3 ? "video, images and audio" : mediaKinds.length === 1 ? "video only" : `video and ${mediaKinds.includes("image") ? "images" : "audio"}`}</span></summary>
             <div className="download-options-grid">
-              <label><span>Content from profiles</span><select value={mode} onChange={(event) => { if (isDownloadMode(event.target.value)) setMode(event.target.value); }}><option value="post">Published posts</option><option value="like">Liked videos</option><option value="mix">Collections</option><option value="music">Music videos</option></select></label>
-              <fieldset><legend>Videos per source</legend><div className="limit-presets">{[0, 10, 20, 50, 100].map((value) => <button key={value} type="button" className={limit === value ? "selected" : ""} aria-pressed={limit === value} onClick={() => setLimit(value)}>{value === 0 ? "All" : value}</button>)}</div></fieldset>
+              <label><span>{t("downloads.fromProfiles")}</span><select value={mode} onChange={(event) => { if (isDownloadMode(event.target.value)) setMode(event.target.value); }}><option value="post">{t("downloads.publishedPosts")}</option><option value="like">{t("downloads.likedVideos")}</option><option value="mix">{t("downloads.collections")}</option><option value="music">{t("downloads.musicVideos")}</option></select></label>
+              <fieldset><legend>{t("downloads.perSource")}</legend><div className="limit-presets">{[0, 10, 20, 50, 100].map((value) => <button key={value} type="button" className={limit === value ? "selected" : ""} aria-pressed={limit === value} onClick={() => setLimit(value)}>{value === 0 ? "All" : value}</button>)}</div></fieldset>
               <fieldset>
-                <legend>What to fetch</legend>
+                <legend>{t("downloads.whatToFetch")}</legend>
                 <div className="limit-presets">
                   {([
                     ["video", "Video", "The post itself; always fetched"],
@@ -627,33 +629,33 @@ export default function Dashboard() {
                 </div>
               </fieldset>
             </div>
-            <p>All videos is the default. TrendRelay keeps paging through the source and skips files already downloaded. Unticking an extra means it is never requested, rather than fetched and thrown away.</p>
+            <p>{t("downloads.whatToFetchHelp")}</p>
           </details>
 
           <div className="download-submit-row">
             <button className={`${buttonClass({ variant: "primary" })} download-button`} disabled={busy}>
               {busy ? "Adding to queue…" : urls.length > 1 ? "Download " + urls.length + " sources" : "Start download"}
             </button>
-            <small>Only download media you are authorized to retain and reuse.</small>
+            <small>{t("downloads.authorisedOnly")}</small>
           </div>
         </form>
 
       <section id="download-queue" className="download-queue-card">
         <div className="queue-heading">
-          <div><p className="step-kicker">STEP 2</p><h2>Downloads</h2><p>Active batches update automatically every few seconds.</p></div>
+          <div><p className="step-kicker">STEP 2</p><h2>{t("downloads.heading2")}</h2><p>{t("downloads.autoUpdate")}</p></div>
           <div className="queue-heading-actions">
             {jobs.length > 0 && <button type="button" className={`${buttonClass({ variant: "link" })} clear-downloads-button`} disabled={clearingHistory || jobsBusy} onClick={() => void clearUnavailableDownloads()}><ActionIcon name="dismiss" />{clearingHistory ? "Clearing…" : "Clear missing files"}</button>}
             <Button
               variant="secondary"
               iconOnly
-              aria-label="Refresh downloads"
-              title="Refresh downloads"
+              aria-label={t("downloads.refreshList")}
+              title={t("downloads.refreshList")}
               disabled={jobsBusy}
               onClick={() => void refreshJobs()}
             ><RefreshCw className={jobsBusy ? "spinning" : ""} size={16} strokeWidth={2} /></Button>
           </div>
         </div>
-        <div className="queue-filters" role="group" aria-label="Filter downloads">
+        <div className="queue-filters" role="group" aria-label={t("downloads.filter")}>
           {([
             ["all", "All"],
             ["active", "Active"],
@@ -666,7 +668,7 @@ export default function Dashboard() {
           <span className="empty-download-icon" aria-hidden="true">↓</span>
           <strong>{jobs.length ? "No " + (queueFilter === "attention" ? "downloads need attention" : queueFilter + " downloads") : "Your downloads will appear here"}</strong>
           <p>{jobs.length ? "Choose another filter to see the rest of your queue." : "Add one or more Douyin links above to start your first batch."}</p>
-          {!jobs.length && <a href="#add-links">Add Douyin links</a>}
+          {!jobs.length && <a href="#add-links">{t("downloads.addLinks")}</a>}
         </div>}
 
         <div className="download-job-list">
@@ -698,18 +700,18 @@ export default function Dashboard() {
                 {progress?.folder_exists && <div className="download-live-status"><strong>{job.error && current === "queued" ? "Ready to resume" : preparingLibrary ? "Preparing Library" : downloadingAndPreparing ? "Downloading now · preparing Library" : ACTIVE_STATUSES.has(current) ? "Downloading now" : "Files on disk"}</strong><span>{libraryProgress && (preparingLibrary || downloadingAndPreparing) ? `${progressBreakdown(progress)} · ${libraryProgressBreakdown(libraryProgress)}` : progressBreakdown(progress)}</span></div>}
                 {(sources.length > 0 || canOpenFolder || job.status === "succeeded") && <div className="download-job-actions">
                   {sources.length > 0 && <Button variant="secondary" size="sm" onClick={() => reuseLinks(sources)}><ActionIcon name="link" />Reuse {sources.length === 1 ? "link" : "links"}</Button>}
-                  {creatorProfiles.length > 0 && <Button variant="secondary" size="sm" title="Add the creator's Douyin profile to the link box so you can fetch their whole catalogue" onClick={() => addCreatorProfiles(creatorProfiles)}>Add creator {creatorProfiles.length === 1 ? "profile" : `profiles (${creatorProfiles.length})`}</Button>}
-                  {sources[0] && <a href={sources[0]} target="_blank" rel="noreferrer">Open source</a>}
-                  {canOpenFolder && <Button variant="secondary" size="sm" onClick={() => void openFolder(job.payload.output_root!)}><ActionIcon name="openFolder" />Open folder</Button>}
-                  {job.status === "succeeded" && <Link href="/library">Open library</Link>}
+                  {creatorProfiles.length > 0 && <Button variant="secondary" size="sm" title={t("downloads.addCreatorProfile")} onClick={() => addCreatorProfiles(creatorProfiles)}>Add creator {creatorProfiles.length === 1 ? "profile" : `profiles (${creatorProfiles.length})`}</Button>}
+                  {sources[0] && <a href={sources[0]} target="_blank" rel="noreferrer">{t("downloads.openSource")}</a>}
+                  {canOpenFolder && <Button variant="secondary" size="sm" onClick={() => void openFolder(job.payload.output_root!)}><ActionIcon name="openFolder" />{t("downloads.openFolder")}</Button>}
+                  {job.status === "succeeded" && <Link href="/library">{t("downloads.openLibrary")}</Link>}
                 </div>}
                 {job.result?.summary && current === "succeeded" && <p className="job-summary">{job.result.summary}. Files were also added to the media library.</p>}
                 {job.error && <div className="job-error"><strong>{current === "queued" ? "Download ready to resume" : "Download stopped"}</strong><span>{friendlyDownloadError(job.error)}</span><div className="download-recovery-actions">{(progress?.files_downloaded ?? 0) > 0 && <button type="button" className={buttonClass({ variant: "link" })} disabled={resumingJobId === job.id || current === "running"} onClick={() => void resumeDownload(job.id, true)}><ActionIcon name="confirm" />{resumingJobId === job.id ? "Working…" : "Finish saved files"}</button>}<button type="button" className={buttonClass({ variant: "link" })} disabled={resumingJobId === job.id || current === "running"} onClick={() => void resumeDownload(job.id)}><ActionIcon name="play" />{resumingJobId === job.id ? "Working…" : "Resume download"}</button><button type="button" className={buttonClass({ variant: "link" })} disabled={connecting || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}><ActionIcon name="refresh" />{connecting ? "Opening…" : "Refresh session"}</button><button type="button" className={buttonClass({ variant: "link" })} onClick={() => reuseLinks(sources)}><ActionIcon name="link" />Reuse {sources.length === 1 ? "link" : "links"}</button></div></div>}
-                {current === "empty" && !job.error && <div className="job-error"><strong>No media files were saved</strong><span>Refresh the Douyin session, then reuse these links.</span><button type="button" className={buttonClass({ variant: "link" })} onClick={() => reuseLinks(sources)}><ActionIcon name="link" />Reuse {sources.length === 1 ? "link" : "links"}</button></div>}
+                {current === "empty" && !job.error && <div className="job-error"><strong>{t("downloads.noneSaved")}</strong><span>{t("downloads.reuseLinks")}</span><button type="button" className={buttonClass({ variant: "link" })} onClick={() => reuseLinks(sources)}><ActionIcon name="link" />Reuse {sources.length === 1 ? "link" : "links"}</button></div>}
                 {artifacts.length > 0 && <div className="artifact-list">
                   {artifacts.slice(0, 4).map((artifact) => <div className="artifact-row" key={artifact.path}>
                     <div><strong>{artifact.name}</strong><small>{size(artifact.size_bytes)}</small></div>
-                    <div><Link href={"/library?asset=" + encodeURIComponent(artifact.path)}>Open in Library</Link><Link href={"/campaigns?video=" + encodeURIComponent(artifact.path)}>Plan</Link><Link href={"/publish?video=" + encodeURIComponent(artifact.path)}>Publish</Link></div>
+                    <div><Link href={"/library?asset=" + encodeURIComponent(artifact.path)}>{t("downloads.openInLibrary")}</Link><Link href={"/campaigns?video=" + encodeURIComponent(artifact.path)}>{t("downloads.plan")}</Link><Link href={"/publish?video=" + encodeURIComponent(artifact.path)}>{t("nav.publish")}</Link></div>
                   </div>)}
                   {artifacts.length > 4 && <p className="more-artifacts">+ {artifacts.length - 4} more files in this batch</p>}
                 </div>}

@@ -6,6 +6,7 @@ import { RefreshCw, Download } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
+import { useT } from "../i18n-provider";
 import { buttonClass } from "../ui/button";
 import { numberIn, oneOf, usePersistedState } from "../ui/use-persisted-state";
 import { useJobs } from "../jobs-provider";
@@ -782,6 +783,7 @@ function readTopicFailure(detail: unknown): TopicNote {
 
 export default function ResearchDashboard() {
   const { apiFetch } = useAuth();
+  const t = useT();
   const { jobs: allJobs, refresh: refreshJobs, setActiveWorkspaceId } = useJobs();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
@@ -1289,7 +1291,7 @@ export default function ResearchDashboard() {
 
       <div style={S.hero}>
         <h1 style={S.logo}>TrendRelay</h1>
-        <p style={S.tagline}>Discover what is trending. Research what matters.</p>
+        <p style={S.tagline}>{t("app.tagline")}</p>
 
         <form style={S.searchForm} onSubmit={runQuery}>
           <input
@@ -1364,7 +1366,7 @@ export default function ResearchDashboard() {
       <div style={S.section}>
         <div style={S.tiktokHead}>
           <div>
-            <h2 style={S.sectionTitle}>Douyin hot search</h2>
+            <h2 style={S.sectionTitle}>{t("discover.title")}</h2>
             <p style={S.sectionSub}>
               {douyinBoard
                 ? `${douyinBoard.count} terms · read ${new Date(douyinBoard.fetched_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
@@ -1378,7 +1380,7 @@ export default function ResearchDashboard() {
                 style={S.topicCountSelect}
                 value={topicCount}
                 onChange={(event) => setTopicCount(Number(event.target.value))}
-                title="How many videos a topic download takes"
+                title={t("research.perTopicHelp")}
               >
                 {TOPIC_COUNTS.map((count) => (
                   <option key={count} value={count}>{count}</option>
@@ -1386,7 +1388,7 @@ export default function ResearchDashboard() {
               </select>
               per topic
             </label>
-            <div style={S.boardViewToggle} role="group" aria-label="Board layout">
+            <div style={S.boardViewToggle} role="group" aria-label={t("discover.boardLayout")}>
               {(["gallery", "list"] as const).map((mode) => (
                 <button
                   key={mode}
@@ -1446,7 +1448,7 @@ export default function ResearchDashboard() {
                       style={S.boardImage}
                     />
                   ) : (
-                    <span style={S.boardNoImage}>no image</span>
+                    <span style={S.boardNoImage}>{t("research.noImage")}</span>
                   )}
                   <span style={S.boardRank}>{item.rank}</span>
                 </div>
@@ -1484,8 +1486,8 @@ export default function ResearchDashboard() {
                       target="_blank"
                       rel="noreferrer"
                       style={S.boardAction}
-                      title="Open this term on Douyin"
-                    >Browse</a>
+                      title={t("research.openTermOnDouyin")}
+                    >{t("discover.browse")}</a>
                   </div>
                 </div>
               </article>
@@ -1538,7 +1540,7 @@ export default function ResearchDashboard() {
                     target="_blank"
                     rel="noreferrer"
                     style={S.tiktokExplore}
-                    title="Open this term on Douyin"
+                    title={t("research.openTermOnDouyin")}
                   >
                     Browse
                   </a>
@@ -1549,7 +1551,7 @@ export default function ResearchDashboard() {
         )}
 
         {douyinBoard && douyinBoard.items.length === 0 && !douyinError && (
-          <p style={S.tiktokNote}>The board came back empty. Try again shortly.</p>
+          <p style={S.tiktokNote}>{t("discover.emptyBoard")}</p>
         )}
       </div>
 
@@ -1575,7 +1577,7 @@ export default function ResearchDashboard() {
             </div>
             <div style={S.tiktokControls}>
               <select
-                aria-label="TikTok region"
+                aria-label={t("research.tiktokRegion")}
                 style={S.tiktokSelect}
                 value={tiktokRegion}
                 disabled={busy === "tiktok"}
@@ -1592,7 +1594,7 @@ export default function ResearchDashboard() {
                 ))}
               </select>
               <select
-                aria-label="TikTok period"
+                aria-label={t("research.tiktokPeriod")}
                 style={S.tiktokSelect}
                 value={tiktokPeriod}
                 disabled={busy === "tiktok"}
@@ -1672,7 +1674,7 @@ export default function ResearchDashboard() {
 
       {visibleInspirations.length > 0 && (
         <div style={S.section}>
-          <h2 style={S.sectionTitle}>Results</h2>
+          <h2 style={S.sectionTitle}>{t("research.results")}</h2>
           <p style={S.sectionSub}>
             {liveInspirations.length} signals from your research
           </p>
@@ -1733,7 +1735,7 @@ export default function ResearchDashboard() {
 
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                     <div style={{ ...S.metricRow, flexWrap: "nowrap" }}>
-                      <span style={{ flex: "0 0 56px" }}>Relevance</span>
+                      <span style={{ flex: "0 0 56px" }}>{t("research.relevance")}</span>
                       <div style={barTrack()}>
                         <div style={barFill(pct, color)} />
                       </div>
@@ -1809,7 +1811,7 @@ export default function ResearchDashboard() {
 
       {visibleInspirations.length === 0 && liveInspirations.length > 0 && (
         <div style={{ ...S.empty, ...S.section }}>
-          <p>No signals of this type yet.</p>
+          <p>{t("research.noSignals")}</p>
           <button type="button" className={buttonClass({ variant: "quiet" })} onClick={() => setFeedFilter("all")}>
             Show all results
           </button>
@@ -1832,7 +1834,7 @@ export default function ResearchDashboard() {
       {jobs.length > 0 && (
         <div style={S.jobsSection}>
           <hr style={S.divider} />
-          <h2 style={{ ...S.sectionTitle, marginTop: "24px" }}>Recent research</h2>
+          <h2 style={{ ...S.sectionTitle, marginTop: "24px" }}>{t("research.recent")}</h2>
           <p style={S.sectionSub}>{jobs.length} runs</p>
           {jobs.slice(0, 8).map((job) => (
             <div key={job.id} style={S.jobRow}>

@@ -99,6 +99,74 @@ export const fr: Messages = {
     connectAccount: "Connecter un compte dans Outils",
   },
 
+  downloads: {
+    heading: "Télécharger depuis Douyin",
+    eyebrowAcquisition: "ACQUISITION DE MÉDIAS",
+    intro:
+      "Collez des vidéos, des profils ou des collections. TrendRelay les télécharge en arrière-plan et ajoute les fichiers à votre bibliothèque.",
+    signInPrompt: "Connectez-vous pour gérer vos médias.",
+    signInIntro:
+      "Récupérez les vidéos sources, préparez les extraits et diffusez les publications validées depuis un seul espace de travail.",
+    tryAgain: "Réessayer",
+    workspaceFirst: "Créez d'abord un espace de travail",
+    workspaceOwns:
+      "L'espace de travail regroupe les médias, les validations et l'historique de publication.",
+    createWorkspace: "Créer un espace de travail",
+    step: "ÉTAPE {number}",
+    addLinks: "Ajouter des liens Douyin",
+    addLinksHelp:
+      "Collez un message de partage copié, ou saisissez un lien par ligne.",
+    linksLabel: "Liens Douyin",
+    pasteFromClipboard: "Coller depuis le presse-papiers",
+    readyToDownload: "Prêt à télécharger",
+    remove: "Retirer",
+    installProvider: "Installer le téléchargeur Douyin",
+    installProviderHelp:
+      "Activez le fournisseur géré une seule fois, puis revenez ici.",
+    openTools: "Ouvrir les outils",
+    refreshSession: "Actualiser la session Douyin",
+    refreshSessionHelp:
+      "Votre session Douyin est stockée localement. Ne l'actualisez que si les téléchargements cessent de fonctionner.",
+    options: "Options de téléchargement",
+    fromProfiles: "Contenu des profils",
+    publishedPosts: "Publications",
+    likedVideos: "Vidéos aimées",
+    collections: "Collections",
+    musicVideos: "Vidéos musicales",
+    perSource: "Vidéos par source",
+    whatToFetch: "Éléments à récupérer",
+    whatToFetchHelp:
+      "Toutes les vidéos par défaut. TrendRelay parcourt la source et ignore les fichiers déjà téléchargés. Décocher un élément signifie qu'il n'est jamais demandé, plutôt que récupéré puis jeté.",
+    authorisedOnly:
+      "Ne téléchargez que des médias que vous avez le droit de conserver et de réutiliser.",
+    heading2: "Téléchargements",
+    autoUpdate: "Les lots en cours se mettent à jour toutes les quelques secondes.",
+    openSource: "Ouvrir la source",
+    openFolder: "Ouvrir le dossier",
+    openLibrary: "Ouvrir la bibliothèque",
+    noneSaved: "Aucun fichier n'a été enregistré",
+    reuseLinks: "Actualisez la session Douyin, puis réutilisez ces liens.",
+    openInLibrary: "Ouvrir dans la bibliothèque",
+    plan: "Planifier",
+    detectedSources: "Sources Douyin détectées",
+    refreshList: "Actualiser les téléchargements",
+    filter: "Filtrer les téléchargements",
+    addCreatorProfile:
+      "Ajoutez le profil Douyin du créateur dans le champ des liens pour récupérer tout son catalogue",
+  },
+
+  research: {
+    results: "Résultats",
+    relevance: "Pertinence",
+    noSignals: "Aucun signal de ce type pour le moment.",
+    recent: "Recherches récentes",
+    noImage: "sans image",
+    tiktokRegion: "Région TikTok",
+    tiktokPeriod: "Période TikTok",
+    perTopicHelp: "Nombre de vidéos téléchargées par sujet",
+    openTermOnDouyin: "Ouvrir ce terme sur Douyin",
+  },
+
   effects: {
     title: "Édition",
     unavailable: "Indisponible sur cette machine",

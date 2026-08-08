@@ -36,11 +36,20 @@ NOT_COPY = re.compile(
 )
 
 
+#: `>` and `<` are also the generic brackets, so `useState<Foo>(null)` looks
+#: exactly like a JSX text node to a regex. Copy does not contain these.
+NOT_PROSE = ("\n", ";", "=", "const ", "return ", "=>", "()", "props.", "//")
+
+
+def is_prose(text: str) -> bool:
+    return not any(marker in text for marker in NOT_PROSE)
+
+
 def candidates(source: str) -> list[str]:
     found: list[str] = []
     for match in JSX_TEXT.finditer(source):
         text = match.group(1).strip()
-        if text and HAS_LETTERS.search(text) and not NOT_COPY.match(text):
+        if text and HAS_LETTERS.search(text) and not NOT_COPY.match(text) and is_prose(text):
             found.append(text)
     for match in ATTRIBUTE_TEXT.finditer(source):
         text = match.group(2).strip()

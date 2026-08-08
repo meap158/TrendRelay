@@ -98,6 +98,72 @@ export const vi: Messages = {
     connectAccount: "Kết nối tài khoản trong Công cụ",
   },
 
+  downloads: {
+    heading: "Tải video từ Douyin",
+    eyebrowAcquisition: "THU THẬP NỘI DUNG",
+    intro:
+      "Dán liên kết video, trang cá nhân hoặc bộ sưu tập. TrendRelay sẽ tải ngầm và thêm tệp vào thư viện của bạn.",
+    signInPrompt: "Đăng nhập để quản lý nội dung.",
+    signInIntro:
+      "Tải video nguồn, dựng clip và đăng bài đã duyệt — tất cả trong một không gian làm việc.",
+    tryAgain: "Thử lại",
+    workspaceFirst: "Hãy tạo không gian làm việc trước",
+    workspaceOwns:
+      "Không gian làm việc quản lý nội dung, phê duyệt và lịch sử đăng bài.",
+    createWorkspace: "Tạo không gian làm việc",
+    step: "BƯỚC {number}",
+    addLinks: "Thêm liên kết Douyin",
+    addLinksHelp: "Dán tin nhắn chia sẻ đã sao chép, hoặc mỗi dòng một liên kết.",
+    linksLabel: "Liên kết Douyin",
+    pasteFromClipboard: "Dán từ bộ nhớ tạm",
+    readyToDownload: "Sẵn sàng tải",
+    remove: "Xóa",
+    installProvider: "Cài đặt trình tải Douyin",
+    installProviderHelp: "Bật trình cung cấp được quản lý một lần, rồi quay lại đây.",
+    openTools: "Mở Công cụ",
+    refreshSession: "Làm mới phiên Douyin",
+    refreshSessionHelp:
+      "Phiên Douyin được lưu trên máy bạn. Chỉ làm mới khi việc tải không còn hoạt động.",
+    options: "Tùy chọn tải",
+    fromProfiles: "Nội dung từ trang cá nhân",
+    publishedPosts: "Bài đã đăng",
+    likedVideos: "Video đã thích",
+    collections: "Bộ sưu tập",
+    musicVideos: "Video nhạc",
+    perSource: "Số video mỗi nguồn",
+    whatToFetch: "Nội dung cần tải",
+    whatToFetchHelp:
+      "Mặc định là tải tất cả video. TrendRelay tiếp tục duyệt qua nguồn và bỏ qua tệp đã tải. Bỏ chọn một mục nghĩa là không bao giờ yêu cầu nó, thay vì tải về rồi bỏ đi.",
+    authorisedOnly:
+      "Chỉ tải nội dung mà bạn có quyền lưu giữ và sử dụng lại.",
+    heading2: "Danh sách tải",
+    autoUpdate: "Các lô đang chạy tự động cập nhật sau vài giây.",
+    openSource: "Mở nguồn",
+    openFolder: "Mở thư mục",
+    openLibrary: "Mở thư viện",
+    noneSaved: "Không có tệp nào được lưu",
+    reuseLinks: "Làm mới phiên Douyin, rồi dùng lại các liên kết này.",
+    openInLibrary: "Mở trong Thư viện",
+    plan: "Lên kế hoạch",
+    detectedSources: "Nguồn Douyin đã nhận diện",
+    refreshList: "Làm mới danh sách tải",
+    filter: "Lọc danh sách tải",
+    addCreatorProfile:
+      "Thêm trang cá nhân Douyin của nhà sáng tạo vào ô liên kết để tải toàn bộ nội dung của họ",
+  },
+
+  research: {
+    results: "Kết quả",
+    relevance: "Độ liên quan",
+    noSignals: "Chưa có tín hiệu nào thuộc loại này.",
+    recent: "Nghiên cứu gần đây",
+    noImage: "không có ảnh",
+    tiktokRegion: "Khu vực TikTok",
+    tiktokPeriod: "Khoảng thời gian TikTok",
+    perTopicHelp: "Số video tải về cho mỗi chủ đề",
+    openTermOnDouyin: "Mở từ khóa này trên Douyin",
+  },
+
   effects: {
     title: "Chỉnh sửa",
     unavailable: "Không khả dụng trên máy này",
