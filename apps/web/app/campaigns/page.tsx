@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
 import { useT } from "../i18n-provider";
+import { AutopilotPanel } from "./autopilot-panel";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Button } from "../ui/button";
 
@@ -417,6 +418,20 @@ export default function CampaignsPage() {
                   )}
                 </div>
               </section>
+
+              {/* Between the campaign and its one-off plans: this is how the
+                  campaign actually runs, and the plans below it are the manual
+                  exception rather than the norm. */}
+              <AutopilotPanel
+                key={selectedCampaign.id}
+                workspaceId={workspaceId}
+                campaignId={selectedCampaign.id}
+                campaignStatus={selectedCampaign.status}
+                canEdit={Boolean(canCreatePlan)}
+                apiFetch={apiFetch}
+                succeed={succeed}
+                fail={fail}
+              />
 
               {canCreatePlan && selectedCampaign.status !== "archived" && (
                 <details className="plan-create" open={visiblePlans.length === 0}>
