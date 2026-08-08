@@ -391,7 +391,13 @@ def build_config(args: argparse.Namespace, urls: list[str]) -> dict[str, object]
         "proxy": args.proxy,
         "database": True,
         "database_path": str(DEFAULT_DATABASE.resolve()),
-        "folderstyle": True,
+        # Off deliberately. With it on, every post gets a directory named after
+        # its own title and the file inside repeats that title, so a long
+        # Chinese caption is spent twice on a path Windows caps at 260
+        # characters. Downloads failed at the write, and the failure surfaced as
+        # "Douyin rejected the saved session" - nothing on this machine had ever
+        # written a path longer than 258.
+        "folderstyle": False,
         # Extras the downloader only requests when asked, so declining one
         # saves the bandwidth rather than fetching and discarding it.
         "cover": bool(getattr(args, "covers", False)),
