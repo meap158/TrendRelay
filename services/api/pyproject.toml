@@ -26,6 +26,24 @@ vision = [
   "opencv-python-headless>=4.10,<5",
   "numpy>=1.26,<3",
 ]
+# InsightFace, for identity-aware face work. Separate from `vision` because the
+# code is MIT but its pretrained models are non-commercial, so this is a
+# deliberate choice rather than something a plain install should pick up.
+#
+# Install with `--no-deps` and let `vision` supply cv2. InsightFace declares a
+# dependency on `opencv-python`, which is the GUI build and a *different*
+# distribution from the headless one above; installing it plainly lands both in
+# the same environment, both providing `cv2`, and pip resolves it to a 5.x that
+# this project's own constraint excludes. That is not hypothetical - it is what
+# happened, and it silently replaced the OpenCV the editing suite was verified
+# against until the version assertion caught it.
+faces = [
+  "insightface>=1.0.1,<2",
+  "onnxruntime>=1.20,<2",
+  "onnx>=1.17,<2",
+  "scikit-image>=0.24,<1",
+  "scipy>=1.14,<2",
+]
 dev = [
   "httpx>=0.28,<1",
   "pytest>=8.3,<10",

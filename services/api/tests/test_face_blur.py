@@ -164,7 +164,12 @@ def test_status_reports_available_with_the_real_runtime() -> None:
     assert status["available"] is True
     assert status["reason"] is None
     assert status["detector"] in {"yunet", "haar-cascade"}
-    assert status["opencv_version"].startswith("4.")
+    # A floor, not a pinned major. What blur actually needs is YuNet, which
+    # arrived in 4.5.2; asserting "4." instead made this fail the moment
+    # something dragged OpenCV 5 into the environment - which says nothing
+    # about whether blur works, only about what happened to be installed.
+    installed = tuple(int(part) for part in status["opencv_version"].split(".")[:2])
+    assert installed >= (4, 5)
 
 
 def test_opencv_is_not_imported_merely_by_importing_the_module(monkeypatch) -> None:

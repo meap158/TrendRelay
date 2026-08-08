@@ -87,6 +87,11 @@ def _run(command: list[str], cwd: Path = PROJECT_ROOT) -> subprocess.CompletedPr
 
 
 def _installed_revision(tool: dict[str, Any]) -> str | None:
+    # Not every catalogued tool is a git checkout. A tool installed as a Python
+    # extra has no source directory to read a revision from, and demanding one
+    # would mean inventing a path that is never going to exist.
+    if not tool.get("source_path"):
+        return None
     source = _project_path(tool["source_path"])
     if not (source / ".git").is_dir():
         return None
@@ -109,7 +114,9 @@ def list_tools() -> list[dict[str, Any]]:
     for catalog_tool in _catalog():
         tool = deepcopy(catalog_tool)
         installed_revision = _installed_revision(tool)
-        tool["present"] = _project_path(tool["root_path"]).exists()
+        tool["present"] = bool(
+            tool.get("root_path") and _project_path(tool["root_path"]).exists()
+        )
         tool["installed"] = installed_revision == tool["revision"]
         tool["installed_revision"] = installed_revision
         requested_active = active_state.get(tool["id"], tool.get("default_active", False))
