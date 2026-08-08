@@ -1697,32 +1697,23 @@ export default function PublishPage() {
               </div>
             ) : (
               <>
-                {/* One row per engine that is set up but not contributing, with
-                    the engine's own reason and the way back to it. Without this
-                    the list is simply shorter, which reads as channels having
-                    been disconnected rather than a key having been refused. */}
+                {/* One line, not one block per engine. What is needed here is
+                    which engines are missing and why in a word; the sentence
+                    explaining it and the remedy are already on the engine's own
+                    card, and repeating them verbatim pushed the destinations
+                    themselves off the screen. */}
                 {unavailableEngines.length > 0 && (
-                  <div className="engine-unavailable" role="status">
-                    <strong>{t("publish.enginesUnavailable", {
-                      count: unavailableEngines.length,
-                    })}</strong>
-                    <ul>
-                      {unavailableEngines.map(({ provider, status }) => (
-                        <li key={provider.id}>
-                          <ProviderMark provider={provider.id} size={16} />
-                          <div>
-                            <b>{provider.label}</b>
-                            <span>{status.detail}</span>
-                            {status.fix && <small>{status.fix}</small>}
-                          </div>
-                          <Button variant="quiet" size="sm" onClick={() => {
-                            setSetupOpen(true);
-                            setOpenProvider(provider.id);
-                          }}>{t("publish.fixEngine")}</Button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                  <p className="engine-note" role="status">
+                    {t("publish.notOffering", {
+                      engines: unavailableEngines
+                        .map(({ provider, status }) =>
+                          `${provider.label} (${t(`publish.engineState.${status.state}`)})`)
+                        .join(", "),
+                    })}{" "}
+                    <button type="button" className="link-action" onClick={() => setSetupOpen(true)}>
+                      {t("publish.engineSetup")}
+                    </button>
+                  </p>
                 )}
                 {/* Switched off here, not broken. Said plainly so a missing
                     account is never a mystery. */}

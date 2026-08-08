@@ -372,9 +372,7 @@ export const ru: Messages = {
     saveToEnv: "Сохранить в .env",
     saveAndUse: "Сохранить и сделать основным",
     engineSetup: "Настройка движков",
-    fixEngine: "Исправить",
-    enginesUnavailable:
-      "{count, plural, one {# движок настроен, но не публикует} few {# движка настроены, но не публикуют} many {# движков настроены, но не публикуют} other {# движка настроены, но не публикуют}}",
+    notOffering: "Не дают направлений: {engines}.",
     enginesOff: "Выключены здесь: {engines}.",
     blockedEngine: "{engines} сейчас не может публиковать",
     noEngineOn: "Ни один движок не включён",

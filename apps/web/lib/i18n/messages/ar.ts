@@ -363,9 +363,7 @@ export const ar: Messages = {
     saveToEnv: "احفظ في .env",
     saveAndUse: "احفظ واجعله الافتراضي",
     engineSetup: "إعداد المحرّكات",
-    fixEngine: "معالجة",
-    enginesUnavailable:
-      "{count, plural, zero {لا محرّكات} one {محرّك واحد مُعدّ لكنه لا ينشر} two {محرّكان مُعدّان لكنهما لا ينشران} few {# محرّكات مُعدّة لكنها لا تنشر} many {# محرّكًا مُعدًّا لكنها لا تنشر} other {# محرّك مُعدّ لكنه لا ينشر}}",
+    notOffering: "لا توفّر وجهات: {engines}.",
     enginesOff: "موقوفة هنا: {engines}.",
     blockedEngine: "لا يمكن لـ {engines} النشر الآن",
     noEngineOn: "لا محرّك مُشغّل",

@@ -269,17 +269,6 @@ nav strong { color: #1c2b33; }
 .engine-platforms span { display: inline-flex; }
 .engine-platforms em { margin-inline-start: auto; border-radius: 999px; padding: 1px 7px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-style: normal; font-weight: 600; font-variant-numeric: tabular-nums; }
 .engine-warning { margin: 0; padding: 8px 10px; border-inline-start: 3px solid var(--amber); background: #fdf9ec; color: var(--text); line-height: 1.45; }
-/* Set up but not publishing. Listed rather than left out: an engine whose key
-   was refused simply stops contributing accounts, and a shorter list reads as
-   channels having been disconnected at the network. */
-.engine-unavailable { display: grid; gap: 8px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--line-strong); border-inline-start: 3px solid #c0392b; border-radius: var(--radius); background: var(--panel); }
-.engine-unavailable > strong { font-size: 12px; font-weight: 600; }
-.engine-unavailable ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.engine-unavailable li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.engine-unavailable li > div { display: grid; gap: 2px; flex: 1 1 200px; min-width: 0; }
-.engine-unavailable b { font-size: 12px; font-weight: 600; }
-.engine-unavailable span { font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
-.engine-unavailable small { color: var(--muted); font-size: 11px; line-height: 1.4; }
 .engine-note { margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .engine-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .engine-active-tag { border-radius: 999px; padding: 5px 10px; background: var(--engine-accent, var(--green)); color: #fff; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }

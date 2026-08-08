@@ -369,9 +369,7 @@ export const en = {
     saveToEnv: "Save to .env",
     saveAndUse: "Save and make default",
     engineSetup: "Engine setup",
-    fixEngine: "Fix",
-    enginesUnavailable:
-      "{count, plural, one {# engine is set up but not publishing} other {# engines are set up but not publishing}}",
+    notOffering: "Not offering destinations: {engines}.",
     enginesOff: "Switched off here: {engines}.",
     blockedEngine: "{engines} cannot publish right now",
     noEngineOn: "No engine switched on",

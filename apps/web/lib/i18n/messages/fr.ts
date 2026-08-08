@@ -373,9 +373,7 @@ export const fr: Messages = {
     saveToEnv: "Enregistrer dans .env",
     saveAndUse: "Enregistrer et définir par défaut",
     engineSetup: "Configuration des moteurs",
-    fixEngine: "Corriger",
-    enginesUnavailable:
-      "{count, plural, one {# moteur configuré ne publie pas} other {# moteurs configurés ne publient pas}}",
+    notOffering: "Ne propose aucune destination : {engines}.",
     enginesOff: "Désactivés ici : {engines}.",
     blockedEngine: "{engines} ne peut pas publier pour le moment",
     noEngineOn: "Aucun moteur activé",
