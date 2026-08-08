@@ -1,6 +1,6 @@
 # Agent Handover
 
-Last updated: 2026-08-05
+Last updated: 2026-08-09
 
 ## Current state
 
@@ -43,6 +43,37 @@ Last updated: 2026-08-05
 - `/discover` opens on a trend rather than empty space. The last TikTok category, region and period persist in `localStorage` under `trendrelay.discover.tiktok` and are restored on the next visit, falling back to the first live category. Retired Creative Center tabs (Songs, Creators) stay in the registry so the adapter can explain itself but are filtered out of the quick links. The adapter's cache decides whether a revisit costs a fresh render.
 - The Discover feed shows only what a provider returned. The former `AFFILIATE_STARTERS` cards carried invented conversion rates and commissions under an "Affiliate Signals" source and were shown whenever a provider returned nothing; they are gone and the empty state names the real sources instead.
 
+- Attribution is the product-and-revenue surface. Catalog and Opportunities are
+  retired into it: `/catalog` redirects to its Books tab, `/opportunities`
+  redirects to Discover carrying `trend`, `source`, `title`, `url` and `job`
+  through. Its four tabs are Products (one row per product, expanding to its
+  offers, links, clicks and commission), Links, Books (ad economics, which only
+  mean anything one level above a product) and Imports (conversion CSV and the
+  offer CSV that creates products in the first place). Attribution is now a
+  top-level nav item between Library and Publish; the Publish and Discover
+  section strips render nothing, having one destination each. Opportunity
+  scoring lives on Discover, under the research it scores.
+- Publishing addresses several accounts on several engines in one post.
+  Destinations are chosen per account rather than per network, so two TikTok
+  accounts on two engines are two destinations; `PublishRequest` rejects a
+  repeated account, not a repeated network. Every capability question - caption
+  and title limits, threading, first comments, approval holds, whether media
+  must be public - is asked of the engine delivering that destination, never of
+  one active engine. Engines carry an explicit "Use for publishing" switch and
+  one of six states (ready, off, no key, key refused, unreachable, no channels),
+  each with the engine's own message and a next step. The account load decides
+  whether an engine works; the credential probe is only consulted before any
+  load has run.
+- Campaigns run as standing programmes. `campaign_autopilot.py` decides link
+  placement and composes captions, `campaign_scheduler.py` decides what to post
+  and why, `campaign_runner.py` is the only part that creates anything
+  irreversible, and the durable worker ticks every switched-on campaign once a
+  minute. Three tables: `campaign_autopilot`, `campaign_destinations` (each with
+  its own tracking link, which is what makes destinations comparable) and
+  `campaign_queue_items` (recycling, so a posted item goes to the back rather
+  than being consumed). The panel on `/campaigns` gates its switch behind a
+  readiness checklist and previews the next day's posts before anything exists.
+
 ## Decisions in force
 
 - Follow `SOP.md`; atomic descriptive commits and current README/handover files are mandatory. Its "Interface work" rules apply to every change that touches the UI: the right control for the interaction, built once in `apps/web/app/ui/`, native semantics kept, logical properties, all seven dictionaries, and layout verified at real widths with real content rather than assumed.
@@ -76,6 +107,27 @@ Last updated: 2026-08-05
 - Usage rights are retired as a product concept. Removing the controls left the classification enforcing itself with nothing able to satisfy it: every import defaulted to `unknown`, which is not publishable, so the Library detail pane hid its Studio/Campaign/Publish links and `campaigns_api` rejected every plan with a 409. The campaign gate, the `/assets/{id}/rights` endpoint and `RightsUpdate`, the publishable-rights import gate, the `rights_status` filter and `rights` facet, `rights_status`/`publishable` on the asset view, `PUBLISHABLE_RIGHTS` and the `RightsStatus` literal are all removed. The `media_assets` columns stay with their `unknown` default as inert provenance; dropping them would need a migration and would discard history for no functional gain.
 - Buffer needs per-network metadata or it refuses the post. `InstagramPostMetadataInput` declares `type: PostType!` and `shouldShareToFeed: Boolean!`, Facebook declares `type: PostTypeFacebook!`, and YouTube requires a title on create. `_buffer_metadata` supplies them: Instagram and Facebook publish as Reels, matching the other two engines for short-form video, YouTube takes the title or the caption trimmed to 100 characters, and the AI-disclosure toggle reaches Instagram and TikTok through `isAiGenerated`. Enum values are bare GraphQL tokens, never quoted strings.
 - Error banners must stay readable. `.registry-error` painted `#ffc1af` on `#f8d7da`, a contrast ratio of 1.16:1, which made engine failures such as a bundle.social 403 invisible. It is `#721c24` at 8.25:1, and the two blocked badges sharing that pink wash moved from 3.33:1 to 5.81:1.
+
+- Affiliate link placement is decided by the network, not by a setting. A URL in
+  an Instagram or TikTok caption is not a link - it renders as plain text - and
+  a link in a first comment now costs Instagram reach and gets the comment
+  hidden. So: caption where a link is clickable and unpenalised, bio for
+  Instagram and TikTok with the tracking link on the profile, and a
+  first-comment path that exists but is deliberately unused unattended. Every
+  destination carries the reason alongside the decision.
+- The disclosure leads every caption and is not configurable. It is required
+  near the endorsement, no later than the link, prominent, and on every post. A
+  post with an offer and no disclosure is refused at the setting and at the
+  post.
+- Ranking is by measured earnings per click and refuses to rank below five
+  settled conversions, reporting why rather than printing a figure built on
+  luck. Every fourth slot explores, because always posting to the current leader
+  guarantees the others never gather the evidence that would overturn it.
+- DM automation is out of scope by choice. It converts several times better than
+  a bio link on Instagram and it is the fastest way to get an account restricted
+  when driven from a tool.
+- Autopilot never approves content, writes copy, or invents a posting schedule.
+  A workspace with no slots posts nothing and says so.
 
 ## Validation
 
@@ -147,188 +199,43 @@ Last updated: 2026-08-05
 
 ## Next recommended action
 
-Studio editing tools — designed, not built (requested 2026-08-06):
+Take the campaign autopilot through one real end-to-end run (built 2026-08-09,
+never yet posted anything).
 
-Studio now matches the Library width, and the next step is a set of editing
-tools starting with face blurring. The groundwork that already exists: ffmpeg
-ships with the repo at `node_modules/ffmpeg-static`, originals are immutable by
-contract, and the leased SQL job queue plus the watch-reloaded worker already
-carry every other long render. What is missing is a vision runtime; the API has
-no OpenCV, and the repo's convention for heavy models is an isolated runtime
-installed from Tools, as Media AI already does for speech and OCR.
+Everything is in place and nothing has actually been sent. The path, in order,
+and each step is where a real problem would surface:
 
-The shape it should take:
+1. **Set posting slots** on `/publish`. Autopilot refuses to invent a schedule,
+   so with none it posts nothing and says exactly that.
+2. **Fix an engine.** Bundle.social currently answers HTTP 403 and Buffer's
+   credential probe disagrees with its account load; Zernio's key works but has
+   no channels connected. Only Buffer is returning accounts.
+3. **Add a destination** on `/campaigns`, activate the campaign, queue a clip
+   from the Library and approve it.
+4. **Preview** before switching on. It creates nothing and mints no tracking
+   code, and it is the first place a composed caption is seen whole.
+5. **Switch on with delivery = draft** and confirm a draft appears in the
+   engine's own dashboard. Nothing reaches an audience at this setting.
 
-- Detection with OpenCV's bundled YuNet (`cv2.FaceDetectorYN`) rather than a
-  Haar cascade. It is small, current, and handles profile and partial faces that
-  Haar misses, which matters because a missed face is a privacy failure.
-- Blur the padded region, scale the Gaussian kernel to face size, and smooth
-  detections across frames. Per-frame detection alone flickers and drops faces
-  on brief misses; interpolating across short gaps and expanding the box is what
-  makes the result usable rather than merely demonstrable.
-- Burn the blur into re-encoded pixels, never an overlay, and write a new
-  derivative so the original stays untouched. A reversible blur is not a blur.
-- Preview before committing: render a short low-resolution proxy of the first
-  few seconds so an operator can confirm coverage without waiting for a full
-  encode, and let them re-run with a stronger setting if a face slips through.
-- Record provenance on the derivative: model, settings, faces detected, and the
-  proportion of frames covered. Tag it `faces-blurred` so the state is visible
-  in the Library and a reviewer can tell a blurred cut from an original at a
-  glance. Coverage below a threshold should be surfaced, not hidden, because a
-  partially blurred clip is the dangerous case.
-- Run it as a durable job (`media_face_blur`) through the existing queue and
-  worker, so it survives restarts like every other render.
+What to watch for, since none of it has met a live engine:
 
-Open question for the operator: whether the blurred derivative replaces the
-original in downstream handoffs by default, or is offered alongside it.
+- The tracking link is minted on first use inside the run, from
+  `ProductOffer.affiliate_url`. It is not validated as HTTPS there the way the
+  attribution endpoint validates it, so an offer with an `http://` URL would
+  produce a link the redirector may refuse.
+- `campaign_runner` calls `create_publish_job`, which builds a preview and can
+  raise on validation - Reddit and Pinterest both require a title that queue
+  items do not carry. Those two networks will fail per destination and be
+  reported in `last_note` rather than stopping the run, which is correct
+  behaviour but has never been seen.
+- The daily cap counts posts per campaign, not strictly per destination. With
+  one destination the two are the same; with several it is stricter than the
+  label implies.
 
-Assessment - hosting media publicly for engines that only fetch (R2 vs Cloudinary):
+Also outstanding, unrelated:
 
-Buffer has no upload endpoint and fetches the file when the post goes out, so a
-local clip cannot reach it. Both candidates solve that; they differ in what
-they cost and what else they do.
-
-Cloudflare R2 is the better default. It is S3-compatible, so the upload is a
-few lines against an existing client, and egress is free - which matters
-because the engine downloads the whole video on every publish, and a scheduled
-post may be fetched long after upload. Public delivery comes from an r2.dev
-subdomain or a custom domain. It is storage and nothing more, which is the
-right scope: TrendRelay already transcodes with the bundled ffmpeg.
-
-Cloudinary is the better fit only if transformation is wanted - it returns a
-delivery URL immediately and can transcode and thumbnail on the fly. Its free
-tier meters bandwidth as credits, so video re-fetches draw down the same
-allowance that storage does. Given the H.264 pass already happens locally, its
-advantage is mostly redundant here.
-
-Two things to build in from the start:
-
-A signed or expiring URL is a silent failure, not an error. Buffer's own
-documentation warns that pre-signed links commonly work at `createPost` and
-expire before the post publishes, and the post then fails quietly. Whatever is
-used must be a plain, stable, public HTTPS URL, and the retention rule follows
-from it: the object cannot be deleted when the job completes, only once the
-post it feeds has actually gone out.
-
-This intersects face blurring directly, and getting it wrong is worse than the
-problem it solves. Uploading makes the file world-readable to anyone with the
-URL, effectively permanently. The upload must therefore take the same cut the
-handoff resolves to - the blurred version when one exists - and that has to be
-enforced where the upload happens, not only in the interface that chose it. A
-UI that shows "handoffs use the blurred cut" while the uploader reaches for
-`original_path` would publish exactly the faces the feature exists to hide.
-
-Next - Publish composer and scheduling, from the Publer reference shots:
-
-Two screenshots sit in `tmp/publer/` (`posting.png`, `calendar.png`). They are
-guidance for shape, not a look to copy. Five gaps they expose in `/publish`,
-roughly in order of how much they cost an operator today:
-
-- Media is a typed absolute path. Publer drops a file onto the composer. The
-  better fit here is neither: the Library already holds the asset, its blurred
-  version and its metadata, so Publish should pick from it rather than ask
-  anyone to type `.data\media\...`. This also answers the standing question of
-  how local media reaches Buffer, which cannot upload.
-- The post type is hardcoded. Instagram and Facebook are always sent as Reels
-  and YouTube as a Short, decided in `_buffer_metadata` and its two
-  counterparts. Publer offers Post / Reel / Story per network. The engines all
-  accept the choice; only the interface assumes it.
-- There is no live preview of the post itself. The dry-run plan describes the
-  delivery in text and the previewer plays the media, but neither shows how the
-  caption and media will read on the network. Publer renders it per network
-  with a desktop/mobile toggle.
-- First comment is unsupported, though every engine has it - Buffer exposes
-  `firstComment` on Instagram, Facebook, LinkedIn and YouTube, and the others
-  match. It is the usual place a hashtag block or affiliate link goes.
-- Scheduling is a single datetime input. Publer shows a week of day columns
-  with empty time slots seeded per day, so a post is created by clicking the
-  slot it will occupy.
-- Only one post shape exists. Every delivery is one MP4 with a caption, so
-  `PublishRequest` has `video_path`, `media_url` and nothing else. The three
-  engines all accept more than that, and what they accept differs, which is the
-  part to get right: text-only posts are universal; images and carousels are
-  broadly supported; threads exist on Buffer for X, Bluesky, Threads and
-  Mastodon, and on Zernio via `threadItems`; Stories are Instagram, Facebook and
-  Snapchat only; Pinterest additionally wants a board and destination link, and
-  Reddit a subreddit and flair. A post kind therefore cannot be a free choice -
-  it has to be intersected with the active engine and the chosen destinations,
-  the same way `_validate_request` already rejects a platform an engine does not
-  serve. Build that intersection before the composer, or the interface will
-  offer combinations the engine rejects at submit time.
-
-On that last point: do not build a second calendar. `/campaigns` already owns a
-timezone-aware content calendar, and a scheduling grid in Publish that does not
-know about it would let the two disagree about what goes out when. Either
-Publish borrows that calendar, or the slot presets live in Campaigns and hand
-off to Publish the way the rest of the pipeline does.
-
-Next - Douyin trending through MediaCrawler, requested 2026-08-06:
-
-The catalog entry is enabled; the adapter and the surface are not built. The
-goal is trending Douyin videos in Discover with a one-click handoff that puts a
-video or its channel into the Downloads link box.
-
-Follow the TikTok Creative Center adapter rather than inventing a second shape.
-It already establishes what this needs: a category registry, a cached bounded
-fetch, normalisation into ranked rows with metrics, and honest notes when a
-source serves less than it claims. The Discover panel and its region/period
-controls can be reused almost directly, and the one-click handoff already
-exists in Downloads - `addCreatorProfiles` appends URLs to the link box without
-replacing what is staged, and a trending row should use the same path so a
-queue being assembled is never discarded.
-
-Two constraints to build in from the start rather than retrofit. MediaCrawler
-drives a real browser session, so it belongs behind the durable job queue like
-every other long provider call, not inside a request. And its upstream README
-asks against large-scale crawling, so every collection needs an explicit limit
-and an operator behind it; no schedules, no background sweeps.
-
-Next for blurring - make the render a version, not a second asset:
-
-The blurred output is currently a loose file under .data/productions/face-blur,
-referenced only by its job. The operator's expectation, and the better design,
-is that it is another version of the same video so the Library list stays one
-row per subject rather than filling with near-duplicates.
-
-media_asset_versions already models exactly this: it is keyed on
-(asset_id, version_kind, sha256) and today allows original, proxy, thumbnail
-and audio. Extending that check constraint with a `blurred` kind and writing
-the render as a version of its source asset is the whole change, plus a
-migration for the constraint. The detail view then offers the versions of one
-asset - original and blurred - and the list keeps a single entry, tagged so the
-blurred state is visible without opening it.
-
-Two consequences to decide with it: which version the handoffs to Campaigns and
-Publish resolve to by default (the intent so far is blurred), and whether a
-preview render is stored as a version at all or stays a throwaway proxy. A
-preview is a partial clip, so treating it as a version of the whole asset would
-misrepresent it.
-
-Requested 2026-08-06, partially done - fold Studio into Library:
-
-Studio should stop being its own tab. Everything it offers moves into
-Library > Assets, where the asset is already selected, and the tab is removed
-from the nav. Face blurring in particular should become one click on the asset
-with an instant preview rather than a form that asks for a path Assets already
-knows.
-
-What exists to move: the face-blur panel (preview, coverage, handoff choice)
-and the OpenMontage preflight form. Assets already has the blur action added in
-db4caf2 and the preview route; what it lacks is showing the result in place
-instead of pointing at Studio. The blur panel's status is fetched once on mount,
-so a finished render currently needs a reload - poll it, or refresh after
-submitting, before calling the one-click flow done.
-
-Note that Studio's preflight form still posts a pipeline, budget and manual
-segment plan. Those need somewhere to live in Assets, or an explicit decision
-to drop them, before /studio is deleted rather than merely unlinked.
-
-Open items from the 2026-08-05 session, in priority order:
-
-1. The Library detail pane's Studio/Campaign/Publish links are now ungated, but nothing has exercised a full Library-to-publish run end to end since the rights removal. Walk one asset through it.
-2. The Explore/Research action on generic Discover feed cards has never been seen rendered; it only appears once a research or ads provider returns results, and no provider is configured on this machine. It is typechecked and styled to match the TikTok panel's action pill.
-3. `.tools/` no longer holds a publishing service, but `media_assets.rights_status` and `rights_basis` remain as dead columns. Drop them with a migration only if the lost history is acceptable.
-4. `services/api/migrations/versions/20260722_0001_workspace_foundation.py` has a pre-existing Ruff import-order finding. It sits outside the linted paths and was deliberately not reformatted.
-5. `.claude/launch.json` (added so the dev server can be driven from an agent session) and `poc.py` are untracked. Commit or delete them.
-
-Then: add a reviewed automatic transcription/OCR provider behind the existing Media Library contracts, then add platform-analytics synchronization and live affiliate-network adapters behind the attribution import contract. Keep the SQL leased queue until ADR 0010 triggers are observed and paid/networked OpenMontage providers disabled pending review.
+- Three truncated MP4s from 2026-08-05 (`moov atom not found`, 2.5-5.8 MB, still
+  on disk) sit permanently in the Library's "Needs attention". Deleting media is
+  destructive, so they have been left for the operator to decide on.
+- `C:` was at roughly 4.9 GB free.
+- Arabic layout on Library and Publish deserves a look from someone who reads it.
