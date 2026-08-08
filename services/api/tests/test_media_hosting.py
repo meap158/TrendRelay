@@ -135,3 +135,69 @@ def test_upload_returns_a_stable_url_that_does_not_expire(monkeypatch, tmp_path:
     assert sent["method"] == "PUT"
     assert "acct.r2.cloudflarestorage.com" in str(sent["url"])
     assert str(sent["auth"]).startswith("AWS4-HMAC-SHA256 Credential=AKID/")
+
+
+# --- setup: accept what the Cloudflare dashboard actually puts on screen -------
+
+
+def test_the_account_id_is_taken_out_of_a_pasted_s3_endpoint() -> None:
+    """Nothing in the R2 dashboard is labelled "Account ID" on its own.
+
+    It appears inside the S3 API endpoint, so that whole URL is what gets
+    copied. Storing it verbatim produced a host of
+    `https://<url>.r2.cloudflarestorage.com` and failed at upload time with a
+    DNS error, a long way from the field that caused it.
+    """
+    account = "0123456789abcdef0123456789abcdef"
+    assert media_hosting.normalise(
+        "account_id", f"https://{account}.r2.cloudflarestorage.com/clips"
+    ) == account
+    # The dashboard's own URL carries it too.
+    assert media_hosting.normalise(
+        "account_id", f"https://dash.cloudflare.com/{account}/r2/overview"
+    ) == account
+    assert media_hosting.normalise("account_id", f"  {account.upper()}  ") == account
+
+
+def test_the_bucket_can_be_pasted_as_the_same_endpoint() -> None:
+    # So the two fields accept one clipboard, rather than one of them requiring
+    # the URL to be edited down by hand.
+    account = "0123456789abcdef0123456789abcdef"
+    assert media_hosting.normalise(
+        "bucket", f"https://{account}.r2.cloudflarestorage.com/trendrelay-media"
+    ) == "trendrelay-media"
+    assert media_hosting.normalise("bucket", "trendrelay-media") == "trendrelay-media"
+
+
+def test_the_public_url_gains_a_scheme_and_loses_a_trailing_slash() -> None:
+    # Copied from the dashboard it arrives with a slash, and from some screens
+    # without a scheme. Both used to be rejected or stored as-is, producing
+    # double-slashed media URLs.
+    assert media_hosting.normalise(
+        "public_base_url", "pub-abc123.r2.dev/"
+    ) == "https://pub-abc123.r2.dev"
+    assert media_hosting.normalise(
+        "public_base_url", "https://media.example.com/"
+    ) == "https://media.example.com"
+
+
+def test_saving_stores_the_normalised_values(monkeypatch) -> None:
+    written: dict[str, str] = {}
+    monkeypatch.setattr(media_hosting, "write_env_values",
+                        lambda values: written.update(values) or list(values))
+    account = "0123456789abcdef0123456789abcdef"
+    media_hosting.save_credentials({
+        "account_id": f"https://{account}.r2.cloudflarestorage.com/clips",
+        "bucket": f"https://{account}.r2.cloudflarestorage.com/clips",
+        "public_base_url": "pub-abc123.r2.dev/",
+    })
+    assert written == {
+        "R2_ACCOUNT_ID": account,
+        "R2_BUCKET": "clips",
+        "R2_PUBLIC_BASE_URL": "https://pub-abc123.r2.dev",
+    }
+
+
+def test_a_required_field_that_normalises_to_nothing_is_still_refused() -> None:
+    with pytest.raises(ValueError, match="cannot be empty"):
+        media_hosting.save_credentials({"bucket": "   "})

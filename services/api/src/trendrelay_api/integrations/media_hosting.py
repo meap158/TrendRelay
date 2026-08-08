@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import mimetypes
+import re
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
@@ -33,7 +34,10 @@ CREDENTIAL_FIELDS: tuple[dict[str, Any], ...] = (
         "label": "Account ID",
         "secret": False,
         "required": True,
-        "help": "Cloudflare dashboard → R2 → Overview, in the S3 API endpoint.",
+        "help": (
+            "R2 → your bucket → Settings → S3 API. Paste the whole endpoint URL; "
+            "the account ID is taken out of it."
+        ),
     },
     {
         "id": "access_key_id",
@@ -41,7 +45,10 @@ CREDENTIAL_FIELDS: tuple[dict[str, Any], ...] = (
         "label": "Access key ID",
         "secret": False,
         "required": True,
-        "help": "From an R2 API token with Object Read & Write on this bucket.",
+        "help": (
+            "R2 → API → Manage API tokens → Create token, with Object Read & Write "
+            "on this bucket."
+        ),
     },
     {
         "id": "secret_access_key",
@@ -57,7 +64,7 @@ CREDENTIAL_FIELDS: tuple[dict[str, Any], ...] = (
         "label": "Bucket",
         "secret": False,
         "required": True,
-        "help": "The bucket uploads are written to.",
+        "help": "The bucket name, or paste the same S3 API endpoint again.",
     },
     {
         "id": "public_base_url",
@@ -66,12 +73,53 @@ CREDENTIAL_FIELDS: tuple[dict[str, Any], ...] = (
         "secret": False,
         "required": True,
         "help": (
-            "The bucket's public r2.dev address or your custom domain. "
-            "Anyone with a link can fetch these files, so use a bucket kept for publishing."
+            "R2 → your bucket → Settings → Public development URL, or your custom "
+            "domain. Anyone with a link can fetch these files, so use a bucket kept "
+            "for publishing."
         ),
     },
 )
 CREDENTIAL_KEYS: tuple[str, ...] = tuple(field["key"] for field in CREDENTIAL_FIELDS)
+
+#: The account id inside anything Cloudflare shows it in - the S3 API endpoint
+#: on the bucket page, or the dashboard URL itself. It is a 32-character hex
+#: string in both.
+_ACCOUNT_ID = re.compile(r"\b([0-9a-f]{32})\b", re.IGNORECASE)
+_S3_ENDPOINT = re.compile(
+    r"https?://([0-9a-f]{32})\.r2\.cloudflarestorage\.com/?([^/?#]*)", re.IGNORECASE
+)
+
+
+def normalise(field_id: str, value: str) -> str:
+    """Accept what Cloudflare puts on screen, not what this file happens to store.
+
+    Nothing on the R2 dashboard is labelled "Account ID" on its own. It appears
+    inside the S3 API endpoint and inside the dashboard's own URL, so the value
+    that actually gets copied is a whole URL - and pasting it produced a
+    configuration that failed later, at upload time, with a DNS error.
+
+    Same for the public base URL: the address is copied with its trailing slash
+    and, from some screens, without a scheme.
+    """
+    value = value.strip()
+    if not value:
+        return value
+    if field_id == "account_id":
+        found = _ACCOUNT_ID.search(value)
+        return found.group(1).lower() if found else value
+    if field_id == "bucket":
+        # A pasted S3 endpoint carries the bucket after the host.
+        endpoint = _S3_ENDPOINT.match(value)
+        if endpoint and endpoint.group(2):
+            return endpoint.group(2)
+        return value.rstrip("/").rsplit("/", 1)[-1] if "/" in value else value
+    if field_id == "public_base_url":
+        if not value.startswith(("http://", "https://")):
+            value = f"https://{value}"
+        return value.rstrip("/")
+    return value
+
+
 # R2 ignores the region but SigV4 requires one, and this is the value it expects.
 REGION = "auto"
 SERVICE = "s3"
@@ -180,12 +228,10 @@ def save_credentials(values: dict[str, str]) -> dict[str, Any]:
         raise ValueError(f"Unknown media hosting settings: {', '.join(unknown)}")
     updates: dict[str, str] = {}
     for field_id, raw in values.items():
-        value = (raw or "").strip()
         field = fields[field_id]
+        value = normalise(field_id, raw or "")
         if not value and field["required"]:
             raise ValueError(f"Media hosting {field['label']} cannot be empty.")
-        if field["id"] == "public_base_url" and not value.startswith(("http://", "https://")):
-            raise ValueError("Public base URL must start with http:// or https://.")
         updates[str(field["key"])] = value
     if not updates:
         raise ValueError("Provide at least one setting to save.")
