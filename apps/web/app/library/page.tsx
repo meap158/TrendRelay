@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
+import { useT } from "../i18n-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, buttonClass } from "../ui/button";
 import { ActionIcon, bulkActionIcon } from "../ui/action-icons";
@@ -202,6 +203,7 @@ function MediaPreview({
   onPreviousVideo: () => void;
   onNextVideo: () => void;
 }) {
+  const t = useT();
   const [source, setSource] = useState("");
   const [error, setError] = useState("");
   const [requested, setRequested] = useState(autoStart);
@@ -301,8 +303,8 @@ function MediaPreview({
             <Thumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
             <span className="library-preview-launch-overlay">
               <span className="library-preview-launch-icon" aria-hidden="true">▶</span>
-              <strong>Play video preview</strong>
-              <small>Loaded privately only when you choose to play it</small>
+              <strong>{t("library.playPreview")}</strong>
+              <small>{t("library.privatePreview")}</small>
             </span>
           </button>
         ) : source ? (
@@ -321,7 +323,7 @@ function MediaPreview({
         ) : <p>{error || "Loading video preview…"}</p>}
       </div>
       {blurred && (
-        <div className="library-cut-switch" role="group" aria-label="Which cut to play">
+        <div className="library-cut-switch" role="group" aria-label={t("library.whichCut")}>
           {(["original", "blurred"] as const).map((option) => (
             <button
               key={option}
@@ -333,12 +335,12 @@ function MediaPreview({
           ))}
         </div>
       )}
-      <nav className="library-preview-navigation" aria-label="Browse video previews">
-        <button type="button" disabled={!hasPreviousVideo} onClick={() => navigateVideo(onPreviousVideo)} aria-label="Previous video" title="Previous video (Left arrow)">
+      <nav className="library-preview-navigation" aria-label={t("library.browsePreviews")}>
+        <button type="button" disabled={!hasPreviousVideo} onClick={() => navigateVideo(onPreviousVideo)} aria-label={t("library.previousVideo")} title={t("library.previousVideoKey")}>
           <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m12.5 4.5-5.5 5.5 5.5 5.5" /></svg>
         </button>
-        <span>{videoPosition} of {videoTotal} videos <small>← → navigate · Space play/pause</small></span>
-        <button type="button" disabled={!hasNextVideo} onClick={() => navigateVideo(onNextVideo)} aria-label="Next video" title="Next video (Right arrow)">
+        <span>{videoPosition} of {videoTotal} videos <small>{t("library.keyboardHint")}</small></span>
+        <button type="button" disabled={!hasNextVideo} onClick={() => navigateVideo(onNextVideo)} aria-label={t("library.nextVideo")} title={t("library.nextVideoKey")}>
           <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m7.5 4.5 5.5 5.5-5.5 5.5" /></svg>
         </button>
       </nav>
@@ -363,6 +365,7 @@ const isPadding = (value: unknown): value is number =>
   typeof value === "number" && value >= 0 && value <= 0.4;
 
 export default function LibraryPage() {
+  const t = useT();
   const { loading, user, apiFetch } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
@@ -624,7 +627,7 @@ export default function LibraryPage() {
           <strong>{asset.title}</strong>
           <small>{asset.creator ? `${asset.creator} · ` : ""}{asset.platform ?? asset.source_type} · {displayDuration(asset.duration_ms)} · {displaySize(asset.size_bytes)}</small>
           {asset.versions.some((version) => version.kind === "blurred") && (
-            <em className="blurred-tag" title="A blurred cut exists and is what handoffs send">
+            <em className="blurred-tag" title={t("library.blurredExists")}>
               Faces blurred
             </em>
           )}
@@ -914,8 +917,8 @@ export default function LibraryPage() {
     }
   }
 
-  if (loading) return <main className="library-page"><p>Opening media library…</p></main>;
-  if (!user) return <main className="library-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Flibrary">Sign in to open Library</Link></main>;
+  if (loading) return <main className="library-page"><p>{t("library.opening")}</p></main>;
+  if (!user) return <main className="library-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Flibrary">{t("library.signInPrompt")}</Link></main>;
 
   return (
     <main className="library-page">
@@ -923,7 +926,7 @@ export default function LibraryPage() {
       <div className="page-sticky-shell library-sticky-header">
         <header className="library-heading">
           <div>
-            <p className="section-kicker">Creative intelligence</p>
+            <p className="section-kicker">{t("library.eyebrow")}</p>
             <h1>
               Media Library
               <span className="library-status-dots">
@@ -952,7 +955,7 @@ export default function LibraryPage() {
                 </span>
               </span>
             </h1>
-            <p>Keep originals immutable and turn reference clips into searchable creative recipes.</p>
+            <p>{t("library.intro")}</p>
           </div>
           <label>Workspace
             <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
@@ -971,11 +974,11 @@ export default function LibraryPage() {
         <aside className="library-browser">
           <div className="library-browser-toolbar">
           <form className="library-search" onSubmit={(event) => { event.preventDefault(); void refresh(); }}>
-            <input aria-label="Search library" value={query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder="Search titles, hooks, transcripts, or creators…" />
-            <Button type="submit">Search</Button>
+            <input aria-label={t("library.searchLabel")} value={query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder={t("library.searchPlaceholder")} />
+            <Button type="submit">{t("common.search")}</Button>
           </form>
 
-          <nav className="library-category-bar" aria-label="Media categories">
+          <nav className="library-category-bar" aria-label={t("library.categories")}>
             <div className="library-category-tabs">
               <button type="button" className={!mediaKind ? "selected" : ""} aria-pressed={!mediaKind} onClick={() => patchFilters({ mediaKind: "" })}>All <span>{mediaTotal}</span></button>
               <button type="button" className={mediaKind === "video" ? "selected" : ""} aria-pressed={mediaKind === "video"} onClick={() => patchFilters({ mediaKind: "video" })}>Videos <span>{mediaCount("video")}</span></button>
@@ -983,11 +986,11 @@ export default function LibraryPage() {
               <button type="button" className={mediaKind === "audio" ? "selected" : ""} aria-pressed={mediaKind === "audio"} onClick={() => patchFilters({ mediaKind: "audio" })}>Audio <span>{mediaCount("audio")}</span></button>
             </div>
             <label>Sort
-              <select aria-label="Sort media" value={sortOrder} onChange={(event) => { if (isSortOrder(event.target.value)) setSortOrder(event.target.value); }}>
-                <option value="newest">Newest</option>
-                <option value="oldest">Oldest</option>
-                <option value="title">Title</option>
-                <option value="duration">Longest</option>
+              <select aria-label={t("library.sortLabel")} value={sortOrder} onChange={(event) => { if (isSortOrder(event.target.value)) setSortOrder(event.target.value); }}>
+                <option value="newest">{t("library.sortNewest")}</option>
+                <option value="oldest">{t("library.sortOldest")}</option>
+                <option value="title">{t("library.sortTitle")}</option>
+                <option value="duration">{t("library.sortLongest")}</option>
               </select>
             </label>
           </nav>
@@ -999,10 +1002,10 @@ export default function LibraryPage() {
             onChange={setFilters}
           >
             <label>Group
-              <select aria-label="Group library" value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)}>
-                <option value="none">No grouping</option>
-                <option value="channel">Channel</option>
-                <option value="source">Source</option>
+              <select aria-label={t("library.groupLabel")} value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)}>
+                <option value="none">{t("library.noGrouping")}</option>
+                <option value="channel">{t("library.channel")}</option>
+                <option value="source">{t("library.source")}</option>
               </select>
             </label>
           </AssetFilters>
@@ -1010,9 +1013,9 @@ export default function LibraryPage() {
             <strong>{total} {total === 1 ? "item" : "items"}</strong>
             <div className="library-collection-actions">
               {canImport && <Button variant="quiet" size="sm" busy={busy === "sync"} onClick={() => void syncDownloads()}>{busy === "sync" ? "Refreshing" : "Refresh downloads"}</Button>}
-              <div className="library-view-switcher" role="group" aria-label="Library view">
-                <button type="button" className={viewMode === "gallery" ? "selected" : ""} aria-label="Gallery view" title="Gallery view" aria-pressed={viewMode === "gallery"} onClick={() => chooseView("gallery")}><span aria-hidden="true">▦</span></button>
-                <button type="button" className={viewMode === "list" ? "selected" : ""} aria-label="List view" title="List view" aria-pressed={viewMode === "list"} onClick={() => chooseView("list")}><span aria-hidden="true">☷</span></button>
+              <div className="library-view-switcher" role="group" aria-label={t("library.viewLabel")}>
+                <button type="button" className={viewMode === "gallery" ? "selected" : ""} aria-label={t("library.galleryView")} title={t("library.galleryView")} aria-pressed={viewMode === "gallery"} onClick={() => chooseView("gallery")}><span aria-hidden="true">▦</span></button>
+                <button type="button" className={viewMode === "list" ? "selected" : ""} aria-label={t("library.listView")} title={t("library.listView")} aria-pressed={viewMode === "list"} onClick={() => chooseView("list")}><span aria-hidden="true">☷</span></button>
               </div>
             </div>
           </div>
@@ -1056,7 +1059,7 @@ export default function LibraryPage() {
                 >Select all {total.toLocaleString()} matching</Button>
               )}
               {total > assets.length && selection.size >= total && (
-                <Badge tone="good">every match selected</Badge>
+                <Badge tone="good">{t("library.everyMatchSelected")}</Badge>
               )}
               {selection.size > 0 && (
                 <>
@@ -1082,7 +1085,7 @@ export default function LibraryPage() {
                     ))}
                   </span>
                   {selection.size > Math.min(...bulkActions.map((a) => a.max_batch), Infinity) && (
-                    <Badge tone="neutral">runs in batches</Badge>
+                    <Badge tone="neutral">{t("library.runsInBatches")}</Badge>
                   )}
                 </>
               )}
@@ -1102,26 +1105,26 @@ export default function LibraryPage() {
                   </div>
                 </section>
               ))}
-            {!assets.length && <p>No matching media yet.</p>}
+            {!assets.length && <p>{t("library.empty")}</p>}
           </div>
           {canImport && (
             <details className="library-import">
-              <summary>Import a local file</summary>
+              <summary>{t("library.importLocal")}</summary>
               <form onSubmit={importMedia}>
-                <label>File path<input name="path" required placeholder="S:\Media\clip.mp4" /></label>
-                <label>Title<input name="title" required /></label>
+                <label>{t("library.filePath")}<input name="path" required placeholder="S:\Media\clip.mp4" /></label>
+                <label>{t("library.sortTitle")}<input name="title" required /></label>
                 <div className="library-form-row">
-                  <label>Platform<input name="platform" placeholder="douyin" /></label>
-                  <label>Creator<input name="creator" /></label>
-                  <label>Published at<input name="published_at" type="datetime-local" /></label>
+                  <label>{t("library.platform")}<input name="platform" placeholder="douyin" /></label>
+                  <label>{t("library.creator")}<input name="creator" /></label>
+                  <label>{t("library.publishedAt")}<input name="published_at" type="datetime-local" /></label>
                 </div>
-                <label>Source URL<input name="source_url" type="url" /></label>
-                <label>Caption<textarea name="caption" rows={2} /></label>
-                <label>Hashtags<input name="hashtags" placeholder="coffee, travel" /></label>
+                <label>{t("library.sourceUrl")}<input name="source_url" type="url" /></label>
+                <label>{t("library.caption")}<textarea name="caption" rows={2} /></label>
+                <label>{t("library.hashtags")}<input name="hashtags" placeholder="coffee, travel" /></label>
                 <div className="library-form-row">
-                  <label>Likes<input name="likes" type="number" min={0} /></label>
-                  <label>Comments<input name="comments" type="number" min={0} /></label>
-                  <label>Shares<input name="shares" type="number" min={0} /></label>
+                  <label>{t("library.likes")}<input name="likes" type="number" min={0} /></label>
+                  <label>{t("library.comments")}<input name="comments" type="number" min={0} /></label>
+                  <label>{t("library.shares")}<input name="shares" type="number" min={0} /></label>
                 </div>
                 <Button type="submit" variant="primary" busy={busy === "import"}>{busy === "import" ? "Queuing" : "Import safely"}</Button>
               </form>
@@ -1130,7 +1133,7 @@ export default function LibraryPage() {
 
           {!!jobs.length && (
             <div className="library-jobs">
-              <strong>Recent ingestion</strong>
+              <strong>{t("library.recentIngestion")}</strong>
               {jobs.slice(0, 5).map((job, index) => (
                 <div key={job.id ?? `${job.asset_id}-${index}`}><span>{job.payload?.title ?? "Media import"}</span><em>{job.status}</em></div>
               ))}
@@ -1182,13 +1185,13 @@ export default function LibraryPage() {
                       the vertical space. */}
                   <div className="library-meta-line">
                     <small>{selected.width && selected.height ? `${selected.width}×${selected.height} · ` : ""}{displaySize(selected.size_bytes)}</small>
-                    <nav className="library-item-navigation" aria-label="Browse media">
+                    <nav className="library-item-navigation" aria-label={t("library.browseMedia")}>
                       <Button
                         variant="quiet"
                         size="sm"
                         iconOnly
-                        aria-label="Previous item"
-                        title="Previous item"
+                        aria-label={t("library.previousItem")}
+                        title={t("library.previousItem")}
                         disabled={selectedIndex <= 0}
                         onClick={() => setSelectedId(assets[selectedIndex - 1]?.id ?? selectedId)}
                       >‹</Button>
@@ -1197,8 +1200,8 @@ export default function LibraryPage() {
                         variant="quiet"
                         size="sm"
                         iconOnly
-                        aria-label="Next item"
-                        title="Next item"
+                        aria-label={t("library.nextItem")}
+                        title={t("library.nextItem")}
                         disabled={selectedIndex < 0 || selectedIndex >= assets.length - 1}
                         onClick={() => setSelectedId(assets[selectedIndex + 1]?.id ?? selectedId)}
                       >›</Button>
@@ -1223,16 +1226,16 @@ export default function LibraryPage() {
                   <Button
                     variant="secondary"
                     iconOnly
-                    aria-label="Blur settings"
-                    title="Check coverage on one frame and set how wide the blur sits"
+                    aria-label={t("library.blurSettings")}
+                    title={t("library.blurSettingsHelp")}
                     disabled={selected.media_kind !== "video"}
                     onClick={() => setBlurSettingsOpen(true)}
                   ><ActionIcon name="blurSettings" /></Button>
                   <Button
                     variant="secondary"
-                    title="Stack effects on this asset without touching the original"
+                    title={t("library.effectsHelp")}
                     onClick={() => setEffectsOpen(true)}
-                  ><ActionIcon name="edit" />Effects</Button>
+                  ><ActionIcon name="edit" />{t("library.effects")}</Button>
                   <Button
                     variant="secondary"
                     disabled={selected.media_kind !== "video"}
@@ -1240,7 +1243,7 @@ export default function LibraryPage() {
                       ? "Build and render a clip plan from this video"
                       : "Clip plans apply to video"}
                     onClick={() => setEditorOpen(true)}
-                  ><ActionIcon name="clip" />Clip plan</Button>
+                  ><ActionIcon name="clip" />{t("library.clipPlan")}</Button>
                   {deleteAction && (
                     <Button
                       variant="danger"
@@ -1248,10 +1251,10 @@ export default function LibraryPage() {
                       disabled={!canImport}
                       title={deleteAction.description}
                       onClick={() => void runBulkAction(deleteAction, [selected.id])}
-                    ><ActionIcon name="delete" />Delete</Button>
+                    ><ActionIcon name="delete" />{t("common.delete")}</Button>
                   )}
-                  <Link href={`/campaigns?video=${encodeURIComponent(handoffPath(selected))}`}><ActionIcon name="campaign" />Plan campaign</Link>
-                  <Link href={`/publish?video=${encodeURIComponent(handoffPath(selected))}`}><ActionIcon name="publish" />Prepare to publish</Link>
+                  <Link href={`/campaigns?video=${encodeURIComponent(handoffPath(selected))}`}><ActionIcon name="campaign" />{t("library.planCampaign")}</Link>
+                  <Link href={`/publish?video=${encodeURIComponent(handoffPath(selected))}`}><ActionIcon name="publish" />{t("library.prepareToPublish")}</Link>
                   {selectedSourceLinks.map((url, index, links) => {
                     const label = selected.platform === "douyin"
                       ? `${selected.creator ? `${selected.creator}'s ` : ""}original Douyin video`
@@ -1269,48 +1272,48 @@ export default function LibraryPage() {
 
               <div className="library-detail-grid">
                 <article>
-                  <h3>Creative recipe</h3>
+                  <h3>{t("recipe.heading")}</h3>
                   {selected.analysis ? (
                     <dl className="recipe-grid">
-                      <div><dt>Spoken hook</dt><dd>{selected.analysis.spoken_hook || "—"}</dd></div>
-                      <div><dt>Text hook</dt><dd>{selected.analysis.text_hook || "—"}</dd></div>
-                      <div><dt>CTA</dt><dd>{selected.analysis.call_to_action || "—"}</dd></div>
-                      <div><dt>Product</dt><dd>{selected.analysis.product_shown || "—"}</dd></div>
-                      <div><dt>Format</dt><dd>{selected.analysis.creative_format || "—"}</dd></div>
-                      <div><dt>Editing</dt><dd>{selected.analysis.shot_count ? `${selected.analysis.shot_count} shots · ${selected.analysis.average_shot_ms}ms average` : "—"}</dd></div>
-                      <div><dt>Structure</dt><dd>{selected.analysis.structure_tags.join(", ") || "—"}</dd></div>
-                      <div><dt>Keywords</dt><dd>{selected.analysis.keywords.join(", ") || "—"}</dd></div>
+                      <div><dt>{t("recipe.spokenHook")}</dt><dd>{selected.analysis.spoken_hook || "—"}</dd></div>
+                      <div><dt>{t("recipe.textHook")}</dt><dd>{selected.analysis.text_hook || "—"}</dd></div>
+                      <div><dt>{t("recipe.cta")}</dt><dd>{selected.analysis.call_to_action || "—"}</dd></div>
+                      <div><dt>{t("recipe.product")}</dt><dd>{selected.analysis.product_shown || "—"}</dd></div>
+                      <div><dt>{t("recipe.format")}</dt><dd>{selected.analysis.creative_format || "—"}</dd></div>
+                      <div><dt>{t("recipe.editing")}</dt><dd>{selected.analysis.shot_count ? `${selected.analysis.shot_count} shots · ${selected.analysis.average_shot_ms}ms average` : "—"}</dd></div>
+                      <div><dt>{t("recipe.structure")}</dt><dd>{selected.analysis.structure_tags.join(", ") || "—"}</dd></div>
+                      <div><dt>{t("recipe.keywords")}</dt><dd>{selected.analysis.keywords.join(", ") || "—"}</dd></div>
                     </dl>
-                  ) : <p>No recipe yet. Add reviewed speech or on-screen text below.</p>}
+                  ) : <p>{t("recipe.empty")}</p>}
                 </article>
               </div>
 
               {canEnrich && (
                 <article className="library-enrichment">
                   <div>
-                    <h3>Reviewed transcript and analysis</h3>
-                    <p>Paste reviewed speech and on-screen text. TrendRelay derives a searchable, versioned recipe without claiming machine output was human-reviewed.</p>
+                    <h3>{t("recipe.reviewedHeading")}</h3>
+                    <p>{t("recipe.reviewedIntro")}</p>
                   </div>
                   <form onSubmit={enrich}>
                     <div className="library-form-row">
-                      <label>Language<input name="language" defaultValue="und" /></label>
-                      <label>Product shown<input name="product_shown" defaultValue={selected.analysis?.product_shown ?? ""} /></label>
-                      <label>Creative format<input name="creative_format" defaultValue={selected.analysis?.creative_format ?? ""} placeholder="faceless demo" /></label>
+                      <label>{t("recipe.language")}<input name="language" defaultValue="und" /></label>
+                      <label>{t("recipe.productShown")}<input name="product_shown" defaultValue={selected.analysis?.product_shown ?? ""} /></label>
+                      <label>{t("recipe.creativeFormat")}<input name="creative_format" defaultValue={selected.analysis?.creative_format ?? ""} placeholder="faceless demo" /></label>
                     </div>
-                    <label>Reviewed speech<textarea name="speech_text" rows={5} defaultValue={selected.transcripts.find((item) => item.kind === "speech")?.text ?? ""} /></label>
-                    <label>Reviewed on-screen text<textarea name="ocr_text" rows={4} defaultValue={selected.transcripts.find((item) => item.kind === "ocr")?.text ?? ""} /></label>
+                    <label>{t("recipe.reviewedSpeech")}<textarea name="speech_text" rows={5} defaultValue={selected.transcripts.find((item) => item.kind === "speech")?.text ?? ""} /></label>
+                    <label>{t("recipe.reviewedText")}<textarea name="ocr_text" rows={4} defaultValue={selected.transcripts.find((item) => item.kind === "ocr")?.text ?? ""} /></label>
                     <div className="library-form-row">
-                      <label>Scene cuts (ms)<input name="scene_boundaries_ms" placeholder="1200, 2800, 5100" /></label>
-                      <label>Product reveal (ms)<input name="product_reveal_ms" type="number" min={0} defaultValue={selected.analysis?.product_reveal_ms ?? ""} /></label>
-                      <label>Emotional angle<input name="emotional_angle" /></label>
+                      <label>{t("recipe.sceneCuts")}<input name="scene_boundaries_ms" placeholder="1200, 2800, 5100" /></label>
+                      <label>{t("recipe.productReveal")}<input name="product_reveal_ms" type="number" min={0} defaultValue={selected.analysis?.product_reveal_ms ?? ""} /></label>
+                      <label>{t("recipe.emotionalAngle")}<input name="emotional_angle" /></label>
                     </div>
-                    <label>Analyst notes<textarea name="analyst_notes" rows={3} defaultValue={selected.analysis?.analyst_notes ?? ""} /></label>
+                    <label>{t("recipe.analystNotes")}<textarea name="analyst_notes" rows={3} defaultValue={selected.analysis?.analyst_notes ?? ""} /></label>
                     <Button type="submit" variant="primary" busy={busy === "enrich"}>{busy === "enrich" ? "Analyzing" : "Save and derive recipe"}</Button>
                   </form>
                 </article>
               )}
             </>
-          ) : <article className="library-summary"><p>Select an asset or import a local file to begin.</p></article>}
+          ) : <article className="library-summary"><p>{t("library.selectToBegin")}</p></article>}
         </section>
       </section>
       {workspaceId && selected && (
