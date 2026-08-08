@@ -110,16 +110,38 @@ def _kill_port_holders(port: int) -> bool:
                     pass
     except (OSError, subprocess.TimeoutExpired):
         pass
-    deadline = time.monotonic() + 5
+    # Free twice in a row before believing it. `npm run dev` spawns the real
+    # server as a grandchild, so killing the wrapper can leave the socket held
+    # for a moment longer; a single passing check hands the port to a
+    # replacement that then dies on EADDRINUSE, restarts, and burns its budget.
+    deadline = time.monotonic() + 8
+    confirmations = 0
     while time.monotonic() < deadline:
         if _port_is_free(port):
-            return True
+            confirmations += 1
+            if confirmations >= 2:
+                return True
+        else:
+            confirmations = 0
         time.sleep(0.25)
     return False
 
 
-def find_free_port(preferred: int, name: str, max_attempts: int = 20) -> int:
+def find_free_port(
+    preferred: int, name: str, max_attempts: int = 20, *, may_terminate: bool = True
+) -> int:
+    """Choose a port, freeing it if something else is squatting on it.
+
+    `may_terminate=False` makes this read-only, which is what `--check` needs:
+    that flag is documented as validating "without starting services", and a
+    check that kills the stack it was asked to inspect is worse than no check.
+    Finding a port in use is not an error there - it usually means TrendRelay
+    is already running, which is the thing being checked for.
+    """
     if _port_is_free(preferred):
+        return preferred
+    if not may_terminate:
+        print(f"Port {preferred} is in use (something is already serving it).")
         return preferred
     print(f"Port {preferred} is in use. Attempting to free it for {name}...")
     if _kill_port_holders(preferred):
@@ -284,13 +306,13 @@ def service_is_healthy(service: Service, timeout: float | None = None) -> bool:
         return False
 
 
-def build_services(include_desktop: bool) -> list[Service]:
+def build_services(include_desktop: bool, *, may_terminate: bool = True) -> list[Service]:
     python = ROOT / ".venv" / ("Scripts/python.exe" if IS_WINDOWS else "bin/python")
     npm = "npm.cmd" if IS_WINDOWS else "npm"
 
     _cleanup_stale_nextjs()
-    backend_port = find_free_port(8011, "Backend")
-    frontend_port = find_free_port(3001, "Frontend")
+    backend_port = find_free_port(8011, "Backend", may_terminate=may_terminate)
+    frontend_port = find_free_port(3001, "Frontend", may_terminate=may_terminate)
 
     services = [
         Service(
@@ -449,9 +471,74 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+RUNNER_LOCK = ROOT / ".data" / "dev-runner.pid"
+
+
+def _process_alive(pid: int) -> bool:
+    """Whether a pid is a live process. Never trusts a stale file."""
+    if pid <= 0:
+        return False
+    try:
+        if IS_WINDOWS:
+            result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                capture_output=True, text=True, timeout=10,
+            )
+            return str(pid) in result.stdout
+        os.kill(pid, 0)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return True
+
+
+def existing_runner() -> int | None:
+    """The pid of another dev runner, if one is genuinely still alive.
+
+    Two runners is the failure this exists to stop, and it is not a rare
+    mistake: each one supervises its services and restarts them when they exit,
+    so the second one kills the first one's frontend to take the port, the
+    first one restarts it, and they trade the port until a restart budget runs
+    out. The visible symptom is EADDRINUSE and an app that will not start,
+    which points at the port rather than at the two runners fighting over it.
+    """
+    try:
+        pid = int(RUNNER_LOCK.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+    if pid == os.getpid() or not _process_alive(pid):
+        # A crashed runner leaves its file behind; that must not block a start.
+        RUNNER_LOCK.unlink(missing_ok=True)
+        return None
+    return pid
+
+
+def claim_runner_lock() -> None:
+    RUNNER_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    RUNNER_LOCK.write_text(str(os.getpid()), encoding="utf-8")
+
+
+def release_runner_lock() -> None:
+    try:
+        if int(RUNNER_LOCK.read_text(encoding="utf-8").strip()) == os.getpid():
+            RUNNER_LOCK.unlink(missing_ok=True)
+    except (OSError, ValueError):
+        pass
+
+
 def main() -> int:
     args = parse_args()
-    services = build_services(args.desktop)
+    running_pid = existing_runner()
+    if running_pid and not args.check:
+        print(
+            f"TrendRelay is already running in another terminal (PID {running_pid}). "
+            "Stop that one first, or use it - two runners fight over the same "
+            "ports and neither wins.",
+            file=sys.stderr,
+        )
+        return 1
+
+    # A check must not disturb what it is checking.
+    services = build_services(args.desktop, may_terminate=not args.check)
     errors = validation_errors(args.desktop, services)
     if errors:
         for error in errors:
@@ -460,6 +547,8 @@ def main() -> int:
 
     print_banner(args.desktop, services)
     if args.check:
+        if running_pid:
+            print(f"A dev runner is already active (PID {running_pid}).")
         print("Unified runner checks passed.")
         return 0
 
@@ -470,6 +559,9 @@ def main() -> int:
         )
 
     running: list[RunningService] = []
+    # Claimed only once this process is actually going to supervise services,
+    # so a failed validation never leaves a lock behind.
+    claim_runner_lock()
     try:
         for index, service in enumerate(startable):
             running.append(start_service(service))
@@ -545,6 +637,7 @@ def main() -> int:
         print("\nShutdown requested. Stopping TrendRelay...")
         return 0
     finally:
+        release_runner_lock()
         for item in reversed(running):
             stop_service(item)
 
