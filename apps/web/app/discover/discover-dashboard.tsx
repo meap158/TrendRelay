@@ -11,6 +11,7 @@ import { buttonClass } from "../ui/button";
 import { numberIn, oneOf, usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 import { useJobs } from "../jobs-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
+import { OpportunityScoring } from "./opportunity-scoring";
 
 type Workspace = { id: string; name: string; role: string };
 type ReachChannel = {
@@ -931,6 +932,28 @@ export default function ResearchDashboard() {
         .map((job) => job.raw as ResearchJob),
     [allJobs],
   );
+
+  /**
+   * The trend and evidence a "score this" link is carrying.
+   *
+   * The retired Opportunities page read these from its own query string. The
+   * parameters are unchanged so links written before the merge still arrive
+   * with their evidence attached rather than an empty form.
+   */
+  const [scorePrefill, setScorePrefill] = useState({ trend: "", evidence: "", job: "" });
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      const params = new URLSearchParams(window.location.search);
+      const source = params.get("source") ?? "";
+      const title = params.get("title") ?? "";
+      setScorePrefill({
+        trend: params.get("trend") ?? "",
+        evidence: source && title ? `${source} | ${title} | ${params.get("url") ?? ""}` : "",
+        job: params.get("job") ?? "",
+      });
+    });
+  }, []);
 
   /** Runs that still want something from you: an error to read, or a wait. */
   const unfinished = useMemo(
@@ -1880,6 +1903,23 @@ export default function ResearchDashboard() {
         </div>
       )}
 
+      {/* After the evidence, not on another page. Scoring a trend was a
+          separate destination reached by a link carrying the trend, the
+          evidence and the job id in a query string - a hand-off that existed
+          only because they were two pages. */}
+      {workspaceId && (
+        <div style={S.jobsSection}>
+          <hr style={S.divider} />
+          <OpportunityScoring
+            key={`${workspaceId}:${scorePrefill.job}:${scorePrefill.trend}`}
+            workspaceId={workspaceId}
+            role={workspaces.find((ws) => ws.id === workspaceId)?.role ?? ""}
+            apiFetch={apiFetch}
+            prefill={scorePrefill}
+          />
+        </div>
+      )}
+
       {/* Not a run log. A finished, successful run has already put its results
           on the page above; repeating it as a timestamped row said nothing the
           cards did not. What the log was carrying that nothing else did is kept:
@@ -1907,12 +1947,17 @@ export default function ResearchDashboard() {
               <span style={{ color: "#5f6368" }}>
                 {t("research.readyToScore", { topic: scorable.topic })}
               </span>
-              <Link
-                href={`/opportunities?trend=${encodeURIComponent(scorable.topic)}&job=${encodeURIComponent(scorable.id)}`}
-                style={S.link}
+              <button
+                type="button"
+                style={{ ...S.link, border: 0, background: "transparent", cursor: "pointer" }}
+                onClick={() => {
+                  setScorePrefill({ trend: scorable.topic, evidence: "", job: scorable.id });
+                  document.querySelector(".opportunity-scoring")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
               >
                 {t("research.scoreOpportunity")}
-              </Link>
+              </button>
             </div>
           )}
         </div>

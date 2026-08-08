@@ -20,6 +20,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "../auth-provider";
 import { BooksPanel } from "./books-panel";
+import { OfferImport } from "./offer-import";
 import { ProductTable } from "./product-table";
 import { buttonClass } from "../ui/button";
 import { StatusToasts, useStatus } from "../ui/status";
@@ -514,6 +515,19 @@ export default function AttributionPage() {
               </form>
             </article>
           ) : <p>{t("attribution.importNotPermitted")}</p>}
+          {/* The import that creates the rows this page is about. It used to be
+              the first step of a separate page, so an empty product table and
+              the way to fill it were two different destinations. */}
+          {workspaceId && (
+            <OfferImport
+              workspaceId={workspaceId}
+              canEdit={canEditBooks}
+              apiFetch={apiFetch}
+              onImported={() => void refresh()}
+              succeed={succeed}
+              fail={fail}
+            />
+          )}
           {/* Ad spend lives with the books it is attributed to; sending someone
               to a different tab to import it would be the old split again. */}
           <p className="attribution-note">{t("attribution.spendImportLivesInBooks")}</p>

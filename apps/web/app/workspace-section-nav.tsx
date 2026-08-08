@@ -9,9 +9,10 @@ const AREAS = {
   discover: {
     eyebrow: "Research workspace",
     description: "Move from market evidence to a ranked, actionable opportunity.",
+    // Scoring moved onto Discover itself and the offer catalogue moved into
+    // Attribution, so this is one destination and the strip renders nothing.
     items: [
       { href: "/discover", label: "Discover", description: "Signals and inspiration" },
-      { href: "/opportunities", label: "Opportunities", description: "Offers and scoring" },
     ],
   },
   library: {

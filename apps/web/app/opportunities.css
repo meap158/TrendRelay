@@ -49,8 +49,24 @@
 
 .offer-import-panel h2,
 .opportunity-form h2,
-.opportunity-results h2 {
+.opportunity-results h2,
+.opportunity-results h3,
+.opportunity-card h4 {
   margin: 4px 0 8px;
+}
+
+/* Scoring lives inside Discover now rather than on a page of its own, so it
+   needs its own width and rhythm instead of inheriting a page layout. */
+.opportunity-scoring {
+  display: grid;
+  gap: 16px;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 8px 0 16px;
+}
+.opportunity-scoring .opportunity-results {
+  display: grid;
+  gap: 12px;
 }
 
 .offer-import-panel textarea,

@@ -147,7 +147,10 @@ export function GlobalNav() {
     setDrawerOpen(false);
     notificationButtonRef.current?.focus();
   }
-  const discoverActive = pathname === "/discover" || pathname.startsWith("/discover/") || pathname === "/opportunities" || pathname.startsWith("/opportunities/");
+  // /opportunities is a redirect into Discover now, so it lights the same
+  // entry rather than looking like a destination of its own.
+  const discoverActive = pathname === "/discover" || pathname.startsWith("/discover/")
+    || pathname === "/opportunities";
   const libraryActive = pathname === "/library" || pathname.startsWith("/library/");
   // Its own destination rather than a child of Publish. Attribution now carries
   // products, links, revenue and book economics - three former pages - and
