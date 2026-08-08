@@ -177,14 +177,31 @@ def _eligible_items(
 
 
 def _posted_today(session: Session, destination: CampaignDestination, now: datetime) -> int:
-    """How many posts this destination has already been given today."""
+    """How many posts this destination has already been given today.
+
+    Counted from each item's per-destination stamps rather than from
+    `last_posted_at`, which is the campaign-wide time and would have made a cap
+    labelled "per account" behave as a cap across all of them - stricter than it
+    says, and silently so once a campaign feeds more than one account.
+    """
     start = datetime(now.year, now.month, now.day, tzinfo=UTC)
-    return session.scalar(
-        select(func.count(CampaignQueueItem.id)).where(
-            CampaignQueueItem.campaign_id == destination.campaign_id,
-            CampaignQueueItem.last_posted_at >= start,
+    items = session.scalars(
+        select(CampaignQueueItem).where(
+            CampaignQueueItem.campaign_id == destination.campaign_id
         )
-    ) or 0
+    ).all()
+    posted = 0
+    for item in items:
+        stamp = (item.last_posted_by_destination or {}).get(destination.id)
+        if not stamp:
+            continue
+        try:
+            when = _as_utc(datetime.fromisoformat(str(stamp)))
+        except ValueError:
+            continue
+        if when and when >= start:
+            posted += 1
+    return posted
 
 
 def plan_campaign(

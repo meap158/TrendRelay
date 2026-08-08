@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from trendrelay_api.attribution_api import _public_url
+from trendrelay_api.attribution_api import _https_url, _public_url
 from trendrelay_api.attribution_models import TrackingLink
 from trendrelay_api.autopilot_models import (
     CampaignAutopilot,
@@ -156,13 +156,20 @@ def link_url_for(session: Session, autopilot: CampaignAutopilot,
     offer = session.get(ProductOffer, autopilot.offer_id)
     if not offer:
         return None
+    try:
+        # The same check the attribution endpoint applies. Skipping it here
+        # would let an offer with an http:// or credential-bearing URL mint a
+        # link the redirector then refuses, hours later and somewhere else.
+        destination_url = _https_url(offer.affiliate_url)
+    except ValueError:
+        return None
     link = TrackingLink(
         code=token_urlsafe(8),
         workspace_id=autopilot.workspace_id,
         campaign_id=autopilot.campaign_id,
         offer_id=offer.id,
         product_id=offer.product_id,
-        destination_url=offer.affiliate_url,
+        destination_url=destination_url,
         country_destinations={},
         platform=destination.platform,
         campaign_parameter="tr_campaign",

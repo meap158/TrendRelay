@@ -26,6 +26,9 @@ def _publish(session: Session, autopilot: CampaignAutopilot, post: Any,
         workspace_id=autopilot.workspace_id,
         video_path=post.video_path,
         caption=post.caption,
+        # Reddit and Pinterest refuse a post without one, and the engines take
+        # it as a separate field rather than reading the first caption line.
+        title=post.title,
         first_comment=post.first_comment,
         date=post.at,
         delivery=autopilot.delivery,

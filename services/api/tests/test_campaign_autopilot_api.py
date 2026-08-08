@@ -205,3 +205,37 @@ def test_running_a_switched_off_autopilot_is_refused(workspace) -> None:
     )
     assert response.status_code == 409
     assert "switched off" in response.json()["detail"]
+
+
+def test_an_offer_with_a_plain_http_url_mints_no_tracking_link(workspace) -> None:
+    """Checked here, not by the redirector hours later.
+
+    The attribution endpoint refuses a non-HTTPS destination; minting inside the
+    autopilot run bypassed that check, so an http:// offer would have produced a
+    link that failed at click time, in a different part of the app, long after
+    the setting that caused it.
+    """
+    from trendrelay_api.autopilot_models import CampaignAutopilot, CampaignDestination
+    from trendrelay_api.campaign_autopilot_api import link_url_for
+
+    campaign_id = campaign(workspace)
+    with TestingSession.begin() as session:
+        session.execute(
+            ProductOffer.__table__.update()
+            .where(ProductOffer.id == "offer-1")
+            .values(affiliate_url="http://example.test/aff")
+        )
+    with TestingSession() as session:
+        pilot = CampaignAutopilot(
+            workspace_id=workspace, campaign_id=campaign_id, offer_id="offer-1",
+            created_by="owner-user",
+        )
+        session.add(pilot)
+        destination = CampaignDestination(
+            workspace_id=workspace, campaign_id=campaign_id, provider="buffer",
+            integration_id="acct-1", platform="youtube", label="brand",
+        )
+        session.add(destination)
+        session.flush()
+        assert link_url_for(session, pilot, destination) is None
+        assert destination.tracking_link_id is None

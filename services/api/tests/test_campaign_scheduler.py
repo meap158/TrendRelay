@@ -324,3 +324,40 @@ def test_a_posted_item_goes_to_the_back_rather_than_being_consumed(session) -> N
     assert first.last_posted_by_destination["d1"]
     assert pilot.posts_scheduled == len(posts)
     assert pilot.last_note == note
+
+
+# --- the cap is per account ---------------------------------------------------
+
+
+def test_the_daily_cap_counts_per_account_not_per_campaign(session) -> None:
+    """A cap labelled "per account" must not behave as a cap across all of them.
+
+    It used to count from the campaign-wide `last_posted_at`, so posting once to
+    one account spent the allowance of every other account too - stricter than
+    the label, and silently so once a campaign feeds more than one.
+    """
+    destination(session, "d1", "youtube")
+    destination(session, "d2", "twitter")
+    slot(session, 12)
+    # d1 has already had its two for today; d2 has had none.
+    queue_item(session, "q1", last_posted_by_destination={"d1": NOW.isoformat()})
+    queue_item(session, "q2", position=1,
+               last_posted_by_destination={"d1": NOW.isoformat()})
+    queue_item(session, "q3", position=2)
+    pilot = autopilot(session, daily_cap_per_account=2)
+
+    posts, note = plan_campaign(session, pilot, now=NOW, link_for=None)
+    # d1 is capped, so nothing goes there; d2 is untouched and still eligible.
+    assert all(post.destination_id != "d1" for post in posts)
+    assert posts or "daily cap" in note
+
+
+def test_a_scheduled_post_carries_the_title(session) -> None:
+    # Reddit and Pinterest refuse a post without one, and the engines take it as
+    # a separate field rather than reading the first caption line.
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(session, "q1", title="Three ways to pull a better espresso")
+    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+    assert posts[0].title == "Three ways to pull a better espresso"
+    assert posts[0].video_path.endswith("clip.mp4")

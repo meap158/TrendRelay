@@ -219,18 +219,14 @@ and each step is where a real problem would surface:
 
 What to watch for, since none of it has met a live engine:
 
-- The tracking link is minted on first use inside the run, from
-  `ProductOffer.affiliate_url`. It is not validated as HTTPS there the way the
-  attribution endpoint validates it, so an offer with an `http://` URL would
-  produce a link the redirector may refuse.
 - `campaign_runner` calls `create_publish_job`, which builds a preview and can
-  raise on validation - Reddit and Pinterest both require a title that queue
-  items do not carry. Those two networks will fail per destination and be
-  reported in `last_note` rather than stopping the run, which is correct
-  behaviour but has never been seen.
-- The daily cap counts posts per campaign, not strictly per destination. With
-  one destination the two are the same; with several it is stricter than the
-  label implies.
+  raise on validation. A destination that an engine refuses is reported in
+  `last_note` and skipped rather than stopping the run - correct behaviour that
+  has never actually been seen happen.
+- A queue item's title now reaches the engines, so Reddit and Pinterest have the
+  field they require, but no post has been sent to either.
+- The disclosure and the link are composed per network at post time. The first
+  live post is the first time that composition meets a real caption limit.
 
 Also outstanding, unrelated:
 
