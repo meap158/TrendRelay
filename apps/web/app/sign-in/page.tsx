@@ -6,7 +6,7 @@ import { FormEvent, useState } from "react";
 import { useAuth } from "../auth-provider";
 import { authConfiguration, supabaseBrowserClient } from "../../lib/supabase";
 import { buttonClass } from "../ui/button";
-import { useT } from "../i18n-provider";
+import { useLocale } from "../i18n-provider";
 
 type Mode = "sign-in" | "sign-up";
 
@@ -16,7 +16,7 @@ function safeNextPath(): string {
 }
 
 export default function SignInPage() {
-  const t = useT();
+  const { t, rich } = useLocale();
   const config = authConfiguration();
   const { desktopAvailable, loading: authLoading, user, pairDesktop } = useAuth();
   const client = supabaseBrowserClient();
@@ -128,7 +128,12 @@ export default function SignInPage() {
           <div className="setup-card" role="status">
             <span>{t("auth.setupRequired")}</span>
             <h2>{t("auth.connectSupabase")}</h2>
-            <p>Add <code>NEXT_PUBLIC_SUPABASE_URL</code>, <code>NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</code>, and backend <code>SUPABASE_URL</code> to local <code>.env</code>, then restart.</p>
+            <p>{rich("auth.envInstructions", {
+              publicUrl: <code>NEXT_PUBLIC_SUPABASE_URL</code>,
+              publicKey: <code>NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</code>,
+              serverUrl: <code>SUPABASE_URL</code>,
+              file: <code>.env</code>,
+            })}</p>
           </div>
         ) : (
           <form className="auth-card" onSubmit={submit}>

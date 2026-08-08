@@ -55,6 +55,7 @@ export const ru: Messages = {
     required: "Обязательно",
     unavailable: "Недоступно",
     comingSoon: "Скоро",
+    other: "Другое",
   },
 
   status: {

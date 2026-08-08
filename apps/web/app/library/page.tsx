@@ -957,7 +957,7 @@ export default function LibraryPage() {
             </h1>
             <p>{t("library.intro")}</p>
           </div>
-          <label>Workspace
+          <label>{t("workspace.select")}
             <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
               {workspaces.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.role}</option>)}
             </select>
@@ -980,12 +980,12 @@ export default function LibraryPage() {
 
           <nav className="library-category-bar" aria-label={t("library.categories")}>
             <div className="library-category-tabs">
-              <button type="button" className={!mediaKind ? "selected" : ""} aria-pressed={!mediaKind} onClick={() => patchFilters({ mediaKind: "" })}>All <span>{mediaTotal}</span></button>
-              <button type="button" className={mediaKind === "video" ? "selected" : ""} aria-pressed={mediaKind === "video"} onClick={() => patchFilters({ mediaKind: "video" })}>Videos <span>{mediaCount("video")}</span></button>
-              <button type="button" className={mediaKind === "image" ? "selected" : ""} aria-pressed={mediaKind === "image"} onClick={() => patchFilters({ mediaKind: "image" })}>Images <span>{mediaCount("image")}</span></button>
-              <button type="button" className={mediaKind === "audio" ? "selected" : ""} aria-pressed={mediaKind === "audio"} onClick={() => patchFilters({ mediaKind: "audio" })}>Audio <span>{mediaCount("audio")}</span></button>
+              <button type="button" className={!mediaKind ? "selected" : ""} aria-pressed={!mediaKind} onClick={() => patchFilters({ mediaKind: "" })}>{t("common.all")} <span>{mediaTotal}</span></button>
+              <button type="button" className={mediaKind === "video" ? "selected" : ""} aria-pressed={mediaKind === "video"} onClick={() => patchFilters({ mediaKind: "video" })}>{t("library.videos")} <span>{mediaCount("video")}</span></button>
+              <button type="button" className={mediaKind === "image" ? "selected" : ""} aria-pressed={mediaKind === "image"} onClick={() => patchFilters({ mediaKind: "image" })}>{t("library.images")} <span>{mediaCount("image")}</span></button>
+              <button type="button" className={mediaKind === "audio" ? "selected" : ""} aria-pressed={mediaKind === "audio"} onClick={() => patchFilters({ mediaKind: "audio" })}>{t("library.audio")} <span>{mediaCount("audio")}</span></button>
             </div>
-            <label>Sort
+            <label>{t("library.sortLabel")}
               <select aria-label={t("library.sortLabel")} value={sortOrder} onChange={(event) => { if (isSortOrder(event.target.value)) setSortOrder(event.target.value); }}>
                 <option value="newest">{t("library.sortNewest")}</option>
                 <option value="oldest">{t("library.sortOldest")}</option>
@@ -1001,7 +1001,7 @@ export default function LibraryPage() {
             fields={["channel", "platform", "effect"]}
             onChange={setFilters}
           >
-            <label>Group
+            <label>{t("library.group")}
               <select aria-label={t("library.groupLabel")} value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)}>
                 <option value="none">{t("library.noGrouping")}</option>
                 <option value="channel">{t("library.channel")}</option>

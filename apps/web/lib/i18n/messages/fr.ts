@@ -54,6 +54,7 @@ export const fr: Messages = {
     required: "Obligatoire",
     unavailable: "Indisponible",
     comingSoon: "Bientôt disponible",
+    other: "Autre",
   },
 
   status: {

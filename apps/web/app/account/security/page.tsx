@@ -126,7 +126,7 @@ export default function AccountSecurityPage() {
         <article className="setup-card">
           <p className="eyebrow">{t("mfa.eyebrow")}</p>
           <h1>{challengeRequired ? "Verify your second factor." : "Protect your account with TOTP."}</h1>
-          <p>Current session: <strong>{assurance?.currentLevel ?? "checking"}</strong>. Authenticator apps generate six-digit codes without SMS or email.</p>
+          <p>{t("mfa.currentSession")} <strong>{assurance?.currentLevel ?? "checking"}</strong>. {t("mfa.sixDigitNote")}</p>
           {error && <p className="registry-error" role="alert">{error}</p>}
           {message && <p className="form-message" role="status">{message}</p>}
           {challengeRequired && <form className="stack-form" onSubmit={verify}><label>{t("mfa.sixDigitCode")}<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} required /></label><button disabled={busy}>{t("mfa.verifyAndContinue")}</button></form>}

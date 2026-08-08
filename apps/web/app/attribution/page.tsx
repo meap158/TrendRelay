@@ -362,7 +362,7 @@ export default function AttributionPage() {
                 {offers.filter((item) => item.availability !== "unavailable").map((item) => <option key={item.id} value={item.id}>{item.product.name} · {item.network}</option>)}
               </select></label>
               <label>{t("library.platform")}<select name="platform" defaultValue="tiktok">
-                <option value="tiktok">TikTok</option><option value="instagram">Instagram</option><option value="youtube">YouTube</option><option value="douyin">Douyin</option><option value="other">Other</option>
+                <option value="tiktok">TikTok</option><option value="instagram">Instagram</option><option value="youtube">YouTube</option><option value="douyin">Douyin</option><option value="other">{t("common.other")}</option>
               </select></label>
               <div className="attribution-form-row">
                 <label>{t("attribution.campaignParameter")}<input name="campaign_parameter" defaultValue="tr_campaign" required /></label>
@@ -377,7 +377,7 @@ export default function AttributionPage() {
 
           {canImport && <article className="attribution-panel">
             <h2>{t("attribution.importConversions")}</h2>
-            <p>Use the network report’s tracking code and a timezone-aware conversion time. Order references are stored only as keyed hashes.</p>
+            <p>{t("attribution.importHelp")}</p>
             <form onSubmit={importConversions}>
               <textarea aria-label={t("attribution.conversionCsv")} rows={8} value={csvText} onChange={(event) => setCsvText(event.target.value)} />
               <button className={buttonClass({ variant: "primary" })} disabled={busy === "import"}>{busy === "import" ? "Importing…" : "Import report"}</button>

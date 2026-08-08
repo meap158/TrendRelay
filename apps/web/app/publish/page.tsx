@@ -942,7 +942,7 @@ export default function PublishPage() {
           <article className={`hosting-card${hosting.configured ? " ready" : hosting.required ? " needed" : ""}`}>
             <div className="hosting-head">
               <div>
-                <h3>Media hosting <span>{hosting.label}</span></h3>
+                <h3>{t("publish.mediaHosting")} <span>{hosting.label}</span></h3>
                 <p>
                   {hosting.configured
                     ? "Local clips are uploaded automatically for engines that fetch rather than accept an upload."
@@ -1027,7 +1027,7 @@ export default function PublishPage() {
             <span>{activeProvider ? `via ${activeProvider.label}` : "no engine selected"}</span>
           </div>
 
-          <label>Workspace
+          <label>{t("workspace.select")}
             <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} required>
               {workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} / {workspace.role}</option>)}
             </select>
@@ -1039,7 +1039,7 @@ export default function PublishPage() {
                   uploads, but a clip still has to be chosen before anyone can
                   know that hosting is what stands in the way. */}
               <div className="field-with-action">
-                <label className="ui-field-label">Public media URL
+                <label className="ui-field-label">{t("publish.publicMediaUrl")}
                   <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" required={!videoPath} />
                 </label>
                 <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
@@ -1073,7 +1073,7 @@ export default function PublishPage() {
                   onDragLeave={() => setDragOver(false)}
                   onDrop={dropMedia}
                 >
-                  <label>Approved local MP4 path
+                  <label>{t("publish.approvedPath")}
                     <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" />
                   </label>
                   <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
@@ -1090,7 +1090,7 @@ export default function PublishPage() {
                   fetch it. If the clip has a blurred version, that is the cut that gets uploaded.
                 </small>
               </div>
-              <label>Public media URL <i>{t("publish.optional")}</i>
+              <label>{t("publish.publicMediaUrl")} <i>{t("publish.optional")}</i>
                 <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" />
                 <small>{t("publish.supplyHosted")}</small>
               </label>
@@ -1104,7 +1104,7 @@ export default function PublishPage() {
                   onDragLeave={() => setDragOver(false)}
                   onDrop={dropMedia}
                 >
-                  <label>Approved local MP4 path
+                  <label>{t("publish.approvedPath")}
                     <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" required />
                   </label>
                   <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
@@ -1118,14 +1118,14 @@ export default function PublishPage() {
                 )}
                 <small className="ui-field-note">{activeProvider?.media_note ?? "Media must sit under a configured publishing media directory."}</small>
               </div>
-              <label>Public media URL <i>{t("publish.optional")}</i>
+              <label>{t("publish.publicMediaUrl")} <i>{t("publish.optional")}</i>
                 <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" />
                 <small>{t("publish.supplySkipUpload")}</small>
               </label>
             </>
           )}
 
-          <label>Title <i>{t("publish.titleUsedBy")}</i>
+          <label>{t("publish.title")} <i>{t("publish.titleUsedBy")}</i>
             <input name="title" maxLength={300} value={title} onChange={(event) => setTitle(event.target.value)} />
             {titleLimit && (
               <small className={`char-count${titleOver > 0 ? " over" : ""}`}>
@@ -1134,7 +1134,7 @@ export default function PublishPage() {
               </small>
             )}
           </label>
-          <label>Caption
+          <label>{t("publish.caption")}
             <textarea name="caption" rows={5} maxLength={5000} required value={caption} onChange={(event) => setCaption(event.target.value)} />
             {captionLimit && (
               <small className={`char-count${captionOver > 0 ? " over" : captionOver > -20 ? " close" : ""}`}>
@@ -1213,7 +1213,7 @@ export default function PublishPage() {
               (activeProvider?.first_comment_platforms ?? []).includes(platform));
             if (!carriers.length) return null;
             return (
-              <label>First comment <i>{t("publish.optional")}</i>
+              <label>{t("publish.firstComment")} <i>{t("publish.optional")}</i>
                 <textarea
                   name="first_comment"
                   rows={2}
@@ -1268,7 +1268,7 @@ export default function PublishPage() {
                     : "Stored with the draft; the engine does not act on it."}
               </small>
             </label>
-            <label>Visibility <i>{t("publish.visibilityScope")}</i>
+            <label>{t("publish.visibility")} <i>{t("publish.visibilityScope")}</i>
               <select name="visibility" defaultValue="public">
                 <option value="public">{t("publish.public")}</option>
                 <option value="private">{t("publish.privateOnlyMe")}</option>
@@ -1449,13 +1449,13 @@ export default function PublishPage() {
           </fieldset>
 
           {chosen.includes("reddit") && (
-            <label>Subreddit
+            <label>{t("publish.subreddit")}
               <input name="subreddit" placeholder="r/videos" required />
               <small>{t("publish.subredditRequired")}</small>
             </label>
           )}
           {chosen.includes("pinterest") && (
-            <label>Pinterest board
+            <label>{t("publish.pinterestBoard")}
               <input name="board" placeholder={t("publish.productLaunches")} required />
               <small>{t("publish.pinterestBoardHelp")}</small>
             </label>
@@ -1467,7 +1467,7 @@ export default function PublishPage() {
                 type="checkbox"
                 checked={needsApproval}
                 onChange={(event) => setNeedsApproval(event.target.checked)}
-              /> Send for approval
+              /> {t("publish.sendForApproval")}
               <small>
                 Held in {activeProvider.label} for a teammate to approve. Only works where
                 that channel&apos;s posting policy asks for approval.
@@ -1476,7 +1476,7 @@ export default function PublishPage() {
           )}
 
           <label className="checkbox-row">
-            <input name="made_with_ai" type="checkbox" /> Disclose AI-generated media
+            <input name="made_with_ai" type="checkbox" /> {t("publish.discloseAi")}
             <small>Sets each platform&apos;s synthetic-media flag where the engine exposes one.</small>
           </label>
 

@@ -60,6 +60,7 @@ export const en = {
     required: "Required",
     unavailable: "Unavailable",
     comingSoon: "Coming soon",
+    other: "Other",
   },
 
   status: {

@@ -185,16 +185,16 @@ export function ClipEditor({
       <div className="clip-editor-body">
         <form className="clip-editor-form" onSubmit={propose}>
           <div className="clip-editor-grid">
-            <label className="ui-field">Plan title
+            <label className="ui-field">{t("clipEditor.planTitle")}
               <input name="title" required minLength={2} defaultValue={assetTitle.slice(0, 60)} />
             </label>
-            <label className="ui-field">Pipeline
+            <label className="ui-field">{t("clipEditor.pipeline")}
               <select name="pipeline" defaultValue="clip-factory">
                 <option value="clip-factory">{t("clipEditor.clipFactory")}</option>
                 <option value="podcast-repurpose">{t("clipEditor.podcastRepurpose")}</option>
               </select>
             </label>
-            <label className="ui-field">Budget cap
+            <label className="ui-field">{t("clipEditor.budgetCap")}
               <input name="budget_usd" type="number" min="1" max="100" step="0.01" defaultValue="1" />
             </label>
           </div>
@@ -209,19 +209,19 @@ export function ClipEditor({
             </div>
             {segments.map((segment, index) => (
               <div className="segment-row" key={index}>
-                <label className="ui-field">Label
+                <label className="ui-field">{t("clipEditor.label")}
                   <input
                     value={segment.label}
                     onChange={(event) => updateSegment(index, { label: event.target.value })}
                   />
                 </label>
-                <label className="ui-field">Start
+                <label className="ui-field">{t("clipEditor.start")}
                   <input
                     type="number" min="0" step="0.1" value={segment.start_seconds}
                     onChange={(event) => updateSegment(index, { start_seconds: Number(event.target.value) })}
                   />
                 </label>
-                <label className="ui-field">End
+                <label className="ui-field">{t("clipEditor.end")}
                   <input
                     type="number" min="0.1" step="0.1" value={segment.end_seconds}
                     onChange={(event) => updateSegment(index, { end_seconds: Number(event.target.value) })}

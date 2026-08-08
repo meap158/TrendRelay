@@ -54,6 +54,7 @@ export const ja: Messages = {
     required: "必須",
     unavailable: "利用できません",
     comingSoon: "近日公開",
+    other: "その他",
   },
 
   status: {

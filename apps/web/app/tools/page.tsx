@@ -244,7 +244,7 @@ export default function ToolsPage() {
             <div className="access-guide-body">
               <div className="access-guide-callout">
                 <strong>{t("tools.meta.fastest")}</strong>
-                <p>Open <b>Meta Ads Kit → Setup → Launch Meta login</b>. Approve read access in the local Social Flow window; TrendRelay does not ask you to paste the resulting token.</p>
+                <p>{t("common.open")} <b>Meta Ads Kit → Setup → Launch Meta login</b>. Approve read access in the local Social Flow window; TrendRelay does not ask you to paste the resulting token.</p>
               </div>
               <div className="access-guide-steps">
                 <p><i>1</i><span>{rich("tools.meta.step1", { business: <b>Business</b> })}</span></p>
@@ -367,10 +367,10 @@ export default function ToolsPage() {
                   {name} · {setup.configured_secret_names?.includes(name) ? "configured" : "not set"}
                 </code>
               ))}</div>
-              <p>Add or update these entries in the project’s local <code>.env</code> file, then restart TrendRelay.</p>
+              <p>{rich("tools.addToEnvFile", { file: <code>.env</code> })}</p>
             </div>
           )}
-          {setup.tool_id === "douyin-downloader" && setup.connection && <p className="connection-note">Douyin connection: <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
+          {setup.tool_id === "douyin-downloader" && setup.connection && <p className="connection-note">{t("tools.douyinConnection")} <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
           <div className="setup-actions">
             {setup.actions.map((action) => action.kind === "navigate" && action.href ? (
               <Link className={buttonClass({ variant: "primary" })} href={action.href} key={action.id}>{action.label}</Link>

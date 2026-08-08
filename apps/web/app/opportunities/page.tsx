@@ -339,7 +339,7 @@ export default function OpportunitiesPage() {
       <WorkspaceSectionNav area="discover" />
       <header className="opportunity-header">
         <div>
-          <p className="eyebrow">EVIDENCE → ECONOMICS → CAMPAIGN</p>
+          <p className="eyebrow">{t("opportunities.eyebrow")}</p>
           <h1>{t("opportunities.heading")}</h1>
           <p className="lede">
             Import offers, score demand with visible factors, and turn the best case into a draft campaign.
@@ -358,7 +358,7 @@ export default function OpportunitiesPage() {
 
       <section className="opportunity-steps">
         <article className="offer-import-panel">
-          <p className="eyebrow">1 · OFFER CATALOG</p>
+          <p className="eyebrow">{t("opportunities.stepCatalog")}</p>
           <h2>{t("opportunities.importOffers")}</h2>
           <p>{t("opportunities.importHelp")}</p>
           <Link className="inline-guide-link" href="/tools#amazon-access-guide">{t("opportunities.whereAmazonAccess")}</Link>
@@ -379,7 +379,7 @@ export default function OpportunitiesPage() {
         </article>
 
         <form className="opportunity-form" onSubmit={createOpportunity}>
-          <p className="eyebrow">2 · SCORE THE CASE</p>
+          <p className="eyebrow">{t("opportunities.stepScore")}</p>
           <h2>{t("opportunities.buildCase")}</h2>
           {prefill.job && <p className="registry-message">Completed research job {prefill.job} will be attached as source evidence.</p>}
           <div className="opportunity-form-grid">
@@ -430,7 +430,7 @@ export default function OpportunitiesPage() {
 
       <section className="opportunity-results">
         <div className="section-heading">
-          <div><p className="eyebrow">3 · DECIDE</p><h2>{t("opportunities.ranked")}</h2></div>
+          <div><p className="eyebrow">{t("opportunities.stepDecide")}</p><h2>{t("opportunities.ranked")}</h2></div>
           <Link href="/discover">{t("opportunities.gatherMore")}</Link>
         </div>
         {opportunities.length === 0 && <p className="empty-state">{t("opportunities.noneScored")}</p>}

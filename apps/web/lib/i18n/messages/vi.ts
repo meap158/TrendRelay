@@ -54,6 +54,7 @@ export const vi: Messages = {
     required: "Bắt buộc",
     unavailable: "Không khả dụng",
     comingSoon: "Sắp có",
+    other: "Khác",
   },
 
   status: {

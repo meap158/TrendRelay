@@ -6,7 +6,7 @@ import { RefreshCw, Download } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
-import { useT } from "../i18n-provider";
+import { useLocale } from "../i18n-provider";
 import { buttonClass } from "../ui/button";
 import { numberIn, oneOf, usePersistedState } from "../ui/use-persisted-state";
 import { useJobs } from "../jobs-provider";
@@ -783,7 +783,7 @@ function readTopicFailure(detail: unknown): TopicNote {
 
 export default function ResearchDashboard() {
   const { apiFetch } = useAuth();
-  const t = useT();
+  const { t, rich } = useLocale();
   const { jobs: allJobs, refresh: refreshJobs, setActiveWorkspaceId } = useJobs();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
@@ -1462,7 +1462,7 @@ export default function ResearchDashboard() {
                     title={`Find "${item.term}" on Douyin`}
                   >{item.term}</a>
                   <span style={S.boardMeta}>
-                    {item.hot_value > 0 && <>{compactNumber(item.hot_value)} heat</>}
+                    {item.hot_value > 0 && <>{t("discover.heat", { value: compactNumber(item.hot_value) })}</>}
                     {item.hot_value > 0 && item.view_count > 0 && " · "}
                     {item.view_count > 0 && <>{compactNumber(item.view_count)} views</>}
                   </span>
@@ -1513,7 +1513,9 @@ export default function ResearchDashboard() {
                 <div style={S.tiktokMetrics}>
                   {item.hot_value > 0 && (
                     <span style={S.tiktokMetric}>
-                      <b>{compactNumber(item.hot_value)}</b> heat
+                      {rich("discover.heat", {
+                        value: <b>{compactNumber(item.hot_value)}</b>,
+                      })}
                     </span>
                   )}
                 </div>

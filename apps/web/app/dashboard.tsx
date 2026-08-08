@@ -537,7 +537,7 @@ export default function Dashboard() {
         <form id="add-links" className="download-composer" onSubmit={fetchMedia}>
           <div className="download-card-heading">
             <div>
-              <p className="step-kicker">STEP 1</p>
+              <p className="step-kicker">{t("downloads.step", { number: 1 })}</p>
               <h2>{t("downloads.addLinks")}</h2>
               <p>{t("downloads.addLinksHelp")}</p>
             </div>
@@ -602,7 +602,7 @@ export default function Dashboard() {
           </div>}
 
           <details className="download-options">
-            <summary>Download options <span>{modeLabel(mode)} · {limit === 0 ? "all videos" : `up to ${limit} per source`} · {mediaKinds.length === 3 ? "video, images and audio" : mediaKinds.length === 1 ? "video only" : `video and ${mediaKinds.includes("image") ? "images" : "audio"}`}</span></summary>
+            <summary>{t("downloads.options")} <span>{modeLabel(mode)} · {limit === 0 ? "all videos" : `up to ${limit} per source`} · {mediaKinds.length === 3 ? "video, images and audio" : mediaKinds.length === 1 ? "video only" : `video and ${mediaKinds.includes("image") ? "images" : "audio"}`}</span></summary>
             <div className="download-options-grid">
               <label><span>{t("downloads.fromProfiles")}</span><select value={mode} onChange={(event) => { if (isDownloadMode(event.target.value)) setMode(event.target.value); }}><option value="post">{t("downloads.publishedPosts")}</option><option value="like">{t("downloads.likedVideos")}</option><option value="mix">{t("downloads.collections")}</option><option value="music">{t("downloads.musicVideos")}</option></select></label>
               <fieldset><legend>{t("downloads.perSource")}</legend><div className="limit-presets">{[0, 10, 20, 50, 100].map((value) => <button key={value} type="button" className={limit === value ? "selected" : ""} aria-pressed={limit === value} onClick={() => setLimit(value)}>{value === 0 ? "All" : value}</button>)}</div></fieldset>
@@ -642,7 +642,7 @@ export default function Dashboard() {
 
       <section id="download-queue" className="download-queue-card">
         <div className="queue-heading">
-          <div><p className="step-kicker">STEP 2</p><h2>{t("downloads.heading2")}</h2><p>{t("downloads.autoUpdate")}</p></div>
+          <div><p className="step-kicker">{t("downloads.step", { number: 2 })}</p><h2>{t("downloads.heading2")}</h2><p>{t("downloads.autoUpdate")}</p></div>
           <div className="queue-heading-actions">
             {jobs.length > 0 && <button type="button" className={`${buttonClass({ variant: "link" })} clear-downloads-button`} disabled={clearingHistory || jobsBusy} onClick={() => void clearUnavailableDownloads()}><ActionIcon name="dismiss" />{clearingHistory ? "Clearing…" : "Clear missing files"}</button>}
             <Button

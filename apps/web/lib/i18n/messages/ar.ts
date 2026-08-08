@@ -56,6 +56,7 @@ export const ar: Messages = {
     required: "مطلوب",
     unavailable: "غير متاح",
     comingSoon: "قريبًا",
+    other: "أخرى",
   },
 
   status: {

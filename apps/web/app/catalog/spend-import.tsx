@@ -240,19 +240,19 @@ export function SpendImport({
 
       {preview && (
         <div className="spend-summary" role="status">
-          <span><b>{preview.ready}</b> ready</span>
-          {preview.needs_confirming > 0 && <span><b>{preview.needs_confirming}</b> guessed</span>}
-          {preview.unresolved > 0 && <span><b>{preview.unresolved}</b> unplaced</span>}
+          <span><b>{preview.ready}</b> {t("spendImport.ready")}</span>
+          {preview.needs_confirming > 0 && <span><b>{preview.needs_confirming}</b> {t("spendImport.guessed")}</span>}
+          {preview.unresolved > 0 && <span><b>{preview.unresolved}</b> {t("spendImport.unplaced")}</span>}
           {preview.problem_count > 0 && (
-            <span className="bad"><b>{preview.problem_count}</b> unreadable</span>
+            <span className="bad"><b>{preview.problem_count}</b> {t("spendImport.unreadable")}</span>
           )}
         </div>
       )}
 
       {result && (
         <div className="spend-summary" role="status">
-          <span><b>{result.written}</b> added</span>
-          <span><b>{result.updated}</b> updated</span>
+          <span><b>{result.written}</b> {t("spendImport.added")}</span>
+          <span><b>{result.updated}</b> {t("spendImport.updated")}</span>
           {result.skipped_count > 0 && (
             <span className="bad">
               <b>{result.skipped_count}</b> left out

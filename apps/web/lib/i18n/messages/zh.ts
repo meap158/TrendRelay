@@ -54,6 +54,7 @@ export const zh: Messages = {
     required: "必填",
     unavailable: "不可用",
     comingSoon: "即将推出",
+    other: "其他",
   },
 
   status: {

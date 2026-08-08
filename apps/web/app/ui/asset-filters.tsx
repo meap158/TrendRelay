@@ -135,7 +135,7 @@ export function AssetFilters({
       )}
 
       {shown.has("channel") && (
-        <label>Channel
+        <label>{t("filters.channel")}
           <select
             aria-label={t("filters.byChannel")}
             value={values.channel ?? ""}
@@ -153,7 +153,7 @@ export function AssetFilters({
       )}
 
       {shown.has("platform") && (
-        <label>Source
+        <label>{t("filters.source")}
           <select
             aria-label={t("filters.bySource")}
             value={values.platform ?? ""}
@@ -170,7 +170,7 @@ export function AssetFilters({
       )}
 
       {shown.has("mediaKind") && (
-        <label>Media
+        <label>{t("filters.media")}
           <select
             aria-label={t("filters.byMediaKind")}
             value={values.mediaKind ?? ""}
@@ -188,7 +188,7 @@ export function AssetFilters({
       {/* Named "Effects" rather than "Blurred" because this is the axis that
           will grow — a blurred cut is the first rendered effect, not the last. */}
       {shown.has("effect") && (
-        <label>Effects
+        <label>{t("filters.effects")}
           <select
             aria-label={t("filters.byEffect")}
             value={values.effect ?? ""}
@@ -204,7 +204,7 @@ export function AssetFilters({
       )}
 
       {shown.has("length") && (
-        <label>Length
+        <label>{t("filters.length")}
           <select
             aria-label={t("filters.byLength")}
             value={values.maxSeconds ?? ""}
