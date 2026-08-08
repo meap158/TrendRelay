@@ -6,7 +6,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "./auth-provider";
 import { type BaseJob, useJobs } from "./jobs-provider";
+import { useT } from "./i18n-provider";
 import { Button } from "./ui/button";
+import { LanguagePicker } from "./ui/language-picker";
 
 const READ_NOTIFICATIONS_KEY = "trendrelay:read-notifications:";
 const MAX_STORED_READ_KEYS = 300;
@@ -60,6 +62,7 @@ export function GlobalNav() {
   const { user, signOut, localMode } = useAuth();
   const { jobs } = useJobs();
   const pathname = usePathname();
+  const t = useT();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [readKeys, setReadKeys] = useState<Set<string>>(new Set());
   const [readStateReady, setReadStateReady] = useState(false);
@@ -163,15 +166,16 @@ export function GlobalNav() {
         <strong>TrendRelay</strong>
       </Link>
       <nav className="app-nav">
-        <Link className={discoverActive ? "active" : ""} href="/discover">Discover</Link>
-        <Link className={pathname === "/" ? "active" : ""} href="/">Downloads</Link>
-        <Link className={libraryActive ? "active" : ""} href="/library">Library</Link>
-        <Link className={publishActive ? "active" : ""} href="/publish">Publish</Link>
-        <Link className={pathname === "/campaigns" ? "active" : ""} href="/campaigns">Campaigns</Link>
-        <Link className={pathname === "/tools" ? "active" : ""} href="/tools">Tools</Link>
+        <Link className={discoverActive ? "active" : ""} href="/discover">{t("nav.discover")}</Link>
+        <Link className={pathname === "/" ? "active" : ""} href="/">{t("common.download")}</Link>
+        <Link className={libraryActive ? "active" : ""} href="/library">{t("nav.library")}</Link>
+        <Link className={publishActive ? "active" : ""} href="/publish">{t("nav.publish")}</Link>
+        <Link className={pathname === "/campaigns" ? "active" : ""} href="/campaigns">{t("nav.campaigns")}</Link>
+        <Link className={pathname === "/tools" ? "active" : ""} href="/tools">{t("nav.tools")}</Link>
       </nav>
 
       <div className="toolbar-actions">
+        <LanguagePicker compact />
         <div className="notification-shell" ref={notificationShellRef}>
           <button
             ref={notificationButtonRef}
