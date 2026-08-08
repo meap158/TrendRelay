@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { useT } from "../i18n-provider";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Button } from "../ui/button";
 
@@ -75,6 +76,7 @@ function size(bytes: number): string {
 }
 
 export default function CampaignsPage() {
+  const t = useT();
   const { loading, user, apiFetch } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
@@ -332,10 +334,10 @@ export default function CampaignsPage() {
   }
 
   if (loading) {
-    return <main className="campaign-page"><div className="loading-panel">Loading campaigns…</div></main>;
+    return <main className="campaign-page"><div className="loading-panel">{t("campaigns.loading")}</div></main>;
   }
   if (!user) {
-    return <main className="campaign-page"><Link href="/sign-in?next=%2Fcampaigns">Sign in to manage campaigns</Link></main>;
+    return <main className="campaign-page"><Link href="/sign-in?next=%2Fcampaigns">{t("campaigns.signInPrompt")}</Link></main>;
   }
 
   const visiblePlans = plans.filter((plan) => !campaignId || plan.campaign_id === campaignId);
@@ -344,9 +346,9 @@ export default function CampaignsPage() {
     <main className="campaign-page">
       <header className="campaign-heading">
         <div>
-          <p className="section-kicker">CAMPAIGN OPERATIONS</p>
-          <h1>Plan once. Approve once. Publish anywhere.</h1>
-          <p>Connect strategy, approved media, posting time, affiliate disclosure, and fallback delivery.</p>
+          <p className="section-kicker">{t("campaigns.eyebrow")}</p>
+          <h1>{t("campaigns.heading")}</h1>
+          <p>{t("campaigns.intro")}</p>
         </div>
         <label className="workspace-control">
           Workspace
@@ -363,7 +365,7 @@ export default function CampaignsPage() {
       <section className="campaign-layout">
         <aside className="campaign-sidebar">
           <div className="card-heading">
-            <div><p className="section-kicker">CAMPAIGNS</p><h2>{campaigns.length} total</h2></div>
+            <div><p className="section-kicker">{t("campaigns.listHeading")}</p><h2>{campaigns.length} total</h2></div>
           </div>
           <div className="campaign-list">
             {campaigns.map((campaign) => (
@@ -377,19 +379,19 @@ export default function CampaignsPage() {
                 <span>{campaign.status} · {campaign.markets.join(", ") || "global"}</span>
               </button>
             ))}
-            {!campaigns.length && <p>No campaigns yet.</p>}
+            {!campaigns.length && <p>{t("campaigns.empty")}</p>}
           </div>
           {canCreateCampaign && (
             <details className="campaign-create">
-              <summary>New campaign</summary>
+              <summary>{t("campaigns.create")}</summary>
               <form onSubmit={createCampaign}>
-                <label>Name<input name="name" required maxLength={160} /></label>
-                <label>Objective<textarea name="objective" rows={3} required /></label>
-                <label>Audience<textarea name="audience" rows={3} required /></label>
-                <label>Markets<input name="markets" placeholder="TH, US" /></label>
-                <label>Languages<input name="languages" placeholder="en, th" /></label>
-                <label>Affiliate URL<input name="affiliate_url" type="url" /></label>
-                <Button type="submit" variant="primary" busy={busy === "campaign"}>Create campaign</Button>
+                <label>{t("campaigns.name")}<input name="name" required maxLength={160} /></label>
+                <label>{t("campaigns.objective")}<textarea name="objective" rows={3} required /></label>
+                <label>{t("campaigns.audience")}<textarea name="audience" rows={3} required /></label>
+                <label>{t("campaigns.markets")}<input name="markets" placeholder="TH, US" /></label>
+                <label>{t("campaigns.languages")}<input name="languages" placeholder="en, th" /></label>
+                <label>{t("campaigns.affiliateUrl")}<input name="affiliate_url" type="url" /></label>
+                <Button type="submit" variant="primary" busy={busy === "campaign"}>{t("campaigns.createButton")}</Button>
               </form>
             </details>
           )}
@@ -406,44 +408,44 @@ export default function CampaignsPage() {
                   <small>Audience: {selectedCampaign.audience}</small>
                 </div>
                 <div className="campaign-status-actions">
-                  <Link href={`/attribution?campaign=${encodeURIComponent(selectedCampaign.id)}`}>Measure revenue</Link>
+                  <Link href={`/attribution?campaign=${encodeURIComponent(selectedCampaign.id)}`}>{t("campaigns.measureRevenue")}</Link>
                   {canCreateCampaign && selectedCampaign.status !== "active" && (
-                    <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("active")}>Activate</Button>
+                    <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("active")}>{t("campaigns.activate")}</Button>
                   )}
                   {canCreateCampaign && selectedCampaign.status !== "archived" && (
-                    <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("archived")}>Archive</Button>
+                    <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("archived")}>{t("campaigns.archive")}</Button>
                   )}
                 </div>
               </section>
 
               {canCreatePlan && selectedCampaign.status !== "archived" && (
                 <details className="plan-create" open={visiblePlans.length === 0}>
-                  <summary>Add publication plan</summary>
+                  <summary>{t("campaigns.addPlan")}</summary>
                   <form key={selectedCampaign.id} onSubmit={createPlan}>
                     <div className="plan-form-grid">
-                      <label>Title<input name="title" required maxLength={200} /></label>
-                      <label>Platform<select name="platform" defaultValue="tiktok"><option>tiktok</option><option>instagram</option><option>youtube</option><option>douyin</option><option>other</option></select></label>
-                      <label>Suggested time<input name="scheduled_at" type="datetime-local" defaultValue={localDateDefault()} required /></label>
+                      <label>{t("publish.title")}<input name="title" required maxLength={200} /></label>
+                      <label>{t("library.platform")}<select name="platform" defaultValue="tiktok"><option>tiktok</option><option>instagram</option><option>youtube</option><option>douyin</option><option>other</option></select></label>
+                      <label>{t("campaigns.suggestedTime")}<input name="scheduled_at" type="datetime-local" defaultValue={localDateDefault()} required /></label>
                     </div>
-                    <label>Approved MP4 path<input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} required /></label>
-                    <label>Optional cover path<input name="cover_path" /></label>
-                    <label>Caption<textarea name="caption" rows={5} required /></label>
+                    <label>{t("campaigns.approvedPath")}<input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} required /></label>
+                    <label>{t("campaigns.coverPath")}<input name="cover_path" /></label>
+                    <label>{t("publish.caption")}<textarea name="caption" rows={5} required /></label>
                     <div className="plan-form-grid">
-                      <label>Hashtags<input name="hashtags" placeholder="travel, espresso" /></label>
-                      <label>Affiliate URL<input name="affiliate_url" type="url" defaultValue={selectedCampaign.affiliate_url ?? ""} /></label>
-                      <label>Disclosure<input name="disclosure" defaultValue="#ad" required /></label>
+                      <label>{t("library.hashtags")}<input name="hashtags" placeholder="travel, espresso" /></label>
+                      <label>{t("campaigns.affiliateUrl")}<input name="affiliate_url" type="url" defaultValue={selectedCampaign.affiliate_url ?? ""} /></label>
+                      <label>{t("publish.disclosure")}<input name="disclosure" defaultValue="#ad" required /></label>
                     </div>
                     <small>Times use {timezone}. New plans require owner or approver review.</small>
-                    <Button type="submit" variant="primary" busy={busy === "plan"}>Send for approval</Button>
+                    <Button type="submit" variant="primary" busy={busy === "plan"}>{t("publish.sendForApproval")}</Button>
                   </form>
                 </details>
               )}
 
               <section className="calendar-board">
                 <div className="card-heading">
-                  <div><p className="section-kicker">CONTENT CALENDAR</p><h2>{visiblePlans.length} planned posts</h2></div>
+                  <div><p className="section-kicker">{t("campaigns.calendar")}</p><h2>{visiblePlans.length} planned posts</h2></div>
                 </div>
-                {!visiblePlans.length && <div className="quiet-empty"><strong>No publication plans</strong><span>Add approved media and a posting time.</span></div>}
+                {!visiblePlans.length && <div className="quiet-empty"><strong>{t("campaigns.noPlans")}</strong><span>{t("campaigns.addApprovedMedia")}</span></div>}
                 {visiblePlans.map((plan) => {
                   const manualPackage = packages[plan.id];
                   return (
@@ -460,15 +462,15 @@ export default function CampaignsPage() {
                         <div className="calendar-actions">
                           {plan.state === "needs_approval" && canApprove && (
                             <>
-                              <Button variant="primary" size="sm" busy={busy === plan.id} onClick={() => void decide(plan, "approve")}>Approve</Button>
-                              <Button variant="danger" size="sm" busy={busy === plan.id} onClick={() => void decide(plan, "reject")}>Reject</Button>
+                              <Button variant="primary" size="sm" busy={busy === plan.id} onClick={() => void decide(plan, "approve")}>{t("campaigns.approve")}</Button>
+                              <Button variant="danger" size="sm" busy={busy === plan.id} onClick={() => void decide(plan, "reject")}>{t("campaigns.reject")}</Button>
                             </>
                           )}
                           {plan.state === "approved" && (
                             <>
-                              <Button variant="quiet" size="sm" onClick={() => void copyPostingText(plan)}>Copy post</Button>
-                              <Button variant="quiet" size="sm" busy={busy === `package-${plan.id}`} onClick={() => void exportPackage(plan)}>Export package</Button>
-                              <Link href={`/publish?video=${encodeURIComponent(plan.video_path)}`}>Publish</Link>
+                              <Button variant="quiet" size="sm" onClick={() => void copyPostingText(plan)}>{t("campaigns.copyPost")}</Button>
+                              <Button variant="quiet" size="sm" busy={busy === `package-${plan.id}`} onClick={() => void exportPackage(plan)}>{t("campaigns.exportPackage")}</Button>
+                              <Link href={`/publish?video=${encodeURIComponent(plan.video_path)}`}>{t("nav.publish")}</Link>
                               {plan.deep_link && <a href={plan.deep_link} target="_blank" rel="noreferrer">Open {plan.platform}</a>}
                             </>
                           )}
@@ -476,7 +478,7 @@ export default function CampaignsPage() {
                         {manualPackage && (
                           <div className="package-result">
                             <div><strong>{manualPackage.path}</strong><small>{size(manualPackage.bytes)} · SHA-256 {manualPackage.sha256.slice(0, 12)}</small></div>
-                            <Button variant="quiet" size="sm" onClick={() => void openFolder(manualPackage.folder)}>Open folder</Button>
+                            <Button variant="quiet" size="sm" onClick={() => void openFolder(manualPackage.folder)}>{t("downloads.openFolder")}</Button>
                           </div>
                         )}
                       </div>
@@ -487,8 +489,8 @@ export default function CampaignsPage() {
             </>
           ) : (
             <section className="empty-console">
-              <h2>Create a campaign to start the calendar.</h2>
-              <p>A campaign connects the objective, audience, affiliate destination, approved media, and publication plan.</p>
+              <h2>{t("campaigns.createToStart")}</h2>
+              <p>{t("campaigns.whatItConnects")}</p>
             </section>
           )}
         </div>
