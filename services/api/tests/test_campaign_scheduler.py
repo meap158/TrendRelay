@@ -149,13 +149,13 @@ def test_an_inactive_campaign_posts_nothing_and_says_why(session) -> None:
     campaign = session.get(Campaign, "camp")
     campaign.status = "draft"
     session.commit()
-    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_url=None)
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert posts == []
     assert "not active" in note
 
 
 def test_no_destinations_is_explained_rather_than_silent(session) -> None:
-    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_url=None)
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert posts == []
     assert "No destinations chosen" in note
 
@@ -163,7 +163,7 @@ def test_no_destinations_is_explained_rather_than_silent(session) -> None:
 def test_no_slots_means_no_invented_schedule(session) -> None:
     """A guessed posting time looks considered while being arbitrary."""
     destination(session, "d1", "youtube")
-    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_url=None)
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert posts == []
     assert "does not invent a schedule" in note
 
@@ -172,7 +172,7 @@ def test_a_draft_item_is_never_posted(session) -> None:
     destination(session, "d1", "youtube")
     slot(session, 18)
     queue_item(session, "q1", state="draft")
-    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_url=None)
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert posts == []
     assert "Nothing approved" in note
 
@@ -185,7 +185,7 @@ def test_an_offer_with_no_disclosure_stops_the_campaign(session) -> None:
     queue_item(session, "q1")
     posts, note = plan_campaign(
         session, autopilot(session, disclosure="  "), now=NOW,
-        link_url="https://tr.example/c/abc",
+        link_for=lambda _id: "https://tr.example/c/abc",
     )
     assert posts == []
     assert "disclosure" in note
@@ -199,7 +199,7 @@ def test_it_schedules_one_post_per_due_slot(session) -> None:
     slot(session, 12)
     slot(session, 18)
     queue_item(session, "q1")
-    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_url=None)
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert len(posts) == 2
     assert [post.at.hour for post in posts] == [12, 18]
     assert "2 post(s) scheduled" in note
@@ -214,7 +214,7 @@ def test_the_link_lands_in_the_caption_on_youtube_and_in_the_bio_on_tiktok(sessi
     queue_item(session, "q1")
     queue_item(session, "q2")
     posts, _ = plan_campaign(
-        session, autopilot(session), now=NOW, link_url="https://tr.example/c/abc"
+        session, autopilot(session), now=NOW, link_for=lambda _id: "https://tr.example/c/abc"
     )
     placements = {post.destination_id: post for post in posts}
     if "d-tube" in placements:
@@ -231,7 +231,7 @@ def test_every_scheduled_post_leads_with_the_disclosure(session) -> None:
     slot(session, 12)
     queue_item(session, "q1")
     posts, _ = plan_campaign(
-        session, autopilot(session), now=NOW, link_url="https://tr.example/c/abc"
+        session, autopilot(session), now=NOW, link_for=lambda _id: "https://tr.example/c/abc"
     )
     assert posts[0].caption.startswith("Affiliate link; we may earn a commission.")
 
@@ -244,7 +244,7 @@ def test_an_item_posted_recently_to_this_account_is_held_back(session) -> None:
         session, "q1",
         last_posted_by_destination={"d1": (NOW - timedelta(days=3)).isoformat()},
     )
-    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_url=None)
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert posts == []
     assert "rested 30 days" in note
 
@@ -260,7 +260,7 @@ def test_rest_is_per_destination_not_per_item(session) -> None:
         last_posted_by_destination={"d1": (NOW - timedelta(days=3)).isoformat()},
     )
     # d2 has never seen it, so with d2 chosen the item is eligible.
-    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_url=None)
+    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert all(post.destination_id != "d1" for post in posts) or posts == []
 
 
@@ -268,7 +268,7 @@ def test_the_reason_records_why_that_destination_was_chosen(session) -> None:
     destination(session, "d1", "youtube")
     slot(session, 12)
     queue_item(session, "q1")
-    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_url=None)
+    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert "Unranked" in posts[0].reason
     assert "settled conversion" in posts[0].reason
 
@@ -299,7 +299,7 @@ def test_a_destination_with_evidence_is_ranked_and_says_so(session) -> None:
     destination(session, "d1", "youtube", tracking_link_id="link-1")
     slot(session, 12)
     queue_item(session, "q1")
-    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_url=None)
+    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert "Ranked" in posts[0].reason
     assert "6 settled conversions over 20 clicks" in posts[0].reason
 
@@ -314,7 +314,7 @@ def test_a_posted_item_goes_to_the_back_rather_than_being_consumed(session) -> N
     queue_item(session, "q1")
     queue_item(session, "q2", position=1)
     pilot = autopilot(session)
-    posts, note = plan_campaign(session, pilot, now=NOW, link_url=None)
+    posts, note = plan_campaign(session, pilot, now=NOW, link_for=None)
     record_scheduled(session, pilot, posts, note=note, now=NOW)
     session.commit()
 

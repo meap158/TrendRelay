@@ -15,6 +15,7 @@ approved or it is skipped; the slots are the workspace's own.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -52,6 +53,10 @@ class ScheduledPost:
     destination_id: str
     queue_item_id: str
     at: datetime
+    #: Carried on the post rather than looked up again later, so what was
+    #: composed and what is published cannot drift apart between the two.
+    video_path: str
+    title: str | None
     caption: str
     first_comment: str | None
     placement: str
@@ -187,7 +192,7 @@ def plan_campaign(
     autopilot: CampaignAutopilot,
     *,
     now: datetime,
-    link_url: str | None,
+    link_for: Callable[[str], str | None] | None = None,
 ) -> tuple[list[ScheduledPost], str]:
     """Work out what one campaign should post next, and why.
 
@@ -195,6 +200,11 @@ def plan_campaign(
     empty: "nothing scheduled" is not an explanation, and an operator staring at
     a silent autopilot needs to know whether it is waiting for a slot, an
     approval, or a rest interval to expire.
+
+    `link_for` is asked per destination rather than given once, because each
+    destination has its own tracking code - that separation is what makes them
+    comparable afterwards - and because the caption around the link differs by
+    network anyway.
     """
     campaign = session.get(Campaign, autopilot.campaign_id)
     if not campaign or campaign.status != "active":
@@ -259,7 +269,7 @@ def plan_campaign(
                 platform=destination.platform,
                 body=item.body,
                 hashtags=list(item.hashtags or []),
-                link=link_url,
+                link=link_for(destination.id) if link_for else None,
                 disclosure=autopilot.disclosure,
                 bio_hint=autopilot.bio_hint,
             )
@@ -270,6 +280,8 @@ def plan_campaign(
             destination_id=destination.id,
             queue_item_id=item.id,
             at=moment,
+            video_path=item.video_path,
+            title=item.title,
             caption=post.caption,
             first_comment=post.first_comment,
             placement=post.placement.placement,

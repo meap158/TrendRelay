@@ -19,7 +19,28 @@ from trendrelay_api.integrations.last30days import run_job  # noqa: E402
 from trendrelay_api.integrations.openmontage_runtime import run_render_job  # noqa: E402
 from trendrelay_api.integrations.publishing import run_publish_job  # noqa: E402
 from trendrelay_api.media_library import run_ingest_job  # noqa: E402
+from trendrelay_api.campaign_runner import tick as campaign_tick  # noqa: E402
+from trendrelay_api.database import SessionFactory  # noqa: E402
 from trendrelay_api.jobs import recoverable_job_ids  # noqa: E402
+
+
+#: Campaign autopilot is time-driven rather than queue-driven, so it is asked
+#: on a clock instead of waiting for a job to appear. Once a minute is far more
+#: often than any posting slot needs and cheap when there is nothing to do.
+AUTOPILOT_EVERY_SECONDS = 60
+_last_autopilot = 0.0
+
+
+def tick_autopilot(now: float) -> None:
+    """Ask every switched-on campaign whether a slot is due."""
+    global _last_autopilot
+    if now - _last_autopilot < AUTOPILOT_EVERY_SECONDS:
+        return
+    _last_autopilot = now
+    try:
+        campaign_tick(SessionFactory)
+    except Exception as error:  # pragma: no cover - the loop must not die here
+        print(f"Campaign autopilot tick failed: {error}", flush=True)
 
 
 def process_available() -> int:
@@ -54,11 +75,12 @@ def process_available() -> int:
 def worker_main() -> None:
     print(
         "Durable worker ready: douyin_download, trend_research, social_publish, "
-        "openmontage_render, media_ingest, media_face_blur",
+        "openmontage_render, media_ingest, media_face_blur, campaign_autopilot",
         flush=True,
     )
     try:
         while True:
+            tick_autopilot(time.monotonic())
             if process_available() == 0:
                 time.sleep(1)
     except KeyboardInterrupt:
