@@ -22,6 +22,11 @@ from trendrelay_api.integrations.douyin import (
     resume_download_job,
     start_connection,
 )
+from trendrelay_api.integrations.douyin_topic import (
+    TopicDownloadRequest,
+    TopicUnavailable,
+    download_topic,
+)
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/media", tags=["media"])
 AuthenticatedUser = Annotated[CurrentUser, Depends(current_user)]
@@ -80,6 +85,75 @@ def douyin_trending_board(
         return fetch(limit=limit)
     except TrendingUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@router.get("/douyin/topic")
+def douyin_topic_search(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    term: Annotated[str, Query(min_length=1, max_length=120)],
+    limit: Annotated[int, Query(ge=1, le=30)] = 10,
+) -> dict[str, Any]:
+    """The videos posted under a term, so a trending topic becomes downloadable.
+
+    A look, not an acquisition: nothing is fetched and nothing is queued. It
+    exists so an operator can see what a topic actually contains before
+    committing disk to it.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.douyin_topic import TopicUnavailable, search
+
+    try:
+        return search(term, limit=limit)
+    except TopicUnavailable as error:
+        raise HTTPException(
+            status_code=503,
+            # Carried through as a shape rather than a sentence, because
+            # "sign in" is an action the panel can offer and a 503 body is not.
+            detail={"message": str(error), "login_required": error.login_required},
+        ) from error
+
+
+@router.post("/douyin/topic/downloads", status_code=202)
+def download_douyin_topic(
+    workspace_id: str,
+    body: TopicDownloadRequest,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Search a term and queue its top videos as one ordinary download job."""
+    if body.workspace_id != workspace_id:
+        raise HTTPException(status_code=422, detail="Workspace path and body must match.")
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    require_governed_assurance(user)
+    try:
+        result = download_topic(body, actor_user_id=user.id)
+    except PermissionError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except TopicUnavailable as error:
+        raise HTTPException(
+            status_code=503,
+            detail={"message": str(error), "login_required": error.login_required},
+        ) from error
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media.topic_download_submitted",
+        "download",
+        result["job"]["id"],
+        {
+            "provider": "douyin-downloader",
+            "term": result["term"],
+            "source_count": len(result["queued"]),
+        },
+    )
+    return result
 
 
 @router.post("/douyin/connection", status_code=202)

@@ -287,3 +287,130 @@ def test_download_library_sync_requires_confirmation(monkeypatch) -> None:
 
     assert response.status_code == 400
     assert called is False
+
+
+# --- topic downloads ------------------------------------------------------------
+
+
+def workspace_for_topics() -> dict:
+    return asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Media", "slug": "media"})
+    ).json()["workspace"]
+
+
+def test_a_trending_term_can_be_queued_as_a_download(monkeypatch) -> None:
+    workspace = workspace_for_topics()
+    monkeypatch.setattr(
+        media_api,
+        "download_topic",
+        lambda _body, **_kwargs: {
+            "job": {"id": "download_abc", "status": "queued"},
+            "term": "camping",
+            "queued": [{"video_url": "https://www.douyin.com/video/1"}],
+        },
+    )
+
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/media/douyin/topic/downloads",
+            json={
+                "workspace_id": workspace["id"],
+                "term": "camping",
+                "limit": 3,
+                "confirm_external_action": True,
+            },
+        )
+    )
+
+    assert response.status_code == 202
+    assert response.json()["job"]["status"] == "queued"
+
+
+def test_a_topic_download_needs_confirmation() -> None:
+    workspace = workspace_for_topics()
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/media/douyin/topic/downloads",
+            json={"workspace_id": workspace["id"], "term": "camping"},
+        )
+    )
+    assert response.status_code == 400
+
+
+def test_needing_a_sign_in_reaches_the_panel_as_something_actionable(monkeypatch) -> None:
+    # A 503 with a sentence gives the operator nothing to click. The flag is
+    # what lets the panel offer the sign-in instead.
+    workspace = workspace_for_topics()
+
+    def refuse(_body, **_kwargs):
+        raise media_api.TopicUnavailable("Sign in to search.", login_required=True)
+
+    monkeypatch.setattr(media_api, "download_topic", refuse)
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/media/douyin/topic/downloads",
+            json={
+                "workspace_id": workspace["id"],
+                "term": "camping",
+                "confirm_external_action": True,
+            },
+        )
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["login_required"] is True
+
+
+def test_an_analyst_cannot_queue_a_topic_download() -> None:
+    workspace = workspace_for_topics()
+    asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/members",
+            json={"user_id": "analyst-user", "role": "analyst"},
+        )
+    )
+    app.dependency_overrides[current_user] = lambda: CurrentUser(id="analyst-user")
+
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/media/douyin/topic/downloads",
+            json={
+                "workspace_id": workspace["id"],
+                "term": "camping",
+                "confirm_external_action": True,
+            },
+        )
+    )
+    assert response.status_code == 403
+
+
+def test_searching_a_topic_is_a_look_any_member_can_take(monkeypatch) -> None:
+    # It fetches nothing and queues nothing, so it is gated like reading the
+    # board rather than like a download.
+    workspace = workspace_for_topics()
+    asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace['id']}/members",
+            json={"user_id": "analyst-user", "role": "analyst"},
+        )
+    )
+    app.dependency_overrides[current_user] = lambda: CurrentUser(id="analyst-user")
+    monkeypatch.setattr(
+        "trendrelay_api.integrations.douyin_topic.search",
+        lambda term, limit=10: {"term": term, "count": 0, "items": []},
+    )
+
+    response = asyncio.run(
+        request(
+            "GET",
+            f"/api/workspaces/{workspace['id']}/media/douyin/topic?term=camping",
+        )
+    )
+    assert response.status_code == 200
+    assert response.json()["term"] == "camping"
