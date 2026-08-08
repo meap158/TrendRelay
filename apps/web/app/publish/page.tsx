@@ -21,6 +21,7 @@ import {
   type AssetFacets,
   type AssetFilterValues,
 } from "../ui/asset-filters";
+import { ActionIcon } from "../ui/action-icons";
 import { Button, buttonClass } from "../ui/button";
 import { Badge } from "../ui/primitives";
 import {
@@ -1039,7 +1040,7 @@ export default function PublishPage() {
                 <label className="ui-field-label">Public media URL
                   <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" required={!videoPath} />
                 </label>
-                <Button variant="quiet" onClick={openPicker}>Choose from library</Button>
+                <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />Choose from library</Button>
               </div>
               {clip && (
                 <span className="chosen-clip">
@@ -1073,7 +1074,7 @@ export default function PublishPage() {
                   <label>Approved local MP4 path
                     <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" />
                   </label>
-                  <Button variant="quiet" onClick={openPicker}>Choose from library</Button>
+                  <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />Choose from library</Button>
                 </div>
                 {clip && (
                   <span className="chosen-clip">
@@ -1104,7 +1105,7 @@ export default function PublishPage() {
                   <label>Approved local MP4 path
                     <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" required />
                   </label>
-                  <Button variant="quiet" onClick={openPicker}>Choose from library</Button>
+                  <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />Choose from library</Button>
                 </div>
                 {clip && (
                   <span className="chosen-clip">
@@ -1367,7 +1368,7 @@ export default function PublishPage() {
                   disabled={!canExecute}
                   busy={busy === "accounts"}
                   onClick={() => void refreshAccounts()}
-                >{busy === "accounts" ? "Loading" : "Load connected accounts"}</Button>
+                ><ActionIcon name="refresh" />{busy === "accounts" ? "Loading" : "Load connected accounts"}</Button>
               </div>
             ) : (
               <>
@@ -1482,7 +1483,7 @@ export default function PublishPage() {
           )}
           <div className="publish-actions">
             <Button type="submit" variant="secondary" busy={busy === "preview"} disabled={busy !== null}>
-              {busy === "preview" ? "Checking" : "Dry-run"}
+              <ActionIcon name="confirm" />{busy === "preview" ? "Checking" : "Dry-run"}
             </Button>
             <Button
               variant={delivery === "now" ? "danger" : "primary"}
@@ -1496,7 +1497,12 @@ export default function PublishPage() {
                   `${{ now: "Publish immediately", schedule: "Schedule", draft: "Create a draft" }[delivery]} on ${activeProvider?.label} for ${where}?`,
                 )) void submit(form, true);
               }}
-            >{busy === "publish" ? "Submitting" : delivery === "now" ? "Publish now" : delivery === "schedule" ? "Confirm and schedule" : "Confirm and draft"}</Button>
+            >
+              {/* The icon follows the mode, since these are three different
+                  commitments wearing one button. */}
+              <ActionIcon name={delivery === "now" ? "publish" : delivery === "schedule" ? "campaign" : "edit"} />
+              {busy === "publish" ? "Submitting" : delivery === "now" ? "Publish now" : delivery === "schedule" ? "Confirm and schedule" : "Confirm and draft"}
+            </Button>
           </div>
         </form>
 
