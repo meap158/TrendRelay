@@ -300,6 +300,31 @@
       "block_reason": "Installed as a Python extra rather than a source checkout: pip install -e services/api[faces] --no-deps. Cloning the repository would fetch code nothing loads; the runtime comes from the published wheel and the models download on first use.",
       "root_path": ".tools/catalog/insightface",
       "source_path": ".tools/catalog/insightface/source"
+    },
+    {
+      "id": "face-anon-simple",
+      "name": "Face Anonymization Made Simple",
+      "repository": "https://github.com/hanweikung/face_anon_simple",
+      "revision": "c36f276352873827e9d559ee8d130b7563491171",
+      "version": "revision-pinned",
+      "license": "AGPL-3.0",
+      "license_url": "https://github.com/hanweikung/face_anon_simple/blob/main/LICENSE",
+      "category": "Media editing",
+      "summary": "Replaces a face with a generated one that keeps the original expression, pose and gaze. Not a swap: the new face is nobody's.",
+      "capabilities": [
+        "Face anonymisation",
+        "Expression-preserving generation"
+      ],
+      "integration_status": "adapted-behind-licence-gate",
+      "commercial_use": "conditional",
+      "install_strategy": "source-checkout",
+      "install_allowed": true,
+      "activation_allowed": true,
+      "default_active": false,
+      "root_path": ".tools/catalog/face-anon-simple",
+      "source_path": ".tools/catalog/face-anon-simple/source",
+      "documentation": "docs/third-party/face-anon-simple.md",
+      "notes": "AGPL-3.0, so it runs as a separate program in its own virtualenv and TrendRelay never imports it - using a program rather than linking a library. Stills only: the model generates each face independently, so video would flicker between invented faces, and video is refused rather than mangled. Weights come from hkung/face-anon-simple, stable-diffusion-2-1 and CLIP."
     }
   ]
 }

@@ -1,0 +1,25 @@
+diff --git a/src/diffusers/utils/dynamic_modules_utils.py b/src/diffusers/utils/dynamic_modules_utils.py
+index f13dd47..15e300b 100644
+--- a/src/diffusers/utils/dynamic_modules_utils.py
++++ b/src/diffusers/utils/dynamic_modules_utils.py
+@@ -25,7 +25,19 @@ from pathlib import Path
+ from typing import Dict, Optional, Union
+ from urllib import request
+ 
+-from huggingface_hub import cached_download, hf_hub_download, model_info
++from huggingface_hub import hf_hub_download, model_info
++
++try:  # huggingface_hub < 0.26, which this fork was written against
++    from huggingface_hub import cached_download
++except ImportError:  # huggingface_hub >= 0.26 removed it
++
++    def cached_download(*args, **kwargs):
++        raise RuntimeError(
++            "huggingface_hub.cached_download was removed in 0.26. It is only "
++            "used to fetch a remote custom pipeline, which this integration "
++            "never does; use hf_hub_download if you need it."
++        )
++
+ from huggingface_hub.utils import validate_hf_hub_args
+ from packaging import version
+ 
