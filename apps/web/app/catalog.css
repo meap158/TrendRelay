@@ -73,14 +73,14 @@
    page scroll sideways. */
 .catalog-table-scroll { margin-top: 12px; overflow-x: auto; }
 .catalog-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.catalog-table th, .catalog-table td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.catalog-table th, .catalog-table td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: start; vertical-align: top; }
 .catalog-table thead th { border-bottom: 1px solid var(--line-strong); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
 /* Figures line up on the right and share one glyph width, so a column of
    amounts can be compared by eye instead of read one row at a time. */
-.catalog-table .numeric { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.catalog-no-data { color: var(--muted); font-style: italic; text-align: left; }
+.catalog-table .numeric { text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.catalog-no-data { color: var(--muted); font-style: italic; text-align: start; }
 
-.catalog-work-toggle { display: grid; gap: 2px; border: 0; padding: 0; color: inherit; background: none; font: inherit; text-align: left; cursor: pointer; }
+.catalog-work-toggle { display: grid; gap: 2px; border: 0; padding: 0; color: inherit; background: none; font: inherit; text-align: start; cursor: pointer; }
 .catalog-work-toggle span { font-weight: 600; }
 .catalog-work-toggle small { color: var(--muted); font-weight: 400; }
 .catalog-work-toggle:hover span { color: var(--link); }

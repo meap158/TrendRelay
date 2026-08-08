@@ -48,7 +48,7 @@
 .conversion-list > div { display: grid; grid-template-columns: minmax(0, 1fr) 90px 100px 90px; gap: 12px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--line); }
 .conversion-list span { display: grid; gap: 3px; }
 .conversion-list small { color: var(--muted); }
-.attribution-limits ul { margin: 10px 0 0; padding-left: 18px; color: var(--muted); line-height: 1.5; }
+.attribution-limits ul { margin: 10px 0 0; padding-inline-start: 18px; color: var(--muted); line-height: 1.5; }
 @media (max-width: 1000px) {
   .attribution-layout { grid-template-columns: 1fr; }
   .attribution-side { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
