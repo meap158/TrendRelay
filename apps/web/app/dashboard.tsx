@@ -501,7 +501,14 @@ export default function Dashboard() {
   if (loading) return <main className="console-page"><div className="loading-panel">
     <strong>Loading workspace…</strong>
     <span>Waiting on TrendRelay&apos;s local API. If it is restarting this can hang.</span>
-    <Button variant="secondary" size="sm" onClick={retryAuth}>Try again</Button>
+    <div className="loading-panel-actions">
+      <Button variant="secondary" size="sm" onClick={retryAuth}>Try again</Button>
+      {/* A plain anchor on purpose. next/link navigates on the client, which
+          needs the React that may be the thing that died; a real navigation
+          does not. */}
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+      <a className={buttonClass({ variant: "quiet", size: "sm" })} href="/">Reload</a>
+    </div>
   </div></main>;
   if (!user) return <main className="console-page"><section className="empty-console"><strong>TrendRelay</strong><h1>Sign in to manage media.</h1><p>Fetch source videos, prepare clips, and send approved posts from one workspace.</p><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2F">Sign in</Link></section></main>;
 
