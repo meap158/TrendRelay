@@ -128,3 +128,36 @@ def test_the_default_replaces_the_subject_rather_than_the_crowd(slot) -> None:
     from trendrelay_api.integrations.face_identity import IdentitySettings
 
     assert SwapSettings().match_threshold == IdentitySettings().match_threshold
+
+
+# --- download mirrors, which are a different question ------------------------
+
+
+def test_a_download_mirror_is_not_a_licence(tmp_path, monkeypatch) -> None:
+    """Changing where a file comes from changes nothing about permission.
+
+    hf-mirror.com and ModelScope serve the same weights from the same
+    publishers, which makes them a delivery choice. A withdrawn or
+    non-commercially licensed model stays withdrawn or non-commercial whichever
+    host answers, and the gates are what say so - not the endpoint.
+    """
+    from trendrelay_api.integrations import face_anon
+
+    monkeypatch.setattr(face_anon, "ENDPOINT_FILE", tmp_path / "endpoint")
+    monkeypatch.setenv("HF_ENDPOINT", "https://hf-mirror.com")
+    assert face_anon.hf_endpoint() == "https://hf-mirror.com"
+
+    monkeypatch.setattr(face_swap, "MODEL_DIR", tmp_path)
+    monkeypatch.setattr(face_swap, "LICENCE_FILE", tmp_path / "licence.json")
+    # A mirror is configured and the swap gate is unmoved by it.
+    assert runtime_status()["available"] is False
+
+
+def test_a_mirror_must_be_https(tmp_path, monkeypatch) -> None:
+    # Weights fetched over plain HTTP can be altered in transit, and a tampered
+    # model fails silently rather than loudly.
+    from trendrelay_api.integrations import face_anon
+
+    monkeypatch.setattr(face_anon, "ENDPOINT_FILE", tmp_path / "endpoint")
+    with pytest.raises(ValueError, match="https"):
+        face_anon.save_hf_endpoint("http://mirror.example")

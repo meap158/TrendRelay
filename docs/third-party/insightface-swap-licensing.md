@@ -19,6 +19,30 @@ The withdrawn model is also the weakest thing on offer. InsightFace now sells
 retention, cleaner hair and boundary blending, and steadier results across a
 clip rather than a still. The mirror route ends at the 2023 baseline.
 
+## Download mirrors are a different question
+
+Two things get called "a mirror" and only one of them is a licensing problem.
+
+A **delivery mirror** — `hf-mirror.com`, ModelScope — serves the same files from
+the same publishers, and exists because Hugging Face is slow or unreachable from
+much of the world. It changes where a download comes from and nothing about
+whether you may use what arrives. Set `HF_ENDPOINT`, or record one locally:
+
+```python
+from trendrelay_api.integrations import face_anon
+face_anon.save_hf_endpoint("https://hf-mirror.com")
+```
+
+It must be https — weights fetched over plain HTTP can be altered in transit,
+and a tampered model fails silently rather than loudly. The setting lives in
+`.data/face-anon/hf-endpoint`, git-ignored like the token.
+
+A **re-upload** of a withdrawn model is not that. The file is the same bytes,
+but the publisher took it down and the licence never permitted commercial use;
+serving it from somewhere else changes neither. The gates in `face_swap.py`
+answer that question and the endpoint setting does not touch them — there is a
+test asserting exactly that, because the distinction is easy to lose.
+
 ## Who to contact
 
 - **Email:** contact@insightface.ai

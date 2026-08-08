@@ -143,6 +143,7 @@ def runtime_status() -> dict[str, Any]:
         "licence": "AGPL-3.0",
         "licence_summary": LICENCE_SUMMARY,
         "revision": REVISION,
+        "endpoint": hf_endpoint(),
         "isolation": "subprocess",
         "media": "images only",
     }
@@ -192,12 +193,49 @@ def save_hf_token(token: str) -> Path:
     return TOKEN_FILE
 
 
+#: A Hugging Face mirror endpoint, when the default is slow or unreachable.
+#:
+#: This is a delivery mirror, not a re-upload: hf-mirror.com and ModelScope
+#: serve the same files from the same publishers, so it changes where a model
+#: is fetched from and nothing about whether you may use it. A model that is
+#: withdrawn or licensed non-commercially stays withdrawn or non-commercial
+#: whichever host answers - that question is settled by the licence gates, not
+#: here.
+DEFAULT_HF_ENDPOINT = "https://huggingface.co"
+ENDPOINT_FILE = PROJECT_ROOT / ".data" / "face-anon" / "hf-endpoint"
+
+
+def hf_endpoint() -> str:
+    """Where model files are fetched from. Environment first, then local file."""
+    from_env = os.environ.get("HF_ENDPOINT", "").strip()
+    if from_env:
+        return from_env.rstrip("/")
+    try:
+        stored = ENDPOINT_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        return DEFAULT_HF_ENDPOINT
+    return (stored or DEFAULT_HF_ENDPOINT).rstrip("/")
+
+
+def save_hf_endpoint(endpoint: str) -> Path:
+    """Record a mirror to use on this machine. Git-ignored, like the token."""
+    cleaned = endpoint.strip().rstrip("/")
+    if cleaned and not cleaned.startswith("https://"):
+        # Weights fetched over plain HTTP can be altered in transit, and a
+        # tampered model is a silent failure rather than a loud one.
+        raise ValueError("A model mirror must be https.")
+    ENDPOINT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    ENDPOINT_FILE.write_text((cleaned or DEFAULT_HF_ENDPOINT) + "\n", encoding="utf-8")
+    return ENDPOINT_FILE
+
+
 def _environment() -> dict[str, str]:
     token = hf_token()
     return {
         **os.environ,
         **({"HF_TOKEN": token} if token else {}),
         "HF_HOME": str(HF_CACHE),
+        "HF_ENDPOINT": hf_endpoint(),
         "HF_HUB_DISABLE_TELEMETRY": "1",
         # Windows without Developer Mode cannot make the symlinks the cache
         # prefers; it falls back to copies and says so loudly on every run.
