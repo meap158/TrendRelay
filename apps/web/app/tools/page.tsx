@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { useLocale } from "../i18n-provider";
 import { buttonClass } from "../ui/button";
 
 type Tool = {
@@ -66,6 +67,7 @@ async function responseJson<T>(response: Response): Promise<T> {
 }
 
 export default function ToolsPage() {
+  const { t, rich } = useLocale();
   const { loading, user, apiFetch } = useAuth();
   const [tools, setTools] = useState<Tool[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -205,15 +207,15 @@ export default function ToolsPage() {
     }
   }
 
-  if (loading) return <main className="tools-page"><p>Loading local tool registry…</p></main>;
-  if (!user) return <main className="tools-page"><h1>Sign in to manage tools.</h1><Link href="/sign-in?next=%2Ftools">Sign in</Link></main>;
+  if (loading) return <main className="tools-page"><p>{t("tools.loading")}</p></main>;
+  if (!user) return <main className="tools-page"><h1>{t("tools.signInPrompt")}</h1><Link href="/sign-in?next=%2Ftools">{t("nav.signIn")}</Link></main>;
 
   return (
     <main className="tools-page">
       <header className="page-sticky-shell tools-sticky-header">
         <div className="tools-sticky-copy">
-          <p className="eyebrow">LOCAL TOOLBOX</p>
-          <h1>Install, configure, then use.</h1>
+          <p className="eyebrow">{t("tools.eyebrow")}</p>
+          <h1>{t("tools.intro")}</h1>
           <p className="lede">
             Each provider keeps its own setup path: browser connection, OAuth, optional API keys, diagnostics, or no extra setup at all.
             Credential values stay outside this catalog and are never returned to the interface.
@@ -228,68 +230,68 @@ export default function ToolsPage() {
       <section className="access-guides" aria-labelledby="access-guides-title">
         <div className="access-guides-heading">
           <div>
-            <p className="eyebrow">PLATFORM ACCESS</p>
-            <h2 id="access-guides-title">Get the right credentials.</h2>
+            <p className="eyebrow">{t("tools.accessEyebrow")}</p>
+            <h2 id="access-guides-title">{t("tools.accessHeading")}</h2>
           </div>
-          <p>Short, current setup paths for the two accounts most likely to block research and affiliate work.</p>
+          <p>{t("tools.accessIntro")}</p>
         </div>
         <div className="access-guide-grid">
           <details className="access-guide" id="meta-access-guide">
             <summary>
-              <span><strong>Meta Ads</strong><small>First-party campaign reporting</small></span>
-              <b>OAuth in app</b>
+              <span><strong>{t("tools.meta.name")}</strong><small>{t("tools.meta.subtitle")}</small></span>
+              <b>{t("tools.meta.method")}</b>
             </summary>
             <div className="access-guide-body">
               <div className="access-guide-callout">
-                <strong>Fastest path in TrendRelay</strong>
+                <strong>{t("tools.meta.fastest")}</strong>
                 <p>Open <b>Meta Ads Kit → Setup → Launch Meta login</b>. Approve read access in the local Social Flow window; TrendRelay does not ask you to paste the resulting token.</p>
               </div>
               <div className="access-guide-steps">
-                <p><i>1</i><span>Create or select a <b>Business</b> app in Meta for Developers and add the Marketing API product.</span></p>
-                <p><i>2</i><span>Give the app access to the correct Business and ad account. Read-only reporting needs <code>ads_read</code>; account discovery may also require <code>business_management</code>.</span></p>
+                <p><i>1</i><span>{rich("tools.meta.step1", { business: <b>Business</b> })}</span></p>
+                <p><i>2</i><span>{rich("tools.meta.step2", { adsRead: <code>ads_read</code>, businessManagement: <code>business_management</code> })}</span></p>
                 <p><i>3</i><span>Use TrendRelay&apos;s login launcher for normal use. For a short diagnostic token, use Graph API Explorer; for unattended server automation, create a System User in Business Settings.</span></p>
-                <p><i>4</i><span>Copy the ad account ID from Ads Manager (<code>act_…</code>). Optionally save only that non-secret ID as <code>META_AD_ACCOUNT=act_…</code> in the local <code>.env</code>.</span></p>
+                <p><i>4</i><span>{rich("tools.meta.step4", { actPrefix: <code>act_…</code>, envLine: <code>META_AD_ACCOUNT=act_…</code>, file: <code>.env</code> })}</span></p>
               </div>
               <div className="access-guide-links">
-                <a href="https://developers.facebook.com/apps/" target="_blank" rel="noreferrer">Meta developer apps</a>
-                <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer">Graph API Explorer</a>
-                <a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noreferrer">Business system users</a>
-                <a href="https://developers.facebook.com/docs/marketing-api/overview/authorization/" target="_blank" rel="noreferrer">Official authorization guide</a>
+                <a href="https://developers.facebook.com/apps/" target="_blank" rel="noreferrer">{t("tools.meta.linkApps")}</a>
+                <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer">{t("tools.meta.linkExplorer")}</a>
+                <a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noreferrer">{t("tools.meta.linkSystemUsers")}</a>
+                <a href="https://developers.facebook.com/docs/marketing-api/overview/authorization/" target="_blank" rel="noreferrer">{t("tools.meta.linkGuide")}</a>
               </div>
-              <p className="access-guide-note">Public competitor research through Meta Ads Collector needs no Meta account or token. Never put a Meta access token in source control or a browser-facing field.</p>
+              <p className="access-guide-note">{t("tools.meta.warning")}</p>
             </div>
           </details>
 
           <details className="access-guide" id="amazon-access-guide">
             <summary>
-              <span><strong>Amazon Creators API</strong><small>Catalog and affiliate product access</small></span>
-              <b>Guide only</b>
+              <span><strong>{t("tools.amazon.name")}</strong><small>{t("tools.amazon.subtitle")}</small></span>
+              <b>{t("tools.amazon.method")}</b>
             </summary>
             <div className="access-guide-body">
               <div className="access-guide-callout warning">
-                <strong>What works in TrendRelay today</strong>
-                <p>The Amazon API adapter is not connected yet. Use SiteStripe affiliate links or export offers to CSV, then import them in Opportunities. TrendRelay does not currently accept Amazon API secrets.</p>
+                <strong>{t("tools.amazon.today")}</strong>
+                <p>{t("tools.amazon.todayBody")}</p>
               </div>
               <div className="access-guide-steps">
-                <p><i>1</i><span>Join Amazon Associates for the marketplace you will promote and obtain its Partner Tag. API registration requires a reviewed, finally accepted Associates account.</span></p>
-                <p><i>2</i><span>Sign in as the primary account owner, then open <b>Associates Central → Tools → Creators API</b>.</span></p>
-                <p><i>3</i><span>Choose <b>Create Application</b>, then <b>Add New Credential</b>. Save the Credential ID, Credential Secret, and Version securely—the secret may only be shown once.</span></p>
-                <p><i>4</i><span>The application exchanges those credentials for a one-hour OAuth access token at runtime. Do not copy that temporary access token into TrendRelay.</span></p>
+                <p><i>1</i><span>{t("tools.amazon.step1")}</span></p>
+                <p><i>2</i><span>{rich("tools.amazon.step2", { path: <b>Associates Central → Tools → Creators API</b> })}</span></p>
+                <p><i>3</i><span>{rich("tools.amazon.step3", { createApplication: <b>Create Application</b>, addCredential: <b>Add New Credential</b> })}</span></p>
+                <p><i>4</i><span>{t("tools.amazon.step4")}</span></p>
               </div>
               <div className="access-guide-links">
-                <a href="https://affiliate-program.amazon.com/creatorsapi/docs/en-us/onboarding/sign-up-as-an-amazon-associate" target="_blank" rel="noreferrer">Join Amazon Associates</a>
-                <a href="https://affiliate-program.amazon.com/creatorsapi/docs/en-us/onboarding/register-for-creators-api" target="_blank" rel="noreferrer">Create API credentials</a>
-                <a href="https://affiliate-program.amazon.com/creatorsapi/docs/en-us/get-started/using-curl" target="_blank" rel="noreferrer">Official token guide</a>
-                <Link href="/opportunities">Import Amazon offers</Link>
+                <a href="https://affiliate-program.amazon.com/creatorsapi/docs/en-us/onboarding/sign-up-as-an-amazon-associate" target="_blank" rel="noreferrer">{t("tools.amazon.linkJoin")}</a>
+                <a href="https://affiliate-program.amazon.com/creatorsapi/docs/en-us/onboarding/register-for-creators-api" target="_blank" rel="noreferrer">{t("tools.amazon.linkCredentials")}</a>
+                <a href="https://affiliate-program.amazon.com/creatorsapi/docs/en-us/get-started/using-curl" target="_blank" rel="noreferrer">{t("tools.amazon.linkTokenGuide")}</a>
+                <Link href="/opportunities">{t("tools.amazon.linkImport")}</Link>
               </div>
-              <p className="access-guide-note">Do not start a new PA-API integration: Amazon stopped accepting new PA-API customers and deprecated it on May 15, 2026. Creators API uses Credential ID and Credential Secret instead of the old AWS access-key pair.</p>
+              <p className="access-guide-note">{t("tools.amazon.warning")}</p>
             </div>
           </details>
         </div>
       </section>
       {error && <p className="registry-error" role="alert">{error}</p>}
       {message && <p className="registry-message" role="status">{message}</p>}
-      <section className="tool-grid" aria-label="Third-party tools">
+      <section className="tool-grid" aria-label={t("tools.thirdParty")}>
         {tools.map((tool) => (
           <article className="tool-card" key={tool.id}>
             <div className="tool-card-top">
@@ -314,14 +316,14 @@ export default function ToolsPage() {
               </div>
               <div className="tool-actions">
                 <a href={tool.repository} target="_blank" rel="noreferrer">GitHub</a>
-                {tool.service_repository && <a href={tool.service_repository} target="_blank" rel="noreferrer">Self-host service</a>}
-                {tool.id === "meta-ads-kit" && <a href="#meta-access-guide">Access guide</a>}
+                {tool.service_repository && <a href={tool.service_repository} target="_blank" rel="noreferrer">{t("tools.selfHost")}</a>}
+                {tool.id === "meta-ads-kit" && <a href="#meta-access-guide">{t("tools.accessGuide")}</a>}
                 {guidedSetup.has(tool.id) && (
-                  <button disabled={busy === `${tool.id}-setup`} onClick={() => void loadSetup(tool.id)}>Setup</button>
+                  <button disabled={busy === `${tool.id}-setup`} onClick={() => void loadSetup(tool.id)}>{t("tools.setup")}</button>
                 )}
-                {tool.id === "openmontage" && tool.installed && <Link href="/library">Open Library</Link>}
+                {tool.id === "openmontage" && tool.installed && <Link href="/library">{t("tools.openLibrary")}</Link>}
                 {!tool.present && tool.install_allowed && (
-                  <button disabled={busy === tool.id} onClick={() => void mutate(tool, "install")}>Install</button>
+                  <button disabled={busy === tool.id} onClick={() => void mutate(tool, "install")}>{t("tools.install")}</button>
                 )}
                 {tool.installed && tool.activation_allowed && (
                   <button disabled={busy === tool.id} onClick={() => void mutate(tool, "activation")}>
@@ -329,7 +331,7 @@ export default function ToolsPage() {
                   </button>
                 )}
                 {tool.present && (
-                  <button className="danger" disabled={busy === tool.id} onClick={() => void mutate(tool, "uninstall")}>Uninstall</button>
+                  <button className="danger" disabled={busy === tool.id} onClick={() => void mutate(tool, "uninstall")}>{t("tools.uninstall")}</button>
                 )}
               </div>
             </div>
@@ -341,11 +343,11 @@ export default function ToolsPage() {
         <section className="setup-wizard" aria-labelledby="setup-title">
           <div className="setup-wizard-heading">
             <div>
-              <p className="eyebrow">GUIDED LOCAL SETUP</p>
+              <p className="eyebrow">{t("tools.guidedSetup")}</p>
               <h2 id="setup-title">{setup.title}</h2>
               <p>{setup.summary}</p>
             </div>
-            <button type="button" className="setup-close" onClick={() => setSetup(null)} aria-label="Close setup">Close</button>
+            <button type="button" className="setup-close" onClick={() => setSetup(null)} aria-label={t("tools.closeSetup")}>{t("common.close")}</button>
           </div>
           <div className="setup-steps">
             {setup.requirements.map((requirement, index) => (
@@ -358,7 +360,7 @@ export default function ToolsPage() {
           </div>
           {setup.configured_secret_names && (
             <div className="secret-checklist">
-              <strong>Optional provider keys</strong>
+              <strong>{t("tools.providerKeys")}</strong>
               <p>Configured names are shown; secret values never leave the API process.</p>
               <div>{setup.supported_secret_names?.map((name) => (
                 <code className={setup.configured_secret_names?.includes(name) ? "configured" : "missing"} key={name}>
@@ -381,14 +383,14 @@ export default function ToolsPage() {
               >{action.label}</button>
             ))}
           </div>
-          <p className="privacy-note">Local-only setup · explicit confirmation for external windows · no credential values exposed</p>
+          <p className="privacy-note">{t("tools.localOnlyNote")}</p>
         </section>
       )}
 
       {reachDiagnostics && (
         <section className="diagnostic-panel" aria-live="polite">
           <div>
-            <p className="eyebrow">AGENT REACH · LOCAL PRESENCE ONLY</p>
+            <p className="eyebrow">{t("tools.reachEyebrow")}</p>
             <h2>{reachDiagnostics.summary.ready} of {reachDiagnostics.summary.total} channels ready</h2>
             <p>{reachDiagnostics.summary.setup_required} need setup; {reachDiagnostics.summary.unavailable} lack a local dependency.</p>
           </div>
@@ -397,10 +399,10 @@ export default function ToolsPage() {
               <span key={channel.id} className={channel.status}>{channel.id}: {channel.status}</span>
             ))}
           </div>
-          <p>No network probes, browser-session reads, or secret values were used.</p>
+          <p>{t("tools.noProbes")}</p>
         </section>
       )}
-      <p className="registry-note">Lifecycle and authentication launchers only work from this machine.</p>
+      <p className="registry-note">{t("tools.launchersLocal")}</p>
     </main>
   );
 }

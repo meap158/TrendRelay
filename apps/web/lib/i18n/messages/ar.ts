@@ -517,6 +517,79 @@ export const ar: Messages = {
     rememberForLater: "تذكّر هذا في كل استيراد لاحق لهذه الحملة",
   },
 
+  tools: {
+    loading: "جارٍ تحميل سجل الأدوات المحلي…",
+    signInPrompt: "سجّل الدخول لإدارة الأدوات.",
+    eyebrow: "صندوق الأدوات المحلي",
+    intro: "ثبّت، ثم اضبط، ثم استخدم.",
+    accessEyebrow: "الوصول إلى المنصات",
+    accessHeading: "احصل على بيانات الاعتماد الصحيحة.",
+    accessIntro:
+      "مسارات إعداد قصيرة ومحدّثة للحسابين الأكثر عرقلةً لأعمال البحث والتسويق بالعمولة.",
+    thirdParty: "أدوات خارجية",
+    install: "تثبيت",
+    uninstall: "إزالة",
+    setup: "الإعداد",
+    closeSetup: "إغلاق الإعداد",
+    openLibrary: "فتح المكتبة",
+    selfHost: "خدمة مستضافة ذاتيًا",
+    accessGuide: "دليل الوصول",
+    guidedSetup: "إعداد محلي موجَّه",
+    providerKeys: "مفاتيح المزوّدين (اختيارية)",
+    addToEnvFile:
+      "أضف هذه المدخلات أو حدّثها في ملف {file} المحلي الخاص بالمشروع، ثم أعد تشغيل TrendRelay.",
+    douyinConnection: "اتصال Douyin:",
+    localOnlyNote:
+      "إعداد محلي فقط · تأكيد صريح للنوافذ الخارجية · لا تُعرض قيم بيانات الاعتماد",
+    reachEyebrow: "AGENT REACH · حضور محلي فقط",
+    noProbes:
+      "لم تُستخدم أي فحوص شبكية أو قراءات لجلسات المتصفح أو قيم سرية.",
+    launchersLocal:
+      "مشغّلات دورة الحياة والمصادقة تعمل من هذا الجهاز فقط.",
+
+    meta: {
+      name: "إعلانات Meta",
+      subtitle: "تقارير الحملات من مصدرها",
+      method: "OAuth داخل التطبيق",
+      fastest: "أسرع مسار في TrendRelay",
+      fastestPath: "Meta Ads Kit ← الإعداد ← فتح تسجيل دخول Meta",
+      step1:
+        "أنشئ تطبيق {business} أو اختره في Meta for Developers، ثم أضف منتج Marketing API.",
+      step2:
+        "امنح التطبيق صلاحية الوصول إلى الحساب التجاري والحساب الإعلاني الصحيحين. تتطلب تقارير القراءة فقط {adsRead}، وقد يتطلب اكتشاف الحسابات أيضًا {businessManagement}.",
+      step4:
+        "انسخ معرّف الحساب الإعلاني من Ads Manager ({actPrefix}). ويمكنك حفظ ذلك المعرّف غير السري وحده بصيغة {envLine} في ملف {file} المحلي.",
+      linkApps: "تطبيقات مطوّري Meta",
+      linkExplorer: "مستكشف Graph API",
+      linkSystemUsers: "مستخدمو النظام في الحساب التجاري",
+      linkGuide: "دليل التفويض الرسمي",
+      warning:
+        "لا يحتاج البحث العلني عن المنافسين عبر Meta Ads Collector إلى حساب أو رمز من Meta. لا تضع رمز وصول Meta في نظام إدارة الشيفرة أو في حقل ظاهر للمتصفح.",
+    },
+
+    amazon: {
+      name: "Amazon Creators API",
+      subtitle: "الوصول إلى الكتالوج ومنتجات العمولة",
+      method: "إرشاد فقط",
+      today: "ما يعمل في TrendRelay اليوم",
+      todayBody:
+        "لم يُربط محوّل Amazon API بعد. استخدم روابط SiteStripe التابعة، أو صدّر العروض إلى CSV ثم استوردها في «الفرص». لا يقبل TrendRelay حاليًا أسرار Amazon API.",
+      step1:
+        "انضم إلى Amazon Associates للسوق الذي ستروّج له واحصل على Partner Tag الخاص به. يتطلب تسجيل الـ API حسابًا في Associates تمت مراجعته وقبوله نهائيًا.",
+      step2: "سجّل الدخول بصفتك المالك الأساسي للحساب، ثم افتح {path}.",
+      step3:
+        "اختر {createApplication}، ثم {addCredential}. احفظ Credential ID وCredential Secret والإصدار بأمان — فقد يُعرض السر مرة واحدة فقط.",
+      step4:
+        "يستبدل التطبيق بيانات الاعتماد تلك برمز وصول OAuth صالح لساعة واحدة أثناء التشغيل. لا تنسخ رمز الوصول المؤقت هذا إلى TrendRelay.",
+      linkJoin: "الانضمام إلى Amazon Associates",
+      linkCredentials: "إنشاء بيانات اعتماد API",
+      linkTokenGuide: "دليل الرموز الرسمي",
+      linkImport: "استيراد عروض Amazon",
+      warning:
+        "لا تبدأ تكاملًا جديدًا مع PA-API: أوقفت Amazon قبول عملاء PA-API الجدد وأنهت دعمها في 15 مايو 2026. تستخدم Creators API معرّف بيانات اعتماد وسرًا بدلًا من زوج مفاتيح AWS القديم.",
+    },
+  },
+
   effects: {
     title: "التحرير",
     unavailable: "غير متاح على هذا الجهاز",

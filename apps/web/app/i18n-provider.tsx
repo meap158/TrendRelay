@@ -45,6 +45,20 @@ type LocaleContextValue = {
   dir: Direction;
   setLocale: (next: Locale) => void;
   t: (path: string, values?: Values) => string;
+  /**
+   * A translated sentence with markup inside it.
+   *
+   * Setup instructions read "Create or select a **Business** app…", where the
+   * emphasised part is a literal that must not be translated and the sentence
+   * around it must be. Splitting that into three JSX children and translating
+   * each is how you get broken grammar: Japanese and Arabic put the verb and
+   * the modifiers in places English does not, so a sentence reassembled in
+   * English order is not a sentence.
+   *
+   * So the whole sentence is one key with `{name}` placeholders, and each
+   * language puts the placeholder where its own grammar wants it.
+   */
+  rich: (path: string, nodes: Record<string, React.ReactNode>) => React.ReactNode[];
   format: {
     number: (value: number) => string;
     compact: (value: number) => string;
@@ -158,11 +172,34 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
       return interpolate(found, values, tag);
     };
 
+    const rich = (
+      path: string,
+      nodes: Record<string, React.ReactNode>,
+    ): React.ReactNode[] => {
+      const found = lookup(dictionary, path) ?? lookup(MESSAGES.en, path);
+      if (typeof found !== "string") return [path];
+      // Split on the placeholders themselves so the surrounding text keeps
+      // whatever order the translation put it in.
+      return found.split(/(\{\w+\})/g).map((piece, index) => {
+        const name = piece.startsWith("{") && piece.endsWith("}")
+          ? piece.slice(1, -1)
+          : null;
+        if (name && name in nodes) {
+          return <span key={index}>{nodes[name]}</span>;
+        }
+        // Plain text between the placeholders, kept verbatim - an unknown
+        // placeholder shows itself rather than vanishing, so a mismatch
+        // between a dictionary and its call site is visible.
+        return <span key={index}>{piece}</span>;
+      });
+    };
+
     return {
       locale,
       dir,
       setLocale,
       t,
+      rich,
       format: {
         number: (v) => new Intl.NumberFormat(tag).format(v),
         compact: (v) =>

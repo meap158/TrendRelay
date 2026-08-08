@@ -524,6 +524,79 @@ export const en = {
     rememberForLater: "Remember this for every later import of this campaign",
   },
 
+  tools: {
+    loading: "Loading local tool registry…",
+    signInPrompt: "Sign in to manage tools.",
+    eyebrow: "LOCAL TOOLBOX",
+    intro: "Install, configure, then use.",
+    accessEyebrow: "PLATFORM ACCESS",
+    accessHeading: "Get the right credentials.",
+    accessIntro:
+      "Short, current setup paths for the two accounts most likely to block research and affiliate work.",
+    thirdParty: "Third-party tools",
+    install: "Install",
+    uninstall: "Uninstall",
+    setup: "Setup",
+    closeSetup: "Close setup",
+    openLibrary: "Open Library",
+    selfHost: "Self-host service",
+    accessGuide: "Access guide",
+    guidedSetup: "GUIDED LOCAL SETUP",
+    providerKeys: "Optional provider keys",
+    addToEnvFile:
+      "Add or update these entries in the project's local {file} file, then restart TrendRelay.",
+    douyinConnection: "Douyin connection:",
+    localOnlyNote:
+      "Local-only setup · explicit confirmation for external windows · no credential values exposed",
+    reachEyebrow: "AGENT REACH · LOCAL PRESENCE ONLY",
+    noProbes:
+      "No network probes, browser-session reads, or secret values were used.",
+    launchersLocal:
+      "Lifecycle and authentication launchers only work from this machine.",
+
+    meta: {
+      name: "Meta Ads",
+      subtitle: "First-party campaign reporting",
+      method: "OAuth in app",
+      fastest: "Fastest path in TrendRelay",
+      fastestPath: "Meta Ads Kit → Setup → Launch Meta login",
+      step1:
+        "Create or select a {business} app in Meta for Developers and add the Marketing API product.",
+      step2:
+        "Give the app access to the correct Business and ad account. Read-only reporting needs {adsRead}; account discovery may also require {businessManagement}.",
+      step4:
+        "Copy the ad account ID from Ads Manager ({actPrefix}). Optionally save only that non-secret ID as {envLine} in the local {file}.",
+      linkApps: "Meta developer apps",
+      linkExplorer: "Graph API Explorer",
+      linkSystemUsers: "Business system users",
+      linkGuide: "Official authorization guide",
+      warning:
+        "Public competitor research through Meta Ads Collector needs no Meta account or token. Never put a Meta access token in source control or a browser-facing field.",
+    },
+
+    amazon: {
+      name: "Amazon Creators API",
+      subtitle: "Catalog and affiliate product access",
+      method: "Guide only",
+      today: "What works in TrendRelay today",
+      todayBody:
+        "The Amazon API adapter is not connected yet. Use SiteStripe affiliate links or export offers to CSV, then import them in Opportunities. TrendRelay does not currently accept Amazon API secrets.",
+      step1:
+        "Join Amazon Associates for the marketplace you will promote and obtain its Partner Tag. API registration requires a reviewed, finally accepted Associates account.",
+      step2: "Sign in as the primary account owner, then open {path}.",
+      step3:
+        "Choose {createApplication}, then {addCredential}. Save the Credential ID, Credential Secret, and Version securely — the secret may only be shown once.",
+      step4:
+        "The application exchanges those credentials for a one-hour OAuth access token at runtime. Do not copy that temporary access token into TrendRelay.",
+      linkJoin: "Join Amazon Associates",
+      linkCredentials: "Create API credentials",
+      linkTokenGuide: "Official token guide",
+      linkImport: "Import Amazon offers",
+      warning:
+        "Do not start a new PA-API integration: Amazon stopped accepting new PA-API customers and deprecated it on May 15, 2026. Creators API uses Credential ID and Credential Secret instead of the old AWS access-key pair.",
+    },
+  },
+
   effects: {
     title: "Editing",
     unavailable: "Not available on this machine",

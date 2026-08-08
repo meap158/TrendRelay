@@ -533,6 +533,80 @@ export const fr: Messages = {
       "Mémoriser ce choix pour tous les imports suivants de cette campagne",
   },
 
+  tools: {
+    loading: "Chargement du registre local des outils…",
+    signInPrompt: "Connectez-vous pour gérer les outils.",
+    eyebrow: "BOÎTE À OUTILS LOCALE",
+    intro: "Installer, configurer, puis utiliser.",
+    accessEyebrow: "ACCÈS AUX PLATEFORMES",
+    accessHeading: "Obtenir les bons identifiants.",
+    accessIntro:
+      "Parcours de configuration courts et à jour pour les deux comptes les plus susceptibles de bloquer la recherche et l'affiliation.",
+    thirdParty: "Outils tiers",
+    install: "Installer",
+    uninstall: "Désinstaller",
+    setup: "Configurer",
+    closeSetup: "Fermer la configuration",
+    openLibrary: "Ouvrir la bibliothèque",
+    selfHost: "Service auto-hébergé",
+    accessGuide: "Guide d'accès",
+    guidedSetup: "CONFIGURATION LOCALE GUIDÉE",
+    providerKeys: "Clés de fournisseurs (facultatif)",
+    addToEnvFile:
+      "Ajoutez ou mettez à jour ces entrées dans le fichier {file} local du projet, puis redémarrez TrendRelay.",
+    douyinConnection: "Connexion Douyin :",
+    localOnlyNote:
+      "Configuration locale uniquement · confirmation explicite pour les fenêtres externes · aucune valeur d'identifiant exposée",
+    reachEyebrow: "AGENT REACH · PRÉSENCE LOCALE UNIQUEMENT",
+    noProbes:
+      "Aucune sonde réseau, aucune lecture de session de navigateur, aucune valeur secrète utilisée.",
+    launchersLocal:
+      "Les lanceurs de cycle de vie et d'authentification ne fonctionnent que depuis cette machine.",
+
+    meta: {
+      name: "Meta Ads",
+      subtitle: "Rapports de campagne propriétaires",
+      method: "OAuth dans l'application",
+      fastest: "Chemin le plus rapide dans TrendRelay",
+      fastestPath: "Meta Ads Kit → Configuration → Lancer la connexion Meta",
+      step1:
+        "Créez ou sélectionnez une application {business} dans Meta for Developers, puis ajoutez le produit Marketing API.",
+      step2:
+        "Donnez à l'application l'accès au bon Business et au bon compte publicitaire. Les rapports en lecture seule exigent {adsRead} ; la découverte des comptes peut aussi requérir {businessManagement}.",
+      step4:
+        "Copiez l'identifiant du compte publicitaire depuis Ads Manager ({actPrefix}). Vous pouvez n'enregistrer que cet identifiant non secret sous la forme {envLine} dans le fichier {file} local.",
+      linkApps: "Applications développeur Meta",
+      linkExplorer: "Explorateur de l'API Graph",
+      linkSystemUsers: "Utilisateurs système du Business",
+      linkGuide: "Guide officiel d'autorisation",
+      warning:
+        "La recherche publique sur les concurrents via Meta Ads Collector ne demande ni compte ni jeton Meta. Ne placez jamais un jeton d'accès Meta dans le contrôle de version ni dans un champ exposé au navigateur.",
+    },
+
+    amazon: {
+      name: "API Amazon Creators",
+      subtitle: "Accès au catalogue et aux produits d'affiliation",
+      method: "Guide seulement",
+      today: "Ce qui fonctionne aujourd'hui dans TrendRelay",
+      todayBody:
+        "L'adaptateur de l'API Amazon n'est pas encore connecté. Utilisez les liens d'affiliation SiteStripe, ou exportez les offres en CSV puis importez-les dans Opportunités. TrendRelay n'accepte pas actuellement de secrets de l'API Amazon.",
+      step1:
+        "Inscrivez-vous à Amazon Associates pour la place de marché que vous promouvrez et obtenez son Partner Tag. L'enregistrement à l'API exige un compte Associates examiné et définitivement accepté.",
+      step2:
+        "Connectez-vous en tant que propriétaire principal du compte, puis ouvrez {path}.",
+      step3:
+        "Choisissez {createApplication}, puis {addCredential}. Conservez en lieu sûr le Credential ID, le Credential Secret et la Version — le secret peut n'être affiché qu'une seule fois.",
+      step4:
+        "L'application échange ces identifiants contre un jeton d'accès OAuth valable une heure au moment de l'exécution. Ne copiez pas ce jeton temporaire dans TrendRelay.",
+      linkJoin: "Rejoindre Amazon Associates",
+      linkCredentials: "Créer des identifiants d'API",
+      linkTokenGuide: "Guide officiel des jetons",
+      linkImport: "Importer les offres Amazon",
+      warning:
+        "Ne démarrez pas une nouvelle intégration PA-API : Amazon a cessé d'accepter de nouveaux clients PA-API et l'a dépréciée le 15 mai 2026. L'API Creators utilise un Credential ID et un Credential Secret au lieu de l'ancienne paire de clés d'accès AWS.",
+    },
+  },
+
   effects: {
     title: "Édition",
     unavailable: "Indisponible sur cette machine",

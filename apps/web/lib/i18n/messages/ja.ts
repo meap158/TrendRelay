@@ -520,6 +520,79 @@ export const ja: Messages = {
     rememberForLater: "このキャンペーンの以後の取り込みでも記憶する",
   },
 
+  tools: {
+    loading: "ローカルのツール一覧を読み込み中…",
+    signInPrompt: "ツールを管理するにはログインしてください。",
+    eyebrow: "ローカルツールボックス",
+    intro: "インストールし、設定し、使う。",
+    accessEyebrow: "プラットフォームへのアクセス",
+    accessHeading: "必要な認証情報を用意する。",
+    accessIntro:
+      "リサーチとアフィリエイト業務の妨げになりやすい 2 つのアカウントについて、短く最新の手順をまとめました。",
+    thirdParty: "サードパーティのツール",
+    install: "インストール",
+    uninstall: "アンインストール",
+    setup: "セットアップ",
+    closeSetup: "セットアップを閉じる",
+    openLibrary: "ライブラリを開く",
+    selfHost: "セルフホストのサービス",
+    accessGuide: "アクセス手順",
+    guidedSetup: "ガイド付きローカルセットアップ",
+    providerKeys: "任意のプロバイダキー",
+    addToEnvFile:
+      "プロジェクトのローカル {file} ファイルにこれらの項目を追加または更新し、TrendRelay を再起動してください。",
+    douyinConnection: "Douyin の接続:",
+    localOnlyNote:
+      "ローカル限定のセットアップ · 外部ウィンドウは明示的な確認が必要 · 認証情報の値は表示しません",
+    reachEyebrow: "AGENT REACH · ローカル確認のみ",
+    noProbes:
+      "ネットワーク探索、ブラウザセッションの読み取り、シークレット値の使用は行っていません。",
+    launchersLocal:
+      "ライフサイクルと認証のランチャーはこの端末からのみ動作します。",
+
+    meta: {
+      name: "Meta 広告",
+      subtitle: "自社キャンペーンのレポート",
+      method: "アプリ内 OAuth",
+      fastest: "TrendRelay での最短手順",
+      fastestPath: "Meta Ads Kit → セットアップ → Meta ログインを開く",
+      step1:
+        "Meta for Developers で {business} アプリを作成または選択し、Marketing API プロダクトを追加します。",
+      step2:
+        "正しいビジネスと広告アカウントへのアクセス権をアプリに付与します。読み取り専用のレポートには {adsRead} が必要で、アカウントの検出にはさらに {businessManagement} が必要な場合があります。",
+      step4:
+        "Ads Manager から広告アカウント ID（{actPrefix}）をコピーします。必要であれば、その非機密の ID だけを {envLine} としてローカルの {file} に保存してください。",
+      linkApps: "Meta 開発者アプリ",
+      linkExplorer: "Graph API エクスプローラ",
+      linkSystemUsers: "ビジネスのシステムユーザー",
+      linkGuide: "公式の認可ガイド",
+      warning:
+        "Meta Ads Collector による公開情報の競合調査に、Meta のアカウントやトークンは不要です。Meta のアクセストークンをソース管理やブラウザ側の入力欄に置かないでください。",
+    },
+
+    amazon: {
+      name: "Amazon Creators API",
+      subtitle: "カタログとアフィリエイト商品へのアクセス",
+      method: "手順の案内のみ",
+      today: "現在 TrendRelay でできること",
+      todayBody:
+        "Amazon API のアダプタはまだ接続されていません。SiteStripe のアフィリエイトリンクを使うか、案件を CSV に書き出して「商機」で取り込んでください。TrendRelay は現在 Amazon API のシークレットを受け付けません。",
+      step1:
+        "紹介したいマーケットプレイスの Amazon アソシエイトに参加し、パートナータグを取得します。API の登録には、審査を通過し最終的に承認されたアソシエイトアカウントが必要です。",
+      step2: "主アカウントの所有者としてログインし、{path} を開きます。",
+      step3:
+        "{createApplication} を選び、続いて {addCredential} を選びます。Credential ID、Credential Secret、Version は安全に保管してください。シークレットは一度しか表示されないことがあります。",
+      step4:
+        "アプリケーションは実行時にその認証情報を 1 時間有効な OAuth アクセストークンと交換します。その一時的なアクセストークンを TrendRelay に貼り付けないでください。",
+      linkJoin: "Amazon アソシエイトに参加",
+      linkCredentials: "API 認証情報を作成",
+      linkTokenGuide: "公式トークンガイド",
+      linkImport: "Amazon の案件を取り込む",
+      warning:
+        "新規に PA-API を組み込まないでください。Amazon は PA-API の新規受付を終了し、2026 年 5 月 15 日に提供を終了しました。Creators API は従来の AWS アクセスキー対ではなく、Credential ID と Credential Secret を使います。",
+    },
+  },
+
   effects: {
     title: "編集",
     unavailable: "この環境では利用できません",

@@ -524,6 +524,79 @@ export const vi: Messages = {
     rememberForLater: "Ghi nhớ điều này cho mọi lần nhập sau của chiến dịch này",
   },
 
+  tools: {
+    loading: "Đang tải danh sách công cụ trên máy…",
+    signInPrompt: "Đăng nhập để quản lý công cụ.",
+    eyebrow: "HỘP CÔNG CỤ CỤC BỘ",
+    intro: "Cài đặt, cấu hình, rồi sử dụng.",
+    accessEyebrow: "QUYỀN TRUY CẬP NỀN TẢNG",
+    accessHeading: "Lấy đúng thông tin xác thực.",
+    accessIntro:
+      "Hướng dẫn ngắn gọn, cập nhật cho hai loại tài khoản dễ cản trở việc nghiên cứu và tiếp thị liên kết nhất.",
+    thirdParty: "Công cụ bên thứ ba",
+    install: "Cài đặt",
+    uninstall: "Gỡ cài đặt",
+    setup: "Thiết lập",
+    closeSetup: "Đóng thiết lập",
+    openLibrary: "Mở Thư viện",
+    selfHost: "Dịch vụ tự vận hành",
+    accessGuide: "Hướng dẫn truy cập",
+    guidedSetup: "THIẾT LẬP CÓ HƯỚNG DẪN",
+    providerKeys: "Khóa nhà cung cấp (không bắt buộc)",
+    addToEnvFile:
+      "Thêm hoặc cập nhật các mục này trong tệp {file} cục bộ của dự án, rồi khởi động lại TrendRelay.",
+    douyinConnection: "Kết nối Douyin:",
+    localOnlyNote:
+      "Thiết lập chỉ trên máy · xác nhận rõ ràng khi mở cửa sổ bên ngoài · không lộ giá trị thông tin xác thực",
+    reachEyebrow: "AGENT REACH · CHỈ HIỆN DIỆN CỤC BỘ",
+    noProbes:
+      "Không dò mạng, không đọc phiên trình duyệt, không dùng giá trị bí mật nào.",
+    launchersLocal:
+      "Các trình khởi chạy vòng đời và xác thực chỉ hoạt động từ máy này.",
+
+    meta: {
+      name: "Meta Ads",
+      subtitle: "Báo cáo chiến dịch của chính bạn",
+      method: "OAuth trong ứng dụng",
+      fastest: "Cách nhanh nhất trong TrendRelay",
+      fastestPath: "Meta Ads Kit → Thiết lập → Mở đăng nhập Meta",
+      step1:
+        "Tạo hoặc chọn một ứng dụng {business} trong Meta for Developers rồi thêm sản phẩm Marketing API.",
+      step2:
+        "Cấp cho ứng dụng quyền truy cập đúng Business và tài khoản quảng cáo. Báo cáo chỉ đọc cần {adsRead}; việc dò tìm tài khoản có thể cần thêm {businessManagement}.",
+      step4:
+        "Sao chép ID tài khoản quảng cáo từ Ads Manager ({actPrefix}). Nếu muốn, chỉ lưu ID không bí mật đó dưới dạng {envLine} trong tệp {file} cục bộ.",
+      linkApps: "Ứng dụng nhà phát triển Meta",
+      linkExplorer: "Graph API Explorer",
+      linkSystemUsers: "Người dùng hệ thống của Business",
+      linkGuide: "Hướng dẫn ủy quyền chính thức",
+      warning:
+        "Nghiên cứu đối thủ công khai qua Meta Ads Collector không cần tài khoản hay token Meta nào. Tuyệt đối không đưa token truy cập Meta vào mã nguồn hay ô nhập hiển thị trên trình duyệt.",
+    },
+
+    amazon: {
+      name: "Amazon Creators API",
+      subtitle: "Truy cập danh mục và sản phẩm tiếp thị",
+      method: "Chỉ là hướng dẫn",
+      today: "Hiện tại TrendRelay làm được gì",
+      todayBody:
+        "Bộ chuyển đổi Amazon API chưa được kết nối. Hãy dùng liên kết tiếp thị SiteStripe, hoặc xuất ưu đãi ra CSV rồi nhập ở mục Cơ hội. TrendRelay hiện không nhận khóa bí mật của Amazon API.",
+      step1:
+        "Tham gia Amazon Associates cho thị trường bạn sẽ quảng bá và lấy Partner Tag. Việc đăng ký API yêu cầu tài khoản Associates đã được xét duyệt và chấp thuận chính thức.",
+      step2: "Đăng nhập bằng tài khoản chủ sở hữu chính, rồi mở {path}.",
+      step3:
+        "Chọn {createApplication}, rồi {addCredential}. Hãy lưu giữ an toàn Credential ID, Credential Secret và Version — phần bí mật có thể chỉ hiển thị một lần.",
+      step4:
+        "Ứng dụng sẽ dùng các thông tin đó để đổi lấy token truy cập OAuth có hiệu lực một giờ khi chạy. Đừng sao chép token tạm thời đó vào TrendRelay.",
+      linkJoin: "Tham gia Amazon Associates",
+      linkCredentials: "Tạo thông tin xác thực API",
+      linkTokenGuide: "Hướng dẫn token chính thức",
+      linkImport: "Nhập ưu đãi Amazon",
+      warning:
+        "Đừng bắt đầu tích hợp PA-API mới: Amazon đã ngừng nhận khách hàng PA-API mới và khai tử nó từ ngày 15/5/2026. Creators API dùng Credential ID và Credential Secret thay cho cặp khóa truy cập AWS cũ.",
+    },
+  },
+
   effects: {
     title: "Chỉnh sửa",
     unavailable: "Không khả dụng trên máy này",

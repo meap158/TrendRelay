@@ -506,6 +506,77 @@ export const zh: Messages = {
     rememberForLater: "记住该选择，用于此广告系列以后的每次导入",
   },
 
+  tools: {
+    loading: "正在加载本机工具清单…",
+    signInPrompt: "登录后即可管理工具。",
+    eyebrow: "本地工具箱",
+    intro: "先安装，再配置，然后使用。",
+    accessEyebrow: "平台访问权限",
+    accessHeading: "拿到正确的凭据。",
+    accessIntro:
+      "针对最容易卡住调研和联盟业务的两类账号，提供简明且最新的配置路径。",
+    thirdParty: "第三方工具",
+    install: "安装",
+    uninstall: "卸载",
+    setup: "配置",
+    closeSetup: "关闭配置",
+    openLibrary: "打开素材库",
+    selfHost: "自建服务",
+    accessGuide: "访问指南",
+    guidedSetup: "本地引导配置",
+    providerKeys: "可选的服务商密钥",
+    addToEnvFile:
+      "在项目本地的 {file} 文件中添加或更新这些条目，然后重启 TrendRelay。",
+    douyinConnection: "抖音连接：",
+    localOnlyNote:
+      "仅在本机配置 · 打开外部窗口需明确确认 · 不会暴露任何凭据内容",
+    reachEyebrow: "AGENT REACH · 仅本地存在",
+    noProbes: "未进行网络探测、未读取浏览器会话、未使用任何密钥内容。",
+    launchersLocal: "生命周期与认证启动器只能在本机运行。",
+
+    meta: {
+      name: "Meta 广告",
+      subtitle: "第一方广告系列报表",
+      method: "应用内 OAuth",
+      fastest: "TrendRelay 中最快的路径",
+      fastestPath: "Meta Ads Kit → 配置 → 打开 Meta 登录",
+      step1:
+        "在 Meta for Developers 中创建或选择一个 {business} 应用，并添加 Marketing API 产品。",
+      step2:
+        "为该应用授予对应 Business 和广告账户的访问权限。只读报表需要 {adsRead}；账户发现可能还需要 {businessManagement}。",
+      step4:
+        "从 Ads Manager 复制广告账户 ID（{actPrefix}）。如有需要，仅将这个非敏感 ID 以 {envLine} 的形式保存到本地 {file} 中。",
+      linkApps: "Meta 开发者应用",
+      linkExplorer: "Graph API 浏览器",
+      linkSystemUsers: "Business 系统用户",
+      linkGuide: "官方授权指南",
+      warning:
+        "通过 Meta Ads Collector 进行公开的竞品调研无需任何 Meta 账号或令牌。切勿把 Meta 访问令牌放入源代码管理或浏览器可见的输入框。",
+    },
+
+    amazon: {
+      name: "Amazon Creators API",
+      subtitle: "商品目录与联盟商品访问",
+      method: "仅提供指引",
+      today: "TrendRelay 目前支持的做法",
+      todayBody:
+        "Amazon API 适配器尚未接入。请使用 SiteStripe 联盟链接，或将优惠导出为 CSV 后在“商机”中导入。TrendRelay 目前不接收 Amazon API 的密钥。",
+      step1:
+        "为你要推广的站点加入 Amazon Associates 并获取其 Partner Tag。申请 API 需要一个已通过审核并最终获批的 Associates 账号。",
+      step2: "以主账号所有者身份登录，然后打开 {path}。",
+      step3:
+        "选择 {createApplication}，再选择 {addCredential}。请妥善保存 Credential ID、Credential Secret 和 Version——密钥可能只显示一次。",
+      step4:
+        "应用会在运行时用这些凭据换取有效期一小时的 OAuth 访问令牌。请勿把该临时访问令牌复制到 TrendRelay。",
+      linkJoin: "加入 Amazon Associates",
+      linkCredentials: "创建 API 凭据",
+      linkTokenGuide: "官方令牌指南",
+      linkImport: "导入 Amazon 优惠",
+      warning:
+        "请勿新建 PA-API 集成：Amazon 已停止接收新的 PA-API 客户，并于 2026 年 5 月 15 日将其废弃。Creators API 使用 Credential ID 和 Credential Secret，取代旧的 AWS 访问密钥对。",
+    },
+  },
+
   effects: {
     title: "编辑",
     unavailable: "当前设备不可用",
