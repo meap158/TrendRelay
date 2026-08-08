@@ -7,6 +7,14 @@ import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
 import { useT } from "../i18n-provider";
+import {
+  effectLabel,
+  effectSummary,
+  optionLabel,
+  paramHelp,
+  paramLabel,
+} from "../../lib/i18n/effects";
+
 
 /**
  * The editing suite: a stack of effects applied to one asset.
@@ -54,23 +62,30 @@ function defaultsFor(effect: EffectDefinition): Record<string, unknown> {
 /** One control, chosen by what the parameter says it is. */
 function ParamControl({
   param,
+  effectId,
   value,
   onChange,
 }: {
   param: EffectParam;
+  effectId: string;
   value: unknown;
   onChange: (next: unknown) => void;
 }) {
+  const t = useT();
+  const label = paramLabel(t, effectId, param.id, param.label);
+  const help = param.help ? paramHelp(t, effectId, param.id, param.help) : "";
   if (param.kind === "choice") {
     return (
       <label className="effect-param">
-        <span>{param.label}</span>
+        <span>{label}</span>
         <select value={String(value ?? "")} onChange={(event) => onChange(event.target.value)}>
           {param.options.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
+            <option key={option.value} value={option.value}>
+              {optionLabel(t, effectId, option.value, option.label)}
+            </option>
           ))}
         </select>
-        {param.help && <small>{param.help}</small>}
+        {help && <small>{help}</small>}
       </label>
     );
   }
@@ -82,8 +97,8 @@ function ParamControl({
           checked={Boolean(value)}
           onChange={(event) => onChange(event.target.checked)}
         />
-        <span>{param.label}</span>
-        {param.help && <small>{param.help}</small>}
+        <span>{label}</span>
+        {help && <small>{help}</small>}
       </label>
     );
   }
@@ -91,7 +106,7 @@ function ParamControl({
   return (
     <label className="effect-param">
       <span>
-        {param.label}
+        {label}
         <b>{numeric}{param.unit}</b>
       </span>
       <input
@@ -102,7 +117,7 @@ function ParamControl({
         value={numeric}
         onChange={(event) => onChange(Number(event.target.value))}
       />
-      {param.help && <small>{param.help}</small>}
+      {help && <small>{help}</small>}
     </label>
   );
 }
@@ -260,9 +275,9 @@ export function EffectEditor({
               variant="secondary"
               size="sm"
               disabled={!canEdit || !effect.available}
-              title={effect.available ? effect.summary : effect.unavailable_reason ?? undefined}
+              title={effect.available ? effectSummary(t, effect.id, effect.summary) : effect.unavailable_reason ?? undefined}
               onClick={() => add(effect)}
-            ><ActionIcon name="add" />{effect.label}</Button>
+            ><ActionIcon name="add" />{effectLabel(t, effect.id, effect.label)}</Button>
           ))}
         </div>
 
@@ -290,8 +305,8 @@ export function EffectEditor({
                   <div className="effect-step-head">
                     <span className="effect-step-order">{index + 1}</span>
                     <div>
-                      <strong>{effect.label}</strong>
-                      <small>{effect.summary}</small>
+                      <strong>{effectLabel(t, effect.id, effect.label)}</strong>
+                      <small>{effectSummary(t, effect.id, effect.summary)}</small>
                     </div>
                     {/* Which stage an effect runs in decides what it costs, so it
                         is stated rather than left to be discovered at render. */}
@@ -311,7 +326,7 @@ export function EffectEditor({
                         onClick={() => move(index, 1)}
                       >↓</Button>
                       <Button
-                        variant="quiet" size="sm" iconOnly aria-label={`Remove ${effect.label}`}
+                        variant="quiet" size="sm" iconOnly aria-label={`${t("common.delete")} ${effectLabel(t, effect.id, effect.label)}`}
                         disabled={!canEdit}
                         onClick={() => edit(steps.filter((_, at) => at !== index))}
                       ><ActionIcon name="dismiss" /></Button>
@@ -326,6 +341,7 @@ export function EffectEditor({
                         <ParamControl
                           key={param.id}
                           param={param}
+                          effectId={effect.id}
                           value={step.values?.[param.id] ?? param.default}
                           onChange={(next) => edit(steps.map((item, at) => at === index
                             ? { ...item, values: { ...item.values, [param.id]: next } }

@@ -1,0 +1,75 @@
+/**
+ * Translating the effect catalogue, which the API owns.
+ *
+ * The editor renders text it is given rather than text it holds: the label,
+ * summary, parameter names, help and choice options all arrive from
+ * `/api/effects`, in English, because that is where the registry lives. So the
+ * i18n sweep over `.tsx` files could reach 100% while the one panel where
+ * somebody tunes a blur stayed entirely English.
+ *
+ * The fix is a lookup rather than more plumbing. The registry already has
+ * stable ids — `face_blur`, `padding_ratio`, `9:16` — so the dictionary is
+ * keyed by those and the API's own English is the fallback. That keeps the
+ * locale in the browser with the rest of it, and means a newly registered
+ * effect shows up in English immediately and gets translated later, instead of
+ * showing up blank.
+ */
+
+/** Option values are not identifiers — `9:16` and `90` have to become keys. */
+const OPTION_KEYS: Record<string, string> = {
+  horizontal: "horizontal",
+  vertical: "vertical",
+  both: "both",
+  "90": "right90",
+  "180": "half",
+  "270": "left90",
+  "9:16": "vertical916",
+  "4:5": "portrait45",
+  "1:1": "square11",
+  "16:9": "landscape169",
+  centre: "middle",
+  top: "top",
+  bottom: "bottom",
+};
+
+type Translate = (path: string, values?: Record<string, string | number>) => string;
+
+/**
+ * Look up a key, and fall back to what the API said.
+ *
+ * `t()` returns the path itself when a key is missing, which is what makes an
+ * omission visible during a sweep. Here that would put `fx.face_blur.label` in
+ * front of a user, so a miss falls back to the English the API already sent —
+ * untranslated text beats a dotted path.
+ */
+function fromDictionary(t: Translate, key: string, apiText: string): string {
+  const found = t(key);
+  return found === key ? apiText : found;
+}
+
+export function effectLabel(t: Translate, id: string, apiLabel: string): string {
+  return fromDictionary(t, `fx.${id}.label`, apiLabel);
+}
+
+export function effectSummary(t: Translate, id: string, apiSummary: string): string {
+  return fromDictionary(t, `fx.${id}.summary`, apiSummary);
+}
+
+export function paramLabel(
+  t: Translate, effectId: string, paramId: string, apiLabel: string,
+): string {
+  return fromDictionary(t, `fx.${effectId}.${paramId}`, apiLabel);
+}
+
+export function paramHelp(
+  t: Translate, effectId: string, paramId: string, apiHelp: string,
+): string {
+  return fromDictionary(t, `fx.${effectId}.${paramId}Help`, apiHelp);
+}
+
+export function optionLabel(
+  t: Translate, effectId: string, value: string, apiLabel: string,
+): string {
+  const key = OPTION_KEYS[value];
+  return key ? fromDictionary(t, `fx.${effectId}.${key}`, apiLabel) : apiLabel;
+}
