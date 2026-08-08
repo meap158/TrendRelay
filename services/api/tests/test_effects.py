@@ -159,11 +159,18 @@ def test_speed_is_the_only_effect_that_moves_the_duration() -> None:
     assert duration_after(recipe(("speed", {"rate": 2.0}), ("speed", {"rate": 2.0})), 10.0) == 2.5
 
 
-def test_only_speed_declares_that_it_retimes() -> None:
+def test_exactly_the_effects_that_change_length_declare_it() -> None:
     # Anything already timed against the source - a clip plan, a blur timeline -
-    # stops lining up once this runs, so the flag is what the interface warns on.
+    # stops lining up once one of these runs, so the flag is what the interface
+    # warns on. Speed scales the length and a trim replaces it; nothing else
+    # touches it, and an effect that gained the ability quietly would be missed.
     assert effects.SPEED.retimes is True
-    assert [item.id for item in effects.REGISTRY.values() if item.retimes] == ["speed"]
+    assert effects.TRIM.retimes is True
+    assert {item.id for item in effects.REGISTRY.values() if item.retimes} == {"speed", "trim"}
+    for effect in effects.REGISTRY.values():
+        if not effect.retimes:
+            values = {param.id: param.default for param in effect.params}
+            assert effect.duration_of(values, 12.0) == 12.0, effect.id
 
 
 # --- the declaration the interface reads ---------------------------------------
@@ -199,3 +206,77 @@ def test_a_described_default_is_a_value_the_effect_would_accept() -> None:
 def test_an_empty_recipe_has_nothing_to_render() -> None:
     assert build_filtergraph(read_recipe([])) == ([], [])
     assert read_recipe(None) == []
+
+
+# --- aspect, trim and volume ---------------------------------------------------
+
+
+def test_aspect_crops_rather_than_stretches() -> None:
+    # A squeeze would fit the frame too, and would make every face the wrong
+    # shape. crop keeps the pixels honest and throws away what will not fit.
+    [filter_text] = video_of(("aspect", {"ratio": "1:1"}))
+    assert filter_text.startswith("crop=")
+    assert "scale=" not in filter_text
+
+
+def test_aspect_keeps_dimensions_even() -> None:
+    # yuv420p halves the chroma planes, so an odd width or height has nowhere to
+    # put its last line and the encoder refuses the frame.
+    for ratio in ("9:16", "4:5", "1:1", "16:9"):
+        [filter_text] = video_of(("aspect", {"ratio": ratio}))
+        assert filter_text.count("trunc(") == 2
+        assert "/2)*2" in filter_text
+
+
+def test_the_comma_inside_a_crop_expression_is_escaped() -> None:
+    # An unescaped comma would end the crop filter early and ffmpeg would read
+    # the rest of the expression as another filter.
+    [filter_text] = video_of(("aspect", {"ratio": "9:16"}))
+    assert r"min(iw\," in filter_text
+
+
+def test_the_anchor_decides_what_survives_a_crop() -> None:
+    assert video_of(("aspect", {"ratio": "1:1", "anchor": "top"}))[0].endswith(":0")
+    assert video_of(("aspect", {"ratio": "1:1", "anchor": "bottom"}))[0].endswith("ih-oh")
+    assert video_of(("aspect", {"ratio": "1:1", "anchor": "centre"}))[0].endswith("(ih-oh)/2")
+
+
+def test_a_trim_rebases_its_timestamps() -> None:
+    # Without this the output keeps a gap where the removed opening was, and a
+    # player sits on a frozen first frame for exactly that long.
+    assert video_of(("trim", {"start": 3, "length": 5})) == [
+        "trim=start=3.000:duration=5.000", "setpts=PTS-STARTPTS",
+    ]
+    assert audio_of(("trim", {"start": 3, "length": 5})) == [
+        "atrim=start=3.000:duration=5.000", "asetpts=PTS-STARTPTS",
+    ]
+
+
+def test_a_trim_with_no_length_runs_to_the_end() -> None:
+    assert video_of(("trim", {"start": 4})) == ["trim=start=4.000", "setpts=PTS-STARTPTS"]
+    assert duration_after(recipe(("trim", {"start": 4})), 10.0) == 6.0
+
+
+def test_a_trim_sets_the_duration_rather_than_scaling_it() -> None:
+    # The reason duration is a function of duration and not a multiplier: speed
+    # scales the length, a trim replaces it, and one number cannot say both.
+    assert duration_after(recipe(("trim", {"start": 2, "length": 5})), 30.0) == 5.0
+    # Asking for more than is left cannot invent footage.
+    assert duration_after(recipe(("trim", {"start": 8, "length": 30})), 10.0) == 2.0
+    assert duration_after(recipe(("trim", {"start": 99})), 10.0) == 0.0
+
+
+def test_trim_and_speed_compound_in_the_order_given() -> None:
+    trimmed_then_sped = recipe(("trim", {"start": 0, "length": 10}), ("speed", {"rate": 2.0}))
+    assert duration_after(trimmed_then_sped, 60.0) == 5.0
+    sped_then_trimmed = recipe(("speed", {"rate": 2.0}), ("trim", {"start": 0, "length": 10}))
+    assert duration_after(sped_then_trimmed, 60.0) == 10.0
+
+
+def test_volume_touches_only_the_audio_chain() -> None:
+    assert video_of(("volume", {"gain": 2.0})) == []
+    assert audio_of(("volume", {"gain": 2.0})) == ["volume=2"]
+
+
+def test_mute_overrides_whatever_gain_was_set() -> None:
+    assert audio_of(("volume", {"gain": 3.0, "mute": True})) == ["volume=0"]

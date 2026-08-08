@@ -85,8 +85,10 @@ class Effect:
     #: plan, a blur timeline — no longer lines up. Ordering matters because of
     #: this, and the interface says so.
     retimes: bool = False
-    #: How the output duration changes, for showing the result before rendering.
-    duration_factor: Callable[[dict[str, Any]], float] = lambda values: 1.0
+    #: The running time this step leaves behind, given what it started with.
+    #: A function of the duration rather than a multiplier of it: speed scales
+    #: the length, but a trim replaces it, and a factor cannot say that.
+    duration_of: Callable[[dict[str, Any], float], float] = lambda values, seconds: seconds
     availability: Callable[[], tuple[bool, str | None]] = lambda: (True, None)
 
     def param(self, param_id: str) -> EffectParam | None:
@@ -290,15 +292,137 @@ SPEED = Effect(
         ),
     ),
     retimes=True,
-    duration_factor=lambda values: 1.0 / float(values["rate"]),
+    duration_of=lambda values, seconds: seconds / float(values["rate"]),
     video_filters=_speed_video_filters,
     audio_filters=_speed_audio_filters,
+)
+
+
+#: The shapes the networks actually want, as width over height.
+ASPECT_RATIOS = {
+    "9:16": 9 / 16,
+    "4:5": 4 / 5,
+    "1:1": 1.0,
+    "16:9": 16 / 9,
+}
+
+
+def _aspect_filters(values: dict[str, Any]) -> list[str]:
+    ratio = ASPECT_RATIOS[values["ratio"]]
+    # The comma inside the expression belongs to min(), not to the filter list,
+    # so it is escaped. Dimensions are trimmed to even numbers because yuv420p
+    # halves the chroma planes and an odd one has nowhere to put the last line.
+    width = rf"trunc(min(iw\,ih*{ratio:.6f})/2)*2"
+    height = rf"trunc(min(ih\,iw/{ratio:.6f})/2)*2"
+    x, y = {
+        "centre": ("(iw-ow)/2", "(ih-oh)/2"),
+        "top": ("(iw-ow)/2", "0"),
+        "bottom": ("(iw-ow)/2", "ih-oh"),
+    }[values["anchor"]]
+    return [f"crop={width}:{height}:{x}:{y}"]
+
+
+def _trim_video_filters(values: dict[str, Any]) -> list[str]:
+    start = float(values["start"])
+    length = float(values["length"])
+    # Timestamps are rebased to zero. Without that the output keeps a gap where
+    # the removed opening was, and players sit on a frozen first frame.
+    if length <= 0:
+        return [f"trim=start={start:.3f}", "setpts=PTS-STARTPTS"]
+    return [f"trim=start={start:.3f}:duration={length:.3f}", "setpts=PTS-STARTPTS"]
+
+
+def _trim_audio_filters(values: dict[str, Any]) -> list[str]:
+    start = float(values["start"])
+    length = float(values["length"])
+    if length <= 0:
+        return [f"atrim=start={start:.3f}", "asetpts=PTS-STARTPTS"]
+    return [f"atrim=start={start:.3f}:duration={length:.3f}", "asetpts=PTS-STARTPTS"]
+
+
+def _trim_duration(values: dict[str, Any], seconds: float) -> float:
+    remaining = max(0.0, seconds - float(values["start"]))
+    length = float(values["length"])
+    return min(remaining, length) if length > 0 else remaining
+
+
+def _volume_filters(values: dict[str, Any]) -> list[str]:
+    if values["mute"]:
+        return ["volume=0"]
+    return [f"volume={float(values['gain']):.4g}"]
+
+
+ASPECT = Effect(
+    id="aspect",
+    label="Aspect",
+    summary="Crop to the shape a network wants, without stretching anything.",
+    stage="stream",
+    params=(
+        EffectParam(
+            id="ratio", label="Shape", kind="choice", default="9:16",
+            options=(
+                ("9:16", "9:16 vertical"),
+                ("4:5", "4:5 portrait"),
+                ("1:1", "1:1 square"),
+                ("16:9", "16:9 landscape"),
+            ),
+            help="Cropped, never squeezed, so a face keeps the shape it had.",
+        ),
+        EffectParam(
+            id="anchor", label="Keep", kind="choice", default="centre",
+            options=(("centre", "Middle"), ("top", "Top"), ("bottom", "Bottom")),
+            help="Which part survives when the frame has to lose height.",
+        ),
+    ),
+    video_filters=_aspect_filters,
+)
+
+TRIM = Effect(
+    id="trim",
+    label="Trim",
+    summary="Keep a stretch of the clip and drop the rest.",
+    stage="stream",
+    params=(
+        EffectParam(
+            id="start", label="Start at", kind="number", default=0.0,
+            minimum=0.0, maximum=3600.0, step=0.1, unit="s",
+            help="Everything before this is dropped.",
+        ),
+        EffectParam(
+            id="length", label="Keep for", kind="number", default=0.0,
+            minimum=0.0, maximum=3600.0, step=0.1, unit="s",
+            help="0 keeps everything from the start point onwards.",
+        ),
+    ),
+    retimes=True,
+    duration_of=_trim_duration,
+    video_filters=_trim_video_filters,
+    audio_filters=_trim_audio_filters,
+)
+
+VOLUME = Effect(
+    id="volume",
+    label="Volume",
+    summary="Lift, drop, or silence the clip's own audio.",
+    stage="stream",
+    params=(
+        EffectParam(
+            id="gain", label="Gain", kind="number", default=1.0,
+            minimum=0.0, maximum=4.0, step=0.05, unit="x",
+            help="1 leaves it alone. Ignored when muted.",
+        ),
+        EffectParam(
+            id="mute", label="Mute", kind="toggle", default=False,
+            help="Silence the source, for a clip that will carry its own sound.",
+        ),
+    ),
+    audio_filters=_volume_filters,
 )
 
 #: Order is the order the interface offers them in: the cheap, predictable
 #: transforms first, then anything that needs a model.
 REGISTRY: dict[str, Effect] = {
-    effect.id: effect for effect in (FLIP, ROTATE, COLOUR, SPEED)
+    effect.id: effect for effect in (FLIP, ROTATE, ASPECT, COLOUR, SPEED, TRIM, VOLUME)
 }
 
 
@@ -393,7 +517,7 @@ def duration_after(steps: Sequence[RecipeStep], seconds: float) -> float:
     """What the clip will run to once the recipe has been applied."""
     result = seconds
     for step in steps:
-        result *= step.effect.duration_factor(step.values)
+        result = max(0.0, step.effect.duration_of(step.values, result))
     return result
 
 
