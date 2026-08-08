@@ -27,7 +27,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from trendrelay_api.database import SessionFactory
-from trendrelay_api.integrations import face_blur
+from trendrelay_api.integrations import face_blur, recolour
 from trendrelay_api.integrations.effects import (
     Effect,
     EffectError,
@@ -106,6 +106,43 @@ FACE_BLUR = Effect(
 register(FACE_BLUR)
 
 
+GARMENT_RECOLOUR = Effect(
+    id="garment_recolour",
+    label="Recolour clothing",
+    summary="Shift the colour of what the subject is wearing, keeping the fabric.",
+    stage="frame",
+    params=(
+        EffectParam(
+            id="hue_shift", label="Colour shift", kind="number", default=60.0,
+            minimum=-180.0, maximum=180.0, step=5.0, unit="°",
+            help="Degrees around the wheel. 180 is the opposite colour.",
+        ),
+        EffectParam(
+            id="saturation_floor", label="Fabric threshold", kind="number", default=60.0,
+            minimum=0.0, maximum=200.0, step=5.0,
+            help="How colourful a pixel must be to count as clothing. Raise it if "
+                 "the background is changing colour too.",
+        ),
+        EffectParam(
+            id="saturation_scale", label="Vividness", kind="number", default=1.0,
+            minimum=0.0, maximum=2.5, step=0.05, unit="x",
+            help="1 keeps the original strength.",
+        ),
+    ),
+    availability=_blur_availability,
+)
+
+register(GARMENT_RECOLOUR)
+
+
+def _recolour_settings(values: dict[str, Any]) -> recolour.RecolourSettings:
+    return recolour.RecolourSettings(
+        hue_shift=float(values["hue_shift"]),
+        saturation_floor=int(values["saturation_floor"]),
+        saturation_scale=float(values["saturation_scale"]),
+    )
+
+
 def _blur_settings(values: dict[str, Any]) -> face_blur.BlurSettings:
     return face_blur.BlurSettings(
         padding_ratio=float(values["padding_ratio"]),
@@ -149,13 +186,19 @@ def render_recipe(
     try:
         current = source
         for step in frame_steps:
-            if step.effect.id != "face_blur":
-                raise EffectError(f"{step.effect.label} cannot be rendered yet.")
             staged = scratch / f"{step.effect.id}.mp4"
-            outcome = face_blur.render_blurred(
-                current, staged, _blur_settings(step.values),
-                preview_seconds=preview_seconds,
-            )
+            if step.effect.id == "face_blur":
+                outcome = face_blur.render_blurred(
+                    current, staged, _blur_settings(step.values),
+                    preview_seconds=preview_seconds,
+                )
+            elif step.effect.id == "garment_recolour":
+                outcome = recolour.render_recoloured(
+                    current, staged, _recolour_settings(step.values),
+                    preview_seconds=preview_seconds,
+                )
+            else:
+                raise EffectError(f"{step.effect.label} cannot be rendered yet.")
             report["frame_effects"].append({"effect": step.effect.id, **outcome})
             current = staged
 
