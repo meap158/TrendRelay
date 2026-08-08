@@ -189,11 +189,32 @@ function progressBreakdown(progress: DownloadProgress): string {
   return parts.join(" · ");
 }
 
-function libraryProgressBreakdown(progress: LibraryProgress): string {
-  const parts = [`${progress.succeeded} of ${progress.total} prepared`];
-  if (progress.active) parts.push(`${progress.active} remaining`);
-  if (progress.failed) parts.push(`${progress.failed} failed`);
-  if (progress.cancelled) parts.push(`${progress.cancelled} cancelled`);
+/**
+ * What the Library step is doing, in words that separate waiting from stuck.
+ *
+ * This said "0 of 4 prepared · 4 remaining", which reads as a stalled job. It
+ * was accurate - ingestion had not started yet - but nothing distinguished
+ * "queued and it will happen" from "queued and nothing is coming", and the
+ * difference is the whole question a reader has. It cost a bug report against a
+ * pipeline that was working.
+ *
+ * `queued` and `running` were already in the payload; only the sentence
+ * collapsed them.
+ */
+function libraryProgressBreakdown(
+  progress: LibraryProgress,
+  t: (path: string, values?: Record<string, string | number>) => string,
+): string {
+  const parts: string[] = [];
+  if (progress.succeeded === progress.total && progress.total > 0) {
+    parts.push(t("downloads.addedToLibrary", { count: progress.succeeded }));
+  } else {
+    parts.push(t("downloads.addedOf", { done: progress.succeeded, total: progress.total }));
+    if (progress.running) parts.push(t("downloads.addingNow", { count: progress.running }));
+    if (progress.queued) parts.push(t("downloads.waitingTurn", { count: progress.queued }));
+  }
+  if (progress.failed) parts.push(t("downloads.addFailed", { count: progress.failed }));
+  if (progress.cancelled) parts.push(t("downloads.addCancelled", { count: progress.cancelled }));
   return parts.join(" · ");
 }
 function isVisibleForFilter(job: DownloadJob, filter: QueueFilter): boolean {
@@ -697,7 +718,7 @@ export default function Dashboard() {
               </summary>
               <div className="download-job-body">
                 {ACTIVE_STATUSES.has(current) && <div className={"job-progress " + current} aria-label={current === "queued" ? "Waiting to start" : preparingLibrary ? "Preparing downloaded media for Library" : downloadingAndPreparing ? "Downloading while preparing earlier files for Library" : "Download in progress"}><span style={preparingLibrary ? { width: `${libraryPercent}%` } : undefined} /></div>}
-                {progress?.folder_exists && <div className="download-live-status"><strong>{job.error && current === "queued" ? "Ready to resume" : preparingLibrary ? "Preparing Library" : downloadingAndPreparing ? "Downloading now · preparing Library" : ACTIVE_STATUSES.has(current) ? "Downloading now" : "Files on disk"}</strong><span>{libraryProgress && (preparingLibrary || downloadingAndPreparing) ? `${progressBreakdown(progress)} · ${libraryProgressBreakdown(libraryProgress)}` : progressBreakdown(progress)}</span></div>}
+                {progress?.folder_exists && <div className="download-live-status"><strong>{job.error && current === "queued" ? "Ready to resume" : preparingLibrary ? "Preparing Library" : downloadingAndPreparing ? "Downloading now · preparing Library" : ACTIVE_STATUSES.has(current) ? "Downloading now" : "Files on disk"}</strong><span>{libraryProgress && (preparingLibrary || downloadingAndPreparing) ? `${progressBreakdown(progress)} · ${libraryProgressBreakdown(libraryProgress, t)}` : progressBreakdown(progress)}</span></div>}
                 {(sources.length > 0 || canOpenFolder || job.status === "succeeded") && <div className="download-job-actions">
                   {sources.length > 0 && <Button variant="secondary" size="sm" onClick={() => reuseLinks(sources)}><ActionIcon name="link" />Reuse {sources.length === 1 ? "link" : "links"}</Button>}
                   {creatorProfiles.length > 0 && <Button variant="secondary" size="sm" title={t("downloads.addCreatorProfile")} onClick={() => addCreatorProfiles(creatorProfiles)}>Add creator {creatorProfiles.length === 1 ? "profile" : `profiles (${creatorProfiles.length})`}</Button>}
