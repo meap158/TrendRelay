@@ -615,6 +615,34 @@ def _net_commission(item: Conversion) -> int:
     return 0
 
 
+@workspace_router.get("/products")
+def attribution_products(
+    workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
+) -> dict[str, Any]:
+    """Every product with its links, clicks, earnings and ad economics.
+
+    The row that Attribution, Catalog and Opportunities were each showing a
+    third of. Nothing new is computed: the ad economics come from
+    `work_economics`, which already buckets by currency and already refuses a
+    ratio whose denominator would make it meaningless.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.attribution_products import products_payload
+
+    payload = products_payload(session, workspace_id)
+    return {
+        **payload,
+        "count": len(payload["products"]),
+        # Said once, here, rather than implied by a column heading: the same
+        # conversion appears in a product's `earnings` and in its work's
+        # royalty, so a caller that adds them has counted the money twice.
+        "note": (
+            "Earnings and work economics describe the same conversions viewed "
+            "two ways, grouped by product and by work. They are not additive."
+        ),
+    }
+
+
 @workspace_router.get("/summary")
 def attribution_summary(
     workspace_id: str, user: AuthenticatedUser, session: DatabaseSession

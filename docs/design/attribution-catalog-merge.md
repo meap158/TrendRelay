@@ -74,9 +74,9 @@ Distribution workspace
 The page becomes one table of **products**, each row expanding to what we know
 about it:
 
-- **Identity** — name, brand, marketplace, identifier. For books, the editions
-  grouped under a work, which is what `CatalogWork` and `WorkEdition` already
-  express; a paperback and a Kindle edition are one row, not two.
+- **Identity** — name, brand, marketplace, identifier. For books, the product's
+  form and the work it belongs to, so a paperback and a Kindle edition sit
+  together under one heading even though the schema makes them two products.
 - **Where it goes** — the affiliate offers on it, and the tracking links built
   from them, with country destinations and expiry.
 - **What it earned** — clicks, conversions, commission.
@@ -85,22 +85,42 @@ about it:
 Creating a tracking link stops being a form you fill from memory. It becomes an
 action on a product row, which is where Lasso's advantage actually comes from.
 
-### The boundary: two revenue streams, never one number
+### The boundary: one revenue stream, two views — never added together
 
-This is the part to get right, and it is the one real argument against merging.
+> **Correction.** An earlier draft of this document said the page would carry
+> *two revenue streams* — affiliate commission and book royalties — and must
+> never show one total. That was wrong, and wrong in the direction that matters:
+> it invented a distinction the code does not have. Reading the implementation
+> settles it. `catalog_works.py:504` does
+> `bucket.royalty_cents += conversion.commission_cents`. **Catalog's royalty
+> *is* Attribution's commission.** There is one stream, counted once, grouped
+> two ways. The conclusion — never show them as one total — survives, but for
+> the opposite reason: not because they are different money, but because they
+> are the *same* money, and adding a figure to itself is the error.
 
-The page would carry two kinds of money that look alike and are not:
+Two real boundaries remain, and both must be held.
 
-- **Affiliate commission** — someone else's product, earned per conversion,
-  measured through our own tracking links.
-- **Royalties** — our own books, earned per sale, driven by ad spend, and only
-  ever knowable from the marketplace's own report.
+**Attributed versus total.** ROAS and ACoS count only conversions from campaigns
+that actually ran ads in the measured window. TACoS counts every conversion,
+which is how a publisher watches a book stop depending on ads. Collapsing these
+into one "revenue" flatters the advertising. `work_economics` already keeps
+`royalty_cents` and `attributed_royalty_cents` apart; the UI must not merge them.
 
-They have different lifecycles, different confidence, and different currencies.
-A single "revenue" figure spanning both would be wrong in a way nobody could see
-— which is exactly the failure the per-currency ad-spend buckets were built to
-prevent. **Keep them as two ledgers on one page, never one total**, and keep
-ROAS/ACoS/TACoS attached to the book ledger where their denominators are real.
+**One currency per bucket.** Unchanged and non-negotiable. A figure that adds
+dong to dollars is wrong by a factor of tens of thousands and reads as entirely
+plausible.
+
+### A product is an edition, so works get their own list
+
+`WorkEdition` is unique on `(workspace_id, product_id)`. A paperback and an
+ebook of the same book are therefore **two products**, not two editions of one
+product row — and the ad budget belongs to the work above them, not to either.
+
+So the endpoint returns `products` and `works` as sibling lists rather than
+nesting a work's economics inside every product row. Repeating one ROAS on both
+editions produces a column that cannot be summed, and a column of numbers is the
+one thing every reader sums. Each product names its `work_ids`; each work names
+its editions. The UI groups visually; the data never duplicates.
 
 ### What moves, what stays
 
@@ -135,8 +155,9 @@ languages, and merged copy is new copy. Reusing the existing `catalog.*` and
 
 ## What I would not do
 
-- **Do not blend the two revenue streams into a headline number.** Stated above,
-  worth repeating; it is the only way this merge makes things worse.
+- **Do not add commission to royalty.** They are the same conversions. A
+  headline that sums them doubles every figure on the page, and nothing on
+  screen would reveal it.
 - **Do not move Opportunities in.** Different question, different moment.
 - **Do not rebuild the measurement notes.** The copy explaining HMAC pseudonyms,
   the cookie window and the missing click-through rate is more valuable than
