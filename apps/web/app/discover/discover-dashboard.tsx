@@ -8,7 +8,7 @@ import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
 import { useLocale } from "../i18n-provider";
 import { buttonClass } from "../ui/button";
-import { numberIn, oneOf, usePersistedState } from "../ui/use-persisted-state";
+import { numberIn, oneOf, usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 import { useJobs } from "../jobs-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 
@@ -781,6 +781,26 @@ function readTopicFailure(detail: unknown): TopicNote {
   };
 }
 
+/** Shape guards for restored data. A cache written by an older build must not
+ *  be trusted just because it parsed: a missing `items` array would crash the
+ *  render it was restored into. */
+const isBoard = (value: unknown): value is DouyinBoard =>
+  !!value && typeof value === "object" && Array.isArray((value as DouyinBoard).items);
+const isTikTok = (value: unknown): value is TikTokResult =>
+  !!value && typeof value === "object" && Array.isArray((value as TikTokResult).items);
+const isAdSearch = (value: unknown): value is AdSearchResult =>
+  !!value && typeof value === "object" && Array.isArray((value as AdSearchResult).ads);
+const isBriefing = (value: unknown): value is MetaBriefing =>
+  !!value && typeof value === "object" && !!(value as MetaBriefing).signals;
+
+/** The hot board is the most perishable thing here: its ranking moves through
+ *  the day and its cover images are signed URLs that expire. Half an hour keeps
+ *  a reload useful without pretending stale trends are current. */
+const BOARD_MAX_AGE = 30 * 60 * 1000;
+/** Research results are a piece of work someone commissioned, not a live feed,
+ *  so they are worth keeping for a working day. */
+const RESEARCH_MAX_AGE = 8 * 60 * 60 * 1000;
+
 export default function ResearchDashboard() {
   const { apiFetch } = useAuth();
   const { t, rich } = useLocale();
@@ -790,16 +810,20 @@ export default function ResearchDashboard() {
   const [providers, setProviders] = useState<ResearchProviders | null>(null);
   const [query, setQuery] = useState("");
   const [queryMode, setQueryMode] = useState<"trends" | "ads">("trends");
-  const [adResult, setAdResult] = useState<AdSearchResult | null>(null);
-  const [tiktokResult, setTiktokResult] = useState<TikTokResult | null>(null);
+  const [adResult, setAdResult] = usePersistedCache<AdSearchResult>(
+    "trendrelay.discover.ads", RESEARCH_MAX_AGE, isAdSearch);
+  const [tiktokResult, setTiktokResult] = usePersistedCache<TikTokResult>(
+    "trendrelay.discover.tiktok.result", RESEARCH_MAX_AGE, isTikTok);
   const [tiktokCategories, setTiktokCategories] = useState<TikTokCategory[]>([]);
   const [tiktokRegion, setTiktokRegion] = useState("US");
   const [tiktokPeriod, setTiktokPeriod] = useState(7);
-  const [briefing, setBriefing] = useState<MetaBriefing | null>(null);
+  const [briefing, setBriefing] = usePersistedCache<MetaBriefing>(
+    "trendrelay.discover.briefing", RESEARCH_MAX_AGE, isBriefing);
   const [feedFilter, setFeedFilter] = useState<"all" | "trend" | "ad" | "account">("all");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [douyinBoard, setDouyinBoard] = useState<DouyinBoard | null>(null);
+  const [douyinBoard, setDouyinBoard, , boardReady] = usePersistedCache<DouyinBoard>(
+    "trendrelay.discover.board", BOARD_MAX_AGE, isBoard);
   const [douyinError, setDouyinError] = useState<string | null>(null);
   const [douyinView, setDouyinView] = usePersistedState<"gallery" | "list">(
     "trendrelay.discover.douyinView", "gallery", isBoardView,
@@ -889,14 +913,16 @@ export default function ResearchDashboard() {
   }
 
   useEffect(() => {
-    if (!workspaceId || douyinAutoRead.current) return;
+    // Wait for the restore before deciding there is nothing to show, or the
+    // first render would refetch over a perfectly good cached board.
+    if (!workspaceId || !boardReady || douyinBoard || douyinAutoRead.current) return;
     douyinAutoRead.current = true;
     // Deferred so the read does not run inside the render that scheduled it.
     queueMicrotask(() => void loadDouyinBoard());
     // Once per workspace; the ref is the guard, so the callback's identity
     // changing would only repeat the same read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
+  }, [workspaceId, boardReady, douyinBoard]);
 
   const jobs = useMemo(
     () =>
