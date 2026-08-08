@@ -427,6 +427,115 @@ def list_media_files(root: Path) -> set[Path]:
     }
 
 
+def _search_snapshots(output: Path) -> list[Path]:
+    board = output / "search"
+    return sorted(board.glob("*.jsonl")) if board.is_dir() else []
+
+
+def topic(args: argparse.Namespace) -> int:
+    """Find the videos posted under a term and print them as JSON.
+
+    The hot board ranks topics, not clips: its group_id is a topic identifier
+    and asking the video endpoint for one fails every time. Searching the term
+    is what turns a trending topic into videos that can actually be downloaded.
+    """
+    with contextlib.redirect_stdout(sys.stderr):
+        if check_provider() != 0:
+            return 1
+        cookies, _source = resolve_cookies()
+        if not cookies_are_ready(cookies):
+            print(cookie_setup_message(), file=sys.stderr)
+            return 4
+
+    args.output.mkdir(parents=True, exist_ok=True)
+    runtime_dir = ROOT / ".data" / "douyin" / "runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    config = {
+        "link": [],
+        "path": str(args.output.resolve()),
+        "mode": ["post"],
+        "cookies": cookies,
+        "proxy": args.proxy,
+        "progress": {"quiet_logs": True},
+    }
+    before = _search_snapshots(args.output)
+    config_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", prefix="search-", dir=runtime_dir,
+            encoding="utf-8", delete=False,
+        ) as config_file:
+            json.dump(config, config_file, ensure_ascii=False, indent=2)
+            config_path = Path(config_file.name)
+        # The term is Chinese and the provider prints it as it works, which a
+        # cp1252 console cannot encode; the child is told to speak UTF-8.
+        environment = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+        completed = subprocess.run(
+            [
+                str(tool_executable()), "--config", str(config_path),
+                "--search", args.term, "--search-max", str(args.limit),
+            ],
+            cwd=SOURCE_DIR,
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=args.timeout,
+        )
+        if completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout or "").strip()
+            # Search is the one thing here that needs a real account. Downloads
+            # and the hot board work from the anonymous session `connect`
+            # captures; searching answers 2483 "please log in first" to it, and
+            # a traceback tail does not tell an operator what to do about that.
+            if "LoginRequiredError" in detail or "2483" in detail:
+                print(
+                    "Douyin requires a signed-in account to search. The saved session is "
+                    "anonymous, which is enough to download a known link but not to look "
+                    "one up. Run `npm run douyin -- login` and sign in, then retry.",
+                    file=sys.stderr,
+                )
+                return 5
+            print(detail[-1500:] or "The provider could not search.", file=sys.stderr)
+            return 1
+    finally:
+        if config_path is not None:
+            config_path.unlink(missing_ok=True)
+
+    fresh = sorted(set(_search_snapshots(args.output)) - set(before))
+    if not fresh:
+        print("The provider reported success but wrote no results.", file=sys.stderr)
+        return 1
+
+    items = []
+    for raw in _read_jsonl(fresh[-1]):
+        aweme_id = str(raw.get("aweme_id") or "").strip()
+        if not aweme_id:
+            continue
+        statistics = raw.get("statistics") if isinstance(raw.get("statistics"), dict) else {}
+        author = raw.get("author") if isinstance(raw.get("author"), dict) else {}
+        items.append({
+            "aweme_id": aweme_id,
+            # A real video id, unlike the board's group_id, so this is a link
+            # that downloads.
+            "video_url": f"https://www.douyin.com/video/{aweme_id}",
+            "title": str(raw.get("desc") or "").strip()[:300],
+            "creator": str(author.get("nickname") or "").strip()[:120],
+            "likes": int(statistics.get("digg_count") or 0),
+            "plays": int(statistics.get("play_count") or 0),
+        })
+
+    # Escaped rather than raw: this is read by another process, and a console
+    # using the Windows default codepage cannot encode Chinese titles.
+    print(json.dumps(
+        {"term": args.term, "items": items, "count": len(items)},
+        ensure_ascii=True,
+    ))
+    return 0
+
+
 def trending(args: argparse.Namespace) -> int:
     """Read Douyin's hot-search board and print it as JSON on stdout.
 
@@ -679,6 +788,16 @@ def build_parser() -> argparse.ArgumentParser:
     hot.add_argument("--proxy", default="")
     hot.add_argument("--timeout", type=positive_integer, default=180)
     hot.set_defaults(handler=trending)
+
+    topics = subparsers.add_parser(
+        "topic", help="Find downloadable videos posted under a term."
+    )
+    topics.add_argument("term")
+    topics.add_argument("--limit", type=positive_integer, default=20)
+    topics.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    topics.add_argument("--proxy", default="")
+    topics.add_argument("--timeout", type=positive_integer, default=180)
+    topics.set_defaults(handler=topic)
     return parser
 
 
@@ -698,6 +817,8 @@ def main() -> int:
         return login_provider()
     if args.command == "connect":
         return connect_provider()
+    if args.command == "topic":
+        return topic(args)
     if args.command == "trending":
         return trending(args)
     return batch_download(args)
