@@ -86,6 +86,21 @@ type Offer = {
   product: { name: string };
 };
 
+type LibraryAsset = {
+  id: string;
+  title: string;
+  original_path: string;
+  media_kind: string;
+  duration_ms: number | null;
+};
+
+/** Seconds, rounded, for a clip length nobody needs to the millisecond. */
+function clipLength(ms: number | null): string | null {
+  if (!ms) return null;
+  const total = Math.round(ms / 1000);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
   if (!response.ok) throw new Error(body.detail ?? "Autopilot request failed.");
@@ -126,6 +141,10 @@ export function AutopilotPanel({
   const [preview, setPreview] = useState<{ note: string; posts: PreviewPost[] } | null>(null);
   const [busy, setBusy] = useState("");
   const [adding, setAdding] = useState(false);
+  const [library, setLibrary] = useState<LibraryAsset[]>([]);
+  /** The clip being written up. Null when the composer is closed. */
+  const [drafting, setDrafting] = useState<LibraryAsset | null>(null);
+  const [picking, setPicking] = useState(false);
 
   const base = `/api/workspaces/${workspaceId}/campaigns/${campaignId}`;
 
@@ -167,6 +186,24 @@ export function AutopilotPanel({
       setAdding(true);
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "Could not load accounts.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function loadLibrary() {
+    setBusy("library");
+    try {
+      // Video only, and only what the library considers ready. The queue posts
+      // unattended, so an asset still being processed has no business in it.
+      const body = await json<{ assets: LibraryAsset[] }>(await apiFetch(
+        `/api/workspaces/${workspaceId}/media/library/assets?media_kind=video&limit=40`,
+      ));
+      setLibrary(body.assets ?? []);
+      setDrafting(null);
+      setPicking(true);
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "The library could not be read.");
     } finally {
       setBusy("");
     }
@@ -441,8 +478,89 @@ export function AutopilotPanel({
         title={t("autopilot.queue", {
           approved: autopilot.queue_approved, total: autopilot.queue_total,
         })}
+        aside={canEdit ? (
+          <Button variant="secondary" size="sm" busy={busy === "library"}
+            onClick={() => void loadLibrary()}>{t("autopilot.addFromLibrary")}</Button>
+        ) : undefined}
       >
         <p className="autopilot-lede">{t("autopilot.queueHelp")}</p>
+
+        {/* Pick the clip, then write the copy for it. Two steps rather than one
+            form with a path field: the path is not something anyone should be
+            typing, and the copy is the part that deserves the room. */}
+        {picking && !drafting && (
+          <div className="autopilot-account-picker">
+            <div className="autopilot-picker-head">
+              <strong>{t("autopilot.chooseClip")}</strong>
+              <Button variant="quiet" size="sm" onClick={() => setPicking(false)}>
+                {t("common.close")}
+              </Button>
+            </div>
+            <ul>
+              {library.map((asset) => (
+                <li key={asset.id}>
+                  <span>
+                    <strong>{asset.title}</strong>
+                    <small>{clipLength(asset.duration_ms) ?? asset.media_kind}</small>
+                  </span>
+                  <Button variant="quiet" size="sm" onClick={() => setDrafting(asset)}>
+                    {t("autopilot.writeCopy")}
+                  </Button>
+                </li>
+              ))}
+              {!library.length && <li>{t("autopilot.noClips")}</li>}
+            </ul>
+          </div>
+        )}
+
+        {drafting && (
+          <form
+            className="autopilot-compose"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              const body = String(form.get("body") ?? "").trim();
+              if (!body) return;
+              void run("queue", async () => {
+                await json(await apiFetch(`${base}/queue`, {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({
+                    asset_id: drafting.id,
+                    video_path: drafting.original_path,
+                    title: drafting.title,
+                    body,
+                    hashtags: String(form.get("hashtags") ?? "")
+                      .split(/[\s,]+/).filter(Boolean),
+                  }),
+                }));
+                setDrafting(null);
+                setPicking(false);
+                return t("autopilot.queued");
+              });
+            }}
+          >
+            <div className="autopilot-picker-head">
+              <strong>{drafting.title}</strong>
+              <Button variant="quiet" size="sm" onClick={() => setDrafting(null)}>
+                {t("autopilot.chooseAnother")}
+              </Button>
+            </div>
+            <label>{t("autopilot.copy")}
+              <textarea name="body" rows={4} required maxLength={4000}
+                placeholder={t("autopilot.copyPlaceholder")} />
+              {/* The disclosure and the link are added per network at post
+                  time, so writing either here would duplicate them. */}
+              <small>{t("autopilot.copyHelp")}</small>
+            </label>
+            <label>{t("autopilot.hashtags")}
+              <input name="hashtags" placeholder={t("autopilot.hashtagsExample")} />
+            </label>
+            <Button type="submit" variant="primary" busy={busy === "queue"}>
+              {t("autopilot.addToQueue")}
+            </Button>
+          </form>
+        )}
         {queue.length === 0 ? (
           <p className="autopilot-empty">{t("autopilot.noQueue")}</p>
         ) : (

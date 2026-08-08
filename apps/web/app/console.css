@@ -725,3 +725,10 @@ html { scroll-behavior: smooth; }
 @media (max-width: 700px) {
   .autopilot-destinations li, .autopilot-queue li { grid-template-columns: minmax(0, 1fr) auto; }
 }
+/* Pick the clip, then write for it. The copy field gets the room because it is
+   the part that is actually being authored; the path never appears. */
+.autopilot-compose { display: grid; gap: 10px; margin-top: 10px; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.autopilot-compose label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.autopilot-compose textarea, .autopilot-compose input { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; resize: vertical; }
+.autopilot-compose small { color: var(--muted); font-weight: 400; line-height: 1.4; }
+.autopilot-compose .ui-button { justify-self: start; }
