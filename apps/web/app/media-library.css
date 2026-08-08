@@ -199,7 +199,15 @@
 .blur-preview { width: 100%; margin-top: 6px; border-radius: var(--radius-sm); background: #111820; }
 .handoff-note { align-self: center; color: var(--muted); font-size: 10px; font-style: normal; }
 /* Actions sit on one baseline whatever their label length. */
-.library-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* Grouped rather than one long row. Six unrelated concerns at the same size
+   and spacing gave no hint that Delete and Open folder differ, and the eye had
+   to read every label to find the one edit it wanted. */
+.library-actions { display: grid; gap: 14px; align-items: start; }
+.library-action-group { display: grid; gap: 6px; }
+.library-action-group h4 { margin: 0; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.library-action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* Pushed to the end of its row so a mis-aimed click lands on nothing. */
+.library-action-danger { display: inline-flex; margin-inline-start: auto; }
 .library-actions > :is(button, a, .ui-button) { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; margin: 0; }
 .button-spinner { width: 11px; height: 11px; margin-inline-end: 6px; border: 2px solid var(--line-strong); border-top-color: var(--link); border-radius: 50%; animation: spin 0.8s linear infinite; }
 /* An asset with more than one cut is marked in the list, so a blurred version

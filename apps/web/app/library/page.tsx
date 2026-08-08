@@ -1238,64 +1238,89 @@ export default function LibraryPage() {
                   </div>
                 </div>
                 <div className="library-actions">
-                  <Button
-                    variant="secondary"
-                    busy={busy === "folder"}
-                    onClick={() => void openAssetFolder(selected)}
-                  ><ActionIcon name="openFolder" />{busy === "folder" ? "Opening" : "Open folder"}</Button>
-                  <Button
-                    variant="secondary"
-                    busy={busy === "blur"}
-                    disabled={busy.startsWith("blur") || selected.media_kind !== "video"}
-                    title={selected.media_kind === "video"
-                      ? "Detect every face and burn the blur into a new render"
-                      : "Face blurring applies to video"}
-                    onClick={() => void blurFaces(selected)}
-                  ><ActionIcon name="blur" />{busy === "blur" ? "Blurring" : "Blur faces"}</Button>
-                  <Button
-                    variant="secondary"
-                    iconOnly
-                    aria-label={t("library.blurSettings")}
-                    title={t("library.blurSettingsHelp")}
-                    disabled={selected.media_kind !== "video"}
-                    onClick={() => setBlurSettingsOpen(true)}
-                  ><ActionIcon name="blurSettings" /></Button>
-                  <Button
-                    variant="secondary"
-                    title={t("library.effectsHelp")}
-                    onClick={() => setEffectsOpen(true)}
-                  ><ActionIcon name="edit" />{t("library.effects")}</Button>
-                  <Button
-                    variant="secondary"
-                    disabled={selected.media_kind !== "video"}
-                    title={selected.media_kind === "video"
-                      ? "Build and render a clip plan from this video"
-                      : "Clip plans apply to video"}
-                    onClick={() => setEditorOpen(true)}
-                  ><ActionIcon name="clip" />{t("library.clipPlan")}</Button>
-                  {deleteAction && (
-                    <Button
-                      variant="danger"
-                      busy={busy === `bulk-${deleteAction.id}`}
-                      disabled={!canImport}
-                      title={deleteAction.description}
-                      onClick={() => void runBulkAction(deleteAction, [selected.id])}
-                    ><ActionIcon name="delete" />{t("common.delete")}</Button>
-                  )}
-                  <Link href={`/campaigns?video=${encodeURIComponent(handoffPath(selected))}`}><ActionIcon name="campaign" />{t("library.planCampaign")}</Link>
-                  <Link href={`/publish?video=${encodeURIComponent(handoffPath(selected))}`}><ActionIcon name="publish" />{t("library.prepareToPublish")}</Link>
-                  {selectedSourceLinks.map((url, index, links) => {
-                    const label = selected.platform === "douyin"
-                      ? `${selected.creator ? `${selected.creator}'s ` : ""}original Douyin video`
-                      : `Original source${links.length > 1 ? ` ${index + 1}` : ""}`;
-                    return selected.platform === "douyin" ? (
-                      <a className="douyin-source-link" key={url} href={url} target="_blank" rel="noreferrer" aria-label={`Open ${label}`} title={`Open ${label}`}>
-                        <DouyinMark />
-                      </a>
-                    ) : (
-                      <a key={url} href={url} target="_blank" rel="noreferrer">{label}</a>
-                    );
-                  })}
+                  {/* Editing first, because it is the reason this panel is open,
+                      and grouped so the three edits read as one set of choices
+                      rather than as neighbours of Delete. */}
+                  <section className="library-action-group" aria-label={t("library.editingActions")}>
+                    <h4>{t("library.editingActions")}</h4>
+                    <div className="library-action-row">
+                      <Button
+                        variant="secondary"
+                        busy={busy === "blur"}
+                        disabled={busy.startsWith("blur") || selected.media_kind !== "video"}
+                        title={selected.media_kind === "video"
+                          ? t("library.blurFacesHelp")
+                          : t("library.videoOnly")}
+                        onClick={() => void blurFaces(selected)}
+                      ><ActionIcon name="blur" />{busy === "blur" ? t("blurSettings.rendering") : t("blurSettings.blurFaces")}</Button>
+                      <Button
+                        variant="secondary"
+                        iconOnly
+                        aria-label={t("library.blurSettings")}
+                        title={t("library.blurSettingsHelp")}
+                        disabled={selected.media_kind !== "video"}
+                        onClick={() => setBlurSettingsOpen(true)}
+                      ><ActionIcon name="blurSettings" /></Button>
+                      <Button
+                        variant="secondary"
+                        title={t("library.effectsHelp")}
+                        onClick={() => setEffectsOpen(true)}
+                      ><ActionIcon name="edit" />{t("library.effects")}</Button>
+                      <Button
+                        variant="secondary"
+                        disabled={selected.media_kind !== "video"}
+                        title={selected.media_kind === "video"
+                          ? t("library.clipPlanHelp")
+                          : t("library.videoOnlyClip")}
+                        onClick={() => setEditorOpen(true)}
+                      ><ActionIcon name="clip" />{t("library.clipPlan")}</Button>
+                    </div>
+                  </section>
+
+                  <section className="library-action-group" aria-label={t("library.handoffActions")}>
+                    <h4>{t("library.handoffActions")}</h4>
+                    <div className="library-action-row">
+                      <Link href={`/campaigns?video=${encodeURIComponent(handoffPath(selected))}`}><ActionIcon name="campaign" />{t("library.planCampaign")}</Link>
+                      <Link href={`/publish?video=${encodeURIComponent(handoffPath(selected))}`}><ActionIcon name="publish" />{t("library.prepareToPublish")}</Link>
+                    </div>
+                  </section>
+
+                  <section className="library-action-group" aria-label={t("library.fileActions")}>
+                    <h4>{t("library.fileActions")}</h4>
+                    <div className="library-action-row">
+                      <Button
+                        variant="secondary"
+                        busy={busy === "folder"}
+                        onClick={() => void openAssetFolder(selected)}
+                      ><ActionIcon name="openFolder" />{busy === "folder" ? t("library.opening") : t("library.openFolder")}</Button>
+                      {selectedSourceLinks.map((url, index, links) => {
+                        const label = selected.platform === "douyin"
+                          ? `${selected.creator ? `${selected.creator}'s ` : ""}original Douyin video`
+                          : `Original source${links.length > 1 ? ` ${index + 1}` : ""}`;
+                        return selected.platform === "douyin" ? (
+                          <a className="douyin-source-link" key={url} href={url} target="_blank" rel="noreferrer" aria-label={`Open ${label}`} title={`Open ${label}`}>
+                            <DouyinMark />
+                          </a>
+                        ) : (
+                          <a key={url} href={url} target="_blank" rel="noreferrer">{label}</a>
+                        );
+                      })}
+                      {deleteAction && (
+                        // Last, and the only red thing here. Sitting between
+                        // Effects and Plan campaign, it was one slip from a
+                        // destructive click.
+                        <span className="library-action-danger">
+                        <Button
+                          variant="danger"
+                          busy={busy === `bulk-${deleteAction.id}`}
+                          disabled={!canImport}
+                          title={deleteAction.description}
+                          onClick={() => void runBulkAction(deleteAction, [selected.id])}
+                        ><ActionIcon name="delete" />{t("common.delete")}</Button>
+                        </span>
+                      )}
+                    </div>
+                  </section>
                 </div>
               </article>
 
