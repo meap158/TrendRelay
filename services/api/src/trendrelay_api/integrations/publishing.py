@@ -370,7 +370,10 @@ class PublishRequest(BaseModel):
     date: datetime
     schedule: bool = False
     delivery: Literal["draft", "schedule", "now"] | None = None
-    targets: list[PublishTarget] = Field(min_length=1, max_length=10)
+    # Raised from 10 once a post could address several accounts per network
+    # across several engines. Still a cap: it bounds a runaway request rather
+    # than expressing a policy about how wide a post should go.
+    targets: list[PublishTarget] = Field(min_length=1, max_length=25)
     made_with_ai: bool = False
     visibility: Literal["public", "private"] = "public"
     provider: ProviderId | None = None
@@ -426,9 +429,22 @@ class PublishRequest(BaseModel):
 
     @field_validator("targets")
     @classmethod
-    def unique_platforms(cls, targets: list[PublishTarget]) -> list[PublishTarget]:
-        if len({target.platform for target in targets}) != len(targets):
-            raise ValueError("Select each platform at most once.")
+    def unique_destinations(cls, targets: list[PublishTarget]) -> list[PublishTarget]:
+        """One post per account, not one per network.
+
+        This used to reject a second target on the same platform, which meant a
+        workspace with two TikTok accounts - a common case, and the reason for
+        running more than one engine at all - had to send the post twice. What
+        must not happen is the *same* account receiving it twice: that is a
+        duplicate post, and some engines accept it silently.
+
+        The engine is part of the identity because two engines can expose the
+        same account under ids that only look alike.
+        """
+        seen = {(target.provider, target.platform, target.integration_id)
+                for target in targets}
+        if len(seen) != len(targets):
+            raise ValueError("Each destination can only be chosen once.")
         return targets
 
     @field_validator("media_url")

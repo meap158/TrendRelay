@@ -170,9 +170,18 @@ export default function PublishPage() {
   const [engineReach, setEngineReach] = useState<EngineReach[]>([]);
   const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [connection, setConnection] = useState<Connection | null>(null);
-  const [targets, setTargets] = useState<Record<string, string>>({});
+  /**
+   * Chosen destinations, as account ids in the order they were picked.
+   *
+   * Was one account per platform. That shape could not express "both TikTok
+   * accounts", which is the case running two engines is for, and it silently
+   * dropped the second choice rather than refusing it.
+   */
+  const [targets, setTargets] = useState<string[]>([]);
   const [credentialDrafts, setCredentialDrafts] = useState<Record<string, Record<string, string>>>({});
   const [openProvider, setOpenProvider] = useState<string | null>(null);
+  /** Post type per destination, keyed by account: two accounts on one network
+      can go out as a Reel and as a Story. */
   const [postTypes, setPostTypes] = useState<Record<string, string>>({});
   const [hostingDraft, setHostingDraft] = useState<Record<string, string>>({});
   const [hostingOpen, setHostingOpen] = useState(false);
@@ -227,15 +236,89 @@ export default function PublishPage() {
   /** The engine that will deliver a destination, read from the account itself. */
   const engineFor = (accountId: string) =>
     accounts.find((item) => item.id === accountId)?.provider ?? null;
+  /** The engine definition behind one chosen account. */
+  const providerOf = (accountId: string): Provider | null => {
+    const engine = engineFor(accountId);
+    return (engine ? providerById.get(engine) : null) ?? activeProvider;
+  };
+  /**
+   * Every engine delivering one network on this post.
+   *
+   * Each capability question here - can it thread, does it take a first
+   * comment, how long may the caption be, does it fetch the media - is a
+   * question about the engine behind *that destination*, and a network can now
+   * appear twice under two engines. Asking one active engine on behalf of all
+   * of them was right only while a post could use one.
+   */
+  const providersFor = (platform: string): Provider[] => {
+    const ids = [...new Set(
+      chosenAccounts.filter((item) => item.platform === platform)
+        .map((item) => item.provider),
+    )];
+    const found = ids.map((id) => providerById.get(id)).filter((item): item is Provider =>
+      Boolean(item));
+    return found.length ? found : activeProvider ? [activeProvider] : [];
+  };
   // Every network any engine can reach, rather than one engine's list.
   const platforms = useMemo(
     () => [...new Set(accounts.map((account) => account.platform))],
     [accounts],
   );
   const connectedPlatforms = platforms;
-  const chosen = connectedPlatforms.filter((platform) =>
-    accounts.some((account) => account.id === targets[platform]));
-  const needsPublicMedia = activeProvider?.requires_public_media ?? false;
+  /** The accounts this post goes to, in the order they were chosen. */
+  const chosenAccounts = useMemo(
+    () => targets
+      .map((id) => accounts.find((account) => account.id === id))
+      .filter((account): account is Account => Boolean(account)),
+    [accounts, targets],
+  );
+  /** The networks reached, each named once however many accounts are on it. */
+  const chosen = useMemo(
+    () => [...new Set(chosenAccounts.map((account) => account.platform))],
+    [chosenAccounts],
+  );
+  /** The engines actually delivering this post, in the order chosen. */
+  const chosenEngines = useMemo(() => {
+    const seen: PublishingProvider[] = [];
+    for (const account of chosenAccounts) {
+      if (!seen.includes(account.provider)) seen.push(account.provider);
+    }
+    return seen;
+  }, [chosenAccounts]);
+  const chosenProviders = chosenEngines
+    .map((id) => providerById.get(id))
+    .filter((item): item is Provider => Boolean(item));
+  // Any engine, not the active one. If one destination is delivered by an
+  // engine that fetches media, a URL is needed even when the others accept an
+  // upload - and reading this from whichever engine happened to be active let a
+  // post reach submission with nothing for that engine to fetch.
+  const fetchOnlyProviders = chosenProviders.filter((item) => item.requires_public_media);
+  /** "Buffer" or "Buffer and Zernio" - what this post actually goes out through. */
+  const engineNames = (list: Provider[]) =>
+    list.length > 1
+      ? `${list.slice(0, -1).map((item) => item.label).join(", ")} and ${list[list.length - 1].label}`
+      : list[0]?.label ?? "";
+  const deliveringNames = engineNames(chosenProviders);
+  const fetchingNames = engineNames(fetchOnlyProviders);
+  /** Engines on this post that can hold a draft for a teammate to approve. */
+  const approvers = chosenProviders.filter((item) => item.supports_approval);
+  /** Every engine with working credentials - all of them can carry this post. */
+  const connectedEngines = (connection?.providers ?? []).filter((item) => item.authenticated);
+  /**
+   * How the media reaches the engines, said once.
+   *
+   * Two engines with different notes both apply, so both are shown; identical
+   * notes are said once rather than twice, which is what happens when three
+   * destinations share an engine.
+   */
+  const mediaNote = [...new Set(
+    (chosenProviders.length ? chosenProviders : activeProvider ? [activeProvider] : [])
+      .map((item) => item.media_note)
+      .filter(Boolean),
+  )].join(" ") || null;
+  const needsPublicMedia = chosenProviders.length
+    ? fetchOnlyProviders.length > 0
+    : activeProvider?.requires_public_media ?? false;
   const hosting = connection?.media_hosting ?? null;
   // With storage configured the engine still fetches, but TrendRelay does the
   // hosting, so a local path is enough and no URL has to be found by hand.
@@ -277,33 +360,58 @@ export default function PublishPage() {
   }, [quickSlots, scheduledTimes]);
 
   // The preview stands in for the first destination, which is the one being composed.
-  const previewPlatform = chosen[0] ?? null;
-  const postTypesFor = (platform: string) => {
-    const engine = engineFor(targets[platform] ?? "");
-    return (engine ? providerById.get(engine)?.post_types?.[platform] : undefined) ?? [];
+  const previewAccount = chosenAccounts[0] ?? null;
+  const previewPlatform = previewAccount?.platform ?? null;
+  /** Post types this account can take, from the engine that will deliver it. */
+  const postTypesFor = (accountId: string) => {
+    const account = accounts.find((item) => item.id === accountId);
+    if (!account) return [];
+    return providerById.get(account.provider)?.post_types?.[account.platform] ?? [];
   };
-  const previewType = previewPlatform
-    ? (postTypesFor(previewPlatform)).find(
-        (kind) => kind.id === (postTypes[previewPlatform]
-          ?? postTypesFor(previewPlatform)[0]?.id),
+  const previewType = previewAccount
+    ? postTypesFor(previewAccount.id).find(
+        (kind) => kind.id === (postTypes[previewAccount.id]
+          ?? postTypesFor(previewAccount.id)[0]?.id),
       )
     : null;
   /** One caption goes to every destination, so the shortest limit is the real
       one - and knowing which network sets it is what lets you decide whether to
-      trim or to drop that destination. */
-  const providerLimits = activeProvider?.limits ?? {};
-  const chosenLimits = chosen
-    .map((platform) => ({ platform, ...providerLimits[platform] }))
-    .filter((entry) => typeof entry.caption === "number");
+      trim or to drop that destination.
+   *
+   *  Each limit comes from the engine delivering that destination. Two engines
+   *  publishing to the same network do not always allow the same length, and
+   *  taking every limit from one active engine quietly reported a ceiling that
+   *  did not apply to half the post. */
+  const chosenLimits: Array<{
+    platform: PublishingPlatform; caption: number; title: number | null;
+  }> = [];
+  for (const platform of chosen) {
+    // The strictest engine delivering this network. Two engines publishing to
+    // the same place need not allow the same length, and the caption is one
+    // text sent to all of them.
+    const caps = providersFor(platform)
+      .map((provider) => provider.limits?.[platform])
+      .filter((item): item is PlatformLimit => Boolean(item));
+    if (!caps.length) continue;
+    const captions = caps.map((item) => item.caption);
+    const titles = caps.map((item) => item.title)
+      .filter((value): value is number => typeof value === "number");
+    chosenLimits.push({
+      platform,
+      caption: Math.min(...captions),
+      title: titles.length ? Math.min(...titles) : null,
+    });
+  }
   const captionLimit = chosenLimits.length
     ? chosenLimits.reduce((tightest, entry) => (tightest.caption <= entry.caption ? tightest : entry))
     : null;
-  const titledLimits = chosenLimits.filter((entry) => typeof entry.title === "number");
+  const titledLimits = chosenLimits.filter(
+    (entry): entry is typeof entry & { title: number } => entry.title !== null);
   const titleLimit = titledLimits.length
-    ? titledLimits.reduce((tightest, entry) => ((tightest.title ?? 0) <= (entry.title ?? 0) ? tightest : entry))
+    ? titledLimits.reduce((tightest, entry) => (tightest.title <= entry.title ? tightest : entry))
     : null;
   const captionOver = captionLimit ? caption.length - captionLimit.caption : 0;
-  const titleOver = titleLimit ? title.length - (titleLimit.title ?? 0) : 0;
+  const titleOver = titleLimit ? title.length - titleLimit.title : 0;
 
   const scheduledAt = delivery === "schedule" && date ? new Date(date) : null;
   // Compared against the clock read when the schedule pane opened, since
@@ -325,9 +433,7 @@ export default function PublishPage() {
               ? "Pick a time in the future"
               : null;
 
-  const previewHandle = previewPlatform
-    ? accounts.find((account) => account.id === targets[previewPlatform])?.label ?? ""
-    : "";
+  const previewHandle = previewAccount?.label ?? "";
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -418,13 +524,14 @@ export default function PublishPage() {
   }, [apiFetch, workspaceId]);
 
   function requestFrom(form: FormData, confirm: boolean) {
-    const selectedTargets = chosen.map((platform) => ({
-      platform,
-      integration_id: targets[platform],
-      post_type: postTypes[platform] ?? null,
+    const selectedTargets = chosenAccounts.map((account) => ({
+      platform: account.platform,
+      integration_id: account.id,
+      post_type: postTypes[account.id] ?? null,
       // Taken from the chosen account rather than from one active engine, which
-      // is what lets a single post go out through several at once.
-      provider: engineFor(targets[platform]),
+      // is what lets a single post go out through several at once - and lets
+      // two accounts on one network each go through their own.
+      provider: account.provider,
     }));
     if (!selectedTargets.length) throw new Error("Choose at least one connected destination.");
     const localDate = String(form.get("date") ?? "");
@@ -432,10 +539,14 @@ export default function PublishPage() {
     const mediaUrl = String(form.get("media_url") ?? "").trim();
     const localPath = String(form.get("video_path") ?? "").trim();
     if (needsPublicMedia && !mediaUrl && !(hostsLocalMedia && localPath)) {
+      // Names the engine that actually needs it, which may not be the one that
+      // happens to be active - otherwise the message sends you to check the
+      // settings of an engine this post never touches.
+      const asking = fetchOnlyProviders[0] ?? activeProvider;
       throw new Error(
         hostsLocalMedia
           ? "Enter the approved local MP4 path, or a public media URL."
-          : `${activeProvider?.label} needs a public media URL. ${activeProvider?.media_note}`,
+          : `${asking?.label} needs a public media URL. ${asking?.media_note}`,
       );
     }
     if (!needsPublicMedia && !localPath && !mediaUrl) {
@@ -443,13 +554,18 @@ export default function PublishPage() {
     }
     return {
       workspace_id: workspaceId,
-      provider: connection?.active_provider ?? null,
+      // The lead engine, only a fallback for a destination that names none.
+      // Every target above names its own, so this decides nothing on its own.
+      provider: chosenEngines[0] ?? connection?.active_provider ?? null,
       video_path: localPath || "unused",
       media_url: mediaUrl || null,
       caption: form.get("caption"),
       first_comment: firstComment.trim() || null,
       thread: thread.map((part) => part.trim()).filter(Boolean),
-      needs_approval: needsApproval,
+      // Only where an engine on this post can actually hold it. The checkbox
+      // hides when no chosen engine supports approval, but the state it left
+      // behind would otherwise still travel.
+      needs_approval: approvers.length > 0 && needsApproval,
       title: form.get("title") || null,
       date: new Date(localDate).toISOString(),
       delivery,
@@ -497,7 +613,7 @@ export default function PublishPage() {
       );
       setCredentialDrafts((current) => ({ ...current, [provider.id]: {} }));
       setConnection(body.connection);
-      if (activate) { setTargets({}); setPostTypes({}); }
+      if (activate) { setTargets([]); setPostTypes({}); }
       setOpenProvider(null);
       setNotice(
         `Saved ${body.result.written_keys.join(", ")} to .env.` +
@@ -671,9 +787,8 @@ export default function PublishPage() {
         }),
       );
       setConnection(body.connection);
-      setTargets({});
       setPreview(null);
-      setNotice(`${provider.label} is now the active publishing engine. Refresh accounts to load its destinations.`);
+      setNotice(`${provider.label} is now the default engine for destinations that name none. Every connected engine still delivers its own accounts.`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Engine could not be switched.");
     } finally {
@@ -708,14 +823,11 @@ export default function PublishPage() {
       setAccounts(result.accounts);
       setEngineReach(result.engines);
       setAccountsLoaded(true);
-      setTargets((current) => Object.fromEntries(
-        [...new Set(result.accounts.map((account) => account.platform))].map((platform) => [
-          platform,
-          result.accounts.some((account) => account.id === current[platform])
-            ? current[platform]
-            : "",
-        ]),
-      ));
+      // Keep what is still there, drop what the refresh no longer returns: a
+      // destination that has gone would otherwise be submitted and rejected by
+      // the engine rather than here.
+      setTargets((current) => current.filter(
+        (id) => result.accounts.some((account) => account.id === id)));
       const reachable = result.engines.filter((engine) => engine.reachable);
       if (!options.quiet || !result.accounts.length) {
         setNotice(result.accounts.length
@@ -778,7 +890,7 @@ export default function PublishPage() {
           </p>
         </div>
         <div className="publish-heading-side">
-          {!activeProvider && (
+          {!connectedEngines.length && (
             <span className="connection-badge">{checking ? "Checking…" : "No engine"}</span>
           )}
         </div>
@@ -789,28 +901,40 @@ export default function PublishPage() {
         {error && <p className="registry-error" role="alert">{error}</p>}
       </div>
 
-      {activeProvider?.authenticated && !setupOpen ? (
+      {/* Every connected engine, not the active one. A post can go out through
+          all of them at once, so a summary naming one made the others look
+          switched off - and hid the fact that their destinations were already
+          in the picker below. */}
+      {connectedEngines.length > 0 && !setupOpen ? (
         <div className="engine-summary">
-          <ProviderMark provider={activeProvider.id} size={22} />
+          <span className="engine-summary-marks">
+            {connectedEngines.map((provider) => (
+              <ProviderMark key={provider.id} provider={provider.id} size={22} />
+            ))}
+          </span>
           <div>
-            <strong>{activeProvider.label}</strong>
+            <strong>{engineNames(connectedEngines)}</strong>
             <span>
               {accounts.length
-                ? `${accounts.length} destination${accounts.length === 1 ? "" : "s"} available`
+                ? `${accounts.length} destination${accounts.length === 1 ? "" : "s"} across `
+                  + `${connectedEngines.length} engine${connectedEngines.length === 1 ? "" : "s"}`
                 : connection?.next_step}
             </span>
           </div>
           {hosting?.required && !hosting.configured && (
             <Badge tone="warn">{t("publish.mediaHostingNeeded")}</Badge>
           )}
-          <a
-            className={buttonClass({ variant: "quiet", size: "sm" })}
-            href={activeProvider.dashboard_url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >{t("downloads.heading2")}</a>
+          {connectedEngines.map((provider) => (
+            <a
+              key={provider.id}
+              className={buttonClass({ variant: "quiet", size: "sm" })}
+              href={provider.dashboard_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >{provider.label}</a>
+          ))}
           <Button variant="quiet" size="sm" onClick={() => setSetupOpen(true)}>
-            Change engine
+            Engine setup
           </Button>
         </div>
       ) : (
@@ -822,7 +946,7 @@ export default function PublishPage() {
           </div>
           <div className="section-heading-aside">
             {connection && <span>{connection.next_step}</span>}
-            {activeProvider?.authenticated && (
+            {connectedEngines.length > 0 && (
               <Button variant="quiet" size="sm" onClick={() => setSetupOpen(false)}>
                 Done
               </Button>
@@ -947,8 +1071,8 @@ export default function PublishPage() {
                   {hosting.configured
                     ? "Local clips are uploaded automatically for engines that fetch rather than accept an upload."
                     : hosting.required
-                      ? `${activeProvider?.label} downloads your video instead of accepting an upload, so it needs a public URL. Add storage and TrendRelay will host the file for you.`
-                      : "Not needed by the active engine. Add it if you switch to one that fetches media, such as Buffer."}
+                      ? `${fetchingNames || activeProvider?.label} downloads your video instead of accepting an upload, so it needs a public URL. Add storage and TrendRelay will host the file for you.`
+                      : "Not needed by the engines this post uses. Add it as soon as one destination goes through an engine that fetches media, such as Buffer."}
                 </p>
               </div>
               <div className="hosting-status">
@@ -1024,7 +1148,14 @@ export default function PublishPage() {
               <p className="eyebrow">{t("publish.stepDelivery")}</p>
               <h2>{t("publish.whatGoesOut")}</h2>
             </div>
-            <span>{activeProvider ? `via ${activeProvider.label}` : "no engine selected"}</span>
+            {/* Every engine carrying part of this post, not one active one.
+                Which engine delivers where is the thing you most need to see
+                when a post spans several. */}
+            <span>{deliveringNames
+              ? `via ${deliveringNames}`
+              : activeProvider
+                ? `via ${activeProvider.label}`
+                : "no destinations chosen"}</span>
           </div>
 
           <label>{t("workspace.select")}
@@ -1053,15 +1184,15 @@ export default function PublishPage() {
               )}
               {videoPath && !mediaUrl ? (
                 <p className="publish-blocked" role="status">
-                  {activeProvider?.label} downloads the file rather than accepting an
-                  upload, so this clip needs somewhere public to sit.{" "}
+                  {fetchingNames || activeProvider?.label} downloads the file rather than
+                  accepting an upload, so this clip needs somewhere public to sit.{" "}
                   <button type="button" className="link-action" onClick={() => setHostingOpen(true)}>
                     Set up media hosting
                   </button>{" "}
                   and TrendRelay will do it for you, or paste a URL you already host.
                 </p>
               ) : (
-                <small className="ui-field-note">{activeProvider?.media_note}</small>
+                <small className="ui-field-note">{mediaNote}</small>
               )}
             </div>
           ) : needsPublicMedia ? (
@@ -1086,7 +1217,7 @@ export default function PublishPage() {
                   </span>
                 )}
                 <small className="ui-field-note">
-                  Uploaded to {hosting?.label} when the post runs, so {activeProvider?.label} can
+                  Uploaded to {hosting?.label} when the post runs, so {fetchingNames || activeProvider?.label} can
                   fetch it. If the clip has a blurred version, that is the cut that gets uploaded.
                 </small>
               </div>
@@ -1116,7 +1247,7 @@ export default function PublishPage() {
                     {isBlurred(clip) && <em className="blurred-tag">{t("publish.facesBlurred")}</em>}
                   </span>
                 )}
-                <small className="ui-field-note">{activeProvider?.media_note ?? "Media must sit under a configured publishing media directory."}</small>
+                <small className="ui-field-note">{mediaNote ?? "Media must sit under a configured publishing media directory."}</small>
               </div>
               <label>{t("publish.publicMediaUrl")} <i>{t("publish.optional")}</i>
                 <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" />
@@ -1145,12 +1276,27 @@ export default function PublishPage() {
           </label>
 
           {(() => {
+            // Threading is a property of the engine delivering that
+            // destination. A network can thread through one engine and not
+            // through another, so this is asked per destination.
+            // Offered when any engine delivering the network can thread. The
+            // note below already says which destinations get the caption only,
+            // so the composer appearing is not a promise that all of them will
+            // receive the replies.
             const threaders = chosen.filter((platform) =>
-              (activeProvider?.thread_platforms ?? []).includes(platform));
+              providersFor(platform).some(
+                (provider) => (provider.thread_platforms ?? []).includes(platform)));
             if (!threaders.length && !thread.length) return null;
+            // The strictest engine among the ones threading: exceeding its
+            // limit is rejected by that engine, whatever the others allow.
+            const threadProviders = threaders.flatMap((platform) => providersFor(platform));
             const limit = threaders.length
-              ? Math.min(...threaders.map((p) => activeProvider?.limits?.[p]?.caption ?? 2200))
+              ? Math.min(...threaders.flatMap((platform) => providersFor(platform)
+                  .map((provider) => provider.limits?.[platform]?.caption ?? 2200)))
               : null;
+            const maxParts = threadProviders.length
+              ? Math.min(...threadProviders.map((provider) => provider.max_thread_parts ?? 25))
+              : (activeProvider?.max_thread_parts ?? 25);
             return (
               <div className="thread-composer">
                 <div className="thread-head">
@@ -1192,7 +1338,7 @@ export default function PublishPage() {
                 <Button
                   variant="quiet"
                   size="sm"
-                  disabled={thread.length >= (activeProvider?.max_thread_parts ?? 25) - 1}
+                  disabled={thread.length >= maxParts - 1}
                   onClick={() => setThread([...thread, ""])}
                 >{t("publish.addReply")}</Button>
                 {/* Each part is its own post, so the limit is per part - which
@@ -1210,7 +1356,8 @@ export default function PublishPage() {
 
           {(() => {
             const carriers = chosen.filter((platform) =>
-              (activeProvider?.first_comment_platforms ?? []).includes(platform));
+              providersFor(platform).some(
+                (provider) => (provider.first_comment_platforms ?? []).includes(platform)));
             if (!carriers.length) return null;
             return (
               <label>{t("publish.firstComment")} <i>{t("publish.optional")}</i>
@@ -1354,7 +1501,13 @@ export default function PublishPage() {
           <fieldset className="account-picker">
             <legend>
               Destinations
-              <b>{chosen.length ? `${chosen.length} selected` : "none selected"}</b>
+              {/* Accounts, not networks. Two TikTok accounts are two posts, and
+                  counting networks made choosing the second look like it had
+                  done nothing. */}
+              <b>{targets.length
+                ? `${targets.length} account${targets.length === 1 ? "" : "s"}`
+                  + ` on ${chosen.length} network${chosen.length === 1 ? "" : "s"}`
+                : "none selected"}</b>
             </legend>
             {!connection?.authenticated ? (
               <p className="picker-empty">
@@ -1385,56 +1538,100 @@ export default function PublishPage() {
                 )}
                 <div className="platform-grid">{connectedPlatforms.map((platform) => {
                   const platformAccounts = accounts.filter((account) => account.platform === platform);
+                  const picked = platformAccounts.filter((account) => targets.includes(account.id));
+                  const engines = new Set(platformAccounts.map((item) => item.provider));
                   return (
-                    <section key={platform} className={`platform-card${targets[platform] ? " chosen" : ""}`}>
+                    <section key={platform} className={`platform-card${picked.length ? " chosen" : ""}`}>
                       <div className="platform-card-head">
                         <PlatformIcon platform={platform} />
                         <div>
                           <strong>{platformLabels[platform]}</strong>
                           <span>
-                            {platformAccounts.length} connected
-                            {new Set(platformAccounts.map((item) => item.provider)).size > 1
-                              && " · more than one engine"}
+                            {picked.length
+                              ? `${picked.length} of ${platformAccounts.length} chosen`
+                              : `${platformAccounts.length} connected`}
+                            {engines.size > 1 && ` · ${engines.size} engines`}
                           </span>
                         </div>
+                        {/* One reach-everything action per network. Choosing
+                            eight accounts one at a time is the work this page
+                            exists to remove. */}
+                        {platformAccounts.length > 1 && (
+                          <button
+                            type="button"
+                            className="platform-card-all"
+                            onClick={() => setTargets((current) => (
+                              picked.length === platformAccounts.length
+                                ? current.filter((id) => !platformAccounts.some((account) => account.id === id))
+                                : [...current, ...platformAccounts
+                                    .filter((account) => !current.includes(account.id))
+                                    .map((account) => account.id)]
+                            ))}
+                          >{picked.length === platformAccounts.length ? "None" : "All"}</button>
+                        )}
                       </div>
-                      <div className="account-options">{platformAccounts.map((account) => (
-                        <button
-                          type="button"
-                          key={account.id}
-                          aria-pressed={targets[platform] === account.id}
-                          className={targets[platform] === account.id ? "selected" : ""}
-                          title={account.label}
-                          onClick={() => setTargets({ ...targets, [platform]: targets[platform] === account.id ? "" : account.id })}
-                        ><span>{account.label}</span><i>{account.provider_label}</i></button>
-                      ))}</div>
-                      {/* Only networks with a real choice are asked about. */}
-                      {targets[platform] && postTypesFor(platform).length > 1 && (
-                        <div className="post-types" role="tablist" aria-label={`${platformLabels[platform]} post type`}>
-                          {postTypesFor(platform).map((kind) => {
-                            const active = (postTypes[platform] ?? postTypesFor(platform)[0]?.id) === kind.id;
-                            return (
-                              <button
-                                type="button"
-                                key={kind.id}
-                                aria-pressed={active}
-                                className={active ? "selected" : ""}
-                                title={kind.help}
-                                onClick={() => setPostTypes({ ...postTypes, [platform]: kind.id })}
-                              >{kind.label}</button>
-                            );
-                          })}
-                        </div>
-                      )}
+                      <div className="account-options">{platformAccounts.map((account) => {
+                        const on = targets.includes(account.id);
+                        return (
+                          <button
+                            type="button"
+                            key={account.id}
+                            aria-pressed={on}
+                            className={on ? "selected" : ""}
+                            title={account.label}
+                            onClick={() => setTargets((current) => (
+                              on
+                                ? current.filter((id) => id !== account.id)
+                                : [...current, account.id]
+                            ))}
+                          ><span>{account.label}</span><i>{account.provider_label}</i></button>
+                        );
+                      })}</div>
+                      {/* Per account, not per network: the same post can be a
+                          Reel on one Instagram account and a Story on another. */}
+                      {picked.map((account) => {
+                        const kinds = postTypesFor(account.id);
+                        if (kinds.length < 2) return null;
+                        return (
+                          <div
+                            className="post-types"
+                            key={account.id}
+                            role="tablist"
+                            aria-label={`${account.label} post type`}
+                          >
+                            {picked.length > 1 && <em className="post-types-for">{account.label}</em>}
+                            {kinds.map((kind) => {
+                              const active = (postTypes[account.id] ?? kinds[0]?.id) === kind.id;
+                              return (
+                                <button
+                                  type="button"
+                                  key={kind.id}
+                                  aria-pressed={active}
+                                  className={active ? "selected" : ""}
+                                  title={kind.help}
+                                  onClick={() => setPostTypes({ ...postTypes, [account.id]: kind.id })}
+                                >{kind.label}</button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
                     </section>
                   );
                 })}</div>
                 <div className="picker-footer">
+                  {/* Which engines these destinations came from. The list is
+                      every engine at once, so naming one would be wrong; and
+                      the old line comparing connected to supported platforms
+                      could only ever say "no other platforms" once accounts
+                      were loaded from all of them. */}
                   <p>
-                    {activeProvider?.label} also supports{" "}
-                    {platforms.filter((platform) => !connectedPlatforms.includes(platform))
-                      .map((platform) => platformLabels[platform]).join(", ") || "no other platforms"}
-                    {platforms.length > connectedPlatforms.length ? " — connect them in its dashboard." : "."}
+                    {engineReach.filter((engine) => engine.reachable).length
+                      ? `Reachable through ${engineReach
+                          .filter((engine) => engine.reachable)
+                          .map((engine) => `${engine.label} (${engine.account_count})`)
+                          .join(", ")}. Connect more in each engine's dashboard.`
+                      : "No engine is reachable yet. Add a key in Engine setup above."}
                   </p>
                   <Button
                     variant="quiet"
@@ -1461,7 +1658,7 @@ export default function PublishPage() {
             </label>
           )}
 
-          {activeProvider?.supports_approval && delivery === "draft" && (
+          {approvers.length > 0 && delivery === "draft" && (
             <label className="checkbox-row">
               <input
                 type="checkbox"
@@ -1469,8 +1666,9 @@ export default function PublishPage() {
                 onChange={(event) => setNeedsApproval(event.target.checked)}
               /> {t("publish.sendForApproval")}
               <small>
-                Held in {activeProvider.label} for a teammate to approve. Only works where
-                that channel&apos;s posting policy asks for approval.
+                Held in {engineNames(approvers)} for a teammate to approve. Only works
+                where that channel&apos;s posting policy asks for approval, and only for
+                the destinations those engines deliver.
               </small>
             </label>
           )}
@@ -1496,7 +1694,7 @@ export default function PublishPage() {
                 const form = event.currentTarget.form;
                 const where = chosen.map((platform) => platformLabels[platform]).join(", ");
                 if (form && window.confirm(
-                  `${{ now: "Publish immediately", schedule: "Schedule", draft: "Create a draft" }[delivery]} on ${activeProvider?.label} for ${where}?`,
+                  `${{ now: "Publish immediately", schedule: "Schedule", draft: "Create a draft" }[delivery]} on ${deliveringNames || activeProvider?.label} for ${where}?`,
                 )) void submit(form, true);
               }}
             >
@@ -1560,7 +1758,7 @@ export default function PublishPage() {
               />
               <p className="privacy-note">
                 A rehearsal of the caption and frame against this network&apos;s shape,
-                not a render of what {activeProvider?.label} will produce.
+                not a render of what {deliveringNames || activeProvider?.label} will produce.
               </p>
             </article>
           )}

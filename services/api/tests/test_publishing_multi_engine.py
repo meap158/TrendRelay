@@ -257,3 +257,81 @@ def test_a_path_with_no_public_media_need_is_not_hosted(media_file, engines, mon
     )
     body = request(media_file, provider="zernio", targets=targets(("tiktok", "zernio")))
     publishing._execute_publish(body)
+
+
+# --- several accounts on one network ------------------------------------------
+
+
+def account(platform: str, integration_id: str, provider: str) -> publishing.PublishTarget:
+    return publishing.PublishTarget(
+        platform=platform, integration_id=integration_id, provider=provider
+    )
+
+
+def test_one_network_can_receive_the_post_on_several_accounts(media_file, engines) -> None:
+    """The case that made multi-engine worth having.
+
+    A brand with two TikTok accounts used to have to send the post twice,
+    because the request refused a second target on a platform it had already
+    seen. That refusal was about networks; what actually must not repeat is an
+    account.
+    """
+    body = request(
+        media_file,
+        provider="bundle_social",
+        media_url="https://cdn.example.com/clip.mp4",
+        targets=[
+            account("tiktok", "brand-main", "bundle_social"),
+            account("tiktok", "brand-second", "zernio"),
+            account("youtube", "brand-tube", "buffer"),
+        ],
+    )
+    result = publishing._execute_publish(body)
+
+    assert engines["bundle_social"] == [["tiktok"]]
+    assert engines["zernio"] == [["tiktok"]]
+    assert engines["buffer"] == [["youtube"]]
+    assert result["status"] == "created"
+
+
+def test_two_accounts_on_one_engine_go_out_in_a_single_call(media_file, engines) -> None:
+    # Grouped by engine, so one engine holding both accounts is asked once and
+    # can batch them - not asked twice for the same post.
+    body = request(
+        media_file,
+        provider="bundle_social",
+        media_url="https://cdn.example.com/clip.mp4",
+        targets=[
+            account("tiktok", "brand-main", "bundle_social"),
+            account("tiktok", "brand-second", "bundle_social"),
+        ],
+    )
+    publishing._execute_publish(body)
+
+    assert engines["bundle_social"] == [["tiktok", "tiktok"]]
+
+
+def test_the_same_account_cannot_be_chosen_twice(media_file) -> None:
+    # Not a network rule but an account one: the same account receiving the post
+    # twice is a duplicate, and some engines accept it without complaint.
+    with pytest.raises(ValueError, match="only be chosen once"):
+        request(
+            media_file,
+            targets=[
+                account("tiktok", "brand-main", "bundle_social"),
+                account("tiktok", "brand-main", "bundle_social"),
+            ],
+        )
+
+
+def test_the_same_account_id_on_two_engines_is_two_destinations(media_file) -> None:
+    # Two engines can expose different accounts under ids that look alike, so
+    # the engine is part of a destination's identity.
+    body = request(
+        media_file,
+        targets=[
+            account("tiktok", "shared-looking-id", "bundle_social"),
+            account("tiktok", "shared-looking-id", "zernio"),
+        ],
+    )
+    assert len(body.targets) == 2

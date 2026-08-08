@@ -437,10 +437,14 @@ nav strong { color: #1c2b33; }
 .platform-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .platform-card { display: grid; align-content: start; gap: 9px; padding: 11px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel-raised); }
 .platform-card.chosen { border-color: var(--green); background: var(--panel); }
-.platform-card-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 9px; align-items: center; }
+.platform-card-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 9px; align-items: center; }
 .platform-card-head > div { display: grid; gap: 2px; min-width: 0; }
 .platform-card-head strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .platform-card-head span { color: var(--muted); font-size: 11px; }
+/* Reaching every account on a network is the common case once a workspace runs
+   more than one engine, so it is one control rather than a row of taps. */
+.publish-form .platform-card-all { width: auto; min-height: 22px; padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: 999px; background: transparent; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.publish-form .platform-card-all:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
 .platform-icon, .provider-mark { display: block; flex: none; }
 .account-options { display: grid; gap: 5px; align-content: start; }
 /* Two lines now: the channel, and the engine that reaches it. The same network
@@ -462,6 +466,9 @@ nav strong { color: #1c2b33; }
 /* Underlined tabs rather than a second row of pills: the account chips above
  * are already pill-shaped, and two pill rows on one card read as one list. */
 .post-types { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+/* Named only when a network has more than one account chosen; with one, the
+   card heading above already says which account these types belong to. */
+.post-types-for { flex: 1 0 100%; color: var(--muted); font-size: 10px; font-style: normal; }
 .publish-form .post-types button { width: auto; min-height: 24px; padding: 2px 8px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); font-size: 11px; }
 .publish-form .post-types button:hover:not(:disabled) { color: var(--text); }
 .publish-form .post-types button.selected { border-bottom-color: var(--green); color: var(--green); font-weight: 600; }
@@ -543,6 +550,10 @@ nav strong { color: #1c2b33; }
 .engine-summary > div { display: grid; gap: 1px; margin-inline-end: auto; min-width: 0; }
 .engine-summary strong { font-size: 13px; font-weight: 500; }
 .engine-summary span { color: var(--muted); font-size: 11px; }
+/* Several engines can carry one post, so the summary shows every connected
+   mark. Overlapped slightly: they read as one group rather than a queue. */
+.engine-summary-marks { display: inline-flex; align-items: center; }
+.engine-summary-marks > * + * { margin-inline-start: -6px; }
 .section-heading-aside { display: flex; align-items: center; gap: 8px; }
 
 /* --- publishing job rows ---------------------------------------------------- */
