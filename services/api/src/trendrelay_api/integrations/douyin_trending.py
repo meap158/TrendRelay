@@ -37,6 +37,11 @@ class TrendingItem:
     #: the topic the term belongs to, and asking the video-detail endpoint for it
     #: fails every time. Kept for reference, never turned into a video link.
     topic_id: str | None
+    #: The board's `sentence_id`, which names the topic's own page. Unlike
+    #: group_id it is present on every entry, and `douyin.com/hot/<id>` serves
+    #: that page to a signed-out visitor - so this, not the term, is what lets
+    #: a topic be downloaded without a Douyin account.
+    sentence_id: str | None = None
     #: The board's own thumbnail. A signed URL with an expiry, so it is worth
     #: showing as soon as the board is read and worth nothing stored.
     cover_url: str | None = None
@@ -54,6 +59,7 @@ class TrendingItem:
             "term": self.term,
             "hot_value": self.hot_value,
             "topic_id": self.topic_id,
+            "sentence_id": self.sentence_id,
             # The board ranks topics, not clips. Every term therefore opens the
             # search, where a real video can be chosen; there is no video here to
             # hand to Downloads directly.
@@ -73,6 +79,8 @@ def _parse(payload: dict[str, Any]) -> list[TrendingItem]:
             continue
         group = raw.get("group_id")
         topic_id = str(group) if group not in (None, "", 0) else None
+        sentence = raw.get("sentence_id")
+        sentence_id = str(sentence) if sentence not in (None, "", 0) else None
         cover = raw.get("word_cover")
         urls = cover.get("url_list") if isinstance(cover, dict) else None
         cover_url = next(
@@ -85,6 +93,7 @@ def _parse(payload: dict[str, Any]) -> list[TrendingItem]:
                 term=term,
                 hot_value=int(raw.get("hot_value") or 0),
                 topic_id=topic_id,
+                sentence_id=sentence_id,
                 cover_url=cover_url,
                 view_count=int(raw.get("view_count") or 0),
             )

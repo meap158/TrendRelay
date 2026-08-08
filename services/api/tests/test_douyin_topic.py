@@ -138,6 +138,53 @@ def test_a_hang_becomes_a_stated_timeout(monkeypatch) -> None:
 # --- queueing what it found -----------------------------------------------------
 
 
+# --- the account-free route -----------------------------------------------------
+
+
+def topic_page(count: int) -> str:
+    return json.dumps({
+        "sentence_id": "2601278",
+        "count": count,
+        "landed_on": "https://www.douyin.com/video/7671120679625936162?sentenceId=2601278",
+        "items": [
+            {
+                "aweme_id": f"76709916148016448{index:02d}",
+                "video_url": f"https://www.douyin.com/video/76709916148016448{index:02d}",
+            }
+            for index in range(count)
+        ],
+    })
+
+
+def test_a_hot_topic_page_lists_videos(monkeypatch) -> None:
+    stub_run(monkeypatch, completed(0, topic_page(4)))
+    result = douyin_topic.topic_videos("2601278", limit=4)
+    assert result["count"] == 4
+    assert all(item["video_url"].startswith("https://www.douyin.com/video/")
+               for item in result["items"])
+
+
+def test_reading_a_topic_page_never_reports_a_sign_in_problem(monkeypatch) -> None:
+    # This is the route that exists precisely because it needs no account.
+    # Telling the operator to sign in here would send them somewhere useless.
+    stub_run(monkeypatch, completed(1, stderr="net::ERR_TIMED_OUT"))
+    with pytest.raises(TopicUnavailable) as error:
+        douyin_topic.topic_videos("2601278")
+    assert error.value.login_required is False
+
+
+def test_a_topic_that_dropped_off_the_board_says_so(monkeypatch) -> None:
+    stub_run(monkeypatch, completed(douyin_topic.EMPTY_TOPIC_EXIT))
+    with pytest.raises(TopicUnavailable, match="dropped off the board"):
+        douyin_topic.topic_videos("2601278")
+
+
+def test_a_missing_browser_names_the_one_step_that_installs_it(monkeypatch) -> None:
+    stub_run(monkeypatch, completed(douyin_topic.BROWSER_MISSING_EXIT))
+    with pytest.raises(TopicUnavailable, match="Connect"):
+        douyin_topic.topic_videos("2601278")
+
+
 def request(**overrides: Any) -> TopicDownloadRequest:
     return TopicDownloadRequest(**{
         "workspace_id": "ws",
@@ -227,3 +274,54 @@ def test_the_urls_queued_are_ones_the_downloader_accepts(monkeypatch) -> None:
 def test_a_blank_term_is_refused() -> None:
     with pytest.raises(ValueError):
         TopicDownloadRequest(workspace_id="ws", term="   ")
+
+
+# --- which route a download takes -----------------------------------------------
+
+
+def test_a_board_topic_downloads_without_a_douyin_account(monkeypatch) -> None:
+    # The whole point of the hot-topic route. Given a sentence_id it must read
+    # the topic page, never search, because searching is the door that is shut
+    # to anyone without an account.
+    seen: list = []
+    stub_run(monkeypatch, completed(0, topic_page(3)), seen)
+    queued = capture_job(monkeypatch)
+
+    result = download_topic(request(sentence_id="2601278"), actor_user_id="user-1")
+
+    assert result["route"] == "hot-topic-page"
+    assert seen[0][0][2] == "hot", "must read the topic page, not search"
+    assert len(queued[0][0].urls) == 3
+
+
+def test_search_is_only_used_when_there_is_no_topic_id(monkeypatch) -> None:
+    seen: list = []
+    stub_run(monkeypatch, completed(0, videos(3)), seen)
+    capture_job(monkeypatch)
+
+    result = download_topic(request(), actor_user_id="user-1")
+
+    assert result["route"] == "search"
+    assert seen[0][0][2] == "topic"
+
+
+def test_the_term_is_kept_for_the_record_even_on_the_topic_route(monkeypatch) -> None:
+    # The topic page knows an id, not a name. Losing the term would leave the
+    # audit trail and the operator's message saying "2601278".
+    stub_run(monkeypatch, completed(0, topic_page(2)))
+    capture_job(monkeypatch)
+    result = download_topic(
+        request(term="露营", sentence_id="2601278", limit=2), actor_user_id="user-1"
+    )
+    assert result["term"] == "露营"
+
+
+def test_a_topic_id_that_is_not_a_number_is_refused() -> None:
+    # It is interpolated into a URL.
+    with pytest.raises(ValueError):
+        TopicDownloadRequest(workspace_id="ws", term="x", sentence_id="../../evil")
+
+
+def test_an_absent_topic_id_is_not_a_topic_id() -> None:
+    assert TopicDownloadRequest(workspace_id="ws", term="x", sentence_id="").sentence_id is None
+    assert TopicDownloadRequest(workspace_id="ws", term="x").sentence_id is None

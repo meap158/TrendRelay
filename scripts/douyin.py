@@ -30,6 +30,7 @@ DEFAULT_DATABASE = ROOT / ".data" / "douyin" / "dy_downloader.db"
 DEFAULT_COOKIE_FILE = ROOT / ".data" / "douyin" / "cookies.json"
 CONNECTION_STATUS_FILE = ROOT / ".data" / "douyin" / "connection-status.json"
 COOKIE_CAPTURE_SCRIPT = ROOT / "scripts" / "douyin_cookie_capture.py"
+TOPIC_VIDEOS_SCRIPT = ROOT / "scripts" / "douyin_topic_videos.py"
 SUPPORTED_MODES = ("post", "like", "mix", "music", "collect", "collectmix")
 URL_PATTERN = re.compile(r"https?://[^\s<>\"']+")
 MEDIA_SUFFIXES = {
@@ -432,6 +433,48 @@ def _search_snapshots(output: Path) -> list[Path]:
     return sorted(board.glob("*.jsonl")) if board.is_dir() else []
 
 
+def hot_topic(args: argparse.Namespace) -> int:
+    """The videos on a hot-topic page, which needs no Douyin account.
+
+    Search is the walled route: an anonymous session gets 2483, and someone
+    without an account cannot use it at all. The board hands out a `sentence_id`
+    for every term, and the page it names is served to signed-out visitors, so
+    this is the route that works for everyone.
+
+    Run in the provider's own venv because that is where the browser lives.
+    """
+    if not login_browser_ready():
+        print(
+            "The browser used to read topic pages is not installed. "
+            "Run `npm run douyin -- connect` once to install it.",
+            file=sys.stderr,
+        )
+        return 3
+    command = [
+        str(tool_python()), str(TOPIC_VIDEOS_SCRIPT), args.sentence_id,
+        "--limit", str(args.limit),
+    ]
+    if DEFAULT_COOKIE_FILE.is_file():
+        command += ["--cookies", str(DEFAULT_COOKIE_FILE)]
+    completed = subprocess.run(
+        command,
+        cwd=ROOT,
+        env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+        timeout=args.timeout,
+    )
+    if completed.stderr:
+        print(completed.stderr.strip(), file=sys.stderr)
+    if completed.returncode != 0:
+        return completed.returncode
+    print(completed.stdout.strip())
+    return 0
+
+
 def topic(args: argparse.Namespace) -> int:
     """Find the videos posted under a term and print them as JSON.
 
@@ -494,7 +537,8 @@ def topic(args: argparse.Namespace) -> int:
                 print(
                     "Douyin requires a signed-in account to search. The saved session is "
                     "anonymous, which is enough to download a known link but not to look "
-                    "one up. Run `npm run douyin -- login` and sign in, then retry.",
+                    "one up. A trending topic does not need this: it downloads through "
+                    "its own page. To search anyway, connect Douyin again and log in.",
                     file=sys.stderr,
                 )
                 return 5
@@ -798,6 +842,15 @@ def build_parser() -> argparse.ArgumentParser:
     topics.add_argument("--proxy", default="")
     topics.add_argument("--timeout", type=positive_integer, default=180)
     topics.set_defaults(handler=topic)
+
+    hot_topics = subparsers.add_parser(
+        "hot",
+        help="List a hot topic's videos by its board sentence_id. No account needed.",
+    )
+    hot_topics.add_argument("sentence_id")
+    hot_topics.add_argument("--limit", type=positive_integer, default=10)
+    hot_topics.add_argument("--timeout", type=positive_integer, default=180)
+    hot_topics.set_defaults(handler=hot_topic)
     return parser
 
 
@@ -817,6 +870,8 @@ def main() -> int:
         return login_provider()
     if args.command == "connect":
         return connect_provider()
+    if args.command == "hot":
+        return hot_topic(args)
     if args.command == "topic":
         return topic(args)
     if args.command == "trending":
