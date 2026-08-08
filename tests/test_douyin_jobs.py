@@ -1000,3 +1000,51 @@ def test_an_older_request_without_media_kinds_still_fetches_everything(
 
     assert "--covers" in seen["command"]
     assert "--music" in seen["command"]
+
+
+# --- when a failed download is, and is not, a session problem ------------------
+
+
+def test_a_missing_video_is_not_reported_as_an_expired_session() -> None:
+    """The failure that started this: a link that is not a video.
+
+    The provider says it could not read the video's detail. Nothing about that
+    is about who we are, and treating it as an expired login had the operator
+    re-authenticating repeatedly against a session that was working.
+    """
+    from trendrelay_api.integrations.douyin import _looks_like_auth_failure
+
+    assert _looks_like_auth_failure(
+        "VideoDownloader - ERROR - Failed to get video detail: 7670088121371464995"
+    ) is False
+
+
+def test_the_no_media_note_no_longer_accuses_the_session() -> None:
+    # The downloader's own summary used to name cookies and anti-bot as the
+    # likely cause, and the job classifier believed it. Now it states only what
+    # happened, so it cannot convict the session by itself.
+    from trendrelay_api.integrations.douyin import _looks_like_auth_failure
+
+    assert _looks_like_auth_failure(
+        "Download finished without saving any media files. "
+        "The reason is above, if the provider gave one."
+    ) is False
+
+
+def test_a_real_refusal_is_still_recognised() -> None:
+    from trendrelay_api.integrations.douyin import _looks_like_auth_failure
+
+    for detail in (
+        "403 Forbidden",
+        "Please sign in to continue",
+        "risk control triggered, complete the slider verification",
+        "missing or expired cookies",
+    ):
+        assert _looks_like_auth_failure(detail) is True, detail
+
+
+def test_an_ordinary_failure_is_not_a_refusal() -> None:
+    from trendrelay_api.integrations.douyin import _looks_like_auth_failure
+
+    for detail in ("", "post has been removed", "network timeout", "no such user"):
+        assert _looks_like_auth_failure(detail) is False, detail

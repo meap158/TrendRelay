@@ -581,10 +581,14 @@ def batch_download(args: argparse.Namespace) -> int:
         after_media = list_media_files(args.output)
         new_media = after_media - before_media
         if not new_media:
+            # Stated, not guessed at. This also happens when a post has been
+            # removed, when the link names a topic or a page rather than a
+            # video, and when everything asked for is already held. Naming
+            # cookies here made every one of those read as an expired session,
+            # and the caller upstream believed it.
             print(
                 "Download finished without saving any media files. "
-                "Douyin likely blocked the request (missing/expired cookies or anti-bot). "
-                + cookie_setup_message(),
+                "The reason is above, if the provider gave one.",
                 file=sys.stderr,
             )
             return 3

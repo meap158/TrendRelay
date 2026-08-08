@@ -218,6 +218,31 @@ def cookie_status() -> dict[str, Any]:
     }
 
 
+#: Words the provider uses when a request was refused for who we are, rather
+#: than for what we asked. Only these justify telling an operator their session
+#: is finished.
+AUTH_FAILURE_MARKERS = (
+    "cookie",
+    "login",
+    "sign in",
+    "unauthor",
+    "forbidden",
+    "403",
+    "401",
+    "risk",
+    "verify",
+    "captcha",
+    "anti-bot",
+    "slider",
+)
+
+
+def _looks_like_auth_failure(detail: str) -> bool:
+    """Whether the provider's own words point at the session rather than the link."""
+    text = (detail or "").casefold()
+    return any(marker in text for marker in AUTH_FAILURE_MARKERS)
+
+
 def _write_connection_status(state: str, message: str) -> dict[str, str]:
     payload = {"state": state, "message": message, "updated_at": _now()}
     CONNECTION_STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -841,19 +866,38 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
                 creator_urls.extend(creators)
 
         if not artifacts:
-            if blocked_sources:
+            details = source_errors or ([last_detail] if last_detail else [])
+            evidence = '\n'.join(details)
+            # A source that saved nothing is not proof the session is finished.
+            # It is also what a removed post, a link that is not a video, and a
+            # clip already held all look like. Only the provider actually saying
+            # so marks the connection broken - anything else had the operator
+            # re-authenticating over and over against a session that was fine.
+            if blocked_sources and _looks_like_auth_failure(evidence):
                 _write_connection_status(
                     "refresh_required",
                     "Douyin rejected the saved session. Refresh the Douyin session and retry.",
                 )
-                raise RuntimeError(
-                    "Douyin could not access these sources. Refresh the Douyin session in "
-                    "TrendRelay, then retry with a specific video or profile link."
+                message = (
+                    "Douyin refused the request for this session. Refresh the Douyin "
+                    "session in TrendRelay, then retry."
                 )
-            message = "Download finished without media files. Connect Douyin in the app and retry."
-            details = source_errors or ([last_detail] if last_detail else [])
-            if details:
-                message = f"{message}\n" + "\n".join(details)[-2500:]
+            elif blocked_sources:
+                message = (
+                    "Douyin returned no media for these links. The post may have been "
+                    "removed, or the link may name a topic or a page rather than a "
+                    "video. The saved session was not the problem."
+                )
+            else:
+                message = (
+                    "Download finished without media files. Connect Douyin in the app "
+                    "and retry."
+                )
+            # The provider's own words survive whichever branch runs. They were
+            # dropped exactly when something unexpected happened, which is when
+            # they are worth the most.
+            if evidence:
+                message = message + '\n' + evidence[-2500:]
             raise RuntimeError(message)
 
         summary = f"Fetched {len(artifacts)} media file(s)"
