@@ -9,6 +9,7 @@ import { Badge, Card } from "../ui/primitives";
 import { StatusToasts, useStatus } from "../ui/status";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
+import { useT } from "../i18n-provider";
 
 type Workspace = { id: string; name: string; role: string };
 
@@ -96,6 +97,7 @@ function schemeLabel(scheme: string): string {
 const isSort = oneOf("title", "spend", "royalty");
 
 export default function CatalogPage() {
+  const t = useT();
   const { user, apiFetch } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
@@ -197,7 +199,7 @@ export default function CatalogPage() {
   const pending = suggestions.filter((item) => !item.automatic);
   const ready = suggestions.filter((item) => item.automatic);
 
-  if (!user) return <main className="console"><p>Sign in to see the catalog.</p></main>;
+  if (!user) return <main className="console"><p>{t("catalog.signInPrompt")}</p></main>;
 
   return (
     <main className="console catalog-page">
@@ -205,7 +207,7 @@ export default function CatalogPage() {
 
       <header className="catalog-head">
         <div>
-          <h1>Catalog</h1>
+          <h1>{t("catalog.heading")}</h1>
           <p>
             One row per book. Editions are grouped underneath, so ad spend and
             royalties are measured against the book rather than the format.
@@ -214,7 +216,7 @@ export default function CatalogPage() {
         <div className="catalog-head-controls">
           {workspaces.length > 1 && (
             <select
-              aria-label="Workspace"
+              aria-label={t("workspace.select")}
               value={workspaceId}
               onChange={(event) => setWorkspaceId(event.target.value)}
             >
@@ -224,13 +226,13 @@ export default function CatalogPage() {
             </select>
           )}
           <select
-            aria-label="Sort books by"
+            aria-label={t("catalog.sortBy")}
             value={sort}
             onChange={(event) => setSort(event.target.value as typeof sort)}
           >
-            <option value="title">By title</option>
-            <option value="spend">By ad spend</option>
-            <option value="royalty">By royalty</option>
+            <option value="title">{t("catalog.byTitle")}</option>
+            <option value="spend">{t("catalog.byAdSpend")}</option>
+            <option value="royalty">{t("catalog.byRoyalty")}</option>
           </select>
         </div>
       </header>
@@ -279,7 +281,7 @@ export default function CatalogPage() {
                     size="sm"
                     busy={busy === "group"}
                     onClick={() => void group([suggestion.match_key])}
-                  >These are one book</Button>
+                  >{t("catalog.theseAreOneBook")}</Button>
                 )}
               </li>
             ))}
@@ -314,14 +316,14 @@ export default function CatalogPage() {
             <table className="catalog-table">
               <thead>
                 <tr>
-                  <th scope="col">Book</th>
-                  <th scope="col">Editions</th>
-                  <th scope="col" className="numeric">Ad spend</th>
-                  <th scope="col" className="numeric">Royalty</th>
-                  <th scope="col" className="numeric" title="Royalty from advertised campaigns divided by ad spend">ROAS</th>
-                  <th scope="col" className="numeric" title="Ad spend as a share of the royalty those ads produced">ACoS</th>
-                  <th scope="col" className="numeric" title="Ad spend as a share of all royalty, advertised or not">TACoS</th>
-                  <th scope="col" className="numeric">Units</th>
+                  <th scope="col">{t("catalog.book")}</th>
+                  <th scope="col">{t("catalog.editions")}</th>
+                  <th scope="col" className="numeric">{t("catalog.adSpend")}</th>
+                  <th scope="col" className="numeric">{t("catalog.royalty")}</th>
+                  <th scope="col" className="numeric" title={t("catalog.roasHelp")}>ROAS</th>
+                  <th scope="col" className="numeric" title={t("catalog.acosHelp")}>ACoS</th>
+                  <th scope="col" className="numeric" title={t("catalog.tacosHelp")}>TACoS</th>
+                  <th scope="col" className="numeric">{t("catalog.units")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -359,7 +361,7 @@ export default function CatalogPage() {
                             {/* Stated on the row rather than as a footnote: it
                                 is the reason the amounts beside it are on
                                 separate lines instead of added together. */}
-                            {work.mixed_currency && <Badge tone="warn">mixed currency</Badge>}
+                            {work.mixed_currency && <Badge tone="warn">{t("catalog.mixedCurrency")}</Badge>}
                           </td>
                         )}
                         {bucket ? (
@@ -393,7 +395,7 @@ export default function CatalogPage() {
                                     {edition.identifier ?? "no identifier"}
                                   </code>
                                   {edition.assignment === "manual" && (
-                                    <Badge tone="accent">set by hand</Badge>
+                                    <Badge tone="accent">{t("catalog.setByHand")}</Badge>
                                   )}
                                 </div>
                                 {canEdit && (
@@ -401,12 +403,12 @@ export default function CatalogPage() {
                                     variant="quiet"
                                     size="sm"
                                     busy={busy === "detach"}
-                                    title="Treat this edition as a separate book from now on"
+                                    title={t("catalog.splitOutHelp")}
                                     onClick={() => void detach(
                                       edition.product_id,
                                       edition.name ?? edition.title ?? "That edition",
                                     )}
-                                  >Split out</Button>
+                                  >{t("catalog.splitOut")}</Button>
                                 )}
                               </li>
                             ))}

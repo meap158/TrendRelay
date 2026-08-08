@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 
 import { Button } from "../ui/button";
 import { Badge, Card } from "../ui/primitives";
+import { useT } from "../i18n-provider";
 
 type Work = { work_id: string; title: string; author: string | null };
 
@@ -101,6 +102,7 @@ export function SpendImport({
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   onImported: () => void;
 }) {
+  const t = useT();
   const [csvText, setCsvText] = useState("");
   const [currency, setCurrency] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -170,7 +172,7 @@ export function SpendImport({
   return (
     <Card
       eyebrow="Ad spend"
-      title="Bring in a spend report"
+      title={t("spendImport.heading")}
       aside={preview && canEdit ? (
         <div className="spend-actions">
           <Button
@@ -184,7 +186,7 @@ export function SpendImport({
               variant="secondary"
               size="sm"
               busy={busy === "import"}
-              title="Also import the rows whose book was guessed from the campaign name"
+              title={t("spendImport.alsoImportGuessed")}
               onClick={() => void bring(true)}
             >Include {preview.needs_confirming} guessed</Button>
           )}
@@ -198,7 +200,7 @@ export function SpendImport({
       </p>
 
       <label className="spend-field">
-        <span>Exported report</span>
+        <span>{t("spendImport.exportedReport")}</span>
         <textarea
           rows={5}
           value={csvText}
@@ -217,7 +219,7 @@ export function SpendImport({
 
       <div className="spend-controls">
         <label className="spend-currency">
-          <span>Currency if the file has none</span>
+          <span>{t("spendImport.currencyIfNone")}</span>
           <input
             value={currency}
             maxLength={3}
@@ -231,7 +233,7 @@ export function SpendImport({
           busy={busy === "check"}
           disabled={!csvText.trim() || !canEdit}
           onClick={() => void check()}
-        >Check it first</Button>
+        >{t("spendImport.checkFirst")}</Button>
       </div>
 
       {failure && <p className="console-error" role="alert">{failure}</p>}
@@ -264,7 +266,7 @@ export function SpendImport({
 
       {(preview?.problems.length || result?.problems.length) ? (
         <details className="spend-problems">
-          <summary>Rows that could not be read</summary>
+          <summary>{t("spendImport.unreadableRows")}</summary>
           <ul>
             {(preview?.problems ?? result?.problems ?? []).map((problem) => (
               <li key={problem.line}>
@@ -278,7 +280,7 @@ export function SpendImport({
 
       {pending.length > 0 && (
         <div className="spend-unplaced">
-          <h3>Campaigns without a book</h3>
+          <h3>{t("spendImport.campaignsWithoutBook")}</h3>
           <p>
             Until each of these names a book its spend is left out, and every
             ratio above reads better than it should.
@@ -301,7 +303,7 @@ export function SpendImport({
                     onChange={(event) =>
                       setChoice((current) => ({ ...current, [campaign.key]: event.target.value }))}
                   >
-                    <option value="">Choose a book…</option>
+                    <option value="">{t("spendImport.chooseBook")}</option>
                     {works.map((work) => (
                       <option key={work.work_id} value={work.work_id}>
                         {work.title}{work.author ? ` — ${work.author}` : ""}
@@ -309,19 +311,19 @@ export function SpendImport({
                     ))}
                   </select>
                   {campaign.suggested && !choice[campaign.key] && (
-                    <Badge tone="warn">suggested</Badge>
+                    <Badge tone="warn">{t("spendImport.suggested")}</Badge>
                   )}
                   <Button
                     variant="secondary"
                     size="sm"
                     busy={busy === `map:${campaign.name}`}
                     disabled={!canEdit || !(choice[campaign.key] ?? campaign.suggested)}
-                    title="Remember this for every later import of this campaign"
+                    title={t("spendImport.rememberForLater")}
                     onClick={() => void map(
                       campaign.name,
                       choice[campaign.key] ?? campaign.suggested ?? "",
                     )}
-                  >Always this book</Button>
+                  >{t("spendImport.alwaysThisBook")}</Button>
                 </div>
               </li>
             ))}

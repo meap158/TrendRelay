@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button } from "../ui/button";
+import { useT } from "../i18n-provider";
 
 type Workspace = { id: string; name: string; role: string };
 type Offer = {
@@ -110,6 +111,7 @@ function money(cents: number | null | undefined, currency: string): string {
 }
 
 export default function OpportunitiesPage() {
+  const t = useT();
   const { loading, user, apiFetch } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
@@ -329,8 +331,8 @@ export default function OpportunitiesPage() {
     }
   }
 
-  if (loading) return <main className="opportunity-page"><p>Loading opportunities…</p></main>;
-  if (!user) return <main className="opportunity-page"><h1>Sign in required</h1></main>;
+  if (loading) return <main className="opportunity-page"><p>{t("opportunities.loading")}</p></main>;
+  if (!user) return <main className="opportunity-page"><h1>{t("opportunities.signInRequired")}</h1></main>;
 
   return (
     <main className="opportunity-page">
@@ -338,7 +340,7 @@ export default function OpportunitiesPage() {
       <header className="opportunity-header">
         <div>
           <p className="eyebrow">EVIDENCE → ECONOMICS → CAMPAIGN</p>
-          <h1>Rank the opportunities worth pursuing</h1>
+          <h1>{t("opportunities.heading")}</h1>
           <p className="lede">
             Import offers, score demand with visible factors, and turn the best case into a draft campaign.
           </p>
@@ -357,14 +359,14 @@ export default function OpportunitiesPage() {
       <section className="opportunity-steps">
         <article className="offer-import-panel">
           <p className="eyebrow">1 · OFFER CATALOG</p>
-          <h2>Import affiliate offers</h2>
-          <p>Use the CSV fallback for Amazon Creators, impact.com, Awin, or any manual affiliate link.</p>
-          <Link className="inline-guide-link" href="/tools#amazon-access-guide">Where to get Amazon API access</Link>
+          <h2>{t("opportunities.importOffers")}</h2>
+          <p>{t("opportunities.importHelp")}</p>
+          <Link className="inline-guide-link" href="/tools#amazon-access-guide">{t("opportunities.whereAmazonAccess")}</Link>
           <label className="file-button">
             Load CSV
             <input type="file" accept=".csv,text/csv" onChange={(event) => void loadCsv(event.target.files?.[0])} />
           </label>
-          <textarea aria-label="Affiliate offer CSV" rows={8} value={csvText} onChange={(event) => setCsvText(event.target.value)} />
+          <textarea aria-label={t("opportunities.offerCsv")} rows={8} value={csvText} onChange={(event) => setCsvText(event.target.value)} />
           <Button variant="primary" busy={busy === "import"} disabled={!canEdit} onClick={() => void importCsv()}>
             {busy === "import" ? "Importing" : "Validate and import"}
           </Button>
@@ -378,34 +380,34 @@ export default function OpportunitiesPage() {
 
         <form className="opportunity-form" onSubmit={createOpportunity}>
           <p className="eyebrow">2 · SCORE THE CASE</p>
-          <h2>Build an explainable opportunity</h2>
+          <h2>{t("opportunities.buildCase")}</h2>
           {prefill.job && <p className="registry-message">Completed research job {prefill.job} will be attached as source evidence.</p>}
           <div className="opportunity-form-grid">
-            <label>Name<input name="name" required minLength={2} defaultValue={prefill.trend} placeholder="Portable espresso acceleration" /></label>
-            <label>Trend entity<input name="trend_entity" required minLength={2} defaultValue={prefill.trend} placeholder="portable espresso maker" /></label>
-            <label>Lifecycle<select name="lifecycle" defaultValue="unknown"><option value="unknown">Unknown</option><option value="emerging">Emerging</option><option value="accelerating">Accelerating</option><option value="peaking">Peaking</option><option value="saturated">Saturated</option><option value="declining">Declining</option></select></label>
-            <label>Markets<input name="markets" placeholder="US, TH" /></label>
-            <label>Languages<input name="languages" placeholder="en, th" /></label>
+            <label>{t("campaigns.name")}<input name="name" required minLength={2} defaultValue={prefill.trend} placeholder="Portable espresso acceleration" /></label>
+            <label>{t("opportunities.trendEntity")}<input name="trend_entity" required minLength={2} defaultValue={prefill.trend} placeholder="portable espresso maker" /></label>
+            <label>{t("opportunities.lifecycle")}<select name="lifecycle" defaultValue="unknown"><option value="unknown">{t("lifecycle.unknown")}</option><option value="emerging">{t("lifecycle.emerging")}</option><option value="accelerating">{t("lifecycle.accelerating")}</option><option value="peaking">{t("lifecycle.peaking")}</option><option value="saturated">{t("lifecycle.saturated")}</option><option value="declining">{t("lifecycle.declining")}</option></select></label>
+            <label>{t("campaigns.markets")}<input name="markets" placeholder="US, TH" /></label>
+            <label>{t("campaigns.languages")}<input name="languages" placeholder="en, th" /></label>
           </div>
-          <label>Summary<textarea name="summary" rows={3} required minLength={2} placeholder="What the evidence says and why it may convert." /></label>
+          <label>{t("opportunities.summary")}<textarea name="summary" rows={3} required minLength={2} placeholder={t("opportunities.whatEvidenceSays")} /></label>
           <label>
             Evidence
             <textarea name="evidence" rows={4} required={!prefill.job} defaultValue={prefill.evidence} placeholder={"source | evidence title | https://source.example\nanother_source | supporting signal | https://source.example"} />
-            <small>One row per item. Every score keeps these source references.</small>
+            <small>{t("opportunities.oneRowPerItem")}</small>
           </label>
 
           <div className="score-input-grid">
             {factorFields.map(([key, label, initial]) => (
               <fieldset key={key}>
                 <label>{label}<input name={key} type="number" min={0} max={100} defaultValue={initial} required /></label>
-                <input name={`${key}_reason`} placeholder="Evidence-based reason (recommended)" maxLength={500} />
+                <input name={`${key}_reason`} placeholder={t("opportunities.evidenceReason")} maxLength={500} />
               </fieldset>
             ))}
           </div>
 
           <div className="offer-picker">
-            <div><h3>Matching offers</h3><small>{offers.length} catalog offers</small></div>
-            {offers.length === 0 && <p>No offers yet. Import the CSV first, or score trend evidence without an offer.</p>}
+            <div><h3>{t("opportunities.matchingOffers")}</h3><small>{offers.length} catalog offers</small></div>
+            {offers.length === 0 && <p>{t("opportunities.noOffers")}</p>}
             {offers.map((offer) => (
               <label key={offer.id} className={selectedOffers.includes(offer.id) ? "selected" : ""}>
                 <input type="checkbox" checked={selectedOffers.includes(offer.id)} onChange={() => toggleOffer(offer.id)} />
@@ -416,7 +418,7 @@ export default function OpportunitiesPage() {
               <label>
                 Primary campaign offer
                 <select value={selectedOffer} onChange={(event) => setSelectedOffer(event.target.value)}>
-                  <option value="">No primary offer</option>
+                  <option value="">{t("opportunities.noPrimaryOffer")}</option>
                   {selectedOffers.map((id) => <option key={id} value={id}>{offerById.get(id)?.product.name} · {offerById.get(id)?.network}</option>)}
                 </select>
               </label>
@@ -428,10 +430,10 @@ export default function OpportunitiesPage() {
 
       <section className="opportunity-results">
         <div className="section-heading">
-          <div><p className="eyebrow">3 · DECIDE</p><h2>Ranked opportunities</h2></div>
-          <Link href="/discover">Gather more evidence</Link>
+          <div><p className="eyebrow">3 · DECIDE</p><h2>{t("opportunities.ranked")}</h2></div>
+          <Link href="/discover">{t("opportunities.gatherMore")}</Link>
         </div>
-        {opportunities.length === 0 && <p className="empty-state">No opportunities scored yet.</p>}
+        {opportunities.length === 0 && <p className="empty-state">{t("opportunities.noneScored")}</p>}
         {opportunities.map((item) => (
           <article className="opportunity-card" key={item.id}>
             <div className="opportunity-score"><strong>{item.score}</strong><span>/100</span><small>{item.score_version}</small></div>
@@ -449,7 +451,7 @@ export default function OpportunitiesPage() {
               </div>
               <div className="opportunity-actions">
                 <button type="button" disabled={!canEdit || busy === item.id} onClick={() => void createCampaign(item)}>{busy === item.id ? "Creating…" : "Create campaign"}</button>
-                <Link href="/campaigns">Open campaign calendar</Link>
+                <Link href="/campaigns">{t("opportunities.openCalendar")}</Link>
               </div>
             </div>
           </article>
