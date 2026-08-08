@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
+import { useT } from "../i18n-provider";
 import { useJobs } from "../jobs-provider";
 import {
   PlatformIcon,
@@ -156,6 +157,7 @@ function sinceLabel(iso: string) {
 const DRAFT_KEY = "trendrelay.publish.draft";
 
 export default function PublishPage() {
+  const t = useT();
   const { loading, user, apiFetch } = useAuth();
   const { jobs: allJobs, setActiveWorkspaceId, refresh: refreshJobs } = useJobs();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -760,16 +762,16 @@ export default function PublishPage() {
     }
   }
 
-  if (loading) return <main className="publish-page"><p>Checking your session…</p></main>;
-  if (!user) return <main className="publish-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Fpublish">Sign in to publish</Link></main>;
+  if (loading) return <main className="publish-page"><p>{t("publish.checkingSession")}</p></main>;
+  if (!user) return <main className="publish-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Fpublish">{t("publish.signInPrompt")}</Link></main>;
 
   return (
     <main className="publish-page">
       <WorkspaceSectionNav area="publish" />
       <header className="publish-heading">
         <div>
-          <p className="eyebrow">DISTRIBUTION DESK</p>
-          <h1>Deliver the approved clip</h1>
+          <p className="eyebrow">{t("publish.eyebrow")}</p>
+          <h1>{t("publish.heading")}</h1>
           <p className="lede">
             Write the post, choose where it goes, and dry-run it before anything leaves this
             machine. Engine keys live in your local <code>.env</code>.
@@ -799,14 +801,14 @@ export default function PublishPage() {
             </span>
           </div>
           {hosting?.required && !hosting.configured && (
-            <Badge tone="warn">media hosting needed</Badge>
+            <Badge tone="warn">{t("publish.mediaHostingNeeded")}</Badge>
           )}
           <a
             className={buttonClass({ variant: "quiet", size: "sm" })}
             href={activeProvider.dashboard_url}
             target="_blank"
             rel="noopener noreferrer"
-          >Dashboard</a>
+          >{t("downloads.heading2")}</a>
           <Button variant="quiet" size="sm" onClick={() => setSetupOpen(true)}>
             Change engine
           </Button>
@@ -815,8 +817,8 @@ export default function PublishPage() {
       <section className="engine-setup" aria-labelledby="engine-setup-title">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">STEP 1 · PUBLISHING ENGINE</p>
-            <h2 id="engine-setup-title">Choose and configure an API</h2>
+            <p className="eyebrow">{t("publish.stepEngine")}</p>
+            <h2 id="engine-setup-title">{t("publish.chooseEngine")}</h2>
           </div>
           <div className="section-heading-aside">
             {connection && <span>{connection.next_step}</span>}
@@ -862,7 +864,7 @@ export default function PublishPage() {
                 )}
                 <div className="engine-actions">
                   {active
-                    ? <Badge tone="accent">Active</Badge>
+                    ? <Badge tone="accent">{t("publish.active")}</Badge>
                     : <Button
                         variant="quiet"
                         size="sm"
@@ -884,7 +886,7 @@ export default function PublishPage() {
                     aria-expanded={open}
                     onClick={() => setOpenProvider(open ? null : provider.id)}
                   >{open ? "Close" : provider.configured ? "Replace key" : "Add key"}</Button>
-                  <a className={buttonClass({ variant: "quiet" })} href={provider.docs_url} target="_blank" rel="noopener noreferrer">Docs</a>
+                  <a className={buttonClass({ variant: "quiet" })} href={provider.docs_url} target="_blank" rel="noopener noreferrer">{t("publish.docs")}</a>
                 </div>
                 {open && (
                   <div className="engine-credentials">
@@ -1019,8 +1021,8 @@ export default function PublishPage() {
         <form className="publish-form" onSubmit={(event) => { event.preventDefault(); void submit(event.currentTarget, false); }}>
           <div className="section-heading">
             <div>
-              <p className="eyebrow">STEP 2 · DELIVERY</p>
-              <h2>What goes out</h2>
+              <p className="eyebrow">{t("publish.stepDelivery")}</p>
+              <h2>{t("publish.whatGoesOut")}</h2>
             </div>
             <span>{activeProvider ? `via ${activeProvider.label}` : "no engine selected"}</span>
           </div>
@@ -1040,13 +1042,13 @@ export default function PublishPage() {
                 <label className="ui-field-label">Public media URL
                   <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" required={!videoPath} />
                 </label>
-                <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />Choose from library</Button>
+                <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
               </div>
               {clip && (
                 <span className="chosen-clip">
                   <b>{clip.title}</b>
                   {clip.duration_ms ? <i>{clipLength(clip.duration_ms)}</i> : null}
-                  {isBlurred(clip) && <em className="blurred-tag">Faces blurred</em>}
+                  {isBlurred(clip) && <em className="blurred-tag">{t("publish.facesBlurred")}</em>}
                 </span>
               )}
               {videoPath && !mediaUrl ? (
@@ -1074,13 +1076,13 @@ export default function PublishPage() {
                   <label>Approved local MP4 path
                     <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" />
                   </label>
-                  <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />Choose from library</Button>
+                  <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
                 </div>
                 {clip && (
                   <span className="chosen-clip">
                     <b>{clip.title}</b>
                     {clip.duration_ms ? <i>{clipLength(clip.duration_ms)}</i> : null}
-                    {isBlurred(clip) && <em className="blurred-tag">Faces blurred</em>}
+                    {isBlurred(clip) && <em className="blurred-tag">{t("publish.facesBlurred")}</em>}
                   </span>
                 )}
                 <small className="ui-field-note">
@@ -1088,9 +1090,9 @@ export default function PublishPage() {
                   fetch it. If the clip has a blurred version, that is the cut that gets uploaded.
                 </small>
               </div>
-              <label>Public media URL <i>optional</i>
+              <label>Public media URL <i>{t("publish.optional")}</i>
                 <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" />
-                <small>Supply one to use media you already host instead.</small>
+                <small>{t("publish.supplyHosted")}</small>
               </label>
             </>
           ) : (
@@ -1105,25 +1107,25 @@ export default function PublishPage() {
                   <label>Approved local MP4 path
                     <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" required />
                   </label>
-                  <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />Choose from library</Button>
+                  <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
                 </div>
                 {clip && (
                   <span className="chosen-clip">
                     <b>{clip.title}</b>
                     {clip.duration_ms ? <i>{clipLength(clip.duration_ms)}</i> : null}
-                    {isBlurred(clip) && <em className="blurred-tag">Faces blurred</em>}
+                    {isBlurred(clip) && <em className="blurred-tag">{t("publish.facesBlurred")}</em>}
                   </span>
                 )}
                 <small className="ui-field-note">{activeProvider?.media_note ?? "Media must sit under a configured publishing media directory."}</small>
               </div>
-              <label>Public media URL <i>optional</i>
+              <label>Public media URL <i>{t("publish.optional")}</i>
                 <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" />
-                <small>Supply one to skip the upload and let the engine fetch the file instead.</small>
+                <small>{t("publish.supplySkipUpload")}</small>
               </label>
             </>
           )}
 
-          <label>Title <i>used by YouTube, Reddit and Pinterest</i>
+          <label>Title <i>{t("publish.titleUsedBy")}</i>
             <input name="title" maxLength={300} value={title} onChange={(event) => setTitle(event.target.value)} />
             {titleLimit && (
               <small className={`char-count${titleOver > 0 ? " over" : ""}`}>
@@ -1152,7 +1154,7 @@ export default function PublishPage() {
             return (
               <div className="thread-composer">
                 <div className="thread-head">
-                  <strong>Thread</strong>
+                  <strong>{t("publish.thread")}</strong>
                   <span>
                     {thread.length
                       ? `${thread.length + 1} posts on ${threaders.map((p) => platformLabels[p]).join(", ")}`
@@ -1192,7 +1194,7 @@ export default function PublishPage() {
                   size="sm"
                   disabled={thread.length >= (activeProvider?.max_thread_parts ?? 25) - 1}
                   onClick={() => setThread([...thread, ""])}
-                >Add reply</Button>
+                >{t("publish.addReply")}</Button>
                 {/* Each part is its own post, so the limit is per part - which
                     is the opposite of how a single caption is counted. */}
                 {thread.length > 0 && chosen.length > threaders.length && (
@@ -1211,12 +1213,12 @@ export default function PublishPage() {
               (activeProvider?.first_comment_platforms ?? []).includes(platform));
             if (!carriers.length) return null;
             return (
-              <label>First comment <i>optional</i>
+              <label>First comment <i>{t("publish.optional")}</i>
                 <textarea
                   name="first_comment"
                   rows={2}
                   maxLength={2000}
-                  placeholder="#hashtags that would clutter the caption"
+                  placeholder={t("publish.hashtagsHint")}
                   value={firstComment}
                   onChange={(event) => setFirstComment(event.target.value)}
                 />
@@ -1230,7 +1232,7 @@ export default function PublishPage() {
             );
           })()}
 
-          <div className="delivery-mode" role="group" aria-label="Delivery mode">
+          <div className="delivery-mode" role="group" aria-label={t("publish.deliveryMode")}>
             {([
               ["draft", "Save as draft", "Nothing publishes until you approve it in the engine"],
               ["schedule", "Schedule", "The engine publishes automatically at the time below"],
@@ -1266,25 +1268,25 @@ export default function PublishPage() {
                     : "Stored with the draft; the engine does not act on it."}
               </small>
             </label>
-            <label>Visibility <i>TikTok and YouTube</i>
+            <label>Visibility <i>{t("publish.visibilityScope")}</i>
               <select name="visibility" defaultValue="public">
-                <option value="public">Public</option>
-                <option value="private">Private / only me</option>
+                <option value="public">{t("publish.public")}</option>
+                <option value="private">{t("publish.privateOnlyMe")}</option>
               </select>
             </label>
           </div>
 
           {delivery === "schedule" && quickSlots.length > 0 && (
-            <div className="time-slots" role="group" aria-label="Next posting times">
-              <span>Next slots</span>
+            <div className="time-slots" role="group" aria-label={t("publish.nextPostingTimes")}>
+              <span>{t("publish.nextSlots")}</span>
               {nextFree && (
                 <button
                   type="button"
                   className={`slot-next${date === nextFree.value ? " selected" : ""}`}
                   aria-pressed={date === nextFree.value}
-                  title="The soonest slot with nothing queued in it"
+                  title={t("publish.soonestSlot")}
                   onClick={() => setDate(nextFree.value)}
-                ><b>Next free</b><i>{nextFree.day} {nextFree.label}</i></button>
+                ><b>{t("publish.nextFree")}</b><i>{nextFree.day} {nextFree.label}</i></button>
               )}
               {quickSlots.map((slot) => (
                 <button
@@ -1313,8 +1315,8 @@ export default function PublishPage() {
                    is offered here rather than behind the editor below. */
                 <div className="planner-empty">
                   <div>
-                    <strong>No posting times yet</strong>
-                    <span>Pick a rhythm to fill the calendar, or set times by hand below.</span>
+                    <strong>{t("publish.noTimesYet")}</strong>
+                    <span>{t("publish.pickRhythm")}</span>
                   </div>
                   <div className="planner-empty-presets">
                     {slotPresets.map((preset) => (
@@ -1449,13 +1451,13 @@ export default function PublishPage() {
           {chosen.includes("reddit") && (
             <label>Subreddit
               <input name="subreddit" placeholder="r/videos" required />
-              <small>Reddit rejects a submission without a target subreddit.</small>
+              <small>{t("publish.subredditRequired")}</small>
             </label>
           )}
           {chosen.includes("pinterest") && (
             <label>Pinterest board
-              <input name="board" placeholder="Product launches" required />
-              <small>The board that should receive the pin.</small>
+              <input name="board" placeholder={t("publish.productLaunches")} required />
+              <small>{t("publish.pinterestBoardHelp")}</small>
             </label>
           )}
 
@@ -1525,7 +1527,7 @@ export default function PublishPage() {
             }}
           />
           <article className="publish-media-preview">
-            <h2>What will be sent</h2>
+            <h2>{t("publish.whatWillBeSent")}</h2>
             {videoPath || mediaUrl ? (
               <>
                 <video
@@ -1542,12 +1544,12 @@ export default function PublishPage() {
                 </p>
               </>
             ) : (
-              <p>Choose media above to see the frames that will go out.</p>
+              <p>{t("publish.chooseMediaFirst")}</p>
             )}
           </article>
           {previewPlatform && (
             <article>
-              <h2>How it will look</h2>
+              <h2>{t("publish.howItWillLook")}</h2>
               <PostPreview
                 platform={previewPlatform}
                 postTypeLabel={previewType?.label ?? "Post"}
@@ -1563,17 +1565,17 @@ export default function PublishPage() {
             </article>
           )}
           <article>
-            <h2>Dry-run plan</h2>
+            <h2>{t("publish.dryRunPlan")}</h2>
             {preview ? (
               <div className="preview-card">
                 <p className="preview-lead">
                   <strong>{preview.delivery === "draft" ? "Draft" : "Scheduled post"}</strong> via {preview.provider_label}
                 </p>
                 <dl className="preview-facts">
-                  <div><dt>When</dt><dd>{new Date(preview.date).toLocaleString()}</dd></div>
-                  <div><dt>Media</dt><dd>{preview.media_source}</dd></div>
-                  <div><dt>Visibility</dt><dd>{preview.visibility}</dd></div>
-                  {preview.made_with_ai && <div><dt>Disclosure</dt><dd>AI-generated</dd></div>}
+                  <div><dt>{t("publish.when")}</dt><dd>{new Date(preview.date).toLocaleString()}</dd></div>
+                  <div><dt>{t("publish.media")}</dt><dd>{preview.media_source}</dd></div>
+                  <div><dt>{t("publish.visibility")}</dt><dd>{preview.visibility}</dd></div>
+                  {preview.made_with_ai && <div><dt>{t("publish.disclosure")}</dt><dd>{t("publish.aiGenerated")}</dd></div>}
                 </dl>
                 <ul className="preview-destinations">
                   {preview.destinations.map((destination) => (
@@ -1591,10 +1593,10 @@ export default function PublishPage() {
                 </ul>
                 <p className="privacy-note">Nothing has been sent. {preview.media_handling}</p>
               </div>
-            ) : <p>Dry-run first — it validates media, destinations and timing without contacting the engine.</p>}
+            ) : <p>{t("publish.dryRunFirst")}</p>}
           </article>
           <article>
-            <h2>Publishing jobs</h2>
+            <h2>{t("publish.jobs")}</h2>
             {jobs.length ? (
               <div className="record-list">{jobs.map((job) => {
                 const request = job.payload?.request;
@@ -1618,7 +1620,7 @@ export default function PublishPage() {
                   </div>
                 );
               })}</div>
-            ) : <p>No publishing jobs yet.</p>}
+            ) : <p>{t("publish.noJobs")}</p>}
           </article>
         </aside>
       </section>
