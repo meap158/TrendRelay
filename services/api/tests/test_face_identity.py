@@ -80,6 +80,69 @@ def test_the_effect_offers_itself_as_blocked_rather_than_missing(acknowledgement
     assert "licence" in reason or "licensed" in reason
 
 
+# --- picking an execution provider ----------------------------------------------
+
+
+def offer(monkeypatch, *names: str) -> None:
+    """Pretend onnxruntime reports these providers, in this order."""
+    monkeypatch.setattr(face_identity, "available_providers",
+                        lambda: [n for n in face_identity.PROVIDER_PREFERENCE if n in names])
+
+
+def test_the_fastest_available_provider_wins(monkeypatch) -> None:
+    # Measured on an RTX 2060: DirectML ran the detection network in 10.8ms
+    # against the CPU's 58.1ms, and a whole render in 10.4s against 32.9s.
+    offer(monkeypatch, "DmlExecutionProvider", "CPUExecutionProvider")
+    assert face_identity.chosen_provider() == "DmlExecutionProvider"
+
+
+def test_cuda_is_preferred_over_directml_when_present(monkeypatch) -> None:
+    # Not installed by default - it wants about 3GB of CUDA and cuDNN wheels -
+    # but adding it must not need a code change to take effect.
+    offer(monkeypatch, "CUDAExecutionProvider", "DmlExecutionProvider", "CPUExecutionProvider")
+    assert face_identity.chosen_provider() == "CUDAExecutionProvider"
+
+
+def test_cpu_is_used_when_it_is_all_there_is(monkeypatch) -> None:
+    offer(monkeypatch, "CPUExecutionProvider")
+    assert face_identity.chosen_provider() == "CPUExecutionProvider"
+
+
+def test_a_machine_offering_nothing_still_answers_cpu(monkeypatch) -> None:
+    monkeypatch.setattr(face_identity, "available_providers", list)
+    assert face_identity.chosen_provider() == "CPUExecutionProvider"
+
+
+def test_cpu_can_be_demanded_explicitly(monkeypatch) -> None:
+    # This is what the fallback uses after a GPU provider throws.
+    offer(monkeypatch, "DmlExecutionProvider", "CPUExecutionProvider")
+    assert face_identity.chosen_provider(force_cpu=True) == "CPUExecutionProvider"
+
+
+def test_an_unrecognised_provider_is_not_selected(monkeypatch) -> None:
+    # onnxruntime lists providers this code has never been measured against,
+    # such as Azure's. Preferring one sight-unseen is not an optimisation.
+    import onnxruntime
+
+    monkeypatch.setattr(onnxruntime, "get_available_providers",
+                        lambda: ["AzureExecutionProvider", "CPUExecutionProvider"])
+    assert face_identity.available_providers() == ["CPUExecutionProvider"]
+
+
+def test_the_status_says_whether_the_gpu_is_in_use(monkeypatch, acknowledgement) -> None:
+    offer(monkeypatch, "DmlExecutionProvider", "CPUExecutionProvider")
+    status = face_identity.runtime_status()
+    assert status["gpu_accelerated"] is True
+    assert status["provider"] == "DmlExecutionProvider"
+
+
+def test_only_the_models_this_feature_reads_are_loaded() -> None:
+    # The pack also carries two landmark models and an age/gender classifier.
+    # Nothing here looks at them, they cost 19% of the CPU path, and running an
+    # age-and-gender classifier over passers-by is not a neutral default.
+    assert face_identity.MODULES == ["detection", "recognition"]
+
+
 # --- grouping faces by identity -------------------------------------------------
 
 

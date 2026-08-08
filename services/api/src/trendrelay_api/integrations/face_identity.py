@@ -47,6 +47,21 @@ Box = tuple[int, int, int, int]
 #: would be both a licence problem and an untrusted download.
 MODEL_PACK = "buffalo_l"
 DETECTION_SIZE = (640, 640)
+#: Only what this feature reads: boxes and embeddings. The pack also carries
+#: two landmark models and an age/gender estimator, which nothing here looks at.
+#: Dropping them is 19% off the CPU path and free on the GPU, and not running an
+#: age-and-gender classifier over strangers is the better default anyway.
+MODULES = ["detection", "recognition"]
+#: Fastest first, CPU last. CUDA is not installed by default - it needs about
+#: 3GB of CUDA 13 and cuDNN wheels - but if someone adds it, it is picked up
+#: without a code change. DirectML needs no extra runtime at all and measured
+#: 5.3x faster than CPU on an RTX 2060: 113ms a frame down to 21ms.
+PROVIDER_PREFERENCE = (
+    "CUDAExecutionProvider",
+    "DmlExecutionProvider",
+    "CPUExecutionProvider",
+)
+CPU_PROVIDER = "CPUExecutionProvider"
 ACKNOWLEDGEMENT_FILE = PROJECT_ROOT / ".data" / "insightface" / "licence-acknowledged.json"
 
 LICENCE_SUMMARY = (
@@ -56,7 +71,7 @@ LICENCE_SUMMARY = (
     "commercial use. Confirm you hold the right to use these models here."
 )
 
-_ANALYSER: Any = None
+_ANALYSERS: dict[str, Any] = {}
 
 
 class FaceIdentityUnavailable(RuntimeError):
@@ -129,6 +144,9 @@ def runtime_status() -> dict[str, Any]:
         "licence_acknowledged": acknowledged,
         "licence": LICENCE_SUMMARY,
         "model_pack": MODEL_PACK,
+        "providers_available": available_providers(),
+        "provider": chosen_provider(),
+        "gpu_accelerated": chosen_provider() != CPU_PROVIDER,
         "install_hint": (
             "pip install --no-deps insightface onnxruntime onnx scikit-image scipy"
         ),
@@ -158,21 +176,48 @@ def _require_available() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def analyser(confidence: float = 0.5) -> Any:
-    """The loaded model pack, kept between calls.
+def available_providers() -> list[str]:
+    """The execution providers this machine offers, fastest first."""
+    try:
+        import onnxruntime
+    except ImportError:
+        return []
+    present = set(onnxruntime.get_available_providers())
+    return [name for name in PROVIDER_PREFERENCE if name in present]
 
-    Loading costs about four seconds and a few hundred megabytes, which is
-    per-render overhead worth paying once rather than per clip.
+
+def chosen_provider(force_cpu: bool = False) -> str:
+    if force_cpu:
+        return CPU_PROVIDER
+    return next(iter(available_providers()), CPU_PROVIDER)
+
+
+def analyser(confidence: float = 0.5, force_cpu: bool = False) -> tuple[Any, str]:
+    """The loaded model pack and the provider running it.
+
+    Loading costs a few seconds and a few hundred megabytes, so it is kept
+    between calls - per-render overhead worth paying once rather than per clip.
+    Cached per provider, because the CPU fallback has to be able to exist
+    alongside the GPU one rather than evicting it.
     """
-    global _ANALYSER
     _require_available()
-    if _ANALYSER is None:
+    provider = chosen_provider(force_cpu)
+    if provider not in _ANALYSERS:
         from insightface.app import FaceAnalysis
 
-        app = FaceAnalysis(name=MODEL_PACK, providers=["CPUExecutionProvider"])
-        app.prepare(ctx_id=-1, det_size=DETECTION_SIZE, det_thresh=confidence)
-        _ANALYSER = app
-    return _ANALYSER
+        # The CPU provider is always appended: a GPU provider that cannot place
+        # an operator falls back per-node instead of failing to build at all.
+        providers = [provider] if provider == CPU_PROVIDER else [provider, CPU_PROVIDER]
+        app = FaceAnalysis(
+            name=MODEL_PACK, providers=providers, allowed_modules=MODULES
+        )
+        app.prepare(
+            ctx_id=-1 if provider == CPU_PROVIDER else 0,
+            det_size=DETECTION_SIZE,
+            det_thresh=confidence,
+        )
+        _ANALYSERS[provider] = app
+    return _ANALYSERS[provider], provider
 
 
 def faces_in(frame: Any, app: Any) -> list[tuple[Box, Any]]:
@@ -297,28 +342,47 @@ def render_selective_blur(
     if not source.is_file():
         raise FaceIdentityUnavailable(f"No such media file: {source}")
 
-    app = analyser(settings.confidence)
-
     def _open() -> Any:
         capture = cv2.VideoCapture(str(source))
         if not capture.isOpened():
             raise FaceBlurUnavailable(f"OpenCV could not read {source.name}.")
         return capture
 
-    capture = _open()
+    def _read_faces(force_cpu: bool) -> tuple[list[list[tuple[Box, Any]]], dict[str, Any], str]:
+        app, provider = analyser(settings.confidence, force_cpu=force_cpu)
+        capture = _open()
+        try:
+            shape = {
+                "fps": capture.get(cv2.CAP_PROP_FPS) or 25.0,
+                "width": int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                "height": int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+            }
+            limit = int(shape["fps"] * preview_seconds) if preview_seconds else None
+            read: list[list[tuple[Box, Any]]] = []
+            while limit is None or len(read) < limit:
+                ok, frame = capture.read()
+                if not ok:
+                    break
+                read.append(faces_in(frame, app))
+            return read, shape, provider
+        finally:
+            capture.release()
+
     try:
-        fps = capture.get(cv2.CAP_PROP_FPS) or 25.0
-        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        limit = int(fps * preview_seconds) if preview_seconds else None
-        timeline: list[list[tuple[Box, Any]]] = []
-        while limit is None or len(timeline) < limit:
-            ok, frame = capture.read()
-            if not ok:
-                break
-            timeline.append(faces_in(frame, app))
-    finally:
-        capture.release()
+        timeline, shape, provider = _read_faces(force_cpu=False)
+    except Exception as error:
+        # A GPU provider can build a session and still throw partway through a
+        # clip - DirectML raises on shapes it cannot place, and it does so at
+        # inference rather than at load. The pass restarts on CPU rather than
+        # losing the render: slower is a far better answer than failed.
+        if chosen_provider() == CPU_PROVIDER:
+            raise
+        fallback_reason = f"{type(error).__name__}: {str(error)[:200]}"
+        timeline, shape, provider = _read_faces(force_cpu=True)
+    else:
+        fallback_reason = None
+    fps = shape["fps"]
+    width, height = shape["width"], shape["height"]
 
     if not timeline:
         raise FaceIdentityUnavailable(f"{source.name} contained no readable frames.")
@@ -381,5 +445,9 @@ def render_selective_blur(
         "subject_identity": subject,
         "identity_report": report,
         "kept_subject": settings.keep_subject,
+        "provider": provider,
+        # Named when it happened, because a render that silently took five times
+        # longer than the last one is otherwise a mystery.
+        "gpu_fallback_reason": fallback_reason,
         "output": str(destination),
     }

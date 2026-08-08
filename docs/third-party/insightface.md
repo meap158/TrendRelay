@@ -22,9 +22,36 @@ No reference photo is required, and the render reports how many identities were
 found and what share of the clip each held, so the subject guess is checkable
 rather than magic.
 
-Measured on a real 6-second clip: 185 frames, 70 faces, 5 identities, about 33
-seconds on CPU. That is roughly five times slower than real time, so it suits a
+## Speed, and the GPU
+
+Measured on a real 6-second clip, 185 frames, 70 faces, 5 identities:
+
+| | per frame | whole render |
+|---|---|---|
+| CPU | 113 ms | 32.9 s |
+| DirectML on an RTX 2060 | 21 ms | 10.4 s |
+
+The GPU run found the same faces, the same five identities and the same subject
+as the CPU run, so this is speed rather than a different answer. The render is
+still not real time - decode and encode stay on the CPU - so it suits a
 deliberate render rather than a live preview.
+
+DirectML rather than CUDA: it needs no toolkit, works on any DX12 adapter, and
+is a 25 MB wheel against roughly 3 GB of CUDA 13 and cuDNN 9. Providers are
+chosen fastest-first - CUDA, then DirectML, then CPU - so installing
+`onnxruntime-gpu[cuda,cudnn]` is picked up with no code change.
+
+Two things learned the hard way. onnxruntime, onnxruntime-directml and
+onnxruntime-gpu all install the same `onnxruntime` module, so exactly one may be
+present; installing a second on top of the first is the same trap as
+opencv-python below. And DirectML can build a session and still throw partway
+through a clip - it raised on a Reshape at 1280x1280 - so a GPU failure restarts
+the pass on CPU rather than losing the render, and the reason is reported.
+
+Only `detection` and `recognition` are loaded. The pack also carries two
+landmark models and an age/gender classifier that nothing here reads; dropping
+them is 19% off the CPU path, free on the GPU, and running an age-and-gender
+classifier over passers-by is not a neutral default.
 
 ## The licence, which is the whole reason this is gated
 

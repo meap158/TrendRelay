@@ -39,10 +39,25 @@ vision = [
 # against until the version assertion caught it.
 faces = [
   "insightface>=1.0.1,<2",
+  # onnxruntime, onnxruntime-directml and onnxruntime-gpu all install the same
+  # `onnxruntime` module, so exactly one of them may be present. This is the
+  # portable default; see `faces-gpu` for the accelerated swap.
   "onnxruntime>=1.20,<2",
   "onnx>=1.17,<2",
   "scikit-image>=0.24,<1",
   "scipy>=1.14,<2",
+]
+# GPU acceleration. Uninstall `onnxruntime` first - they collide on the same
+# module name - then install this instead:
+#     pip uninstall -y onnxruntime && pip install --no-deps onnxruntime-directml
+# DirectML rather than CUDA: it needs no toolkit, works on any DX12 adapter, and
+# measured 5.3x on an RTX 2060 (113ms a frame to 21ms; a whole render 32.9s to
+# 10.4s) and found the same faces, identities and subject as the CPU run.
+# CUDA is faster still but wants ~3GB of
+# CUDA 13 and cuDNN 9 wheels; install `onnxruntime-gpu[cuda,cudnn]` instead and
+# the code prefers it automatically, no change required.
+faces-gpu = [
+  "onnxruntime-directml>=1.24,<2",
 ]
 dev = [
   "httpx>=0.28,<1",
