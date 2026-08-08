@@ -7,7 +7,7 @@ import { RefreshCw, Download } from "lucide-react";
 import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
 import { buttonClass } from "../ui/button";
-import { oneOf, usePersistedState } from "../ui/use-persisted-state";
+import { numberIn, oneOf, usePersistedState } from "../ui/use-persisted-state";
 import { useJobs } from "../jobs-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 
@@ -380,6 +380,27 @@ const S: Record<string, React.CSSProperties> = {
     background: "#eef2fb", color: "#385898", fontSize: 11, fontWeight: 600,
     textDecoration: "none",
   } as const,
+  // Taking a topic and looking at one sit together, with the download given the
+  // solid treatment: it is the action the board exists to make possible.
+  boardActions: { display: "flex", alignItems: "center", gap: 6, marginTop: 2 } as const,
+  boardDownload: {
+    display: "inline-flex", alignItems: "center", gap: 4, border: 0,
+    borderRadius: 4, padding: "4px 9px", background: "#1a73e8", color: "#fff",
+    font: "inherit", fontSize: 11, fontWeight: 600, cursor: "pointer",
+    whiteSpace: "nowrap",
+  } as const,
+  topicCountLabel: {
+    display: "inline-flex", alignItems: "center", gap: 5,
+    color: "#606770", fontSize: 11, whiteSpace: "nowrap",
+  } as const,
+  topicCountSelect: {
+    borderRadius: 6, border: "1px solid #dadce0", padding: "3px 4px",
+    background: "#fff", color: "#1c2b33", font: "inherit", fontSize: 11,
+  } as const,
+  // The same note frame as a failure, turned green. A queued download and a
+  // refused one land in the same place, so the colour is what tells them apart.
+  topicNoteGood: { borderLeftColor: "#34a853", background: "#f4faf5" } as const,
+  topicNoteLink: { color: "#1a73e8", fontWeight: 600 } as const,
   tiktokList: {
     display: "grid",
     gap: "1px",
@@ -724,6 +745,35 @@ type DouyinTrend = {
 type DouyinBoard = { count: number; fetched_at: string; items: DouyinTrend[] };
 const isBoardView = oneOf("gallery", "list");
 
+/** How many clips a topic download takes. Small on purpose: a trending topic
+    has thousands of posts and the disk is finite. */
+const TOPIC_COUNTS = [3, 5, 10, 20] as const;
+
+type TopicNote = {
+  tone: "good" | "bad";
+  text: string;
+  /** Search is the one Douyin call needing a real account, and the fix is a
+      single command. Worth naming rather than leaving as a bare failure. */
+  loginRequired?: boolean;
+};
+
+/** FastAPI carries a structured detail for the sign-in case and a plain string
+    everywhere else, so both shapes have to be read. */
+function readTopicFailure(detail: unknown): TopicNote {
+  if (detail && typeof detail === "object" && "message" in detail) {
+    const shaped = detail as { message?: unknown; login_required?: unknown };
+    return {
+      tone: "bad",
+      text: typeof shaped.message === "string" ? shaped.message : "The topic could not be fetched.",
+      loginRequired: shaped.login_required === true,
+    };
+  }
+  return {
+    tone: "bad",
+    text: typeof detail === "string" ? detail : "The topic could not be fetched.",
+  };
+}
+
 export default function ResearchDashboard() {
   const { apiFetch } = useAuth();
   const { jobs: allJobs, refresh: refreshJobs, setActiveWorkspaceId } = useJobs();
@@ -748,6 +798,14 @@ export default function ResearchDashboard() {
   );
   /** Read once per visit; the ref is what stops a re-render asking again. */
   const douyinAutoRead = useRef(false);
+  /** Which term is being fetched, so only that card shows the wait. */
+  const [topicBusy, setTopicBusy] = useState<string | null>(null);
+  const [topicNote, setTopicNote] = useState<TopicNote | null>(null);
+  /** How many clips a topic download takes. Kept because it is a preference
+      about disk, not a per-click decision. */
+  const [topicCount, setTopicCount] = usePersistedState<number>(
+    "trendrelay.discover.topicCount", 5, numberIn(...TOPIC_COUNTS),
+  );
 
   /** Read once on arrival, then on demand. */
   async function loadDouyinBoard() {
@@ -767,6 +825,54 @@ export default function ResearchDashboard() {
       );
     } finally {
       setBusy(null);
+    }
+  }
+
+  /** Search a trending term and queue its top clips as one download.
+   *
+   * The board ranks topics rather than clips, so until now a term could only
+   * open Douyin in a browser and leave the operator copying links back. This
+   * does the search server-side and hands the real video URLs to the same
+   * download job everything else uses.
+   */
+  async function downloadTopic(term: string) {
+    if (!workspaceId || topicBusy) return;
+    setTopicBusy(term);
+    setTopicNote(null);
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/media/douyin/topic/downloads`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspace_id: workspaceId,
+            term,
+            limit: topicCount,
+            confirm_external_action: true,
+          }),
+        },
+      );
+      const body = await response.json();
+      if (!response.ok) {
+        setTopicNote(readTopicFailure(body.detail));
+        return;
+      }
+      const queued: unknown[] = body.queued ?? [];
+      setTopicNote({
+        tone: "good",
+        text: `Queued ${queued.length} ${queued.length === 1 ? "video" : "videos"} for “${term}”. Watch it in Downloads.`,
+      });
+      // The job is live from here, so the queue should show it rather than
+      // waiting for the next poll.
+      void refreshJobs();
+    } catch (reason) {
+      setTopicNote({
+        tone: "bad",
+        text: reason instanceof Error ? reason.message : "The topic could not be fetched.",
+      });
+    } finally {
+      setTopicBusy(null);
     }
   }
 
@@ -1256,6 +1362,20 @@ export default function ResearchDashboard() {
             </p>
           </div>
           <div style={S.tiktokControls}>
+            <label style={S.topicCountLabel}>
+              Download
+              <select
+                style={S.topicCountSelect}
+                value={topicCount}
+                onChange={(event) => setTopicCount(Number(event.target.value))}
+                title="How many videos a topic download takes"
+              >
+                {TOPIC_COUNTS.map((count) => (
+                  <option key={count} value={count}>{count}</option>
+                ))}
+              </select>
+              per topic
+            </label>
             <div style={S.boardViewToggle} role="group" aria-label="Board layout">
               {(["gallery", "list"] as const).map((mode) => (
                 <button
@@ -1282,6 +1402,21 @@ export default function ResearchDashboard() {
         </div>
 
         {douyinError && <p style={S.tiktokNote}>{douyinError}</p>}
+
+        {topicNote && (
+          <p
+            style={{ ...S.tiktokNote, ...(topicNote.tone === "good" ? S.topicNoteGood : null) }}
+            role={topicNote.tone === "bad" ? "alert" : "status"}
+          >
+            {topicNote.text}
+            {topicNote.loginRequired && (
+              <>
+                {" "}
+                <Link href="/tools" style={S.topicNoteLink}>Open Tools to sign in</Link>
+              </>
+            )}
+          </p>
+        )}
 
         {douyinBoard && douyinBoard.items.length > 0 && douyinView === "gallery" && (
           <div style={S.boardGrid}>
@@ -1316,13 +1451,29 @@ export default function ResearchDashboard() {
                     {item.hot_value > 0 && item.view_count > 0 && " · "}
                     {item.view_count > 0 && <>{compactNumber(item.view_count)} views</>}
                   </span>
-                  <a
-                    href={item.search_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={S.boardAction}
-                    title="Find videos for this term on Douyin, then download one"
-                  >Find videos</a>
+                  <div style={S.boardActions}>
+                    <button
+                      type="button"
+                      style={S.boardDownload}
+                      disabled={topicBusy !== null || !workspaceId}
+                      onClick={() => void downloadTopic(item.term)}
+                      title={`Search this term and download its top ${topicCount} videos`}
+                    >
+                      {topicBusy === item.term ? "Queueing…" : (
+                        <>
+                          <Download size={13} strokeWidth={2} />
+                          Download {topicCount}
+                        </>
+                      )}
+                    </button>
+                    <a
+                      href={item.search_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={S.boardAction}
+                      title="Open this term on Douyin"
+                    >Browse</a>
+                  </div>
                 </div>
               </article>
             ))}
@@ -1351,17 +1502,34 @@ export default function ResearchDashboard() {
                     </span>
                   )}
                 </div>
-                {/* A term is a topic, not a clip, so this opens the search
-                    rather than pretending there is something to download. */}
-                <a
-                  href={item.search_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={S.tiktokExplore}
-                  title="Find videos for this term on Douyin, then download one"
-                >
-                  Find videos
-                </a>
+                {/* A term names a topic, not a clip. The download searches it
+                    first and queues the real videos it finds; the link is for
+                    looking at the topic rather than taking it. */}
+                <div style={S.boardActions}>
+                  <button
+                    type="button"
+                    style={S.boardDownload}
+                    disabled={topicBusy !== null || !workspaceId}
+                    onClick={() => void downloadTopic(item.term)}
+                    title={`Search this term and download its top ${topicCount} videos`}
+                  >
+                    {topicBusy === item.term ? "Queueing…" : (
+                      <>
+                        <Download size={13} strokeWidth={2} />
+                        Download {topicCount}
+                      </>
+                    )}
+                  </button>
+                  <a
+                    href={item.search_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={S.tiktokExplore}
+                    title="Open this term on Douyin"
+                  >
+                    Browse
+                  </a>
+                </div>
               </div>
             ))}
           </div>
