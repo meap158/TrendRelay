@@ -5,7 +5,7 @@
 - Pinned revision: `c36f276352873827e9d559ee8d130b7563491171`
 - License: **AGPL-3.0**
 - Commercial use: conditional — see the isolation note below
-- Status: integrated and gated, **but blocked on this machine** — see below
+- Status: integrated and gated; runs on Python 3.12, **waiting on a Hugging Face licence acceptance** — see below
 - Media: **still images only**
 
 ## What it does
@@ -47,7 +47,7 @@ So video is refused with a message pointing at the identity-aware blur, which
 does hold steady across a clip. Producing a flickering video and calling it
 anonymised would be worse than declining.
 
-## Blocked: it needs Python 3.10–3.12, and this machine has 3.14
+## Resolved: it needs Python 3.10–3.12, not the API's 3.14
 
 The integration is complete and the isolation is in place. It does not yet run
 here, and the reason is a hard dependency deadlock rather than anything fixable
@@ -65,11 +65,29 @@ Those two constraints are mutually exclusive. Satisfying the repository means
 `transformers 4.46.1`, whose `tokenizers` dependency has no Python 3.14 wheel.
 The project's own `environment.yml` pins Python 3.8.18 for exactly this reason.
 
-The fix is an interpreter, not a patch: build the tool's virtualenv on Python
-3.11 or 3.12 and install the pinned stack into it. Because the tool already runs
-as an isolated subprocess, it does not have to share the API's interpreter — the
-AGPL boundary and the version boundary are the same boundary, which is a happy
-accident of the design.
+The fix was an interpreter, not a patch. The tool's virtualenv is now built on a
+uv-managed standalone Python 3.12 — no system install, nothing on PATH — and the
+pinned stack installs into it cleanly: torch 2.4.1+cu124, diffusers 0.25.1,
+transformers 4.46.1, huggingface_hub 0.25.2. Because the tool already runs as an
+isolated subprocess, it never had to share the API's interpreter: the AGPL
+boundary and the version boundary turned out to be the same boundary.
+
+## Still blocked: Stable Diffusion 2-1 is gated
+
+The model builds on `stabilityai/stable-diffusion-2-1`, and Stability has gated
+that repository behind licence acceptance. An unauthenticated fetch answers 401,
+which diffusers reports as *"not a valid model identifier"* — a message that
+sends you hunting for a typo instead of a login.
+
+Accepting a model licence is the operator's to do, so:
+
+1. Accept the terms at https://huggingface.co/stabilityai/stable-diffusion-2-1
+   while signed in to your own Hugging Face account.
+2. Create a read token and set `HF_TOKEN`.
+
+The integration detects this case and says exactly that rather than surfacing
+the raw error. `openai/clip-vit-large-patch14` and `hkung/face-anon-simple`
+itself are both ungated and download fine.
 
 Patching forward instead was tried and abandoned: the `cached_download` shim in
 `scripts/patches/` cleared one wall and the next appeared immediately. Chasing
@@ -94,3 +112,6 @@ failure mode at the end of it.
   machine's `C:` had 8 GB free — left at the default the download would have
   died most of the way through with a disk error rather than anything about
   models.
+- uv caches to `C:` as well, and torch filled it: the drive hit 86 MB free
+  before `uv cache clean` recovered 4.7 GB. Set `UV_CACHE_DIR` to the project
+  drive before installing this stack.

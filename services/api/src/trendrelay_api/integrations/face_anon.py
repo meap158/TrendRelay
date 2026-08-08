@@ -164,6 +164,9 @@ def _environment() -> dict[str, str]:
         **os.environ,
         "HF_HOME": str(HF_CACHE),
         "HF_HUB_DISABLE_TELEMETRY": "1",
+        # Windows without Developer Mode cannot make the symlinks the cache
+        # prefers; it falls back to copies and says so loudly on every run.
+        "HF_HUB_DISABLE_SYMLINKS_WARNING": "1",
         "PYTHONUTF8": "1",
         "PYTHONIOENCODING": "utf-8",
     }
@@ -223,13 +226,33 @@ def anonymise_image(
     ])
     if completed.returncode != 0:
         detail = (completed.stderr or "").strip().splitlines()
-        raise FaceAnonUnavailable(
-            detail[-1] if detail else "The face anonymiser failed."
-        )
+        last = detail[-1] if detail else "The face anonymiser failed."
+        raise FaceAnonUnavailable(_explain(last))
     try:
         return json.loads(completed.stdout)
     except json.JSONDecodeError as error:
         raise FaceAnonUnavailable("The anonymiser produced no readable result.") from error
+
+
+#: Stability gated their Stable Diffusion repositories behind licence
+#: acceptance, and this model builds on 2-1. An unauthenticated fetch answers
+#: 401, which the underlying library reports as "not a valid model identifier" -
+#: a message that sends you looking for a typo instead of a login.
+GATED_MARKERS = ("stable-diffusion-2-1", "401 Client Error", "RepositoryNotFound")
+
+
+def _explain(detail: str) -> str:
+    """Turn the provider's own wording into something an operator can act on."""
+    if any(marker in detail for marker in GATED_MARKERS):
+        return (
+            "Stable Diffusion 2-1 is gated on Hugging Face, and this model is "
+            "built on it. Accept the licence at "
+            "https://huggingface.co/stabilityai/stable-diffusion-2-1 with your "
+            "own account, create a read token, and put it in HF_TOKEN. "
+            "Accepting a model licence is yours to do, not something TrendRelay "
+            "can do for you."
+        )
+    return detail
 
 
 def install_hint() -> str:
