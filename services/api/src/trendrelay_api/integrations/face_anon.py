@@ -159,9 +159,44 @@ def _require_available() -> None:
 # --------------------------------------------------------------------------- #
 
 
+#: Where a Hugging Face read token lives on this machine. Under `.data`, which
+#: is git-ignored, so the token stays on the machine that holds it and cannot be
+#: committed by accident - the failure mode for a secret in a repository is that
+#: nobody notices until it is already public.
+TOKEN_FILE = PROJECT_ROOT / ".data" / "face-anon" / "hf-token"
+
+
+def hf_token() -> str | None:
+    """The token, from the environment first and the local file second.
+
+    The environment wins so a shell or CI can override without editing
+    anything; the file is what makes the setting survive a reboot without
+    putting a secret in the project's tracked configuration.
+    """
+    from_env = os.environ.get("HF_TOKEN", "").strip()
+    if from_env:
+        return from_env
+    try:
+        stored = TOKEN_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return stored or None
+
+
+def save_hf_token(token: str) -> Path:
+    """Write the token where only this machine can read it."""
+    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    TOKEN_FILE.write_text(token.strip() + "\n", encoding="utf-8")
+    if os.name != "nt":
+        TOKEN_FILE.chmod(0o600)
+    return TOKEN_FILE
+
+
 def _environment() -> dict[str, str]:
+    token = hf_token()
     return {
         **os.environ,
+        **({"HF_TOKEN": token} if token else {}),
         "HF_HOME": str(HF_CACHE),
         "HF_HUB_DISABLE_TELEMETRY": "1",
         # Windows without Developer Mode cannot make the symlinks the cache
@@ -234,23 +269,27 @@ def anonymise_image(
         raise FaceAnonUnavailable("The anonymiser produced no readable result.") from error
 
 
-#: Stability gated their Stable Diffusion repositories behind licence
-#: acceptance, and this model builds on 2-1. An unauthenticated fetch answers
-#: 401, which the underlying library reports as "not a valid model identifier" -
-#: a message that sends you looking for a typo instead of a login.
-GATED_MARKERS = ("stable-diffusion-2-1", "401 Client Error", "RepositoryNotFound")
+#: `stabilityai/stable-diffusion-2-1` is no longer on Hugging Face. A logged-out
+#: browser gets a plain 404, and a gated repository would instead show its
+#: licence panel publicly - gating is visible by design. The API answers 401 for
+#: both cases, which is what made this look like a licence problem at first.
+MISSING_BASE_MARKERS = (
+    "stable-diffusion-2-1",
+    "not a valid model identifier",
+    "401 Client Error",
+    "RepositoryNotFound",
+)
 
 
 def _explain(detail: str) -> str:
     """Turn the provider's own wording into something an operator can act on."""
-    if any(marker in detail for marker in GATED_MARKERS):
+    if any(marker in detail for marker in MISSING_BASE_MARKERS):
         return (
-            "Stable Diffusion 2-1 is gated on Hugging Face, and this model is "
-            "built on it. Accept the licence at "
-            "https://huggingface.co/stabilityai/stable-diffusion-2-1 with your "
-            "own account, create a read token, and put it in HF_TOKEN. "
-            "Accepting a model licence is yours to do, not something TrendRelay "
-            "can do for you."
+            "This model builds on stabilityai/stable-diffusion-2-1, which has "
+            "been withdrawn from Hugging Face - it is a 404 now, not a licence "
+            "gate, so no token or acceptance will fetch it. It needs its VAE "
+            "and scheduler from somewhere else before it can run, and picking "
+            "that source is a decision about provenance rather than a setting."
         )
     return detail
 

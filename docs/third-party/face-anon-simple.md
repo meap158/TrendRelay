@@ -72,27 +72,28 @@ transformers 4.46.1, huggingface_hub 0.25.2. Because the tool already runs as an
 isolated subprocess, it never had to share the API's interpreter: the AGPL
 boundary and the version boundary turned out to be the same boundary.
 
-## Still blocked: Stable Diffusion 2-1 is gated
+## Still blocked: Stable Diffusion 2-1 is gone, not gated
 
-The model builds on `stabilityai/stable-diffusion-2-1`, and Stability has gated
-that repository behind licence acceptance. An unauthenticated fetch answers 401,
-which diffusers reports as *"not a valid model identifier"* — a message that
-sends you hunting for a typo instead of a login.
+The model builds on `stabilityai/stable-diffusion-2-1` for its VAE and
+scheduler. That repository is no longer on Hugging Face: a logged-out browser
+gets a plain 404, and a search does not surface it. The `stabilityai` org is
+alive and publishing — Stable Audio 3 is weeks old — so this is a withdrawal of
+that model, not an account that went away.
 
-Accepting a model licence is the operator's to do, so:
+**This was first recorded here as a licence gate, and that was wrong.** The
+diagnosis came from a 401 returned by the API, and Hugging Face answers 401 for
+a gated repository *and* for one you cannot see. A gated repository is publicly
+visible with its licence panel attached — gating is meant to be discoverable —
+so the plain 404 in a browser is what settles it. No token and no acceptance
+will fetch this; there is nothing to accept.
 
-1. Accept the terms at https://huggingface.co/stabilityai/stable-diffusion-2-1
-   while signed in to your own Hugging Face account.
-2. Create a read token and set `HF_TOKEN`.
-
-The integration detects this case and says exactly that rather than surfacing
-the raw error. `openai/clip-vit-large-patch14` and `hkung/face-anon-simple`
-itself are both ungated and download fine.
-
-Patching forward instead was tried and abandoned: the `cached_download` shim in
-`scripts/patches/` cleared one wall and the next appeared immediately. Chasing
-renamed internals through a vendored fork is unbounded work with a silent-wrong
-failure mode at the end of it.
+What it needs is a source for SD 2.1's VAE and scheduler. That is a decision
+about provenance rather than a setting, and the obvious shortcuts are all worse
+than they look: a community re-upload is an unverified copy of weights, and
+substituting a different VAE changes what the model produces without changing
+anything you can see in the code. Worth resolving deliberately, or leaving
+face anonymisation parked — the identity-aware blur already covers video, which
+is what this product mostly handles.
 
 ## Notes from installing it
 
