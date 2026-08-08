@@ -279,9 +279,15 @@ export default function PublishPage() {
     }
     // The engine's own words first: "invalid API key" is more use than
     // anything this page could infer from a false flag.
-    const refusal = provider.authorization_error
-      ?? (reach && !reach.reachable ? reach.reason : null);
-    if (!provider.authenticated || (reach && !reach.reachable)) {
+    const refusal = reach && !reach.reachable
+      ? reach.reason ?? provider.authorization_error
+      : provider.authorization_error;
+    // The account load wins over the credential probe, because it is the more
+    // recent and more direct evidence: it asked this engine for these accounts
+    // and got them. Reading both as equal listed Buffer as unreachable directly
+    // above the three Buffer accounts it had just returned.
+    const working = reach ? reach.reachable : provider.authenticated;
+    if (!working) {
       const rejected = /401|403|key|token|auth|unauthor|forbidden/i.test(refusal ?? "");
       return {
         state: rejected ? "rejected" : "unreachable",
