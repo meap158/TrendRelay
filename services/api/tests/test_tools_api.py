@@ -1,10 +1,12 @@
 import asyncio
+import json
 import os
 
 import httpx
 import pytest
 
 from trendrelay_api.main import app
+from trendrelay_api.tool_registry import PROJECT_ROOT
 
 
 async def request(method: str, path: str, **kwargs) -> httpx.Response:
@@ -18,8 +20,13 @@ def test_lists_every_catalogued_github_project() -> None:
 
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 7
-    assert {tool["id"] for tool in tools} == {
+    # Against the catalogue rather than a hardcoded roster: the list is meant to
+    # grow, and a count would fail on every addition without anything being wrong.
+    catalogue = json.loads((PROJECT_ROOT / "config" / "tool-catalog.json").read_text("utf-8"))
+    assert {tool["id"] for tool in tools} == {item["id"] for item in catalogue["tools"]}
+    # The tools TrendRelay actually calls today, which a bad catalogue edit could
+    # silently drop.
+    assert {
         "douyin-downloader",
         "last30days-skill",
         "openmontage",
@@ -27,7 +34,23 @@ def test_lists_every_catalogued_github_project() -> None:
         "meta-ads-kit",
         "meta-ads-collector",
         "mediacrawler",
-    }
+    } <= {tool["id"] for tool in tools}
+
+
+def test_every_catalogued_tool_documents_its_licence() -> None:
+    """A licence and a written-up evaluation, or it should not be offered.
+
+    Half these projects cannot legally be used commercially, and that is not
+    visible from the repository name. The catalogue is where that is recorded,
+    so an entry missing it is worse than no entry at all.
+    """
+    tools = asyncio.run(request("GET", "/api/tools")).json()["tools"]
+
+    for tool in tools:
+        assert tool["license"], tool["id"]
+        assert tool["commercial_use"] in {"allowed", "conditional", "blocked"}, tool["id"]
+        notes = PROJECT_ROOT / tool["documentation"]
+        assert notes.is_file(), f"{tool['id']} points at missing {tool['documentation']}"
 
 
 def test_agent_reach_diagnostics_are_sanitized(monkeypatch) -> None:
