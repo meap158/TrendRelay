@@ -27,7 +27,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from trendrelay_api.database import SessionFactory
-from trendrelay_api.integrations import face_blur, recolour
+from trendrelay_api.integrations import face_blur, face_identity, recolour
 from trendrelay_api.integrations.effects import (
     Effect,
     EffectError,
@@ -55,7 +55,7 @@ RENDER_ROOT = PROJECT_ROOT / ".data" / "productions" / "edits"
 #: The recipe steps that produce a privacy-relevant cut. A render containing one
 #: is stored as a `blurred` version rather than an `edited` one, because the
 #: publish path and the library filter both ask for that kind by name.
-PRIVACY_EFFECTS = frozenset({"face_blur"})
+PRIVACY_EFFECTS = frozenset({"face_blur", "selective_face_blur"})
 
 
 def _blur_availability() -> tuple[bool, str | None]:
@@ -135,11 +135,66 @@ GARMENT_RECOLOUR = Effect(
 register(GARMENT_RECOLOUR)
 
 
+def _identity_availability() -> tuple[bool, str | None]:
+    status = face_identity.runtime_status()
+    return bool(status["available"]), status["reason"]
+
+
+SELECTIVE_BLUR = Effect(
+    id="selective_face_blur",
+    label="Blur everyone but the subject",
+    summary="Tell the faces apart and cover the passers-by, not the creator.",
+    stage="frame",
+    params=(
+        EffectParam(
+            id="keep_subject",
+            label="Keep the subject visible",
+            kind="toggle",
+            default=True,
+            help="Off covers only the subject and leaves everyone else, for "
+                 "anonymising yourself rather than the crowd.",
+        ),
+        EffectParam(
+            id="match_threshold",
+            label="Identity strictness",
+            kind="number",
+            default=0.4,
+            minimum=0.2,
+            maximum=0.8,
+            step=0.05,
+            help="How alike two faces must be to count as one person. Raise it "
+                 "when one person is being treated as several.",
+        ),
+        EffectParam(
+            id="confidence",
+            label="Detector confidence",
+            kind="number",
+            default=0.5,
+            minimum=0.1,
+            maximum=0.95,
+            step=0.05,
+            help="Lower finds more faces and more things that are not faces.",
+        ),
+    ),
+    availability=_identity_availability,
+)
+
+register(SELECTIVE_BLUR)
+
+
 def _recolour_settings(values: dict[str, Any]) -> recolour.RecolourSettings:
     return recolour.RecolourSettings(
         hue_shift=float(values["hue_shift"]),
         saturation_floor=int(values["saturation_floor"]),
         saturation_scale=float(values["saturation_scale"]),
+    )
+
+
+def _identity_settings(values: dict[str, Any]) -> face_identity.IdentitySettings:
+    return face_identity.IdentitySettings(
+        keep_subject=bool(values["keep_subject"]),
+        match_threshold=float(values["match_threshold"]),
+        confidence=float(values["confidence"]),
     )
 
 
@@ -190,6 +245,11 @@ def render_recipe(
             if step.effect.id == "face_blur":
                 outcome = face_blur.render_blurred(
                     current, staged, _blur_settings(step.values),
+                    preview_seconds=preview_seconds,
+                )
+            elif step.effect.id == "selective_face_blur":
+                outcome = face_identity.render_selective_blur(
+                    current, staged, _identity_settings(step.values),
                     preview_seconds=preview_seconds,
                 )
             elif step.effect.id == "garment_recolour":

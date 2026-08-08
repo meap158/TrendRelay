@@ -289,15 +289,17 @@
         "Face embedding",
         "Face swap (inswapper)"
       ],
-      "integration_status": "evaluated-not-adapted",
-      "commercial_use": "blocked",
-      "install_strategy": "source-checkout",
-      "install_allowed": true,
+      "integration_status": "adapted-behind-licence-gate",
+      "commercial_use": "conditional",
+      "install_strategy": "python-extra",
+      "install_allowed": false,
       "activation_allowed": true,
       "default_active": false,
+      "documentation": "docs/third-party/insightface.md",
+      "notes": "Powers the selective face blur: faces are embedded and clustered so passers-by can be covered while the creator stays visible. The code is MIT; the pretrained models are non-commercial research only, so the capability reports itself unavailable until an operator records that they hold the right to use them. The withdrawn inswapper_128 face swapper is not used and is not downloaded.",
+      "block_reason": "Installed as a Python extra rather than a source checkout: pip install -e services/api[faces] --no-deps. Cloning the repository would fetch code nothing loads; the runtime comes from the published wheel and the models download on first use.",
       "root_path": ".tools/catalog/insightface",
-      "source_path": ".tools/catalog/insightface/source",
-      "documentation": "docs/third-party/insightface.md"
+      "source_path": ".tools/catalog/insightface/source"
     }
   ]
 }
