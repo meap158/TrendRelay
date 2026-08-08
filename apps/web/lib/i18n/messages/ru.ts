@@ -175,6 +175,11 @@ export const ru: Messages = {
     intro:
       "Оригиналы остаются неизменными, а референсные ролики превращаются в креативные рецепты с поиском.",
     playPreview: "Воспроизвести превью",
+    viewPreview: "Показать превью",
+    loadingPreview: "Загрузка превью…",
+    previewUnavailable: "Превью недоступно",
+    previewPosition: "{position} из {total}",
+    arrowHint: "← → переход",
     privatePreview: "Загружается приватно и только когда вы решите включить",
     keyboardHint: "← → переход · Пробел воспроизведение/пауза",
     searchPlaceholder: "Поиск по названию, хуку, расшифровке или автору…",

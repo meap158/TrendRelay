@@ -176,6 +176,11 @@ export const en = {
     intro:
       "Keep originals immutable and turn reference clips into searchable creative recipes.",
     playPreview: "Play video preview",
+    viewPreview: "View preview",
+    loadingPreview: "Loading preview…",
+    previewUnavailable: "Preview unavailable",
+    previewPosition: "{position} of {total}",
+    arrowHint: "← → browse",
     privatePreview: "Loaded privately only when you choose to play it",
     keyboardHint: "← → navigate · Space play/pause",
     searchPlaceholder: "Search titles, hooks, transcripts, or creators…",

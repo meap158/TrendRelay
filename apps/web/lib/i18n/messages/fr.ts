@@ -175,6 +175,11 @@ export const fr: Messages = {
     intro:
       "Gardez les originaux intacts et transformez les clips de référence en recettes créatives consultables.",
     playPreview: "Lire l'aperçu",
+    viewPreview: "Afficher l'aperçu",
+    loadingPreview: "Chargement de l'aperçu…",
+    previewUnavailable: "Aperçu indisponible",
+    previewPosition: "{position} sur {total}",
+    arrowHint: "← → naviguer",
     privatePreview: "Chargé en privé uniquement lorsque vous choisissez de le lire",
     keyboardHint: "← → naviguer · Espace lire/pause",
     searchPlaceholder: "Rechercher un titre, une accroche, une transcription ou un créateur…",

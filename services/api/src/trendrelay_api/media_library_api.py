@@ -688,6 +688,15 @@ def asset_content(
     )
 
 
+#: The Library's own three categories. Anything else has no player to send it
+#: to, so it is refused by name rather than served as bytes nothing can render.
+PREVIEWABLE_KINDS = ("video", "image", "audio")
+#: Previews are inlined as base64, which is a third larger than the file and is
+#: held in memory by both sides. A cap keeps one enormous asset from taking the
+#: tab down with it.
+PREVIEW_SIZE_LIMIT = 100 * 1024 * 1024
+
+
 @router.post("/assets/{asset_id}/preview")
 def asset_preview(
     workspace_id: str,
@@ -696,16 +705,23 @@ def asset_preview(
     session: DatabaseSession,
     cut: Annotated[Literal["original", "blurred"], Query()] = "original",
 ) -> dict[str, str]:
-    """Return playable bytes for one cut of an asset.
+    """Return previewable bytes for one cut of an asset.
 
-    Both cuts come back the same way so the player treats them identically; a
-    file served as a download would leave the browser to decide, and it decides
-    differently for a streamed file than for inline base64.
+    Video, image and audio all come back the same way, and so do both cuts, so
+    the player treats them identically. A file served as a download would leave
+    the browser to decide, and it decides differently for a streamed file than
+    for inline base64.
+
+    The Library already filters by video, image and audio, so previewing only
+    video meant two of its three categories opened to nothing.
     """
     membership(session, workspace_id, user.id)
     asset = _asset_record(session, workspace_id, asset_id)
-    if asset.media_kind != "video":
-        raise HTTPException(status_code=422, detail="Only videos have playable previews.")
+    if asset.media_kind not in PREVIEWABLE_KINDS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{asset.media_kind} assets have no preview.",
+        )
     wanted = ("blurred",) if cut == "blurred" else ("proxy", "original")
     versions = session.scalars(
         select(MediaAssetVersion).where(
@@ -721,13 +737,15 @@ def asset_preview(
             (item for item in versions if item.version_kind == wanted[1]), None
         )
     if not version:
-        raise HTTPException(status_code=404, detail="Video preview not found.")
+        raise HTTPException(status_code=404, detail="Preview not found.")
     try:
         path = Path(version.path).resolve(strict=True)
     except OSError as error:
-        raise HTTPException(status_code=404, detail="Video preview is unavailable.") from error
-    if path.stat().st_size > 100 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Video preview is too large to play safely.")
+        raise HTTPException(status_code=404, detail="Preview is unavailable.") from error
+    if path.stat().st_size > PREVIEW_SIZE_LIMIT:
+        raise HTTPException(
+            status_code=413, detail="This file is too large to preview safely."
+        )
     return {
         "mime_type": version.mime_type,
         "content_base64": base64.b64encode(path.read_bytes()).decode("ascii"),

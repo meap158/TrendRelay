@@ -114,7 +114,20 @@ def is_prose(text: str) -> bool:
     return not LOOKS_LITERAL.match(text)
 
 
+#: Comments are not shipped to anyone, and they are full of angle brackets:
+#: a line explaining that `<video> and <audio>` share an interface reads to the
+#: extractor as the JSX text node "and". Stripped before anything else, so the
+#: count reflects the interface rather than the commentary about it.
+LINE_COMMENT = re.compile(r"^\s*//.*$", re.M)
+BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+
+
+def strip_comments(source: str) -> str:
+    return LINE_COMMENT.sub("", BLOCK_COMMENT.sub("", source))
+
+
 def candidates(source: str) -> list[str]:
+    source = strip_comments(source)
     found: list[str] = []
     for match in JSX_TEXT.finditer(source):
         text = match.group(1).strip()

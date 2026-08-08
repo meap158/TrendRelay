@@ -171,6 +171,11 @@ export const ar: Messages = {
     intro:
       "احتفظ بالنسخ الأصلية كما هي، وحوّل المقاطع المرجعية إلى وصفات إبداعية قابلة للبحث.",
     playPreview: "تشغيل المعاينة",
+    viewPreview: "عرض المعاينة",
+    loadingPreview: "جارٍ تحميل المعاينة…",
+    previewUnavailable: "المعاينة غير متاحة",
+    previewPosition: "{position} من {total}",
+    arrowHint: "← → للتنقل",
     privatePreview: "يُحمَّل بشكل خاص فقط عند اختيارك تشغيله",
     keyboardHint: "← → للتنقل · مسافة للتشغيل/الإيقاف",
     searchPlaceholder: "ابحث في العناوين أو الجُمل الافتتاحية أو النصوص أو أصحاب المحتوى…",

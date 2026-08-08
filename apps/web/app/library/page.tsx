@@ -182,8 +182,8 @@ function MediaPreview({
   asset,
   workspaceId,
   apiFetch,
-  videoPosition,
-  videoTotal,
+  previewPosition,
+  previewTotal,
   hasPreviousVideo,
   hasNextVideo,
   autoStart,
@@ -194,8 +194,8 @@ function MediaPreview({
   asset: Asset;
   workspaceId: string;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
-  videoPosition: number;
-  videoTotal: number;
+  previewPosition: number;
+  previewTotal: number;
   hasPreviousVideo: boolean;
   hasNextVideo: boolean;
   autoStart: boolean;
@@ -210,12 +210,17 @@ function MediaPreview({
   // A blurred cut is watched in the same player as the original, so the two are
   // compared in place rather than in a second, smaller video somewhere else.
   const [cut, setCut] = useState<"original" | "blurred">("original");
-  const videoRef = useRef<HTMLVideoElement>(null);
+  // Both <video> and <audio> are HTMLMediaElement, which is the whole
+  // transport surface used here: play, pause and paused.
+  const videoRef = useRef<HTMLMediaElement>(null);
   const navigatingRef = useRef(false);
   const blurred = asset.versions.find((version) => version.kind === "blurred") ?? null;
 
+  // Audio and video both have a transport; an image has nothing to play.
+  const playable = asset.media_kind === "video" || asset.media_kind === "audio";
+
   useEffect(() => {
-    if (asset.media_kind !== "video" || !requested) return;
+    if (!requested) return;
     let active = true;
     let objectUrl = "";
     const controller = new AbortController();
@@ -234,14 +239,14 @@ function MediaPreview({
       .then((url) => { if (active) setSource(url); })
       .catch((reason) => {
         if (active && reason instanceof DOMException && reason.name === "AbortError") return;
-        if (active) setError(reason instanceof Error ? reason.message : "Video preview unavailable");
+        if (active) setError(reason instanceof Error ? reason.message : t("library.previewUnavailable"));
       });
     return () => {
       active = false;
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [apiFetch, asset.id, asset.media_kind, blurred, cut, requested, workspaceId]);
+  }, [apiFetch, asset.id, blurred, cut, requested, t, workspaceId]);
 
   function startPlayback() {
     setError("");
@@ -273,7 +278,6 @@ function MediaPreview({
   }
 
   useEffect(() => {
-    if (asset.media_kind !== "video") return;
     function navigateWithKeyboard(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
@@ -285,7 +289,7 @@ function MediaPreview({
         event.preventDefault();
         navigateVideo(onNextVideo);
       }
-      if (event.code === "Space") {
+      if (event.code === "Space" && playable) {
         event.preventDefault();
         togglePlayback();
       }
@@ -294,7 +298,6 @@ function MediaPreview({
     return () => window.removeEventListener("keydown", navigateWithKeyboard);
   });
 
-  if (asset.media_kind !== "video") return null;
   return (
     <article className="library-preview-card">
       <div className="library-preview-stage">
@@ -302,25 +305,50 @@ function MediaPreview({
           <button type="button" className="library-preview-launch" onClick={startPlayback}>
             <Thumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
             <span className="library-preview-launch-overlay">
-              <span className="library-preview-launch-icon" aria-hidden="true">▶</span>
-              <strong>{t("library.playPreview")}</strong>
+              <span className="library-preview-launch-icon" aria-hidden="true">
+                {playable ? "▶" : "⛶"}
+              </span>
+              <strong>
+                {playable ? t("library.playPreview") : t("library.viewPreview")}
+              </strong>
               <small>{t("library.privatePreview")}</small>
             </span>
           </button>
         ) : source ? (
-          <video
-            ref={videoRef}
-            aria-label={`Preview ${asset.title}`}
-            controls
-            autoPlay
-            playsInline
-            preload="metadata"
-            src={source}
-            onPlay={() => onPlaybackChange(true)}
-            onPause={() => { if (!navigatingRef.current) onPlaybackChange(false); }}
-            onEnded={() => onPlaybackChange(false)}
-          />
-        ) : <p>{error || "Loading video preview…"}</p>}
+          asset.media_kind === "image" ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="library-preview-image" src={source} alt={asset.title} />
+          ) : asset.media_kind === "audio" ? (
+            // Written out rather than built with createElement so the ref is a
+            // real JSX ref: React forbids reading one out of a props object
+            // during render, and the two tags share nothing but their props.
+            <audio
+              ref={videoRef as React.RefObject<HTMLAudioElement>}
+              className="library-preview-audio"
+              aria-label={asset.title}
+              controls
+              autoPlay
+              preload="metadata"
+              src={source}
+              onPlay={() => onPlaybackChange(true)}
+              onPause={() => { if (!navigatingRef.current) onPlaybackChange(false); }}
+              onEnded={() => onPlaybackChange(false)}
+            />
+          ) : (
+            <video
+              ref={videoRef as React.RefObject<HTMLVideoElement>}
+              aria-label={asset.title}
+              controls
+              autoPlay
+              playsInline
+              preload="metadata"
+              src={source}
+              onPlay={() => onPlaybackChange(true)}
+              onPause={() => { if (!navigatingRef.current) onPlaybackChange(false); }}
+              onEnded={() => onPlaybackChange(false)}
+            />
+          )
+        ) : <p>{error || t("library.loadingPreview")}</p>}
       </div>
       {blurred && (
         <div className="library-cut-switch" role="group" aria-label={t("library.whichCut")}>
@@ -339,7 +367,10 @@ function MediaPreview({
         <button type="button" disabled={!hasPreviousVideo} onClick={() => navigateVideo(onPreviousVideo)} aria-label={t("library.previousVideo")} title={t("library.previousVideoKey")}>
           <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m12.5 4.5-5.5 5.5 5.5 5.5" /></svg>
         </button>
-        <span>{videoPosition} of {videoTotal} videos <small>{t("library.keyboardHint")}</small></span>
+        <span>
+          {t("library.previewPosition", { position: previewPosition, total: previewTotal })}
+          <small>{playable ? t("library.keyboardHint") : t("library.arrowHint")}</small>
+        </span>
         <button type="button" disabled={!hasNextVideo} onClick={() => navigateVideo(onNextVideo)} aria-label={t("library.nextVideo")} title={t("library.nextVideoKey")}>
           <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m7.5 4.5 5.5 5.5-5.5 5.5" /></svg>
         </button>
@@ -434,8 +465,6 @@ export default function LibraryPage() {
     : [];
   const selectedChannelUrl = selected ? douyinChannelUrl(selected) : null;
   const selectedIndex = assets.findIndex((asset) => asset.id === selectedId);
-  const videoAssets = assets.filter((asset) => asset.media_kind === "video");
-  const selectedVideoIndex = videoAssets.findIndex((asset) => asset.id === selectedId);
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const canImport = ["owner", "editor", "approver"].includes(workspace?.role ?? "");
   // Approving a plan commits render spend, so it is the narrower pair.
@@ -1149,14 +1178,14 @@ export default function LibraryPage() {
                 asset={selected}
                 workspaceId={workspaceId}
                 apiFetch={apiFetch}
-                videoPosition={selectedVideoIndex + 1}
-                videoTotal={videoAssets.length}
-                hasPreviousVideo={selectedVideoIndex > 0}
-                hasNextVideo={selectedVideoIndex >= 0 && selectedVideoIndex < videoAssets.length - 1}
+                previewPosition={selectedIndex + 1}
+                previewTotal={assets.length}
+                hasPreviousVideo={selectedIndex > 0}
+                hasNextVideo={selectedIndex >= 0 && selectedIndex < assets.length - 1}
                 autoStart={continueVideoPlayback}
                 onPlaybackChange={setContinueVideoPlayback}
-                onPreviousVideo={() => setSelectedId(videoAssets[selectedVideoIndex - 1]?.id ?? selected.id)}
-                onNextVideo={() => setSelectedId(videoAssets[selectedVideoIndex + 1]?.id ?? selected.id)}
+                onPreviousVideo={() => setSelectedId(assets[selectedIndex - 1]?.id ?? selected.id)}
+                onNextVideo={() => setSelectedId(assets[selectedIndex + 1]?.id ?? selected.id)}
               />
               <article className="library-summary">
                 <div>
