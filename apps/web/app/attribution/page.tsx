@@ -1,13 +1,33 @@
 "use client";
 
+/**
+ * Products, links, revenue and book economics, on one page.
+ *
+ * Attribution, Catalog and Opportunities were three pages over one model: every
+ * row already carried `product_id`. The split was navigation, not data. What
+ * changes here is which question the page answers first - "what did this
+ * product do?" rather than "what did this link do?" - which is where every link
+ * manager worth copying ended up.
+ *
+ * The tabs are sections of one subject, not separate tools. Products is the
+ * default because it is the only view that shows a product's whole story;
+ * Links keeps the campaign-shaped view for people who think in campaigns; Books
+ * exists because ad economics only mean anything one level above the product.
+ */
+
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { BooksPanel } from "./books-panel";
+import { ProductTable } from "./product-table";
 import { buttonClass } from "../ui/button";
 import { StatusToasts, useStatus } from "../ui/status";
+import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { useT } from "../i18n-provider";
+import { money } from "./format";
+import type { ProductRow, ProductsPayload, WorkRow } from "./types";
 
 type Workspace = { id: string; name: string; role: string };
 type Campaign = { id: string; name: string; affiliate_url?: string | null };
@@ -78,14 +98,13 @@ const csvTemplate = [
   "PASTE_CODE,impact,ORDER_REFERENCE,2026-07-26T12:00:00+07:00,approved,USD,89.99,12.50",
 ].join("\n");
 
+const TABS = ["products", "links", "books", "imports"] as const;
+const isTab = oneOf(...TABS);
+
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
   if (!response.ok) throw new Error(body.detail ?? "Attribution request failed.");
   return body;
-}
-
-function money(cents: number, currency: string): string {
-  return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(cents / 100);
 }
 
 function countryDestinations(value: string): Record<string, string> {
@@ -110,9 +129,16 @@ export default function AttributionPage() {
   const [links, setLinks] = useState<TrackingLink[]>([]);
   const [conversions, setConversions] = useState<Conversion[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [products, setProducts] = useState<ProductRow[]>([]);
+  const [works, setWorks] = useState<WorkRow[]>([]);
   const [campaignId, setCampaignId] = useState("");
   const [csvText, setCsvText] = useState(csvTemplate);
   const [busy, setBusy] = useState("");
+  const [tab, setTab] = usePersistedState("trendrelay.attribution.tab", "products", isTab);
+  // Set when someone builds a link from a product row, so the form opens with
+  // the offer already chosen instead of asking them to find it again in a list.
+  const [presetOffer, setPresetOffer] = useState("");
+  const linkFormRef = useRef<HTMLFormElement>(null);
   // Reported over the page. Rendered in flow, these shifted everything below
   // them whenever an action finished, which reads as the interface flinching.
   const { messages: statusMessages, succeed, fail, dismiss } = useStatus();
@@ -121,16 +147,21 @@ export default function AttributionPage() {
   const canCreate = ["owner", "editor", "approver"].includes(workspace?.role ?? "");
   const canChangeStatus = ["owner", "approver"].includes(workspace?.role ?? "");
   const canImport = ["owner", "editor", "analyst"].includes(workspace?.role ?? "");
+  const canEditBooks = ["owner", "editor"].includes(workspace?.role ?? "");
 
   const refresh = useCallback(async (nextWorkspace = workspaceId) => {
     if (!nextWorkspace) return;
-    const [campaignBody, planBody, offerBody, linkBody, conversionBody, summaryBody] = await Promise.all([
-      json<{ campaigns: Campaign[] }>(await apiFetch(`/api/workspaces/${nextWorkspace}/campaigns`)),
-      json<{ plans: Plan[] }>(await apiFetch(`/api/workspaces/${nextWorkspace}/campaigns/calendar`)),
-      json<{ offers: Offer[] }>(await apiFetch(`/api/workspaces/${nextWorkspace}/opportunities/offers`)),
-      json<{ links: TrackingLink[] }>(await apiFetch(`/api/workspaces/${nextWorkspace}/attribution/links`)),
-      json<{ conversions: Conversion[] }>(await apiFetch(`/api/workspaces/${nextWorkspace}/attribution/conversions`)),
-      json<Summary>(await apiFetch(`/api/workspaces/${nextWorkspace}/attribution/summary`)),
+    const base = `/api/workspaces/${nextWorkspace}`;
+    const [
+      campaignBody, planBody, offerBody, linkBody, conversionBody, summaryBody, productBody,
+    ] = await Promise.all([
+      json<{ campaigns: Campaign[] }>(await apiFetch(`${base}/campaigns`)),
+      json<{ plans: Plan[] }>(await apiFetch(`${base}/campaigns/calendar`)),
+      json<{ offers: Offer[] }>(await apiFetch(`${base}/opportunities/offers`)),
+      json<{ links: TrackingLink[] }>(await apiFetch(`${base}/attribution/links`)),
+      json<{ conversions: Conversion[] }>(await apiFetch(`${base}/attribution/conversions`)),
+      json<Summary>(await apiFetch(`${base}/attribution/summary`)),
+      json<ProductsPayload>(await apiFetch(`${base}/attribution/products`)),
     ]);
     setCampaigns(campaignBody.campaigns);
     setPlans(planBody.plans);
@@ -138,6 +169,8 @@ export default function AttributionPage() {
     setLinks(linkBody.links);
     setConversions(conversionBody.conversions);
     setSummary(summaryBody);
+    setProducts(productBody.products);
+    setWorks(productBody.works);
     setCampaignId((current) => {
       const requested = new URLSearchParams(window.location.search).get("campaign");
       if (requested && campaignBody.campaigns.some((item) => item.id === requested)) return requested;
@@ -160,6 +193,14 @@ export default function AttributionPage() {
     return () => { cancelled = true; };
   }, [apiFetch, user, fail]);
 
+  // A link from the retired /catalog page names the tab it wants. Honoured once,
+  // on arrival, so it does not fight the stored preference on later visits.
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    if (isTab(requested)) setTab(requested);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!workspaceId) return;
     queueMicrotask(() => {
@@ -172,8 +213,6 @@ export default function AttributionPage() {
   async function createLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy("link");
-    fail("");
-    succeed("");
     const form = new FormData(event.currentTarget);
     try {
       const expiry = String(form.get("expires_at") ?? "");
@@ -197,10 +236,11 @@ export default function AttributionPage() {
       );
       try {
         await navigator.clipboard.writeText(body.link.url);
-        succeed("Tracking link created and copied. The destination host and disclosure remain visible.");
+        succeed(t("attribution.linkCreatedCopied"));
       } catch {
-        succeed(`Tracking link created: ${body.link.url}`);
+        succeed(t("attribution.linkCreated", { url: body.link.url }));
       }
+      setPresetOffer("");
       await refresh();
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "Tracking link creation failed.");
@@ -209,31 +249,51 @@ export default function AttributionPage() {
     }
   }
 
-  async function setLinkStatus(link: TrackingLink, status: TrackingLink["status"]) {
-    if (!window.confirm(`${status === "active" ? "Activate" : "Disable"} tracking link ${link.code}?`)) return;
-    setBusy(link.id);
-    fail("");
+  const setLinkStatus = useCallback(async (
+    linkId: string,
+    status: "active" | "disabled",
+  ) => {
+    const link = links.find((item) => item.id === linkId);
+    if (!link) return;
+    if (!window.confirm(t(
+      status === "active" ? "attribution.confirmActivate" : "attribution.confirmDisable",
+      { code: link.code },
+    ))) return;
+    setBusy(linkId);
     try {
       await json(
-        await apiFetch(`/api/workspaces/${workspaceId}/attribution/links/${link.id}/status`, {
+        await apiFetch(`/api/workspaces/${workspaceId}/attribution/links/${linkId}/status`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status, confirm_external_action: true }),
         }),
       );
-      succeed(`Tracking link ${status === "active" ? "activated" : "disabled"}.`);
+      succeed(t(status === "active" ? "attribution.activated" : "attribution.disabled"));
       await refresh();
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "Status update failed.");
     } finally {
       setBusy("");
     }
-  }
+  }, [apiFetch, links, refresh, succeed, fail, t, workspaceId]);
+
+  const copyLink = useCallback((code: string) => {
+    const link = links.find((item) => item.code === code);
+    if (link) void navigator.clipboard.writeText(link.url);
+  }, [links]);
+
+  /** From a product row: carry the offer over rather than make them find it. */
+  const startLinkFromProduct = useCallback((_product: ProductRow, offerId: string) => {
+    setPresetOffer(offerId);
+    setTab("links");
+    queueMicrotask(() => {
+      linkFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [setTab]);
 
   async function importConversions(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy("import");
-    fail("");
     try {
       const result = await json<{ created: number; updated: number; matched_clicks: number }>(
         await apiFetch(`/api/workspaces/${workspaceId}/attribution/conversions/import`, {
@@ -242,7 +302,11 @@ export default function AttributionPage() {
           body: JSON.stringify({ csv_text: csvText, confirm_external_action: true }),
         }),
       );
-      succeed(`${result.created} conversion(s) added, ${result.updated} updated, ${result.matched_clicks} matched to clicks.`);
+      succeed(t("attribution.imported", {
+        created: result.created,
+        updated: result.updated,
+        matched: result.matched_clicks,
+      }));
       await refresh();
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "Conversion import failed.");
@@ -253,6 +317,43 @@ export default function AttributionPage() {
 
   if (loading) return <main className="attribution-page"><p>{t("attribution.opening")}</p></main>;
   if (!user) return <main className="attribution-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Fattribution">{t("attribution.signInPrompt")}</Link></main>;
+
+  const linkForm = canCreate && (
+    <article className="attribution-panel">
+      <h2>{t("attribution.createLink")}</h2>
+      <form onSubmit={createLink} ref={linkFormRef}>
+        <label>{t("attribution.campaign")}<select name="campaign_id" required value={campaignId} onChange={(event) => setCampaignId(event.target.value)}>
+          {campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select></label>
+        <label>{t("attribution.publicationPlan")}<select name="plan_id" defaultValue="">
+          <option value="">{t("attribution.campaignLevelLink")}</option>
+          {plans.filter((item) => item.campaign_id === campaignId).map((item) => <option key={item.id} value={item.id}>{item.title} · {item.platform}</option>)}
+        </select></label>
+        <label>{t("attribution.affiliateOffer")}<select name="offer_id" value={presetOffer} onChange={(event) => setPresetOffer(event.target.value)}>
+          <option value="">{t("attribution.useCampaignDestination")}</option>
+          {offers.filter((item) => item.availability !== "unavailable").map((item) => <option key={item.id} value={item.id}>{item.product.name} · {item.network}</option>)}
+        </select></label>
+        <label>{t("library.platform")}<select name="platform" defaultValue="tiktok">
+          <option value="tiktok">TikTok</option><option value="instagram">Instagram</option><option value="youtube">YouTube</option><option value="douyin">Douyin</option><option value="other">{t("common.other")}</option>
+        </select></label>
+        <div className="attribution-form-row">
+          <label>{t("attribution.campaignParameter")}<input name="campaign_parameter" defaultValue="tr_campaign" required /></label>
+          <label>{t("attribution.platformParameter")}<input name="platform_parameter" defaultValue="tr_platform" required /></label>
+        </div>
+        <label>{t("publish.disclosure")}<textarea name="disclosure" rows={2} defaultValue="Affiliate link; we may earn a commission." required /></label>
+        <label>{t("attribution.countryDestinations")}<textarea name="country_destinations" rows={3} placeholder={"TH=https://th.merchant.example/offer\nUS=https://us.merchant.example/offer"} /><small>{t("attribution.countryDestinationsHelp")}</small></label>
+        <label>{t("attribution.expiry")}<input name="expires_at" type="datetime-local" /></label>
+        <button className={buttonClass({ variant: "primary" })} disabled={busy === "link" || !campaignId}>{busy === "link" ? t("attribution.creating") : t("attribution.createAndCopy")}</button>
+      </form>
+    </article>
+  );
+
+  const measurementNotes = (
+    <article className="attribution-panel attribution-limits">
+      <h2>{t("attribution.measurementNotes")}</h2>
+      <ul>{summary?.limitations.map((item) => <li key={item}>{item}</li>)}</ul>
+    </article>
+  );
 
   return (
     <main className="attribution-page">
@@ -268,128 +369,157 @@ export default function AttributionPage() {
         </select></label>
       </header>
 
-
       <section className="attribution-totals">
-        <article><span>{t("attribution.activeLinks")}</span><strong>{summary?.totals.active_links ?? 0}</strong><small>{summary?.totals.links ?? 0} total</small></article>
-        <article><span>{t("attribution.clicks")}</span><strong>{summary?.totals.clicks ?? 0}</strong><small>{summary?.totals.unique_visitors ?? 0} privacy-safe visitors</small></article>
+        <article><span>{t("attribution.activeLinks")}</span><strong>{summary?.totals.active_links ?? 0}</strong><small>{t("attribution.totalLinks", { count: summary?.totals.links ?? 0 })}</small></article>
+        <article><span>{t("attribution.clicks")}</span><strong>{summary?.totals.clicks ?? 0}</strong><small>{t("attribution.privacySafeVisitors", { count: summary?.totals.unique_visitors ?? 0 })}</small></article>
         {Object.entries(summary?.by_currency ?? {}).map(([currency, item]) => (
           <article key={currency}>
-            <span>Net commission · {currency}</span>
+            <span>{t("attribution.netCommission")} · {currency}</span>
             <strong>{money(item.net_commission_cents, currency)}</strong>
-            <small>{item.approved_conversions} approved · EPC {money(Math.round(item.earnings_per_click_cents), currency)}</small>
+            <small>{t("attribution.approvedCount", { count: item.approved_conversions })} · EPC {money(Math.round(item.earnings_per_click_cents), currency)}</small>
           </article>
         ))}
       </section>
 
-      <section className="attribution-layout">
-        <div className="attribution-main">
-          <article className="attribution-panel">
-            <div className="panel-heading"><div><h2>{t("attribution.trackingLinks")}</h2><p>Visitors always see your first-party host; the public info endpoint exposes the destination host and disclosure.</p></div></div>
-            <div className="tracking-list">
-              {links.map((link) => (
-                <div key={link.id}>
-                  <div className="tracking-copy">
-                    <strong>{campaigns.find((item) => item.id === link.campaign_id)?.name ?? "Campaign"}</strong>
-                    <a href={`${link.url}/info`} target="_blank" rel="noreferrer">{link.url}</a>
-                    <small>→ {link.destination_host} · {link.platform} · {link.disclosure}</small>
-                  </div>
-                  <div className="tracking-metrics">
-                    <span>{link.clicks}<small>{t("attribution.clicksLower")}</small></span>
-                    <span>{link.conversions}<small>{t("attribution.approved")}</small></span>
-                    <em className={`tracking-status ${link.status}`}>{link.status}</em>
-                  </div>
-                  <div className="tracking-actions">
-                    <button onClick={() => void navigator.clipboard.writeText(link.url)}>{t("attribution.copy")}</button>
-                    {canChangeStatus && link.status === "active" && <button disabled={busy === link.id} onClick={() => void setLinkStatus(link, "disabled")}>{t("attribution.disable")}</button>}
-                    {canChangeStatus && link.status !== "active" && <button disabled={busy === link.id} onClick={() => void setLinkStatus(link, "active")}>{t("attribution.activate")}</button>}
-                  </div>
-                </div>
-              ))}
-              {!links.length && <p>{t("attribution.noLinks")}</p>}
-            </div>
-          </article>
+      {/* Sections of one subject, not separate tools; the totals above stay
+          visible across all of them because they describe the whole page. */}
+      <nav className="attribution-tabs" aria-label={t("attribution.sections")}>
+        {TABS.map((name) => (
+          <button
+            key={name}
+            type="button"
+            className={tab === name ? "active" : ""}
+            aria-current={tab === name ? "true" : undefined}
+            onClick={() => setTab(name)}
+          >{t(`attribution.tab.${name}`)}</button>
+        ))}
+      </nav>
 
-          <article className="attribution-panel">
-            <h2>{t("attribution.revenueByCampaign")}</h2>
-            <div className="revenue-table">
-              <div className="table-head"><span>{t("attribution.campaign")}</span><span>{t("attribution.conversions")}</span><span>{t("attribution.netCommission")}</span></div>
-              {summary?.campaigns.map((row) => (
-                <div key={`${row.campaign_id}-${row.currency}`}>
-                  <span>{row.campaign_name}<small>{row.currency}</small></span>
-                  <span>{row.approved_conversions}</span>
-                  <strong>{money(row.net_commission_cents, row.currency)}</strong>
-                </div>
-              ))}
-              {!summary?.campaigns.length && <p>{t("attribution.noRevenue")}</p>}
-            </div>
-            {!!summary?.creative_formats.length && <>
-              <h3>{t("attribution.earningsByFormat")}</h3>
-              <div className="format-chips">{summary.creative_formats.map((row) => (
-                <span key={`${row.creative_format}-${row.currency}`}><strong>{row.creative_format}</strong>{money(row.net_commission_cents, row.currency)}</span>
-              ))}</div>
-            </>}
-          </article>
+      {tab === "products" && (
+        <section className="attribution-tab-panel">
+          <ProductTable
+            products={products}
+            works={works}
+            canCreate={canCreate}
+            canChangeStatus={canChangeStatus}
+            busy={busy}
+            onCreateLink={startLinkFromProduct}
+            onCopyLink={copyLink}
+            onSetLinkStatus={(id, status) => void setLinkStatus(id, status)}
+          />
+          {/* Said where the two figures meet, not in a footnote: the same
+              conversion is a product's commission and a book's royalty. */}
+          <p className="attribution-note">{t("attribution.notAdditive")}</p>
+          {measurementNotes}
+        </section>
+      )}
 
-          <article className="attribution-panel">
-            <h2>{t("attribution.recentConversions")}</h2>
-            <div className="conversion-list">
-              {conversions.slice(0, 30).map((item) => (
-                <div key={item.id}>
-                  <span><strong>{item.network}</strong><small>{new Date(item.occurred_at).toLocaleString()} · {item.tracking_code}</small></span>
-                  <em className={`conversion-status ${item.status}`}>{item.status}</em>
-                  <strong>{money(item.commission_cents, item.currency)}</strong>
-                  <small>{item.click_matched ? "Matched click" : "No eligible click"}</small>
-                </div>
-              ))}
-              {!conversions.length && <p>{t("attribution.noReports")}</p>}
-            </div>
-          </article>
-        </div>
-
-        <aside className="attribution-side">
-          {canCreate && <article className="attribution-panel">
-            <h2>{t("attribution.createLink")}</h2>
-            <form onSubmit={createLink}>
-              <label>{t("attribution.campaign")}<select name="campaign_id" required value={campaignId} onChange={(event) => setCampaignId(event.target.value)}>
-                {campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select></label>
-              <label>{t("attribution.publicationPlan")}<select name="plan_id" defaultValue="">
-                <option value="">{t("attribution.campaignLevelLink")}</option>
-                {plans.filter((item) => item.campaign_id === campaignId).map((item) => <option key={item.id} value={item.id}>{item.title} · {item.platform}</option>)}
-              </select></label>
-              <label>{t("attribution.affiliateOffer")}<select name="offer_id" defaultValue="">
-                <option value="">{t("attribution.useCampaignDestination")}</option>
-                {offers.filter((item) => item.availability !== "unavailable").map((item) => <option key={item.id} value={item.id}>{item.product.name} · {item.network}</option>)}
-              </select></label>
-              <label>{t("library.platform")}<select name="platform" defaultValue="tiktok">
-                <option value="tiktok">TikTok</option><option value="instagram">Instagram</option><option value="youtube">YouTube</option><option value="douyin">Douyin</option><option value="other">{t("common.other")}</option>
-              </select></label>
-              <div className="attribution-form-row">
-                <label>{t("attribution.campaignParameter")}<input name="campaign_parameter" defaultValue="tr_campaign" required /></label>
-                <label>{t("attribution.platformParameter")}<input name="platform_parameter" defaultValue="tr_platform" required /></label>
+      {tab === "links" && (
+        <section className="attribution-layout attribution-tab-panel">
+          <div className="attribution-main">
+            <article className="attribution-panel">
+              <div className="panel-heading"><div><h2>{t("attribution.trackingLinks")}</h2><p>{t("attribution.trackingLinksHelp")}</p></div></div>
+              <div className="tracking-list">
+                {links.map((link) => (
+                  <div key={link.id}>
+                    <div className="tracking-copy">
+                      <strong>{campaigns.find((item) => item.id === link.campaign_id)?.name ?? t("attribution.campaign")}</strong>
+                      <a href={`${link.url}/info`} target="_blank" rel="noreferrer">{link.url}</a>
+                      <small>→ {link.destination_host} · {link.platform} · {link.disclosure}</small>
+                    </div>
+                    <div className="tracking-metrics">
+                      <span>{link.clicks}<small>{t("attribution.clicksLower")}</small></span>
+                      <span>{link.conversions}<small>{t("attribution.approved")}</small></span>
+                      <em className={`tracking-status ${link.status}`}>{link.status}</em>
+                    </div>
+                    <div className="tracking-actions">
+                      <button onClick={() => void navigator.clipboard.writeText(link.url)}>{t("attribution.copy")}</button>
+                      {canChangeStatus && link.status === "active" && <button disabled={busy === link.id} onClick={() => void setLinkStatus(link.id, "disabled")}>{t("attribution.disable")}</button>}
+                      {canChangeStatus && link.status !== "active" && <button disabled={busy === link.id} onClick={() => void setLinkStatus(link.id, "active")}>{t("attribution.activate")}</button>}
+                    </div>
+                  </div>
+                ))}
+                {!links.length && <p>{t("attribution.noLinks")}</p>}
               </div>
-              <label>{t("publish.disclosure")}<textarea name="disclosure" rows={2} defaultValue="Affiliate link; we may earn a commission." required /></label>
-              <label>{t("attribution.countryDestinations")}<textarea name="country_destinations" rows={3} placeholder={"TH=https://th.merchant.example/offer\nUS=https://us.merchant.example/offer"} /><small>Optional. One COUNTRY=https://destination line. Incoming query parameters are never forwarded.</small></label>
-              <label>{t("attribution.expiry")}<input name="expires_at" type="datetime-local" /></label>
-              <button className={buttonClass({ variant: "primary" })} disabled={busy === "link" || !campaignId}>{busy === "link" ? "Creating…" : "Create and copy"}</button>
-            </form>
-          </article>}
+            </article>
 
-          {canImport && <article className="attribution-panel">
-            <h2>{t("attribution.importConversions")}</h2>
-            <p>{t("attribution.importHelp")}</p>
-            <form onSubmit={importConversions}>
-              <textarea aria-label={t("attribution.conversionCsv")} rows={8} value={csvText} onChange={(event) => setCsvText(event.target.value)} />
-              <button className={buttonClass({ variant: "primary" })} disabled={busy === "import"}>{busy === "import" ? "Importing…" : "Import report"}</button>
-            </form>
-          </article>}
+            <article className="attribution-panel">
+              <h2>{t("attribution.revenueByCampaign")}</h2>
+              <div className="revenue-table">
+                <div className="table-head"><span>{t("attribution.campaign")}</span><span>{t("attribution.conversions")}</span><span>{t("attribution.netCommission")}</span></div>
+                {summary?.campaigns.map((row) => (
+                  <div key={`${row.campaign_id}-${row.currency}`}>
+                    <span>{row.campaign_name}<small>{row.currency}</small></span>
+                    <span>{row.approved_conversions}</span>
+                    <strong>{money(row.net_commission_cents, row.currency)}</strong>
+                  </div>
+                ))}
+                {!summary?.campaigns.length && <p>{t("attribution.noRevenue")}</p>}
+              </div>
+              {!!summary?.creative_formats.length && <>
+                <h3>{t("attribution.earningsByFormat")}</h3>
+                <div className="format-chips">{summary.creative_formats.map((row) => (
+                  <span key={`${row.creative_format}-${row.currency}`}><strong>{row.creative_format}</strong>{money(row.net_commission_cents, row.currency)}</span>
+                ))}</div>
+              </>}
+            </article>
 
-          <article className="attribution-panel attribution-limits">
-            <h2>{t("attribution.measurementNotes")}</h2>
-            <ul>{summary?.limitations.map((item) => <li key={item}>{item}</li>)}</ul>
-          </article>
-        </aside>
-      </section>
+            <article className="attribution-panel">
+              <h2>{t("attribution.recentConversions")}</h2>
+              <div className="conversion-list">
+                {conversions.slice(0, 30).map((item) => (
+                  <div key={item.id}>
+                    <span><strong>{item.network}</strong><small>{new Date(item.occurred_at).toLocaleString()} · {item.tracking_code}</small></span>
+                    <em className={`conversion-status ${item.status}`}>{item.status}</em>
+                    <strong>{money(item.commission_cents, item.currency)}</strong>
+                    <small>{item.click_matched ? t("attribution.matchedClick") : t("attribution.noEligibleClick")}</small>
+                  </div>
+                ))}
+                {!conversions.length && <p>{t("attribution.noReports")}</p>}
+              </div>
+            </article>
+          </div>
+
+          <aside className="attribution-side">
+            {linkForm}
+            {measurementNotes}
+          </aside>
+        </section>
+      )}
+
+      {tab === "books" && (
+        <section className="attribution-tab-panel catalog-page">
+          <p className="attribution-note">{t("attribution.booksIntro")}</p>
+          {workspaceId && (
+            <BooksPanel
+              workspaceId={workspaceId}
+              canEdit={canEditBooks}
+              apiFetch={apiFetch}
+              succeed={succeed}
+              fail={fail}
+            />
+          )}
+        </section>
+      )}
+
+      {tab === "imports" && (
+        <section className="attribution-tab-panel">
+          {canImport ? (
+            <article className="attribution-panel">
+              <h2>{t("attribution.importConversions")}</h2>
+              <p>{t("attribution.importHelp")}</p>
+              <form onSubmit={importConversions}>
+                <textarea aria-label={t("attribution.conversionCsv")} rows={10} value={csvText} onChange={(event) => setCsvText(event.target.value)} />
+                <button className={buttonClass({ variant: "primary" })} disabled={busy === "import"}>{busy === "import" ? t("attribution.importing") : t("attribution.importReport")}</button>
+              </form>
+            </article>
+          ) : <p>{t("attribution.importNotPermitted")}</p>}
+          {/* Ad spend lives with the books it is attributed to; sending someone
+              to a different tab to import it would be the old split again. */}
+          <p className="attribution-note">{t("attribution.spendImportLivesInBooks")}</p>
+        </section>
+      )}
+
       <StatusToasts messages={statusMessages} onDismiss={dismiss} />
     </main>
   );

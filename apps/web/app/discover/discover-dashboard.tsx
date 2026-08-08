@@ -932,6 +932,27 @@ export default function ResearchDashboard() {
     [allJobs],
   );
 
+  /** Runs that still want something from you: an error to read, or a wait. */
+  const unfinished = useMemo(
+    () => jobs.filter((job) => job.status !== "succeeded").slice(0, 5),
+    [jobs],
+  );
+
+  /**
+   * The newest run worth scoring.
+   *
+   * One link, not one per run. Scoring is a step you take after reading the
+   * cards, and the cards on this page are the newest run's - so a column of
+   * links to older runs offered a choice nobody was making.
+   */
+  const scorable = useMemo(
+    () =>
+      jobs.find(
+        (job) => job.status === "succeeded" && (job.observations?.length ?? 0) > 0,
+      ) ?? null,
+    [jobs],
+  );
+
   useEffect(() => {
     let cancelled = false;
     apiFetch("/api/workspaces")
@@ -1859,37 +1880,41 @@ export default function ResearchDashboard() {
         </div>
       )}
 
-      {jobs.length > 0 && (
+      {/* Not a run log. A finished, successful run has already put its results
+          on the page above; repeating it as a timestamped row said nothing the
+          cards did not. What the log was carrying that nothing else did is kept:
+          a run that failed, a run still going, and the way through to scoring. */}
+      {(unfinished.length > 0 || scorable) && (
         <div style={S.jobsSection}>
           <hr style={S.divider} />
-          <h2 style={{ ...S.sectionTitle, marginTop: "24px" }}>{t("research.recent")}</h2>
-          <p style={S.sectionSub}>{jobs.length} runs</p>
-          {jobs.slice(0, 8).map((job) => (
+          {unfinished.map((job) => (
             <div key={job.id} style={S.jobRow}>
               <div style={{ display: "flex", alignItems: "center" }}>
                 <span style={jobDot(job.status)} />
                 <div>
                   <span style={{ color: "#202124", fontWeight: 500 }}>{job.topic}</span>
                   <span style={{ color: "#80868b", marginLeft: "8px" }}>
-                    {job.status} · {new Date(job.created_at).toLocaleString()}
+                    {job.status === "failed"
+                      ? (job.error ?? t("research.runFailed"))
+                      : t("research.stillResearching")}
                   </span>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                {job.error && (
-                  <span style={{ color: "#ea4335", fontSize: "12px" }}>{job.error}</span>
-                )}
-                {job.status === "succeeded" && (job.observations?.length ?? 0) > 0 && (
-                  <Link
-                    href={`/opportunities?trend=${encodeURIComponent(job.topic)}&job=${encodeURIComponent(job.id)}`}
-                    style={S.link}
-                  >
-                    Score opportunity
-                  </Link>
-                )}
-              </div>
             </div>
           ))}
+          {scorable && (
+            <div style={S.jobRow}>
+              <span style={{ color: "#5f6368" }}>
+                {t("research.readyToScore", { topic: scorable.topic })}
+              </span>
+              <Link
+                href={`/opportunities?trend=${encodeURIComponent(scorable.topic)}&job=${encodeURIComponent(scorable.id)}`}
+                style={S.link}
+              >
+                {t("research.scoreOpportunity")}
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </main>

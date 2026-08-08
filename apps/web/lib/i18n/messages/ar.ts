@@ -162,7 +162,10 @@ export const ar: Messages = {
     results: "النتائج",
     relevance: "مدى الصلة",
     noSignals: "لا توجد مؤشرات من هذا النوع بعد.",
-    recent: "أبحاث حديثة",
+    runFailed: "فشل هذا التشغيل.",
+    stillResearching: "البحث جارٍ…",
+    readyToScore: "بحث «{topic}» جاهز للتقييم.",
+    scoreOpportunity: "قيّم الفرصة",
     noImage: "بدون صورة",
     tiktokRegion: "منطقة TikTok",
     tiktokPeriod: "فترة TikTok",
@@ -454,6 +457,60 @@ export const ar: Messages = {
       "استخدم رمز التتبع من تقرير الشبكة ووقت تحويل يراعي المنطقة الزمنية. تُحفظ مراجع الطلبات كبصمات مُعمّاة بمفتاح فقط.",
     measurementNotes: "ملاحظات القياس",
     conversionCsv: "ملف CSV للتحويلات",
+    sections: "أقسام الإسناد",
+    tab: {
+      products: "المنتجات",
+      links: "الروابط",
+      books: "الكتب",
+      imports: "الاستيراد",
+    },
+    productsEyebrow: "كل شيء في صف واحد",
+    products: "المنتجات",
+    productCount:
+      "{count, plural, zero {لا منتجات} one {منتج واحد} two {منتجان} few {# منتجات} many {# منتجًا} other {# منتج}}",
+    noProducts:
+      "لا توجد منتجات بعد. استورد عروض التسويق بالعمولة من قسم «الفرص»، وستظهر هنا كل روابطها ونقراتها وعمولاتها.",
+    product: "المنتج",
+    offers: "العروض",
+    links: "الروابط",
+    whereItGoes: "إلى أين يؤدي",
+    commissionRate: "عمولة {rate}",
+    cookieWindow:
+      "كوكي لمدة {days, plural, zero {أيام} one {يوم واحد} two {يومين} few {# أيام} many {# يومًا} other {# يوم}}",
+    createLinkHere: "إنشاء رابط",
+    noOffers: "لا توجد عروض تسويق بالعمولة لهذا المنتج بعد.",
+    noLinksHere: "لا توجد روابط تتبّع لهذا المنتج بعد.",
+    approvedCount:
+      "{count, plural, zero {لا شيء معتمد} one {واحدة معتمدة} two {اثنتان معتمدتان} few {# معتمدة} many {# معتمدة} other {# معتمدة}}",
+    pendingCount:
+      "{count, plural, zero {لا شيء معلّق} one {واحدة معلّقة} two {اثنتان معلّقتان} few {# معلّقة} many {# معلّقة} other {# معلّقة}}",
+    totalLinks: "{count} إجمالًا",
+    privacySafeVisitors: "{count} زائرًا مجهول الهوية",
+    notAdditive:
+      "عمولة المنتج وحقوق ملكية الكتاب هما التحويلات نفسها، تُحتسب مرة واحدة وتُجمَّع بطريقتين. لا تجمعهما أبدًا.",
+    booksIntro:
+      "جدوى الإعلان تخص الكتاب لا الصيغة: النسخة الورقية والنسخة الرقمية منتجان منفصلان يتشاركان ميزانية واحدة.",
+    trackingLinksHelp:
+      "يرى الزائرون دائمًا نطاقك أنت؛ وتكشف نقطة المعلومات العامة عن مضيف الوجهة وعن الإفصاح.",
+    countryDestinationsHelp:
+      "اختياري. سطر واحد لكل مدخل بصيغة الدولة=https://الوجهة. لا تُمرَّر معطيات الاستعلام الواردة أبدًا.",
+    creating: "جارٍ الإنشاء…",
+    createAndCopy: "أنشئ وانسخ",
+    importing: "جارٍ الاستيراد…",
+    importReport: "استيراد التقرير",
+    importNotPermitted: "دورك لا يسمح باستيراد تقارير التحويلات.",
+    spendImportLivesInBooks:
+      "يُستورد الإنفاق الإعلاني ضمن قسم «الكتب»، بجوار العناوين المُسنَد إليها.",
+    linkCreatedCopied:
+      "أُنشئ رابط التتبّع ونُسخ. يبقى مضيف الوجهة والإفصاح ظاهرين.",
+    linkCreated: "أُنشئ رابط التتبّع: {url}",
+    confirmActivate: "هل تريد تفعيل رابط التتبّع {code}؟",
+    confirmDisable: "هل تريد تعطيل رابط التتبّع {code}؟",
+    activated: "فُعّل رابط التتبّع.",
+    disabled: "عُطّل رابط التتبّع.",
+    imported: "أُضيف {created}، وحُدّث {updated}، وطُوبق {matched} مع نقرات.",
+    matchedClick: "نقرة مطابقة",
+    noEligibleClick: "لا توجد نقرة مؤهلة",
   },
 
   opportunities: {
@@ -515,6 +572,25 @@ export const ar: Messages = {
     acosHelp: "الإنفاق الإعلاني كنسبة من العائد الذي حققته تلك الإعلانات",
     tacosHelp: "الإنفاق الإعلاني كنسبة من كل العائد، بإعلان أو بدونه",
     splitOutHelp: "التعامل مع هذه الطبعة ككتاب مستقل من الآن فصاعدًا",
+    grouping: "التجميع",
+    booksToGroup:
+      "{count, plural, zero {لا كتب} one {كتاب واحد} two {كتابان} few {# كتب} many {# كتابًا} other {# كتاب}} بحاجة إلى تجميع طبعاتها",
+    groupConfident:
+      "جمّع {count, plural, zero {لا تطابقات} one {تطابقًا واثقًا واحدًا} two {تطابقين واثقين} few {# تطابقات واثقة} many {# تطابقًا واثقًا} other {# تطابق واثق}}",
+    confident: "واثق",
+    percentSure: "ثقة {percent}%",
+    noIdentifier: "بلا معرّف",
+    economics: "الجدوى",
+    bookCount:
+      "{count, plural, zero {لا كتب} one {كتاب واحد} two {كتابان} few {# كتب} many {# كتابًا} other {# كتاب}}",
+    empty:
+      "لم تُجمَّع أي كتب بعد. استورد فهرسًا يحتوي على عمود ISBN أو ASIN — أو على روابط منتجات أمازون التي تحمل المعرّف داخل الرابط — ثم جمّع الطبعات أعلاه.",
+    editionCount:
+      "{count, plural, zero {لا طبعات} one {طبعة واحدة} two {طبعتان} few {# طبعات} many {# طبعة} other {# طبعة}}",
+    nothingRecorded: "لم يُسجّل إنفاق أو حقوق ملكية بعد",
+    thatEdition: "تلك الطبعة",
+    grouped: "جُمِعت {editions} طبعة في {books} كتاب.",
+    detached: "أصبح {name} كتابًا مستقلاً، ولن يمسّه التجميع.",
   },
 
   spendImport: {

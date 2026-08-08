@@ -149,7 +149,14 @@ export function GlobalNav() {
   }
   const discoverActive = pathname === "/discover" || pathname.startsWith("/discover/") || pathname === "/opportunities" || pathname.startsWith("/opportunities/");
   const libraryActive = pathname === "/library" || pathname.startsWith("/library/");
-  const publishActive = pathname === "/publish" || pathname.startsWith("/publish/") || pathname === "/attribution" || pathname.startsWith("/attribution/");
+  // Its own destination rather than a child of Publish. Attribution now carries
+  // products, links, revenue and book economics - three former pages - and
+  // reaching it through Publish made the biggest surface here the hardest to
+  // find. /catalog redirects into it, so that path lights it up too.
+  const attributionActive = pathname === "/attribution"
+    || pathname.startsWith("/attribution/")
+    || pathname === "/catalog";
+  const publishActive = pathname === "/publish" || pathname.startsWith("/publish/");
 
   return (
     <header className="app-toolbar">
@@ -169,6 +176,7 @@ export function GlobalNav() {
         <Link className={discoverActive ? "active" : ""} href="/discover">{t("nav.discover")}</Link>
         <Link className={pathname === "/" ? "active" : ""} href="/">{t("common.download")}</Link>
         <Link className={libraryActive ? "active" : ""} href="/library">{t("nav.library")}</Link>
+        <Link className={attributionActive ? "active" : ""} href="/attribution">{t("nav.attribution")}</Link>
         <Link className={publishActive ? "active" : ""} href="/publish">{t("nav.publish")}</Link>
         <Link className={pathname === "/campaigns" ? "active" : ""} href="/campaigns">{t("nav.campaigns")}</Link>
         <Link className={pathname === "/tools" ? "active" : ""} href="/tools">{t("nav.tools")}</Link>

@@ -166,7 +166,10 @@ export const fr: Messages = {
     results: "Résultats",
     relevance: "Pertinence",
     noSignals: "Aucun signal de ce type pour le moment.",
-    recent: "Recherches récentes",
+    runFailed: "Cette analyse a échoué.",
+    stillResearching: "Recherche en cours…",
+    readyToScore: "La recherche sur {topic} est prête à être évaluée.",
+    scoreOpportunity: "Évaluer l’opportunité",
     noImage: "sans image",
     tiktokRegion: "Région TikTok",
     tiktokPeriod: "Période TikTok",
@@ -465,6 +468,56 @@ export const fr: Messages = {
       "Utilisez le code de suivi du rapport du réseau et une heure de conversion avec fuseau horaire. Les références de commande ne sont stockées que sous forme d'empreintes à clé.",
     measurementNotes: "Notes de mesure",
     conversionCsv: "CSV de conversions",
+    sections: "Sections de l’attribution",
+    tab: {
+      products: "Produits",
+      links: "Liens",
+      books: "Livres",
+      imports: "Imports",
+    },
+    productsEyebrow: "Tout sur une seule ligne",
+    products: "Produits",
+    productCount: "{count, plural, one {# produit} other {# produits}}",
+    noProducts:
+      "Aucun produit pour l’instant. Importez des offres d’affiliation dans Opportunités : chaque lien, clic et commission apparaîtra ici.",
+    product: "Produit",
+    offers: "Offres",
+    links: "Liens",
+    whereItGoes: "Où il mène",
+    commissionRate: "commission de {rate}",
+    cookieWindow: "cookie de {days, plural, one {# jour} other {# jours}}",
+    createLinkHere: "Créer un lien",
+    noOffers: "Aucune offre d’affiliation sur ce produit.",
+    noLinksHere: "Aucun lien de suivi pour ce produit.",
+    approvedCount: "{count, plural, one {# approuvée} other {# approuvées}}",
+    pendingCount: "{count, plural, one {# en attente} other {# en attente}}",
+    totalLinks: "{count} au total",
+    privacySafeVisitors: "{count} visiteurs anonymisés",
+    notAdditive:
+      "La commission d’un produit et les droits d’auteur de son livre sont les mêmes conversions, comptées une fois et regroupées de deux façons. Ne les additionnez jamais.",
+    booksIntro:
+      "La rentabilité publicitaire se mesure au livre, pas au format : un broché et un ebook sont deux produits qui partagent un même budget.",
+    trackingLinksHelp:
+      "Les visiteurs voient toujours votre propre domaine ; le point d’accès public expose l’hôte de destination et la mention d’affiliation.",
+    countryDestinationsHelp:
+      "Facultatif. Une ligne PAYS=https://destination. Les paramètres de requête entrants ne sont jamais transmis.",
+    creating: "Création…",
+    createAndCopy: "Créer et copier",
+    importing: "Import…",
+    importReport: "Importer le rapport",
+    importNotPermitted: "Votre rôle ne permet pas d’importer des rapports de conversion.",
+    spendImportLivesInBooks:
+      "Les dépenses publicitaires s’importent dans Livres, à côté des titres auxquels elles sont attribuées.",
+    linkCreatedCopied:
+      "Lien de suivi créé et copié. L’hôte de destination et la mention restent visibles.",
+    linkCreated: "Lien de suivi créé : {url}",
+    confirmActivate: "Activer le lien de suivi {code} ?",
+    confirmDisable: "Désactiver le lien de suivi {code} ?",
+    activated: "Lien de suivi activé.",
+    disabled: "Lien de suivi désactivé.",
+    imported: "{created} ajoutées, {updated} mises à jour, {matched} associées à un clic.",
+    matchedClick: "Clic associé",
+    noEligibleClick: "Aucun clic éligible",
   },
 
   opportunities: {
@@ -530,6 +583,25 @@ export const fr: Messages = {
     tacosHelp:
       "Dépenses publicitaires en part de toutes les redevances, avec ou sans publicité",
     splitOutHelp: "Traiter désormais cette édition comme un livre distinct",
+    grouping: "Regroupement",
+    booksToGroup:
+      "{count, plural, one {# livre} other {# livres}} dont les éditions sont à regrouper",
+    groupConfident:
+      "Regrouper {count} {count, plural, one {correspondance sûre} other {correspondances sûres}}",
+    confident: "sûr",
+    percentSure: "{percent} % de certitude",
+    noIdentifier: "aucun identifiant",
+    economics: "Rentabilité",
+    bookCount: "{count, plural, one {# livre} other {# livres}}",
+    empty:
+      "Aucun livre regroupé pour l’instant. Importez un catalogue comportant une colonne ISBN ou ASIN — ou des liens produit Amazon, qui portent l’identifiant dans l’URL — puis regroupez les éditions ci-dessus.",
+    editionCount: "{count, plural, one {# édition} other {# éditions}}",
+    nothingRecorded: "Aucune dépense ni redevance enregistrée",
+    thatEdition: "Cette édition",
+    grouped:
+      "{editions, plural, one {# édition regroupée} other {# éditions regroupées}} en {books, plural, one {# livre} other {# livres}}.",
+    detached:
+      "{name} constitue désormais un livre à part, que le regroupement laissera tranquille.",
   },
 
   spendImport: {

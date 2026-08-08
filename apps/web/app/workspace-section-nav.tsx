@@ -24,10 +24,12 @@ const AREAS = {
   publish: {
     eyebrow: "Distribution workspace",
     description: "Deliver approved creative and measure the revenue it produces.",
+    // Catalog was folded into Attribution, and Attribution became a top-level
+    // destination of its own. What is left is one item, so this strip renders
+    // nothing - a row of one link navigates nowhere, and the page heading
+    // already says where you are.
     items: [
       { href: "/publish", label: "Delivery", description: "Accounts and scheduling" },
-      { href: "/attribution", label: "Attribution", description: "Links and revenue" },
-      { href: "/catalog", label: "Catalog", description: "Books and economics" },
     ],
   },
 } satisfies Record<WorkspaceArea, {
