@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
+import { useT } from "../i18n-provider";
 
 type Segment = { label: string; start_seconds: number; end_seconds: number };
 type Production = {
@@ -58,6 +59,7 @@ export function ClipEditor({
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   onClose: () => void;
 }) {
+  const t = useT();
   const [segments, setSegments] = useState<Segment[]>([FIRST_SEGMENT]);
   const [productions, setProductions] = useState<Production[]>([]);
   const [renders, setRenders] = useState<RenderJob[]>([]);
@@ -168,7 +170,7 @@ export function ClipEditor({
   return (
     <Dialog
       open={open}
-      title="Advanced clip editor"
+      title={t("clipEditor.heading")}
       description={assetTitle}
       onClose={onClose}
     >
@@ -188,8 +190,8 @@ export function ClipEditor({
             </label>
             <label className="ui-field">Pipeline
               <select name="pipeline" defaultValue="clip-factory">
-                <option value="clip-factory">Clip factory</option>
-                <option value="podcast-repurpose">Podcast repurpose</option>
+                <option value="clip-factory">{t("clipEditor.clipFactory")}</option>
+                <option value="podcast-repurpose">{t("clipEditor.podcastRepurpose")}</option>
               </select>
             </label>
             <label className="ui-field">Budget cap
@@ -199,7 +201,7 @@ export function ClipEditor({
 
           <div className="clip-editor-plan">
             <div className="clip-editor-plan-head">
-              <strong>Clips</strong>
+              <strong>{t("clipEditor.clips")}</strong>
               <span>
                 {segments.length} of {MAX_SEGMENTS}
                 {durationSeconds ? ` · source runs ${secondsLabel(durationSeconds)}` : ""}
@@ -250,7 +252,7 @@ export function ClipEditor({
                   end_seconds: (segments[segments.length - 1]?.end_seconds ?? 0) + 15,
                 },
               ])}
-            >Add clip</Button>
+            >{t("clipEditor.addClip")}</Button>
           </div>
 
           <Button
@@ -259,12 +261,12 @@ export function ClipEditor({
             busy={busy === "propose"}
             disabled={Boolean(planProblem) || available === false}
             title={planProblem ?? undefined}
-          >Create immutable preflight</Button>
+          >{t("clipEditor.createPreflight")}</Button>
         </form>
 
         {productions.length > 0 && (
           <div className="clip-editor-plans">
-            <strong>Plans for this clip</strong>
+            <strong>{t("clipEditor.plansForClip")}</strong>
             {productions.map((production) => (
               <div className="clip-editor-plan-row" key={production.id}>
                 <span>{production.title}</span>
@@ -279,7 +281,7 @@ export function ClipEditor({
                     busy={busy === `approve-${production.id}`}
                     title={canApprove ? undefined : "Only owners and approvers can approve a plan"}
                     onClick={() => void act(production.id, "approve")}
-                  >Approve</Button>
+                  >{t("clipEditor.approve")}</Button>
                 )}
                 {production.execution?.enabled && (
                   <Button
@@ -288,7 +290,7 @@ export function ClipEditor({
                     disabled={!canApprove}
                     busy={busy === `render-${production.id}`}
                     onClick={() => void act(production.id, "render")}
-                  >Render</Button>
+                  >{t("clipEditor.render")}</Button>
                 )}
               </div>
             ))}
@@ -297,7 +299,7 @@ export function ClipEditor({
 
         {renders.length > 0 && (
           <div className="clip-editor-plans">
-            <strong>Recent renders</strong>
+            <strong>{t("clipEditor.recentRenders")}</strong>
             {renders.slice(0, 5).map((job) => (
               <div className="clip-editor-plan-row" key={job.id}>
                 <span>{job.result?.artifacts?.[0]?.label ?? job.id}</span>

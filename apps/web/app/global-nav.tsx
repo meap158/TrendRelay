@@ -153,7 +153,7 @@ export function GlobalNav() {
 
   return (
     <header className="app-toolbar">
-      <Link className="app-brand" href="/" aria-label="TrendRelay home">
+      <Link className="app-brand" href="/" aria-label={t("session.home")}>
         <span className="app-brand-mark" aria-hidden="true">
           <svg viewBox="0 0 32 32" focusable="false">
             <path d="M7.5 21.5 13 16l5 3 6.5-8.5" />
@@ -181,7 +181,7 @@ export function GlobalNav() {
             ref={notificationButtonRef}
             type="button"
             className="notification-trigger"
-            aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : "Notifications"}
+            aria-label={unreadCount ? t("notifications.unreadCount", { count: unreadCount }) : t("notifications.heading")}
             aria-expanded={drawerOpen}
             aria-controls="notification-panel"
             onClick={() => setDrawerOpen((current) => !current)}
@@ -193,20 +193,20 @@ export function GlobalNav() {
           </button>
 
           {drawerOpen && (
-            <section id="notification-panel" className="notification-panel" aria-label="Notifications">
+            <section id="notification-panel" className="notification-panel" aria-label={t("notifications.heading")}>
               <header className="notification-heading">
                 <div>
-                  <h2>Notifications</h2>
+                  <h2>{t("notifications.heading")}</h2>
                   <p>{unreadCount ? `${unreadCount} unread` : "You are all caught up"}</p>
                 </div>
                 <div className="notification-heading-actions">
-                  <button type="button" className="notification-mark-all" disabled={unreadCount === 0} onClick={markAllRead}>Mark all read</button>
-                  <button type="button" className="notification-close" aria-label="Close notifications" onClick={closeDrawer}>×</button>
+                  <button type="button" className="notification-mark-all" disabled={unreadCount === 0} onClick={markAllRead}>{t("notifications.markAllRead")}</button>
+                  <button type="button" className="notification-close" aria-label={t("notifications.close")} onClick={closeDrawer}>×</button>
                 </div>
               </header>
 
               {groups.length === 0 ? (
-                <div className="notification-empty"><strong>No notifications yet</strong><span>Job updates will appear here.</span></div>
+                <div className="notification-empty"><strong>{t("notifications.empty")}</strong><span>{t("notifications.emptyHelp")}</span></div>
               ) : (
                 <ol className="notification-list">
                   {groups.slice(0, 15).map((group) => {
@@ -229,8 +229,8 @@ export function GlobalNav() {
                         <footer>
                           <time dateTime={job.created_at}>{new Date(job.created_at).toLocaleString()}</time>
                           {read
-                            ? <span className="notification-read-label">Read</span>
-                            : <button type="button" className="notification-row-read" onClick={() => markRead(group)}>Mark read</button>}
+                            ? <span className="notification-read-label">{t("notifications.read")}</span>
+                            : <button type="button" className="notification-row-read" onClick={() => markRead(group)}>{t("notifications.markRead")}</button>}
                         </footer>
                       </li>
                     );
@@ -240,7 +240,7 @@ export function GlobalNav() {
             </section>
           )}
         </div>
-        {localMode ? <span className="local-admin-badge" title="Development-only loopback session">Local admin</span> : <Button variant="link" size="sm" onClick={() => void signOut()}>Sign out</Button>}
+        {localMode ? <span className="local-admin-badge" title={t("session.loopbackOnly")}>{t("session.localAdmin")}</span> : <Button variant="link" size="sm" onClick={() => void signOut()}>{t("session.signOut")}</Button>}
       </div>
     </header>
   );

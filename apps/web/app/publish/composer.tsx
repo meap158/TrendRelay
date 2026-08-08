@@ -11,6 +11,7 @@ import {
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
+import { useT } from "../i18n-provider";
 
 export type LibraryAsset = {
   id: string;
@@ -124,6 +125,7 @@ export function MediaPicker({
   onPick: (asset: LibraryAsset) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const [filters, setFilters] = useState<AssetFilterValues>(PICKER_BASE);
 
   /** Applied on change, because narrowing the list is a new search either way. */
@@ -137,7 +139,7 @@ export function MediaPicker({
   return (
     <Dialog
       open={open}
-      title="Choose a clip"
+      title={t("composer.chooseClip")}
       description="Videos in this workspace's library."
       onClose={onClose}
     >
@@ -179,7 +181,7 @@ export function MediaPicker({
                   {[asset.platform, asset.creator].filter(Boolean).join(" · ") || "No source recorded"}
                 </small>
               </span>
-              {isBlurred(asset) && <Badge tone="accent">Faces blurred</Badge>}
+              {isBlurred(asset) && <Badge tone="accent">{t("composer.facesBlurred")}</Badge>}
             </button>
           </li>
         ))}
@@ -211,6 +213,7 @@ export function PostPreview({
   title: string;
   thumbnail: string;
 }) {
+  const t = useT();
   const story = postTypeLabel.toLowerCase() === "story";
   const showsTitle = platform === "youtube" || platform === "reddit" || platform === "pinterest";
 
@@ -228,7 +231,7 @@ export function PostPreview({
           // eslint-disable-next-line @next/next/no-img-element
           <img alt="" src={thumbnail} />
         ) : (
-          <p>Choose a clip to see its frame here.</p>
+          <p>{t("composer.chooseClipForFrame")}</p>
         )}
       </div>
       {story ? (
@@ -361,6 +364,7 @@ export function UpcomingPosts({
   onPickDay: (at: Date) => void;
   onOpenCalendar?: () => void;
 }) {
+  const t = useT();
   const strip = useMemo(() => {
     const start = new Date(now);
     start.setHours(0, 0, 0, 0);
@@ -381,14 +385,14 @@ export function UpcomingPosts({
   return (
     <article className="upcoming">
       <header className="upcoming-head">
-        <h2>Upcoming posts</h2>
+        <h2>{t("composer.upcoming")}</h2>
         {onOpenCalendar && (
           <Button
             variant="quiet"
             size="sm"
             iconOnly
-            aria-label="Open the posting calendar"
-            title="Open the posting calendar"
+            aria-label={t("composer.openCalendar")}
+            title={t("composer.openCalendar")}
             onClick={onOpenCalendar}
           >
             <CalendarGlyph />
@@ -396,7 +400,7 @@ export function UpcomingPosts({
         )}
       </header>
 
-      <div className="upcoming-strip" role="tablist" aria-label="Days">
+      <div className="upcoming-strip" role="tablist" aria-label={t("composer.days")}>
         {strip.map((day) => {
           const selected = day.offset === active.offset;
           return (
@@ -467,7 +471,7 @@ export function UpcomingPosts({
             variant="secondary"
             size="sm"
             onClick={() => onPickDay(firstFreeTime(active.at, slots, active.posts, now))}
-          >Schedule one</Button>
+          >{t("composer.scheduleOne")}</Button>
         </div>
       )}
     </article>
@@ -540,6 +544,7 @@ export function WeekCalendar({
   now: Date;
   onPick: (at: Date) => void;
 }) {
+  const t = useT();
   const [offset, setOffset] = useState(0);
   const start = useMemo(() => {
     const base = weekStart(now);
@@ -572,7 +577,7 @@ export function WeekCalendar({
             size="sm"
             disabled={offset === 0}
             onClick={() => setOffset(0)}
-          >This week</Button>
+          >{t("composer.thisWeek")}</Button>
           <Button variant="quiet" size="sm" onClick={() => setOffset(offset + 1)}>
             Next →
           </Button>
@@ -659,6 +664,7 @@ export function SlotEditor({
   busy: boolean;
   onSave: (entries: { weekday: number; time: string }[]) => void;
 }) {
+  const t = useT();
   const [draft, setDraft] = useState("");
   const [weekday, setWeekday] = useState(EVERY_DAY);
 
@@ -675,7 +681,7 @@ export function SlotEditor({
     <div className="slot-editor">
       <div className="slot-editor-head">
         <div>
-          <h4>Posting times</h4>
+          <h4>{t("composer.postingTimes")}</h4>
           <p>Times are {timezone}, the clock you are reading.</p>
         </div>
         {slots.length > 0 && canEdit && (
@@ -708,15 +714,15 @@ export function SlotEditor({
           <input
             type="time"
             value={draft}
-            aria-label="Time of day"
+            aria-label={t("composer.timeOfDay")}
             onChange={(event) => setDraft(event.target.value)}
           />
           <select
             value={weekday}
-            aria-label="Repeats"
+            aria-label={t("composer.repeats")}
             onChange={(event) => setWeekday(Number(event.target.value))}
           >
-            <option value={EVERY_DAY}>Every day</option>
+            <option value={EVERY_DAY}>{t("composer.everyDay")}</option>
             {WEEKDAY_NAMES.map((name, index) => (
               <option key={name} value={index}>{name} only</option>
             ))}
@@ -728,7 +734,7 @@ export function SlotEditor({
       )}
       {canEdit && (
         <div className="slot-presets">
-          <span>Start from a preset</span>
+          <span>{t("composer.startFromPreset")}</span>
           <div>
             {presets.map((preset) => (
               <button
@@ -744,7 +750,7 @@ export function SlotEditor({
               </button>
             ))}
           </div>
-          <p>A preset replaces the list above. Each assumes something about where your audience is.</p>
+          <p>{t("composer.presetWarning")}</p>
         </div>
       )}
     </div>

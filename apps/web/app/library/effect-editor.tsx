@@ -6,6 +6,7 @@ import { ActionIcon } from "../ui/action-icons";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
+import { useT } from "../i18n-provider";
 
 /**
  * The editing suite: a stack of effects applied to one asset.
@@ -127,6 +128,7 @@ export function EffectEditor({
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   canEdit: boolean;
 }) {
+  const t = useT();
   const [effects, setEffects] = useState<EffectDefinition[]>([]);
   const [steps, setSteps] = useState<Step[]>([]);
   const [busy, setBusy] = useState("");
@@ -227,12 +229,12 @@ export function EffectEditor({
   return (
     <Dialog
       open={open}
-      title="Edit"
+      title={t("effectEditor.edit")}
       description="Stack effects on this asset. The original is never changed."
       onClose={onClose}
       footer={
         <>
-          <Button variant="quiet" onClick={onClose}>Close</Button>
+          <Button variant="quiet" onClick={onClose}>{t("common.close")}</Button>
           <Button
             variant="secondary"
             busy={busy === "save"}
@@ -244,14 +246,14 @@ export function EffectEditor({
             busy={busy === "render"}
             disabled={!canEdit || !steps.length || unavailable.length > 0}
             onClick={() => void render()}
-          >Render</Button>
+          >{t("effectEditor.render")}</Button>
         </>
       }
     >
       <div className="effect-editor">
         {failure && <p className="console-error" role="alert">{failure}</p>}
 
-        <div className="effect-add" role="group" aria-label="Add an effect">
+        <div className="effect-add" role="group" aria-label={t("effectEditor.heading")}>
           {usable.map((effect) => (
             <Button
               key={effect.id}
@@ -278,7 +280,7 @@ export function EffectEditor({
                   <li key={`${step.effect}-${index}`} className="effect-step">
                     <div className="effect-step-head">
                       <strong>{step.effect}</strong>
-                      <Badge tone="bad">not available</Badge>
+                      <Badge tone="bad">{t("effectEditor.notAvailable")}</Badge>
                     </div>
                   </li>
                 );
@@ -296,15 +298,15 @@ export function EffectEditor({
                     <Badge tone={effect.stage === "frame" ? "warn" : "neutral"}>
                       {effect.stage === "frame" ? "per frame" : "one pass"}
                     </Badge>
-                    {effect.retimes && <Badge tone="accent">changes length</Badge>}
+                    {effect.retimes && <Badge tone="accent">{t("effectEditor.changesLength")}</Badge>}
                     <div className="effect-step-actions">
                       <Button
-                        variant="quiet" size="sm" iconOnly aria-label="Move earlier"
+                        variant="quiet" size="sm" iconOnly aria-label={t("effectEditor.moveEarlier")}
                         disabled={!canEdit || index === 0}
                         onClick={() => move(index, -1)}
                       >↑</Button>
                       <Button
-                        variant="quiet" size="sm" iconOnly aria-label="Move later"
+                        variant="quiet" size="sm" iconOnly aria-label={t("effectEditor.moveLater")}
                         disabled={!canEdit || index === steps.length - 1}
                         onClick={() => move(index, 1)}
                       >↓</Button>

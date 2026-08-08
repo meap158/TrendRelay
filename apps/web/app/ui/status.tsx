@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useT } from "../i18n-provider";
 
 /**
  * Transient status that does not move the page.
@@ -86,6 +87,7 @@ export function StatusToasts({
   messages: StatusMessage[];
   onDismiss: (id: number) => void;
 }) {
+  const t = useT();
   if (!messages.length) return null;
   return (
     // aria-live rather than a role, so a screen reader hears the outcome
@@ -96,7 +98,7 @@ export function StatusToasts({
           <p>{message.text}</p>
           <button
             type="button"
-            aria-label="Dismiss"
+            aria-label={t("ui.dismiss")}
             onClick={() => onDismiss(message.id)}
           >×</button>
         </div>

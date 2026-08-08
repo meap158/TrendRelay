@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
+import { useT } from "../i18n-provider";
 
 /**
  * Choose how wide the blur sits, and see it on a real frame before paying for
@@ -35,6 +36,7 @@ export function BlurSettings({
   busy: boolean;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
 }) {
+  const t = useT();
   const [frame, setFrame] = useState("");
   const [faces, setFaces] = useState<number | null>(null);
   /** Null until a frame has been fetched, so the first load can auto-pick. */
@@ -103,13 +105,13 @@ export function BlurSettings({
   return (
     <Dialog
       open={open}
-      title="Blur settings"
+      title={t("blurSettings.heading")}
       description="Check the coverage on one frame before rendering the clip."
       onClose={onClose}
       footer={
         <>
-          <Button variant="quiet" onClick={onClose}>Close</Button>
-          <Button variant="primary" busy={busy} onClick={onBlur}>Blur faces</Button>
+          <Button variant="quiet" onClick={onClose}>{t("common.close")}</Button>
+          <Button variant="primary" busy={busy} onClick={onBlur}>{t("blurSettings.blurFaces")}</Button>
         </>
       }
     >
@@ -117,11 +119,11 @@ export function BlurSettings({
         <div className="blur-frame">
           {frame ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img alt="One frame with the blur applied" src={frame} />
+            <img alt={t("blurSettings.onePreviewFrame")} src={frame} />
           ) : (
             <p>{loading ? "Rendering a frame…" : failure ?? "No frame yet."}</p>
           )}
-          {loading && frame && <span className="blur-frame-busy">Rendering…</span>}
+          {loading && frame && <span className="blur-frame-busy">{t("blurSettings.rendering")}</span>}
         </div>
 
         <div className="blur-controls">
@@ -186,7 +188,7 @@ export function BlurSettings({
               detector getting it wrong, and the coverage slider cannot fix it. */}
           {fallback && (
             <div className="blur-detector-note">
-              <Badge tone="warn">fallback detector</Badge>
+              <Badge tone="warn">{t("blurSettings.fallbackDetector")}</Badge>
               <p>
                 The accurate face model is not installed, so TrendRelay is using
                 OpenCV&apos;s bundled cascade. It mistakes patterned clothing for faces

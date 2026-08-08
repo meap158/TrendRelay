@@ -4,6 +4,7 @@ import * as RadixDialog from "@radix-ui/react-dialog";
 import type { ReactNode } from "react";
 
 import { Button } from "./button";
+import { useT } from "../i18n-provider";
 
 /**
  * A modal panel.
@@ -28,6 +29,7 @@ export function Dialog({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const t = useT();
   return (
     <RadixDialog.Root open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <RadixDialog.Portal>
@@ -41,7 +43,7 @@ export function Dialog({
               )}
             </div>
             <RadixDialog.Close asChild>
-              <Button variant="quiet" size="sm">Close</Button>
+              <Button variant="quiet" size="sm">{t("common.close")}</Button>
             </RadixDialog.Close>
           </header>
           {children}

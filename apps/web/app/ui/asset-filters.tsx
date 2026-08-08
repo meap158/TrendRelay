@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "./button";
+import { useT } from "../i18n-provider";
 
 /**
  * The one description of how the media library can be narrowed.
@@ -114,19 +115,20 @@ export function AssetFilters({
   /** Extra controls that belong on the same row, such as the Library's grouping. */
   children?: React.ReactNode;
 }) {
+  const t = useT();
   const shown = new Set(fields);
   const set = (patch: Partial<AssetFilterValues>) => onChange({ ...values, ...patch });
   const count = activeFilterCount(values, cleared);
 
   return (
-    <div className="asset-filters" role="group" aria-label="Filter media">
+    <div className="asset-filters" role="group" aria-label={t("filters.filterMedia")}>
       {shown.has("query") && (
         <label className="asset-filter-search">
-          <span className="sr-only">Search media</span>
+          <span className="sr-only">{t("filters.searchMedia")}</span>
           <input
             type="search"
             value={values.query ?? ""}
-            placeholder="Search titles, creators and transcripts"
+            placeholder={t("filters.searchPlaceholder")}
             onChange={(event) => set({ query: event.target.value })}
           />
         </label>
@@ -135,11 +137,11 @@ export function AssetFilters({
       {shown.has("channel") && (
         <label>Channel
           <select
-            aria-label="Filter by channel"
+            aria-label={t("filters.byChannel")}
             value={values.channel ?? ""}
             onChange={(event) => set({ channel: event.target.value })}
           >
-            <option value="">All channels</option>
+            <option value="">{t("filters.allChannels")}</option>
             {facets.channels.map((facet) => (
               <option
                 key={facet.value || "__unassigned__"}
@@ -153,11 +155,11 @@ export function AssetFilters({
       {shown.has("platform") && (
         <label>Source
           <select
-            aria-label="Filter by source"
+            aria-label={t("filters.bySource")}
             value={values.platform ?? ""}
             onChange={(event) => set({ platform: event.target.value })}
           >
-            <option value="">All sources</option>
+            <option value="">{t("filters.allSources")}</option>
             {facets.platforms.map((facet) => (
               <option key={facet.value || "__other__"} value={facet.value || "__other__"}>
                 {label(facet, "Other sources")}
@@ -170,12 +172,12 @@ export function AssetFilters({
       {shown.has("mediaKind") && (
         <label>Media
           <select
-            aria-label="Filter by media kind"
+            aria-label={t("filters.byMediaKind")}
             value={values.mediaKind ?? ""}
             onChange={(event) =>
               set({ mediaKind: event.target.value as AssetFilterValues["mediaKind"] })}
           >
-            <option value="">All media</option>
+            <option value="">{t("filters.allMedia")}</option>
             {facets.media_kinds.map((facet) => (
               <option key={facet.value} value={facet.value}>{label(facet, "Other media")}</option>
             ))}
@@ -188,12 +190,12 @@ export function AssetFilters({
       {shown.has("effect") && (
         <label>Effects
           <select
-            aria-label="Filter by effect"
+            aria-label={t("filters.byEffect")}
             value={values.effect ?? ""}
             onChange={(event) =>
               set({ effect: event.target.value as AssetFilterValues["effect"] })}
           >
-            <option value="">Any effect</option>
+            <option value="">{t("filters.anyEffect")}</option>
             {facets.effects.map((facet) => (
               <option key={facet.value} value={facet.value}>{label(facet, facet.value)}</option>
             ))}
@@ -204,12 +206,12 @@ export function AssetFilters({
       {shown.has("length") && (
         <label>Length
           <select
-            aria-label="Filter by length"
+            aria-label={t("filters.byLength")}
             value={values.maxSeconds ?? ""}
             onChange={(event) =>
               set({ maxSeconds: event.target.value ? Number(event.target.value) : undefined })}
           >
-            <option value="">Any length</option>
+            <option value="">{t("filters.anyLength")}</option>
             {LENGTHS.map(([seconds, text]) => (
               <option key={seconds} value={seconds}>{text}</option>
             ))}
