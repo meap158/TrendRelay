@@ -240,7 +240,7 @@ nav strong { color: #1c2b33; }
 .connection-badge { align-self: center; border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; color: var(--muted); font-size: 11px; font-weight: 500; }
 .connection-badge.ready { border-color: var(--green); color: var(--green); background: var(--green-dark); }
 
-.engine-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.engine-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; align-items: start; }
 .engine-card { display: grid; align-content: start; gap: 10px; padding: 14px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel-raised); }
 /* Ready engines carry their accent; the rest are visibly not carrying posts.
    The state is on the card itself, not only in a word beside the title. */
@@ -250,15 +250,16 @@ nav strong { color: #1c2b33; }
 .engine-card.engine-off, .engine-card.engine-no-key { opacity: .82; }
 /* Detail then remedy, always in that order: a state with no next step is a
    dead end dressed as information. */
-.engine-status-line { display: grid; gap: 3px; margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font-size: 12px; line-height: 1.45; }
+.engine-status-line { display: grid; gap: 3px; margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
 .engine-status-line.bad { border-inline-start: 3px solid #c0392b; }
 .engine-status-line small { color: var(--muted); }
-.engine-toggle { display: inline-flex; align-items: center; gap: 6px; margin-inline-end: auto; font-size: 12px; font-weight: 600; cursor: pointer; }
-.engine-toggle input { width: 15px; height: 15px; accent-color: var(--engine-accent, var(--green)); cursor: pointer; }
-.engine-toggle.unavailable { color: var(--muted); cursor: not-allowed; }
-.engine-toggle.unavailable input { cursor: not-allowed; }
+/* Its own row, so the switch never competes for width with the key actions.
+   Two columns rather than a wrapping flex line: the switch keeps the space it
+   needs and the default control sits opposite it at every card width. */
+.engine-switch-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.engine-switch-row .ui-switch input:checked + .ui-switch-track { background: var(--engine-accent, var(--green)); }
 .engine-card-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
-.engine-card-head strong { display: block; font-size: 14px; font-weight: 500; }
+.engine-card-head strong { display: block; overflow: hidden; font-size: 14px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .engine-card-head span { color: var(--muted); font-size: 11px; }
 .engine-state { align-self: start; border-radius: 999px; padding: 3px 8px; border: 1px solid var(--line); color: var(--muted); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
 .engine-state.ready { border-color: var(--green); color: var(--green); background: var(--green-dark); }
@@ -277,7 +278,7 @@ nav strong { color: #1c2b33; }
 .engine-unavailable li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .engine-unavailable li > div { display: grid; gap: 2px; flex: 1 1 200px; min-width: 0; }
 .engine-unavailable b { font-size: 12px; font-weight: 600; }
-.engine-unavailable span { font-size: 12px; line-height: 1.4; }
+.engine-unavailable span { font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
 .engine-unavailable small { color: var(--muted); font-size: 11px; line-height: 1.4; }
 .engine-note { margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .engine-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -514,7 +515,9 @@ nav strong { color: #1c2b33; }
 .preview-destinations span { color: var(--muted); font-size: 11px; line-height: 1.4; }
 
 .publish-page button:focus-visible, .publish-page a:focus-visible, .publish-page input:focus-visible, .publish-page textarea:focus-visible, .publish-page select:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
-@media (max-width: 1000px) { .engine-grid { grid-template-columns: 1fr; } .platform-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* .engine-grid reflows on its own now (auto-fit), so forcing one column here
+   would drop it to a single card at widths where two still fit. */
+@media (max-width: 1000px) { .platform-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 820px) {
   .publish-page .publish-heading, .publish-page .section-heading { display: grid; gap: 10px; }
   .publish-page .section-heading > span { text-align: start; }

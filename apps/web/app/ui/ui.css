@@ -200,3 +200,24 @@ a.ui-button { text-decoration: none; }
 .ui-dialog-head p { margin: 0; color: var(--muted); }
 .ui-dialog-foot { display: flex; flex: none; justify-content: flex-end; gap: 8px; }
 .ui-dialog:focus-visible { outline: none; }
+
+/* --- Switch --------------------------------------------------------------- */
+/* On/off that takes effect immediately. The native input stays in the tree and
+   is only visually replaced, so focus, keyboard and screen-reader behaviour are
+   the platform's rather than reimplemented here. */
+.ui-switch { display: inline-flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
+/* Not display:none, which would take it out of the focus order. */
+.ui-switch input { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
+.ui-switch-track { position: relative; flex: none; width: 34px; height: 20px; border-radius: 999px; background: var(--line-strong); transition: background .16s ease; }
+.ui-switch-thumb { position: absolute; inset-block-start: 2px; inset-inline-start: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--panel); box-shadow: 0 1px 3px rgba(0, 0, 0, .28); transition: inset-inline-start .16s ease; }
+.ui-switch input:checked + .ui-switch-track { background: var(--green); }
+.ui-switch input:checked + .ui-switch-track .ui-switch-thumb { inset-inline-start: 16px; }
+.ui-switch input:focus-visible + .ui-switch-track { outline: 2px solid var(--link); outline-offset: 2px; }
+.ui-switch-text { display: grid; gap: 1px; min-width: 0; font-size: 12px; font-weight: 600; line-height: 1.35; }
+.ui-switch-text small { color: var(--muted); font-weight: 400; }
+.ui-switch-disabled { cursor: not-allowed; }
+.ui-switch-disabled .ui-switch-text { color: var(--muted); }
+.ui-switch-disabled .ui-switch-track { opacity: .5; }
+@media (prefers-reduced-motion: reduce) {
+  .ui-switch-track, .ui-switch-thumb { transition: none; }
+}

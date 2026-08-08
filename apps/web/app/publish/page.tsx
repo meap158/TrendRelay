@@ -24,7 +24,7 @@ import {
 } from "../ui/asset-filters";
 import { ActionIcon } from "../ui/action-icons";
 import { Button, buttonClass } from "../ui/button";
-import { Badge } from "../ui/primitives";
+import { Badge, Switch } from "../ui/primitives";
 import {
   MEDIA_DRAG_TYPE,
   MediaPicker,
@@ -1121,22 +1121,23 @@ export default function PublishPage() {
                   <span>{status.detail}</span>
                   {status.fix && <small>{status.fix}</small>}
                 </p>
-                <div className="engine-actions">
-                  <label className={`engine-toggle${usable ? "" : " unavailable"}`}>
-                    <input
-                      type="checkbox"
-                      checked={usable && !engineOff(provider.id)}
-                      disabled={!usable}
-                      onChange={(event) => setDisabledEngines(
-                        event.target.checked
-                          ? disabledEngines.filter((id) => id !== provider.id)
-                          : [...disabledEngines, provider.id],
-                      )}
-                    />
-                    <span>{t("publish.useForPublishing")}</span>
-                  </label>
+                {/* Its own row. The switch answers "will this engine carry the
+                    post", which is a different question from the three key
+                    actions below it - and as a peer of those buttons it needed
+                    an auto margin that broke the row onto two lines. */}
+                <div className="engine-switch-row">
+                  <Switch
+                    checked={usable && !engineOff(provider.id)}
+                    disabled={!usable}
+                    label={t("publish.useForPublishing")}
+                    onChange={(next) => setDisabledEngines(
+                      next
+                        ? disabledEngines.filter((id) => id !== provider.id)
+                        : [...disabledEngines, provider.id],
+                    )}
+                  />
                   {isDefault
-                    ? <Badge tone="accent" >{t("publish.defaultEngine")}</Badge>
+                    ? <Badge tone="accent">{t("publish.defaultEngine")}</Badge>
                     : <Button
                         variant="quiet"
                         size="sm"
@@ -1149,6 +1150,8 @@ export default function PublishPage() {
                       >{busy === `${provider.id}-activate`
                         ? t("publish.switching")
                         : t("publish.makeDefault")}</Button>}
+                </div>
+                <div className="engine-actions">
                   <Button
                     variant="quiet"
                     size="sm"

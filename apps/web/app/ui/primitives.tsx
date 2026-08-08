@@ -93,6 +93,52 @@ export function Field({
   );
 }
 
+/**
+ * An on/off switch.
+ *
+ * A switch, not a checkbox, because it takes effect the moment it moves: a
+ * checkbox promises a form and a submit button somewhere below it. The native
+ * input is kept and only visually replaced, so it stays focusable, keyboard
+ * operable and announced as a switch, and `label` wraps it so the text is part
+ * of the hit area rather than something to aim past.
+ *
+ * The thumb moves with `inset-inline-start` rather than a transform, so it
+ * slides the correct way in Arabic without a second rule.
+ */
+export function Switch({
+  checked,
+  onChange,
+  label,
+  /** Sits under the label, for the consequence rather than a restatement. */
+  description,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: ReactNode;
+  description?: ReactNode;
+  disabled?: boolean;
+}) {
+  return (
+    <label className={`ui-switch${disabled ? " ui-switch-disabled" : ""}`}>
+      <input
+        type="checkbox"
+        role="switch"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span className="ui-switch-track" aria-hidden="true">
+        <span className="ui-switch-thumb" />
+      </span>
+      <span className="ui-switch-text">
+        <span>{label}</span>
+        {description && <small>{description}</small>}
+      </span>
+    </label>
+  );
+}
+
 /** A row of mutually exclusive choices. */
 export function ChoiceRow({
   label,
