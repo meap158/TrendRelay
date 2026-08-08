@@ -860,6 +860,16 @@ export const en = {
       saturation_scale: "Vividness",
       saturation_scaleHelp: "1 keeps the original strength.",
     },
+    face_swap: {
+      label: "Replace a face",
+      summary: "Put a different face on one person, tracked across the clip.",
+      swap_subject: "Replace the subject",
+      swap_subjectHelp: "Off replaces everyone except the subject instead.",
+      match_threshold: "Identity strictness",
+      match_thresholdHelp: "How alike two faces must be to count as one person.",
+      confidence: "Detector confidence",
+      confidenceHelp: "Lower finds more faces and more things that are not faces.",
+    },
     selective_face_blur: {
       label: "Blur everyone but the subject",
       summary: "Tell the faces apart and cover the passers-by, not the creator.",

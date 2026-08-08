@@ -55,7 +55,7 @@ RENDER_ROOT = PROJECT_ROOT / ".data" / "productions" / "edits"
 #: The recipe steps that produce a privacy-relevant cut. A render containing one
 #: is stored as a `blurred` version rather than an `edited` one, because the
 #: publish path and the library filter both ask for that kind by name.
-PRIVACY_EFFECTS = frozenset({"face_blur", "selective_face_blur"})
+PRIVACY_EFFECTS = frozenset({"face_blur", "selective_face_blur", "face_swap"})
 
 
 def _blur_availability() -> tuple[bool, str | None]:
@@ -180,6 +180,57 @@ SELECTIVE_BLUR = Effect(
 )
 
 register(SELECTIVE_BLUR)
+
+
+def _swap_availability() -> tuple[bool, str | None]:
+    from trendrelay_api.integrations import face_swap
+
+    status = face_swap.runtime_status()
+    return bool(status["available"]), status["reason"]
+
+
+#: Listed even though it cannot run. Hiding a gated capability makes the gate
+#: invisible: an operator would not know the feature exists, why it is off, or
+#: what turns it on. Shown-and-refused is the honest shape, and it is the same
+#: shape the blur and recolour use when OpenCV is missing.
+FACE_SWAP = Effect(
+    id="face_swap",
+    label="Replace a face",
+    summary="Put a different face on one person, tracked across the clip.",
+    stage="frame",
+    params=(
+        EffectParam(
+            id="swap_subject",
+            label="Replace the subject",
+            kind="toggle",
+            default=True,
+            help="Off replaces everyone except the subject instead.",
+        ),
+        EffectParam(
+            id="match_threshold",
+            label="Identity strictness",
+            kind="number",
+            default=0.4,
+            minimum=0.2,
+            maximum=0.8,
+            step=0.05,
+            help="How alike two faces must be to count as one person.",
+        ),
+        EffectParam(
+            id="confidence",
+            label="Detector confidence",
+            kind="number",
+            default=0.5,
+            minimum=0.1,
+            maximum=0.95,
+            step=0.05,
+            help="Lower finds more faces and more things that are not faces.",
+        ),
+    ),
+    availability=_swap_availability,
+)
+
+register(FACE_SWAP)
 
 
 def _recolour_settings(values: dict[str, Any]) -> recolour.RecolourSettings:

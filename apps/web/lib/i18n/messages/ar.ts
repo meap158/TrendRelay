@@ -850,6 +850,16 @@ export const ar: Messages = {
       saturation_scale: "قوة اللون",
       saturation_scaleHelp: "القيمة ١ تُبقي الشدّة الأصلية.",
     },
+    face_swap: {
+      label: "استبدال وجه",
+      summary: "يضع وجهًا آخر على شخص واحد، ويتابعه عبر المقطع كله.",
+      swap_subject: "استبدال الشخص الرئيسي",
+      swap_subjectHelp: "عند إيقافه يُستبدل كل من عداه بدلًا منه.",
+      match_threshold: "صرامة تحديد الهوية",
+      match_thresholdHelp: "كم يجب أن يتشابه وجهان ليُعدّا شخصًا واحدًا.",
+      confidence: "عتبة الكشف",
+      confidenceHelp: "كلما انخفضت، عثر على وجوه أكثر — وعلى أشياء ليست وجوهًا أكثر.",
+    },
     selective_face_blur: {
       label: "تمويه الجميع عدا الشخص الرئيسي",
       summary: "يميّز بين الوجوه فيغطي المارّة دون صاحب المحتوى.",

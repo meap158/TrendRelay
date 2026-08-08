@@ -870,6 +870,16 @@ export const fr: Messages = {
       saturation_scale: "Éclat",
       saturation_scaleHelp: "1 conserve l'intensité d'origine.",
     },
+    face_swap: {
+      label: "Remplacer un visage",
+      summary: "Pose un autre visage sur une personne, suivie tout au long du clip.",
+      swap_subject: "Remplacer le sujet",
+      swap_subjectHelp: "Désactivé, remplace tout le monde sauf le sujet.",
+      match_threshold: "Rigueur d'identification",
+      match_thresholdHelp: "À quel point deux visages doivent se ressembler pour être la même personne.",
+      confidence: "Seuil de détection",
+      confidenceHelp: "Plus bas, il trouve plus de visages — et plus de choses qui n'en sont pas.",
+    },
     selective_face_blur: {
       label: "Flouter tout le monde sauf le sujet",
       summary: "Distingue les visages et couvre les passants, pas le créateur.",

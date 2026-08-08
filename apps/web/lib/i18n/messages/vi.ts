@@ -860,6 +860,16 @@ export const vi: Messages = {
       saturation_scale: "Độ rực",
       saturation_scaleHelp: "1 là giữ nguyên độ rực ban đầu.",
     },
+    face_swap: {
+      label: "Thay khuôn mặt",
+      summary: "Đặt một khuôn mặt khác lên một người, bám theo suốt clip.",
+      swap_subject: "Thay mặt nhân vật chính",
+      swap_subjectHelp: "Tắt đi thì thay mặt tất cả những người khác, trừ nhân vật chính.",
+      match_threshold: "Độ chặt khi nhận dạng",
+      match_thresholdHelp: "Hai khuôn mặt phải giống nhau đến mức nào mới được coi là một người.",
+      confidence: "Ngưỡng nhận diện",
+      confidenceHelp: "Ngưỡng thấp tìm được nhiều mặt hơn, và cũng nhiều thứ không phải mặt hơn.",
+    },
     selective_face_blur: {
       label: "Làm mờ mọi người trừ nhân vật chính",
       summary: "Phân biệt các khuôn mặt và che người qua đường, không che nhà sáng tạo.",

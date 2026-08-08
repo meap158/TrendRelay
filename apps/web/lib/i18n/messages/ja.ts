@@ -853,6 +853,16 @@ export const ja: Messages = {
       saturation_scale: "鮮やかさ",
       saturation_scaleHelp: "1 で元の鮮やかさのままです。",
     },
+    face_swap: {
+      label: "顔を差し替える",
+      summary: "特定の一人の顔を別の顔に置き換え、クリップ全体で追跡します。",
+      swap_subject: "被写体を差し替える",
+      swap_subjectHelp: "オフにすると、被写体以外の全員を差し替えます。",
+      match_threshold: "同一人物の判定",
+      match_thresholdHelp: "どれだけ似ていれば同じ人物と見なすか。",
+      confidence: "検出のしきい値",
+      confidenceHelp: "下げるほど多くの顔が見つかり、顔でないものも多く見つかります。",
+    },
     selective_face_blur: {
       label: "被写体以外をぼかす",
       summary: "顔を見分けて、通行人だけを覆います。投稿者はそのまま残ります。",

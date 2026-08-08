@@ -835,6 +835,16 @@ export const zh: Messages = {
       saturation_scale: "鲜艳度",
       saturation_scaleHelp: "1 表示保持原有强度。",
     },
+    face_swap: {
+      label: "替换人脸",
+      summary: "把某个人的脸换成另一张，并在整段片段中持续跟踪。",
+      swap_subject: "替换主角",
+      swap_subjectHelp: "关闭后改为替换除主角以外的所有人。",
+      match_threshold: "身份判定严格度",
+      match_thresholdHelp: "两张脸要多相似才算同一个人。",
+      confidence: "检测阈值",
+      confidenceHelp: "阈值越低找到的人脸越多，误判也越多。",
+    },
     selective_face_blur: {
       label: "只保留主角，模糊其他人",
       summary: "分辨不同人脸，遮盖路人而不是创作者本人。",
