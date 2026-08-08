@@ -51,17 +51,26 @@ def test_entries_without_a_term_are_dropped(monkeypatch) -> None:
     assert terms == ["第一", "第二", "第三"]
 
 
-def test_only_a_term_with_a_video_can_go_straight_to_downloads(monkeypatch) -> None:
+def test_a_group_id_is_a_topic_and_never_becomes_a_video_link(monkeypatch) -> None:
+    """The board ranks topics, not clips.
+
+    `group_id` looks like a video id and is not one. Treating it as a video
+    produced douyin.com/video/<topic> links that the detail endpoint refused
+    every time — and that refusal was then read as an expired session, so the
+    operator was told to sign in again over a link that could never have worked.
+    """
     run_with(monkeypatch, BOARD)
 
     items = {item["term"]: item for item in douyin_trending.fetch()["items"]}
 
-    assert items["第一"]["downloadable"] is True
-    assert items["第一"]["video_url"].endswith("/video/7669355765292193043")
-    # No group id, and a zero group id, both mean the board attached no video.
-    assert items["第二"]["downloadable"] is False
-    assert items["第二"]["video_url"] is None
-    assert items["第三"]["downloadable"] is False
+    assert items["第一"]["topic_id"] == "7669355765292193043"
+    # Nothing anywhere may offer this as something to download.
+    for item in items.values():
+        assert "video_url" not in item
+        assert "downloadable" not in item
+    # No group id, and a zero group id, are both simply absent.
+    assert items["第二"]["topic_id"] is None
+    assert items["第三"]["topic_id"] is None
 
 
 def test_every_term_can_at_least_be_searched(monkeypatch) -> None:

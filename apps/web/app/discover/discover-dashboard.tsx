@@ -714,10 +714,9 @@ type DouyinTrend = {
   rank: number;
   term: string;
   hot_value: number;
-  video_id: string | null;
-  video_url: string | null;
+  /** The topic the term belongs to. Not a video, despite looking like one. */
+  topic_id: string | null;
   search_url: string;
-  downloadable: boolean;
   /** The board's own thumbnail: a signed URL that expires, so never stored. */
   cover_url: string | null;
   view_count: number;
@@ -1305,35 +1304,25 @@ export default function ResearchDashboard() {
                 </div>
                 <div style={S.boardBody}>
                   <a
-                    href={item.video_url ?? item.search_url}
+                    href={item.search_url}
                     target="_blank"
                     rel="noreferrer"
                     className="board-term-link"
                     style={S.boardTerm}
-                    title={item.video_url
-                      ? `Open this video on Douyin: ${item.term}`
-                      : `Search Douyin for ${item.term}`}
+                    title={`Find "${item.term}" on Douyin`}
                   >{item.term}</a>
                   <span style={S.boardMeta}>
                     {item.hot_value > 0 && <>{compactNumber(item.hot_value)} heat</>}
                     {item.hot_value > 0 && item.view_count > 0 && " · "}
                     {item.view_count > 0 && <>{compactNumber(item.view_count)} views</>}
                   </span>
-                  {item.downloadable && item.video_url ? (
-                    <Link
-                      href={`/?add=${encodeURIComponent(item.video_url)}`}
-                      style={S.boardAction}
-                      title="Send this video to Downloads"
-                    >Download</Link>
-                  ) : (
-                    <a
-                      href={item.search_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={S.boardAction}
-                      title="The board attached no video to this term"
-                    >Open search</a>
-                  )}
+                  <a
+                    href={item.search_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={S.boardAction}
+                    title="Find videos for this term on Douyin, then download one"
+                  >Find videos</a>
                 </div>
               </article>
             ))}
@@ -1347,14 +1336,12 @@ export default function ResearchDashboard() {
                 <span style={S.tiktokRank}>{item.rank}</span>
                 <div style={S.tiktokBody}>
                   <a
-                    href={item.video_url ?? item.search_url}
+                    href={item.search_url}
                     target="_blank"
                     rel="noreferrer"
                     className="board-term-link"
                     style={S.boardTermLink}
-                    title={item.video_url
-                      ? `Open this video on Douyin: ${item.term}`
-                      : `Search Douyin for ${item.term}`}
+                    title={`Find "${item.term}" on Douyin`}
                   >{item.term}</a>
                 </div>
                 <div style={S.tiktokMetrics}>
@@ -1364,27 +1351,17 @@ export default function ResearchDashboard() {
                     </span>
                   )}
                 </div>
-                {/* Only a term the board attached a video to can go straight to
-                    Downloads; the rest open the search so a clip can be picked. */}
-                {item.downloadable && item.video_url ? (
-                  <Link
-                    href={`/?add=${encodeURIComponent(item.video_url)}`}
-                    style={S.tiktokExplore}
-                    title="Send this video to Downloads"
-                  >
-                    Download
-                  </Link>
-                ) : (
-                  <a
-                    href={item.search_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={S.tiktokExplore}
-                    title="The board attached no video to this term"
-                  >
-                    Open search
-                  </a>
-                )}
+                {/* A term is a topic, not a clip, so this opens the search
+                    rather than pretending there is something to download. */}
+                <a
+                  href={item.search_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={S.tiktokExplore}
+                  title="Find videos for this term on Douyin, then download one"
+                >
+                  Find videos
+                </a>
               </div>
             ))}
           </div>

@@ -33,16 +33,14 @@ class TrendingItem:
     rank: int
     term: str
     hot_value: int
-    #: The video the board attaches to this term, when it attaches one.
-    video_id: str | None
+    #: The board's `group_id`. It looks like a video id and is not one: it names
+    #: the topic the term belongs to, and asking the video-detail endpoint for it
+    #: fails every time. Kept for reference, never turned into a video link.
+    topic_id: str | None
     #: The board's own thumbnail. A signed URL with an expiry, so it is worth
     #: showing as soon as the board is read and worth nothing stored.
     cover_url: str | None = None
     view_count: int = 0
-
-    @property
-    def video_url(self) -> str | None:
-        return f"https://www.douyin.com/video/{self.video_id}" if self.video_id else None
 
     @property
     def search_url(self) -> str:
@@ -55,12 +53,11 @@ class TrendingItem:
             "rank": self.rank,
             "term": self.term,
             "hot_value": self.hot_value,
-            "video_id": self.video_id,
-            # Only a term with a video can be handed straight to Downloads; the
-            # rest link out to the search so the operator can pick one.
-            "video_url": self.video_url,
+            "topic_id": self.topic_id,
+            # The board ranks topics, not clips. Every term therefore opens the
+            # search, where a real video can be chosen; there is no video here to
+            # hand to Downloads directly.
             "search_url": self.search_url,
-            "downloadable": self.video_id is not None,
             "cover_url": self.cover_url,
             "view_count": self.view_count,
         }
@@ -75,7 +72,7 @@ def _parse(payload: dict[str, Any]) -> list[TrendingItem]:
         if not term:
             continue
         group = raw.get("group_id")
-        video_id = str(group) if group not in (None, "", 0) else None
+        topic_id = str(group) if group not in (None, "", 0) else None
         cover = raw.get("word_cover")
         urls = cover.get("url_list") if isinstance(cover, dict) else None
         cover_url = next(
@@ -87,7 +84,7 @@ def _parse(payload: dict[str, Any]) -> list[TrendingItem]:
                 rank=len(items) + 1,
                 term=term,
                 hot_value=int(raw.get("hot_value") or 0),
-                video_id=video_id,
+                topic_id=topic_id,
                 cover_url=cover_url,
                 view_count=int(raw.get("view_count") or 0),
             )
