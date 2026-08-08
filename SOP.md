@@ -32,6 +32,18 @@ This document contains the durable operating rules for humans and agents working
 6. Keep the handover concise and current. Replace stale status instead of accumulating a session diary.
 7. End every session with completed work, validation, blockers, and the next recommended action recorded in the handover.
 
+## Interface work (mandatory)
+
+Visual design is part of the deliverable on every task that touches the interface, not a follow-up pass. A control that works but breaks its container, or the wrong control for the job, is unfinished work.
+
+1. **Always pick the conventional control for the interaction.** A switch for state that takes effect immediately; a checkbox for selection inside a form or set; a radio group for one of several. A control that promises the wrong interaction is wrong even when it functions.
+2. **Always build a reusable control once, in `apps/web/app/ui/`.** Do not inline a new control in a page. The next use must be able to reach for the same component rather than reproduce it.
+3. **Always keep native semantics.** Replace a control visually, never structurally: the input stays in the tree so focus order, keyboard behaviour, and the accessible role come from the platform.
+4. **Always verify layout at the widths the design actually uses**, with the content it will actually hold — a long error message from an upstream service, a long name, an empty state. Assuming a layout holds is not verifying it. When a page cannot be reached (for example, it is behind a session you do not have), check the markup against the real stylesheets in a throwaway harness and delete the harness in the same change.
+5. **Always use CSS logical properties** (`inset-inline-start`, `margin-inline-end`, `padding-block`) rather than physical ones. The app ships Arabic; a physical property is a second rule waiting to be forgotten.
+6. **Always add every new user-facing string to all seven dictionaries** in `apps/web/lib/i18n/messages/`, with the plural categories that language uses. `scripts/i18n_scan.py` must still report 100%.
+7. Motion should honour `prefers-reduced-motion`. Focus indicators must remain visible.
+
 ## Definition of done
 
-A change is complete only when its implementation, relevant checks, README, documentation, and handover are current; its diff contains no unrelated work; and it is recorded in an atomic descriptive commit when committing is authorized.
+A change is complete only when its implementation, relevant checks, README, documentation, and handover are current; its diff contains no unrelated work; and it is recorded in an atomic descriptive commit when committing is authorized. For interface work, it is complete only when the rules above have been applied and the layout has been verified rather than assumed.

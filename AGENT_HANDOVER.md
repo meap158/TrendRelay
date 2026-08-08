@@ -45,7 +45,7 @@ Last updated: 2026-08-05
 
 ## Decisions in force
 
-- Follow `SOP.md`; atomic descriptive commits and current README/handover files are mandatory.
+- Follow `SOP.md`; atomic descriptive commits and current README/handover files are mandatory. Its "Interface work" rules apply to every change that touches the UI: the right control for the interaction, built once in `apps/web/app/ui/`, native semantics kept, logical properties, all seven dictionaries, and layout verified at real widths with real content rather than assumed.
 - Python/FastAPI is the control-plane runtime; Python also powers compute-heavy workers.
 - Provider source remains isolated under `.tools/`; core modules depend only on capability contracts.
 - Supabase access tokens are verified with asymmetric JWKS only. Workspace authorization is membership-and-role based; no service credential is exposed to the web or Electron renderer.
