@@ -166,7 +166,7 @@ export default function PublishPage() {
   const [mediaUrl, setMediaUrl] = useState("");
   // Accounts from every engine at once, each carrying its own, so one post can
   // reach a TikTok on one engine and a YouTube on another.
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [allAccounts, setAllAccounts] = useState<Account[]>([]);
   const [engineReach, setEngineReach] = useState<EngineReach[]>([]);
   const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [connection, setConnection] = useState<Connection | null>(null);
@@ -183,6 +183,24 @@ export default function PublishPage() {
   /** Post type per destination, keyed by account: two accounts on one network
       can go out as a Reel and as a Story. */
   const [postTypes, setPostTypes] = useState<Record<string, string>>({});
+  /**
+   * Engines switched off for publishing, by id.
+   *
+   * A key that works is not the same as an engine you want this post to use. A
+   * workspace can hold a client's engine alongside its own, and without a
+   * switch the only way to keep a post off one was to remember not to pick its
+   * accounts - which is a rule you break once and discover afterwards.
+   *
+   * Stored here rather than on the server: it is a preference about composing,
+   * not a policy about the workspace, and every destination still names the
+   * engine that will deliver it.
+   */
+  const [disabledEngines, setDisabledEngines] = usePersistedState<string[]>(
+    "trendrelay.publish.disabledEngines",
+    [],
+    (value): value is string[] =>
+      Array.isArray(value) && value.every((item) => typeof item === "string"),
+  );
   const [hostingDraft, setHostingDraft] = useState<Record<string, string>>({});
   const [hostingOpen, setHostingOpen] = useState(false);
   const draftRestored = useRef(false);
@@ -233,6 +251,80 @@ export default function PublishPage() {
     () => new Map((connection?.providers ?? []).map((item) => [item.id, item])),
     [connection],
   );
+  const engineOff = (id: string) => disabledEngines.includes(id);
+  /**
+   * What is true of one engine right now, in one place.
+   *
+   * Three sources used to be read separately and phrased differently: whether a
+   * key is saved, whether the engine accepted it, and whether the account list
+   * could actually be read. A key can be saved and rejected, accepted and
+   * return nothing, or work yesterday and time out today, and each of those
+   * needs a different thing done about it.
+   */
+  const engineState = (provider: Provider): {
+    state: "ready" | "off" | "no-key" | "rejected" | "unreachable" | "no-accounts";
+    tone: "good" | "warn" | "bad" | "neutral";
+    detail: string;
+    fix: string | null;
+  } => {
+    const reach = engineReach.find((item) => item.id === provider.id) ?? null;
+    const count = reach?.account_count ?? provider.account_count ?? 0;
+    if (!provider.configured) {
+      return {
+        state: "no-key",
+        tone: "neutral",
+        detail: t("publish.engineNoKey"),
+        fix: t("publish.engineNoKeyFix"),
+      };
+    }
+    // The engine's own words first: "invalid API key" is more use than
+    // anything this page could infer from a false flag.
+    const refusal = provider.authorization_error
+      ?? (reach && !reach.reachable ? reach.reason : null);
+    if (!provider.authenticated || (reach && !reach.reachable)) {
+      const rejected = /401|403|key|token|auth|unauthor|forbidden/i.test(refusal ?? "");
+      return {
+        state: rejected ? "rejected" : "unreachable",
+        tone: "bad",
+        detail: refusal ?? t(rejected ? "publish.engineRejected" : "publish.engineUnreachable"),
+        fix: t(rejected ? "publish.engineRejectedFix" : "publish.engineUnreachableFix"),
+      };
+    }
+    if (engineOff(provider.id)) {
+      return {
+        state: "off",
+        tone: "neutral",
+        detail: t("publish.engineOff"),
+        fix: t("publish.engineOffFix"),
+      };
+    }
+    if (accountsLoaded && count === 0) {
+      return {
+        state: "no-accounts",
+        tone: "warn",
+        detail: t("publish.engineNoAccounts"),
+        fix: t("publish.engineNoAccountsFix"),
+      };
+    }
+    return {
+      state: "ready",
+      tone: "good",
+      detail: t("publish.engineReadyDetail", { count }),
+      fix: null,
+    };
+  };
+
+  /**
+   * The destinations actually offered.
+   *
+   * An engine switched off keeps its accounts out of the picker entirely. A
+   * greyed row you cannot choose is the same information with more to read.
+   */
+  const accounts = useMemo(
+    () => allAccounts.filter((account) => !disabledEngines.includes(account.provider)),
+    [allAccounts, disabledEngines],
+  );
+
   /** The engine that will deliver a destination, read from the account itself. */
   const engineFor = (accountId: string) =>
     accounts.find((item) => item.id === accountId)?.provider ?? null;
@@ -302,8 +394,32 @@ export default function PublishPage() {
   const fetchingNames = engineNames(fetchOnlyProviders);
   /** Engines on this post that can hold a draft for a teammate to approve. */
   const approvers = chosenProviders.filter((item) => item.supports_approval);
-  /** Every engine with working credentials - all of them can carry this post. */
-  const connectedEngines = (connection?.providers ?? []).filter((item) => item.authenticated);
+  /** Engines that work and are switched on - these are the ones carrying posts. */
+  const connectedEngines = (connection?.providers ?? []).filter(
+    (item) => engineState(item).state === "ready");
+  /**
+   * Engines whose key works, switched on or not.
+   *
+   * Kept apart from the list above so that turning every engine off does not
+   * report the same thing as never having set one up. One is a choice you just
+   * made and can undo; the other is work you have not done yet.
+   */
+  const usableEngines = (connection?.providers ?? []).filter(
+    (item) => ["ready", "off", "no-accounts"].includes(engineState(item).state));
+  /**
+   * Engines that have been set up but cannot deliver right now.
+   *
+   * Surfaced rather than omitted. An engine whose key was revoked simply stops
+   * contributing accounts, so the picker quietly gets shorter - which looks
+   * exactly like those channels having been disconnected at the network, and
+   * sends you to the wrong dashboard to fix it.
+   */
+  const unavailableEngines = (connection?.providers ?? [])
+    .map((item) => ({ provider: item, status: engineState(item) }))
+    .filter(({ status }) => ["rejected", "unreachable", "no-accounts"].includes(status.state));
+  /** Chosen destinations whose engine has stopped working since they were picked. */
+  const brokenChoices = chosenProviders.filter(
+    (item) => engineState(item).state !== "ready");
   /**
    * How the media reaches the engines, said once.
    *
@@ -421,7 +537,12 @@ export default function PublishPage() {
   /** Why the submit is unavailable, so it is never dead without explanation. */
   const blockedReason = !canExecute
     ? "Only owners and approvers can publish"
-    : !chosen.length
+    // Named before submitting, because the alternative is that engine refusing
+    // the post after the others have already published, and a live post cannot
+    // be taken back.
+    : brokenChoices.length
+      ? t("publish.blockedEngine", { engines: engineNames(brokenChoices) })
+      : !chosen.length
       ? "Choose at least one destination"
       : !caption.trim()
         ? "Write a caption"
@@ -617,7 +738,7 @@ export default function PublishPage() {
       setOpenProvider(null);
       setNotice(
         `Saved ${body.result.written_keys.join(", ")} to .env.` +
-        (activate ? ` ${provider.label} is now the active engine.` : ""),
+        (activate ? ` ${t("publish.nowDefault", { label: provider.label })}` : ""),
       );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Credentials could not be saved.");
@@ -820,7 +941,7 @@ export default function PublishPage() {
         `/api/workspaces/${workspaceId}/publishing/integrations/all`,
         { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
       ));
-      setAccounts(result.accounts);
+      setAllAccounts(result.accounts);
       setEngineReach(result.engines);
       setAccountsLoaded(true);
       // Keep what is still there, drop what the refresh no longer returns: a
@@ -890,7 +1011,7 @@ export default function PublishPage() {
           </p>
         </div>
         <div className="publish-heading-side">
-          {!connectedEngines.length && (
+          {!usableEngines.length && (
             <span className="connection-badge">{checking ? "Checking…" : "No engine"}</span>
           )}
         </div>
@@ -905,26 +1026,31 @@ export default function PublishPage() {
           all of them at once, so a summary naming one made the others look
           switched off - and hid the fact that their destinations were already
           in the picker below. */}
-      {connectedEngines.length > 0 && !setupOpen ? (
+      {usableEngines.length > 0 && !setupOpen ? (
         <div className="engine-summary">
           <span className="engine-summary-marks">
-            {connectedEngines.map((provider) => (
+            {(connectedEngines.length ? connectedEngines : usableEngines).map((provider) => (
               <ProviderMark key={provider.id} provider={provider.id} size={22} />
             ))}
           </span>
           <div>
-            <strong>{engineNames(connectedEngines)}</strong>
+            <strong>{connectedEngines.length
+              ? engineNames(connectedEngines)
+              : t("publish.noEngineOn")}</strong>
             <span>
-              {accounts.length
-                ? `${accounts.length} destination${accounts.length === 1 ? "" : "s"} across `
-                  + `${connectedEngines.length} engine${connectedEngines.length === 1 ? "" : "s"}`
-                : connection?.next_step}
+              {!connectedEngines.length
+                ? t("publish.noEngineOnHelp")
+                : accounts.length
+                  ? t("publish.destinationsAcross", {
+                      destinations: accounts.length, engines: connectedEngines.length,
+                    })
+                  : connection?.next_step}
             </span>
           </div>
           {hosting?.required && !hosting.configured && (
             <Badge tone="warn">{t("publish.mediaHostingNeeded")}</Badge>
           )}
-          {connectedEngines.map((provider) => (
+          {usableEngines.map((provider) => (
             <a
               key={provider.id}
               className={buttonClass({ variant: "quiet", size: "sm" })}
@@ -934,7 +1060,7 @@ export default function PublishPage() {
             >{provider.label}</a>
           ))}
           <Button variant="quiet" size="sm" onClick={() => setSetupOpen(true)}>
-            Engine setup
+            {t("publish.engineSetup")}
           </Button>
         </div>
       ) : (
@@ -946,7 +1072,7 @@ export default function PublishPage() {
           </div>
           <div className="section-heading-aside">
             {connection && <span>{connection.next_step}</span>}
-            {connectedEngines.length > 0 && (
+            {usableEngines.length > 0 && (
               <Button variant="quiet" size="sm" onClick={() => setSetupOpen(false)}>
                 Done
               </Button>
@@ -955,12 +1081,13 @@ export default function PublishPage() {
         </div>
         <div className="engine-grid">
           {connection?.providers.map((provider) => {
-            const active = provider.id === connection.active_provider;
-            const state = provider.authenticated ? "connected" : provider.configured ? "key saved" : "needs key";
+            const isDefault = provider.id === connection.active_provider;
+            const status = engineState(provider);
+            const usable = status.state === "ready" || status.state === "no-accounts";
             const open = openProvider === provider.id;
             return (
               <article
-                className={`engine-card${active ? " active" : ""}`}
+                className={`engine-card engine-${status.state}`}
                 key={provider.id}
                 style={{ "--engine-accent": provider.accent } as React.CSSProperties}
               >
@@ -970,33 +1097,58 @@ export default function PublishPage() {
                     <strong>{provider.label}</strong>
                     <span>{provider.tagline}</span>
                   </div>
-                  <small className={`engine-state ${provider.authenticated ? "ready" : provider.configured ? "partial" : ""}`}>
-                    {state}
-                  </small>
+                  {/* One word for the state, and the switch beside it, so
+                      "can this engine publish?" and "should it?" are answered
+                      in the same glance rather than inferred from a key field
+                      three lines down. */}
+                  <Badge tone={status.tone}>{t(`publish.engineState.${status.state}`)}</Badge>
                 </div>
-                <p className="engine-summary">{provider.summary}</p>
-                <div className="engine-platforms" aria-label={`${provider.label} supports ${provider.platforms.length} destinations`}>
+                <p className="engine-blurb">{provider.summary}</p>
+                <div className="engine-platforms" aria-label={t("publish.engineSupports", {
+                  label: provider.label, count: provider.platforms.length,
+                })}>
                   {provider.platforms.map((platform) => (
                     <span key={platform} title={platformLabels[platform]}>
-                      <PlatformIcon platform={platform} size={16} muted={!active} />
+                      <PlatformIcon platform={platform} size={16} muted={!usable || engineOff(provider.id)} />
                     </span>
                   ))}
                   <em>{provider.platforms.length}</em>
                 </div>
-                {provider.authorization_error && (
-                  <p className="engine-warning" role="status">{provider.authorization_error}</p>
-                )}
+                {/* The engine's own message where there is one, and the thing
+                    to do about it either way. A state without a next step is a
+                    dead end dressed as information. */}
+                <p className={`engine-status-line${status.tone === "bad" ? " bad" : ""}`} role="status">
+                  <span>{status.detail}</span>
+                  {status.fix && <small>{status.fix}</small>}
+                </p>
                 <div className="engine-actions">
-                  {active
-                    ? <Badge tone="accent">{t("publish.active")}</Badge>
+                  <label className={`engine-toggle${usable ? "" : " unavailable"}`}>
+                    <input
+                      type="checkbox"
+                      checked={usable && !engineOff(provider.id)}
+                      disabled={!usable}
+                      onChange={(event) => setDisabledEngines(
+                        event.target.checked
+                          ? disabledEngines.filter((id) => id !== provider.id)
+                          : [...disabledEngines, provider.id],
+                      )}
+                    />
+                    <span>{t("publish.useForPublishing")}</span>
+                  </label>
+                  {isDefault
+                    ? <Badge tone="accent" >{t("publish.defaultEngine")}</Badge>
                     : <Button
                         variant="quiet"
                         size="sm"
                         disabled={!canExecute || !provider.configured}
                         busy={busy === `${provider.id}-activate`}
-                        title={provider.configured ? undefined : "Save this engine's API key first"}
+                        title={provider.configured
+                          ? t("publish.defaultEngineHelp")
+                          : t("publish.saveKeyFirst")}
                         onClick={() => void activateProvider(provider)}
-                      >{busy === `${provider.id}-activate` ? "Switching" : "Use this engine"}</Button>}
+                      >{busy === `${provider.id}-activate`
+                        ? t("publish.switching")
+                        : t("publish.makeDefault")}</Button>}
                   <Button
                     variant="quiet"
                     size="sm"
@@ -1042,11 +1194,11 @@ export default function PublishPage() {
                         variant="primary"
                         disabled={!canExecute}
                         busy={busy === `${provider.id}-credentials`}
-                        onClick={() => void saveCredentials(provider, !active)}
+                        onClick={() => void saveCredentials(provider, !isDefault)}
                       >
                         {busy === `${provider.id}-credentials`
-                          ? "Saving"
-                          : active ? "Save to .env" : "Save and use this engine"}
+                          ? t("publish.saving")
+                          : isDefault ? t("publish.saveToEnv") : t("publish.saveAndUse")}
                       </Button>
                       <a className={buttonClass({ variant: "quiet" })} href={provider.dashboard_url} target="_blank" rel="noopener noreferrer">
                         Get a key
@@ -1527,13 +1679,46 @@ export default function PublishPage() {
               </div>
             ) : (
               <>
-                {engineReach.some((engine) => !engine.reachable && engine.account_count === 0
-                  && engine.reason && !engine.reason.startsWith("No key")) && (
-                  <p className="engine-warning" role="status">
-                    Some engines could not be read, so their accounts are missing here:{" "}
-                    {engineReach.filter((engine) => !engine.reachable && engine.reason
-                      && !engine.reason.startsWith("No key"))
-                      .map((engine) => `${engine.label} (${engine.reason})`).join("; ")}
+                {/* One row per engine that is set up but not contributing, with
+                    the engine's own reason and the way back to it. Without this
+                    the list is simply shorter, which reads as channels having
+                    been disconnected rather than a key having been refused. */}
+                {unavailableEngines.length > 0 && (
+                  <div className="engine-unavailable" role="status">
+                    <strong>{t("publish.enginesUnavailable", {
+                      count: unavailableEngines.length,
+                    })}</strong>
+                    <ul>
+                      {unavailableEngines.map(({ provider, status }) => (
+                        <li key={provider.id}>
+                          <ProviderMark provider={provider.id} size={16} />
+                          <div>
+                            <b>{provider.label}</b>
+                            <span>{status.detail}</span>
+                            {status.fix && <small>{status.fix}</small>}
+                          </div>
+                          <Button variant="quiet" size="sm" onClick={() => {
+                            setSetupOpen(true);
+                            setOpenProvider(provider.id);
+                          }}>{t("publish.fixEngine")}</Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {/* Switched off here, not broken. Said plainly so a missing
+                    account is never a mystery. */}
+                {disabledEngines.length > 0 && (
+                  <p className="engine-note">
+                    {t("publish.enginesOff", {
+                      engines: (connection?.providers ?? [])
+                        .filter((item) => disabledEngines.includes(item.id))
+                        .map((item) => item.label)
+                        .join(", "),
+                    })}{" "}
+                    <button type="button" className="link-action" onClick={() => setSetupOpen(true)}>
+                      {t("publish.engineSetup")}
+                    </button>
                   </p>
                 )}
                 <div className="platform-grid">{connectedPlatforms.map((platform) => {
