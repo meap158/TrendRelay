@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from trendrelay_api.database import SessionFactory
+from trendrelay_api.integrations import longpath
 from trendrelay_api.jobs import (
     claim_job,
     complete_job,
@@ -147,9 +148,23 @@ def _now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
+def _is_file(path: Path) -> bool:
+    """`is_file`, able to see past 260 characters.
+
+    The plain call answers False for an over-long path. That is not "no", it is
+    "I could not look", and reading it as no is how over-long downloads became
+    invisible: never counted as progress, never scanned, never shortened.
+    """
+    return os.path.isfile(longpath.extended(path))
+
+
+def _size_of(path: Path) -> int:
+    return os.path.getsize(longpath.extended(path))
+
+
 def _fingerprint(path: Path) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as source:
+    with open(longpath.extended(path), "rb") as source:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
@@ -514,13 +529,31 @@ def _scan_new_media(output_root: Path, seen_paths: set[str]) -> list[Path]:
     """
     discovered: list[Path] = []
     for path in sorted(output_root.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in MEDIA_SUFFIXES:
+        # `is_file()` through the prefix: on a path past 260 the plain call
+        # answers False, meaning "I cannot look", not "not a file". Reading it
+        # as "no" skipped the over-long downloads entirely - so the files that
+        # most needed shortening were the ones never seen.
+        if path.suffix.lower() not in MEDIA_SUFFIXES:
+            continue
+        if not _is_file(path):
             continue
         resolved = str(path.resolve())
         if resolved in seen_paths:
             continue
         seen_paths.add(resolved)
         discovered.append(path)
+
+    # The provider writes through the extended-length prefix, so a file may
+    # exist at a path Windows will not open without it. Brought back under the
+    # limit here, once, at the only point where every new file is in hand: from
+    # this line on the rest of the system - ffmpeg, OpenCV, the library, the
+    # database - deals only in ordinary paths.
+    discovered, _renamed = longpath.shorten_all(discovered, output_root)
+    # Marked under the name it now has. The pre-rename path is already in the
+    # set and stays there harmlessly - nothing is at it any more - but without
+    # this the next scan would find the renamed file and call it new.
+    for path in discovered:
+        seen_paths.add(str(path.resolve()))
     return discovered
 
 
@@ -532,7 +565,7 @@ def _describe_media(paths: list[Path]) -> list[dict[str, Any]]:
             {
                 "path": str(path),
                 "name": path.name,
-                "size_bytes": path.stat().st_size,
+                "size_bytes": _size_of(path),
                 "sha256": _fingerprint(path),
             }
         )
@@ -602,7 +635,7 @@ def _download_progress(job: dict[str, Any]) -> dict[str, Any]:
             "bytes_downloaded": 0,
             "has_files_on_disk": False,
         }
-    all_files = [path for path in output_root.rglob("*") if path.is_file()]
+    all_files = [path for path in output_root.rglob("*") if _is_file(path)]
     media_files = [
         path for path in all_files if path.suffix.lower() in MEDIA_SUFFIXES
     ]
@@ -618,7 +651,7 @@ def _download_progress(job: dict[str, Any]) -> dict[str, Any]:
         "audio_downloaded": sum(
             path.suffix.lower() in AUDIO_SUFFIXES for path in media_files
         ),
-        "bytes_downloaded": sum(path.stat().st_size for path in media_files),
+        "bytes_downloaded": sum(_size_of(path) for path in media_files),
         "has_files_on_disk": bool(all_files),
     }
 

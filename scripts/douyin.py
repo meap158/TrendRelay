@@ -372,6 +372,27 @@ def collect_urls(values: list[str], batch_file: Path | None) -> list[str]:
     return unique
 
 
+def extended_path(path: Path) -> str:
+    """A path the Win32 API accepts past its 260-character limit.
+
+    `\\\\?\\` skips the normalisation that enforces MAX_PATH: no registry
+    change, no administrator, no restart. Measured against this provider's own
+    path composition, identical names failed plainly at 280, 305 and 335
+    characters and succeeded through the prefix at all three.
+
+    Kept here rather than imported because this script is deliberately
+    standalone - it runs from npm without the API package on the path.
+    """
+    if os.name != "nt":
+        return str(path)
+    absolute = os.path.abspath(str(path))
+    if absolute.startswith("\\\\?\\"):
+        return absolute
+    if absolute.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + absolute[2:]
+    return "\\\\?\\" + absolute
+
+
 def build_config(args: argparse.Namespace, urls: list[str]) -> dict[str, object]:
     modes = args.mode or ["post"]
     limit_by_mode = {mode: args.limit for mode in modes}
@@ -383,7 +404,13 @@ def build_config(args: argparse.Namespace, urls: list[str]) -> dict[str, object]
     cookies, _source = resolve_cookies()
     return {
         "link": urls,
-        "path": str(args.output.resolve()),
+        # Prefixed so the provider can write a name Windows would otherwise
+        # refuse. A caption of 80 Chinese characters plus a creator name lands
+        # a path in the 200s and sometimes past 260, and past it the write
+        # fails with FileNotFoundError - for a file that could not be created.
+        # The API renames anything over-long back under the limit afterwards,
+        # so nothing downstream ever sees this prefix.
+        "path": extended_path(args.output.resolve()),
         "mode": modes,
         "number": limit_by_mode,
         "increase": incremental,
@@ -419,12 +446,22 @@ def redacted_config(config: dict[str, object]) -> dict[str, object]:
 
 
 def list_media_files(root: Path) -> set[Path]:
-    if not root.exists():
+    """Media in the output folder, including files Windows cannot open plainly.
+
+    `is_file()` answers False for a path over 260 characters - not "no" but "I
+    could not look" - and this set is what decides whether anything was saved.
+    A long Chinese caption therefore downloaded correctly, counted as nothing,
+    and left the script reporting no new media; the API read that as a rejected
+    session and told the whole workspace to reconnect Douyin. The download had
+    worked. Nothing was wrong with the cookies.
+    """
+    if not os.path.isdir(extended_path(root)):
         return set()
     return {
-        path.resolve()
+        Path(os.path.abspath(str(path)))
         for path in root.rglob("*")
-        if path.is_file() and path.suffix.lower() in MEDIA_SUFFIXES
+        if path.suffix.lower() in MEDIA_SUFFIXES
+        and os.path.isfile(extended_path(path))
     }
 
 
