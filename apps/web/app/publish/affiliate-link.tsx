@@ -24,6 +24,7 @@ import { useMemo, useState } from "react";
 
 import { Button } from "../ui/button";
 import { useT } from "../i18n-provider";
+import { withDisclosure } from "../../lib/publish-rules";
 
 export type TrackingLink = {
   id: string;
@@ -79,19 +80,6 @@ export function AffiliateLink({
 
   const captionWorks = (outcomes.caption ?? []).length > 0;
   const bioOnly = (outcomes.bio ?? []).length > 0;
-
-  /**
-   * Put the disclosure first, once.
-   *
-   * Prepending blindly would stack it on every insert, and a caption that opens
-   * with the same sentence twice reads as a mistake in the one line that is
-   * meant to be a legal statement.
-   */
-  function withDisclosure(text: string, disclosure: string): string {
-    const lead = disclosure.trim();
-    if (!lead || text.trimStart().startsWith(lead)) return text;
-    return text.trim() ? `${lead}\n\n${text.trimStart()}` : lead;
-  }
 
   function addToCaption() {
     if (!link) return;

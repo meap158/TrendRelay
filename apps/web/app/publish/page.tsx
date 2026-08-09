@@ -28,6 +28,7 @@ import { ActionIcon } from "../ui/action-icons";
 import { Button, buttonClass } from "../ui/button";
 import { Badge, Switch } from "../ui/primitives";
 import { CredentialRow } from "../ui/credential-field";
+import { allRoutesSpent, moveImage, preferredRoute } from "../../lib/publish-rules";
 import {
   MEDIA_DRAG_TYPE,
   MediaPicker,
@@ -516,18 +517,10 @@ export default function PublishPage() {
    * an engine that has since been switched off, say - degrades to posting
    * through a working one instead of silently dropping the destination.
    */
-  const routeOf = (page: SocialPage) => {
-    const chosen = routeFor[page.key];
-    return page.reachable_by.find((item) => `${item.provider}:${item.id}` === chosen)
-      // An engine with nothing left to spend is not the one to fall back to,
-      // so a page reached by two engines keeps working when one runs out.
-      ?? page.reachable_by.find((item) => item.available !== false)
-      ?? page.reachable_by[0];
-  };
+  const routeOf = (page: SocialPage) =>
+    preferredRoute(page.reachable_by, routeFor[page.key]) ?? page.reachable_by[0];
   /** Out of quota on every engine that reaches it, so nothing can carry it. */
-  const pageSpent = (page: SocialPage) =>
-    page.reachable_by.length > 0
-    && page.reachable_by.every((item) => item.available === false);
+  const pageSpent = (page: SocialPage) => allRoutesSpent(page.reachable_by);
   /** A page is chosen when any of its routes is in the target list. */
   const pageChosen = (page: SocialPage) =>
     page.reachable_by.some((item) => targets.includes(item.id));
@@ -1026,13 +1019,7 @@ export default function PublishPage() {
 
   /** Move an image one place along. Order is the post, so it is editable. */
   function moveCarouselImage(index: number, by: -1 | 1) {
-    setImagePaths((current) => {
-      const next = [...current];
-      const target = index + by;
-      if (target < 0 || target >= next.length) return current;
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
+    setImagePaths((current) => moveImage(current, index, by));
   }
 
   async function saveSlots(entries: { weekday: number; time: string }[]) {

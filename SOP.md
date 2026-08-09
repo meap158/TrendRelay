@@ -47,3 +47,5 @@ Visual design is part of the deliverable on every task that touches the interfac
 ## Definition of done
 
 A change is complete only when its implementation, relevant checks, README, documentation, and handover are current; its diff contains no unrelated work; and it is recorded in an atomic descriptive commit when committing is authorized. For interface work, it is complete only when the rules above have been applied and the layout has been verified rather than assumed.
+
+`npm test` runs both suites: the Python tests and the browser app's own. A decision the interface makes - what a rule does to a caption, what order a list ends up in, which route a destination takes - belongs in a plain `.ts` module beside `lib/publish-rules.ts` and gets a test there. It is the only part of the interface that can be checked without a browser, and the parts that fail quietly are exactly these: a disclosure prepended twice still looks like a disclosure, and a post sent through an engine with no quota still looks sent.
