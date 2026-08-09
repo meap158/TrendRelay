@@ -40,6 +40,7 @@ product naming the `work_ids` it belongs to.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Any
 
 from sqlalchemy import select
@@ -144,21 +145,52 @@ def products_payload(session: Session, workspace_id: str) -> dict[str, Any]:
         for report in work_economics(session, workspace_id=workspace_id)
     }
 
+    # Grouped once rather than rescanned per product.
+    #
+    # This used to walk every click and every conversion in the workspace for
+    # each product, which is fine at ten products and a hundred clicks and is
+    # tens of millions of comparisons at a few hundred products and fifty
+    # thousand clicks - on the request thread, on every page load.
+    #
+    # A click can be attributed by product or by the link it came through, and
+    # the original counted it once if either matched. Grouping preserves that
+    # exactly: an event is filed under both, and since the redirector copies a
+    # link's product onto the click it writes, "both" is normally one place.
+    offers_by_product: dict[str, list[Any]] = defaultdict(list)
+    for item in offers:
+        if item.product_id:
+            offers_by_product[item.product_id].append(item)
+    link_product = {item.id: item.product_id for item in links}
+    links_by_product: dict[str, list[Any]] = defaultdict(list)
+    for item in links:
+        if item.product_id:
+            links_by_product[item.product_id].append(item)
+    editions_by_product: dict[str, list[Any]] = defaultdict(list)
+    for item in editions:
+        if item.product_id:
+            editions_by_product[item.product_id].append(item)
+
+    def file_by_product(events: list[Any]) -> dict[str, list[Any]]:
+        filed: dict[str, list[Any]] = defaultdict(list)
+        for event in events:
+            owners = {
+                identifier for identifier in (
+                    event.product_id, link_product.get(event.tracking_link_id)
+                ) if identifier
+            }
+            for identifier in owners:
+                filed[identifier].append(event)
+        return filed
+
+    clicks_by_product = file_by_product(list(clicks))
+    conversions_by_product = file_by_product(list(conversions))
+
     rows: list[dict[str, Any]] = []
     for product in products:
-        product_links = [item for item in links if item.product_id == product.id]
-        link_ids = {item.id for item in product_links}
-        # A click can be attributed by product or only by the link it came
-        # through, depending on how the link was built; both count once.
-        product_clicks = [
-            item for item in clicks
-            if item.product_id == product.id or item.tracking_link_id in link_ids
-        ]
-        product_conversions = [
-            item for item in conversions
-            if item.product_id == product.id or item.tracking_link_id in link_ids
-        ]
-        product_editions = [item for item in editions if item.product_id == product.id]
+        product_links = links_by_product.get(product.id, [])
+        product_clicks = clicks_by_product.get(product.id, [])
+        product_conversions = conversions_by_product.get(product.id, [])
+        product_editions = editions_by_product.get(product.id, [])
         work_ids = sorted({item.work_id for item in product_editions})
 
         rows.append({
@@ -182,7 +214,7 @@ def products_payload(session: Session, workspace_id: str) -> dict[str, Any]:
                     "cookie_days": offer.cookie_days,
                     "availability": offer.availability,
                 }
-                for offer in offers if offer.product_id == product.id
+                for offer in offers_by_product.get(product.id, [])
             ],
             "links": [
                 {

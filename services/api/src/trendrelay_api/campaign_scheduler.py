@@ -110,28 +110,40 @@ def _performance(session: Session, workspace_id: str, destinations: list[Campaig
     Only destinations that have a tracking link can be measured, which is the
     point of giving each one its own rather than sharing the campaign's.
     """
+    link_ids = [item.tracking_link_id for item in destinations if item.tracking_link_id]
+    if not link_ids:
+        return {}
+
+    # Two queries for every destination, rather than two each. A campaign with
+    # a dozen accounts was issuing two dozen round trips on every tick, once a
+    # minute, to answer a question that fits in one grouped count.
+    click_counts = dict(
+        session.execute(
+            select(ClickEvent.tracking_link_id, func.count(ClickEvent.id))
+            .where(ClickEvent.tracking_link_id.in_(link_ids))
+            .group_by(ClickEvent.tracking_link_id)
+        ).all()
+    )
+    conversions = session.scalars(
+        select(Conversion).where(Conversion.tracking_link_id.in_(link_ids))
+    ).all()
+    by_link: dict[str, list[Conversion]] = {}
+    for item in conversions:
+        by_link.setdefault(item.tracking_link_id, []).append(item)
+
     found: dict[str, dict[str, float]] = {}
     for destination in destinations:
         if not destination.tracking_link_id:
             continue
-        clicks = session.scalar(
-            select(func.count(ClickEvent.id)).where(
-                ClickEvent.tracking_link_id == destination.tracking_link_id
-            )
-        ) or 0
-        conversions = session.scalars(
-            select(Conversion).where(
-                Conversion.tracking_link_id == destination.tracking_link_id
-            )
-        ).all()
-        settled = [item for item in conversions if item.status == "approved"]
+        mine = by_link.get(destination.tracking_link_id, [])
+        settled = [item for item in mine if item.status == "approved"]
         reversed_out = sum(
             item.commission_cents
-            for item in conversions
+            for item in mine
             if item.status in {"reversed", "refunded"}
         )
         found[destination.id] = {
-            "clicks": float(clicks),
+            "clicks": float(click_counts.get(destination.tracking_link_id, 0)),
             "conversions": float(len(settled)),
             "net_commission_cents": float(
                 sum(item.commission_cents for item in settled) - reversed_out
@@ -141,7 +153,7 @@ def _performance(session: Session, workspace_id: str, destinations: list[Campaig
 
 
 def _eligible_items(
-    session: Session, campaign_id: str, *, destination_id: str, now: datetime,
+    items: list[CampaignQueueItem], *, destination_id: str, now: datetime,
     min_recycle_days: int,
 ) -> list[CampaignQueueItem]:
     """Approved items that have rested long enough on this destination.
@@ -150,15 +162,11 @@ def _eligible_items(
     audiences, and holding it back everywhere because one account saw it last
     week empties the queue for no reason. Reposting it to the *same* account too
     soon is the thing that gets an account flagged, and that is what this stops.
+
+    Takes the queue rather than fetching it: this is asked once per slot, and
+    re-reading every approved item from the database for each one turned a
+    24-hour horizon into a query per posting time.
     """
-    items = session.scalars(
-        select(CampaignQueueItem)
-        .where(
-            CampaignQueueItem.campaign_id == campaign_id,
-            CampaignQueueItem.state == "approved",
-        )
-        .order_by(CampaignQueueItem.position, CampaignQueueItem.created_at)
-    ).all()
     rested: list[CampaignQueueItem] = []
     for item in items:
         stamp = (item.last_posted_by_destination or {}).get(destination_id)
@@ -176,7 +184,9 @@ def _eligible_items(
     return rested
 
 
-def _posted_today(session: Session, destination: CampaignDestination, now: datetime) -> int:
+def _posted_today(
+    items: list[CampaignQueueItem], destination: CampaignDestination, now: datetime
+) -> int:
     """How many posts this destination has already been given today.
 
     Counted from each item's per-destination stamps rather than from
@@ -185,11 +195,6 @@ def _posted_today(session: Session, destination: CampaignDestination, now: datet
     says, and silently so once a campaign feeds more than one account.
     """
     start = datetime(now.year, now.month, now.day, tzinfo=UTC)
-    items = session.scalars(
-        select(CampaignQueueItem).where(
-            CampaignQueueItem.campaign_id == destination.campaign_id
-        )
-    ).all()
     posted = 0
     for item in items:
         stamp = (item.last_posted_by_destination or {}).get(destination.id)
@@ -249,6 +254,15 @@ def plan_campaign(
     if not upcoming:
         return [], "No slot falls inside the next 24 hours."
 
+    # Read once for the whole horizon. Both the cap and the rest interval are
+    # asked per slot, and each used to go back to the database for the same rows.
+    queue = list(session.scalars(
+        select(CampaignQueueItem)
+        .where(CampaignQueueItem.campaign_id == autopilot.campaign_id)
+        .order_by(CampaignQueueItem.position, CampaignQueueItem.created_at)
+    ).all())
+    approved = [item for item in queue if item.state == "approved"]
+
     performance = _performance(session, autopilot.workspace_id, list(destinations))
     ranks = rank_destinations(
         [{"id": item.id, "platform": item.platform} for item in destinations],
@@ -264,12 +278,11 @@ def plan_campaign(
         if rank is None:
             break
         destination = by_id[rank.destination_id]
-        if _posted_today(session, destination, moment) >= autopilot.daily_cap_per_account:
+        if _posted_today(queue, destination, moment) >= autopilot.daily_cap_per_account:
             notes.append(f"{destination.label} is at its daily cap.")
             continue
         eligible = _eligible_items(
-            session,
-            autopilot.campaign_id,
+            approved,
             destination_id=destination.id,
             now=moment,
             min_recycle_days=autopilot.min_recycle_days,

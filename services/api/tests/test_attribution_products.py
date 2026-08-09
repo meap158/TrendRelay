@@ -220,3 +220,44 @@ def test_a_workspace_with_no_products_is_not_an_error(seeded) -> None:
     assert body["products"] == []
     assert body["works"] == []
     assert body["count"] == 0
+
+
+def test_a_click_is_counted_once_however_it_is_attributed(seeded) -> None:
+    """The grouping must not double-count what the scan counted once.
+
+    A click carries its own product_id and belongs to a tracking link that also
+    names one. The old scan matched on either and counted the click once; the
+    index files it under both, so a click whose two answers agree - which is
+    every click the redirector writes, since it copies the link's product - must
+    still come to one.
+    """
+    row = paperback(products(seeded))
+    # Three clicks were seeded, each carrying both product_id and a link on the
+    # same product.
+    assert row["clicks"] == 3
+
+
+def test_events_that_only_know_their_link_still_reach_the_product(seeded) -> None:
+    # An import can write a conversion with no product_id at all. It is still
+    # this product's conversion, because its link is.
+    with TestingSession.begin() as session:
+        session.add(Conversion(
+            id="conv-linkonly", workspace_id=seeded, tracking_link_id="link-1",
+            click_event_id=None, campaign_id="camp-1", plan_id=None,
+            offer_id=None, product_id=None, network="amazon",
+            external_reference_hash="h-link", occurred_at=datetime(2026, 7, 6, tzinfo=UTC),
+            status="approved", currency="USD", order_value_cents=1_000,
+            commission_cents=100, raw_metadata={}, imported_by="owner-user",
+        ))
+    [bucket] = [item for item in paperback(products(seeded))["earnings"]
+                if item["currency"] == "USD"]
+    assert bucket["approved"] == 2
+    assert bucket["net_commission_cents"] == 1_350
+
+
+def test_a_product_with_no_events_reports_zero_rather_than_missing(seeded) -> None:
+    # The ebook shares the work but has no link, click or conversion of its own.
+    ebook = next(row for row in products(seeded)["products"] if row["id"] == "prod-2")
+    assert ebook["clicks"] == 0
+    assert ebook["earnings"] == []
+    assert ebook["links"] == []
