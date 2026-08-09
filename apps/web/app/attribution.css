@@ -27,6 +27,12 @@
 .tracking-list > div { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--line); }
 .tracking-copy { display: grid; gap: 4px; min-width: 0; }
 .tracking-copy a, .tracking-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The network's own tracking parameters, qualifying the link rather than
+   competing with it: one wrapping line of chips, no row of its own. */
+.tracking-subids { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.tracking-subids em { display: inline-flex; gap: 5px; align-items: baseline; border-radius: 999px; padding: 1px 7px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-style: normal; }
+.tracking-subids b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.tracking-subids.none em { box-shadow: inset 0 0 0 1px var(--line-strong); background: transparent; }
 .tracking-copy a { color: var(--link); font-family: ui-monospace, monospace; font-size: 11px; }
 .tracking-copy small { color: var(--muted); }
 .tracking-metrics { display: flex; gap: 10px; align-items: center; }

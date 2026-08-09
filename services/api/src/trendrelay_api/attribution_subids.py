@@ -216,6 +216,18 @@ def assign(destination_url: str, context: LinkContext) -> dict[str, str]:
     return assigned
 
 
+def dimensions_for(destination_url: str) -> dict[str, str]:
+    """What each of this network's slots means, by parameter name.
+
+    Read from the same slot map the values were assigned with, so a screen
+    labelling a stored sub ID cannot drift from the policy that produced it.
+    """
+    network = network_for(destination_url)
+    if not network:
+        return {}
+    return dict(zip(network.slots, DIMENSIONS, strict=False))
+
+
 def describe(destination_url: str, context: LinkContext) -> dict[str, Any]:
     """What this link will send, for a screen that has to explain it."""
     network = network_for(destination_url)

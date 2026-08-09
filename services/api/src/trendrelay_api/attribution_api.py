@@ -183,6 +183,18 @@ def _link_view(session: Session, item: TrackingLink) -> dict[str, Any]:
         # the values are read back off a dashboard we do not control, and an
         # operator reconciling a payout needs to know which column is which.
         "sub_ids": dict(item.sub_ids or {}),
+        # The same values with the meaning of each slot, so a screen can label
+        # them from the policy that assigned them rather than a second copy of it.
+        "sub_id_slots": [
+            {
+                "parameter": parameter,
+                "dimension": attribution_subids.dimensions_for(item.destination_url).get(
+                    parameter, ""
+                ),
+                "value": value,
+            }
+            for parameter, value in (item.sub_ids or {}).items()
+        ],
         "sub_id_key": attribution_subids.link_key(item.code),
         "disclosure": item.disclosure,
         "status": item.status,

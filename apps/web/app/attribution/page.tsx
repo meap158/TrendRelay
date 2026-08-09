@@ -49,6 +49,10 @@ type TrackingLink = {
   destination_host: string;
   country_destinations: Record<string, string>;
   platform: string;
+  /** What the affiliate network will report this link as, one entry per slot. */
+  sub_id_slots?: Array<{ parameter: string; dimension: string; value: string }>;
+  /** The value that identifies this link in a network's own export. */
+  sub_id_key?: string;
   disclosure: string;
   status: "active" | "disabled" | "broken" | "expired";
   expires_at?: string | null;
@@ -427,6 +431,33 @@ export default function AttributionPage() {
                       <strong>{campaigns.find((item) => item.id === link.campaign_id)?.name ?? t("attribution.campaign")}</strong>
                       <a href={`${link.url}/info`} target="_blank" rel="noreferrer">{link.url}</a>
                       <small>→ {link.destination_host} · {link.platform} · {link.disclosure}</small>
+                      {/* What the network's own report will call this link.
+                          Worth showing: those columns are read back off a
+                          dashboard we do not control, and reconciling a payout
+                          means knowing which column is which. Compact, because
+                          it qualifies the link rather than competing with it. */}
+                      {link.sub_id_slots?.length ? (
+                        <span className="tracking-subids">
+                          {link.sub_id_slots.map((slot) => (
+                            <em
+                              key={slot.parameter}
+                              title={t(`attribution.subIdDimension.${slot.dimension}`)}
+                            >
+                              {slot.parameter}<b>{slot.value}</b>
+                            </em>
+                          ))}
+                        </span>
+                      ) : link.sub_id_key ? (
+                        // No contract for this network, so nothing was added -
+                        // guessing a parameter name breaks the sale rather than
+                        // weakening tracking. The key is still offered, since it
+                        // is what to paste into a sub-ID field by hand.
+                        <span className="tracking-subids none">
+                          <em title={t("attribution.subIdUnknownHelp")}>
+                            {t("attribution.subIdUnknown")}<b>{link.sub_id_key}</b>
+                          </em>
+                        </span>
+                      ) : null}
                     </div>
                     <div className="tracking-metrics">
                       <span>{link.clicks}<small>{t("attribution.clicksLower")}</small></span>
