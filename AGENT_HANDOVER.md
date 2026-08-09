@@ -35,7 +35,7 @@ Last updated: 2026-08-09
 - `/publish` picks an engine, configures its keys, discovers connected accounts, produces dry-run previews, and submits governed work. Engine cards and per-platform destination cards carry inline SVG marks from `apps/web/app/publishing-icons.tsx` so operators can tell Zernio, Buffer, and Bundle.social — and each destination — apart at a glance. Publishing joins Last30Days research and OpenMontage preflights in TrendRelay's leased SQL job store and supervised hot-reload worker.
 - TikTok Discovery reads TikTok Creative Center's public trend tabs. Creative Center is client-rendered and its `creative_radar_api` answers `40101 no permission` to unsigned callers, so plain HTTP cannot read it: `scripts/tiktok_creative_bridge.py` renders the page in an isolated Playwright runtime and `integrations/tiktok_creative.py` normalizes the result. Two extractors run per render - rows carrying `data-index`, then a generic repeating-sibling detector that names no CSS class - with a rendered-text scanner as a third fallback. Metrics arrive in three layouts (`303.7K` + `Posts`, `Video views` + `79M`, and the combined `787.7K followers`) and all three are parsed. Anonymous visitors get three hashtag rows and four video cards before a login wall, which is reported as a note rather than hidden. The song and creator tabs are retired upstream and are declared unavailable rather than silently redirected. Nothing is ever fabricated: an empty render raises and the API answers 503.
 - `/campaigns` provides persistent workspace campaigns and a timezone-aware content calendar. Plans bind approved media to captions, hashtags, affiliate links, disclosure, platform deep links, and posting times; owner/approver decisions lock content. Approved plans can hand off to the active publishing engine or produce an idempotent, audited manual ZIP under `.data/manual-packages/`.
-- `/opportunities` provides workspace-scoped products and affiliate offers, idempotent CSV import, persisted evidence, deterministic score `v1` with nine visible contributions, research-job provenance, and draft campaign creation linked back to the opportunity and primary offer.
+- Opportunity scoring - workspace-scoped products and affiliate offers, idempotent CSV import, persisted evidence, deterministic score `v1` with nine visible contributions, research-job provenance, and draft campaign creation linked back to the opportunity and primary offer - is still in force, but no longer has a page of its own. The scoring sits on Discover under the research it scores, the products and offers sit in Attribution, and `/opportunities` redirects (see the Attribution bullet below).
 - `/library` is the persistent creative-intelligence layer: durable SHA-256-deduplicated ingestion, hash-addressed immutable originals, FFmpeg thumbnail/proxy/audio derivatives, authenticated content, reviewed transcript/OCR records, versioned creative recipes, rights review, search, and publishable Studio/Campaign handoffs. Contextual counted facets filter by media type, channel, source, and usage rights; each facet ignores only its own selection, full filtered totals are calculated before pagination, and results can be grouped with exact counts without duplicating immutable assets. Douyin and authenticated OpenMontage outputs queue into it automatically.
 - `/attribution` is the first-party revenue workbench: governed transparent links, HTTPS and parameter-collision controls, country routing, privacy-minimized click events, idempotent conversion CSV imports, campaign/creative-format summaries, and explicit measurement limitations. Public `/c/{code}/info` reveals the destination before `/c/{code}` records and redirects.
 
@@ -73,6 +73,36 @@ Last updated: 2026-08-09
   `campaign_queue_items` (recycling, so a posted item goes to the back rather
   than being consumed). The panel on `/campaigns` gates its switch behind a
   readiness checklist and previews the next day's posts before anything exists.
+
+- Engine cards say what is connected and on which plan. Each engine reports its
+  connected channels rather than the platforms it supports - the supported list
+  was the same eight or twelve icons on every card whether an account was
+  attached or none. No engine exposes which plan an account is on: there is no
+  endpoint that names a tier and no field on any response that carries one, so
+  `engine_limits.infer_plan` reads it off the limits they do report. Buffer's
+  30-day request quota separates Free/Essentials/Team and arrives in
+  `RateLimit-Policy`, not `RateLimit` - the latter is the 15-minute window,
+  which is 100 on every tier and would call a Team account Free. Against the
+  live key Buffer sends only the policy header, reporting 3,000: Free, measured.
+  A quota matching no published figure leaves the plan unnamed rather than
+  rounded, and the answer carries the same measured/counted/published mark as
+  every figure beside it.
+- An engine with no quota left stops offering destinations. Its accounts are
+  marked unavailable rather than dropped, because a destination that vanishes
+  reads as a disconnected account, and each carries how much went against the
+  quota. Only a measured or counted figure can block - a published one is a
+  pricing-page scrape with no usage and must never refuse a post - and only
+  allowances that actually stop a post count, which is why "3 of 3 connected
+  accounts" does not: that is room for more accounts, not room to post. A page
+  reached by two engines routes around the exhausted one.
+- Media hosting is checked rather than trusted. `media_hosting.probe` signs a
+  request against the bucket, writes a small object and fetches it back through
+  the public base URL with no credentials - the hop an engine makes, and the
+  only one that proves public access, which is a separate switch from the API
+  token. Each stage names the setting it clears; a public URL answering 200 with
+  different bytes fails rather than passes. Saving refuses the two paste errors
+  the form invites (the S3 endpoint as the secret, the account ID as the access
+  key) and leaves anything wrong-but-plausible to the check.
 
 ## Decisions in force
 
@@ -196,20 +226,37 @@ Last updated: 2026-08-09
 - Publishing-engine session (2026-08-05): `npm run check` passes 231 tests with ESLint, TypeScript and Ruff. New suites cover the three engines' payloads, the `.env` writer, the Douyin streaming batch (interleaving, no-double-ingest, keep-going-on-failure) and Buffer's per-network metadata. The streaming tests were confirmed to fail when the batch is collapsed back into a single invocation, so they detect the regression rather than merely passing.
 - Live checks this session: a Zernio key saved through the API reached a scratch `.env` without the secret appearing in the response, an unconfirmed save returned 400 and an unknown engine 422, and an engine switch persisted to `PUBLISHING_PROVIDER`. The Library assets endpoint returned 694 assets with no `publishable` or `rights_status` key and facets of channels/platforms/media_kinds only, and selecting an asset rendered all three handoff links. A Library import that previously failed `422 literal_error` now reaches business logic. TikTok Creative Center parsed live hashtag and video rows with posts and views intact. Twenty live Ad Library cards measured 0.00px between the Research and Source centres, identical bar geometry on every card, and no overflow.
 - Two environment traps cost time and are worth knowing. Next dev HMR appends updated CSS after existing rules, so cascade results are wrong until a hard reload; a padding fix appeared broken twice before reloading proved it correct. And `document.hasFocus()` is false in a hidden browser pane, so `:focus` styling cannot be verified there at all.
+- Engine/quota/hosting session (2026-08-09): the API suite passes 624 tests with TypeScript, ESLint, the production web build and 959/959 strings translated. 34 failures in `test_face_blur`, `test_face_swap`, `test_face_identity` and `test_effect_render` pre-date the session and are `insightface`/`onnxruntime` missing from the venv, not regressions. New suites cover plan inference per engine, the 30-day-window rule that stops a Team account reading as Free, exhaustion (including the two things that must never block a publish), route selection around a spent engine, and the storage access check.
+- Live checks this session: Buffer returned `RateLimit-Policy` with a 3,000-request 30-day quota and no `RateLimit` header at all, so the plan reads Free by measurement; the R2 access check reached stage 2 and reported the refused key, which turned out to be the account ID saved as the access key ID. Forcing an engine into an exhausted state marked its three pages unavailable with the count attached while Zernio's TikTok stayed available, then the force was reverted.
+- **UI changes this session were not verified by eye, and that is a real gap.** The browser automation could not get any page past its loading state: chunks fetch 200, HMR connects, no console errors, and zero API calls follow - the visible text is server-rendered, so React never hydrated. That is consistent with Chrome starving an occluded window of scheduler work, and it is not something waiting or reloading resolves. The web app has no automated tests of its own (`npm test` runs pytest), so `tsc`, ESLint and `next build` are the only gates a UI change passes. Anything shipped today that touches rendering deserves a look in a real, focused browser window.
+- Two tests were reading the developer's own `.env` and passed or failed depending on who ran them: both assert Buffer refuses a local file with no public URL, which stops being true the moment R2 is configured. `test_buffer_requires_a_public_media_url` and the autopilot preview test now pin `media_hosting.status` instead.
+- The backend reloader had stopped working: edits to the API, and a touch of `main.py`, left a worker from hours earlier still serving, so a change had to be chased by killing the process. A fresh process with identical arguments reloads correctly, which puts the fault in the watch being lost rather than never set up. `scripts/dev.py` now runs the backend with `WATCHFILES_FORCE_POLLING=1`; that is a mitigation, not a root cause.
+- Restarting the backend repeatedly trips `dev.py`'s restart guard (5 in 60s) and takes the whole runner down with it, orphaning the frontend. Worth knowing before reaching for a restart to work around something else.
 
 ## Next recommended action
 
-Take the campaign autopilot through one real end-to-end run (built 2026-08-09,
-never yet posted anything).
+Fix the R2 credentials, then take the campaign autopilot through one real
+end-to-end run. The order matters now: the credentials block the run.
 
-Everything is in place and nothing has actually been sent. The path, in order,
-and each step is where a real problem would surface:
+**The blocker.** The saved R2 settings are in the wrong fields.
+`R2_ACCESS_KEY_ID` holds the account ID - byte-identical to `R2_ACCOUNT_ID` -
+and `R2_SECRET_ACCESS_KEY` holds `https://405e37fc…`, the S3 API endpoint URL.
+Everything on the R2 bucket page is a 32-character hex string or a URL and the
+fields do not say which is which, so this is the mistake the form invites. The
+access check on `/publish` reports it in one line; saving now refuses both
+shapes outright. The replacements come from R2 → API → Manage API tokens, with
+Object Read & Write on the bucket. Until this is fixed, media hosting cannot
+work, and Buffer - which has no upload endpoint and fetches the file when the
+post goes out - cannot publish a local clip at all.
+
+Then the run itself, each step being where a real problem would surface:
 
 1. **Set posting slots** on `/publish`. Autopilot refuses to invent a schedule,
    so with none it posts nothing and says exactly that.
-2. **Fix an engine.** Bundle.social currently answers HTTP 403 and Buffer's
-   credential probe disagrees with its account load; Zernio's key works but has
-   no channels connected. Only Buffer is returning accounts.
+2. **Check the engines.** Bundle.social still answers HTTP 403. Buffer returns
+   three channels (Facebook `Naceto Books`, Instagram and Threads
+   `halcyonbooks.official`) on a measured Free plan. Zernio's key works and now
+   has one TikTok channel, `Tiêu Dùng Thông Minh 24h`.
 3. **Add a destination** on `/campaigns`, activate the campaign, queue a clip
    from the Library and approve it.
 4. **Preview** before switching on. It creates nothing and mints no tracking
@@ -227,11 +274,15 @@ What to watch for, since none of it has met a live engine:
   field they require, but no post has been sent to either.
 - The disclosure and the link are composed per network at post time. The first
   live post is the first time that composition meets a real caption limit.
+- Nothing has ever been out of quota, so the destinations that grey out when an
+  engine is spent have only been seen by forcing the condition, never by
+  reaching it.
 
 Also outstanding, unrelated:
 
 - Three truncated MP4s from 2026-08-05 (`moov atom not found`, 2.5-5.8 MB, still
   on disk) sit permanently in the Library's "Needs attention". Deleting media is
   destructive, so they have been left for the operator to decide on.
-- `C:` was at roughly 4.9 GB free.
+- `C:` is at roughly 4.2 GB free, down from 4.9 GB, and is the best available
+  explanation for the instability described under Validation.
 - Arabic layout on Library and Publish deserves a look from someone who reads it.
