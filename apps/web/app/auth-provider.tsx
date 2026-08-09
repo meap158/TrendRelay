@@ -1,7 +1,7 @@
 "use client";
 
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl } from "../lib/api";
 import { authConfiguration, supabaseBrowserClient } from "../lib/supabase";
@@ -68,8 +68,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /** Bumped to run the local-session probe again after a stalled attempt. */
   const [probeAttempt, setProbeAttempt] = useState(0);
 
+  /**
+   * Whether a probe is in the air.
+   *
+   * A retry aborts whatever is running, so retrying while a probe is still
+   * going replaces an answer that was on its way with one that has to start
+   * over. Doing that in a burst - which is what returning to a window
+   * produces - starves the probe indefinitely, and the recovery below turns
+   * into the reason there is nothing to recover from.
+   */
+  const probeInFlight = useRef(false);
+  /**
+   * When the probe in flight started, by wall clock rather than by timer.
+   *
+   * A frozen tab runs no timers at all, so the abort deadline below can fail to
+   * arrive and leave a probe in flight for as long as the tab is away. Reading
+   * the clock on the way back is what tells a burst of events (suppress) from a
+   * probe that has been stranded (restart) - and without it, refusing to retry
+   * while one is in flight would remove the only escape from exactly that.
+   */
+  const probeStartedAt = useRef(0);
+
   useEffect(() => {
     let replaced = false;
+    probeInFlight.current = true;
+    probeStartedAt.current = Date.now();
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), LOCAL_PROBE_MS);
     fetch(`${apiBaseUrl()}/api/auth/local-session`, {
@@ -87,7 +110,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .catch(() => { if (!replaced) setLocalUser(null); })
       .finally(() => {
         window.clearTimeout(timer);
-        if (!replaced) setLocalCheckComplete(true);
+        if (replaced) return;
+        probeInFlight.current = false;
+        setLocalCheckComplete(true);
       });
     return () => {
       replaced = true;
@@ -105,7 +130,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!loading) return;
     function retry() {
-      if (document.visibilityState !== "hidden") setProbeAttempt((count) => count + 1);
+      if (document.visibilityState === "hidden") return;
+      // Only when nothing fresh is already on its way. Coming back to a window
+      // fires several of these at once, and each retry aborts the probe in
+      // flight, so a burst would cancel the answer over and over. A probe older
+      // than its own deadline is a different case: its abort timer never ran,
+      // which is what a frozen tab does, and that one is worth replacing.
+      if (probeInFlight.current && Date.now() - probeStartedAt.current < LOCAL_PROBE_MS) {
+        return;
+      }
+      setProbeAttempt((count) => count + 1);
     }
     // Three ways of coming back to a stuck tab, all of them real events the
     // browser delivers on time: switching to it, focusing the window, and
