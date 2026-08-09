@@ -203,6 +203,12 @@ def test_zernio_drafts_when_scheduling_is_off(
 
 def test_buffer_requires_a_public_media_url(monkeypatch, media_file: Path, tmp_path: Path) -> None:
     use_provider(monkeypatch, tmp_path, "buffer")
+    # Without this the test reads the developer's own .env: on a machine with R2
+    # configured TrendRelay hosts the file itself and nothing is refused, so the
+    # test passed or failed depending on who ran it.
+    monkeypatch.setattr(
+        publishing.media_hosting, "status", lambda: {"configured": False}
+    )
     with pytest.raises(ValueError, match="public media URL"):
         publishing.preview_publish(request(media_file))
 
