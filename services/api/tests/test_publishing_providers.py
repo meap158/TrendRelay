@@ -295,7 +295,9 @@ def test_connection_status_reports_every_engine_without_exposing_values(
             assert set(field) == {
                 "id", "key", "label", "secret", "required", "help", "configured"
             }
-
+            # The preview exists so a saved key is recognisable, so it must
+            # carry the tail and nothing before it. A mask that leaked the front
+            # of a key would defeat the point of masking at all.
 
 def test_saving_credentials_writes_only_known_keys(monkeypatch, media_file: Path) -> None:
     written: dict[str, str] = {}
@@ -1361,3 +1363,54 @@ def test_boards_are_offered_only_by_an_engine_that_lists_them(
     # Empty means the engine does not offer them, not that the account has none,
     # so the field falls back to being typed rather than claiming it is empty.
     assert publishing.board_options("buffer", "acct") == []
+
+
+def test_the_preview_asks_woopsocial_what_it_would_refuse(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    """The only engine here that will answer, so the only one asked.
+
+    Sent without media: validating the real thing would mean uploading it, and a
+    dry run that uploads is not a dry run. Complaints about the missing media are
+    therefore an artefact of the question and are dropped.
+    """
+    use_provider(monkeypatch, tmp_path, "woopsocial")
+
+    def fake_request(method, path, **kwargs):
+        if path == "/social-accounts":
+            return woop_accounts_payload()
+        if path == "/posts/validate":
+            assert "media" not in kwargs["body"]["content"][0]
+            return {"validationErrors": [
+                {"field": "MEDIA", "message": "Media is required"},
+                {"field": "DESCRIPTION", "message": "Caption is too long"},
+            ]}
+        return {}
+
+    monkeypatch.setattr(publishing, "_woopsocial_request", fake_request)
+    preview = publishing.preview_publish(request(
+        media_file,
+        targets=[publishing.PublishTarget(platform="tiktok", integration_id="w1")],
+    ))
+    assert preview["engine_problems"] == ["DESCRIPTION: Caption is too long"]
+
+
+def test_a_dry_run_survives_the_engine_refusing_to_answer(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    # Checking a little less beats a preview that fails because a validation
+    # call timed out.
+    use_provider(monkeypatch, tmp_path, "woopsocial")
+
+    def fake_request(method, path, **kwargs):
+        if path == "/social-accounts":
+            return woop_accounts_payload()
+        raise RuntimeError("api.woopsocial.com: HTTP 503")
+
+    monkeypatch.setattr(publishing, "_woopsocial_request", fake_request)
+    preview = publishing.preview_publish(request(
+        media_file,
+        targets=[publishing.PublishTarget(platform="tiktok", integration_id="w1")],
+    ))
+    assert preview["status"] == "dry_run"
+    assert preview["engine_problems"] == []

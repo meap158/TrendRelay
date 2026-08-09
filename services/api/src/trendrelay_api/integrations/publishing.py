@@ -1143,6 +1143,44 @@ def _woopsocial_upload(video: Path) -> str:
     return str(media_id)
 
 
+def _woopsocial_validate(request: PublishRequest) -> list[str]:
+    """Ask WoopSocial what it would refuse, without creating or uploading anything.
+
+    The only engine here that offers this. Everything else is checked against our
+    own copy of the rules, which is a copy and therefore drifts.
+
+    Sent without media on purpose. Validating the real thing would mean uploading
+    it first, and a dry run that uploads a file is no longer a dry run - so
+    complaints about missing media are dropped rather than reported, because they
+    are an artefact of the question rather than a problem with the post. What
+    survives is everything that does not need the file: a disconnected account,
+    platform data the network will not take, a caption or title over the limit.
+    """
+    known = _woopsocial_account_platforms()
+    accounts = []
+    for target in request.targets:
+        platform = known.get(target.integration_id)
+        if not platform:
+            return [f"{target.platform}: WoopSocial no longer lists this account."]
+        accounts.append({"platform": platform, "socialAccountId": target.integration_id})
+    payload = _woopsocial_request(
+        "POST",
+        "/posts/validate",
+        body={
+            "content": [{"text": request.caption}],
+            "schedule": {"type": "DRAFT"},
+            "socialAccounts": accounts,
+        },
+        content_type="application/json",
+        timeout=30,
+    ) or {}
+    return [
+        f"{item.get('field', '')}: {item.get('message', '')}".strip(": ")
+        for item in (payload.get("validationErrors") or [])
+        if str(item.get("field") or "").upper() != "MEDIA"
+    ]
+
+
 def _woopsocial_boards(integration_id: str) -> list[dict[str, str]]:
     payload = _woopsocial_request(
         "GET", f"/social-accounts/{quote(integration_id)}/platform-inputs", timeout=30
@@ -2022,6 +2060,17 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
     )
     if uses_local_media:
         approved_video_path(request.video_path)
+    # What the engine itself says, where it will say anything. Tolerated rather
+    # than required: a dry run that fails because a validation call timed out
+    # would be worse than one that checked a little less.
+    engine_problems: list[str] = []
+    for provider_id, part in scoped.items():
+        if provider_id != "woopsocial":
+            continue
+        try:
+            engine_problems.extend(_woopsocial_validate(part))
+        except (RuntimeError, ValueError):
+            continue
     # Every destination across every engine, so the dry run reads as one post
     # rather than one report per engine.
     destinations = [
@@ -2034,6 +2083,9 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
         "status": "dry_run",
         "provider": lead.id,
         "provider_label": lead.label,
+        # Empty means either nothing wrong or nothing asked; the engine list
+        # above says which engines could be asked at all.
+        "engine_problems": engine_problems,
         "engines": [
             {
                 "id": provider_id,
