@@ -86,6 +86,11 @@ def consolidate(accounts: list[dict[str, Any]]) -> list[ConsolidatedPage]:
             "provider_label": account.get("provider_label"),
             "id": account.get("id"),
             "label": account.get("label"),
+            # Carried per route, not per page: a page reachable by two engines
+            # is still reachable when one of them has run out of quota, and the
+            # picker should send it through the other rather than grey it out.
+            "available": account.get("available", True),
+            "unavailable_reason": account.get("unavailable_reason"),
         }
         # A handle-less account is unmergeable and kept that way: its key
         # includes the engine and id, so it can never collide with another.
@@ -115,6 +120,12 @@ def consolidate(accounts: list[dict[str, Any]]) -> list[ConsolidatedPage]:
 
 def page_payload(page: ConsolidatedPage) -> dict[str, Any]:
     """What the picker needs to show one page and post to it exactly once."""
+    # The first route that can actually carry a post. An engine out of quota is
+    # still listed - which engines reach a page is worth seeing - but it stops
+    # being the one chosen by default, so a page with a second route keeps
+    # working without anybody having to notice why.
+    usable = [item for item in page.reachable_by if item.get("available", True)]
+    routes = usable or page.reachable_by
     return {
         "key": page.key,
         "platform": page.platform,
@@ -123,10 +134,16 @@ def page_payload(page: ConsolidatedPage) -> dict[str, Any]:
         "shared": page.shared,
         "engine_count": len(page.reachable_by),
         "reachable_by": page.reachable_by,
+        # Unavailable only when every engine that reaches it has run out. One
+        # exhausted route out of two is not a page you cannot post to.
+        "available": bool(usable),
+        "unavailable_reason": None if usable else page.reachable_by[0].get(
+            "unavailable_reason"
+        ),
         # The engine a post goes through unless the operator picks another. One,
         # never all of them: delivering a consolidated page through every engine
         # that can reach it would publish the same post to the same audience
         # once per engine.
-        "default_provider": page.reachable_by[0]["provider"],
-        "default_integration_id": page.reachable_by[0]["id"],
+        "default_provider": routes[0]["provider"],
+        "default_integration_id": routes[0]["id"],
     }

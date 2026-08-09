@@ -6,11 +6,13 @@ from trendrelay_api.integrations.engine_limits import (
     FREE_PLAN,
     Allowance,
     allowances,
+    exhausted,
     infer_plan,
     parse_rate_limit,
     parse_rate_limit_policy,
     payload,
     plan_payload,
+    spent_note,
 )
 
 
@@ -228,6 +230,60 @@ def test_an_engine_that_reported_nothing_names_no_plan() -> None:
     assert plan_payload(plan) == {
         "name": None, "confidence": "published", "note": plan.note,
     }
+
+
+# --- running out ---------------------------------------------------------------
+
+
+def test_a_spent_daily_allowance_is_what_stops_a_post() -> None:
+    items = allowances(
+        "bundle_social", account_count=1,
+        daily={"posts": {"used": 20, "limit": 20, "remaining": 0}},
+    )
+    spent = exhausted(items)
+    assert spent is not None
+    assert spent.id == "daily_posts"
+    # The numbers, not just the verdict: "out of quota" gives no way to judge
+    # whether to wait or to fix something.
+    assert spent_note(spent) == "Posts today: 20 of 20 used. Resets daily."
+
+
+def test_a_full_account_list_does_not_stop_posting() -> None:
+    """3 of 3 connected accounts is the plan in full use, not a dead engine.
+
+    Blocking on it would switch off every destination at exactly the moment the
+    workspace is using everything it pays for.
+    """
+    items = allowances("buffer", account_count=3)
+    assert by_id(items)["accounts"].remaining == 0
+    assert exhausted(items) is None
+
+
+def test_a_published_figure_can_never_stop_a_publish() -> None:
+    """It is a scrape of a pricing page, and it carries no usage at all.
+
+    A year-old marketing number must not be what refuses to send a post, so the
+    rule is built to exclude it rather than trusted to.
+    """
+    items = allowances("bundle_social", account_count=1)
+    assert by_id(items)["posts_per_month"].confidence == "published"
+    assert exhausted(items) is None
+
+
+def test_a_spent_request_budget_stops_everything() -> None:
+    items = allowances(
+        "buffer", account_count=1, rate_limit={"limit": 100, "remaining": 0})
+    spent = exhausted(items)
+    assert spent is not None and spent.id == "requests"
+    assert "100 of 100 used" in spent_note(spent)
+
+
+def test_room_to_spare_blocks_nothing() -> None:
+    items = allowances(
+        "bundle_social", account_count=1,
+        daily={"posts": {"used": 19, "limit": 20, "remaining": 1}},
+    )
+    assert exhausted(items) is None
 
 
 def test_every_plan_records_where_it_was_read_from() -> None:

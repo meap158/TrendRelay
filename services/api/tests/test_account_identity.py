@@ -84,10 +84,45 @@ def test_an_engine_listing_an_account_twice_is_not_a_second_route() -> None:
         account("buffer", "b1", "instagram", "Halcyon", "halcyonbooks"),
     ])
     assert len(pages) == 1
-    assert pages[0].reachable_by == [{
-        "provider": "buffer", "provider_label": "Buffer", "id": "b1", "label": "Halcyon",
-    }]
+    # One route, not two. Asserted on identity rather than the whole dict, so a
+    # new field on a route does not read as a second engine appearing.
+    assert [(item["provider"], item["id"]) for item in pages[0].reachable_by] == [
+        ("buffer", "b1"),
+    ]
     assert not pages[0].shared
+
+
+def test_a_page_routes_around_the_engine_that_has_run_out() -> None:
+    """Two engines reach this page and one has no quota left.
+
+    Greying the page out would be wrong: the post can still go, through the
+    other engine. The exhausted route stays listed - which engines reach a page
+    is worth seeing - but stops being the one chosen.
+    """
+    spent = account("buffer", "b1", "instagram", "Halcyon", "halcyonbooks")
+    spent["available"] = False
+    spent["unavailable_reason"] = "Buffer has no quota left. Posts today: 20 of 20 used."
+    page = page_payload(consolidate([
+        spent,
+        account("zernio", "z9", "instagram", "Halcyon", "halcyonbooks"),
+    ])[0])
+
+    assert page["available"] is True
+    assert page["default_provider"] == "zernio"
+    assert page["engine_count"] == 2
+
+
+def test_a_page_whose_every_engine_is_spent_says_so_with_the_numbers() -> None:
+    spent = account("buffer", "b1", "instagram", "Halcyon", "halcyonbooks")
+    spent["available"] = False
+    spent["unavailable_reason"] = "Buffer has no quota left. Posts today: 20 of 20 used."
+    page = page_payload(consolidate([spent])[0])
+
+    assert page["available"] is False
+    assert "20 of 20" in page["unavailable_reason"]
+    # Still routable, so selecting it deliberately remains possible rather than
+    # producing a destination with no engine behind it.
+    assert page["default_provider"] == "buffer"
 
 
 def test_the_order_engines_were_read_in_is_preserved() -> None:

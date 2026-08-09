@@ -324,6 +324,42 @@ def allowances(
     return found
 
 
+#: Allowances whose exhaustion stops a post going out.
+#:
+#: Deliberately not "accounts". A workspace at 3 of 3 connected accounts has
+#: used up its room for *more* accounts, not its room to post - blocking on it
+#: would switch off every destination at exactly the moment the plan is fully
+#: in use. Nor "comments", which stops a first comment rather than a post.
+BLOCKING_ALLOWANCES: tuple[str, ...] = ("daily_posts", "requests")
+
+
+def exhausted(items: list[Allowance]) -> Allowance | None:
+    """The allowance that has run out, if one has.
+
+    Only a figure with both a ceiling and a count of what is gone can be
+    exhausted, which rules out the published ones by construction: they are
+    quoted from a pricing page and carry no usage. That is the right outcome -
+    a scrape of a marketing page must never be what stops a publish.
+    """
+    for item in items:
+        if item.id not in BLOCKING_ALLOWANCES or item.confidence == "published":
+            continue
+        if item.limit is not None and item.used is not None and item.remaining == 0:
+            return item
+    return None
+
+
+def spent_note(item: Allowance) -> str:
+    """How much went against the quota, which is the part worth reading.
+
+    "Out of quota" alone gives no way to judge whether to wait an hour or fix
+    something, so the sentence carries the numbers and, where the engine said
+    so, when they come back.
+    """
+    sentence = f"{item.label}: {item.used} of {item.limit} used."
+    return f"{sentence} Resets daily." if "resets daily" in item.note.lower() else sentence
+
+
 def payload(item: Allowance) -> dict[str, Any]:
     return {
         "id": item.id,

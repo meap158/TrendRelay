@@ -1325,6 +1325,7 @@ def discover_all_integrations() -> dict[str, Any]:
                 "reachable": False, "reason": "No key saved for this engine.",
                 "account_count": 0, "channels": [], "allowances": [],
                 "plan": engine_limits.plan_payload(engine_limits.infer_plan(provider_id)),
+                "quota": {"blocked": False, "reason": None, "allowance_id": None},
             })
             continue
         try:
@@ -1346,13 +1347,41 @@ def discover_all_integrations() -> dict[str, Any]:
                     for item in engine_limits.allowances(provider_id, account_count=0)
                 ],
                 "plan": engine_limits.plan_payload(engine_limits.infer_plan(provider_id)),
+                # Unreachable is a different state from out of quota, and the
+                # card already says which. Claiming both would give two reasons
+                # for one silence.
+                "quota": {"blocked": False, "reason": None, "allowance_id": None},
             })
             continue
-        accounts.extend(found)
         measured_daily = (
             bundle_daily_limits(found[0]["id"])
             if provider_id == "bundle_social" and found else None
         )
+        measured = engine_limits.allowances(
+            provider_id,
+            account_count=len(found),
+            rate_limit=(
+                engine_limits.parse_rate_limit(buffer_rate_limit_header())
+                if provider_id == "buffer" else None
+            ),
+            policy=(
+                engine_limits.parse_rate_limit_policy(buffer_rate_limit_policy_header())
+                if provider_id == "buffer" else None
+            ),
+            daily=measured_daily,
+        )
+        # An engine with nothing left cannot deliver, so its accounts stop being
+        # somewhere a post can go. Marked rather than dropped: a destination
+        # that vanishes looks like a disconnected account, and the number that
+        # ran out is the thing worth reading.
+        spent = engine_limits.exhausted(measured)
+        for account in found:
+            account["available"] = spent is None
+            account["unavailable_reason"] = (
+                f"{provider.label} has no quota left. {engine_limits.spent_note(spent)}"
+                if spent else None
+            )
+        accounts.extend(found)
         engines.append({
             "id": provider_id, "label": provider.label,
             "reachable": True, "reason": None, "account_count": len(found),
@@ -1376,26 +1405,14 @@ def discover_all_integrations() -> dict[str, Any]:
                 daily=measured_daily,
                 account_count=len(found),
             )),
-            "allowances": [
-                engine_limits.payload(item)
-                for item in engine_limits.allowances(
-                    provider_id,
-                    account_count=len(found),
-                    rate_limit=(
-                        engine_limits.parse_rate_limit(buffer_rate_limit_header())
-                        if provider_id == "buffer" else None
-                    ),
-                    policy=(
-                        engine_limits.parse_rate_limit_policy(
-                            buffer_rate_limit_policy_header()
-                        ) if provider_id == "buffer" else None
-                    ),
-                    # One account's counter, not a sum: bundle.social meters per
-                    # account, and adding them would invent a total the engine
-                    # does not have.
-                    daily=measured_daily,
-                )
-            ],
+            # One account's counter, not a sum: bundle.social meters per account,
+            # and adding them would invent a total the engine does not have.
+            "allowances": [engine_limits.payload(item) for item in measured],
+            "quota": {
+                "blocked": spent is not None,
+                "reason": engine_limits.spent_note(spent) if spent else None,
+                "allowance_id": spent.id if spent else None,
+            },
         })
     ordered = sorted(
         accounts,
