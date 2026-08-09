@@ -650,8 +650,11 @@ def test_a_network_only_offers_the_types_it_can_actually_publish() -> None:
     assert [kind.id for kind in publishing.post_types_for("instagram")] == [
         "reel", "story", "post",
     ]
-    # TikTok has no Story surface in any of these APIs, so there is no choice.
-    assert [kind.id for kind in publishing.post_types_for("tiktok")] == ["video"]
+    # TikTok has no Story surface in any of these APIs, but it does have photo
+    # carousels - offered by the platform here and refused per engine, since
+    # only some of them have a contract for one.
+    assert [kind.id for kind in publishing.post_types_for("tiktok")] == ["video", "photo"]
+    assert publishing.resolve_post_type("tiktok", None).id == "video"
     assert [kind.id for kind in publishing.post_types_for("linkedin")] == ["post"]
 
 
@@ -1491,3 +1494,145 @@ def test_revealing_a_saved_credential_returns_it(monkeypatch, media_file: Path) 
 def test_revealing_an_unset_credential_says_so(monkeypatch, media_file: Path) -> None:
     with pytest.raises(ValueError, match="no saved value"):
         publishing.reveal_credential("WOOPSOCIAL_PROJECT_ID")
+
+
+# --- TikTok photo carousels ---------------------------------------------------
+
+
+@pytest.fixture
+def carousel_images(media_file: Path, tmp_path: Path) -> list[str]:
+    paths = []
+    for index in range(3):
+        image = tmp_path / f"frame{index}.jpg"
+        image.write_bytes(b"jpeg-bytes")
+        paths.append(str(image))
+    return paths
+
+
+def carousel(media_file: Path, images: list[str], **overrides):
+    return request(
+        media_file,
+        image_paths=images,
+        targets=[publishing.PublishTarget(
+            platform="tiktok", integration_id="account-1", post_type="photo",
+        )],
+        **overrides,
+    )
+
+
+def test_zernio_posts_a_carousel_as_images_not_a_video(
+    monkeypatch, media_file: Path, tmp_path: Path, carousel_images: list[str]
+) -> None:
+    """A carousel is a different post, not a video with a flag set.
+
+    Its media is images, its settings say `media_type: photo`, and the caption
+    moves to `description` because `content` becomes a 90-character title.
+    """
+    use_provider(monkeypatch, tmp_path, "zernio")
+    sent: dict[str, object] = {}
+    uploaded: list[str] = []
+
+    def fake_request(method, path, **kwargs):
+        if path == "/media/presign":
+            name = kwargs["body"]["filename"]
+            uploaded.append(name)
+            assert kwargs["body"]["contentType"] == "image/jpeg"
+            return {
+                "uploadUrl": f"https://upload.example.com/{name}",
+                "publicUrl": f"https://cdn.example.com/{name}",
+            }
+        if path == "/posts":
+            sent["body"] = kwargs["body"]
+            return {"post": {"_id": "zer_photo"}}
+        return {}
+
+    monkeypatch.setattr(publishing, "_zernio_request", fake_request)
+    monkeypatch.setattr(publishing, "_http", lambda *args, **kwargs: None)
+
+    publishing._execute_publish(
+        carousel(media_file, carousel_images, confirm_external_action=True)
+    )
+    body = sent["body"]
+
+    assert [item["type"] for item in body["mediaItems"]] == ["image"] * 3
+    # Swipe order is the post: a carousel opens on its first image.
+    assert uploaded == ["frame0.jpg", "frame1.jpg", "frame2.jpg"]
+    assert body["tiktokSettings"]["media_type"] == "photo"
+    assert body["description"] == "Launch clip"
+    assert len(body["content"]) <= 90
+    # Duet and stitch are video settings and have no meaning on a carousel.
+    assert "allow_duet" not in body["tiktokSettings"]
+    assert "allow_stitch" not in body["tiktokSettings"]
+    assert body["tiktokSettings"]["express_consent_given"] is True
+
+
+def test_woopsocial_posts_a_carousel_as_one_post_of_many_media(
+    monkeypatch, media_file: Path, tmp_path: Path, carousel_images: list[str]
+) -> None:
+    use_provider(monkeypatch, tmp_path, "woopsocial")
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        if path == "/projects":
+            return [{"id": "proj_1"}]
+        if path.startswith("/media"):
+            return {"mediaId": f"med_{len(sent)}"}
+        if path == "/social-accounts":
+            return [{"id": "account-1", "platform": "TIKTOK",
+                     "username": "brand", "status": "CONNECTED"}]
+        if path == "/posts":
+            sent["body"] = kwargs["body"]
+            return {"id": "p"}
+        return {}
+
+    monkeypatch.setattr(publishing, "_woopsocial_request", fake_request)
+    publishing._execute_publish(
+        carousel(media_file, carousel_images, confirm_external_action=True)
+    )
+    body = sent["body"]
+
+    assert len(body["content"][0]["media"]) == 3
+    assert body["socialAccounts"][0]["postType"] == "PHOTO"
+
+
+def test_an_engine_without_a_carousel_contract_refuses_by_name(
+    monkeypatch, media_file: Path, tmp_path: Path, carousel_images: list[str]
+) -> None:
+    """Refused before anything is uploaded, rather than discovered mid-publish.
+
+    Buffer has no documented contract for one here, and handing it a carousel
+    would either be rejected by the engine or quietly posted as something else.
+    """
+    use_provider(monkeypatch, tmp_path, "buffer")
+    with pytest.raises(ValueError, match="cannot post a TikTok photo carousel"):
+        publishing.preview_publish(carousel(media_file, carousel_images))
+
+
+def test_a_carousel_with_no_images_is_refused(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    use_provider(monkeypatch, tmp_path, "zernio")
+    with pytest.raises(ValueError, match="at least one image"):
+        publishing.preview_publish(carousel(media_file, []))
+
+
+def test_carousel_images_obey_the_media_root(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    # The same boundary the video path has: without it an authenticated LAN
+    # client could name any file on the server and have it published. A real
+    # file outside the root, because a missing one fails on existence first and
+    # would pass this test without the boundary existing at all.
+    outside = tmp_path.parent / "outside-the-root.png"
+    outside.write_bytes(b"png-bytes")
+    with pytest.raises(PermissionError, match="approved media root"):
+        publishing.approved_image_paths([str(outside)])
+
+
+def test_a_carousel_refuses_a_file_that_is_not_an_image(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    stray = tmp_path / "notes.txt"
+    stray.write_bytes(b"x")
+    with pytest.raises(ValueError, match="existing image"):
+        publishing.approved_image_paths([str(stray)])

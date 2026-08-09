@@ -174,6 +174,11 @@ class ProviderDefinition:
     #: post can carry destinations on several engines at once.
     ingests_media_url: bool
     media_note: str
+    #: Platforms this engine can post a photo carousel to, rather than a video.
+    #: Empty where the engine has no documented contract for one: offering the
+    #: choice and discovering mid-publish that it cannot is worse than not
+    #: offering it, because the post is already half-made by then.
+    photo_carousel_platforms: tuple[str, ...] = ()
 
 
 PROVIDERS: dict[str, ProviderDefinition] = {
@@ -247,6 +252,7 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         ),
         requires_public_media=False,
         ingests_media_url=True,
+        photo_carousel_platforms=("tiktok",),
         media_note="The approved local MP4 is uploaded through a Zernio presigned URL.",
     ),
     "buffer": ProviderDefinition(
@@ -336,6 +342,7 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         # engine from reading the local file, and saying otherwise would fail the
         # post at upload time.
         ingests_media_url=False,
+        photo_carousel_platforms=("tiktok",),
         media_note=(
             "The approved local MP4 is uploaded to WoopSocial before the post is "
             "created. Single-request uploads are capped at 100 MB."
@@ -391,7 +398,14 @@ POST_TYPES: dict[str, tuple[PostType, ...]] = {
         PostType("video", "Video", "A standard upload with no Shorts treatment."),
     ),
     "threads": (PostType("post", "Post", "A thread with the video attached."),),
-    "tiktok": (PostType("video", "Video", "TikTok publishes video posts only."),),
+    "tiktok": (
+        PostType("video", "Video", "A single video, which is what TikTok is mostly used for."),
+        PostType(
+            "photo",
+            "Photo carousel",
+            "Up to 35 images, swiped through. Not every engine can post one.",
+        ),
+    ),
 }
 # Buffer accepts a first comment on exactly these three networks; its schema
 # has no such field for the others, so offering it there would be a promise the
@@ -416,6 +430,15 @@ YOUTUBE_CATEGORIES: dict[str, str] = {
     "27": "Education", "28": "Science & Technology", "29": "Nonprofits & Activism",
 }
 DEFAULT_YOUTUBE_CATEGORY = "22"
+
+#: What a TikTok photo carousel may be built from. Deliberately short: these are
+#: uploaded to a network that will reject anything else, and an unfamiliar
+#: extension is better refused here than three minutes into a publish.
+IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".webp"})
+
+#: TikTok's own ceiling on a photo carousel.
+MAX_CAROUSEL_IMAGES = 35
+
 
 DEFAULT_POST_TYPE = PostType("post", "Post", "A standard post with the video attached.")
 
@@ -464,6 +487,11 @@ class PublishTarget(BaseModel):
 class PublishRequest(BaseModel):
     workspace_id: str = Field(min_length=1, max_length=128)
     video_path: str = Field(min_length=1, max_length=1000)
+    #: A TikTok photo carousel's images, in swipe order. Empty for a video post,
+    #: which is still what almost every post here is - so `video_path` stays
+    #: required rather than becoming one of two optional media fields that a
+    #: caller has to know to pick between.
+    image_paths: list[str] = Field(default_factory=list, max_length=MAX_CAROUSEL_IMAGES)
     caption: str = Field(min_length=1, max_length=5000)
     title: str | None = Field(default=None, max_length=200)
     date: datetime
@@ -665,14 +693,20 @@ def _error_message(url: str, error: urllib.error.HTTPError) -> str:
     return f"{host}: {message}" + (f" {hint}" if hint else "")
 
 
-def approved_video_path(video_path: str) -> Path:
-    candidate = Path(video_path)
+def _approved_media_path(path: str, *, suffixes: frozenset[str], described: str) -> Path:
+    """Resolve one operator-supplied file inside an approved media root.
+
+    The root check is the security boundary and applies to every kind of media:
+    without it an authenticated LAN client could name any file on the server and
+    have it published.
+    """
+    candidate = Path(path)
     if not candidate.is_absolute():
         candidate = PROJECT_ROOT / candidate
     try:
         resolved = candidate.resolve(strict=True)
     except OSError as error:
-        raise ValueError("Publishing media must be an existing MP4 file.") from error
+        raise ValueError(f"Publishing media must be an existing {described}.") from error
     configured_roots = get_settings().publishing_media_root_list
     roots = [
         (Path(root) if Path(root).is_absolute() else PROJECT_ROOT / root).resolve()
@@ -682,9 +716,30 @@ def approved_video_path(video_path: str) -> Path:
         raise PermissionError(
             "Publishing media must be inside an approved media root: " + ", ".join(configured_roots)
         )
-    if resolved.suffix.lower() != ".mp4" or not resolved.is_file():
-        raise ValueError("Publishing media must be an existing MP4 file.")
+    if resolved.suffix.lower() not in suffixes or not resolved.is_file():
+        raise ValueError(f"Publishing media must be an existing {described}.")
     return resolved
+
+
+def approved_video_path(video_path: str) -> Path:
+    return _approved_media_path(video_path, suffixes=frozenset({".mp4"}), described="MP4 file")
+
+
+def approved_image_paths(image_paths: list[str]) -> list[Path]:
+    """The carousel's images, in the order they will be swiped through.
+
+    Order is content: a carousel opens on its first image, so re-sorting these
+    would change the post. They are resolved as a list rather than a set for
+    that reason, and duplicates are left alone because repeating a frame is a
+    legitimate thing to do.
+    """
+    return [
+        _approved_media_path(
+            path, suffixes=IMAGE_SUFFIXES,
+            described="image (" + ", ".join(sorted(IMAGE_SUFFIXES)) + ")",
+        )
+        for path in image_paths
+    ]
 
 
 def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> None:
@@ -697,7 +752,23 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
     for target in request.targets:
         # Resolving raises if the network cannot accept the requested type, so a
         # bad choice is refused here rather than by the engine mid-delivery.
-        resolve_post_type(target.platform, target.post_type)
+        kind = resolve_post_type(target.platform, target.post_type)
+        if kind.id != "photo":
+            continue
+        # A carousel is a different post, not a different setting: the media is
+        # images rather than a video, and an engine without a contract for one
+        # would otherwise be handed a video and asked to make a gallery of it.
+        if target.platform not in provider.photo_carousel_platforms:
+            raise ValueError(
+                f"{provider.label} cannot post a "
+                f"{PLATFORM_LABELS[target.platform]} photo carousel. "
+                "Deliver this destination through another engine, or post a video."
+            )
+        if not request.image_paths:
+            raise ValueError(
+                "A photo carousel needs at least one image. Choose them from the "
+                "Library, or switch the destination back to a video."
+            )
 
     # Length is checked before anything is uploaded. The alternative the code
     # used to take was to truncate a title to fit, which published something
@@ -777,6 +848,16 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
             "Pinterest needs a destination board. Choose one from the account, or "
             "paste the board ID."
         )
+
+
+def _is_photo_post(request: PublishRequest) -> bool:
+    """Whether this request is a carousel rather than a video.
+
+    Asked of the targets rather than of `image_paths` being non-empty: images
+    can be attached and then the destination switched back to a video, and the
+    chosen post type is what the operator actually decided.
+    """
+    return any(target.kind.id == "photo" for target in request.targets)
 
 
 def _post_title(request: PublishRequest) -> str:
@@ -983,12 +1064,29 @@ def _zernio_request(
     return _http(method, f"{ZERNIO_API}{path}", headers=headers, **kwargs)
 
 
-def _zernio_upload(video: Path) -> str:
-    size = video.stat().st_size
+#: What each media suffix is called on the wire. Presign and PUT must agree, and
+#: a mismatch is rejected by the object store rather than by the API, which
+#: makes it an obscure failure a long way from its cause.
+CONTENT_TYPES: dict[str, str] = {
+    ".mp4": "video/mp4",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
+
+
+def content_type_for(path: Path) -> str:
+    return CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream")
+
+
+def _zernio_upload(media: Path) -> str:
+    content_type = content_type_for(media)
+    size = media.stat().st_size
     presigned = _zernio_request(
         "POST",
         "/media/presign",
-        body={"filename": video.name, "contentType": "video/mp4", "size": size},
+        body={"filename": media.name, "contentType": content_type, "size": size},
         content_type="application/json",
         timeout=60,
     ) or {}
@@ -1000,8 +1098,8 @@ def _zernio_upload(video: Path) -> str:
         "PUT",
         upload_url,
         headers={},
-        data=video.read_bytes(),
-        content_type="video/mp4",
+        data=media.read_bytes(),
+        content_type=content_type,
         timeout=900,
         parse_json=False,
     )
@@ -1011,17 +1109,35 @@ def _zernio_upload(video: Path) -> str:
 def _zernio_publish(
     request: PublishRequest, video: Path | None, request_id: str | None = None
 ) -> dict[str, Any]:
-    media_url = request.media_url
-    if not media_url:
-        if video is None:
-            raise ValueError("Zernio needs either an approved local MP4 or a public media URL.")
-        media_url = _zernio_upload(video)
+    carousel = _is_photo_post(request)
+    if carousel:
+        # Every image, in swipe order, each presigned and put separately. The
+        # order is the post, so the uploads are not parallelised into whatever
+        # sequence finishes first.
+        media_items = [
+            {"type": "image", "url": _zernio_upload(image)}
+            for image in approved_image_paths(request.image_paths)
+        ]
+        media_url = media_items[0]["url"]
+    else:
+        media_url = request.media_url
+        if not media_url:
+            if video is None:
+                raise ValueError(
+                    "Zernio needs either an approved local MP4 or a public media URL."
+                )
+            media_url = _zernio_upload(video)
+        media_items = [{"type": "video", "url": media_url}]
     post: dict[str, Any] = {
-        "content": request.caption,
-        "mediaItems": [{"type": "video", "url": media_url}],
+        # A photo post reads `content` as a 90-character title and takes the real
+        # caption from `description`; a video post has no description at all.
+        "content": (_post_title(request)[:90] if carousel else request.caption),
+        "mediaItems": media_items,
         "platforms": [],
         "timezone": "UTC",
     }
+    if carousel:
+        post["description"] = request.caption[:4000]
     if request.title:
         post["title"] = request.title
     if request.mode == "now":
@@ -1049,17 +1165,24 @@ def _zernio_publish(
             entry["platformSpecificData"] = specific
         post["platforms"].append(entry)
     if any(target.platform == "tiktok" for target in request.targets):
-        post["tiktokSettings"] = {
+        settings: dict[str, Any] = {
             "privacy_level": (
                 "PUBLIC_TO_EVERYONE" if request.visibility == "public" else "SELF_ONLY"
             ),
             "allow_comment": True,
-            "allow_duet": True,
-            "allow_stitch": True,
             "content_preview_confirmed": True,
             "express_consent_given": True,
-            "video_made_with_ai": request.made_with_ai,
         }
+        if carousel:
+            # Duet and stitch are video settings and are not sent for a
+            # carousel; `media_type` is what makes it one.
+            settings["media_type"] = "photo"
+            settings["photo_cover_index"] = 0
+        else:
+            settings["allow_duet"] = True
+            settings["allow_stitch"] = True
+            settings["video_made_with_ai"] = request.made_with_ai
+        post["tiktokSettings"] = settings
     result = _zernio_request(
         "POST",
         "/posts",
@@ -1233,9 +1356,18 @@ _WOOPSOCIAL_POST_TYPES: dict[str, dict[str, str]] = {
 
 
 def _woopsocial_publish(request: PublishRequest, video: Path | None) -> dict[str, Any]:
-    if video is None:
-        raise ValueError("WoopSocial needs an approved local MP4 to upload.")
-    media_id = _woopsocial_upload(video)
+    carousel = _is_photo_post(request)
+    if carousel:
+        # In swipe order, one upload each: the media array is the carousel.
+        media_ids = [
+            _woopsocial_upload(image)
+            for image in approved_image_paths(request.image_paths)
+        ]
+    else:
+        if video is None:
+            raise ValueError("WoopSocial needs an approved local MP4 to upload.")
+        media_ids = [_woopsocial_upload(video)]
+    media_id = media_ids[0]
     known = _woopsocial_account_platforms()
 
     if request.mode == "now":
@@ -1260,7 +1392,7 @@ def _woopsocial_publish(request: PublishRequest, video: Path | None) -> dict[str
         if platform in {"INSTAGRAM", "FACEBOOK"}:
             entry["postType"] = _WOOPSOCIAL_POST_TYPES[target.platform][target.kind.id]
         elif platform == "TIKTOK":
-            entry["postType"] = "VIDEO"
+            entry["postType"] = "PHOTO" if carousel else "VIDEO"
             entry["privacyLevel"] = (
                 "PUBLIC_TO_EVERYONE" if request.visibility == "public" else "SELF_ONLY"
             )
@@ -1281,7 +1413,9 @@ def _woopsocial_publish(request: PublishRequest, video: Path | None) -> dict[str
         body={
             "content": [{
                 "text": request.caption,
-                "media": [{"type": "MEDIA_LIBRARY", "mediaId": media_id}],
+                "media": [
+                    {"type": "MEDIA_LIBRARY", "mediaId": item} for item in media_ids
+                ],
             }],
             "schedule": schedule,
             "socialAccounts": accounts,
