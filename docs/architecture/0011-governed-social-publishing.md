@@ -8,17 +8,22 @@ Accepted. Revised to replace the self-hosted Postiz service with pluggable hoste
 
 TrendRelay exposes short-video publishing through an authenticated, workspace-scoped API and `/publish` browser screen. Editors may generate offline previews. Only owners and approvers may discover connected accounts, change engines, save engine credentials, or submit remote work, and every provider-facing request requires an explicit external-action confirmation.
 
-Publishing targets one of three hosted engines, selected by `PUBLISHING_PROVIDER`:
+Publishing targets four hosted engines. `PUBLISHING_PROVIDER` names the default, but a single post may address destinations on several at once, chosen per account rather than per network:
 
 | Engine | Auth | Media | Notes |
 | --- | --- | --- | --- |
-| `bundle_social` | `x-api-key` plus a team ID | Uploads the reviewed local MP4 | Multi-tenant white-label engine; verbose platform errors |
-| `zernio` | Static `Authorization: Bearer sk_…` | Presigned `PUT`, then a public URL | Single-tenant; scheduling, drafts, and immediate publishing share one endpoint |
+| `bundle_social` | `x-api-key` plus a team ID | Uploads the reviewed local MP4, or ingests a URL | Multi-tenant white-label engine; verbose platform errors |
+| `zernio` | Static `Authorization: Bearer sk_…` | Presigned `PUT`, or ingests a URL | Single-tenant; scheduling, drafts, and immediate publishing share one endpoint |
 | `buffer` | `Authorization: Bearer …` over GraphQL | None — the caller supplies a public HTTPS URL | Queue semantics; one mutation per channel |
+| `woopsocial` | `Authorization: Bearer …` | Multipart upload only, capped at 100 MB per request | Draft/schedule/publish-now are native; reports delivery per destination; the only engine that will validate a post before it exists |
 
-An engine declares the platforms it publishes to, and a request naming an unsupported platform is rejected before any network call. Because the engines disagree about media, `PublishRequest` carries both an approved local `video_path` and an optional public `media_url`; Buffer requires the URL, Zernio prefers it and otherwise uploads, and Bundle.social always uploads the reviewed local file.
+An engine declares the platforms it publishes to, and a request naming an unsupported platform is rejected before any network call.
 
-Credentials are operator-supplied through the Publish screen. The API writes them to the project's local `.env` from a loopback-only, role-gated, explicitly confirmed endpoint, then clears the cached settings. Only fixed, allow-listed keys may be written. Stored values are never returned: the API reports configured booleans and the environment-variable name.
+Because the engines disagree about media, `PublishRequest` carries both an approved local `video_path` and an optional public `media_url`, and each engine declares two separate capabilities rather than one. `requires_public_media` means it cannot accept an upload at all; `ingests_media_url` means it can fetch a URL instead of being handed the file. The pair matters because one post spans several engines: a URL supplied so Buffer can publish must not excuse WoopSocial, which has no endpoint that takes a URL, from reading the local file.
+
+Credentials are operator-supplied through the Publish screen. The API writes them to the project's local `.env` from a loopback-only, role-gated, explicitly confirmed endpoint, then clears the cached settings. Only fixed, allow-listed keys may be written.
+
+Stored values are exposed in two deliberate shapes, which supersedes the earlier rule that they were never returned. Status payloads carry a preview masked to the last four characters — enough to recognise which key is in place, never enough to use, and a value too short to mask keeps none of itself. A separate endpoint returns one value in full, gated exactly as a write is and restricted to the keys these screens can already write, so it can never become "read any environment variable". The rule changed because a row of empty boxes reads as "nothing saved": five R2 settings were stored with the account ID in the access-key field, and nothing on screen could distinguish them.
 
 Submitted operations use the shared SQL durable-job store with kind `social_publish`, and the resolved engine is frozen into the job payload at creation. Workers claim an expiring lease before calling the engine. The retry budget is one because a timeout after upload or post creation has an uncertain remote outcome; operators must inspect the engine rather than retry blindly.
 
