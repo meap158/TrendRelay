@@ -284,6 +284,11 @@ def test_the_preview_reports_what_an_engine_would_refuse(workspace, tmp_path) ->
     original = publishing.get_settings
     publishing.get_settings = lambda: SimpleNamespace(
         publishing_media_root_list=[str(tmp_path)], publishing_provider="zernio")
+    # Buffer only needs a public URL when TrendRelay cannot supply one itself.
+    # Without pinning this the test reads the developer's own .env and passes or
+    # fails depending on whether they happen to have object storage configured.
+    original_hosting = publishing.media_hosting.status
+    publishing.media_hosting.status = lambda: {"configured": False}
     try:
         # X takes 280 characters. The disclosure leads every caption, so a body
         # that would have fit alone no longer does - exactly the arithmetic an
@@ -305,6 +310,7 @@ def test_the_preview_reports_what_an_engine_would_refuse(workspace, tmp_path) ->
         assert _would_be_accepted(pilot, planned("Short and fine."), uploads) is None
     finally:
         publishing.get_settings = original
+        publishing.media_hosting.status = original_hosting
 
 
 def test_the_preview_carries_a_verdict_for_every_post(workspace) -> None:
