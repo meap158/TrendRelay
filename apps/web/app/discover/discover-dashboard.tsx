@@ -212,7 +212,7 @@ function statusDot(ready: boolean): React.CSSProperties {
     width: "8px",
     height: "8px",
     borderRadius: "50%",
-    background: ready ? "#34a853" : "#ea4335",
+    background: ready ? "var(--green)" : "var(--red)",
     marginRight: "6px",
   };
 }
@@ -221,7 +221,7 @@ function barTrack(): React.CSSProperties {
   return {
     height: "6px",
     borderRadius: "3px",
-    background: "#f1f3f4",
+    background: "var(--panel-raised)",
     overflow: "hidden",
     position: "relative",
     flex: 1,
@@ -246,15 +246,15 @@ function jobDot(status: string): React.CSSProperties {
     borderRadius: "50%",
     marginRight: "10px",
     background:
-      status === "succeeded" ? "#34a853" : status === "failed" ? "#ea4335" : "#fbbc04",
+      status === "succeeded" ? "var(--green)" : status === "failed" ? "var(--red)" : "var(--amber)",
   };
 }
 
 const S: Record<string, React.CSSProperties> = {
   page: {
     fontFamily: "'Google Sans', 'Segoe UI', system-ui, -apple-system, sans-serif",
-    background: "#fff",
-    color: "#202124",
+    background: "var(--panel)",
+    color: "var(--text)",
     minHeight: "100vh",
   },
   hero: {
@@ -269,12 +269,12 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: "42px",
     fontWeight: 400,
     letterSpacing: "-0.5px",
-    color: "#202124",
+    color: "var(--text)",
     margin: "0 0 8px",
   },
   tagline: {
     fontSize: "15px",
-    color: "#5f6368",
+    color: "var(--muted)",
     margin: "0 0 36px",
     fontWeight: 400,
   },
@@ -283,8 +283,8 @@ const S: Record<string, React.CSSProperties> = {
     alignItems: "center",
     width: "100%",
     maxWidth: "584px",
-    background: "#fff",
-    border: "1px solid #dfe1e5",
+    background: "var(--panel)",
+    border: "1px solid var(--line-strong)",
     borderRadius: "24px",
     padding: "6px 8px 6px 16px",
     boxShadow: "0 1px 6px rgba(32,33,36,0.08)",
@@ -297,7 +297,7 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: "16px",
     padding: "10px 8px",
     background: "transparent",
-    color: "#202124",
+    color: "var(--text)",
     fontFamily: "inherit",
   },
   tiktokHead: {
@@ -314,34 +314,34 @@ const S: Record<string, React.CSSProperties> = {
     flexWrap: "wrap" as const,
   },
   tiktokSelect: {
-    border: "1px solid #dadce0",
+    border: "1px solid var(--line-strong)",
     borderRadius: "16px",
     padding: "6px 12px",
     fontSize: "12px",
-    background: "#fff",
-    color: "#3c4043",
+    background: "var(--panel)",
+    color: "var(--text)",
     fontFamily: "inherit",
     cursor: "pointer",
   },
   tiktokNote: {
     margin: "0 0 12px",
     padding: "8px 12px",
-    borderLeft: "3px solid #f5c33b",
-    background: "#fffdf5",
-    color: "#5f6368",
+    borderLeft: "3px solid var(--amber)",
+    background: "var(--panel)df5",
+    color: "var(--muted)",
     fontSize: "12px",
     lineHeight: 1.5,
   },
   // --- Douyin board, gallery view -----------------------------------------
   // A picture is what makes a trending term legible at a glance; the ranked
   // list stays available for reading many of them quickly.
-  boardViewToggle: { display: "flex", gap: 2, padding: 2, borderRadius: 999, background: "#eef0f3" } as const,
+  boardViewToggle: { display: "flex", gap: 2, padding: 2, borderRadius: 999, background: "var(--panel-raised)" } as const,
   boardViewButton: {
     minHeight: 24, padding: "3px 10px", border: 0, borderRadius: 999,
-    background: "transparent", color: "#606770", font: "inherit", fontSize: 11,
+    background: "transparent", color: "var(--muted)", font: "inherit", fontSize: 11,
     fontWeight: 600, cursor: "pointer",
   } as const,
-  boardViewButtonOn: { background: "#ffffff", color: "#1c2b33", boxShadow: "0 1px 2px rgb(28 43 51 / 18%)" } as const,
+  boardViewButtonOn: { background: "var(--panel)", color: "var(--text)", boxShadow: "0 1px 2px rgb(28 43 51 / 18%)" } as const,
   boardGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
@@ -350,36 +350,36 @@ const S: Record<string, React.CSSProperties> = {
   } as const,
   boardCard: {
     display: "grid", gridTemplateRows: "auto 1fr", overflow: "hidden",
-    border: "1px solid #cbd2d9", borderRadius: 8, background: "#ffffff",
+    border: "1px solid var(--line)", borderRadius: 8, background: "var(--panel)",
   } as const,
   boardThumb: {
-    position: "relative", aspectRatio: "3 / 4", overflow: "hidden", background: "#eef0f3",
+    position: "relative", aspectRatio: "3 / 4", overflow: "hidden", background: "var(--panel-raised)",
   } as const,
   boardImage: { width: "100%", height: "100%", objectFit: "cover", display: "block" } as const,
   boardNoImage: {
     position: "absolute", inset: 0, display: "grid", placeItems: "center",
-    color: "#98a2ad", fontSize: 11,
+    color: "var(--muted)", fontSize: 11,
   } as const,
   boardRank: {
     position: "absolute", top: 6, left: 6, display: "grid", placeItems: "center",
     minWidth: 20, height: 20, padding: "0 5px", borderRadius: 999,
-    background: "rgb(0 0 0 / 62%)", color: "#ffffff", fontSize: 10, fontWeight: 700,
+    background: "rgb(0 0 0 / 62%)", color: "var(--panel)", fontSize: 10, fontWeight: 700,
   } as const,
   boardBody: { display: "grid", alignContent: "start", gap: 4, padding: "8px 9px 10px" } as const,
   boardTerm: {
     display: "-webkit-box", overflow: "hidden", WebkitBoxOrient: "vertical",
     WebkitLineClamp: 2, fontSize: 12, fontWeight: 600, lineHeight: 1.35,
-    color: "#1c2b33", textDecoration: "none",
+    color: "var(--text)", textDecoration: "none",
   } as const,
   // The list already sizes its own name; this only makes it read as a link.
   boardTermLink: {
-    overflow: "hidden", color: "#1c2b33", fontSize: 13, fontWeight: 600,
+    overflow: "hidden", color: "var(--text)", fontSize: 13, fontWeight: 600,
     textDecoration: "none", textOverflow: "ellipsis", whiteSpace: "nowrap",
   } as const,
-  boardMeta: { color: "#606770", fontSize: 10 } as const,
+  boardMeta: { color: "var(--muted)", fontSize: 10 } as const,
   boardAction: {
     justifySelf: "start", marginTop: 2, borderRadius: 4, padding: "3px 8px",
-    background: "#eef2fb", color: "#385898", fontSize: 11, fontWeight: 600,
+    background: "#eef2fb", color: "var(--link)", fontSize: 11, fontWeight: 600,
     textDecoration: "none",
   } as const,
   // Taking a topic and looking at one sit together, with the download given the
@@ -387,27 +387,27 @@ const S: Record<string, React.CSSProperties> = {
   boardActions: { display: "flex", alignItems: "center", gap: 6, marginTop: 2 } as const,
   boardDownload: {
     display: "inline-flex", alignItems: "center", gap: 4, border: 0,
-    borderRadius: 4, padding: "4px 9px", background: "#1a73e8", color: "#fff",
+    borderRadius: 4, padding: "4px 9px", background: "var(--link)", color: "var(--panel)",
     font: "inherit", fontSize: 11, fontWeight: 600, cursor: "pointer",
     whiteSpace: "nowrap",
   } as const,
   topicCountLabel: {
     display: "inline-flex", alignItems: "center", gap: 5,
-    color: "#606770", fontSize: 11, whiteSpace: "nowrap",
+    color: "var(--muted)", fontSize: 11, whiteSpace: "nowrap",
   } as const,
   topicCountSelect: {
-    borderRadius: 6, border: "1px solid #dadce0", padding: "3px 4px",
-    background: "#fff", color: "#1c2b33", font: "inherit", fontSize: 11,
+    borderRadius: 6, border: "1px solid var(--line-strong)", padding: "3px 4px",
+    background: "var(--panel)", color: "var(--text)", font: "inherit", fontSize: 11,
   } as const,
   // The same note frame as a failure, turned green. A queued download and a
   // refused one land in the same place, so the colour is what tells them apart.
-  topicNoteGood: { borderLeftColor: "#34a853", background: "#f4faf5" } as const,
-  topicNoteLink: { color: "#1a73e8", fontWeight: 600 } as const,
+  topicNoteGood: { borderLeftColor: "var(--green)", background: "#f4faf5" } as const,
+  topicNoteLink: { color: "var(--link)", fontWeight: 600 } as const,
   tiktokList: {
     display: "grid",
     gap: "1px",
-    background: "#e8eaed",
-    border: "1px solid #e8eaed",
+    background: "var(--line)",
+    border: "1px solid var(--line)",
     borderRadius: "12px",
     overflow: "hidden",
   },
@@ -417,10 +417,10 @@ const S: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: "12px",
     padding: "12px 16px",
-    background: "#fff",
+    background: "var(--panel)",
   },
   tiktokRank: {
-    color: "#80868b",
+    color: "var(--muted)",
     fontSize: "12px",
     fontVariantNumeric: "tabular-nums" as const,
     textAlign: "center" as const,
@@ -434,7 +434,7 @@ const S: Record<string, React.CSSProperties> = {
   },
   tiktokName: {
     fontSize: "14px",
-    color: "#202124",
+    color: "var(--text)",
     fontWeight: 500,
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -443,15 +443,15 @@ const S: Record<string, React.CSSProperties> = {
   },
   tiktokTag: {
     fontSize: "11px",
-    color: "#5f6368",
-    background: "#f1f3f4",
+    color: "var(--muted)",
+    background: "var(--panel-raised)",
     borderRadius: "10px",
     padding: "2px 8px",
   },
   tiktokMetrics: {
     display: "flex",
     gap: "14px",
-    color: "#5f6368",
+    color: "var(--muted)",
     fontSize: "12px",
     whiteSpace: "nowrap" as const,
   },
@@ -459,10 +459,10 @@ const S: Record<string, React.CSSProperties> = {
     fontVariantNumeric: "tabular-nums" as const,
   },
   tiktokExplore: {
-    border: "1px solid #dadce0",
+    border: "1px solid var(--line-strong)",
     borderRadius: "14px",
-    background: "#fff",
-    color: "#3c4043",
+    background: "var(--panel)",
+    color: "var(--text)",
     fontSize: "11px",
     fontFamily: "inherit",
     padding: "4px 10px",
@@ -470,7 +470,7 @@ const S: Record<string, React.CSSProperties> = {
   },
   tiktokSource: {
     margin: "12px 0 0",
-    color: "#80868b",
+    color: "var(--muted)",
     fontSize: "11px",
   },
   quickLinksRow: {
@@ -485,13 +485,13 @@ const S: Record<string, React.CSSProperties> = {
     display: "inline-flex",
     alignItems: "center",
     gap: "6px",
-    background: "#f8f9fa",
-    border: "1px solid #dadce0",
+    background: "var(--panel-raised)",
+    border: "1px solid var(--line-strong)",
     borderRadius: "16px",
     padding: "6px 14px",
     fontSize: "12px",
     cursor: "pointer",
-    color: "#3c4043",
+    color: "var(--text)",
     textDecoration: "none",
     fontWeight: 500,
     transition: "all 0.15s",
@@ -503,37 +503,37 @@ const S: Record<string, React.CSSProperties> = {
   },
   modeBtn: {
     background: "transparent",
-    border: "1px solid #dadce0",
+    border: "1px solid var(--line-strong)",
     borderRadius: "16px",
     padding: "6px 16px",
     fontSize: "13px",
     cursor: "pointer",
-    color: "#5f6368",
+    color: "var(--muted)",
     fontFamily: "inherit",
     fontWeight: 500,
     transition: "all 0.15s",
   },
   modeBtnActive: {
-    background: "#e6f6ee",
-    border: "1px solid #006b4e",
-    color: "#006b4e",
+    background: "var(--green-dark)",
+    border: "1px solid var(--green)",
+    color: "var(--green)",
   },
   topBar: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     padding: "12px 24px",
-    borderBottom: "1px solid #f1f3f4",
+    borderBottom: "1px solid var(--panel-raised)",
     fontSize: "13px",
-    color: "#5f6368",
+    color: "var(--muted)",
   },
   wsSelect: {
-    border: "1px solid #dadce0",
+    border: "1px solid var(--line-strong)",
     borderRadius: "8px",
     padding: "4px 8px",
     fontSize: "13px",
-    background: "#fff",
-    color: "#3c4043",
+    background: "var(--panel)",
+    color: "var(--text)",
     fontFamily: "inherit",
   },
   error: {
@@ -552,12 +552,12 @@ const S: Record<string, React.CSSProperties> = {
   sectionTitle: {
     fontSize: "20px",
     fontWeight: 400,
-    color: "#202124",
+    color: "var(--text)",
     margin: "0 0 4px",
   },
   sectionSub: {
     fontSize: "13px",
-    color: "#5f6368",
+    color: "var(--muted)",
     margin: "0 0 20px",
   },
   filterRow: {
@@ -568,19 +568,19 @@ const S: Record<string, React.CSSProperties> = {
   },
   filterBtn: {
     background: "transparent",
-    border: "1px solid #dadce0",
+    border: "1px solid var(--line-strong)",
     borderRadius: "16px",
     padding: "5px 14px",
     fontSize: "13px",
     cursor: "pointer",
-    color: "#5f6368",
+    color: "var(--muted)",
     fontFamily: "inherit",
     transition: "all 0.15s",
   },
   filterBtnActive: {
     background: "#f1f8f5",
-    border: "1px solid #006b4e",
-    color: "#006b4e",
+    border: "1px solid var(--green)",
+    color: "var(--green)",
   },
   grid: {
     display: "grid",
@@ -588,10 +588,10 @@ const S: Record<string, React.CSSProperties> = {
     gap: "16px",
   },
   card: {
-    border: "1px solid #e8eaed",
+    border: "1px solid var(--line)",
     borderRadius: "12px",
     padding: "20px",
-    background: "#fff",
+    background: "var(--panel)",
     transition: "box-shadow 0.2s",
     cursor: "default",
     display: "flex",
@@ -603,18 +603,18 @@ const S: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     textTransform: "uppercase" as const,
     letterSpacing: "0.5px",
-    color: "#006b4e",
+    color: "var(--green)",
   },
   cardTitle: {
     fontSize: "15px",
     fontWeight: 500,
-    color: "#202124",
+    color: "var(--text)",
     margin: 0,
     lineHeight: 1.4,
   },
   cardSummary: {
     fontSize: "13px",
-    color: "#5f6368",
+    color: "var(--muted)",
     margin: 0,
     lineHeight: 1.5,
   },
@@ -623,7 +623,7 @@ const S: Record<string, React.CSSProperties> = {
     height: "140px",
     objectFit: "cover" as const,
     borderRadius: "8px",
-    background: "#f8f9fa",
+    background: "var(--panel-raised)",
   },
   metricRow: {
     display: "flex",
@@ -631,7 +631,7 @@ const S: Record<string, React.CSSProperties> = {
     flexWrap: "wrap" as const,
     gap: "6px 8px",
     fontSize: "12px",
-    color: "#5f6368",
+    color: "var(--muted)",
   },
   cardFooter: {
     display: "flex",
@@ -641,9 +641,9 @@ const S: Record<string, React.CSSProperties> = {
     gap: "8px 12px",
     marginTop: "auto",
     paddingTop: "10px",
-    borderTop: "1px solid #f1f3f4",
+    borderTop: "1px solid var(--panel-raised)",
     fontSize: "12px",
-    color: "#80868b",
+    color: "var(--muted)",
   },
   cardSource: {
     flex: "1 1 auto",
@@ -679,7 +679,7 @@ const S: Record<string, React.CSSProperties> = {
     alignItems: "center",
     minHeight: "30px",
     padding: "0 4px",
-    color: "#006b4e",
+    color: "var(--green)",
     textDecoration: "none",
     fontSize: "12px",
     fontWeight: 500,
@@ -695,13 +695,13 @@ const S: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "space-between",
     padding: "12px 0",
-    borderBottom: "1px solid #f1f3f4",
+    borderBottom: "1px solid var(--panel-raised)",
     fontSize: "13px",
   },
   empty: {
     textAlign: "center",
     padding: "40px 24px",
-    color: "#80868b",
+    color: "var(--muted)",
     fontSize: "14px",
   },
   accountRow: {
@@ -712,16 +712,16 @@ const S: Record<string, React.CSSProperties> = {
     padding: "16px 0",
   },
   inputSmall: {
-    border: "1px solid #dadce0",
+    border: "1px solid var(--line-strong)",
     borderRadius: "8px",
     padding: "6px 10px",
     fontSize: "13px",
     fontFamily: "inherit",
-    color: "#3c4043",
+    color: "var(--text)",
   },
   divider: {
     border: "none",
-    borderTop: "1px solid #f1f3f4",
+    borderTop: "1px solid var(--panel-raised)",
     margin: "0",
   },
 };
@@ -729,8 +729,7 @@ const S: Record<string, React.CSSProperties> = {
 const COLORS_BY_KIND: Record<string, string> = {
   trend: "#1a73e8",
   ad: "#e37400",
-  account: "#34a853",
-  starter: "#9334e6",
+  account: "var(--green)",
 };
 
 type DouyinTrend = {
@@ -1777,7 +1776,7 @@ export default function ResearchDashboard() {
 
           <div style={S.grid}>
             {visibleInspirations.map((item) => {
-              const color = COLORS_BY_KIND[item.kind] ?? "#5f6368";
+              const color = COLORS_BY_KIND[item.kind] ?? "var(--muted)";
               const pct = item.relevance ?? 40;
               return (
                 <div
@@ -1823,7 +1822,7 @@ export default function ResearchDashboard() {
                           <span
                             key={m}
                             style={{
-                              background: "#f1f3f4",
+                              background: "var(--panel-raised)",
                               borderRadius: "10px",
                               padding: "2px 8px",
                               fontSize: "11px",
@@ -1892,10 +1891,10 @@ export default function ResearchDashboard() {
 
       {liveInspirations.length === 0 && !tiktokResult && !busy && (
         <div style={{ ...S.empty, ...S.section }}>
-          <p style={{ color: "#5f6368", fontSize: "15px", margin: "0 0 6px" }}>
+          <p style={{ color: "var(--muted)", fontSize: "15px", margin: "0 0 6px" }}>
             Nothing collected yet.
           </p>
-          <p style={{ color: "#80868b", fontSize: "13px", margin: 0 }}>
+          <p style={{ color: "var(--muted)", fontSize: "13px", margin: 0 }}>
             Search a topic to run 30-day research, switch to Ads to read the public Meta Ad
             Library, or open a TikTok Creative Center list above. Every card below is read from
             a live source — TrendRelay does not seed the feed with examples.
@@ -1932,8 +1931,8 @@ export default function ResearchDashboard() {
               <div style={{ display: "flex", alignItems: "center" }}>
                 <span style={jobDot(job.status)} />
                 <div>
-                  <span style={{ color: "#202124", fontWeight: 500 }}>{job.topic}</span>
-                  <span style={{ color: "#80868b", marginLeft: "8px" }}>
+                  <span style={{ color: "var(--text)", fontWeight: 500 }}>{job.topic}</span>
+                  <span style={{ color: "var(--muted)", marginLeft: "8px" }}>
                     {job.status === "failed"
                       ? (job.error ?? t("research.runFailed"))
                       : t("research.stillResearching")}
@@ -1944,7 +1943,7 @@ export default function ResearchDashboard() {
           ))}
           {scorable && (
             <div style={S.jobRow}>
-              <span style={{ color: "#5f6368" }}>
+              <span style={{ color: "var(--muted)" }}>
                 {t("research.readyToScore", { topic: scorable.topic })}
               </span>
               <button
