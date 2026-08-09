@@ -297,8 +297,15 @@ def test_woopsocial_credits_never_stop_a_post() -> None:
     found = by_id(allowances("woopsocial", account_count=1))
     assert found["posts_per_month"].unlimited
     assert "Uncapped" in found["posts_per_month"].note
-    # Not offered as an allowance at all, so nothing can exhaust it.
-    assert "credits" not in found
+
+    # Listed, because "30 credits" beside an engine reads as 30 posts and the
+    # only way that figure stops misleading is to say what it is spent on.
+    credits = found["ai_credits"]
+    assert credits.limit == 30
+    assert "not on publishing" in credits.note
+    # And it can never stop a post: published figures carry no usage, so there
+    # is nothing for exhaustion to measure.
+    assert credits.confidence == "published"
     assert exhausted(allowances("woopsocial", account_count=2)) is None
 
 

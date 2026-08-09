@@ -312,6 +312,22 @@ def allowances(
             note=f"Uncapped on the {plan['plan']} plan. From {plan['source']}, "
                  f"checked {PUBLISHED_ON}.",
         ))
+    if plan.get("ai_credits_per_month"):
+        # Shown precisely because it looks like a posting allowance and is not.
+        # Someone reading "30 credits" beside an engine reasonably assumes 30
+        # posts; saying what they are actually spent on is the only way that
+        # figure stops being misleading. It can never block a post either - it
+        # is published, and `exhausted` ignores anything without measured usage.
+        found.append(Allowance(
+            id="ai_credits",
+            label="AI credits per month",
+            confidence="published",
+            limit=int(plan["ai_credits_per_month"]),
+            used=None,
+            note="Spent on this engine's own content generation, not on "
+                 "publishing. TrendRelay writes its own captions, so posting "
+                 f"never uses one. From {plan['source']}, checked {PUBLISHED_ON}.",
+        ))
     if plan.get("queued_per_channel"):
         found.append(Allowance(
             id="queued_per_channel",
