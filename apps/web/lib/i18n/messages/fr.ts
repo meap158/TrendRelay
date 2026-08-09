@@ -287,13 +287,11 @@ export const fr: Messages = {
     signInPrompt: "Connectez-vous pour publier",
     eyebrow: "POSTE DE DIFFUSION",
     heading: "Diffuser le clip validé",
-    stepEngine: "ÉTAPE 1 · MOTEUR DE PUBLICATION",
     chooseEngine: "Choisir et configurer une API",
     active: "Actif",
     docs: "Documentation",
     mediaHosting: "Hébergement du média",
     mediaHostingNeeded: "hébergement du média requis",
-    stepDelivery: "ÉTAPE 2 · DIFFUSION",
     whatGoesOut: "Ce qui sera publié",
     publicMediaUrl: "URL publique du média",
     chooseFromLibrary: "Choisir dans la bibliothèque",
@@ -337,8 +335,6 @@ export const fr: Messages = {
     media: "Média",
     disclosure: "Mention",
     aiGenerated: "Généré par IA",
-    dryRunFirst:
-      "Faites d'abord une simulation — elle valide le média, les destinations et l'horaire sans contacter le moteur.",
     jobs: "Tâches de publication",
     noJobs: "Aucune tâche de publication pour le moment.",
     productLaunches: "Lancements de produits",
@@ -402,6 +398,7 @@ export const fr: Messages = {
     setUp: "Configurer",
     reachableThrough: "Les destinations viennent de {engines}. Connectez-en d’autres dans le tableau de bord de chaque moteur.",
     nothingReachable: "Aucun moteur ne fournit encore de destination.",
+    jobCount: "{count, plural, =0 {aucune} one {# publication} other {# publications}}",
   },
 
   autopilot: {

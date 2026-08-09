@@ -280,13 +280,11 @@ export const ar: Messages = {
     signInPrompt: "سجّل الدخول للنشر",
     eyebrow: "مكتب التوزيع",
     heading: "إرسال المقطع المعتمد",
-    stepEngine: "الخطوة ١ · محرّك النشر",
     chooseEngine: "اختر واجهة برمجية واضبطها",
     active: "قيد الاستخدام",
     docs: "التوثيق",
     mediaHosting: "استضافة الوسائط",
     mediaHostingNeeded: "يلزم استضافة للوسائط",
-    stepDelivery: "الخطوة ٢ · التسليم",
     whatGoesOut: "ما الذي سيُنشر",
     publicMediaUrl: "رابط عام للوسائط",
     chooseFromLibrary: "الاختيار من المكتبة",
@@ -327,8 +325,6 @@ export const ar: Messages = {
     media: "الوسائط",
     disclosure: "الإفصاح",
     aiGenerated: "من إنتاج الذكاء الاصطناعي",
-    dryRunFirst:
-      "ابدأ بتشغيل تجريبي — فهو يتحقق من الوسائط والوجهات والتوقيت دون الاتصال بالمحرّك.",
     jobs: "مهام النشر",
     noJobs: "لا توجد مهام نشر بعد.",
     productLaunches: "إطلاق المنتجات",
@@ -392,6 +388,7 @@ export const ar: Messages = {
     setUp: "إعداد",
     reachableThrough: "الوجهات من {engines}. اربط المزيد من لوحة كل محرّك.",
     nothingReachable: "لا يوجد محرّك يوفّر وجهات بعد.",
+    jobCount: "{count, plural, zero {لا شيء بعد} one {منشور واحد} two {منشوران} few {# منشورات} many {# منشورًا} other {# منشور}}",
   },
 
   autopilot: {

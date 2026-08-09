@@ -282,13 +282,11 @@ export const vi: Messages = {
     signInPrompt: "Đăng nhập để đăng bài",
     eyebrow: "BÀN PHÂN PHỐI",
     heading: "Gửi clip đã duyệt",
-    stepEngine: "BƯỚC 1 · CÔNG CỤ ĐĂNG BÀI",
     chooseEngine: "Chọn và cấu hình API",
     active: "Đang dùng",
     docs: "Tài liệu",
     mediaHosting: "Lưu trữ media",
     mediaHostingNeeded: "cần nơi lưu trữ media",
-    stepDelivery: "BƯỚC 2 · PHÂN PHỐI",
     whatGoesOut: "Nội dung sẽ đăng",
     publicMediaUrl: "Liên kết media công khai",
     chooseFromLibrary: "Chọn từ thư viện",
@@ -331,8 +329,6 @@ export const vi: Messages = {
     media: "Media",
     disclosure: "Công bố",
     aiGenerated: "Do AI tạo",
-    dryRunFirst:
-      "Hãy chạy thử trước — bước này kiểm tra media, điểm đến và thời gian mà không gọi tới công cụ đăng.",
     jobs: "Tác vụ đăng bài",
     noJobs: "Chưa có tác vụ đăng bài nào.",
     productLaunches: "Ra mắt sản phẩm",
@@ -394,6 +390,7 @@ export const vi: Messages = {
     setUp: "Thiết lập",
     reachableThrough: "Đích đến đến từ {engines}. Hãy kết nối thêm trong bảng điều khiển của từng công cụ.",
     nothingReachable: "Chưa có công cụ nào cung cấp đích đến.",
+    jobCount: "{count, plural, =0 {chưa có} other {{count} bài}}",
   },
 
   autopilot: {

@@ -282,13 +282,11 @@ export const ja: Messages = {
     signInPrompt: "投稿するにはログインしてください",
     eyebrow: "配信デスク",
     heading: "承認済みクリップを配信",
-    stepEngine: "ステップ 1 · 投稿エンジン",
     chooseEngine: "API を選んで設定",
     active: "使用中",
     docs: "ドキュメント",
     mediaHosting: "メディアの配置先",
     mediaHostingNeeded: "メディアの配置先が必要です",
-    stepDelivery: "ステップ 2 · 配信",
     whatGoesOut: "投稿する内容",
     publicMediaUrl: "公開メディア URL",
     chooseFromLibrary: "ライブラリから選択",
@@ -331,8 +329,6 @@ export const ja: Messages = {
     media: "メディア",
     disclosure: "表示",
     aiGenerated: "AI 生成",
-    dryRunFirst:
-      "まずドライランを。エンジンに接続せずに、メディア・配信先・時刻を検証します。",
     jobs: "投稿ジョブ",
     noJobs: "投稿ジョブはまだありません。",
     productLaunches: "商品ローンチ",
@@ -394,6 +390,7 @@ export const ja: Messages = {
     setUp: "設定",
     reachableThrough: "配信先は {engines} からです。各エンジンのダッシュボードで追加してください。",
     nothingReachable: "配信先を提供しているエンジンはまだありません。",
+    jobCount: "{count, plural, =0 {まだなし} other {{count}件}}",
   },
 
   autopilot: {

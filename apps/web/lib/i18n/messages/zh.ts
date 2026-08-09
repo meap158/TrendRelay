@@ -274,13 +274,11 @@ export const zh: Messages = {
     signInPrompt: "登录后即可发布",
     eyebrow: "分发台",
     heading: "发布已审核的片段",
-    stepEngine: "第 1 步 · 发布引擎",
     chooseEngine: "选择并配置 API",
     active: "使用中",
     docs: "文档",
     mediaHosting: "媒体托管",
     mediaHostingNeeded: "需要媒体托管",
-    stepDelivery: "第 2 步 · 分发",
     whatGoesOut: "要发布的内容",
     publicMediaUrl: "公开媒体链接",
     chooseFromLibrary: "从素材库选择",
@@ -321,8 +319,6 @@ export const zh: Messages = {
     media: "素材",
     disclosure: "披露",
     aiGenerated: "AI 生成",
-    dryRunFirst:
-      "建议先试运行——它会在不连接引擎的情况下校验素材、发布目标和时间。",
     jobs: "发布任务",
     noJobs: "暂无发布任务。",
     productLaunches: "新品发布",
@@ -384,6 +380,7 @@ export const zh: Messages = {
     setUp: "去设置",
     reachableThrough: "目标来自 {engines}。请在各引擎的控制台中连接更多。",
     nothingReachable: "还没有引擎提供目标。",
+    jobCount: "{count, plural, =0 {暂无} other {{count} 条}}",
   },
 
   autopilot: {

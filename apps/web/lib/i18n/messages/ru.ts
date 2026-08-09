@@ -286,13 +286,11 @@ export const ru: Messages = {
     signInPrompt: "Войдите, чтобы публиковать",
     eyebrow: "ПУЛЬТ ПУБЛИКАЦИИ",
     heading: "Отправить утверждённый ролик",
-    stepEngine: "ШАГ 1 · ДВИЖОК ПУБЛИКАЦИИ",
     chooseEngine: "Выберите и настройте API",
     active: "Активен",
     docs: "Документация",
     mediaHosting: "Хранение медиа",
     mediaHostingNeeded: "нужно хранилище медиа",
-    stepDelivery: "ШАГ 2 · ДОСТАВКА",
     whatGoesOut: "Что уйдёт в публикацию",
     publicMediaUrl: "Публичная ссылка на медиа",
     chooseFromLibrary: "Выбрать из библиотеки",
@@ -336,8 +334,6 @@ export const ru: Messages = {
     media: "Медиа",
     disclosure: "Пометка",
     aiGenerated: "Создано ИИ",
-    dryRunFirst:
-      "Сначала пробный запуск — он проверяет медиа, площадки и время, не обращаясь к движку.",
     jobs: "Задачи публикации",
     noJobs: "Задач публикации пока нет.",
     productLaunches: "Запуски продуктов",
@@ -401,6 +397,7 @@ export const ru: Messages = {
     setUp: "Настроить",
     reachableThrough: "Направления из {engines}. Подключите ещё в панели каждого движка.",
     nothingReachable: "Ни один движок пока не даёт направлений.",
+    jobCount: "{count, plural, =0 {пока нет} one {# публикация} few {# публикации} many {# публикаций} other {# публикации}}",
   },
 
   autopilot: {

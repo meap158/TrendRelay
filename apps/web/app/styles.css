@@ -633,3 +633,17 @@ nav strong { color: #1c2b33; }
 /* The link the sentence above just sent you to, inside the status block so it
    reads as part of the instruction rather than as another action. */
 .engine-status-link { justify-self: start; margin-block-start: 2px; color: var(--link); font-size: 11px; font-weight: 600; }
+/* History, present but not competing. Closed by default: what is going out
+   next matters more than what went out last week, and an open unbounded list
+   in the rail said the opposite. */
+.publish-history summary { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; cursor: pointer; list-style: none; }
+.publish-history summary::-webkit-details-marker { display: none; }
+.publish-history summary h2 { margin: 0; }
+.publish-history summary b { margin-inline-start: auto; color: var(--muted); font-size: 11px; font-weight: 600; }
+/* The native marker was removed to lay the row out; something has to say the
+   row opens, or it reads as a heading that happens to have a count. */
+.publish-history summary::after { content: ""; flex: none; inline-size: 6px; block-size: 6px; margin-inline-start: 8px; border-inline-end: 1.5px solid var(--muted); border-block-end: 1.5px solid var(--muted); rotate: 45deg; translate: 0 -2px; transition: rotate .15s ease; }
+.publish-history details[open] summary::after { rotate: -135deg; translate: 0 1px; }
+@media (prefers-reduced-motion: reduce) { .publish-history summary::after { transition: none; } }
+.publish-history summary:hover h2 { color: var(--link); }
+.publish-history details[open] summary { margin-bottom: 10px; }

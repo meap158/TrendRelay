@@ -1178,7 +1178,6 @@ export default function PublishPage() {
       <section className="engine-setup" aria-labelledby="engine-setup-title">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">{t("publish.stepEngine")}</p>
             <h2 id="engine-setup-title">{t("publish.chooseEngine")}</h2>
           </div>
           <div className="section-heading-aside">
@@ -1509,7 +1508,6 @@ export default function PublishPage() {
         <form className="publish-form" onSubmit={(event) => { event.preventDefault(); void submit(event.currentTarget, false); }}>
           <div className="section-heading">
             <div>
-              <p className="eyebrow">{t("publish.stepDelivery")}</p>
               <h2>{t("publish.whatGoesOut")}</h2>
             </div>
             {/* Every engine carrying part of this post, not one active one.
@@ -1618,6 +1616,235 @@ export default function PublishPage() {
                 <small>{t("publish.supplySkipUpload")}</small>
               </label>
             </>
+          )}
+
+          {/* Where it goes, before what it says.
+
+              The destinations decide the caption limit, which post types
+              are offered, and whether the affiliate link can be a link at
+              all. Asking for the caption first meant writing to a limit
+              nobody had been told yet. */}
+          <fieldset className="account-picker">
+            <legend>
+              Destinations
+              {/* Accounts, not networks. Two TikTok accounts are two posts, and
+                  counting networks made choosing the second look like it had
+                  done nothing. */}
+              <b>{targets.length
+                ? t("publish.destinationCount", {
+                    pages: targets.length, networks: chosen.length,
+                  })
+                : t("publish.noneSelected")}</b>
+            </legend>
+            {!connection?.authenticated ? (
+              <p className="picker-empty">
+                Save and activate an engine key above, then load its connected accounts.
+              </p>
+            ) : !accounts.length ? (
+              <div className="picker-empty">
+                <p>{accountsLoaded
+                  ? "No engine returned a connected account. Connect channels in an engine's dashboard, then load again."
+                  : "No destinations loaded yet."}</p>
+                <Button
+                  variant="quiet"
+                  disabled={!canExecute}
+                  busy={busy === "accounts"}
+                  onClick={() => void refreshAccounts()}
+                ><ActionIcon name="refresh" />{busy === "accounts" ? "Loading" : "Load connected accounts"}</Button>
+              </div>
+            ) : (
+              <>
+                {/* One line, not one block per engine. What is needed here is
+                    which engines are missing and why in a word; the sentence
+                    explaining it and the remedy are already on the engine's own
+                    card, and repeating them verbatim pushed the destinations
+                    themselves off the screen. */}
+                {unavailableEngines.length > 0 && (
+                  <p className="engine-note" role="status">
+                    {t("publish.notOffering", {
+                      engines: unavailableEngines
+                        .map(({ provider, status }) =>
+                          `${provider.label} (${t(`publish.engineState.${status.state}`)})`)
+                        .join(", "),
+                    })}{" "}
+                    <button type="button" className="link-action" onClick={() => setSetupOpen(true)}>
+                      {t("publish.engineSetup")}
+                    </button>
+                  </p>
+                )}
+                {/* Switched off here, not broken. Said plainly so a missing
+                    account is never a mystery. */}
+                {disabledEngines.length > 0 && (
+                  <p className="engine-note">
+                    {t("publish.enginesOff", {
+                      engines: (connection?.providers ?? [])
+                        .filter((item) => disabledEngines.includes(item.id))
+                        .map((item) => item.label)
+                        .join(", "),
+                    })}{" "}
+                    <button type="button" className="link-action" onClick={() => setSetupOpen(true)}>
+                      {t("publish.engineSetup")}
+                    </button>
+                  </p>
+                )}
+                <div className="platform-grid">{connectedPlatforms.map((platform) => {
+                  const platformPages = offeredPages.filter((page) => page.platform === platform);
+                  if (!platformPages.length) return null;
+                  const picked = platformPages.filter(pageChosen);
+                  return (
+                    <section key={platform} className={`platform-card${picked.length ? " chosen" : ""}`}>
+                      <div className="platform-card-head">
+                        <PlatformIcon platform={platform} />
+                        <div>
+                          <strong>{platformLabels[platform]}</strong>
+                          <span>
+                            {picked.length
+                              ? t("publish.pagesChosen", {
+                                  chosen: picked.length, total: platformPages.length,
+                                })
+                              : t("publish.pagesConnected", { count: platformPages.length })}
+                          </span>
+                        </div>
+                        {/* One reach-everything action per network. Choosing
+                            eight pages one at a time is the work this page
+                            exists to remove. */}
+                        {platformPages.length > 1 && (
+                          <button
+                            type="button"
+                            className="platform-card-all"
+                            onClick={() => {
+                              const all = picked.length === platformPages.length;
+                              platformPages.forEach((page) => togglePage(page, !all));
+                            }}
+                          >{picked.length === platformPages.length
+                            ? t("publish.selectNone") : t("publish.selectAll")}</button>
+                        )}
+                      </div>
+                      <div className="account-options">{platformPages.map((page) => {
+                        const on = pageChosen(page);
+                        const route = routeOf(page);
+                        return (
+                          <button
+                            type="button"
+                            key={page.key}
+                            aria-pressed={on}
+                            className={on ? "selected" : ""}
+                            title={page.handle ? `@${page.handle}` : page.label}
+                            onClick={() => togglePage(page, !on)}
+                          >
+                            <span>{page.label}</span>
+                            {/* One page, several engines: say so, and say which
+                                one is actually delivering. Two rows that look
+                                like two accounts is how the same audience gets
+                                posted to twice. */}
+                            <i>{page.reachable_by.length > 1
+                              ? t("publish.viaOneOf", {
+                                  provider: route.provider_label,
+                                  count: page.reachable_by.length,
+                                })
+                              : route.provider_label}</i>
+                          </button>
+                        );
+                      })}</div>
+
+                      {/* Only where there is a real choice to make. */}
+                      {picked.filter((page) => page.reachable_by.length > 1).map((page) => (
+                        <div className="page-route" key={`${page.key}-route`}>
+                          <em>{t("publish.deliverVia", { label: page.label })}</em>
+                          {page.reachable_by.map((item) => {
+                            const active = routeOf(page).id === item.id;
+                            return (
+                              <button
+                                type="button"
+                                key={`${item.provider}:${item.id}`}
+                                aria-pressed={active}
+                                className={active ? "selected" : ""}
+                                onClick={() => switchRoute(page, item.provider, item.id)}
+                              >{item.provider_label}</button>
+                            );
+                          })}
+                        </div>
+                      ))}
+
+                      {/* Per page, not per network: the same post can be a Reel
+                          on one Instagram page and a Story on another. */}
+                      {picked.map((page) => {
+                        const route = routeOf(page);
+                        const kinds = postTypesFor(route.id);
+                        if (kinds.length < 2) return null;
+                        return (
+                          <div
+                            className="post-types"
+                            key={page.key}
+                            role="tablist"
+                            aria-label={`${page.label} post type`}
+                          >
+                            {picked.length > 1 && <em className="post-types-for">{page.label}</em>}
+                            {kinds.map((kind) => {
+                              const active = (postTypes[route.id] ?? kinds[0]?.id) === kind.id;
+                              return (
+                                <button
+                                  type="button"
+                                  key={kind.id}
+                                  aria-pressed={active}
+                                  className={active ? "selected" : ""}
+                                  title={kind.help}
+                                  onClick={() => setPostTypes({ ...postTypes, [route.id]: kind.id })}
+                                >{kind.label}</button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </section>
+                  );
+                })}</div>
+                <div className="picker-footer">
+                  {/* Which engines these destinations came from. The list is
+                      every engine at once, so naming one would be wrong; and
+                      the old line comparing connected to supported platforms
+                      could only ever say "no other platforms" once accounts
+                      were loaded from all of them. */}
+                  {/* Only engines actually contributing destinations. One
+                      reachable with nothing on it is already named above as
+                      having no channels; listing it here as "Zernio (0)" says
+                      the same thing again, in a shape that reads like a total. */}
+                  <p>
+                    {(() => {
+                      const contributing = engineReach.filter(
+                        (engine) => engine.reachable && engine.account_count > 0
+                          && !engineOff(engine.id));
+                      return contributing.length
+                        ? t("publish.reachableThrough", {
+                            engines: contributing
+                              .map((engine) => `${engine.label} (${engine.account_count})`)
+                              .join(", "),
+                          })
+                        : t("publish.nothingReachable");
+                    })()}
+                  </p>
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    disabled={!canExecute}
+                    busy={busy === "accounts"}
+                    onClick={() => void refreshAccounts()}
+                  >{busy === "accounts" ? "Refreshing" : "Refresh accounts"}</Button>
+                </div>
+              </>
+            )}
+          </fieldset>
+          {chosen.includes("reddit") && (
+            <label>{t("publish.subreddit")}
+              <input name="subreddit" placeholder="r/videos" required />
+              <small>{t("publish.subredditRequired")}</small>
+            </label>
+          )}
+          {chosen.includes("pinterest") && (
+            <label>{t("publish.pinterestBoard")}
+              <input name="board" placeholder={t("publish.productLaunches")} required />
+              <small>{t("publish.pinterestBoardHelp")}</small>
+            </label>
           )}
 
           <label>{t("publish.title")} <i>{t("publish.titleUsedBy")}</i>
@@ -1862,229 +2089,6 @@ export default function PublishPage() {
             </div>
           )}
 
-          <fieldset className="account-picker">
-            <legend>
-              Destinations
-              {/* Accounts, not networks. Two TikTok accounts are two posts, and
-                  counting networks made choosing the second look like it had
-                  done nothing. */}
-              <b>{targets.length
-                ? t("publish.destinationCount", {
-                    pages: targets.length, networks: chosen.length,
-                  })
-                : t("publish.noneSelected")}</b>
-            </legend>
-            {!connection?.authenticated ? (
-              <p className="picker-empty">
-                Save and activate an engine key above, then load its connected accounts.
-              </p>
-            ) : !accounts.length ? (
-              <div className="picker-empty">
-                <p>{accountsLoaded
-                  ? "No engine returned a connected account. Connect channels in an engine's dashboard, then load again."
-                  : "No destinations loaded yet."}</p>
-                <Button
-                  variant="quiet"
-                  disabled={!canExecute}
-                  busy={busy === "accounts"}
-                  onClick={() => void refreshAccounts()}
-                ><ActionIcon name="refresh" />{busy === "accounts" ? "Loading" : "Load connected accounts"}</Button>
-              </div>
-            ) : (
-              <>
-                {/* One line, not one block per engine. What is needed here is
-                    which engines are missing and why in a word; the sentence
-                    explaining it and the remedy are already on the engine's own
-                    card, and repeating them verbatim pushed the destinations
-                    themselves off the screen. */}
-                {unavailableEngines.length > 0 && (
-                  <p className="engine-note" role="status">
-                    {t("publish.notOffering", {
-                      engines: unavailableEngines
-                        .map(({ provider, status }) =>
-                          `${provider.label} (${t(`publish.engineState.${status.state}`)})`)
-                        .join(", "),
-                    })}{" "}
-                    <button type="button" className="link-action" onClick={() => setSetupOpen(true)}>
-                      {t("publish.engineSetup")}
-                    </button>
-                  </p>
-                )}
-                {/* Switched off here, not broken. Said plainly so a missing
-                    account is never a mystery. */}
-                {disabledEngines.length > 0 && (
-                  <p className="engine-note">
-                    {t("publish.enginesOff", {
-                      engines: (connection?.providers ?? [])
-                        .filter((item) => disabledEngines.includes(item.id))
-                        .map((item) => item.label)
-                        .join(", "),
-                    })}{" "}
-                    <button type="button" className="link-action" onClick={() => setSetupOpen(true)}>
-                      {t("publish.engineSetup")}
-                    </button>
-                  </p>
-                )}
-                <div className="platform-grid">{connectedPlatforms.map((platform) => {
-                  const platformPages = offeredPages.filter((page) => page.platform === platform);
-                  if (!platformPages.length) return null;
-                  const picked = platformPages.filter(pageChosen);
-                  return (
-                    <section key={platform} className={`platform-card${picked.length ? " chosen" : ""}`}>
-                      <div className="platform-card-head">
-                        <PlatformIcon platform={platform} />
-                        <div>
-                          <strong>{platformLabels[platform]}</strong>
-                          <span>
-                            {picked.length
-                              ? t("publish.pagesChosen", {
-                                  chosen: picked.length, total: platformPages.length,
-                                })
-                              : t("publish.pagesConnected", { count: platformPages.length })}
-                          </span>
-                        </div>
-                        {/* One reach-everything action per network. Choosing
-                            eight pages one at a time is the work this page
-                            exists to remove. */}
-                        {platformPages.length > 1 && (
-                          <button
-                            type="button"
-                            className="platform-card-all"
-                            onClick={() => {
-                              const all = picked.length === platformPages.length;
-                              platformPages.forEach((page) => togglePage(page, !all));
-                            }}
-                          >{picked.length === platformPages.length
-                            ? t("publish.selectNone") : t("publish.selectAll")}</button>
-                        )}
-                      </div>
-                      <div className="account-options">{platformPages.map((page) => {
-                        const on = pageChosen(page);
-                        const route = routeOf(page);
-                        return (
-                          <button
-                            type="button"
-                            key={page.key}
-                            aria-pressed={on}
-                            className={on ? "selected" : ""}
-                            title={page.handle ? `@${page.handle}` : page.label}
-                            onClick={() => togglePage(page, !on)}
-                          >
-                            <span>{page.label}</span>
-                            {/* One page, several engines: say so, and say which
-                                one is actually delivering. Two rows that look
-                                like two accounts is how the same audience gets
-                                posted to twice. */}
-                            <i>{page.reachable_by.length > 1
-                              ? t("publish.viaOneOf", {
-                                  provider: route.provider_label,
-                                  count: page.reachable_by.length,
-                                })
-                              : route.provider_label}</i>
-                          </button>
-                        );
-                      })}</div>
-
-                      {/* Only where there is a real choice to make. */}
-                      {picked.filter((page) => page.reachable_by.length > 1).map((page) => (
-                        <div className="page-route" key={`${page.key}-route`}>
-                          <em>{t("publish.deliverVia", { label: page.label })}</em>
-                          {page.reachable_by.map((item) => {
-                            const active = routeOf(page).id === item.id;
-                            return (
-                              <button
-                                type="button"
-                                key={`${item.provider}:${item.id}`}
-                                aria-pressed={active}
-                                className={active ? "selected" : ""}
-                                onClick={() => switchRoute(page, item.provider, item.id)}
-                              >{item.provider_label}</button>
-                            );
-                          })}
-                        </div>
-                      ))}
-
-                      {/* Per page, not per network: the same post can be a Reel
-                          on one Instagram page and a Story on another. */}
-                      {picked.map((page) => {
-                        const route = routeOf(page);
-                        const kinds = postTypesFor(route.id);
-                        if (kinds.length < 2) return null;
-                        return (
-                          <div
-                            className="post-types"
-                            key={page.key}
-                            role="tablist"
-                            aria-label={`${page.label} post type`}
-                          >
-                            {picked.length > 1 && <em className="post-types-for">{page.label}</em>}
-                            {kinds.map((kind) => {
-                              const active = (postTypes[route.id] ?? kinds[0]?.id) === kind.id;
-                              return (
-                                <button
-                                  type="button"
-                                  key={kind.id}
-                                  aria-pressed={active}
-                                  className={active ? "selected" : ""}
-                                  title={kind.help}
-                                  onClick={() => setPostTypes({ ...postTypes, [route.id]: kind.id })}
-                                >{kind.label}</button>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                    </section>
-                  );
-                })}</div>
-                <div className="picker-footer">
-                  {/* Which engines these destinations came from. The list is
-                      every engine at once, so naming one would be wrong; and
-                      the old line comparing connected to supported platforms
-                      could only ever say "no other platforms" once accounts
-                      were loaded from all of them. */}
-                  {/* Only engines actually contributing destinations. One
-                      reachable with nothing on it is already named above as
-                      having no channels; listing it here as "Zernio (0)" says
-                      the same thing again, in a shape that reads like a total. */}
-                  <p>
-                    {(() => {
-                      const contributing = engineReach.filter(
-                        (engine) => engine.reachable && engine.account_count > 0
-                          && !engineOff(engine.id));
-                      return contributing.length
-                        ? t("publish.reachableThrough", {
-                            engines: contributing
-                              .map((engine) => `${engine.label} (${engine.account_count})`)
-                              .join(", "),
-                          })
-                        : t("publish.nothingReachable");
-                    })()}
-                  </p>
-                  <Button
-                    variant="quiet"
-                    size="sm"
-                    disabled={!canExecute}
-                    busy={busy === "accounts"}
-                    onClick={() => void refreshAccounts()}
-                  >{busy === "accounts" ? "Refreshing" : "Refresh accounts"}</Button>
-                </div>
-              </>
-            )}
-          </fieldset>
-
-          {chosen.includes("reddit") && (
-            <label>{t("publish.subreddit")}
-              <input name="subreddit" placeholder="r/videos" required />
-              <small>{t("publish.subredditRequired")}</small>
-            </label>
-          )}
-          {chosen.includes("pinterest") && (
-            <label>{t("publish.pinterestBoard")}
-              <input name="board" placeholder={t("publish.productLaunches")} required />
-              <small>{t("publish.pinterestBoardHelp")}</small>
-            </label>
-          )}
 
           {approvers.length > 0 && delivery === "draft" && (
             <label className="checkbox-row">
@@ -2190,9 +2194,10 @@ export default function PublishPage() {
               </p>
             </article>
           )}
+          {preview && (
           <article>
             <h2>{t("publish.dryRunPlan")}</h2>
-            {preview ? (
+            {(
               <div className="preview-card">
                 <p className="preview-lead">
                   <strong>{preview.delivery === "draft" ? "Draft" : "Scheduled post"}</strong> via {preview.provider_label}
@@ -2219,12 +2224,17 @@ export default function PublishPage() {
                 </ul>
                 <p className="privacy-note">Nothing has been sent. {preview.media_handling}</p>
               </div>
-            ) : <p>{t("publish.dryRunFirst")}</p>}
+            )}
           </article>
-          <article>
-            <h2>{t("publish.jobs")}</h2>
+          )}
+          <article className="publish-history">
+            <details>
+              <summary>
+                <h2>{t("publish.jobs")}</h2>
+                <b>{t("publish.jobCount", { count: jobs.length })}</b>
+              </summary>
             {jobs.length ? (
-              <div className="record-list">{jobs.map((job) => {
+              <div className="record-list">{jobs.slice(0, 8).map((job) => {
                 const request = job.payload?.request;
                 const where = (request?.targets ?? [])
                   .map((target: { platform: PublishingPlatform }) => platformLabels[target.platform])
@@ -2247,6 +2257,7 @@ export default function PublishPage() {
                 );
               })}</div>
             ) : <p>{t("publish.noJobs")}</p>}
+            </details>
           </article>
         </aside>
       </section>

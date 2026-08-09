@@ -286,13 +286,11 @@ export const en = {
     signInPrompt: "Sign in to publish",
     eyebrow: "DISTRIBUTION DESK",
     heading: "Deliver the approved clip",
-    stepEngine: "STEP 1 · PUBLISHING ENGINE",
     chooseEngine: "Choose and configure an API",
     active: "Active",
     docs: "Docs",
     mediaHosting: "Media hosting",
     mediaHostingNeeded: "media hosting needed",
-    stepDelivery: "STEP 2 · DELIVERY",
     whatGoesOut: "What goes out",
     publicMediaUrl: "Public media URL",
     chooseFromLibrary: "Choose from library",
@@ -334,8 +332,6 @@ export const en = {
     media: "Media",
     disclosure: "Disclosure",
     aiGenerated: "AI-generated",
-    dryRunFirst:
-      "Dry-run first — it validates media, destinations and timing without contacting the engine.",
     jobs: "Publishing jobs",
     noJobs: "No publishing jobs yet.",
     productLaunches: "Product launches",
@@ -398,6 +394,7 @@ export const en = {
     setUp: "Set up",
     reachableThrough: "Destinations come from {engines}. Connect more in each engine's dashboard.",
     nothingReachable: "No engine is contributing destinations yet.",
+    jobCount: "{count, plural, =0 {none yet} one {# post} other {# posts}}",
   },
 
   autopilot: {
