@@ -21,6 +21,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from trendrelay_api.campaign_autopilot import resolve_placement
 from trendrelay_api.config import get_settings
 from trendrelay_api.database import SessionFactory
 from trendrelay_api.env_store import configured_keys, effective_value, write_env_values
@@ -1016,11 +1017,20 @@ def _buffer_headers() -> dict[str, str]:
 #: recent. Buffer sends it on every GraphQL response, so the cheapest way to
 #: know the request budget is to keep the one that arrived rather than spend a
 #: request asking.
+#:
+#: `RateLimit-Policy` is kept beside it because the two answer different
+#: questions: `RateLimit` is the window about to bite, which is the same 100 on
+#: every Buffer plan, while the policy lists every window - and the 30-day one
+#: is the only figure that differs between Free, Essentials and Team.
 _BUFFER_RATE_LIMIT: dict[str, str] = {}
 
 
 def buffer_rate_limit_header() -> str | None:
     return _BUFFER_RATE_LIMIT.get("value")
+
+
+def buffer_rate_limit_policy_header() -> str | None:
+    return _BUFFER_RATE_LIMIT.get("policy")
 
 
 def _buffer_graphql(query: str, *, timeout: float = 60) -> dict[str, Any]:
@@ -1041,6 +1051,8 @@ def _buffer_graphql(query: str, *, timeout: float = 60) -> dict[str, Any]:
         for name, value in seen.items():
             if name.casefold() == "ratelimit":
                 _BUFFER_RATE_LIMIT["value"] = value
+            elif name.casefold() == "ratelimit-policy":
+                _BUFFER_RATE_LIMIT["policy"] = value
     errors = payload.get("errors")
     if errors:
         message = errors[0].get("message") if isinstance(errors[0], dict) else str(errors[0])
@@ -1311,7 +1323,8 @@ def discover_all_integrations() -> dict[str, Any]:
             engines.append({
                 "id": provider_id, "label": provider.label,
                 "reachable": False, "reason": "No key saved for this engine.",
-                "account_count": 0, "allowances": [],
+                "account_count": 0, "channels": [], "allowances": [],
+                "plan": engine_limits.plan_payload(engine_limits.infer_plan(provider_id)),
             })
             continue
         try:
@@ -1323,18 +1336,46 @@ def discover_all_integrations() -> dict[str, Any]:
             engines.append({
                 "id": provider_id, "label": provider.label,
                 "reachable": False, "reason": str(error), "account_count": 0,
+                # No channels rather than none known: an engine that would not
+                # answer has told us nothing about what is connected to it.
+                "channels": [],
                 # Still worth reporting: a refused key does not change what the
                 # plan allows, and "3 accounts allowed" is useful while fixing it.
                 "allowances": [
                     engine_limits.payload(item)
                     for item in engine_limits.allowances(provider_id, account_count=0)
                 ],
+                "plan": engine_limits.plan_payload(engine_limits.infer_plan(provider_id)),
             })
             continue
         accounts.extend(found)
+        measured_daily = (
+            bundle_daily_limits(found[0]["id"])
+            if provider_id == "bundle_social" and found else None
+        )
         engines.append({
             "id": provider_id, "label": provider.label,
             "reachable": True, "reason": None, "account_count": len(found),
+            # What is actually connected, not what the engine supports. The card
+            # showed the platform list off the provider definition, which is the
+            # same eight icons whether an account is attached to any of them.
+            "channels": [
+                {
+                    "id": account["id"],
+                    "platform": account["platform"],
+                    "label": account["label"],
+                    "handle": account.get("handle"),
+                }
+                for account in found
+            ],
+            "plan": engine_limits.plan_payload(engine_limits.infer_plan(
+                provider_id,
+                policy=engine_limits.parse_rate_limit_policy(
+                    buffer_rate_limit_policy_header()
+                ) if provider_id == "buffer" else None,
+                daily=measured_daily,
+                account_count=len(found),
+            )),
             "allowances": [
                 engine_limits.payload(item)
                 for item in engine_limits.allowances(
@@ -1344,13 +1385,15 @@ def discover_all_integrations() -> dict[str, Any]:
                         engine_limits.parse_rate_limit(buffer_rate_limit_header())
                         if provider_id == "buffer" else None
                     ),
+                    policy=(
+                        engine_limits.parse_rate_limit_policy(
+                            buffer_rate_limit_policy_header()
+                        ) if provider_id == "buffer" else None
+                    ),
                     # One account's counter, not a sum: bundle.social meters per
                     # account, and adding them would invent a total the engine
                     # does not have.
-                    daily=(
-                        bundle_daily_limits(found[0]["id"])
-                        if provider_id == "bundle_social" and found else None
-                    ),
+                    daily=measured_daily,
                 )
             ],
         })
@@ -1474,6 +1517,17 @@ def connection_status(probe: bool = True) -> dict[str, Any]:
         "authentication_method": "api-key",
         "authorization_error": current["authorization_error"],
         "supported_platforms": current["platforms"],
+        # Where an affiliate link can go on each network, from the same policy
+        # the campaign autopilot composes with. Sent rather than reimplemented in
+        # the browser: two copies of "does a link work here" drift, and the one
+        # that drifts is the one nobody tests.
+        "link_placement": {
+            platform: {
+                "placement": resolve_placement(platform).placement,
+                "reason": resolve_placement(platform).reason,
+            }
+            for platform in PLATFORM_LABELS
+        },
         "credential_values_exposed": False,
         "next_step": (
             f"Add the {current['label']} API credentials"

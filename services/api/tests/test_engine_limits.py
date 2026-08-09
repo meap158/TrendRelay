@@ -6,8 +6,11 @@ from trendrelay_api.integrations.engine_limits import (
     FREE_PLAN,
     Allowance,
     allowances,
+    infer_plan,
     parse_rate_limit,
+    parse_rate_limit_policy,
     payload,
+    plan_payload,
 )
 
 
@@ -108,15 +111,35 @@ def test_zernio_is_genuinely_uncapped_rather_than_unknown() -> None:
 
 
 def test_a_measured_request_budget_replaces_the_published_one() -> None:
-    # Once the engine has told us, quoting the pricing page beside it would be
-    # two numbers for one thing.
+    # Once the engine has reported the 30-day quota in its policy, quoting the
+    # pricing page beside it would be a scraped number standing in for a
+    # reported one.
     measured = by_id(allowances(
-        "buffer", account_count=1, rate_limit={"limit": 100, "remaining": 50}))
-    assert "requests_per_30_days" not in measured
-    assert "requests" in measured
+        "buffer", account_count=1, policy={900: 100, 2592000: 7_500}))
+    assert measured["requests_per_30_days"].confidence == "measured"
+    assert measured["requests_per_30_days"].limit == 7_500
 
     without = by_id(allowances("buffer", account_count=1))
-    assert "requests_per_30_days" in without
+    assert without["requests_per_30_days"].confidence == "published"
+    assert without["requests_per_30_days"].limit == 3_000
+
+
+def test_the_window_and_the_thirty_day_budget_are_both_shown() -> None:
+    """They are different limits, and one does not stand in for the other.
+
+    The `RateLimit` header counts down the 15-minute window; the 30-day quota is
+    a separate ceiling with no live remainder. Suppressing either leaves someone
+    reading one number as though it were the other.
+    """
+    found = by_id(allowances(
+        "buffer", account_count=1,
+        rate_limit={"limit": 100, "remaining": 50},
+        policy={900: 100, 2592000: 3_000},
+    ))
+    assert found["requests"].used == 50
+    assert found["requests_per_30_days"].limit == 3_000
+    # No remainder on the 30-day figure: the engine never reports one.
+    assert found["requests_per_30_days"].used is None
 
 
 def test_remaining_never_goes_negative() -> None:
@@ -138,6 +161,73 @@ def test_the_payload_carries_the_confidence_to_the_page() -> None:
     assert body["confidence"] == "counted"
     assert body["remaining"] == 1
     assert body["unlimited"] is False
+
+
+# --- which plan the account is on ---------------------------------------------
+
+
+def test_the_policy_header_gives_a_quota_per_window() -> None:
+    assert parse_rate_limit_policy("100;w=900, 250;w=86400, 3000;w=2592000") == {
+        900: 100, 86400: 250, 2592000: 3000,
+    }
+    assert parse_rate_limit_policy(None) == {}
+    assert parse_rate_limit_policy("no windows here") == {}
+
+
+def test_a_buffer_plan_is_read_off_its_thirty_day_quota() -> None:
+    for quota, expected in ((3_000, "Free"), (7_500, "Essentials"), (15_000, "Team")):
+        plan = infer_plan("buffer", policy={900: 100, 2592000: quota})
+        assert plan.name == expected, quota
+        assert plan.confidence == "measured"
+
+
+def test_the_short_window_never_names_a_buffer_plan() -> None:
+    """The 15-minute quota is 100 on every tier.
+
+    Reading whichever window happened to be in the header would call a Team
+    account Free, which is the one wrong answer that matters: it is the figure
+    someone checks before deciding they need to upgrade.
+    """
+    assert infer_plan("buffer", policy={900: 100}).name is None
+    assert infer_plan("buffer", policy={900: 100}).confidence == "published"
+
+
+def test_an_unrecognised_quota_is_left_unnamed_rather_than_rounded() -> None:
+    # A tier we have no figure for is a tier we cannot name. Snapping to the
+    # nearest published number would state a plan the engine never reported.
+    assert infer_plan("buffer", policy={2592000: 9_999}).name is None
+
+
+def test_bundle_social_above_the_free_cap_is_paid_without_a_tier() -> None:
+    free = infer_plan("bundle_social", daily={"posts": {"limit": 20, "used": 3}})
+    assert (free.name, free.confidence) == ("Free", "measured")
+
+    paid = infer_plan("bundle_social", daily={"posts": {"limit": 200}})
+    assert (paid.name, paid.confidence) == ("Paid", "measured")
+    # Named no further, because the paid tiers are not published per-figure.
+    assert "not something it says" in paid.note
+
+
+def test_zernio_is_counted_because_that_is_what_it_charges_by() -> None:
+    assert infer_plan("zernio", account_count=2).name == "Free"
+    assert infer_plan("zernio", account_count=3).name == "Paid"
+    assert infer_plan("zernio", account_count=3).confidence == "counted"
+
+
+def test_an_engine_that_reported_nothing_names_no_plan() -> None:
+    """None is a real answer, and a different one from "Free".
+
+    No engine exposes a plan name, so silence has to read as silence. Defaulting
+    to the free tier would show a paying account the wrong limits with no sign
+    that the figure was a guess.
+    """
+    plan = infer_plan("bundle_social")
+    assert plan.name is None
+    assert plan.confidence == "published"
+    assert "does not report which plan" in plan.note
+    assert plan_payload(plan) == {
+        "name": None, "confidence": "published", "note": plan.note,
+    }
 
 
 def test_every_plan_records_where_it_was_read_from() -> None:

@@ -60,9 +60,10 @@ class Allowance:
 
 #: Free-plan terms, from each engine's pricing page on PUBLISHED_ON.
 #:
-#: Deliberately only the free tier. TrendRelay cannot read which plan an account
-#: is on - none of the three expose it - so quoting paid-tier numbers beside a
-#: free-tier account would be guessing at which row applies.
+#: Deliberately only the free tier. No engine names the plan an account is on,
+#: so these are what applies until `infer_plan` finds a reported limit that says
+#: otherwise - and quoting paid-tier numbers beside an account we have not
+#: placed on a paid tier would be guessing at which row applies.
 FREE_PLAN: dict[str, dict[str, Any]] = {
     "bundle_social": {
         "plan": "Free",
@@ -96,6 +97,23 @@ FREE_PLAN: dict[str, dict[str, Any]] = {
 #: every GraphQL response, in the IETF draft format.
 _RATE_LIMIT = re.compile(r"(\w+)\s*=\s*(\d+)")
 
+#: `RateLimit-Policy: 100;w=900, 250;w=86400, 3000;w=2592000` - the same draft's
+#: companion header, listing every window rather than just the one about to bite.
+_RATE_LIMIT_POLICY = re.compile(r"(\d+)\s*;\s*w\s*=\s*(\d+)")
+
+#: Thirty days, in seconds: the window whose quota differs between Buffer plans.
+_THIRTY_DAYS = 30 * 24 * 60 * 60
+
+
+def parse_rate_limit_policy(header: str | None) -> dict[int, int]:
+    """Quota per window, keyed by the window's length in seconds."""
+    if not header:
+        return {}
+    return {
+        int(window): int(quota)
+        for quota, window in _RATE_LIMIT_POLICY.findall(header)
+    }
+
 
 def parse_rate_limit(header: str | None) -> dict[str, int]:
     """Pull limit/remaining/reset out of a `RateLimit` header.
@@ -112,11 +130,104 @@ def parse_rate_limit(header: str | None) -> dict[str, int]:
     }
 
 
+#: What a 30-day request quota says about a Buffer plan. Buffer publishes a
+#: different figure per tier and returns the one in force on every response, so
+#: the quota identifies the tier even though no endpoint will name it.
+BUFFER_TIER_BY_REQUESTS: dict[int, str] = {
+    3_000: "Free",
+    7_500: "Essentials",
+    15_000: "Team",
+}
+
+#: bundle.social's daily post cap separates its tiers the same way. Only the
+#: free figure is published as a hard number; the paid tiers are higher without
+#: being individually documented, which is enough to rule Free out but not
+#: enough to name the tier.
+BUNDLE_FREE_DAILY_POSTS = 20
+
+
+@dataclass(frozen=True)
+class Plan:
+    """Which plan an account is on, and how that was arrived at.
+
+    ``name`` is None when nothing observed distinguishes one plan from another.
+    That is a real answer and a different one from "Free": someone deciding
+    whether to upgrade is worse off with a confident wrong tier than with none.
+    """
+
+    name: str | None
+    confidence: Confidence
+    note: str
+
+
+def infer_plan(
+    provider_id: str,
+    *,
+    policy: dict[int, int] | None = None,
+    daily: dict[str, Any] | None = None,
+    account_count: int = 0,
+) -> Plan:
+    """The account's plan, read off the limits the engine does report.
+
+    None of the three engines expose a plan name - there is no endpoint to ask,
+    and no field on any response that carries one. What they do report are the
+    limits in force, and those differ per tier, so the limit identifies the tier
+    by elimination. A quota matching exactly one published figure names that
+    tier; anything else is left unnamed rather than rounded to the nearest one.
+    """
+    plan = FREE_PLAN.get(provider_id)
+    assumed = plan["plan"] if plan else "free"
+
+    if provider_id == "buffer":
+        # The 30-day window specifically. The 15-minute one is 100 on every
+        # tier, so reading the header that happens to be nearest expiry would
+        # call a Team account Free.
+        quota = (policy or {}).get(_THIRTY_DAYS)
+        named = BUFFER_TIER_BY_REQUESTS.get(quota) if quota else None
+        if named:
+            return Plan(named, "measured", (
+                f"{named}. Identified by the {quota:,} requests per 30 days the "
+                "engine reports; Buffer has no endpoint that names the plan."
+            ))
+    elif provider_id == "bundle_social":
+        posts = (daily or {}).get("posts") or {}
+        limit = posts.get("limit")
+        if limit is not None:
+            limit = int(limit)
+            if limit == BUNDLE_FREE_DAILY_POSTS:
+                return Plan("Free", "measured", (
+                    f"Free. Identified by the {limit} posts a day the engine "
+                    "reports, which is the free plan's cap."
+                ))
+            return Plan("Paid", "measured", (
+                f"Paid. The engine reports {limit} posts a day, above the free "
+                "plan's cap. Which paid tier is not something it says."
+            ))
+    elif provider_id == "zernio":
+        # Zernio charges per connected account and gives the first two away, so
+        # the count is the answer here rather than evidence towards one.
+        paid = account_count > 2
+        return Plan("Paid" if paid else "Free", "counted", (
+            f"{'Paid' if paid else 'Free'}. Zernio charges per connected "
+            f"account and the first 2 are free; {account_count} connected."
+        ))
+
+    return Plan(None, "published", (
+        f"Assuming the {assumed} plan. This engine does not report which plan "
+        "an account is on, and nothing it has reported distinguishes one."
+    ))
+
+
+def plan_payload(plan: Plan) -> dict[str, Any]:
+    return {"name": plan.name, "confidence": plan.confidence, "note": plan.note}
+
+
 def allowances(
     provider_id: str,
     *,
     account_count: int,
     rate_limit: dict[str, int] | None = None,
+    policy: dict[int, int] | None = None,
     daily: dict[str, Any] | None = None,
 ) -> list[Allowance]:
     """Everything worth showing for one engine, most actionable first."""
@@ -192,14 +303,23 @@ def allowances(
             note="A queue depth, not a monthly allowance: publishing one frees "
                  f"its slot. From {plan['source']}, checked {PUBLISHED_ON}.",
         ))
-    if plan.get("requests_per_30_days") and not rate_limit:
+    if plan.get("requests_per_30_days"):
+        # The engine's own figure where it sent one. Its rate-limit policy lists
+        # a quota per window, and the 30-day window is this same budget - so
+        # quoting the pricing page beside it would be a scraped number sitting
+        # where a reported one was available. No usage with it: the policy says
+        # what the window allows, and only the window nearest expiry reports
+        # what is left of it.
+        measured = (policy or {}).get(_THIRTY_DAYS)
         found.append(Allowance(
             id="requests_per_30_days",
             label="API requests per 30 days",
-            confidence="published",
-            limit=int(plan["requests_per_30_days"]),
+            confidence="measured" if measured else "published",
+            limit=int(measured or plan["requests_per_30_days"]),
             used=None,
-            note=f"From {plan['source']}, checked {PUBLISHED_ON}. Not read from the engine.",
+            note="Reported by the engine in its rate-limit policy." if measured
+                 else f"From {plan['source']}, checked {PUBLISHED_ON}. "
+                      "Not read from the engine.",
         ))
     return found
 
