@@ -536,9 +536,11 @@ export default function PublishPage() {
       .map((item) => item.media_note)
       .filter(Boolean),
   )].join(" ") || null;
-  const needsPublicMedia = chosenProviders.length
-    ? fetchOnlyProviders.length > 0
-    : activeProvider?.requires_public_media ?? false;
+  // Only once a destination has been chosen. Falling back to the default
+  // engine meant warning that Buffer needs a publicly hosted file before the
+  // operator had picked anything - a constraint from a choice they had not
+  // made, presented as a problem with the clip.
+  const needsPublicMedia = chosenProviders.length > 0 && fetchOnlyProviders.length > 0;
   const hosting = connection?.media_hosting ?? null;
   // With storage configured the engine still fetches, but TrendRelay does the
   // hosting, so a local path is enough and no URL has to be found by hand.
@@ -1526,98 +1528,6 @@ export default function PublishPage() {
             </select>
           </label>
 
-          {needsPublicMedia && !hostsLocalMedia ? (
-            <div className="ui-field">
-              {/* The picker belongs here too. This engine fetches rather than
-                  uploads, but a clip still has to be chosen before anyone can
-                  know that hosting is what stands in the way. */}
-              <div className="field-with-action">
-                <label className="ui-field-label">{t("publish.publicMediaUrl")}
-                  <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" required={!videoPath} />
-                </label>
-                <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
-              </div>
-              {clip && (
-                <span className="chosen-clip">
-                  <b>{clip.title}</b>
-                  {clip.duration_ms ? <i>{clipLength(clip.duration_ms)}</i> : null}
-                  {isBlurred(clip) && <em className="blurred-tag">{t("publish.facesBlurred")}</em>}
-                </span>
-              )}
-              {videoPath && !mediaUrl ? (
-                <p className="publish-blocked" role="status">
-                  {fetchingNames || activeProvider?.label} downloads the file rather than
-                  accepting an upload, so this clip needs somewhere public to sit.{" "}
-                  <button type="button" className="link-action" onClick={() => setHostingOpen(true)}>
-                    Set up media hosting
-                  </button>{" "}
-                  and TrendRelay will do it for you, or paste a URL you already host.
-                </p>
-              ) : (
-                <small className="ui-field-note">{mediaNote}</small>
-              )}
-            </div>
-          ) : needsPublicMedia ? (
-            <>
-              <div className="ui-field">
-                <div
-                  className={`field-with-action dropzone${dragOver ? " over" : ""}`}
-                  onDragOver={(event) => { event.preventDefault(); setDragOver(true); }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={dropMedia}
-                >
-                  <label>{t("publish.approvedPath")}
-                    <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" />
-                  </label>
-                  <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
-                </div>
-                {clip && (
-                  <span className="chosen-clip">
-                    <b>{clip.title}</b>
-                    {clip.duration_ms ? <i>{clipLength(clip.duration_ms)}</i> : null}
-                    {isBlurred(clip) && <em className="blurred-tag">{t("publish.facesBlurred")}</em>}
-                  </span>
-                )}
-                <small className="ui-field-note">
-                  Uploaded to {hosting?.label} when the post runs, so {fetchingNames || activeProvider?.label} can
-                  fetch it. If the clip has a blurred version, that is the cut that gets uploaded.
-                </small>
-              </div>
-              <label>{t("publish.publicMediaUrl")} <i>{t("publish.optional")}</i>
-                <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" />
-                <small>{t("publish.supplyHosted")}</small>
-              </label>
-            </>
-          ) : (
-            <>
-              <div className="ui-field">
-                <div
-                  className={`field-with-action dropzone${dragOver ? " over" : ""}`}
-                  onDragOver={(event) => { event.preventDefault(); setDragOver(true); }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={dropMedia}
-                >
-                  <label>{t("publish.approvedPath")}
-                    <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" required />
-                  </label>
-                  <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
-                </div>
-                {clip && (
-                  <span className="chosen-clip">
-                    <b>{clip.title}</b>
-                    {clip.duration_ms ? <i>{clipLength(clip.duration_ms)}</i> : null}
-                    {isBlurred(clip) && <em className="blurred-tag">{t("publish.facesBlurred")}</em>}
-                  </span>
-                )}
-                <small className="ui-field-note">{mediaNote ?? "Media must sit under a configured publishing media directory."}</small>
-              </div>
-              <label>{t("publish.publicMediaUrl")} <i>{t("publish.optional")}</i>
-                <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" />
-                <small>{t("publish.supplySkipUpload")}</small>
-              </label>
-            </>
-          )}
-
           {/* Where it goes, before what it says.
 
               The destinations decide the caption limit, which post types
@@ -1847,15 +1757,116 @@ export default function PublishPage() {
             </label>
           )}
 
+          {/* The clip, once its constraints are known.
+
+              Whether the media has to be publicly hosted depends on which
+              engine delivers it, so asking for it first meant warning about
+              a constraint from a destination nobody had chosen. */}
+          {needsPublicMedia && !hostsLocalMedia ? (
+            <div className="ui-field">
+              {/* The picker belongs here too. This engine fetches rather than
+                  uploads, but a clip still has to be chosen before anyone can
+                  know that hosting is what stands in the way. */}
+              <div className="field-with-action">
+                <label className="ui-field-label">{t("publish.publicMediaUrl")}
+                  <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" required={!videoPath} />
+                </label>
+                <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
+              </div>
+              {clip && (
+                <span className="chosen-clip">
+                  <b>{clip.title}</b>
+                  {clip.duration_ms ? <i>{clipLength(clip.duration_ms)}</i> : null}
+                  {isBlurred(clip) && <em className="blurred-tag">{t("publish.facesBlurred")}</em>}
+                </span>
+              )}
+              {videoPath && !mediaUrl ? (
+                <p className="publish-blocked" role="status">
+                  {fetchingNames || activeProvider?.label} downloads the file rather than
+                  accepting an upload, so this clip needs somewhere public to sit.{" "}
+                  <button type="button" className="link-action" onClick={() => setHostingOpen(true)}>
+                    Set up media hosting
+                  </button>{" "}
+                  and TrendRelay will do it for you, or paste a URL you already host.
+                </p>
+              ) : (
+                <small className="ui-field-note">{mediaNote}</small>
+              )}
+            </div>
+          ) : needsPublicMedia ? (
+            <>
+              <div className="ui-field">
+                <div
+                  className={`field-with-action dropzone${dragOver ? " over" : ""}`}
+                  onDragOver={(event) => { event.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={dropMedia}
+                >
+                  <label>{t("publish.approvedPath")}
+                    <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" />
+                  </label>
+                  <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
+                </div>
+                {clip && (
+                  <span className="chosen-clip">
+                    <b>{clip.title}</b>
+                    {clip.duration_ms ? <i>{clipLength(clip.duration_ms)}</i> : null}
+                    {isBlurred(clip) && <em className="blurred-tag">{t("publish.facesBlurred")}</em>}
+                  </span>
+                )}
+                <small className="ui-field-note">
+                  Uploaded to {hosting?.label} when the post runs, so {fetchingNames || activeProvider?.label} can
+                  fetch it. If the clip has a blurred version, that is the cut that gets uploaded.
+                </small>
+              </div>
+              <label>{t("publish.publicMediaUrl")} <i>{t("publish.optional")}</i>
+                <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" />
+                <small>{t("publish.supplyHosted")}</small>
+              </label>
+            </>
+          ) : (
+            <>
+              <div className="ui-field">
+                <div
+                  className={`field-with-action dropzone${dragOver ? " over" : ""}`}
+                  onDragOver={(event) => { event.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={dropMedia}
+                >
+                  <label>{t("publish.approvedPath")}
+                    <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" required />
+                  </label>
+                  <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
+                </div>
+                {clip && (
+                  <span className="chosen-clip">
+                    <b>{clip.title}</b>
+                    {clip.duration_ms ? <i>{clipLength(clip.duration_ms)}</i> : null}
+                    {isBlurred(clip) && <em className="blurred-tag">{t("publish.facesBlurred")}</em>}
+                  </span>
+                )}
+                <small className="ui-field-note">{mediaNote ?? "Media must sit under a configured publishing media directory."}</small>
+              </div>
+              <label>{t("publish.publicMediaUrl")} <i>{t("publish.optional")}</i>
+                <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" />
+                <small>{t("publish.supplySkipUpload")}</small>
+              </label>
+            </>
+          )}
+
+          {/* Only where a chosen destination has a title field. Most posts do
+              not, and an always-present input labelled "used by YouTube, Reddit
+              and Pinterest" asks every operator to decide whether it applies to
+              them - a decision the destinations already answer. */}
+          {titleLimit && (
           <label>{t("publish.title")} <i>{t("publish.titleUsedBy")}</i>
             <input name="title" maxLength={300} value={title} onChange={(event) => setTitle(event.target.value)} />
-            {titleLimit && (
-              <small className={`char-count${titleOver > 0 ? " over" : ""}`}>
-                {title.length} / {titleLimit.title}
-                <i>tightest: {platformLabels[titleLimit.platform as PublishingPlatform]}</i>
-              </small>
-            )}
+            <small className={`char-count${titleOver > 0 ? " over" : ""}`}>
+              {title.length} / {titleLimit.title}
+              <i>tightest: {platformLabels[titleLimit.platform as PublishingPlatform]}</i>
+            </small>
           </label>
+          )}
           <label>{t("publish.caption")}
             <textarea name="caption" rows={5} maxLength={5000} required value={caption} onChange={(event) => setCaption(event.target.value)} />
             {captionLimit && (
