@@ -6,6 +6,7 @@ import os
 import subprocess
 from typing import Any
 
+from trendrelay_api.env_store import masked_value
 from trendrelay_api.integrations.agent_reach import diagnostic_report
 from trendrelay_api.integrations.douyin import provider_status as douyin_status
 from trendrelay_api.integrations.meta_ads_collector import (
@@ -127,6 +128,11 @@ def setup_report(tool_id: str) -> dict[str, Any]:
             ],
             configured_secret_names=configured,
             supported_secret_names=list(LAST30DAYS_KEYS),
+            # The same masked tail the credential rows show. There is no field
+            # to edit here - these are added to the .env by hand - but "which of
+            # the nine is the wrong one" is the same question, and "configured"
+            # on its own cannot answer it.
+            secret_previews={name: masked_value(name) for name in configured},
             actions=[
                 {
                     "id": "open-research",

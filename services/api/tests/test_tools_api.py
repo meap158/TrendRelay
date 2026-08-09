@@ -100,6 +100,14 @@ def test_last30days_setup_lists_secret_names_without_values(monkeypatch) -> None
     setup = response.json()["setup"]
     assert "EXA_API_KEY" in setup["configured_secret_names"]
     assert "never-return-this-value" not in str(setup)
+    # Masked to its tail, because "configured" against nine keys cannot answer
+    # the only question worth asking: which one is wrong. The value itself still
+    # never leaves the API process, which the assertion above holds to.
+    preview = setup["secret_previews"]["EXA_API_KEY"]
+    assert preview.endswith("alue")
+    assert set(preview[: -len("alue")]) == {"•"}
+    # Only keys that are set: an unset one has no tail to show.
+    assert set(setup["secret_previews"]) <= set(setup["configured_secret_names"])
 
 
 def test_setup_launcher_requires_explicit_confirmation() -> None:

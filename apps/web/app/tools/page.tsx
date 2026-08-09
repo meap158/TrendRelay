@@ -48,6 +48,8 @@ type SetupReport = {
   actions: SetupAction[];
   credential_values_exposed: false;
   configured_secret_names?: string[];
+  /** Per key, the saved value masked to its last few characters. */
+  secret_previews?: Record<string, string | null>;
   supported_secret_names?: string[];
   connection?: { state?: string; message?: string; service_ready?: boolean; authenticated?: boolean };
 };
@@ -362,11 +364,21 @@ export default function ToolsPage() {
             <div className="secret-checklist">
               <strong>{t("tools.providerKeys")}</strong>
               <p>Configured names are shown; secret values never leave the API process.</p>
-              <div>{setup.supported_secret_names?.map((name) => (
-                <code className={setup.configured_secret_names?.includes(name) ? "configured" : "missing"} key={name}>
-                  {name} · {setup.configured_secret_names?.includes(name) ? "configured" : "not set"}
-                </code>
-              ))}</div>
+              {/* The masked tail rather than the word "configured": with nine
+                  keys, which one is wrong is the only question worth asking,
+                  and "configured" cannot answer it. No reveal here - these are
+                  added to the .env by hand and the page offers no field to
+                  edit, so there is nothing to check a value against. */}
+              <div>{setup.supported_secret_names?.map((name) => {
+                const saved = setup.configured_secret_names?.includes(name);
+                return (
+                  <code className={saved ? "configured" : "missing"} key={name}>
+                    {name} · {saved
+                      ? setup.secret_previews?.[name] ?? t("publish.configured")
+                      : t("publish.notSaved")}
+                  </code>
+                );
+              })}</div>
               <p>{rich("tools.addToEnvFile", { file: <code>.env</code> })}</p>
             </div>
           )}
