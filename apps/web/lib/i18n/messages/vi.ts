@@ -348,6 +348,7 @@ export const vi: Messages = {
     engineUnreachableFix: "Thường là do công cụ đang ngừng hoạt động hoặc bạn mất mạng. Hãy thử lại; chưa có gì được gửi đi.",
     engineNoAccounts: "Khóa hoạt động tốt, nhưng chưa có kênh nào được kết nối.",
     engineNoAccountsFix: "Hãy kết nối kênh trong bảng điều khiển của công cụ, rồi tải lại danh sách.",
+    connectedChannels: "{count, plural, other {Đã kết nối # kênh}}",
     engineSupports: "{label} hỗ trợ {count} đích đến",
     useForPublishing: "Dùng để đăng bài",
     defaultEngine: "Mặc định",

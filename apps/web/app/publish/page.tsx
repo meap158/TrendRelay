@@ -49,11 +49,12 @@ type Delivery = "draft" | "schedule" | "now";
 const isDelivery = oneOf<Delivery>("draft", "schedule", "now");
 
 type Workspace = { id: string; name: string; role: string };
+/** How much a figure can be trusted, which is as important as the figure. */
+type Confidence = "measured" | "counted" | "published";
 type Allowance = {
   id: string;
   label: string;
-  /** How much the figure can be trusted, which is as important as the figure. */
-  confidence: "measured" | "counted" | "published";
+  confidence: Confidence;
   limit: number | null;
   used: number | null;
   remaining: number | null;
@@ -86,8 +87,24 @@ type Account = {
   provider: PublishingProvider;
   provider_label: string;
 };
+/** One connected channel, as the engine reports it. */
+type EngineChannel = {
+  id: string;
+  platform: PublishingPlatform;
+  label: string;
+  handle: string | null;
+};
+/**
+ * Which plan an account is on. `name` is null where nothing the engine reported
+ * distinguishes one - no engine will say outright - and that reads as unknown
+ * rather than as the free tier.
+ */
+type EnginePlan = { name: string | null; confidence: Confidence; note: string };
 type EngineReach = {
   allowances?: Allowance[];
+  /** What is actually connected, as against what the engine supports. */
+  channels?: EngineChannel[];
+  plan?: EnginePlan;
   id: string; label: string; reachable: boolean; reason: string | null; account_count: number;
 };
 type CredentialField = {
@@ -1211,6 +1228,9 @@ export default function PublishPage() {
             // the switch below, and the two are deliberately not the same test.
             const usable = ["ready", "no-accounts"].includes(status.state);
             const open = openProvider === provider.id;
+            const reach = engineReach.find((item) => item.id === provider.id);
+            const channels = reach?.channels ?? [];
+            const plan = reach?.plan;
             return (
               <article
                 className={`engine-card engine-${status.state}`}
@@ -1230,15 +1250,59 @@ export default function PublishPage() {
                   <Badge tone={status.tone}>{t(`publish.engineState.${status.state}`)}</Badge>
                 </div>
                 <p className="engine-blurb">{provider.summary}</p>
-                <div className="engine-platforms" aria-label={t("publish.engineSupports", {
-                  label: provider.label, count: provider.platforms.length,
-                })}>
-                  {provider.platforms.map((platform) => (
-                    <span key={platform} title={platformLabels[platform]}>
-                      <PlatformIcon platform={platform} size={16} muted={!usable || engineOff(provider.id)} />
-                    </span>
-                  ))}
-                  <em>{provider.platforms.length}</em>
+                {/* What is connected, and which plan is carrying it.
+                 *
+                 * This row used to list the platforms the engine *supports* -
+                 * the same eight icons on every card, whether an account was
+                 * attached to any of them or none. The question someone has in
+                 * front of three engine cards is which accounts each one can
+                 * reach, so the connected channels answer it and the supported
+                 * list is the fallback for when there is nothing to show. */}
+                <div className="engine-reach">
+                  <span className="engine-reach-head">
+                    {channels.length
+                      ? t("publish.connectedChannels", { count: channels.length })
+                      : t("publish.engineSupports", {
+                          label: provider.label, count: provider.platforms.length,
+                        })}
+                    {/* No engine names the plan an account is on, so this is
+                        read off the limits they do report - and it carries the
+                        same confidence mark as the figures below, because a
+                        plan worked out by elimination is not one they stated. */}
+                    {plan?.name && (
+                      <em className={`engine-plan ${plan.confidence}`} title={plan.note}>
+                        {plan.name}
+                      </em>
+                    )}
+                  </span>
+                  {channels.length ? (
+                    <ul className="engine-channels">
+                      {channels.map((channel) => (
+                        <li key={channel.id} title={`${platformLabels[channel.platform]} · ${channel.label}`}>
+                          <PlatformIcon
+                            platform={channel.platform}
+                            size={14}
+                            muted={engineOff(provider.id)}
+                          />
+                          {/* An @ only where one belongs. Buffer reports a
+                              Facebook page's display name in the same field a
+                              handle arrives in, and "@Naceto Books" claims a
+                              handle that does not exist. */}
+                          <span>{channel.handle && !/\s/.test(channel.handle)
+                            ? `@${channel.handle}` : channel.label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="engine-platforms">
+                      {provider.platforms.map((platform) => (
+                        <span key={platform} title={platformLabels[platform]}>
+                          <PlatformIcon platform={platform} size={16} muted={!usable || engineOff(provider.id)} />
+                        </span>
+                      ))}
+                      <em>{provider.platforms.length}</em>
+                    </div>
+                  )}
                 </div>
                 {/* The engine's own message where there is one, and the thing
                     to do about it either way. A state without a next step is a
@@ -1274,10 +1338,9 @@ export default function PublishPage() {
                     figure quoted from a pricing page are worth different
                     amounts, and showing them alike is how a year-old scrape
                     gets reconciled against a bill. */}
-                {(engineReach.find((item) => item.id === provider.id)?.allowances ?? [])
-                  .length > 0 && (
+                {(reach?.allowances ?? []).length > 0 && (
                   <ul className="engine-allowances">
-                    {(engineReach.find((item) => item.id === provider.id)?.allowances ?? [])
+                    {(reach?.allowances ?? [])
                       .map((item) => {
                         const share = item.limit && item.used !== null
                           ? Math.min(100, Math.round((item.used / item.limit) * 100))

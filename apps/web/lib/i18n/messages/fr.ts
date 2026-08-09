@@ -355,6 +355,7 @@ export const fr: Messages = {
     engineUnreachableFix: "Le plus souvent le moteur est hors service, ou vous êtes hors ligne. Réessayez : rien n’a été envoyé.",
     engineNoAccounts: "La clé fonctionne, mais aucun canal n’y est connecté.",
     engineNoAccountsFix: "Connectez des canaux dans le tableau de bord du moteur, puis rechargez les comptes.",
+    connectedChannels: "{count, plural, one {# canal connecté} other {# canaux connectés}}",
     engineSupports: "{label} prend en charge {count} destinations",
     useForPublishing: "Utiliser pour publier",
     defaultEngine: "Par défaut",

@@ -345,6 +345,7 @@ export const ar: Messages = {
     engineUnreachableFix: "غالبًا المحرّك متوقّف أو أنت غير متصل. أعد المحاولة؛ لم يُرسل شيء.",
     engineNoAccounts: "المفتاح سليم، لكن لا توجد قنوات متصلة به.",
     engineNoAccountsFix: "اربط القنوات من لوحة المحرّك نفسه، ثم أعد تحميل الحسابات.",
+    connectedChannels: "{count, plural, zero {لا توجد قنوات متصلة} one {قناة واحدة متصلة} two {قناتان متصلتان} few {# قنوات متصلة} other {# قناة متصلة}}",
     engineSupports: "يدعم {label} عدد {count} من الوجهات",
     useForPublishing: "استخدمه للنشر",
     defaultEngine: "الافتراضي",

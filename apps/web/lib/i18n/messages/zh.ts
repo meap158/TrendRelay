@@ -338,6 +338,7 @@ export const zh: Messages = {
     engineUnreachableFix: "通常是引擎停机或你处于离线状态。请重试；尚未发送任何内容。",
     engineNoAccounts: "密钥有效，但尚未连接任何渠道。",
     engineNoAccountsFix: "请在引擎自己的控制台连接渠道，然后重新加载。",
+    connectedChannels: "{count, plural, other {已连接 # 个频道}}",
     engineSupports: "{label} 支持 {count} 个目标",
     useForPublishing: "用于发布",
     defaultEngine: "默认",

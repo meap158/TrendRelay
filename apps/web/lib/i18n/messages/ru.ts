@@ -354,6 +354,7 @@ export const ru: Messages = {
     engineUnreachableFix: "Обычно движок не работает или нет сети. Попробуйте снова: ничего не отправлено.",
     engineNoAccounts: "Ключ работает, но к нему не подключено ни одного канала.",
     engineNoAccountsFix: "Подключите каналы в панели самого движка и загрузите аккаунты снова.",
+    connectedChannels: "{count, plural, one {# канал подключён} few {# канала подключено} other {# каналов подключено}}",
     engineSupports: "{label} поддерживает {count} направлений",
     useForPublishing: "Использовать для публикаций",
     defaultEngine: "По умолчанию",

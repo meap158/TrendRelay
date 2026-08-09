@@ -348,6 +348,7 @@ export const ja: Messages = {
     engineUnreachableFix: "多くはエンジン側の停止か、ネットワークの切断です。何も送信されていないので、再度お試しください。",
     engineNoAccounts: "キーは有効ですが、接続されたチャンネルがありません。",
     engineNoAccountsFix: "エンジンのダッシュボードでチャンネルを接続し、再度読み込んでください。",
+    connectedChannels: "{count, plural, other {# 件のチャンネルを接続済み}}",
     engineSupports: "{label} は{count}件の配信先に対応",
     useForPublishing: "投稿に使う",
     defaultEngine: "既定",

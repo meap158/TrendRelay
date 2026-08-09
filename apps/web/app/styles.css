@@ -276,6 +276,19 @@ nav strong { color: #1c2b33; }
 .engine-state.ready { border-color: var(--green); color: var(--green); background: var(--green-dark); }
 .engine-state.partial { border-color: var(--amber); color: #7a5c00; background: #fdf5db; }
 .engine-blurb { margin: 0; color: var(--muted); line-height: 1.5; }
+/* Which accounts this engine reaches, and on which plan. The chips wrap and the
+   list is capped in height rather than allowed to push the switch below the
+   fold: three cards side by side have to stay the same shape whether one has
+   eight channels and the others none. */
+.engine-reach { display: grid; gap: 6px; }
+.engine-reach-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; color: var(--muted); font-size: 11px; font-weight: 600; }
+.engine-plan { border-radius: 999px; padding: 1px 7px; font-size: 9px; font-style: normal; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.engine-plan.measured { color: var(--green); background: var(--green-dark); }
+.engine-plan.counted { color: var(--text); background: var(--panel-raised); }
+.engine-plan.published { color: var(--muted); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.engine-channels { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; max-block-size: 58px; overflow-y: auto; list-style: none; }
+.engine-channels li { display: inline-flex; gap: 5px; align-items: center; max-inline-size: 100%; border-radius: 999px; padding: 2px 8px 2px 6px; background: var(--panel-raised); font-size: 11px; }
+.engine-channels li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .engine-platforms { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .engine-platforms span { display: inline-flex; }
 .engine-platforms em { margin-inline-start: auto; border-radius: 999px; padding: 1px 7px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-style: normal; font-weight: 600; font-variant-numeric: tabular-nums; }

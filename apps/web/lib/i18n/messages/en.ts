@@ -351,6 +351,7 @@ export const en = {
     engineUnreachableFix: "Usually the engine being down or offline. Try again; nothing was sent.",
     engineNoAccounts: "The key works, but no channels are connected to it.",
     engineNoAccountsFix: "Connect channels in the engine's own dashboard, then load accounts again.",
+    connectedChannels: "{count, plural, one {# channel connected} other {# channels connected}}",
     engineSupports: "{label} supports {count} destinations",
     useForPublishing: "Use for publishing",
     defaultEngine: "Default",
