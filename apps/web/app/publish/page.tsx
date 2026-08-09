@@ -872,15 +872,22 @@ export default function PublishPage() {
           : `${asking?.label} needs a public media URL. ${asking?.media_note}`,
       );
     }
-    if (!needsPublicMedia && !localPath && !mediaUrl) {
+    if (!wantsCarousel && !needsPublicMedia && !localPath && !mediaUrl) {
       throw new Error("Enter the approved local MP4 path.");
+    }
+    if (wantsCarousel && !imagePaths.length) {
+      throw new Error("A carousel needs at least one image. Add them from the Library.");
     }
     return {
       workspace_id: workspaceId,
       // The lead engine, only a fallback for a destination that names none.
       // Every target above names its own, so this decides nothing on its own.
       provider: chosenEngines[0] ?? connection?.active_provider ?? null,
-      video_path: localPath || "unused",
+      // Empty rather than a placeholder. It used to send "unused" because the
+      // field was required for every post, which a carousel would now read as
+      // a video it also carries - and which hid a post that had no media at all
+      // behind a path that resolved to nothing.
+      video_path: wantsCarousel ? "" : localPath,
       media_url: mediaUrl || null,
       caption: form.get("caption"),
       first_comment: firstComment.trim() || null,

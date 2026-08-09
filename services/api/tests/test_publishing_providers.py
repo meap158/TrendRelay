@@ -1509,15 +1509,24 @@ def carousel_images(media_file: Path, tmp_path: Path) -> list[str]:
     return paths
 
 
-def carousel(media_file: Path, images: list[str], **overrides):
-    return request(
-        media_file,
-        image_paths=images,
-        targets=[publishing.PublishTarget(
+def carousel(images: list[str], **overrides):
+    """A carousel post: images, and no video at all.
+
+    Built directly rather than through `request`, whose first parameter is the
+    video path and so cannot be overridden to nothing.
+    """
+    payload = {
+        "workspace_id": "workspace-1",
+        "video_path": "",
+        "image_paths": images,
+        "caption": "Launch clip",
+        "date": datetime.now(UTC) + timedelta(hours=2),
+        "targets": [publishing.PublishTarget(
             platform="tiktok", integration_id="account-1", post_type="photo",
         )],
-        **overrides,
-    )
+    }
+    payload.update(overrides)
+    return publishing.PublishRequest(**payload)
 
 
 def test_zernio_posts_a_carousel_as_images_not_a_video(
@@ -1550,7 +1559,7 @@ def test_zernio_posts_a_carousel_as_images_not_a_video(
     monkeypatch.setattr(publishing, "_http", lambda *args, **kwargs: None)
 
     publishing._execute_publish(
-        carousel(media_file, carousel_images, confirm_external_action=True)
+        carousel(carousel_images, confirm_external_action=True)
     )
     body = sent["body"]
 
@@ -1587,7 +1596,7 @@ def test_woopsocial_posts_a_carousel_as_one_post_of_many_media(
 
     monkeypatch.setattr(publishing, "_woopsocial_request", fake_request)
     publishing._execute_publish(
-        carousel(media_file, carousel_images, confirm_external_action=True)
+        carousel(carousel_images, confirm_external_action=True)
     )
     body = sent["body"]
 
@@ -1605,7 +1614,7 @@ def test_an_engine_without_a_carousel_contract_refuses_by_name(
     """
     use_provider(monkeypatch, tmp_path, "buffer")
     with pytest.raises(ValueError, match="cannot post a TikTok photo carousel"):
-        publishing.preview_publish(carousel(media_file, carousel_images))
+        publishing.preview_publish(carousel(carousel_images))
 
 
 def test_a_carousel_with_no_images_is_refused(
@@ -1613,7 +1622,7 @@ def test_a_carousel_with_no_images_is_refused(
 ) -> None:
     use_provider(monkeypatch, tmp_path, "zernio")
     with pytest.raises(ValueError, match="at least one image"):
-        publishing.preview_publish(carousel(media_file, []))
+        publishing.preview_publish(carousel([]))
 
 
 def test_carousel_images_obey_the_media_root(
@@ -1655,3 +1664,51 @@ def test_a_carousel_is_only_offered_by_an_engine_that_can_post_one(media_file: P
     ]
     assert [kind["id"] for kind in by_id["buffer"]["post_types"]["tiktok"]] == ["video"]
     assert [kind["id"] for kind in by_id["bundle_social"]["post_types"]["tiktok"]] == ["video"]
+
+
+def test_a_carousel_needs_no_video_path(carousel_images: list[str]) -> None:
+    """It posts images, so demanding an MP4 as well made no sense.
+
+    The field was required for every post because every post used to be a
+    video, which meant a carousel could not be submitted without also naming a
+    clip it would never publish.
+    """
+    body = carousel(carousel_images)
+    assert body.video_path == ""
+    assert body.image_paths == carousel_images
+
+
+def test_a_carousel_cannot_also_carry_a_video(
+    media_file: Path, carousel_images: list[str]
+) -> None:
+    # Ambiguous about which one publishes, so it is not a post we accept.
+    with pytest.raises(ValueError, match="cannot also carry a video"):
+        carousel(carousel_images, video_path=str(media_file))
+
+
+def test_a_video_post_still_needs_its_media() -> None:
+    # Built directly: `request` takes the video path positionally, so it cannot
+    # be overridden to nothing through it.
+    payload = {
+        "workspace_id": "workspace-1",
+        "video_path": "",
+        "caption": "Launch clip",
+        "date": datetime.now(UTC) + timedelta(hours=2),
+        "targets": [publishing.PublishTarget(platform="tiktok", integration_id="a1")],
+    }
+    with pytest.raises(ValueError, match="approved MP4 or a public media URL"):
+        publishing.PublishRequest(**payload)
+    # A public URL is the other way to have media, and is enough on its own.
+    assert publishing.PublishRequest(**payload, media_url="https://cdn.example.com/c.mp4")
+
+
+def test_images_without_a_carousel_destination_are_refused(
+    media_file: Path, carousel_images: list[str]
+) -> None:
+    """Attached, then the destination switched back to a video.
+
+    Silently ignoring them would publish a video while the composer still shows
+    a list of images that were supposedly going out.
+    """
+    with pytest.raises(ValueError, match="no destination is posting a carousel"):
+        request(media_file, image_paths=carousel_images)

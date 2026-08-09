@@ -20,7 +20,7 @@ from secrets import token_hex
 from typing import Any, Literal
 from urllib.parse import quote
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from trendrelay_api.campaign_autopilot import resolve_placement
 from trendrelay_api.config import get_settings
@@ -486,7 +486,9 @@ class PublishTarget(BaseModel):
 
 class PublishRequest(BaseModel):
     workspace_id: str = Field(min_length=1, max_length=128)
-    video_path: str = Field(min_length=1, max_length=1000)
+    #: Optional only because a photo carousel has no video. Every other post
+    #: still needs one, which `media_matches_the_post_type` holds to.
+    video_path: str = Field(default="", max_length=1000)
     #: A TikTok photo carousel's images, in swipe order. Empty for a video post,
     #: which is still what almost every post here is - so `video_path` stays
     #: required rather than becoming one of two optional media fields that a
@@ -558,6 +560,39 @@ class PublishRequest(BaseModel):
         if self.delivery:
             return self.delivery
         return "schedule" if self.schedule else "draft"
+
+    @model_validator(mode="after")
+    def media_matches_the_post_type(self) -> PublishRequest:
+        """A post carries the media its type is made of, and only that.
+
+        A carousel has images and no video; everything else has a video and no
+        images. Held here rather than left to each engine, because the request
+        that reaches them should already be a coherent post - and because a
+        carousel that also names an MP4 is ambiguous about which one publishes.
+        """
+        try:
+            carousel = any(target.kind.id == "photo" for target in self.targets)
+        except ValueError:
+            # A post type this network does not have is a different complaint,
+            # and `_validate_request` words it far better than a wrapped
+            # validation error would. Leave it to say so.
+            return self
+        if carousel:
+            if not self.image_paths:
+                raise ValueError("A photo carousel needs at least one image.")
+            if self.video_path.strip():
+                raise ValueError(
+                    "A photo carousel posts its images, so it cannot also carry a "
+                    "video. Clear the clip, or switch the destination back to a video."
+                )
+        else:
+            if not self.video_path.strip() and not self.media_url:
+                raise ValueError("A post needs an approved MP4 or a public media URL.")
+            if self.image_paths:
+                raise ValueError(
+                    "Images were attached but no destination is posting a carousel."
+                )
+        return self
 
     @field_validator("targets")
     @classmethod
@@ -2235,7 +2270,12 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
         for provider_id, part in scoped.items()
     )
     if uses_local_media:
-        approved_video_path(request.video_path)
+        # Whichever media this post is actually made of. Resolving the video for
+        # a carousel would demand an MP4 the post does not have.
+        if _is_photo_post(request):
+            approved_image_paths(request.image_paths)
+        else:
+            approved_video_path(request.video_path)
     # What the engine itself says, where it will say anything. Tolerated rather
     # than required: a dry run that fails because a validation call timed out
     # would be worse than one that checked a little less.
@@ -2299,7 +2339,7 @@ def _dispatch(
     """Hand one engine the destinations that belong to it."""
     video = (
         approved_video_path(request.video_path)
-        if _needs_local_media(provider, request)
+        if _needs_local_media(provider, request) and not _is_photo_post(request)
         else None
     )
     if provider.id == "bundle_social":
