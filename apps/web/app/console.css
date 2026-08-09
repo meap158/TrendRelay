@@ -666,12 +666,6 @@ html { scroll-behavior: smooth; }
 /* Four cards in one column, in the order the questions get asked: will this
    post, where, what, and what exactly happens next. */
 .autopilot { display: grid; gap: 12px; margin-top: 12px; }
-/* styles.css styles bare `li` and `li span` for the landing page - grid, 14px
-   padding, white background, and a green monospace face on the spans - and both
-   leak into every list in the app. Reset once here rather than fighting them
-   rule by rule; the components below re-apply what they actually want. */
-.autopilot li { display: flex; gap: 8px; padding: 0; background: transparent; font-weight: 400; }
-.autopilot li span { color: inherit; font: inherit; }
 .autopilot-lede { margin: 0 0 10px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .autopilot-empty { margin: 0; padding: 12px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 12px; }
 .autopilot-note { margin: 10px 0 0; padding: 8px 10px; border-inline-start: 3px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--text); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }

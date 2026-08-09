@@ -5,9 +5,20 @@ main { width: min(1080px, calc(100% - 40px)); margin: 0 auto; padding: 12vh 0 8v
 .eyebrow, .status { color: #006b4e; letter-spacing: 0.16em; font-weight: 700; }
 h1 { max-width: 850px; margin: 18px 0; font-size: clamp(3rem, 8vw, 7rem); line-height: 0.92; letter-spacing: -0.06em; }
 .lede { max-width: 720px; color: #606770; font-size: 1.2rem; line-height: 1.6; }
-ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1px; margin: 64px 0; padding: 1px; list-style: none; background: #cbd2d9; }
-li { display: grid; gap: 28px; padding: 14px; background: #ffffff; font-weight: 650; }
-li span { color: #006b4e; font: 0.72rem ui-monospace, monospace; }
+/* No global `ol`, `li` or `li span` rules live here, and none should.
+ *
+ * They used to: a multi-column grid, 14px of white padding on every list item,
+ * and a green monospace face on every span inside one. They were written for a
+ * marketing page that no longer exists - /about redirects to /tools - and they
+ * applied to every list in the app. Three components had to be repaired after
+ * shipping with them (the autopilot checklist rendered as tall monospace rows,
+ * its preview laid a chronology out in columns, and the engine allowances read
+ * as code), and every classed list in this codebase still carries a defensive
+ * `margin: 0; padding: 0; list-style: none` written to survive them.
+ *
+ * A dashboard's lists have nothing in common with a landing page's. If a page
+ * needs that treatment again, give it a class.
+ */
 .status { font-size: 0.72rem; }
 nav { display: flex; align-items: center; gap: 14px; margin-bottom: 72px; color: #606770; }
 nav a { color: #1c2b33; text-decoration: none; }
@@ -608,9 +619,6 @@ nav strong { color: #1c2b33; }
    page are worth different amounts, and showing them alike is how a year-old
    scrape ends up reconciled against a bill. */
 .engine-allowances { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-/* Same landing-page leak the autopilot panel had: bare `li span` is styled
-   green and monospace here, which turned every label and figure into code. */
-.engine-allowances li span { color: inherit; font: inherit; }
 .engine-allowances li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: baseline; padding: 0; background: transparent; font-size: 11px; }
 .engine-allowance-label { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; min-width: 0; color: var(--muted); }
 .engine-confidence { border-radius: 999px; padding: 1px 6px; font-size: 9px; font-style: normal; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
