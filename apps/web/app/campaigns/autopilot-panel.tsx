@@ -78,6 +78,8 @@ type PreviewPost = {
   first_comment: string | null;
   placement: string;
   reason: string;
+  /** What the delivering engine would refuse this post for, if anything. */
+  problem: string | null;
 };
 
 type Offer = {
@@ -138,7 +140,9 @@ export function AutopilotPanel({
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [slotCount, setSlotCount] = useState<number | null>(null);
-  const [preview, setPreview] = useState<{ note: string; posts: PreviewPost[] } | null>(null);
+  const [preview, setPreview] = useState<
+    { note: string; posts: PreviewPost[]; problems: number } | null
+  >(null);
   const [busy, setBusy] = useState("");
   const [adding, setAdding] = useState(false);
   const [library, setLibrary] = useState<LibraryAsset[]>([]);
@@ -607,10 +611,13 @@ export function AutopilotPanel({
         aside={
           <Button variant="secondary" size="sm" busy={busy === "preview"}
             onClick={() => void run("preview", async () => {
-              const body = await json<{ note: string; posts: PreviewPost[] }>(
-                await apiFetch(`${base}/autopilot/preview`, { method: "POST" }));
+              const body = await json<{
+                note: string; posts: PreviewPost[]; problems: number;
+              }>(await apiFetch(`${base}/autopilot/preview`, { method: "POST" }));
               setPreview(body);
-              return body.note;
+              return body.problems
+                ? t("autopilot.previewProblems", { count: body.problems })
+                : body.note;
             })}>{t("autopilot.showNext")}</Button>
         }
       >
@@ -626,7 +633,10 @@ export function AutopilotPanel({
                 const destination = destinations.find(
                   (item) => item.id === post.destination_id);
                 return (
-                  <li key={`${post.destination_id}-${index}`}>
+                  <li
+                    key={`${post.destination_id}-${index}`}
+                    className={post.problem ? "refused" : undefined}
+                  >
                     <div className="autopilot-preview-head">
                       <strong>{new Date(post.at).toLocaleString()}</strong>
                       <span>{destination?.label ?? post.destination_id}</span>
@@ -634,6 +644,15 @@ export function AutopilotPanel({
                         {t(`autopilot.placement.${post.placement}`)}
                       </Badge>
                     </div>
+                    {/* Above the caption, not below it. The caption is what
+                        this row is for reading; a refusal is what it is for
+                        acting on, and a reason to act belongs before the thing
+                        it acts on. */}
+                    {post.problem && (
+                      <p className="autopilot-refusal" role="status">
+                        <strong>{t("autopilot.wouldBeRefused")}</strong> {post.problem}
+                      </p>
+                    )}
                     <pre>{post.caption}</pre>
                     {post.first_comment && (
                       <pre className="autopilot-first-comment">{post.first_comment}</pre>

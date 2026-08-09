@@ -443,6 +443,8 @@ export const zh: Messages = {
     addToQueue: "加入队列",
     queued: "已以草稿加入队列。审批后即可进入循环。",
     hashtagsExample: "咖啡 意式浓缩",
+    wouldBeRefused: "引擎会拒绝这条帖子：",
+    previewProblems: "有 {count} 条帖子会被拒绝。",
     placement: {
       caption: "链接在文案中",
       first_comment: "链接在首条评论",

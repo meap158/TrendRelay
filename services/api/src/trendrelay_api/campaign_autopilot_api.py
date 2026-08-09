@@ -397,6 +397,51 @@ def remove_queue_item(
     return {"removed": item_id}
 
 
+def _would_be_accepted(
+    autopilot: CampaignAutopilot, post: Any, destination: CampaignDestination
+) -> str | None:
+    """The engine's own verdict on one planned post, without sending anything.
+
+    `_validate_request` is what an engine applies before it will take a post:
+    the network must be one it publishes to, the post type must be one that
+    network accepts, the caption and title must fit, and the media must be under
+    an approved root. All of it is local - nothing is uploaded and no engine is
+    contacted - so a preview can afford to run it on every planned post.
+
+    Without this the preview promised something it had never checked. A campaign
+    could preview perfectly and then fail on every destination at run time, for
+    a caption the disclosure had pushed over a limit, or a title Reddit needs and
+    the queue item never had.
+    """
+    from trendrelay_api.integrations.publishing import (
+        PublishRequest,
+        _validate_request,
+        resolve_provider,
+    )
+
+    try:
+        request = PublishRequest(
+            workspace_id=autopilot.workspace_id,
+            video_path=post.video_path,
+            caption=post.caption,
+            title=post.title,
+            first_comment=post.first_comment,
+            date=post.at,
+            delivery=autopilot.delivery,
+            schedule=autopilot.delivery == "schedule",
+            targets=[{
+                "platform": destination.platform,
+                "integration_id": destination.integration_id,
+                "post_type": destination.post_type,
+                "provider": destination.provider,
+            }],
+        )
+        _validate_request(resolve_provider(destination.provider), request)
+    except Exception as error:
+        return str(error)
+    return None
+
+
 @router.post("/{campaign_id}/autopilot/preview")
 def preview_autopilot(
     workspace_id: str, campaign_id: str, user: AuthenticatedUser, session: DatabaseSession
@@ -429,21 +474,29 @@ def preview_autopilot(
         session, autopilot, now=datetime.now(UTC),
         link_for=(lambda _id: preview_link) if preview_link else None,
     )
+    by_id = {item.id: item for item in destinations}
+    rendered = []
+    for post in posts:
+        destination = by_id.get(post.destination_id)
+        rendered.append({
+            "destination_id": post.destination_id,
+            "queue_item_id": post.queue_item_id,
+            "at": post.at,
+            "caption": post.caption,
+            "first_comment": post.first_comment,
+            "placement": post.placement,
+            "reason": post.reason,
+            # The engine's verdict, not ours. A preview that says "this is what
+            # will post" without checking is a promise it has not kept.
+            "problem": (
+                _would_be_accepted(autopilot, post, destination) if destination else None
+            ),
+        })
     return {
         "note": note,
         "tracking_code": sample,
-        "posts": [
-            {
-                "destination_id": post.destination_id,
-                "queue_item_id": post.queue_item_id,
-                "at": post.at,
-                "caption": post.caption,
-                "first_comment": post.first_comment,
-                "placement": post.placement,
-                "reason": post.reason,
-            }
-            for post in posts
-        ],
+        "posts": rendered,
+        "problems": sum(1 for item in rendered if item["problem"]),
     }
 
 

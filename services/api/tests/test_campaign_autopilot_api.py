@@ -239,3 +239,80 @@ def test_an_offer_with_a_plain_http_url_mints_no_tracking_link(workspace) -> Non
         session.flush()
         assert link_url_for(session, pilot, destination) is None
         assert destination.tracking_link_id is None
+
+
+def test_the_preview_reports_what_an_engine_would_refuse(workspace, tmp_path) -> None:
+    """A preview that says "this is what will post" must have checked.
+
+    Without this a campaign previews perfectly and then fails on every
+    destination at run time - for a caption the disclosure pushed over a limit,
+    or a title Reddit requires and the queue item never carried. The check is
+    the engine's own `_validate_request`, run locally: nothing is uploaded and
+    no engine is contacted, so a preview can afford it on every planned post.
+    """
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from trendrelay_api.autopilot_models import CampaignAutopilot, CampaignDestination
+    from trendrelay_api.campaign_autopilot_api import _would_be_accepted
+    from trendrelay_api.campaign_scheduler import ScheduledPost
+    from trendrelay_api.integrations import publishing
+
+    media = tmp_path / "clip.mp4"
+    media.write_bytes(b"x")
+    campaign_id = campaign(workspace)
+    pilot = CampaignAutopilot(
+        workspace_id=workspace, campaign_id=campaign_id, delivery="draft",
+        created_by="owner-user",
+    )
+    destination = CampaignDestination(
+        workspace_id=workspace, campaign_id=campaign_id, provider="buffer",
+        integration_id="acct-1", platform="twitter", label="brand on X",
+    )
+
+    def planned(caption: str, title: str | None = None) -> ScheduledPost:
+        return ScheduledPost(
+            campaign_id=campaign_id, destination_id="d1", queue_item_id="q1",
+            at=datetime.now(UTC), video_path=str(media), title=title,
+            caption=caption, first_comment=None, placement="caption", reason="",
+        )
+
+    uploads = CampaignDestination(
+        workspace_id=workspace, campaign_id=campaign_id, provider="zernio",
+        integration_id="acct-2", platform="twitter", label="brand on X via Zernio",
+    )
+    original = publishing.get_settings
+    publishing.get_settings = lambda: SimpleNamespace(
+        publishing_media_root_list=[str(tmp_path)], publishing_provider="zernio")
+    try:
+        # X takes 280 characters. The disclosure leads every caption, so a body
+        # that would have fit alone no longer does - exactly the arithmetic an
+        # operator cannot be expected to do in their head.
+        refused = _would_be_accepted(pilot, planned("word " * 120), uploads)
+        assert refused is not None
+        assert "280" in refused
+
+        # The finding that matters most, and was invisible until the preview
+        # started asking: Buffer has no upload endpoint, so an autopilot feeding
+        # it local library files fails on every post until media hosting is set
+        # up. Caught here instead of at the first scheduled slot.
+        fetch_only = _would_be_accepted(pilot, planned("Short and fine."), destination)
+        assert fetch_only is not None
+        assert "public" in fetch_only.lower()
+
+        # And a post an engine would take comes back clean, rather than merely
+        # unreported.
+        assert _would_be_accepted(pilot, planned("Short and fine."), uploads) is None
+    finally:
+        publishing.get_settings = original
+
+
+def test_the_preview_carries_a_verdict_for_every_post(workspace) -> None:
+    # Present on every row, so a caller never has to guess whether a missing
+    # `problem` means "fine" or "not checked".
+    campaign_id = campaign(workspace)
+    body = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/preview"
+    ).json()
+    assert "problems" in body
+    assert all("problem" in post for post in body["posts"])

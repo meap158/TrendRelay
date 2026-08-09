@@ -453,6 +453,8 @@ export const vi: Messages = {
     addToQueue: "Thêm vào hàng đợi",
     queued: "Đã thêm vào hàng đợi dưới dạng nháp. Hãy duyệt để đưa vào vòng xoay.",
     hashtagsExample: "caphe espresso",
+    wouldBeRefused: "Công cụ sẽ từ chối bài này:",
+    previewProblems: "{count} bài sẽ bị từ chối.",
     placement: {
       caption: "liên kết trong chú thích",
       first_comment: "liên kết ở bình luận đầu",

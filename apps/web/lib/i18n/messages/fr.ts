@@ -461,6 +461,8 @@ export const fr: Messages = {
     addToQueue: "Ajouter à la file",
     queued: "Ajouté à la file en brouillon. Approuvez-le pour l’entrer dans la rotation.",
     hashtagsExample: "cafe espresso",
+    wouldBeRefused: "Le moteur refuserait cette publication :",
+    previewProblems: "{count, plural, one {# publication serait refusée} other {# publications seraient refusées}}.",
     placement: {
       caption: "lien dans la légende",
       first_comment: "lien en premier commentaire",

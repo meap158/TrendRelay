@@ -451,6 +451,8 @@ export const ar: Messages = {
     addToQueue: "أضف إلى القائمة",
     queued: "أُضيف إلى القائمة كمسودة. اعتمده ليدخل الدورة.",
     hashtagsExample: "قهوة إسبرسو",
+    wouldBeRefused: "سيرفض المحرّك هذا المنشور:",
+    previewProblems: "سيُرفض {count} منشورًا.",
     placement: {
       caption: "رابط في الوصف",
       first_comment: "رابط في أول تعليق",

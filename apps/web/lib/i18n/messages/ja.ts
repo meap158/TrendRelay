@@ -453,6 +453,8 @@ export const ja: Messages = {
     addToQueue: "キューに追加",
     queued: "下書きとしてキューに追加しました。承認すると循環に入ります。",
     hashtagsExample: "コーヒー エスプレッソ",
+    wouldBeRefused: "エンジンはこの投稿を拒否します:",
+    previewProblems: "{count}件の投稿が拒否されます。",
     placement: {
       caption: "キャプション内のリンク",
       first_comment: "最初のコメントのリンク",

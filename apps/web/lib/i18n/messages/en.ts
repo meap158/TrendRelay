@@ -457,6 +457,8 @@ export const en = {
     addToQueue: "Add to queue",
     queued: "Added to the queue as a draft. Approve it to put it in the rotation.",
     hashtagsExample: "coffee espresso",
+    wouldBeRefused: "The engine would refuse this:",
+    previewProblems: "{count, plural, one {# post would be refused} other {# posts would be refused}}.",
     placement: {
       caption: "link in caption",
       first_comment: "link in first comment",
