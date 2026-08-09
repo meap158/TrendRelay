@@ -78,3 +78,27 @@ export function preferredRoute<T extends Route>(routes: T[], chosen?: string): T
 export function allRoutesSpent(routes: Route[]): boolean {
   return routes.length > 0 && routes.every((item) => item.available === false);
 }
+
+
+/**
+ * The destination list after selecting or clearing one page.
+ *
+ * A page contributes at most one target however many engines reach it: every
+ * route is cleared before one is added, which is the duplicate the grouping
+ * exists to prevent and which the grouping itself would otherwise cause.
+ *
+ * Selecting a page whose engines have all run out does nothing. Clearing one
+ * still works, because a destination already chosen before the quota ran out
+ * has to be removable.
+ */
+export function togglePageTargets(
+  targets: string[],
+  routes: Route[],
+  on: boolean,
+  chosen?: string,
+): string[] {
+  const without = targets.filter((id) => !routes.some((item) => item.id === id));
+  if (!on || allRoutesSpent(routes)) return without;
+  const route = preferredRoute(routes, chosen);
+  return route ? [...without, route.id] : without;
+}

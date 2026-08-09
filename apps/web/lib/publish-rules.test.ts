@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { allRoutesSpent, moveImage, preferredRoute, withDisclosure } from "./publish-rules.ts";
+import {
+  allRoutesSpent,
+  moveImage,
+  preferredRoute,
+  togglePageTargets,
+  withDisclosure,
+} from "./publish-rules.ts";
 
 // --- the disclosure -----------------------------------------------------------
 
@@ -90,4 +96,36 @@ test("a page is only spent when every engine reaching it has run out", () => {
 test("an unreachable page is not a spent one", () => {
   // Different states, said differently: no engine reaches it at all.
   assert.equal(allRoutesSpent([]), false);
+});
+
+// --- choosing destinations ----------------------------------------------------
+
+test("a page contributes one target however many engines reach it", () => {
+  // The duplicate the grouping exists to prevent, and which the grouping itself
+  // would otherwise cause.
+  const chosen = togglePageTargets([], [buffer, zernio], true);
+  assert.equal(chosen.length, 1);
+  assert.deepEqual(togglePageTargets(chosen, [buffer, zernio], true), ["z9"]);
+});
+
+test("selecting a page whose engines have all run out does nothing", () => {
+  // Select-all runs through here, which is where it would otherwise queue a
+  // post that no engine has the quota to send.
+  assert.deepEqual(togglePageTargets([], [buffer], true), []);
+});
+
+test("a spent page can still be cleared", () => {
+  // It may have been chosen before the quota ran out, so it has to come off.
+  assert.deepEqual(togglePageTargets(["b1"], [buffer], false), []);
+});
+
+test("choosing a page routes around the engine that has run out", () => {
+  assert.deepEqual(togglePageTargets([], [buffer, zernio], true), ["z9"]);
+});
+
+test("other pages' destinations are left alone", () => {
+  assert.deepEqual(
+    togglePageTargets(["other-1"], [zernio], true),
+    ["other-1", "z9"],
+  );
 });

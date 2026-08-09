@@ -1712,3 +1712,23 @@ def test_images_without_a_carousel_destination_are_refused(
     """
     with pytest.raises(ValueError, match="no destination is posting a carousel"):
         request(media_file, image_paths=carousel_images)
+
+
+def test_every_credential_key_is_documented_in_the_env_template() -> None:
+    """A new engine drifts out of the template silently otherwise.
+
+    WoopSocial was added with none of its keys listed, and R2 - without which
+    Buffer cannot publish a local clip at all - had never been listed. Both were
+    invisible to anyone setting the project up from the template rather than
+    from the Publish screen.
+    """
+    from trendrelay_api.tool_registry import PROJECT_ROOT
+
+    template = (PROJECT_ROOT / ".env.example").read_text(encoding="utf-8")
+    documented = {
+        line.split("=", 1)[0].strip()
+        for line in template.splitlines()
+        if "=" in line and not line.strip().startswith("#")
+    }
+    missing = sorted(publishing.revealable_keys() - documented)
+    assert not missing, f"absent from .env.example: {', '.join(missing)}"

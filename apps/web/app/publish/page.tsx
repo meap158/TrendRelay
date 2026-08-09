@@ -28,7 +28,12 @@ import { ActionIcon } from "../ui/action-icons";
 import { Button, buttonClass } from "../ui/button";
 import { Badge, Switch } from "../ui/primitives";
 import { CredentialRow } from "../ui/credential-field";
-import { allRoutesSpent, moveImage, preferredRoute } from "../../lib/publish-rules";
+import {
+  allRoutesSpent,
+  moveImage,
+  preferredRoute,
+  togglePageTargets,
+} from "../../lib/publish-rules";
 import {
   MEDIA_DRAG_TYPE,
   MediaPicker,
@@ -531,15 +536,9 @@ export default function PublishPage() {
    * two targets. That is the duplicate this grouping exists to prevent, and it
    * would be caused by the grouping itself.
    */
-  const togglePage = (page: SocialPage, on: boolean) => setTargets((current) => {
-    const without = current.filter(
-      (id) => !page.reachable_by.some((item) => item.id === id));
-    // Clearing a spent page still works; adding one does not. Select-all runs
-    // through here too, which is where it would otherwise queue a post that no
-    // engine has the quota to send.
-    if (on && pageSpent(page)) return without;
-    return on ? [...without, routeOf(page).id] : without;
-  });
+  const togglePage = (page: SocialPage, on: boolean) => setTargets(
+    (current) => togglePageTargets(current, page.reachable_by, on, routeFor[page.key]),
+  );
   const switchRoute = (page: SocialPage, provider: string, id: string) => {
     setRouteFor((current) => ({ ...current, [page.key]: `${provider}:${id}` }));
     setTargets((current) => {
