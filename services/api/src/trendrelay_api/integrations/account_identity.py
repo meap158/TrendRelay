@@ -87,12 +87,12 @@ def consolidate(accounts: list[dict[str, Any]]) -> list[ConsolidatedPage]:
             "id": account.get("id"),
             "label": account.get("label"),
         }
-        if handle:
-            key = f"{platform}:@{handle}"
-        else:
-            # Unmergeable, and kept unmergeable: its key includes the engine and
-            # id so it can never collide with another account.
-            key = f"{platform}:{reach['provider']}:{reach['id']}"
+        # A handle-less account is unmergeable and kept that way: its key
+        # includes the engine and id, so it can never collide with another.
+        key = (
+            f"{platform}:@{handle}" if handle
+            else f"{platform}:{reach['provider']}:{reach['id']}"
+        )
         found = pages.get(key)
         if found is None:
             pages[key] = ConsolidatedPage(

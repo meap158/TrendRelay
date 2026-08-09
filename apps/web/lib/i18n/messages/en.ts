@@ -385,6 +385,14 @@ export const en = {
     deliverVia: "Deliver {label} through",
     destinationCount: "{pages, plural, one {# page} other {# pages}} on {networks, plural, one {# network} other {# networks}}",
     noneSelected: "none selected",
+    confidence: {
+      measured: "measured",
+      counted: "counted",
+      published: "published",
+    },
+    noLimit: "no limit",
+    limitOnly: "{limit} allowed",
+    usedOfLimit: "{used} of {limit}",
   },
 
   autopilot: {

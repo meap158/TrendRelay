@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field, field_validator
 from trendrelay_api.config import get_settings
 from trendrelay_api.database import SessionFactory
 from trendrelay_api.env_store import configured_keys, effective_value, write_env_values
-from trendrelay_api.integrations import media_hosting
+from trendrelay_api.integrations import engine_limits, media_hosting
 from trendrelay_api.integrations.account_identity import consolidate, page_payload
 from trendrelay_api.jobs import (
     claim_job,
@@ -496,6 +496,7 @@ def _http(
     content_type: str | None = None,
     timeout: float = 30,
     parse_json: bool = True,
+    headers_out: dict[str, str] | None = None,
 ) -> Any:
     payload = json.dumps(body).encode() if body is not None else data
     request = urllib.request.Request(url, data=payload, method=method)
@@ -505,9 +506,16 @@ def _http(
         request.add_header("Content-Type", content_type)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
+            if headers_out is not None:
+                headers_out.update(dict(response.headers.items()))
             raw = response.read()
             return json.loads(raw) if parse_json and raw else None
     except urllib.error.HTTPError as error:
+        # The failure carries them too, and a 429's are the most useful reading
+        # of a budget there is - throwing them away would lose the numbers at
+        # exactly the moment somebody needs them.
+        if headers_out is not None and error.headers:
+            headers_out.update(dict(error.headers.items()))
         raise RuntimeError(_error_message(url, error)) from error
     except (OSError, urllib.error.URLError) as error:
         raise RuntimeError(f"Could not reach {_host(url)}: {error}") from error
@@ -995,15 +1003,35 @@ def _buffer_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+#: The last `RateLimit` header Buffer returned, from whichever call was most
+#: recent. Buffer sends it on every GraphQL response, so the cheapest way to
+#: know the request budget is to keep the one that arrived rather than spend a
+#: request asking.
+_BUFFER_RATE_LIMIT: dict[str, str] = {}
+
+
+def buffer_rate_limit_header() -> str | None:
+    return _BUFFER_RATE_LIMIT.get("value")
+
+
 def _buffer_graphql(query: str, *, timeout: float = 60) -> dict[str, Any]:
-    payload = _http(
-        "POST",
-        BUFFER_API,
-        headers=_buffer_headers(),
-        body={"query": query},
-        content_type="application/json",
-        timeout=timeout,
-    ) or {}
+    seen: dict[str, str] = {}
+    try:
+        payload = _http(
+            "POST",
+            BUFFER_API,
+            headers=_buffer_headers(),
+            body={"query": query},
+            content_type="application/json",
+            timeout=timeout,
+            headers_out=seen,
+        ) or {}
+    finally:
+        # Recorded whether the call succeeded or not, for the same reason: a
+        # rejected call still says how much budget is left.
+        for name, value in seen.items():
+            if name.casefold() == "ratelimit":
+                _BUFFER_RATE_LIMIT["value"] = value
     errors = payload.get("errors")
     if errors:
         message = errors[0].get("message") if isinstance(errors[0], dict) else str(errors[0])
@@ -1220,6 +1248,23 @@ def host_media_for_engine(request: PublishRequest) -> dict[str, Any]:
     return {**hosted, "blurred": blurred}
 
 
+def bundle_daily_limits(social_account_id: str) -> dict[str, Any] | None:
+    """bundle.social's own used/limit/remaining for one account, today.
+
+    Returns None rather than raising: a usage figure is a convenience, and
+    losing the screen that publishes because a counter was unavailable would be
+    a poor trade.
+    """
+    try:
+        return _bundle_request(
+            "GET",
+            f"/organization/usage/daily-limits?socialAccountId={social_account_id}",
+            timeout=15,
+        )
+    except Exception:
+        return None
+
+
 ACCOUNT_READERS = {
     "bundle_social": lambda: _bundle_accounts(),
     "zernio": lambda: _zernio_accounts(),
@@ -1257,7 +1302,7 @@ def discover_all_integrations() -> dict[str, Any]:
             engines.append({
                 "id": provider_id, "label": provider.label,
                 "reachable": False, "reason": "No key saved for this engine.",
-                "account_count": 0,
+                "account_count": 0, "allowances": [],
             })
             continue
         try:
@@ -1269,12 +1314,36 @@ def discover_all_integrations() -> dict[str, Any]:
             engines.append({
                 "id": provider_id, "label": provider.label,
                 "reachable": False, "reason": str(error), "account_count": 0,
+                # Still worth reporting: a refused key does not change what the
+                # plan allows, and "3 accounts allowed" is useful while fixing it.
+                "allowances": [
+                    engine_limits.payload(item)
+                    for item in engine_limits.allowances(provider_id, account_count=0)
+                ],
             })
             continue
         accounts.extend(found)
         engines.append({
             "id": provider_id, "label": provider.label,
             "reachable": True, "reason": None, "account_count": len(found),
+            "allowances": [
+                engine_limits.payload(item)
+                for item in engine_limits.allowances(
+                    provider_id,
+                    account_count=len(found),
+                    rate_limit=(
+                        engine_limits.parse_rate_limit(buffer_rate_limit_header())
+                        if provider_id == "buffer" else None
+                    ),
+                    # One account's counter, not a sum: bundle.social meters per
+                    # account, and adding them would invent a total the engine
+                    # does not have.
+                    daily=(
+                        bundle_daily_limits(found[0]["id"])
+                        if provider_id == "bundle_social" and found else None
+                    ),
+                )
+            ],
         })
     ordered = sorted(
         accounts,

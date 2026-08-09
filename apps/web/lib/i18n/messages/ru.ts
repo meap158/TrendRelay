@@ -388,6 +388,14 @@ export const ru: Messages = {
     deliverVia: "Публиковать {label} через",
     destinationCount: "{pages, plural, one {# страница} few {# страницы} many {# страниц} other {# страницы}} в {networks, plural, one {# сети} few {# сетях} many {# сетях} other {# сетях}}",
     noneSelected: "ничего не выбрано",
+    confidence: {
+      measured: "измерено",
+      counted: "подсчитано",
+      published: "по тарифу",
+    },
+    noLimit: "без ограничений",
+    limitOnly: "допустимо {limit}",
+    usedOfLimit: "{used} из {limit}",
   },
 
   autopilot: {

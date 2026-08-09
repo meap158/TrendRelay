@@ -389,6 +389,14 @@ export const fr: Messages = {
     deliverVia: "Publier {label} via",
     destinationCount: "{pages, plural, one {# page} other {# pages}} sur {networks, plural, one {# réseau} other {# réseaux}}",
     noneSelected: "aucune sélection",
+    confidence: {
+      measured: "mesuré",
+      counted: "compté",
+      published: "publié",
+    },
+    noLimit: "sans limite",
+    limitOnly: "{limit} autorisés",
+    usedOfLimit: "{used} sur {limit}",
   },
 
   autopilot: {

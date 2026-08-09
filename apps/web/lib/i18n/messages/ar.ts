@@ -379,6 +379,14 @@ export const ar: Messages = {
     deliverVia: "انشر {label} عبر",
     destinationCount: "{pages, plural, zero {لا صفحات} one {صفحة واحدة} two {صفحتان} few {# صفحات} many {# صفحة} other {# صفحة}} على {networks} شبكات",
     noneSelected: "لم يُختر شيء",
+    confidence: {
+      measured: "مقاس",
+      counted: "معدود",
+      published: "منشور",
+    },
+    noLimit: "بلا حد",
+    limitOnly: "المسموح {limit}",
+    usedOfLimit: "{used} من {limit}",
   },
 
   autopilot: {

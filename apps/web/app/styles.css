@@ -602,3 +602,23 @@ nav strong { color: #1c2b33; }
 .page-route em { flex: 1 0 100%; color: var(--muted); font-size: 10px; font-style: normal; }
 .publish-form .page-route button { width: auto; min-height: 24px; padding: 2px 9px; border: 1px solid var(--line-strong); border-radius: 999px; background: transparent; color: var(--muted); font-size: 11px; }
 .publish-form .page-route button.selected { border-color: var(--green); color: var(--green); font-weight: 600; }
+
+/* What a plan allows, under the state it qualifies. The confidence tag is not
+   decoration: a figure the engine reported and a figure quoted from a pricing
+   page are worth different amounts, and showing them alike is how a year-old
+   scrape ends up reconciled against a bill. */
+.engine-allowances { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+/* Same landing-page leak the autopilot panel had: bare `li span` is styled
+   green and monospace here, which turned every label and figure into code. */
+.engine-allowances li span { color: inherit; font: inherit; }
+.engine-allowances li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: baseline; padding: 0; background: transparent; font-size: 11px; }
+.engine-allowance-label { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; min-width: 0; color: var(--muted); }
+.engine-confidence { border-radius: 999px; padding: 1px 6px; font-size: 9px; font-style: normal; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.engine-confidence.measured { color: var(--green); background: var(--green-dark); }
+.engine-confidence.counted { color: var(--text); background: var(--panel-raised); }
+.engine-confidence.published { color: var(--muted); background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong); }
+.engine-allowance-figure { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.engine-allowance-figure.tight { color: #a1442b; }
+.engine-allowance-bar { grid-column: 1 / -1; margin-block-start: 3px; block-size: 3px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.engine-allowance-bar i { display: block; block-size: 100%; background: var(--green); }
+.engine-allowance-figure.tight ~ .engine-allowance-bar i { background: #c0392b; }

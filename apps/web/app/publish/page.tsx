@@ -47,6 +47,18 @@ type Delivery = "draft" | "schedule" | "now";
 const isDelivery = oneOf<Delivery>("draft", "schedule", "now");
 
 type Workspace = { id: string; name: string; role: string };
+type Allowance = {
+  id: string;
+  label: string;
+  /** How much the figure can be trusted, which is as important as the figure. */
+  confidence: "measured" | "counted" | "published";
+  limit: number | null;
+  used: number | null;
+  remaining: number | null;
+  unlimited: boolean;
+  note: string;
+};
+
 type SocialPage = {
   key: string;
   platform: PublishingPlatform;
@@ -73,6 +85,7 @@ type Account = {
   provider_label: string;
 };
 type EngineReach = {
+  allowances?: Allowance[];
   id: string; label: string; reachable: boolean; reason: string | null; account_count: number;
 };
 type CredentialField = {
@@ -1221,6 +1234,52 @@ export default function PublishPage() {
                     post", which is a different question from the three key
                     actions below it - and as a peer of those buttons it needed
                     an auto margin that broke the row onto two lines. */}
+                {/* What the plan allows and how much is gone, under the state
+                    it qualifies. Three confidences, and the difference between
+                    them is not decoration: a figure read from the engine and a
+                    figure quoted from a pricing page are worth different
+                    amounts, and showing them alike is how a year-old scrape
+                    gets reconciled against a bill. */}
+                {(engineReach.find((item) => item.id === provider.id)?.allowances ?? [])
+                  .length > 0 && (
+                  <ul className="engine-allowances">
+                    {(engineReach.find((item) => item.id === provider.id)?.allowances ?? [])
+                      .map((item) => {
+                        const share = item.limit && item.used !== null
+                          ? Math.min(100, Math.round((item.used / item.limit) * 100))
+                          : null;
+                        const tight = share !== null && share >= 80;
+                        return (
+                          <li key={item.id} title={item.note}>
+                            <span className="engine-allowance-label">
+                              {item.label}
+                              <em className={`engine-confidence ${item.confidence}`}>
+                                {t(`publish.confidence.${item.confidence}`)}
+                              </em>
+                            </span>
+                            <span className={`engine-allowance-figure${tight ? " tight" : ""}`}>
+                              {item.unlimited
+                                ? t("publish.noLimit")
+                                : item.used === null
+                                  ? t("publish.limitOnly", { limit: item.limit ?? 0 })
+                                  : t("publish.usedOfLimit", {
+                                      used: item.used, limit: item.limit ?? 0,
+                                    })}
+                            </span>
+                            {/* Only where both numbers are real. A bar drawn
+                                from a limit with no usage would imply a
+                                measurement that was never taken. */}
+                            {share !== null && (
+                              <span className="engine-allowance-bar" aria-hidden="true">
+                                <i style={{ inlineSize: `${share}%` }} />
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
+                  </ul>
+                )}
+
                 <div className="engine-switch-row">
                   <Switch
                     checked={usable && !engineOff(provider.id)}

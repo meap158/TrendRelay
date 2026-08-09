@@ -381,6 +381,14 @@ export const ja: Messages = {
     deliverVia: "{label} の配信経路",
     destinationCount: "{networks}ネットワークの{pages}ページ",
     noneSelected: "未選択",
+    confidence: {
+      measured: "実測",
+      counted: "集計",
+      published: "公表値",
+    },
+    noLimit: "上限なし",
+    limitOnly: "上限{limit}",
+    usedOfLimit: "{limit}中{used}",
   },
 
   autopilot: {

@@ -371,6 +371,14 @@ export const zh: Messages = {
     deliverVia: "{label} 的发布通道",
     destinationCount: "{networks} 个平台上的 {pages} 个主页",
     noneSelected: "未选择",
+    confidence: {
+      measured: "实测",
+      counted: "统计",
+      published: "公开条款",
+    },
+    noLimit: "无上限",
+    limitOnly: "上限 {limit}",
+    usedOfLimit: "{used}/{limit}",
   },
 
   autopilot: {

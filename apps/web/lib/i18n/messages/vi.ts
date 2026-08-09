@@ -381,6 +381,14 @@ export const vi: Messages = {
     deliverVia: "Đăng {label} qua",
     destinationCount: "{pages} trang trên {networks} nền tảng",
     noneSelected: "chưa chọn",
+    confidence: {
+      measured: "đo được",
+      counted: "đếm được",
+      published: "công bố",
+    },
+    noLimit: "không giới hạn",
+    limitOnly: "cho phép {limit}",
+    usedOfLimit: "{used}/{limit}",
   },
 
   autopilot: {
