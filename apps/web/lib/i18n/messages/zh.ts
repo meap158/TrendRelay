@@ -381,6 +381,18 @@ export const zh: Messages = {
     reachableThrough: "目标来自 {engines}。请在各引擎的控制台中连接更多。",
     nothingReachable: "还没有引擎提供目标。",
     jobCount: "{count, plural, =0 {暂无} other {{count} 条}}",
+    affiliateLink: "联盟链接",
+    chooseTrackingLink: "选择一个追踪链接",
+    noTrackingLinks: "暂无启用的追踪链接。请在「归因」中创建。",
+    linkClicks: "{count} 次点击",
+    addToCaption: "加入文案",
+    addToFirstComment: "加入首条评论",
+    noCaptionLinkHere: "所选平台都不支持文案中的可点击链接。",
+    noCommentHere: "所选平台都不接受首条评论。",
+    commentReach: "Instagram 会降低引导至评论链接的帖子的触达，并常隐藏该评论。",
+    chooseDestinationsFirst: "选择目标后即可看到链接会放在哪里。",
+    disclosureGoesFirst: "无论哪种方式，披露说明都会放在文案开头：「{disclosure}」",
+    bioOnlyHere: "在 {platforms} 上帖内链接无法点击，请将此链接放在简介，并让文案指向它。",
   },
 
   autopilot: {

@@ -647,3 +647,19 @@ nav strong { color: #1c2b33; }
 @media (prefers-reduced-motion: reduce) { .publish-history summary::after { transition: none; } }
 .publish-history summary:hover h2 { color: var(--link); }
 .publish-history details[open] summary { margin-bottom: 10px; }
+
+/* Attaching a tracking link, and saying where it will land before it is
+   inserted. Sits with the caption because that is where a link would otherwise
+   be typed by hand. */
+.affiliate-link { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.affiliate-link.empty { color: var(--muted); font-size: 12px; }
+.affiliate-link > label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.affiliate-outcomes { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.affiliate-outcomes li { display: flex; gap: 8px; align-items: baseline; font-size: 11px; }
+.affiliate-outcomes b { flex: none; border-radius: 999px; padding: 1px 7px; font-size: 10px; font-weight: 700; }
+.affiliate-outcomes li.caption b { color: var(--green); background: var(--green-dark); }
+.affiliate-outcomes li.bio b, .affiliate-outcomes li.first_comment b { color: #7a5c00; background: #fdf5db; }
+.affiliate-outcomes span { color: var(--muted); }
+.affiliate-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.affiliate-note { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.affiliate-note.warn { color: #7a5c00; }

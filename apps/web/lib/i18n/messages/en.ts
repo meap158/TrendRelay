@@ -395,6 +395,18 @@ export const en = {
     reachableThrough: "Destinations come from {engines}. Connect more in each engine's dashboard.",
     nothingReachable: "No engine is contributing destinations yet.",
     jobCount: "{count, plural, =0 {none yet} one {# post} other {# posts}}",
+    affiliateLink: "Affiliate link",
+    chooseTrackingLink: "Choose a tracking link",
+    noTrackingLinks: "No active tracking links yet. Create one in Attribution.",
+    linkClicks: "{count, plural, one {# click} other {# clicks}}",
+    addToCaption: "Add to caption",
+    addToFirstComment: "Add to first comment",
+    noCaptionLinkHere: "None of the chosen networks make a caption link clickable.",
+    noCommentHere: "None of the chosen networks take a first comment.",
+    commentReach: "Instagram reduces reach for posts that funnel to a comment link, and often hides the comment.",
+    chooseDestinationsFirst: "Choose destinations to see where this link will land.",
+    disclosureGoesFirst: "The disclosure leads the caption either way: “{disclosure}”",
+    bioOnlyHere: "On {platforms} no link in a post is clickable, so put this link on the profile and let the caption point at it.",
   },
 
   autopilot: {

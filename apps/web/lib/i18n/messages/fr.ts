@@ -399,6 +399,18 @@ export const fr: Messages = {
     reachableThrough: "Les destinations viennent de {engines}. Connectez-en d’autres dans le tableau de bord de chaque moteur.",
     nothingReachable: "Aucun moteur ne fournit encore de destination.",
     jobCount: "{count, plural, =0 {aucune} one {# publication} other {# publications}}",
+    affiliateLink: "Lien d’affiliation",
+    chooseTrackingLink: "Choisir un lien de suivi",
+    noTrackingLinks: "Aucun lien de suivi actif. Créez-en un dans Attribution.",
+    linkClicks: "{count, plural, one {# clic} other {# clics}}",
+    addToCaption: "Ajouter à la légende",
+    addToFirstComment: "Ajouter en premier commentaire",
+    noCaptionLinkHere: "Aucun réseau choisi ne rend cliquable un lien en légende.",
+    noCommentHere: "Aucun réseau choisi n’accepte de premier commentaire.",
+    commentReach: "Instagram réduit la portée des publications qui renvoient à un lien en commentaire, et masque souvent ce commentaire.",
+    chooseDestinationsFirst: "Choisissez des destinations pour voir où ce lien atterrira.",
+    disclosureGoesFirst: "La mention ouvre la légende dans les deux cas : « {disclosure} »",
+    bioOnlyHere: "Sur {platforms}, aucun lien dans une publication n’est cliquable : placez ce lien sur le profil et laissez la légende y renvoyer.",
   },
 
   autopilot: {

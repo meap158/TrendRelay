@@ -22,6 +22,8 @@ import {
   type AssetFacets,
   type AssetFilterValues,
 } from "../ui/asset-filters";
+import { AffiliateLink, type LinkPlacement,
+  type TrackingLink as AffiliateTrackingLink } from "./affiliate-link";
 import { ActionIcon } from "../ui/action-icons";
 import { Button, buttonClass } from "../ui/button";
 import { Badge, Switch } from "../ui/primitives";
@@ -141,6 +143,8 @@ type Connection = {
   authorization_error: string | null;
   next_step: string;
   supported_platforms: PublishingPlatform[];
+  /** Where a link works on each network, from the API's single policy. */
+  link_placement?: Record<string, LinkPlacement>;
   providers: Provider[];
 };
 type Destination = {
@@ -269,6 +273,8 @@ export default function PublishPage() {
   const [setupOpen, setSetupOpen] = useState(false);
   const [clip, setClip] = useState<LibraryAsset | null>(null);
   const [thumbnail, setThumbnail] = useState("");
+  /** The workspace's tracking links, so one can be attached without leaving. */
+  const [trackingLinks, setTrackingLinks] = useState<AffiliateTrackingLink[]>([]);
   const [library, setLibrary] = useState<LibraryAsset[]>([]);
   const [libraryFacets, setLibraryFacets] = useState<AssetFacets>(EMPTY_FACETS);
   const [libraryState, setLibraryState] = useState<{ loading: boolean; failure: string | null }>({
@@ -741,6 +747,12 @@ export default function PublishPage() {
   useEffect(() => {
     if (!workspaceId) return;
     let cancelled = false;
+    // Read once with the connection. Attaching a link should not send anyone to
+    // another page to copy a code out of it.
+    apiFetch(`/api/workspaces/${workspaceId}/attribution/links`)
+      .then((response) => json<{ links: AffiliateTrackingLink[] }>(response))
+      .then((body) => { if (!cancelled) setTrackingLinks(body.links ?? []); })
+      .catch(() => { if (!cancelled) setTrackingLinks([]); });
     apiFetch(`/api/workspaces/${workspaceId}/publishing/connection`)
       .then((response) => json<{ connection: Connection }>(response))
       .then((body) => { if (!cancelled) setConnection(body.connection); })
@@ -1955,6 +1967,22 @@ export default function PublishPage() {
               </div>
             );
           })()}
+
+          {/* Under the caption, because that is where a link would otherwise be
+              typed - and above the first comment, because it can fill either. */}
+          <AffiliateLink
+            links={trackingLinks}
+            placementByPlatform={connection?.link_placement ?? {}}
+            platforms={chosen}
+            caption={caption}
+            firstComment={firstComment}
+            onCaption={setCaption}
+            onFirstComment={setFirstComment}
+            commentPlatforms={chosen.filter((platform) =>
+              providersFor(platform).some(
+                (provider) => (provider.first_comment_platforms ?? []).includes(platform)))}
+            disabled={!canExecute}
+          />
 
           {(() => {
             const carriers = chosen.filter((platform) =>

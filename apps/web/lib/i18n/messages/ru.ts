@@ -398,6 +398,18 @@ export const ru: Messages = {
     reachableThrough: "Направления из {engines}. Подключите ещё в панели каждого движка.",
     nothingReachable: "Ни один движок пока не даёт направлений.",
     jobCount: "{count, plural, =0 {пока нет} one {# публикация} few {# публикации} many {# публикаций} other {# публикации}}",
+    affiliateLink: "Партнёрская ссылка",
+    chooseTrackingLink: "Выберите ссылку",
+    noTrackingLinks: "Нет активных ссылок. Создайте её в разделе атрибуции.",
+    linkClicks: "{count, plural, one {# клик} few {# клика} many {# кликов} other {# клика}}",
+    addToCaption: "Добавить в подпись",
+    addToFirstComment: "Добавить в первый комментарий",
+    noCaptionLinkHere: "Ни одна из выбранных сетей не делает ссылку в подписи кликабельной.",
+    noCommentHere: "Ни одна из выбранных сетей не принимает первый комментарий.",
+    commentReach: "Instagram снижает охват публикаций, ведущих к ссылке в комментарии, и часто скрывает его.",
+    chooseDestinationsFirst: "Выберите направления, чтобы увидеть, куда попадёт ссылка.",
+    disclosureGoesFirst: "Раскрытие в любом случае открывает подпись: «{disclosure}»",
+    bioOnlyHere: "В {platforms} ссылка в публикации не кликабельна — поместите её в профиль, а подпись пусть указывает на неё.",
   },
 
   autopilot: {

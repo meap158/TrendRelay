@@ -391,6 +391,18 @@ export const ja: Messages = {
     reachableThrough: "配信先は {engines} からです。各エンジンのダッシュボードで追加してください。",
     nothingReachable: "配信先を提供しているエンジンはまだありません。",
     jobCount: "{count, plural, =0 {まだなし} other {{count}件}}",
+    affiliateLink: "アフィリエイトリンク",
+    chooseTrackingLink: "トラッキングリンクを選ぶ",
+    noTrackingLinks: "有効なトラッキングリンクがありません。アトリビューションで作成してください。",
+    linkClicks: "{count}クリック",
+    addToCaption: "キャプションに追加",
+    addToFirstComment: "最初のコメントに追加",
+    noCaptionLinkHere: "選んだネットワークではキャプション内のリンクをタップできません。",
+    noCommentHere: "選んだネットワークは最初のコメントを受け付けません。",
+    commentReach: "Instagram はコメントのリンクへ誘導する投稿のリーチを下げ、そのコメントを隠すことがあります。",
+    chooseDestinationsFirst: "配信先を選ぶと、リンクの行き先が表示されます。",
+    disclosureGoesFirst: "いずれの場合も開示文がキャプションの先頭に入ります:「{disclosure}」",
+    bioOnlyHere: "{platforms} では投稿内のリンクをタップできないため、このリンクはプロフィールに置き、キャプションからそこを指します。",
   },
 
   autopilot: {

@@ -389,6 +389,18 @@ export const ar: Messages = {
     reachableThrough: "الوجهات من {engines}. اربط المزيد من لوحة كل محرّك.",
     nothingReachable: "لا يوجد محرّك يوفّر وجهات بعد.",
     jobCount: "{count, plural, zero {لا شيء بعد} one {منشور واحد} two {منشوران} few {# منشورات} many {# منشورًا} other {# منشور}}",
+    affiliateLink: "رابط العمولة",
+    chooseTrackingLink: "اختر رابط تتبّع",
+    noTrackingLinks: "لا توجد روابط تتبّع نشطة. أنشئ واحدًا من قسم الإسناد.",
+    linkClicks: "{count} نقرة",
+    addToCaption: "أضف إلى الوصف",
+    addToFirstComment: "أضف إلى أول تعليق",
+    noCaptionLinkHere: "لا تجعل أي من الشبكات المختارة رابط الوصف قابلاً للنقر.",
+    noCommentHere: "لا تقبل أي من الشبكات المختارة تعليقًا أول.",
+    commentReach: "يخفّض Instagram انتشار المنشورات التي توجّه إلى رابط في التعليقات، ويخفي التعليق غالبًا.",
+    chooseDestinationsFirst: "اختر الوجهات لترى أين سيستقرّ الرابط.",
+    disclosureGoesFirst: "يتصدّر الإفصاح الوصف في الحالتين: «{disclosure}»",
+    bioOnlyHere: "في {platforms} لا يمكن النقر على أي رابط داخل المنشور، فضع هذا الرابط في الملف واجعل الوصف يشير إليه.",
   },
 
   autopilot: {

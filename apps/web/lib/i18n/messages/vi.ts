@@ -391,6 +391,18 @@ export const vi: Messages = {
     reachableThrough: "Đích đến đến từ {engines}. Hãy kết nối thêm trong bảng điều khiển của từng công cụ.",
     nothingReachable: "Chưa có công cụ nào cung cấp đích đến.",
     jobCount: "{count, plural, =0 {chưa có} other {{count} bài}}",
+    affiliateLink: "Liên kết tiếp thị",
+    chooseTrackingLink: "Chọn một liên kết theo dõi",
+    noTrackingLinks: "Chưa có liên kết theo dõi nào đang hoạt động. Hãy tạo ở mục Ghi nhận.",
+    linkClicks: "{count} lượt nhấp",
+    addToCaption: "Thêm vào chú thích",
+    addToFirstComment: "Thêm vào bình luận đầu",
+    noCaptionLinkHere: "Không nền tảng nào đã chọn cho phép bấm liên kết trong chú thích.",
+    noCommentHere: "Không nền tảng nào đã chọn nhận bình luận đầu.",
+    commentReach: "Instagram giảm tiếp cận với bài dẫn tới liên kết ở bình luận, và thường ẩn bình luận đó.",
+    chooseDestinationsFirst: "Hãy chọn đích đến để xem liên kết sẽ nằm ở đâu.",
+    disclosureGoesFirst: "Lời tuyên bố luôn mở đầu chú thích: “{disclosure}”",
+    bioOnlyHere: "Trên {platforms}, không liên kết nào trong bài bấm được, nên hãy đặt liên kết này ở tiểu sử và để chú thích trỏ tới đó.",
   },
 
   autopilot: {
