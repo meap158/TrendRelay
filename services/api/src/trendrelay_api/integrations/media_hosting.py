@@ -124,6 +124,15 @@ def normalise(field_id: str, value: str) -> str:
 REGION = "auto"
 SERVICE = "s3"
 UPLOAD_TIMEOUT_SECONDS = 900
+PROBE_TIMEOUT_SECONDS = 20
+
+#: Where the access check writes. Outside ``media/`` so it can never be mistaken
+#: for a clip, and a fixed key so repeated checks overwrite one object rather
+#: than littering the bucket.
+PROBE_KEY = "trendrelay/access-check.txt"
+
+#: The empty payload's SHA-256, which SigV4 requires for a body-less request.
+EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 
 
 class MediaHostingUnavailable(RuntimeError):
@@ -224,6 +233,36 @@ def status() -> dict[str, Any]:
     }
 
 
+def _reject_obvious_mix_ups(updates: dict[str, str]) -> None:
+    """Catch the two paste errors this form invites, at the point of saving.
+
+    Everything on the R2 bucket page is a 32-character hex string or a URL, and
+    the fields do not say which is which, so the S3 endpoint lands in the secret
+    and the account ID lands in the access key. Both save without complaint and
+    fail much later, at publish.
+
+    Only mistakes that cannot be anything else are refused here. A wrong-but-
+    plausible key is what `probe` is for; guessing at those would block someone
+    from saving a credential that is in fact correct.
+    """
+    for key in ("R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"):
+        value = updates.get(key, "")
+        if value.startswith(("http://", "https://")):
+            raise ValueError(
+                f"{key} looks like a URL. That is the S3 API endpoint, which "
+                "belongs in Account ID. The access key ID and secret come from "
+                "R2 → API → Manage API tokens."
+            )
+    access_key = updates.get("R2_ACCESS_KEY_ID", "")
+    account = updates.get("R2_ACCOUNT_ID") or effective_value("R2_ACCOUNT_ID").strip()
+    if access_key and access_key == account:
+        raise ValueError(
+            "The access key ID is the same as the account ID. They are both "
+            "32-character hex strings but different values - create an API "
+            "token under R2 → API and paste its access key ID."
+        )
+
+
 def save_credentials(values: dict[str, str]) -> dict[str, Any]:
     """Write hosting settings to the local .env, rejecting anything unrecognised."""
     fields = {field["id"]: field for field in CREDENTIAL_FIELDS}
@@ -239,7 +278,161 @@ def save_credentials(values: dict[str, str]) -> dict[str, Any]:
         updates[str(field["key"])] = value
     if not updates:
         raise ValueError("Provide at least one setting to save.")
+    _reject_obvious_mix_ups(updates)
     return {"written_keys": write_env_values(updates)}
+
+
+def _signed_request(
+    method: str,
+    values: dict[str, str],
+    request_path: str,
+    *,
+    body: bytes | None = None,
+    content_type: str | None = None,
+) -> urllib.request.Request:
+    """A SigV4-signed request against the configured bucket."""
+    host = f"{values['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com"
+    payload_hash = hashlib.sha256(body).hexdigest() if body is not None else EMPTY_SHA256
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    request = urllib.request.Request(
+        f"https://{host}{request_path}", data=body, method=method
+    )
+    request.add_header("Host", host)
+    request.add_header("x-amz-content-sha256", payload_hash)
+    request.add_header("x-amz-date", timestamp)
+    if content_type:
+        request.add_header("Content-Type", content_type)
+    request.add_header(
+        "Authorization",
+        authorization_header(
+            values["R2_ACCESS_KEY_ID"],
+            values["R2_SECRET_ACCESS_KEY"],
+            timestamp,
+            canonical_request(method, request_path, host, payload_hash, timestamp),
+        ),
+    )
+    return request
+
+
+def _check(id: str, label: str, ok: bool, detail: str) -> dict[str, Any]:
+    return {"id": id, "label": label, "ok": ok, "detail": detail}
+
+
+def probe() -> dict[str, Any]:
+    """Try the whole path a published clip takes, and say which part broke.
+
+    Five settings have to agree before a fetch-only engine can collect a video,
+    and until now nothing tried them. A wrong account ID, bucket or public URL
+    was saved without complaint and failed at publish, which is both the latest
+    and the most expensive moment to find out.
+
+    So the check does what publishing does: sign a request against the bucket,
+    write a small object, and fetch that object back through the public base URL
+    without credentials - the last step being the only one that can prove a URL
+    an engine will use from the outside actually serves what was written.
+
+    Each stage names the setting it clears, because "access denied" without a
+    field to look at is a dead end. The stages run in order and stop at the
+    first failure, since every later one would fail for the same reason.
+    """
+    checks: list[dict[str, Any]] = []
+
+    try:
+        values = _settings()
+    except MediaHostingUnavailable as error:
+        checks.append(_check("settings", "Settings saved", False, str(error)))
+        return {"ok": False, "checks": checks}
+    checks.append(_check("settings", "Settings saved", True, "All five settings are present."))
+
+    # The account ID and credentials, against the bucket itself. HEAD writes
+    # nothing and its failures are the ones that separate the fields: a host
+    # that will not resolve is the account ID, a refusal is the key, a missing
+    # bucket is the bucket.
+    bucket_path = f"/{values['R2_BUCKET']}"
+    try:
+        with urllib.request.urlopen(
+            _signed_request("HEAD", values, bucket_path), timeout=PROBE_TIMEOUT_SECONDS
+        ):
+            pass
+    except urllib.error.HTTPError as error:
+        detail = {
+            403: "The access key was refused. Check the access key ID and secret, "
+                 "and that the token has Object Read & Write on this bucket.",
+            401: "The access key was refused. Check the access key ID and secret.",
+            404: f"No bucket named {values['R2_BUCKET']} on this account. Check the "
+                 "bucket, and that the account ID belongs to the same account.",
+        }.get(error.code, f"Cloudflare answered HTTP {error.code}.")
+        checks.append(_check("bucket", "Bucket reachable", False, detail))
+        return {"ok": False, "checks": checks}
+    except (OSError, urllib.error.URLError) as error:
+        checks.append(_check("bucket", "Bucket reachable", False, (
+            f"Could not reach {values['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com "
+            f"({error}). Check the account ID."
+        )))
+        return {"ok": False, "checks": checks}
+    checks.append(_check("bucket", "Bucket reachable", True, (
+        f"Signed in to {values['R2_BUCKET']} with the saved access key."
+    )))
+
+    # A real write, because read access and write access are different grants
+    # and only one of them publishes anything.
+    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    body = f"TrendRelay access check {stamp}\n".encode()
+    try:
+        with urllib.request.urlopen(
+            _signed_request(
+                "PUT", values, f"/{values['R2_BUCKET']}/{quote(PROBE_KEY, safe='/')}",
+                body=body, content_type="text/plain",
+            ),
+            timeout=PROBE_TIMEOUT_SECONDS,
+        ):
+            pass
+    except urllib.error.HTTPError as error:
+        checks.append(_check("write", "Upload accepted", False, (
+            f"The bucket refused the upload (HTTP {error.code}). The API token "
+            "needs Object Read & Write, not read-only."
+        )))
+        return {"ok": False, "checks": checks}
+    except (OSError, urllib.error.URLError) as error:
+        checks.append(_check("write", "Upload accepted", False, f"Upload failed: {error}"))
+        return {"ok": False, "checks": checks}
+    checks.append(_check("write", "Upload accepted", True, (
+        f"Wrote {len(body)} bytes to {PROBE_KEY}."
+    )))
+
+    # The step nothing else covers. Everything above can pass while an engine
+    # still gets nothing, because the engine fetches this URL from the outside
+    # with no credentials at all.
+    url = public_url(values["R2_PUBLIC_BASE_URL"], PROBE_KEY)
+    try:
+        with urllib.request.urlopen(url, timeout=PROBE_TIMEOUT_SECONDS) as response:
+            served = response.read(len(body) + 64)
+    except urllib.error.HTTPError as error:
+        checks.append(_check("public", "Public URL serves it", False, (
+            f"{url} answered HTTP {error.code}. Turn on the bucket's public "
+            "development URL or attach a custom domain, then check the public "
+            "base URL matches it."
+        )))
+        return {"ok": False, "checks": checks}
+    except (OSError, urllib.error.URLError) as error:
+        checks.append(_check("public", "Public URL serves it", False, (
+            f"Could not fetch {url} ({error}). Check the public base URL."
+        )))
+        return {"ok": False, "checks": checks}
+
+    if served.strip() != body.strip():
+        # A 200 from the wrong place is the worst outcome here: it looks correct
+        # and publishes the wrong file, so it is failed rather than passed.
+        checks.append(_check("public", "Public URL serves it", False, (
+            f"{url} answered, but with different content. The public base URL "
+            "points at another bucket or a cache."
+        )))
+        return {"ok": False, "checks": checks}
+    checks.append(_check("public", "Public URL serves it", True, (
+        "Fetched the same bytes back with no credentials, which is how an "
+        "engine will collect your media."
+    )))
+    return {"ok": True, "checks": checks}
 
 
 def upload(path: Path, digest: str) -> dict[str, Any]:
@@ -253,29 +446,13 @@ def upload(path: Path, digest: str) -> dict[str, Any]:
         raise MediaHostingUnavailable(f"No such media file: {path}")
 
     key = object_key(digest, path.suffix)
-    host = f"{values['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com"
     encoded = quote(key, safe="/")
     request_path = f"/{values['R2_BUCKET']}/{encoded}"
     body = path.read_bytes()
-    payload_hash = hashlib.sha256(body).hexdigest()
-    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
 
-    request = urllib.request.Request(
-        f"https://{host}{request_path}", data=body, method="PUT"
-    )
-    request.add_header("Host", host)
-    request.add_header("x-amz-content-sha256", payload_hash)
-    request.add_header("x-amz-date", timestamp)
-    request.add_header("Content-Type", content_type)
-    request.add_header(
-        "Authorization",
-        authorization_header(
-            values["R2_ACCESS_KEY_ID"],
-            values["R2_SECRET_ACCESS_KEY"],
-            timestamp,
-            canonical_request("PUT", request_path, host, payload_hash, timestamp),
-        ),
+    request = _signed_request(
+        "PUT", values, request_path, body=body, content_type=content_type
     )
     try:
         with urllib.request.urlopen(request, timeout=UPLOAD_TIMEOUT_SECONDS) as response:

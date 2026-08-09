@@ -137,6 +137,187 @@ def test_upload_returns_a_stable_url_that_does_not_expire(monkeypatch, tmp_path:
     assert str(sent["auth"]).startswith("AWS4-HMAC-SHA256 Credential=AKID/")
 
 
+# --- the access check ---------------------------------------------------------
+
+
+CONFIGURED = {
+    "R2_ACCOUNT_ID": "acct",
+    "R2_ACCESS_KEY_ID": "AKID",
+    "R2_SECRET_ACCESS_KEY": "secret",
+    "R2_BUCKET": "media",
+    "R2_PUBLIC_BASE_URL": "https://cdn.example.com",
+}
+
+
+class _Reply:
+    """Enough of an HTTP response for the probe to read."""
+
+    def __init__(self, body: bytes = b"") -> None:
+        self.status = 200
+        self._body = body
+
+    def read(self, _size: int | None = None) -> bytes:
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+
+def _probe_with(monkeypatch, handler) -> dict:
+    """Run the probe against a fake bucket, `handler` deciding each step."""
+    monkeypatch.setattr(media_hosting, "effective_value", lambda key: CONFIGURED[key])
+    written: dict[str, bytes] = {}
+
+    def fake_urlopen(request, timeout=None):
+        url = request if isinstance(request, str) else request.full_url
+        method = "GET" if isinstance(request, str) else request.get_method()
+        if method == "PUT":
+            written["body"] = request.data
+        return handler(method, url, written)
+
+    monkeypatch.setattr(media_hosting.urllib.request, "urlopen", fake_urlopen)
+    return media_hosting.probe()
+
+
+def by_check(result: dict) -> dict[str, dict]:
+    return {check["id"]: check for check in result["checks"]}
+
+
+def test_the_probe_walks_the_path_a_published_clip_takes(monkeypatch) -> None:
+    def handler(method, url, written):
+        if method == "PUT":
+            return _Reply()
+        if url.startswith("https://cdn.example.com/"):
+            return _Reply(written["body"])
+        return _Reply()
+
+    result = _probe_with(monkeypatch, handler)
+
+    assert result["ok"] is True
+    found = by_check(result)
+    # The last one is the point: everything else can pass while an engine, which
+    # fetches with no credentials from outside, still gets nothing.
+    assert found["public"]["ok"] is True
+    assert [check["id"] for check in result["checks"]] == [
+        "settings", "bucket", "write", "public",
+    ]
+
+
+def test_a_missing_setting_is_reported_before_anything_is_called(monkeypatch) -> None:
+    monkeypatch.setattr(media_hosting, "effective_value", lambda key: "")
+
+    def explode(*_args, **_kwargs):  # pragma: no cover - must never run
+        raise AssertionError("the probe called out with nothing configured")
+
+    monkeypatch.setattr(media_hosting.urllib.request, "urlopen", explode)
+    result = media_hosting.probe()
+
+    assert result["ok"] is False
+    assert [check["id"] for check in result["checks"]] == ["settings"]
+
+
+def test_each_refusal_names_the_setting_to_look_at(monkeypatch) -> None:
+    """"Access denied" with no field to check is a dead end.
+
+    Five settings have to agree, and the failure that arrives is the same shape
+    whichever one is wrong, so the code is what separates them.
+    """
+    def refuse(code):
+        def handler(method, url, written):
+            raise media_hosting.urllib.error.HTTPError(url, code, "no", {}, None)
+        return handler
+
+    assert "access key" in by_check(
+        _probe_with(monkeypatch, refuse(403)))["bucket"]["detail"]
+    assert "bucket" in by_check(
+        _probe_with(monkeypatch, refuse(404)))["bucket"]["detail"]
+
+    def unreachable(method, url, written):
+        raise media_hosting.urllib.error.URLError("getaddrinfo failed")
+
+    assert "account ID" in by_check(
+        _probe_with(monkeypatch, unreachable))["bucket"]["detail"]
+
+
+def test_a_public_url_serving_something_else_fails_rather_than_passes(monkeypatch) -> None:
+    """A 200 from the wrong bucket is the worst outcome available.
+
+    It looks like success and publishes someone else's file, so matching bytes
+    are required rather than a status code.
+    """
+    def handler(method, url, written):
+        if url.startswith("https://cdn.example.com/"):
+            return _Reply(b"a different object entirely\n")
+        return _Reply()
+
+    result = _probe_with(monkeypatch, handler)
+
+    assert result["ok"] is False
+    assert "another bucket" in by_check(result)["public"]["detail"]
+
+
+def test_the_check_writes_outside_the_media_prefix(monkeypatch) -> None:
+    # A fixed key so repeated checks overwrite one object, and outside `media/`
+    # so it can never be picked up as a clip.
+    assert not media_hosting.PROBE_KEY.startswith("media/")
+    seen: list[str] = []
+
+    def handler(method, url, written):
+        seen.append(url)
+        return _Reply(written.get("body", b""))
+
+    _probe_with(monkeypatch, handler)
+    assert any(media_hosting.PROBE_KEY in url for url in seen)
+
+
+def test_the_endpoint_url_cannot_be_saved_as_the_secret(monkeypatch) -> None:
+    """The paste error this form invites, refused where it happens.
+
+    Every value on the R2 bucket page is a 32-character hex string or a URL and
+    the fields do not say which is which, so the S3 endpoint lands in the secret.
+    It saved without complaint and failed at publish.
+    """
+    monkeypatch.setattr(media_hosting, "effective_value", lambda key: "")
+    with pytest.raises(ValueError, match="looks like a URL"):
+        media_hosting.save_credentials({
+            "secret_access_key": "https://405e37fc.r2.cloudflarestorage.com/bucket",
+        })
+
+
+def test_the_account_id_cannot_be_saved_as_the_access_key(monkeypatch) -> None:
+    monkeypatch.setattr(media_hosting, "effective_value", lambda key: "")
+    with pytest.raises(ValueError, match="same as the account ID"):
+        media_hosting.save_credentials({
+            "account_id": "a" * 32,
+            "access_key_id": "a" * 32,
+        })
+
+
+def test_a_plausible_key_is_still_saved(monkeypatch) -> None:
+    """Only unambiguous mistakes are refused here.
+
+    A wrong-but-plausible key is what the access check is for. Guessing at those
+    would stop someone saving a credential that is in fact correct.
+    """
+    written: dict[str, str] = {}
+    monkeypatch.setattr(media_hosting, "effective_value", lambda key: "")
+    monkeypatch.setattr(
+        media_hosting, "write_env_values",
+        lambda updates: (written.update(updates), sorted(updates))[1],
+    )
+
+    media_hosting.save_credentials({
+        "account_id": "a" * 32,
+        "access_key_id": "b" * 32,
+        "secret_access_key": "c" * 64,
+    })
+
+    assert written["R2_ACCESS_KEY_ID"] == "b" * 32
+
+
 # --- setup: accept what the Cloudflare dashboard actually puts on screen -------
 
 

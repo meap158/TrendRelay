@@ -121,6 +121,28 @@ def save_media_hosting_credentials(
     return {"result": result, "connection": connection_status(probe=False)}
 
 
+@router.post("/media-hosting/probe")
+def probe_media_hosting(
+    workspace_id: str,
+    body: ExternalConfirmation,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Try the whole path a published clip takes through object storage.
+
+    Confirmed like the other outward calls, and for a stronger reason than most:
+    this one writes a small object into the bucket, because fetching it back
+    through the public URL is the only way to prove an engine could.
+    """
+    require_local_request(request)
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(status_code=400, detail="Testing storage requires confirmation.")
+    return {"probe": media_hosting.probe()}
+
+
 class SlotEntry(BaseModel):
     weekday: int = Field(default=-1, ge=-1, le=6)
     time: str = Field(min_length=3, max_length=5)
