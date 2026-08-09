@@ -389,6 +389,12 @@ export const ja: Messages = {
     noLimit: "上限なし",
     limitOnly: "上限{limit}",
     usedOfLimit: "{limit}中{used}",
+    openDashboard: "ダッシュボード",
+    openKeys: "{label} のキーを管理",
+    openChannels: "{label} でチャンネルを接続",
+    openHostingDashboard: "{label} を開く",
+    replaceKeys: "キーを差し替え",
+    setUp: "設定",
   },
 
   autopilot: {

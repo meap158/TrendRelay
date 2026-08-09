@@ -630,3 +630,6 @@ nav strong { color: #1c2b33; }
 .engine-allowance-bar { grid-column: 1 / -1; margin-block-start: 3px; block-size: 3px; border-radius: 999px; background: var(--line); overflow: hidden; }
 .engine-allowance-bar i { display: block; block-size: 100%; background: var(--green); }
 .engine-allowance-figure.tight ~ .engine-allowance-bar i { background: #c0392b; }
+/* The link the sentence above just sent you to, inside the status block so it
+   reads as part of the instruction rather than as another action. */
+.engine-status-link { justify-self: start; margin-block-start: 2px; color: var(--link); font-size: 11px; font-weight: 600; }

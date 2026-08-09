@@ -397,6 +397,12 @@ export const fr: Messages = {
     noLimit: "sans limite",
     limitOnly: "{limit} autorisés",
     usedOfLimit: "{used} sur {limit}",
+    openDashboard: "Tableau de bord",
+    openKeys: "Gérer les clés {label}",
+    openChannels: "Connecter des canaux dans {label}",
+    openHostingDashboard: "Ouvrir {label}",
+    replaceKeys: "Remplacer les clés",
+    setUp: "Configurer",
   },
 
   autopilot: {

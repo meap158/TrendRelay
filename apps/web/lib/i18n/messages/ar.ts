@@ -387,6 +387,12 @@ export const ar: Messages = {
     noLimit: "بلا حد",
     limitOnly: "المسموح {limit}",
     usedOfLimit: "{used} من {limit}",
+    openDashboard: "لوحة التحكم",
+    openKeys: "إدارة مفاتيح {label}",
+    openChannels: "اربط القنوات في {label}",
+    openHostingDashboard: "افتح {label}",
+    replaceKeys: "استبدل المفاتيح",
+    setUp: "إعداد",
   },
 
   autopilot: {

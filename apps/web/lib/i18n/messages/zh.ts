@@ -379,6 +379,12 @@ export const zh: Messages = {
     noLimit: "无上限",
     limitOnly: "上限 {limit}",
     usedOfLimit: "{used}/{limit}",
+    openDashboard: "控制台",
+    openKeys: "管理 {label} 密钥",
+    openChannels: "在 {label} 中连接渠道",
+    openHostingDashboard: "打开 {label}",
+    replaceKeys: "更换密钥",
+    setUp: "去设置",
   },
 
   autopilot: {

@@ -393,6 +393,12 @@ export const en = {
     noLimit: "no limit",
     limitOnly: "{limit} allowed",
     usedOfLimit: "{used} of {limit}",
+    openDashboard: "Dashboard",
+    openKeys: "Manage {label} keys",
+    openChannels: "Connect channels in {label}",
+    openHostingDashboard: "Open {label}",
+    replaceKeys: "Replace keys",
+    setUp: "Set up",
   },
 
   autopilot: {

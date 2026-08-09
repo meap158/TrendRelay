@@ -208,6 +208,10 @@ def status() -> dict[str, Any]:
         "id": "media-hosting",
         "provider": "cloudflare-r2",
         "label": "Cloudflare R2",
+        # Straight to R2 in the Cloudflare dashboard. Every field's help text
+        # names a path inside this page, so linking to it is the difference
+        # between following instructions and hunting for where they start.
+        "dashboard_url": "https://dash.cloudflare.com/?to=/:account/r2",
         "configured": not missing,
         "missing_keys": missing,
         "credential_keys": list(CREDENTIAL_KEYS),

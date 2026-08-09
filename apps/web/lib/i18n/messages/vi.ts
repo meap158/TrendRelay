@@ -389,6 +389,12 @@ export const vi: Messages = {
     noLimit: "không giới hạn",
     limitOnly: "cho phép {limit}",
     usedOfLimit: "{used}/{limit}",
+    openDashboard: "Bảng điều khiển",
+    openKeys: "Quản lý khóa {label}",
+    openChannels: "Kết nối kênh trong {label}",
+    openHostingDashboard: "Mở {label}",
+    replaceKeys: "Thay khóa",
+    setUp: "Thiết lập",
   },
 
   autopilot: {

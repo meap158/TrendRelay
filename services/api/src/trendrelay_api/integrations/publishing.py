@@ -145,7 +145,13 @@ class ProviderDefinition:
     tagline: str
     summary: str
     homepage: str
+    #: Where the API keys live.
     dashboard_url: str
+    #: Where social accounts are connected, which is a different page on some
+    #: engines and the same one on others. Two states send an operator to two
+    #: different places - a refused key to the keys, no channels to the channels
+    #: - and one link cannot serve both.
+    channels_url: str
     docs_url: str
     accent: str
     platforms: tuple[str, ...]
@@ -165,6 +171,7 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         ),
         homepage="https://bundle.social",
         dashboard_url="https://app.bundle.social",
+        channels_url="https://app.bundle.social",
         docs_url="https://docs.bundle.social",
         accent="#5b5bd6",
         platforms=(
@@ -204,6 +211,7 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         ),
         homepage="https://zernio.com",
         dashboard_url="https://zernio.com",
+        channels_url="https://zernio.com",
         docs_url="https://docs.zernio.com",
         accent="#0f9d8f",
         platforms=(
@@ -233,6 +241,7 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         ),
         homepage="https://buffer.com",
         dashboard_url="https://publish.buffer.com/settings/api",
+        channels_url="https://publish.buffer.com/channels",
         docs_url="https://developers.buffer.com",
         accent="#168eea",
         platforms=(
@@ -1395,6 +1404,7 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
         "summary": provider.summary,
         "homepage": provider.homepage,
         "dashboard_url": provider.dashboard_url,
+        "channels_url": provider.channels_url,
         "docs_url": provider.docs_url,
         "accent": provider.accent,
         "platforms": list(provider.platforms),

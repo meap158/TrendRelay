@@ -396,6 +396,12 @@ export const ru: Messages = {
     noLimit: "без ограничений",
     limitOnly: "допустимо {limit}",
     usedOfLimit: "{used} из {limit}",
+    openDashboard: "Панель",
+    openKeys: "Ключи {label}",
+    openChannels: "Подключить каналы в {label}",
+    openHostingDashboard: "Открыть {label}",
+    replaceKeys: "Заменить ключи",
+    setUp: "Настроить",
   },
 
   autopilot: {

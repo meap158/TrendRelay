@@ -112,6 +112,7 @@ type Provider = {
   summary: string;
   homepage: string;
   dashboard_url: string;
+  channels_url: string;
   docs_url: string;
   accent: string;
   platforms: PublishingPlatform[];
@@ -125,6 +126,7 @@ type Provider = {
 };
 type MediaHosting = {
   label: string;
+  dashboard_url?: string;
   configured: boolean;
   required: boolean;
   reason: string | null;
@@ -1229,6 +1231,23 @@ export default function PublishPage() {
                 <p className={`engine-status-line${status.tone === "bad" ? " bad" : ""}`} role="status">
                   <span>{status.detail}</span>
                   {status.fix && <small>{status.fix}</small>}
+                  {/* The link the sentence above just sent you to. "Reconnect
+                      the account in the engine's dashboard" without a way to
+                      get there is an instruction, not a fix - and the page it
+                      means differs by state: a refused key wants the keys page,
+                      no channels wants the channels page. */}
+                  {(status.state === "rejected" || status.state === "no-accounts") && (
+                    <a
+                      className="engine-status-link"
+                      href={status.state === "no-accounts"
+                        ? provider.channels_url : provider.dashboard_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >{t(status.state === "no-accounts"
+                      ? "publish.openChannels" : "publish.openKeys", {
+                        label: provider.label,
+                      })}</a>
+                  )}
                 </p>
                 {/* Its own row. The switch answers "will this engine carry the
                     post", which is a different question from the three key
@@ -1320,6 +1339,15 @@ export default function PublishPage() {
                     aria-expanded={open}
                     onClick={() => setOpenProvider(open ? null : provider.id)}
                   >{open ? "Close" : provider.configured ? "Replace key" : "Add key"}</Button>
+                  {/* Always available, not only when something is wrong: the
+                      engine's own dashboard is where channels are connected and
+                      posts are reviewed, which are ordinary errands. */}
+                  <a
+                    className={buttonClass({ variant: "quiet" })}
+                    href={provider.dashboard_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >{t("publish.openDashboard")}</a>
                   <a className={buttonClass({ variant: "quiet" })} href={provider.docs_url} target="_blank" rel="noopener noreferrer">{t("publish.docs")}</a>
                 </div>
                 {open && (
@@ -1389,12 +1417,24 @@ export default function PublishPage() {
                 <Badge tone={hosting.configured ? "good" : "neutral"}>
                   {hosting.configured ? "configured" : "not set up"}
                 </Badge>
+                {/* Every field below names a path inside this page. Linking to
+                    it is the difference between following the instructions and
+                    hunting for where they start. */}
+                {hosting.dashboard_url && (
+                  <a
+                    className={buttonClass({ variant: "quiet", size: "sm" })}
+                    href={hosting.dashboard_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >{t("publish.openHostingDashboard", { label: hosting.label })}</a>
+                )}
                 <Button
                   variant="quiet"
                   size="sm"
                   aria-expanded={hostingOpen}
                   onClick={() => setHostingOpen(!hostingOpen)}
-                >{hostingOpen ? "Close" : hosting.configured ? "Replace keys" : "Set up"}</Button>
+                >{hostingOpen ? t("common.close") : hosting.configured
+                  ? t("publish.replaceKeys") : t("publish.setUp")}</Button>
               </div>
             </div>
             {hostingOpen && (
