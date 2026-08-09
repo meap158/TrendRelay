@@ -334,6 +334,19 @@ def build_services(include_desktop: bool, *, may_terminate: bool = True) -> list
             ],
             "cyan",
             f"http://127.0.0.1:{backend_port}/api/auth/local-session",
+            # Poll for changes rather than subscribe to them.
+            #
+            # The event-driven watcher stopped delivering on a long-running
+            # backend: edits to the API, and a touch of main.py, left the worker
+            # from hours earlier still serving. A fresh process with these exact
+            # arguments reloads correctly, so the watch is being lost rather
+            # than never set up - which fits ReadDirectoryChangesW dropping a
+            # subscription under load and never getting it back.
+            #
+            # Polling cannot be lost that way, and it is a stat() over a few
+            # hundred files. A reloader that silently stops is worse than one
+            # that costs a little: the failure looks like the code not working.
+            environment={"WATCHFILES_FORCE_POLLING": "1"},
             restart_on_exit=True,
             port=backend_port,
         ),
