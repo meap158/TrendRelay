@@ -16,7 +16,9 @@ Last updated: 2026-08-09
 - Fresh Windows clones use a four-stage `start.cmd` setup with actual Node/Python version checks, reproducible `npm ci`, and `scripts/bootstrap.py` for visible, retried, time-bounded API dependency installation. The lockfile and Windows CI are pinned to npm 11.16 so its stricter manifest/lock consistency checks match current clean machines. A version-pinned npm `allowScripts` policy covers the six reviewed native build/media dependencies, while `scripts/check_node_dependencies.mjs` detects and repairs incomplete JavaScript installs instead of trusting the presence of `node_modules`. A manifest/Python fingerprint skips unchanged work, interrupted setup is safely resumable, `--check` is download-free, and CI verifies the same dependency probe.
 - Douyin Library ingestion reads provider sidecar metadata to retain the channel name, source caption, publication time, and item-specific video URL. Duplicate refreshes backfill missing provenance without overwriting reviewed values; the detail view links the creator name to the originating Douyin profile when the batch retained that profile URL, shows the original video as an accessible Douyin icon action, and opens the selected asset's containing folder through the guarded local API.
 - Next.js serves `apps/web/app/icon.svg` as the product favicon: a green rounded square with a white rising four-node relay path, designed to remain distinct at browser-tab sizes.
-- Social publishing is hosted-API only. `services/api/src/trendrelay_api/integrations/publishing.py` implements three interchangeable engines behind one adapter: Bundle.social (`x-api-key` + team ID, uploads the local MP4), Zernio (`Bearer sk_…` at `https://zernio.com/api/v1`, presigned upload then `POST /posts`), and Buffer (GraphQL `createPost` at `https://api.buffer.com`, which requires an already-public media URL). `PUBLISHING_PROVIDER` selects the active engine. No AGPL publishing service, PostgreSQL, Redis, or Temporal is installed or supervised any more.
+- Social publishing is hosted-API only. `services/api/src/trendrelay_api/integrations/publishing.py` implements four interchangeable engines behind one adapter: Bundle.social (`x-api-key` + team ID, uploads the local MP4), Zernio (`Bearer sk_…` at `https://zernio.com/api/v1`, presigned upload then `POST /posts`), Buffer (GraphQL `createPost` at `https://api.buffer.com`, which requires an already-public media URL), and WoopSocial (`Bearer` at `https://api.woopsocial.com/v1`, multipart `POST /media` then `POST /posts`). `PUBLISHING_PROVIDER` selects the active engine. No AGPL publishing service, PostgreSQL, Redis, or Temporal is installed or supervised any more.
+- Whether an engine is handed the local file is two capabilities, not one. `requires_public_media` says it cannot take an upload at all (Buffer); `ingests_media_url` says it can fetch a URL instead of being given the file. WoopSocial can do neither but the upload, which matters because one post spans several engines: a public URL supplied so Buffer can work must not leave WoopSocial with nothing to send. Its single-request upload is capped at 100 MB and refused here, by name and size, rather than at the engine.
+- WoopSocial reports delivery per destination - status, external URL and error for each account - which no other engine here does. Its `WOOPTEST` sandbox platform is deliberately unmapped so it cannot appear as a destination, and the platform on each post body is read back from the account because their `LINKEDIN` and `LINKEDIN_PAGES` are both `linkedin` to us and the body rejects the wrong one.
 - Engine API keys are entered on `/publish` and written back to the project `.env` by `env_store.py` through a loopback-only, owner/approver, explicitly confirmed endpoint. Only fixed allow-listed keys are writable, cached settings refresh immediately, and stored values are never returned — the API exposes configured booleans and the variable name only.
 - `config/tool-catalog.json`, the `npm run tools --` CLI, the loopback-only lifecycle API, and `/tools` catalogue all seven managed capability projects. The Tools page is also the provider setup hub: Douyin owns automatic cookie capture, Meta Ads uses a confirmed fixed-command authentication launcher, Last 30 Days exposes only configured optional secret names, Agent Reach provides local diagnostics, and no-auth tools link to their operational surface. Compact, collapsed Meta Marketing API and Amazon Creators API access guides link to official credential setup pages; Opportunities links directly to the Amazon guide.
 - The pinned Last 30 Days 3.16.0 source is installed and active locally. `npm run research --`, the research API, and `/research` execute its stable agent JSON 1.x contract and persist workspace-scoped evidence.
@@ -103,6 +105,20 @@ Last updated: 2026-08-09
   different bytes fails rather than passes. Saving refuses the two paste errors
   the form invites (the S3 endpoint as the secret, the account ID as the access
   key) and leaves anything wrong-but-plausible to the check.
+
+- Affiliate networks are sent a sub ID, which is the only field that survives
+  into their own conversion report. `attribution_subids.py` holds the contract
+  per network and the slot map, which is a constant: networks report sub IDs
+  positionally, so a slot that meant a placement on one link and a campaign on
+  another would produce a column that cannot be grouped. Slot one always carries
+  a key derived from the tracking code, because it resolves every other
+  dimension from our own database and the conversion importer matches on it -
+  `token_urlsafe` puts a `-` or `_` in 27% of codes and Shopee accepts letters
+  and digits only, so the key is hashed rather than stored or stripped. Values
+  are fixed when the link is minted, since one that changed with a campaign
+  rename would split a link's history in two. A host matching no known network
+  gets nothing at all: a guessed parameter name can break the sale rather than
+  merely weaken tracking.
 
 ## Decisions in force
 
@@ -256,7 +272,11 @@ Then the run itself, each step being where a real problem would surface:
 2. **Check the engines.** Bundle.social still answers HTTP 403. Buffer returns
    three channels (Facebook `Naceto Books`, Instagram and Threads
    `halcyonbooks.official`) on a measured Free plan. Zernio's key works and now
-   has one TikTok channel, `Tiêu Dùng Thông Minh 24h`.
+   has one TikTok channel, `Tiêu Dùng Thông Minh 24h`. WoopSocial is built but
+   has never been given a key, so nothing about it has met the live API - and
+   it is the one engine that takes an upload and so does not need R2 at all,
+   which makes it the shortest path to a first real post while the storage
+   credentials are still wrong.
 3. **Add a destination** on `/campaigns`, activate the campaign, queue a clip
    from the Library and approve it.
 4. **Preview** before switching on. It creates nothing and mints no tracking

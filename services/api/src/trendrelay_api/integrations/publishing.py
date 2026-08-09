@@ -160,6 +160,14 @@ class ProviderDefinition:
     platforms: tuple[str, ...]
     credentials: tuple[CredentialField, ...]
     requires_public_media: bool
+    #: Whether the engine can fetch a public URL itself instead of being handed
+    #: the file. Not the inverse of `requires_public_media`: an engine can accept
+    #: an upload *and* ingest a URL, and one can do neither but the upload.
+    #:
+    #: It decides whether a public media URL supplied for another engine's sake
+    #: lets this one skip the local file - which is a live question, because one
+    #: post can carry destinations on several engines at once.
+    ingests_media_url: bool
     media_note: str
 
 
@@ -200,6 +208,7 @@ PROVIDERS: dict[str, ProviderDefinition] = {
             ),
         ),
         requires_public_media=False,
+        ingests_media_url=True,
         media_note=(
             "The approved local MP4 is uploaded to bundle.social before the post is created."
         ),
@@ -232,6 +241,7 @@ PROVIDERS: dict[str, ProviderDefinition] = {
             ),
         ),
         requires_public_media=False,
+        ingests_media_url=True,
         media_note="The approved local MP4 is uploaded through a Zernio presigned URL.",
     ),
     "buffer": ProviderDefinition(
@@ -270,6 +280,7 @@ PROVIDERS: dict[str, ProviderDefinition] = {
             ),
         ),
         requires_public_media=True,
+        ingests_media_url=True,
         media_note=(
             "Buffer has no upload endpoint. Provide a public HTTPS media URL that stays "
             "reachable until the post publishes."
@@ -315,6 +326,11 @@ PROVIDERS: dict[str, ProviderDefinition] = {
             ),
         ),
         requires_public_media=False,
+        # It has no endpoint that takes a URL: media arrives as multipart or not
+        # at all. So a public URL supplied for Buffer's sake does not excuse this
+        # engine from reading the local file, and saying otherwise would fail the
+        # post at upload time.
+        ingests_media_url=False,
         media_note=(
             "The approved local MP4 is uploaded to WoopSocial before the post is "
             "created. Single-request uploads are capped at 100 MB."
@@ -1075,8 +1091,23 @@ def _woopsocial_project_id() -> str:
     return str(projects[0]["id"])
 
 
+#: What a single-request upload to WoopSocial accepts. Larger files need their
+#: chunked session flow, which is not built here.
+WOOPSOCIAL_UPLOAD_LIMIT_BYTES = 100 * 1024 * 1024
+
+
 def _woopsocial_upload(video: Path) -> str:
     """Upload the approved cut and return the media id the post will reference."""
+    size = video.stat().st_size
+    if size > WOOPSOCIAL_UPLOAD_LIMIT_BYTES:
+        # Checked here rather than left to the engine. Sending 300 MB in order
+        # to be told it was too big costs the whole upload and returns an error
+        # about a request body, which names neither the file nor the limit.
+        raise ValueError(
+            f"{video.name} is {size / 1024 / 1024:.0f} MB and WoopSocial accepts "
+            f"{WOOPSOCIAL_UPLOAD_LIMIT_BYTES // 1024 // 1024} MB in one upload. "
+            "Publish this clip through another engine, or shorten it in the editor."
+        )
     boundary = f"----WoopSocial{token_hex(16)}"
     parts = [
         f"--{boundary}\r\n".encode(),
@@ -1447,10 +1478,17 @@ def _buffer_publish(request: PublishRequest) -> dict[str, Any]:
 
 
 def _needs_local_media(provider: ProviderDefinition, request: PublishRequest) -> bool:
-    """Buffer never accepts an upload; the other two only read the reviewed local
-    file when no public URL was supplied (both can ingest a URL themselves)."""
+    """Whether this engine has to be handed the reviewed local file.
+
+    An engine that cannot take an upload never is. Otherwise a public URL only
+    excuses the file when the engine can actually fetch one - which WoopSocial
+    cannot, and that matters precisely because one post spans several engines:
+    a URL supplied so Buffer can work must not leave WoopSocial with nothing.
+    """
     if provider.requires_public_media:
         return False
+    if not provider.ingests_media_url:
+        return True
     return not request.media_url
 
 

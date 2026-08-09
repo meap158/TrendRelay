@@ -47,7 +47,9 @@ cd TrendRelay
 
 The first run installs and verifies the application dependencies, creates the Python environment, applies database migrations, starts the local services with hot reload, and opens TrendRelay in your browser. Setup prints four numbered stages and keeps reporting progress during longer downloads; it stops with a useful network error instead of waiting indefinitely. TrendRelay's lockfile and CI are validated with npm 11.16, and a version-pinned install-script allowlist covers its reviewed Electron, media, compiler, and resolver runtimes. If an install is interrupted or incomplete, running `start.cmd` again detects and repairs it automatically.
 
-Social publishing runs entirely against a hosted API. Pick Bundle.social, Zernio, or Buffer on `/publish`, paste that engine's API key into the form, and TrendRelay writes it back to the local `.env`. No local publishing service is installed or supervised.
+Social publishing runs entirely against a hosted API. Pick Bundle.social, Zernio, Buffer or WoopSocial on `/publish`, paste that engine's API key into the form, and TrendRelay writes it back to the local `.env`. Several can be switched on at once, and one post addresses destinations across all of them. No local publishing service is installed or supervised.
+
+Buffer has no upload endpoint, so it needs media already hosted at a public URL; the other three accept the approved local file directly.
 
 If the browser does not open automatically, visit [http://127.0.0.1:3001](http://127.0.0.1:3001).
 

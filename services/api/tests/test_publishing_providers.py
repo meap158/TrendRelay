@@ -1249,3 +1249,44 @@ def test_woopsocial_refuses_an_account_it_no_longer_lists(
     monkeypatch.setattr(publishing, "_woopsocial_request", fake_request)
     with pytest.raises(RuntimeError, match="no longer lists"):
         publishing._execute_publish(request(media_file, confirm_external_action=True))
+
+
+def test_a_public_url_for_buffer_does_not_starve_woopsocial(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    """One post, two engines, and only one of them can fetch a URL.
+
+    Supplying a public media URL is how Buffer is made to work at all, and it
+    used to excuse every engine from reading the local file - leaving WoopSocial,
+    which has no endpoint that takes a URL, with nothing to upload.
+    """
+    woop = publishing.PROVIDERS["woopsocial"]
+    buffer = publishing.PROVIDERS["buffer"]
+    hosted = request(
+        media_file,
+        media_url="https://cdn.example.com/clip.mp4",
+        confirm_external_action=True,
+    )
+
+    assert publishing._needs_local_media(woop, hosted) is True
+    # Buffer never takes an upload, so it is still handed nothing.
+    assert publishing._needs_local_media(buffer, hosted) is False
+    # And an engine that can fetch a URL still skips the local read.
+    assert publishing._needs_local_media(publishing.PROVIDERS["zernio"], hosted) is False
+
+
+def test_woopsocial_names_the_file_and_the_limit_before_uploading(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    # Sending 300 MB to be told it was too big costs the whole upload and returns
+    # an error about a request body, naming neither the file nor the cap.
+    big = tmp_path / "big.mp4"
+    big.write_bytes(b"x" * 16)
+    monkeypatch.setattr(publishing, "WOOPSOCIAL_UPLOAD_LIMIT_BYTES", 8)
+    monkeypatch.setattr(
+        publishing, "_woopsocial_request",
+        lambda *a, **k: pytest.fail("uploaded a file that was over the limit"),
+    )
+
+    with pytest.raises(ValueError, match="big.mp4"):
+        publishing._woopsocial_upload(big)

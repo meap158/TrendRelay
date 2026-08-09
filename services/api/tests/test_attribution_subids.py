@@ -9,7 +9,6 @@ from trendrelay_api.attribution_subids import (
     NETWORKS,
     LinkContext,
     assign,
-    describe,
     link_key,
     network_for,
     sanitise,
@@ -148,26 +147,6 @@ def test_fewer_slots_keep_the_more_valuable_dimensions() -> None:
     # Campaign and date are what a three-slot network gives up, and both are
     # recoverable from the link key in slot one.
     assert "20260810" not in impact.values()
-
-
-def test_the_description_names_the_slot_meanings_and_its_source() -> None:
-    # A screen has to explain why a parameter is there, and an operator checking
-    # our contract against the network's own documentation needs the reference.
-    described = describe(SHOPEE, context())
-    assert described["network"] == "shopee"
-    assert "Sub_id1-5" in described["source"]
-    assert described["parameters"][0] == {
-        "parameter": "sub_id1", "dimension": "link", "value": link_key("abc123XY"),
-    }
-
-
-def test_an_unknown_network_describes_itself_as_one() -> None:
-    described = describe("https://example.com/x", context())
-    assert described["network"] is None
-    assert described["parameters"] == []
-    # Still offered, because it is what the operator would paste into a network
-    # we do not know how to configure automatically.
-    assert described["link_key"] == link_key("abc123XY")
 
 
 def test_every_network_records_where_its_contract_came_from() -> None:

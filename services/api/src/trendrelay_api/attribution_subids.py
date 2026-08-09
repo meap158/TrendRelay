@@ -34,7 +34,6 @@ import hashlib
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
 #: The dimensions we can describe a click by, most valuable first.
@@ -226,24 +225,3 @@ def dimensions_for(destination_url: str) -> dict[str, str]:
     if not network:
         return {}
     return dict(zip(network.slots, DIMENSIONS, strict=False))
-
-
-def describe(destination_url: str, context: LinkContext) -> dict[str, Any]:
-    """What this link will send, for a screen that has to explain it."""
-    network = network_for(destination_url)
-    assigned = assign(destination_url, context)
-    by_parameter = dict(zip(network.slots, DIMENSIONS, strict=False)) if network else {}
-    return {
-        "network": network.id if network else None,
-        "network_label": network.label if network else None,
-        "source": network.source if network else None,
-        "link_key": link_key(context.code),
-        "parameters": [
-            {
-                "parameter": parameter,
-                "dimension": by_parameter.get(parameter, ""),
-                "value": value,
-            }
-            for parameter, value in assigned.items()
-        ],
-    }
