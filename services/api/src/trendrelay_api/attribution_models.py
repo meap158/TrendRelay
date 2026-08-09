@@ -51,6 +51,11 @@ class TrackingLink(Base):
     platform: Mapped[str] = mapped_column(String(24), index=True)
     campaign_parameter: Mapped[str] = mapped_column(String(40), default="tr_campaign")
     platform_parameter: Mapped[str] = mapped_column(String(40), default="tr_platform")
+    #: The affiliate network's own tracking parameters, decided once when the
+    #: link is minted. Fixed at that moment on purpose: a sub ID that changed
+    #: because a campaign was renamed would split one link's history into two
+    #: columns in the network's report, and nothing could add them back together.
+    sub_ids: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
     disclosure: Mapped[str] = mapped_column(String(500))
     status: Mapped[str] = mapped_column(String(16), default="active", index=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)

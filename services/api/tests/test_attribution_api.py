@@ -355,3 +355,123 @@ def test_unavailable_offer_marks_public_link_broken() -> None:
     assert followed.json()["status"] == "broken"
     with TestingSession() as session:
         assert session.scalar(select(TrackingLink)).status == "broken"
+
+
+def import_shopee_offer(workspace_id: str) -> str:
+    csv_text = (
+        "product_name,marketplace,network,affiliate_url,cookie_days,availability\n"
+        "Cold Brew Bottle,Shopee,Shopee,https://shopee.vn/bottle-i.99.88?af=keep,7,available\n"
+    )
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/opportunities/offers/import",
+            json={"csv_text": csv_text},
+        )
+    )
+    assert response.status_code == 200
+    listed = asyncio.run(
+        request("GET", f"/api/workspaces/{workspace_id}/opportunities/offers")
+    )
+    return listed.json()["offers"][0]["id"]
+
+
+def test_a_shopee_link_carries_sub_ids_into_the_redirect() -> None:
+    """The sub ID is the only thing we send that comes back on a payout.
+
+    Our own campaign and platform parameters never appear in the network's
+    report - it has no idea what they are - so without this the conversion CSV
+    has no column that identifies the link, and matching is retyping by hand.
+    """
+    workspace_id = create_workspace()
+    campaign_id = create_campaign(workspace_id, "https://shopee.vn/fallback-i.1.2")
+    offer_id = import_shopee_offer(workspace_id)
+
+    link = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/attribution/links",
+            json={
+                "campaign_id": campaign_id,
+                "offer_id": offer_id,
+                "platform": "tiktok",
+                "confirm_external_action": True,
+            },
+        )
+    ).json()["link"]
+
+    assert link["sub_ids"]["sub_id1"] == link["sub_id_key"]
+    assert link["sub_ids"]["sub_id3"] == "tiktok"
+    for value in link["sub_ids"].values():
+        # Shopee accepts letters and digits only; anything else is rejected.
+        assert value.isalnum(), value
+
+    followed = asyncio.run(request("GET", f"/c/{link['code']}"))
+    query = parse_qs(urlsplit(followed.headers["location"]).query)
+    assert query["sub_id1"] == [link["sub_id_key"]]
+    assert query["sub_id3"] == ["tiktok"]
+    # The affiliate's own parameter is still there; sub IDs are added beside it.
+    assert query["af"] == ["keep"]
+
+
+def test_a_conversion_matches_on_the_sub_id_the_network_reported() -> None:
+    """A network export has no column for our tracking code, only its own.
+
+    Requiring `tracking_code` meant hand-filling a column for every row, which
+    is exactly the work this removes.
+    """
+    workspace_id = create_workspace()
+    campaign_id = create_campaign(workspace_id, "https://shopee.vn/fallback-i.1.2")
+    offer_id = import_shopee_offer(workspace_id)
+    link = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/attribution/links",
+            json={
+                "campaign_id": campaign_id,
+                "offer_id": offer_id,
+                "platform": "tiktok",
+                "confirm_external_action": True,
+            },
+        )
+    ).json()["link"]
+
+    occurred_at = (datetime.now(UTC) + timedelta(minutes=1)).isoformat()
+    export = (
+        "sub_id1,network,conversion_id,occurred_at,status,currency,commission\n"
+        f"{link['sub_id_key']},Shopee,order-77,{occurred_at},approved,VND,15000\n"
+    )
+    imported = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/attribution/conversions/import",
+            json={"csv_text": export, "confirm_external_action": True},
+        )
+    )
+    assert imported.status_code == 201, imported.text
+    assert imported.json()["created"] == 1
+
+    conversions = asyncio.run(
+        request("GET", f"/api/workspaces/{workspace_id}/attribution/conversions")
+    )
+    assert conversions.json()["conversions"][0]["tracking_code"] == link["code"]
+
+
+def test_a_csv_identifying_no_link_is_refused_by_name() -> None:
+    workspace_id = create_workspace()
+    occurred_at = datetime.now(UTC).isoformat()
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/attribution/conversions/import",
+            json={
+                "csv_text": (
+                    "network,conversion_id,occurred_at,status,currency,commission\n"
+                    f"Shopee,order-1,{occurred_at},approved,VND,1000\n"
+                ),
+                "confirm_external_action": True,
+            },
+        )
+    )
+    assert response.status_code == 422
+    assert "sub_id1" in response.json()["detail"]

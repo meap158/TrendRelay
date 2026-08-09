@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from trendrelay_api import attribution_subids
 from trendrelay_api.attribution_models import ClickEvent, Conversion, TrackingLink
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
 from trendrelay_api.config import get_settings
@@ -47,7 +48,6 @@ _ATTRIBUTION_SECRET_LOCK = Lock()
 
 
 CSV_REQUIRED = {
-    "tracking_code",
     "network",
     "conversion_id",
     "occurred_at",
@@ -55,6 +55,17 @@ CSV_REQUIRED = {
     "currency",
     "commission",
 }
+
+#: Column names that identify which link a conversion belongs to. One of them
+#: has to be present.
+#:
+#: `tracking_code` is ours and is what a hand-built sheet uses. The rest are what
+#: a network's own export actually contains: it never saw our code, only the sub
+#: ID we sent it, so requiring the code would mean retyping a column by hand for
+#: every row - which is the work this is meant to remove.
+CSV_LINK_COLUMNS: tuple[str, ...] = (
+    "tracking_code", "sub_id", "sub_id1", "subid1", "link_key", "u1", "sid", "tid",
+)
 
 
 def _https_url(value: str) -> str:
@@ -168,6 +179,11 @@ def _link_view(session: Session, item: TrackingLink) -> dict[str, Any]:
         "platform": item.platform,
         "campaign_parameter": item.campaign_parameter,
         "platform_parameter": item.platform_parameter,
+        # What the network will report this link as. Shown rather than implied:
+        # the values are read back off a dashboard we do not control, and an
+        # operator reconciling a payout needs to know which column is which.
+        "sub_ids": dict(item.sub_ids or {}),
+        "sub_id_key": attribution_subids.link_key(item.code),
         "disclosure": item.disclosure,
         "status": item.status,
         "expires_at": item.expires_at,
@@ -193,6 +209,12 @@ def _destination(item: TrackingLink, country_code: str | None) -> str:
         (item.campaign_parameter, item.campaign_id),
         (item.platform_parameter, item.platform),
     ):
+        if key.casefold() not in existing:
+            query.append((key, value))
+    # The network's own parameters, as decided when the link was minted. Ours
+    # above tell us nothing the network will ever report back; these are the
+    # ones that reach its dashboard and come home on a conversion row.
+    for key, value in (item.sub_ids or {}).items():
         if key.casefold() not in existing:
             query.append((key, value))
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), ""))
@@ -375,8 +397,23 @@ def create_tracking_link(
             detail="Platform parameter already exists in the affiliate destination.",
         )
     ensure_profile(session, user)
+    code = token_urlsafe(8)
+    # Worked out now, while the campaign and the plan are already in hand, and
+    # kept for the life of the link. The network reports these positionally, so
+    # a value that moved or changed would split one link's history in two.
+    minted_at = utc_now()
+    sub_ids = attribution_subids.assign(destination, attribution_subids.LinkContext(
+        code=code,
+        platform=body.platform,
+        campaign_id=campaign.id,
+        campaign_name=campaign.name,
+        created_at=minted_at,
+        content_sha256=plan.video_sha256 if plan else None,
+        product_id=product_id,
+    ))
     item = TrackingLink(
-        code=token_urlsafe(8),
+        code=code,
+        sub_ids=sub_ids,
         workspace_id=workspace_id,
         campaign_id=campaign.id,
         plan_id=plan.id if plan else None,
@@ -465,6 +502,26 @@ def import_conversions(
             status_code=422,
             detail=f"Missing conversion CSV columns: {', '.join(missing)}.",
         )
+    link_columns = [column for column in CSV_LINK_COLUMNS if column in fields]
+    if not link_columns:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Conversion CSV needs a column identifying the link: tracking_code, "
+                "or the sub ID the network reported it under (sub_id1, u1, sid, tid)."
+            ),
+        )
+    # Built once, and only when a sub-ID column is actually present. The key is
+    # derived from the code rather than stored, so there is nothing to look it up
+    # by in SQL - and doing it per row would be a full scan per conversion.
+    by_key: dict[str, TrackingLink] = {}
+    if any(column != "tracking_code" for column in link_columns):
+        by_key = {
+            attribution_subids.link_key(candidate.code): candidate
+            for candidate in session.scalars(
+                select(TrackingLink).where(TrackingLink.workspace_id == workspace_id)
+            ).all()
+        }
     created = 0
     updated = 0
     matched_clicks = 0
@@ -477,15 +534,33 @@ def import_conversions(
             }
             if not any(row.values()):
                 continue
-            code = row["tracking_code"]
-            link = session.scalar(
-                select(TrackingLink).where(
-                    TrackingLink.code == code,
-                    TrackingLink.workspace_id == workspace_id,
+            # Whichever identifying column this row filled in. A network export
+            # carries one of the sub-ID columns; a hand-built sheet carries ours.
+            link = None
+            identifier = ""
+            for column in link_columns:
+                identifier = row.get(column, "")
+                if not identifier:
+                    continue
+                link = (
+                    session.scalar(
+                        select(TrackingLink).where(
+                            TrackingLink.code == identifier,
+                            TrackingLink.workspace_id == workspace_id,
+                        )
+                    )
+                    if column == "tracking_code"
+                    else by_key.get(identifier)
                 )
-            )
+                if link:
+                    break
             if not link:
-                raise ValueError(f"Row {row_number}: tracking_code was not found.")
+                raise ValueError(
+                    f"Row {row_number}: no link matched "
+                    f"{identifier or 'an empty identifier'}."
+                    if identifier
+                    else f"Row {row_number}: no link column had a value."
+                )
             network = row["network"][:120].casefold()
             reference = row["conversion_id"]
             if not network or not reference:
