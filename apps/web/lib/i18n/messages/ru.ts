@@ -289,6 +289,8 @@ export const ru: Messages = {
     chooseEngine: "Выберите и настройте API",
     active: "Активен",
     docs: "Документация",
+    testStorage: "Проверить доступ",
+    hostingProbePassed: "Хранилище работает. Движок сможет загрузить медиа по публичной ссылке.",
     mediaHosting: "Хранение медиа",
     mediaHostingNeeded: "нужно хранилище медиа",
     whatGoesOut: "Что уйдёт в публикацию",

@@ -290,6 +290,8 @@ export const fr: Messages = {
     chooseEngine: "Choisir et configurer une API",
     active: "Actif",
     docs: "Documentation",
+    testStorage: "Tester l'accès",
+    hostingProbePassed: "Le stockage fonctionne. Un moteur peut récupérer vos médias depuis l'URL publique.",
     mediaHosting: "Hébergement du média",
     mediaHostingNeeded: "hébergement du média requis",
     whatGoesOut: "Ce qui sera publié",

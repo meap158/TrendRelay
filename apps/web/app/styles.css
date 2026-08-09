@@ -312,6 +312,16 @@ nav strong { color: #1c2b33; }
 .hosting-head h3 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 4px; font-size: 14px; font-weight: 500; }
 .hosting-head h3 span { color: var(--muted); font-size: 11px; font-weight: 400; }
 .hosting-head p { max-width: 68ch; margin: 0; color: var(--muted); line-height: 1.5; }
+/* Every stage of the storage check, because which one broke is what names the
+   setting to go and look at. Numbered: they run in order and stop at the first
+   failure, so the last row is always the one to read. */
+.hosting-probe { display: grid; gap: 6px; margin: 0; padding: 10px 12px 10px 30px; border-radius: var(--radius-sm); background: var(--panel); }
+.hosting-probe li { padding-inline-start: 4px; font-size: 11px; line-height: 1.5; }
+.hosting-probe li::marker { color: var(--muted); font-variant-numeric: tabular-nums; }
+.hosting-probe li b { display: block; font-weight: 600; }
+.hosting-probe li.ok b { color: var(--green); }
+.hosting-probe li.bad b { color: #c0392b; }
+.hosting-probe li span { color: var(--muted); }
 .hosting-status { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .hosting-status b { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .hosting-status b.configured { color: var(--green); }

@@ -151,6 +151,9 @@ type MediaHosting = {
   reason: string | null;
   credential_fields: CredentialField[];
 };
+/** One stage of the storage check, and the setting it clears. */
+type HostingCheck = { id: string; label: string; ok: boolean; detail: string };
+type HostingProbe = { ok: boolean; checks: HostingCheck[] };
 type Connection = {
   media_hosting: MediaHosting;
   active_provider: PublishingProvider;
@@ -266,6 +269,8 @@ export default function PublishPage() {
   );
   const [hostingDraft, setHostingDraft] = useState<Record<string, string>>({});
   const [hostingOpen, setHostingOpen] = useState(false);
+  /** The last storage check, kept on screen so its stages can be read. */
+  const [hostingProbe, setHostingProbe] = useState<HostingProbe | null>(null);
   const draftRestored = useRef(false);
   // Publishing now is what most posts are for, and the choice is a habit
   // rather than a per-post decision, so it is remembered between sessions.
@@ -966,6 +971,37 @@ export default function PublishPage() {
       .catch(() => undefined);
   }
 
+  /**
+   * Try the whole path a published clip takes through storage.
+   *
+   * Saving these five settings never checked any of them, so a wrong account
+   * ID, bucket or public URL was accepted in silence and failed at publish -
+   * the latest and most expensive place to learn it. The check writes a small
+   * object and reads it back through the public URL, because that last hop is
+   * the one an engine makes and the one nothing else can prove.
+   */
+  async function testHosting() {
+    setBusy("hosting-probe");
+    setError(null);
+    setNotice(null);
+    setHostingProbe(null);
+    try {
+      const body = await json<{ probe: HostingProbe }>(
+        await apiFetch(`/api/workspaces/${workspaceId}/publishing/media-hosting/probe`, {
+          method: "POST",
+          body: JSON.stringify({ confirm_external_action: true }),
+        }),
+      );
+      setHostingProbe(body.probe);
+      // The stages stay on screen either way; this is the one-line verdict.
+      if (body.probe.ok) setNotice(t("publish.hostingProbePassed"));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Storage could not be tested.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function saveHosting() {
     const fields = hosting?.credential_fields ?? [];
     const missing = fields.filter(
@@ -1518,6 +1554,19 @@ export default function PublishPage() {
                     rel="noopener noreferrer"
                   >{t("publish.openHostingDashboard", { label: hosting.label })}</a>
                 )}
+                {/* The same offer every engine card makes, and storage needed
+                    it more: an engine at least answers its own probe, while
+                    these five settings were saved unchecked and only failed
+                    later, mid-publish. */}
+                {hosting.configured && (
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    busy={busy === "hosting-probe"}
+                    disabled={!canExecute}
+                    onClick={() => void testHosting()}
+                  >{t("publish.testStorage")}</Button>
+                )}
                 <Button
                   variant="quiet"
                   size="sm"
@@ -1527,6 +1576,18 @@ export default function PublishPage() {
                   ? t("publish.replaceKeys") : t("publish.setUp")}</Button>
               </div>
             </div>
+            {/* Every stage, not just the verdict. Which one broke is what says
+                which of the five settings to go and look at. */}
+            {hostingProbe && (
+              <ol className={`hosting-probe${hostingProbe.ok ? " ok" : ""}`}>
+                {hostingProbe.checks.map((check) => (
+                  <li key={check.id} className={check.ok ? "ok" : "bad"}>
+                    <b>{check.label}</b>
+                    <span>{check.detail}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
             {hostingOpen && (
               <div className="engine-credentials">
                 {hosting.credential_fields.map((field) => (

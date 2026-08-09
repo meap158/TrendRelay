@@ -285,6 +285,8 @@ export const ja: Messages = {
     chooseEngine: "API を選んで設定",
     active: "使用中",
     docs: "ドキュメント",
+    testStorage: "アクセスを確認",
+    hostingProbePassed: "ストレージは正常です。エンジンは公開URLからメディアを取得できます。",
     mediaHosting: "メディアの配置先",
     mediaHostingNeeded: "メディアの配置先が必要です",
     whatGoesOut: "投稿する内容",

@@ -283,6 +283,8 @@ export const ar: Messages = {
     chooseEngine: "اختر واجهة برمجية واضبطها",
     active: "قيد الاستخدام",
     docs: "التوثيق",
+    testStorage: "اختبار الوصول",
+    hostingProbePassed: "التخزين يعمل. يمكن للمحرك جلب الوسائط من الرابط العام.",
     mediaHosting: "استضافة الوسائط",
     mediaHostingNeeded: "يلزم استضافة للوسائط",
     whatGoesOut: "ما الذي سيُنشر",
