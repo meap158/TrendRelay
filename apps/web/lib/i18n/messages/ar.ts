@@ -334,7 +334,6 @@ export const ar: Messages = {
     productLaunches: "إطلاق المنتجات",
     engineState: {
       ready: "جاهز",
-      off: "موقوف",
       "no-key": "بلا مفتاح",
       rejected: "رُفض المفتاح",
       unreachable: "تعذّر الوصول",
@@ -350,8 +349,6 @@ export const ar: Messages = {
     engineUnreachableFix: "غالبًا المحرّك متوقّف أو أنت غير متصل. أعد المحاولة؛ لم يُرسل شيء.",
     engineNoAccounts: "المفتاح سليم، لكن لا توجد قنوات متصلة به.",
     engineNoAccountsFix: "اربط القنوات من لوحة المحرّك نفسه، ثم أعد تحميل الحسابات.",
-    engineOff: "موقوف هنا عن النشر.",
-    engineOffFix: "أعد تشغيله لتظهر وجهاته.",
     engineSupports: "يدعم {label} عدد {count} من الوجهات",
     useForPublishing: "استخدمه للنشر",
     defaultEngine: "الافتراضي",
@@ -393,6 +390,8 @@ export const ar: Messages = {
     openHostingDashboard: "افتح {label}",
     replaceKeys: "استبدل المفاتيح",
     setUp: "إعداد",
+    reachableThrough: "الوجهات من {engines}. اربط المزيد من لوحة كل محرّك.",
+    nothingReachable: "لا يوجد محرّك يوفّر وجهات بعد.",
   },
 
   autopilot: {

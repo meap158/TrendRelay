@@ -344,7 +344,6 @@ export const fr: Messages = {
     productLaunches: "Lancements de produits",
     engineState: {
       ready: "prêt",
-      off: "désactivé",
       "no-key": "sans clé",
       rejected: "clé refusée",
       unreachable: "injoignable",
@@ -360,8 +359,6 @@ export const fr: Messages = {
     engineUnreachableFix: "Le plus souvent le moteur est hors service, ou vous êtes hors ligne. Réessayez : rien n’a été envoyé.",
     engineNoAccounts: "La clé fonctionne, mais aucun canal n’y est connecté.",
     engineNoAccountsFix: "Connectez des canaux dans le tableau de bord du moteur, puis rechargez les comptes.",
-    engineOff: "Désactivé ici pour la publication.",
-    engineOffFix: "Réactivez-le pour proposer ses destinations.",
     engineSupports: "{label} prend en charge {count} destinations",
     useForPublishing: "Utiliser pour publier",
     defaultEngine: "Par défaut",
@@ -403,6 +400,8 @@ export const fr: Messages = {
     openHostingDashboard: "Ouvrir {label}",
     replaceKeys: "Remplacer les clés",
     setUp: "Configurer",
+    reachableThrough: "Les destinations viennent de {engines}. Connectez-en d’autres dans le tableau de bord de chaque moteur.",
+    nothingReachable: "Aucun moteur ne fournit encore de destination.",
   },
 
   autopilot: {

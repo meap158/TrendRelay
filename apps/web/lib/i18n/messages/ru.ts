@@ -343,7 +343,6 @@ export const ru: Messages = {
     productLaunches: "Запуски продуктов",
     engineState: {
       ready: "готов",
-      off: "выключен",
       "no-key": "нет ключа",
       rejected: "ключ отклонён",
       unreachable: "недоступен",
@@ -359,8 +358,6 @@ export const ru: Messages = {
     engineUnreachableFix: "Обычно движок не работает или нет сети. Попробуйте снова: ничего не отправлено.",
     engineNoAccounts: "Ключ работает, но к нему не подключено ни одного канала.",
     engineNoAccountsFix: "Подключите каналы в панели самого движка и загрузите аккаунты снова.",
-    engineOff: "Здесь выключен для публикаций.",
-    engineOffFix: "Включите его, чтобы появились его направления.",
     engineSupports: "{label} поддерживает {count} направлений",
     useForPublishing: "Использовать для публикаций",
     defaultEngine: "По умолчанию",
@@ -402,6 +399,8 @@ export const ru: Messages = {
     openHostingDashboard: "Открыть {label}",
     replaceKeys: "Заменить ключи",
     setUp: "Настроить",
+    reachableThrough: "Направления из {engines}. Подключите ещё в панели каждого движка.",
+    nothingReachable: "Ни один движок пока не даёт направлений.",
   },
 
   autopilot: {

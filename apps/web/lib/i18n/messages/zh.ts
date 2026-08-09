@@ -328,7 +328,6 @@ export const zh: Messages = {
     productLaunches: "新品发布",
     engineState: {
       ready: "就绪",
-      off: "已关闭",
       "no-key": "未填密钥",
       rejected: "密钥被拒",
       unreachable: "无法连接",
@@ -343,8 +342,6 @@ export const zh: Messages = {
     engineUnreachableFix: "通常是引擎停机或你处于离线状态。请重试；尚未发送任何内容。",
     engineNoAccounts: "密钥有效，但尚未连接任何渠道。",
     engineNoAccountsFix: "请在引擎自己的控制台连接渠道，然后重新加载。",
-    engineOff: "已在此处关闭发布。",
-    engineOffFix: "重新开启即可选择其目标。",
     engineSupports: "{label} 支持 {count} 个目标",
     useForPublishing: "用于发布",
     defaultEngine: "默认",
@@ -385,6 +382,8 @@ export const zh: Messages = {
     openHostingDashboard: "打开 {label}",
     replaceKeys: "更换密钥",
     setUp: "去设置",
+    reachableThrough: "目标来自 {engines}。请在各引擎的控制台中连接更多。",
+    nothingReachable: "还没有引擎提供目标。",
   },
 
   autopilot: {

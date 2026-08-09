@@ -341,7 +341,6 @@ export const en = {
     productLaunches: "Product launches",
     engineState: {
       ready: "ready",
-      off: "off",
       "no-key": "no key",
       rejected: "key refused",
       unreachable: "unreachable",
@@ -356,8 +355,6 @@ export const en = {
     engineUnreachableFix: "Usually the engine being down or offline. Try again; nothing was sent.",
     engineNoAccounts: "The key works, but no channels are connected to it.",
     engineNoAccountsFix: "Connect channels in the engine's own dashboard, then load accounts again.",
-    engineOff: "Switched off for publishing here.",
-    engineOffFix: "Turn it back on to offer its destinations.",
     engineSupports: "{label} supports {count} destinations",
     useForPublishing: "Use for publishing",
     defaultEngine: "Default",
@@ -399,6 +396,8 @@ export const en = {
     openHostingDashboard: "Open {label}",
     replaceKeys: "Replace keys",
     setUp: "Set up",
+    reachableThrough: "Destinations come from {engines}. Connect more in each engine's dashboard.",
+    nothingReachable: "No engine is contributing destinations yet.",
   },
 
   autopilot: {

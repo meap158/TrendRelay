@@ -338,7 +338,6 @@ export const vi: Messages = {
     productLaunches: "Ra mắt sản phẩm",
     engineState: {
       ready: "sẵn sàng",
-      off: "đã tắt",
       "no-key": "chưa có khóa",
       rejected: "khóa bị từ chối",
       unreachable: "không kết nối được",
@@ -353,8 +352,6 @@ export const vi: Messages = {
     engineUnreachableFix: "Thường là do công cụ đang ngừng hoạt động hoặc bạn mất mạng. Hãy thử lại; chưa có gì được gửi đi.",
     engineNoAccounts: "Khóa hoạt động tốt, nhưng chưa có kênh nào được kết nối.",
     engineNoAccountsFix: "Hãy kết nối kênh trong bảng điều khiển của công cụ, rồi tải lại danh sách.",
-    engineOff: "Đã tắt cho việc đăng bài tại đây.",
-    engineOffFix: "Bật lại để hiển thị các đích đến của nó.",
     engineSupports: "{label} hỗ trợ {count} đích đến",
     useForPublishing: "Dùng để đăng bài",
     defaultEngine: "Mặc định",
@@ -395,6 +392,8 @@ export const vi: Messages = {
     openHostingDashboard: "Mở {label}",
     replaceKeys: "Thay khóa",
     setUp: "Thiết lập",
+    reachableThrough: "Đích đến đến từ {engines}. Hãy kết nối thêm trong bảng điều khiển của từng công cụ.",
+    nothingReachable: "Chưa có công cụ nào cung cấp đích đến.",
   },
 
   autopilot: {

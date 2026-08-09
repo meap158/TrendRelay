@@ -302,9 +302,14 @@ export default function PublishPage() {
    * could actually be read. A key can be saved and rejected, accepted and
    * return nothing, or work yesterday and time out today, and each of those
    * needs a different thing done about it.
+   *
+   * Condition only. Whether the operator wants to use the engine is the switch,
+   * and mixing the two here made a healthy switched-off engine report "off"
+   * while a broken switched-off one reported "key refused" - one decision,
+   * described two ways depending on something unrelated to it.
    */
   const engineState = (provider: Provider): {
-    state: "ready" | "off" | "no-key" | "rejected" | "unreachable" | "no-accounts";
+    state: "ready" | "no-key" | "rejected" | "unreachable" | "no-accounts";
     tone: "good" | "warn" | "bad" | "neutral";
     detail: string;
     fix: string | null;
@@ -336,14 +341,6 @@ export default function PublishPage() {
         tone: "bad",
         detail: refusal ?? t(rejected ? "publish.engineRejected" : "publish.engineUnreachable"),
         fix: t(rejected ? "publish.engineRejectedFix" : "publish.engineUnreachableFix"),
-      };
-    }
-    if (engineOff(provider.id)) {
-      return {
-        state: "off",
-        tone: "neutral",
-        detail: t("publish.engineOff"),
-        fix: t("publish.engineOffFix"),
       };
     }
     if (accountsLoaded && count === 0) {
@@ -489,7 +486,7 @@ export default function PublishPage() {
   const approvers = chosenProviders.filter((item) => item.supports_approval);
   /** Engines that work and are switched on - these are the ones carrying posts. */
   const connectedEngines = (connection?.providers ?? []).filter(
-    (item) => engineState(item).state === "ready");
+    (item) => engineState(item).state === "ready" && !engineOff(item.id));
   /**
    * Engines whose key works, switched on or not.
    *
@@ -498,7 +495,7 @@ export default function PublishPage() {
    * made and can undo; the other is work you have not done yet.
    */
   const usableEngines = (connection?.providers ?? []).filter(
-    (item) => ["ready", "off", "no-accounts"].includes(engineState(item).state));
+    (item) => ["ready", "no-accounts"].includes(engineState(item).state));
   /**
    * Engines whose key works and that are switched on, channels or not.
    *
@@ -517,7 +514,13 @@ export default function PublishPage() {
    */
   const unavailableEngines = (connection?.providers ?? [])
     .map((item) => ({ provider: item, status: engineState(item) }))
-    .filter(({ status }) => ["rejected", "unreachable", "no-accounts"].includes(status.state));
+    // Switched off is a decision, not a fault. An engine the operator turned
+    // off has no business in a list of things that need attention - it is
+    // already reported on the line below as switched off, and naming it here
+    // too asks them to fix something they chose.
+    .filter(({ provider, status }) =>
+      !engineOff(provider.id)
+      && ["rejected", "unreachable", "no-accounts"].includes(status.state));
   /** Chosen destinations whose engine has stopped working since they were picked. */
   const brokenChoices = chosenProviders.filter(
     (item) => engineState(item).state !== "ready");
@@ -1191,10 +1194,9 @@ export default function PublishPage() {
           {connection?.providers.map((provider) => {
             const isDefault = provider.id === connection.active_provider;
             const status = engineState(provider);
-            // "off" counts as usable: it is only ever reported for an engine
-            // whose key works. Leaving it out disabled the switch the moment it
-            // was switched off, so it could never be switched back on.
-            const usable = ["ready", "no-accounts", "off"].includes(status.state);
+            // Whether this engine could deliver if asked. Whether it should is
+            // the switch below, and the two are deliberately not the same test.
+            const usable = ["ready", "no-accounts"].includes(status.state);
             const open = openProvider === provider.id;
             return (
               <article
@@ -1300,9 +1302,21 @@ export default function PublishPage() {
                 )}
 
                 <div className="engine-switch-row">
+                  {/* Intent, not capability.
+                   *
+                   * These were one control and should not have been. A refused
+                   * key made the switch disabled, so an engine you had no
+                   * intention of using could not be switched off - and the
+                   * picker went on listing it as something to fix, with no way
+                   * to say "I am not using this one".
+                   *
+                   * The switch now means "I want to publish through this". The
+                   * badge above says whether it currently can. Turning on a
+                   * broken engine is allowed; it contributes nothing until it
+                   * is fixed, and the line under it says why. */}
                   <Switch
-                    checked={usable && !engineOff(provider.id)}
-                    disabled={!usable}
+                    checked={!engineOff(provider.id)}
+                    disabled={!canExecute}
                     label={t("publish.useForPublishing")}
                     onChange={(next) => setDisabledEngines(
                       next
@@ -2029,13 +2043,23 @@ export default function PublishPage() {
                       the old line comparing connected to supported platforms
                       could only ever say "no other platforms" once accounts
                       were loaded from all of them. */}
+                  {/* Only engines actually contributing destinations. One
+                      reachable with nothing on it is already named above as
+                      having no channels; listing it here as "Zernio (0)" says
+                      the same thing again, in a shape that reads like a total. */}
                   <p>
-                    {engineReach.filter((engine) => engine.reachable).length
-                      ? `Reachable through ${engineReach
-                          .filter((engine) => engine.reachable)
-                          .map((engine) => `${engine.label} (${engine.account_count})`)
-                          .join(", ")}. Connect more in each engine's dashboard.`
-                      : "No engine is reachable yet. Add a key in Engine setup above."}
+                    {(() => {
+                      const contributing = engineReach.filter(
+                        (engine) => engine.reachable && engine.account_count > 0
+                          && !engineOff(engine.id));
+                      return contributing.length
+                        ? t("publish.reachableThrough", {
+                            engines: contributing
+                              .map((engine) => `${engine.label} (${engine.account_count})`)
+                              .join(", "),
+                          })
+                        : t("publish.nothingReachable");
+                    })()}
                   </p>
                   <Button
                     variant="quiet"

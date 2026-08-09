@@ -338,7 +338,6 @@ export const ja: Messages = {
     productLaunches: "商品ローンチ",
     engineState: {
       ready: "利用可",
-      off: "オフ",
       "no-key": "キー未登録",
       rejected: "キー拒否",
       unreachable: "接続不可",
@@ -353,8 +352,6 @@ export const ja: Messages = {
     engineUnreachableFix: "多くはエンジン側の停止か、ネットワークの切断です。何も送信されていないので、再度お試しください。",
     engineNoAccounts: "キーは有効ですが、接続されたチャンネルがありません。",
     engineNoAccountsFix: "エンジンのダッシュボードでチャンネルを接続し、再度読み込んでください。",
-    engineOff: "ここでの投稿には使いません。",
-    engineOffFix: "入れ直すと配信先が選べるようになります。",
     engineSupports: "{label} は{count}件の配信先に対応",
     useForPublishing: "投稿に使う",
     defaultEngine: "既定",
@@ -395,6 +392,8 @@ export const ja: Messages = {
     openHostingDashboard: "{label} を開く",
     replaceKeys: "キーを差し替え",
     setUp: "設定",
+    reachableThrough: "配信先は {engines} からです。各エンジンのダッシュボードで追加してください。",
+    nothingReachable: "配信先を提供しているエンジンはまだありません。",
   },
 
   autopilot: {
