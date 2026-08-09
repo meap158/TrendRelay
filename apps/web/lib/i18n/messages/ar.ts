@@ -317,6 +317,8 @@ export const ar: Messages = {
     subreddit: "المجتمع الفرعي",
     subredditRequired: "يرفض Reddit المنشور بدون تحديد مجتمع فرعي.",
     pinterestBoard: "لوحة Pinterest",
+    chooseBoard: "اختر لوحة",
+    pinterestBoardIdHelp: "هذا المحرك لا يعرض قائمة اللوحات، فالصق معرّف اللوحة. وحده Bundle.social يطابق اللوحة بالاسم.",
     pinterestBoardHelp: "اللوحة التي سيُضاف إليها الدبوس.",
     sendForApproval: "إرسال للاعتماد",
     discloseAi: "الإفصاح عن وسائط من إنتاج الذكاء الاصطناعي",

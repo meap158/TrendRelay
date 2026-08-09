@@ -496,7 +496,7 @@ def test_reddit_and_pinterest_require_their_extra_field(
                 targets=[publishing.PublishTarget(platform="reddit", integration_id="a1")],
             )
         )
-    with pytest.raises(ValueError, match="board name"):
+    with pytest.raises(ValueError, match="board ID"):
         publishing.preview_publish(
             request(
                 media_file,
@@ -766,7 +766,7 @@ def test_hosting_being_configured_does_not_skip_the_other_checks(
         media_file,
         targets=[publishing.PublishTarget(platform="pinterest", integration_id="a1")],
     )
-    with pytest.raises(ValueError, match="board name"):
+    with pytest.raises(ValueError, match="board ID"):
         publishing._validate_request(buffer, no_board)
 
 
@@ -1290,3 +1290,74 @@ def test_woopsocial_names_the_file_and_the_limit_before_uploading(
 
     with pytest.raises(ValueError, match="big.mp4"):
         publishing._woopsocial_upload(big)
+
+
+def test_a_picked_board_reaches_each_engine_in_its_own_terms(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    """One string cannot serve every engine.
+
+    bundle.social matches a board by name; Zernio, Buffer and WoopSocial each
+    want its id. A board picked from an account carries both, so a post spanning
+    two engines gives each the form it understands instead of failing on one.
+    """
+    use_provider(monkeypatch, tmp_path, "bundle_social")
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        if path == "/upload/":
+            return {"id": "upl_1"}
+        if path == "/post/":
+            sent["body"] = kwargs["body"]
+            return {"id": "post_1"}
+        return {}
+
+    monkeypatch.setattr(publishing, "_bundle_request", fake_request)
+    publishing._execute_publish(request(
+        media_file,
+        targets=[publishing.PublishTarget(platform="pinterest", integration_id="account-1")],
+        board="board-99",
+        board_name="Product launches",
+        confirm_external_action=True,
+    ))
+    posted = sent["body"]["data"]["PINTEREST"]
+    assert posted["boardName"] == "Product launches"
+
+
+def test_a_typed_board_still_works_where_only_one_value_is_known(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    # Nothing forces a picker: an engine that cannot list boards leaves the
+    # field typed, and that single value has to go somewhere sensible.
+    use_provider(monkeypatch, tmp_path, "bundle_social")
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        if path == "/post/":
+            sent["body"] = kwargs["body"]
+            return {"id": "p"}
+        return {"id": "upl_1"}
+
+    monkeypatch.setattr(publishing, "_bundle_request", fake_request)
+    publishing._execute_publish(request(
+        media_file,
+        targets=[publishing.PublishTarget(platform="pinterest", integration_id="account-1")],
+        board="Product launches",
+        confirm_external_action=True,
+    ))
+    assert sent["body"]["data"]["PINTEREST"]["boardName"] == "Product launches"
+
+
+def test_boards_are_offered_only_by_an_engine_that_lists_them(
+    monkeypatch, media_file: Path
+) -> None:
+    monkeypatch.setattr(
+        publishing, "_woopsocial_request",
+        lambda *a, **k: {"boards": [{"id": "b1", "name": "Espresso"}]},
+    )
+    assert publishing.board_options("woopsocial", "w1") == [
+        {"id": "b1", "name": "Espresso"},
+    ]
+    # Empty means the engine does not offer them, not that the account has none,
+    # so the field falls back to being typed rather than claiming it is empty.
+    assert publishing.board_options("buffer", "acct") == []

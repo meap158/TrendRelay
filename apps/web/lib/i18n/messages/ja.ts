@@ -321,6 +321,8 @@ export const ja: Messages = {
     subreddit: "サブレディット",
     subredditRequired: "投稿先のサブレディットがないと Reddit は受け付けません。",
     pinterestBoard: "Pinterest のボード",
+    chooseBoard: "ボードを選択",
+    pinterestBoardIdHelp: "このエンジンはボード一覧を返さないため、ボードIDを貼り付けてください。名前で照合できるのは Bundle.social だけです。",
     pinterestBoardHelp: "ピンを追加するボード。",
     sendForApproval: "承認に回す",
     discloseAi: "AI 生成であることを明示",

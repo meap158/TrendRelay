@@ -305,6 +305,16 @@ export default function PublishPage() {
   const [thumbnail, setThumbnail] = useState("");
   /** The workspace's tracking links, so one can be attached without leaving. */
   const [trackingLinks, setTrackingLinks] = useState<AffiliateTrackingLink[]>([]);
+  /**
+   * The Pinterest boards of the account this post is going to.
+   *
+   * Empty when its engine will not list them, which is a different thing from
+   * the account having none - so the field falls back to being typed rather
+   * than offering an empty menu.
+   */
+  const [boardsByAccount, setBoardsByAccount] = useState<
+    Record<string, Array<{ id: string; name: string }>>
+  >({});
   const [library, setLibrary] = useState<LibraryAsset[]>([]);
   const [libraryFacets, setLibraryFacets] = useState<AssetFacets>(EMPTY_FACETS);
   const [libraryState, setLibraryState] = useState<{ loading: boolean; failure: string | null }>({
@@ -448,6 +458,11 @@ export default function PublishPage() {
   /** The networks reached, each named once however many accounts are on it. */
   const chosen = useMemo(
     () => [...new Set(chosenAccounts.map((account) => account.platform))],
+    [chosenAccounts],
+  );
+  /** The Pinterest destination, if this post has one. */
+  const pinterestTarget = useMemo(
+    () => chosenAccounts.find((account) => account.platform === "pinterest") ?? null,
     [chosenAccounts],
   );
   /** The engines actually delivering this post, in the order chosen. */
@@ -854,6 +869,10 @@ export default function PublishPage() {
       visibility: form.get("visibility") === "private" ? "private" : "public",
       subreddit: form.get("subreddit") || null,
       board: form.get("board") || null,
+      // Sent alongside the id when the board came from the account's own list.
+      // bundle.social matches a board by name and the others by id, so a post
+      // spanning two engines has to carry both.
+      board_name: boards.find((item) => item.id === form.get("board"))?.name ?? null,
       targets: selectedTargets,
       confirm_external_action: confirm,
     };
@@ -1118,6 +1137,36 @@ export default function PublishPage() {
     // callback's identity would only repeat the same call.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, connection?.configured]);
+
+  // The chosen account's boards, read from its own engine. Only when Pinterest
+  // is actually a destination: it is an outward call, and most posts never go
+  // near Pinterest.
+  useEffect(() => {
+    const account = pinterestTarget;
+    if (!workspaceId || !account || boardsByAccount[account.id]) return;
+    let cancelled = false;
+    apiFetch(
+      `/api/workspaces/${workspaceId}/publishing/accounts/`
+      + `${account.provider}/${encodeURIComponent(account.id)}/boards`,
+      { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
+    )
+      .then((response) => json<{ boards: Array<{ id: string; name: string }> }>(response))
+      // Recorded against the account, so switching destinations shows that
+      // account's boards rather than the last one's, and going back does not
+      // spend another call.
+      .then((body) => {
+        if (!cancelled) {
+          setBoardsByAccount((current) => ({ ...current, [account.id]: body.boards ?? [] }));
+        }
+      })
+      // A failure leaves the field typed rather than blocking the post: the
+      // list is a convenience and the value can always be pasted.
+      .catch(() => {
+        if (!cancelled) setBoardsByAccount((current) => ({ ...current, [account.id]: [] }));
+      });
+    return () => { cancelled = true; };
+  }, [workspaceId, pinterestTarget, boardsByAccount, apiFetch]);
+  const boards = pinterestTarget ? boardsByAccount[pinterestTarget.id] ?? [] : [];
 
   async function refreshAccounts(options: { quiet?: boolean } = {}) {
     if (!workspaceId) return;
@@ -1928,8 +1977,23 @@ export default function PublishPage() {
           )}
           {chosen.includes("pinterest") && (
             <label>{t("publish.pinterestBoard")}
-              <input name="board" placeholder={t("publish.productLaunches")} required />
-              <small>{t("publish.pinterestBoardHelp")}</small>
+              {/* Picked from the account where its engine will list the boards.
+                  Typing was only ever right for bundle.social, which matches a
+                  board by name; the other three want its id, so a typed name
+                  failed on them without saying why. */}
+              {boards.length ? (
+                <select name="board" required defaultValue="">
+                  <option value="" disabled>{t("publish.chooseBoard")}</option>
+                  {boards.map((board) => (
+                    <option key={board.id} value={board.id}>{board.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <input name="board" placeholder={t("publish.productLaunches")} required />
+              )}
+              <small>{boards.length
+                ? t("publish.pinterestBoardHelp")
+                : t("publish.pinterestBoardIdHelp")}</small>
             </label>
           )}
 

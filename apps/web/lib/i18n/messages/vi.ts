@@ -321,6 +321,8 @@ export const vi: Messages = {
     subreddit: "Subreddit",
     subredditRequired: "Reddit từ chối bài đăng nếu không chỉ định subreddit.",
     pinterestBoard: "Bảng Pinterest",
+    chooseBoard: "Chọn bảng",
+    pinterestBoardIdHelp: "Engine này không liệt kê bảng, hãy dán ID bảng. Chỉ Bundle.social khớp bảng theo tên.",
     pinterestBoardHelp: "Bảng sẽ nhận ghim này.",
     sendForApproval: "Gửi duyệt",
     discloseAi: "Ghi rõ nội dung do AI tạo",

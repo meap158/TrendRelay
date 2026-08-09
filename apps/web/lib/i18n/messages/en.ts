@@ -324,6 +324,8 @@ export const en = {
     subreddit: "Subreddit",
     subredditRequired: "Reddit rejects a submission without a target subreddit.",
     pinterestBoard: "Pinterest board",
+    chooseBoard: "Choose a board",
+    pinterestBoardIdHelp: "This engine does not list boards, so paste the board ID. Only Bundle.social matches a board by its name.",
     pinterestBoardHelp: "The board that should receive the pin.",
     sendForApproval: "Send for approval",
     discloseAi: "Disclose AI-generated media",

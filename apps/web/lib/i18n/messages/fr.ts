@@ -326,6 +326,8 @@ export const fr: Messages = {
     subreddit: "Subreddit",
     subredditRequired: "Reddit refuse une soumission sans subreddit cible.",
     pinterestBoard: "Tableau Pinterest",
+    chooseBoard: "Choisir un tableau",
+    pinterestBoardIdHelp: "Ce moteur ne liste pas les tableaux : collez l'ID du tableau. Seul Bundle.social identifie un tableau par son nom.",
     pinterestBoardHelp: "Le tableau qui doit recevoir l'épingle.",
     sendForApproval: "Envoyer pour validation",
     discloseAi: "Signaler un média généré par IA",

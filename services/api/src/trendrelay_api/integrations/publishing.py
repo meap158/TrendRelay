@@ -483,6 +483,11 @@ class PublishRequest(BaseModel):
     youtube_category_id: str = Field(default=DEFAULT_YOUTUBE_CATEGORY, max_length=4)
     subreddit: str | None = Field(default=None, max_length=100)
     board: str | None = Field(default=None, max_length=200)
+    #: The chosen board's name, when it was picked from the engine rather than
+    #: typed. Both are carried because one string cannot serve every engine:
+    #: bundle.social matches a board by name and the other three by id, so a
+    #: post spanning two engines needs each to get the form it understands.
+    board_name: str | None = Field(default=None, max_length=200)
     confirm_external_action: bool = False
 
     @field_validator("thread")
@@ -761,7 +766,12 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
             "Reddit needs a target subreddit; every engine rejects the post without one."
         )
     if NEEDS_BOARD in chosen and not request.board:
-        raise ValueError("Pinterest needs a destination board name.")
+        # Named as an id, because that is what three of the four engines send.
+        # Only bundle.social matches a board by its name.
+        raise ValueError(
+            "Pinterest needs a destination board. Choose one from the account, or "
+            "paste the board ID."
+        )
 
 
 def _post_title(request: PublishRequest) -> str:
@@ -871,7 +881,9 @@ def _bundle_platform_data(
         return {
             "text": title,
             "description": caption,
-            "boardName": request.board or "",
+            # This engine matches on the name. A board picked from another
+            # engine's list arrives as an id, so the name comes with it.
+            "boardName": request.board_name or request.board or "",
             "uploadIds": uploads,
             "isAiGenerated": request.made_with_ai,
         }
@@ -1129,6 +1141,34 @@ def _woopsocial_upload(video: Path) -> str:
     if not media_id:
         raise RuntimeError("WoopSocial did not return a media ID for the upload.")
     return str(media_id)
+
+
+def _woopsocial_boards(integration_id: str) -> list[dict[str, str]]:
+    payload = _woopsocial_request(
+        "GET", f"/social-accounts/{quote(integration_id)}/platform-inputs", timeout=30
+    ) or {}
+    return [
+        {"id": str(board["id"]), "name": str(board.get("name") or board["id"])}
+        for board in (payload.get("boards") or [])
+    ]
+
+
+#: Engines that can list an account's Pinterest boards. Absent means the boards
+#: cannot be offered, not that the account has none - so the field falls back to
+#: being typed rather than pretending the account owns no boards.
+BOARD_READERS = {"woopsocial": _woopsocial_boards}
+
+
+def board_options(provider_id: str, integration_id: str) -> list[dict[str, str]]:
+    """An account's Pinterest boards, where the engine will say.
+
+    Worth asking for rather than typing, because the same field means different
+    things to different engines: bundle.social matches a board by name, while
+    Zernio, Buffer and WoopSocial each want its id. A name typed by hand is
+    therefore correct on exactly one engine and silently wrong on the rest.
+    """
+    reader = BOARD_READERS.get(provider_id)
+    return reader(integration_id) if reader else []
 
 
 def _woopsocial_account_platforms() -> dict[str, str]:

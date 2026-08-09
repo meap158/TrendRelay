@@ -311,6 +311,8 @@ export const zh: Messages = {
     subreddit: "子版块",
     subredditRequired: "未指定目标子版块时 Reddit 会拒绝提交。",
     pinterestBoard: "Pinterest 图板",
+    chooseBoard: "选择图板",
+    pinterestBoardIdHelp: "该引擎不提供图板列表，请粘贴图板 ID。只有 Bundle.social 按名称匹配图板。",
     pinterestBoardHelp: "接收该图钉的图板。",
     sendForApproval: "提交审核",
     discloseAi: "标注为 AI 生成内容",

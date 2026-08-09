@@ -15,6 +15,7 @@ from trendrelay_api.foundation import membership, require_role
 from trendrelay_api.integrations import media_hosting, posting_slots
 from trendrelay_api.integrations.publishing import (
     PublishRequest,
+    board_options,
     connection_status,
     create_publish_job,
     discover_all_integrations,
@@ -233,6 +234,35 @@ def publishing_integrations(
         return discover_integrations(body.provider)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.post("/accounts/{provider}/{integration_id}/boards")
+def publishing_account_boards(
+    workspace_id: str,
+    provider: str,
+    integration_id: str,
+    body: ExternalConfirmation,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """An account's Pinterest boards, where its engine will list them.
+
+    Typed by hand until now, which was correct on exactly one engine:
+    bundle.social matches a board by name while Zernio, Buffer and WoopSocial
+    each want its id, so a name entered for one silently failed on the others.
+
+    An empty list means the engine does not offer them, not that the account has
+    no boards - the field falls back to being typed rather than claiming the
+    account owns none.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(status_code=400, detail="Reading boards requires confirmation.")
+    try:
+        return {"boards": board_options(provider, integration_id)}
     except RuntimeError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
 

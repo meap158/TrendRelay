@@ -325,6 +325,8 @@ export const ru: Messages = {
     subreddit: "Сабреддит",
     subredditRequired: "Reddit отклоняет публикацию без указанного сабреддита.",
     pinterestBoard: "Доска Pinterest",
+    chooseBoard: "Выберите доску",
+    pinterestBoardIdHelp: "Этот движок не выдаёт список досок — вставьте ID доски. По имени доску находит только Bundle.social.",
     pinterestBoardHelp: "Доска, на которую попадёт пин.",
     sendForApproval: "Отправить на согласование",
     discloseAi: "Указать, что медиа создано ИИ",
