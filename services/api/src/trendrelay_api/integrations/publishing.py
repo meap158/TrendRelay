@@ -1989,10 +1989,15 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
             }
             for platform in provider.platforms
         },
+        # Per engine, not per platform: a carousel is offered only where the
+        # engine delivering that destination can actually post one. Filtering
+        # here rather than refusing later means the choice never appears on an
+        # engine that would have to reject it.
         "post_types": {
             platform: [
                 {"id": kind.id, "label": kind.label, "help": kind.help}
                 for kind in post_types_for(platform)
+                if kind.id != "photo" or platform in provider.photo_carousel_platforms
             ]
             for platform in provider.platforms
         },

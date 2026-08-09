@@ -1636,3 +1636,22 @@ def test_a_carousel_refuses_a_file_that_is_not_an_image(
     stray.write_bytes(b"x")
     with pytest.raises(ValueError, match="existing image"):
         publishing.approved_image_paths([str(stray)])
+
+
+def test_a_carousel_is_only_offered_by_an_engine_that_can_post_one(media_file: Path) -> None:
+    """Filtered where the choice is made, not refused after it.
+
+    Buffer has no contract for a carousel here, so offering the option and then
+    rejecting it would be a control that exists to say no.
+    """
+    status = publishing.connection_status(probe=False)
+    by_id = {provider["id"]: provider for provider in status["providers"]}
+
+    assert [kind["id"] for kind in by_id["zernio"]["post_types"]["tiktok"]] == [
+        "video", "photo",
+    ]
+    assert [kind["id"] for kind in by_id["woopsocial"]["post_types"]["tiktok"]] == [
+        "video", "photo",
+    ]
+    assert [kind["id"] for kind in by_id["buffer"]["post_types"]["tiktok"]] == ["video"]
+    assert [kind["id"] for kind in by_id["bundle_social"]["post_types"]["tiktok"]] == ["video"]

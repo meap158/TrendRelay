@@ -300,6 +300,15 @@ export default function PublishPage() {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [slotPresets, setSlotPresets] = useState<SlotPreset[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  /**
+   * Whether the library picker is choosing the clip or adding carousel images.
+   *
+   * One picker rather than two: it is the same library, the same filters and
+   * the same search, and a second copy would drift from this one.
+   */
+  const [pickerMode, setPickerMode] = useState<"video" | "images">("video");
+  /** A TikTok carousel's images, in the order they will be swiped through. */
+  const [imagePaths, setImagePaths] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
   /** Engine setup is configured once and then in the way; it folds down to a
       line as soon as the active engine can actually publish. */
@@ -462,6 +471,22 @@ export default function PublishPage() {
   const chosen = useMemo(
     () => [...new Set(chosenAccounts.map((account) => account.platform))],
     [chosenAccounts],
+  );
+  /**
+   * Whether any destination is set to post a photo carousel.
+   *
+   * Read from the chosen post types rather than from images being attached:
+   * images can be added and the destination then switched back to a video, and
+   * the chosen type is what the operator actually decided.
+   */
+  const wantsCarousel = useMemo(
+    () => chosenAccounts.some((account) => (
+      postTypes[account.id] ?? postTypesFor(account.id)[0]?.id
+    ) === "photo"),
+    // `postTypesFor` reads provider state that changes with the connection,
+    // which `chosenAccounts` and `postTypes` already move with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chosenAccounts, postTypes],
   );
   /** The Pinterest destination, if this post has one. */
   const pinterestTarget = useMemo(
@@ -870,6 +895,10 @@ export default function PublishPage() {
       schedule: delivery === "schedule",
       made_with_ai: form.get("made_with_ai") === "on",
       visibility: form.get("visibility") === "private" ? "private" : "public",
+      // Only when a destination actually asked for one: images can be attached
+      // and the post type then switched back, and sending them would make the
+      // request look like a carousel that nobody chose.
+      image_paths: wantsCarousel ? imagePaths : [],
       subreddit: form.get("subreddit") || null,
       board: form.get("board") || null,
       // Sent alongside the id when the board came from the account's own list.
@@ -975,9 +1004,28 @@ export default function PublishPage() {
     }
   }
 
-  function openPicker() {
+  function openPicker(mode: "video" | "images" = "video") {
+    setPickerMode(mode);
     setPickerOpen(true);
     void loadLibrary();
+  }
+
+  /** Add one image to the carousel, keeping the picker open for the next. */
+  function addCarouselImage(asset: LibraryAsset) {
+    setImagePaths((current) => (
+      current.includes(asset.original_path) ? current : [...current, asset.original_path]
+    ));
+  }
+
+  /** Move an image one place along. Order is the post, so it is editable. */
+  function moveCarouselImage(index: number, by: -1 | 1) {
+    setImagePaths((current) => {
+      const next = [...current];
+      const target = index + by;
+      if (target < 0 || target >= next.length) return current;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
   }
 
   async function saveSlots(entries: { weekday: number; time: string }[]) {
@@ -2029,7 +2077,7 @@ export default function PublishPage() {
                 <label className="ui-field-label">{t("publish.publicMediaUrl")}
                   <input name="media_url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://cdn.example.com/approved-clip.mp4" required={!videoPath} />
                 </label>
-                <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
+                <Button variant="quiet" onClick={() => openPicker()}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
               </div>
               {clip && (
                 <span className="chosen-clip">
@@ -2063,7 +2111,7 @@ export default function PublishPage() {
                   <label>{t("publish.approvedPath")}
                     <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" />
                   </label>
-                  <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
+                  <Button variant="quiet" onClick={() => openPicker()}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
                 </div>
                 {clip && (
                   <span className="chosen-clip">
@@ -2071,6 +2119,50 @@ export default function PublishPage() {
                     {clip.duration_ms ? <i>{clipLength(clip.duration_ms)}</i> : null}
                     {isBlurred(clip) && <em className="blurred-tag">{t("publish.facesBlurred")}</em>}
                   </span>
+                )}
+                {/* Only when a destination is actually set to post one. The
+                    order is the post - a carousel opens on its first image and
+                    is swiped from there - so it is numbered and reorderable
+                    rather than being whatever order they were clicked in. */}
+                {wantsCarousel && (
+                  <div className="carousel-field">
+                    <span className="carousel-head">
+                      <strong>{t("publish.carouselImages", { count: imagePaths.length })}</strong>
+                      <Button variant="quiet" size="sm" onClick={() => openPicker("images")}>
+                        <ActionIcon name="clip" />{t("publish.addImages")}
+                      </Button>
+                    </span>
+                    {imagePaths.length ? (
+                      <ol className="carousel-list">
+                        {imagePaths.map((path, index) => (
+                          <li key={path}>
+                            <code>{path.split(/[\/]/).pop()}</code>
+                            <button
+                              type="button"
+                              aria-label={t("publish.moveEarlier")}
+                              disabled={index === 0}
+                              onClick={() => moveCarouselImage(index, -1)}
+                            >&#8593;</button>
+                            <button
+                              type="button"
+                              aria-label={t("publish.moveLater")}
+                              disabled={index === imagePaths.length - 1}
+                              onClick={() => moveCarouselImage(index, 1)}
+                            >&#8595;</button>
+                            <button
+                              type="button"
+                              aria-label={t("common.remove")}
+                              onClick={() => setImagePaths(
+                                (current) => current.filter((item) => item !== path),
+                              )}
+                            >&#215;</button>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <small className="ui-field-note">{t("publish.carouselEmpty")}</small>
+                    )}
+                  </div>
                 )}
                 <small className="ui-field-note">
                   Uploaded to {hosting?.label} when the post runs, so {fetchingNames || activeProvider?.label} can
@@ -2094,7 +2186,7 @@ export default function PublishPage() {
                   <label>{t("publish.approvedPath")}
                     <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" required />
                   </label>
-                  <Button variant="quiet" onClick={openPicker}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
+                  <Button variant="quiet" onClick={() => openPicker()}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
                 </div>
                 {clip && (
                   <span className="chosen-clip">
@@ -2556,7 +2648,7 @@ export default function PublishPage() {
           failure={libraryState.failure}
           facets={libraryFacets}
           onSearch={(filters) => void loadLibrary(filters)}
-          onPick={pickClip}
+          onPick={pickerMode === "images" ? addCarouselImage : pickClip}
           onClose={() => setPickerOpen(false)}
         />
       )}

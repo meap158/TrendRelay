@@ -705,3 +705,16 @@ nav strong { color: #1c2b33; }
 .affiliate-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .affiliate-note { color: var(--muted); font-size: 11px; line-height: 1.45; }
 .affiliate-note.warn { color: #7a5c00; }
+
+/* A carousel's images, numbered because the order is the post: it opens on the
+   first and is swiped from there. Reorderable for the same reason. */
+.carousel-field { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.carousel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.carousel-head strong { color: var(--muted); font-size: 11px; font-weight: 600; }
+.carousel-list { display: grid; gap: 4px; margin: 0; padding-inline-start: 22px; }
+.carousel-list li { display: flex; gap: 6px; align-items: center; font-size: 11px; }
+.carousel-list li::marker { color: var(--muted); font-variant-numeric: tabular-nums; }
+.carousel-list code { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.carousel-list button { flex: none; inline-size: 22px; block-size: 22px; padding: 0; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: var(--muted); cursor: pointer; }
+.carousel-list button:hover:not(:disabled) { color: var(--text); border-color: var(--text); }
+.carousel-list button:disabled { opacity: .4; cursor: not-allowed; }
