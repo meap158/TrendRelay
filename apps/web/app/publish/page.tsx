@@ -74,7 +74,13 @@ type SocialPage = {
     provider_label: string;
     id: string;
     label: string;
+    /** False where that engine has no quota left to spend on this post. */
+    available?: boolean;
+    unavailable_reason?: string | null;
   }>;
+  /** False only when every engine reaching this page has run out. */
+  available?: boolean;
+  unavailable_reason?: string | null;
   default_provider: PublishingProvider;
   default_integration_id: string;
 };
@@ -105,6 +111,8 @@ type EngineReach = {
   /** What is actually connected, as against what the engine supports. */
   channels?: EngineChannel[];
   plan?: EnginePlan;
+  /** Set when a measured allowance has run out, with the numbers that say so. */
+  quota?: { blocked: boolean; reason: string | null; allowance_id: string | null };
   id: string; label: string; reachable: boolean; reason: string | null; account_count: number;
 };
 type CredentialField = {
@@ -468,8 +476,15 @@ export default function PublishPage() {
   const routeOf = (page: SocialPage) => {
     const chosen = routeFor[page.key];
     return page.reachable_by.find((item) => `${item.provider}:${item.id}` === chosen)
+      // An engine with nothing left to spend is not the one to fall back to,
+      // so a page reached by two engines keeps working when one runs out.
+      ?? page.reachable_by.find((item) => item.available !== false)
       ?? page.reachable_by[0];
   };
+  /** Out of quota on every engine that reaches it, so nothing can carry it. */
+  const pageSpent = (page: SocialPage) =>
+    page.reachable_by.length > 0
+    && page.reachable_by.every((item) => item.available === false);
   /** A page is chosen when any of its routes is in the target list. */
   const pageChosen = (page: SocialPage) =>
     page.reachable_by.some((item) => targets.includes(item.id));
@@ -483,6 +498,10 @@ export default function PublishPage() {
   const togglePage = (page: SocialPage, on: boolean) => setTargets((current) => {
     const without = current.filter(
       (id) => !page.reachable_by.some((item) => item.id === id));
+    // Clearing a spent page still works; adding one does not. Select-all runs
+    // through here too, which is where it would otherwise queue a post that no
+    // engine has the quota to send.
+    if (on && pageSpent(page)) return without;
     return on ? [...without, routeOf(page).id] : without;
   });
   const switchRoute = (page: SocialPage, provider: string, id: string) => {
@@ -1374,6 +1393,15 @@ export default function PublishPage() {
                     figure quoted from a pricing page are worth different
                     amounts, and showing them alike is how a year-old scrape
                     gets reconciled against a bill. */}
+                {/* Said once, above the figures rather than left to be worked
+                    out from them. This is the line that explains why the
+                    engine's destinations went flat in the picker below. */}
+                {reach?.quota?.blocked && (
+                  <p className="engine-quota" role="status">
+                    <b>{t("publish.noQuotaLeft")}</b>
+                    <span>{reach.quota.reason}</span>
+                  </p>
+                )}
                 {(reach?.allowances ?? []).length > 0 && (
                   <ul className="engine-allowances">
                     {(reach?.allowances ?? [])
@@ -1769,26 +1797,32 @@ export default function PublishPage() {
                       <div className="account-options">{platformPages.map((page) => {
                         const on = pageChosen(page);
                         const route = routeOf(page);
+                        const spent = pageSpent(page);
                         return (
                           <button
                             type="button"
                             key={page.key}
                             aria-pressed={on}
-                            className={on ? "selected" : ""}
-                            title={page.handle ? `@${page.handle}` : page.label}
+                            disabled={spent}
+                            className={`${on ? "selected" : ""}${spent ? " spent" : ""}`}
+                            title={spent
+                              ? page.unavailable_reason ?? undefined
+                              : page.handle ? `@${page.handle}` : page.label}
                             onClick={() => togglePage(page, !on)}
                           >
                             <span>{page.label}</span>
-                            {/* One page, several engines: say so, and say which
-                                one is actually delivering. Two rows that look
-                                like two accounts is how the same audience gets
-                                posted to twice. */}
-                            <i>{page.reachable_by.length > 1
-                              ? t("publish.viaOneOf", {
-                                  provider: route.provider_label,
-                                  count: page.reachable_by.length,
-                                })
-                              : route.provider_label}</i>
+                            {/* Out of quota replaces the engine name rather than
+                                sitting beside it: which engine would have
+                                carried this is not the useful fact once none of
+                                them can, and the numbers are. */}
+                            <i>{spent
+                              ? page.unavailable_reason ?? t("publish.noQuotaLeft")
+                              : page.reachable_by.length > 1
+                                ? t("publish.viaOneOf", {
+                                    provider: route.provider_label,
+                                    count: page.reachable_by.length,
+                                  })
+                                : route.provider_label}</i>
                           </button>
                         );
                       })}</div>
@@ -1799,12 +1833,18 @@ export default function PublishPage() {
                           <em>{t("publish.deliverVia", { label: page.label })}</em>
                           {page.reachable_by.map((item) => {
                             const active = routeOf(page).id === item.id;
+                            // Still listed when it has run out, because which
+                            // engines reach a page is worth knowing - just not
+                            // selectable, with the count that explains why.
+                            const spent = item.available === false;
                             return (
                               <button
                                 type="button"
                                 key={`${item.provider}:${item.id}`}
                                 aria-pressed={active}
-                                className={active ? "selected" : ""}
+                                disabled={spent}
+                                title={spent ? item.unavailable_reason ?? undefined : undefined}
+                                className={`${active ? "selected" : ""}${spent ? " spent" : ""}`}
                                 onClick={() => switchRoute(page, item.provider, item.id)}
                               >{item.provider_label}</button>
                             );

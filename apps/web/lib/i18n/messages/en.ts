@@ -291,6 +291,7 @@ export const en = {
     docs: "Docs",
     testStorage: "Test access",
     hostingProbePassed: "Storage works. An engine can fetch your media from the public URL.",
+    noQuotaLeft: "No quota left",
     mediaHosting: "Media hosting",
     mediaHostingNeeded: "media hosting needed",
     whatGoesOut: "What goes out",

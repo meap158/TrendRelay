@@ -287,6 +287,7 @@ export const vi: Messages = {
     docs: "Tài liệu",
     testStorage: "Kiểm tra truy cập",
     hostingProbePassed: "Lưu trữ hoạt động. Engine có thể tải media của bạn từ URL công khai.",
+    noQuotaLeft: "Hết hạn mức",
     mediaHosting: "Lưu trữ media",
     mediaHostingNeeded: "cần nơi lưu trữ media",
     whatGoesOut: "Nội dung sẽ đăng",

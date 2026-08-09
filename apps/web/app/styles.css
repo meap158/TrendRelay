@@ -505,6 +505,16 @@ nav strong { color: #1c2b33; }
 .account-options button > i { color: var(--muted); font-size: 10px; font-style: normal; }
 .account-options button.selected > i { color: inherit; opacity: .8; }
 .account-options button.selected { border-color: var(--green); background: var(--green-dark); color: var(--green); }
+/* Out of quota: still readable, plainly not selectable. Faded rather than
+   hidden, because a destination that disappears looks like a disconnected
+   account - and the count underneath is what says when it comes back. */
+.account-options button.spent { opacity: .55; cursor: not-allowed; }
+.account-options button.spent > i, .page-route button.spent { color: #a1442b; }
+.page-route button.spent { opacity: .6; cursor: not-allowed; }
+/* The same fact once per engine, above the figures it is drawn from. */
+.engine-quota { display: grid; gap: 2px; margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: #fdf0ec; }
+.engine-quota b { color: #a1442b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.engine-quota span { color: var(--muted); font-size: 11px; line-height: 1.45; }
 .time-slots { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .time-slots > span { margin-inline-end: 2px; color: var(--muted); font-size: 11px; font-weight: 600; }
 /* The form sets every button to full width, which would stack these one per row. */

@@ -287,6 +287,7 @@ export const ja: Messages = {
     docs: "ドキュメント",
     testStorage: "アクセスを確認",
     hostingProbePassed: "ストレージは正常です。エンジンは公開URLからメディアを取得できます。",
+    noQuotaLeft: "残り枠なし",
     mediaHosting: "メディアの配置先",
     mediaHostingNeeded: "メディアの配置先が必要です",
     whatGoesOut: "投稿する内容",

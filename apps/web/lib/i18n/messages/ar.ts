@@ -285,6 +285,7 @@ export const ar: Messages = {
     docs: "التوثيق",
     testStorage: "اختبار الوصول",
     hostingProbePassed: "التخزين يعمل. يمكن للمحرك جلب الوسائط من الرابط العام.",
+    noQuotaLeft: "لا توجد حصة متبقية",
     mediaHosting: "استضافة الوسائط",
     mediaHostingNeeded: "يلزم استضافة للوسائط",
     whatGoesOut: "ما الذي سيُنشر",

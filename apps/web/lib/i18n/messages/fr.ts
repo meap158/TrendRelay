@@ -292,6 +292,7 @@ export const fr: Messages = {
     docs: "Documentation",
     testStorage: "Tester l'accès",
     hostingProbePassed: "Le stockage fonctionne. Un moteur peut récupérer vos médias depuis l'URL publique.",
+    noQuotaLeft: "Quota épuisé",
     mediaHosting: "Hébergement du média",
     mediaHostingNeeded: "hébergement du média requis",
     whatGoesOut: "Ce qui sera publié",

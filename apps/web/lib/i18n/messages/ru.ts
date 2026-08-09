@@ -291,6 +291,7 @@ export const ru: Messages = {
     docs: "Документация",
     testStorage: "Проверить доступ",
     hostingProbePassed: "Хранилище работает. Движок сможет загрузить медиа по публичной ссылке.",
+    noQuotaLeft: "Лимит исчерпан",
     mediaHosting: "Хранение медиа",
     mediaHostingNeeded: "нужно хранилище медиа",
     whatGoesOut: "Что уйдёт в публикацию",

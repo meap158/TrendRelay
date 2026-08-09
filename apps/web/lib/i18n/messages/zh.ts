@@ -279,6 +279,7 @@ export const zh: Messages = {
     docs: "文档",
     testStorage: "测试访问",
     hostingProbePassed: "存储可用。引擎可从该公开网址抓取你的媒体。",
+    noQuotaLeft: "配额已用完",
     mediaHosting: "媒体托管",
     mediaHostingNeeded: "需要媒体托管",
     whatGoesOut: "要发布的内容",
