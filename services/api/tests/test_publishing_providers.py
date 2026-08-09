@@ -40,6 +40,7 @@ def media_file(monkeypatch, tmp_path: Path) -> Path:
         "ZERNIO_API_KEY": "sk_test",
         "BUFFER_API_KEY": "buffer_test",
         "BUFFER_ORGANIZATION_ID": "org_test",
+        "WOOPSOCIAL_API_KEY": "woop_test",
     }
     monkeypatch.setattr(publishing, "effective_value", lambda key: credentials.get(key, ""))
     monkeypatch.setattr(
@@ -284,6 +285,7 @@ def test_connection_status_reports_every_engine_without_exposing_values(
         "bundle_social",
         "zernio",
         "buffer",
+        "woopsocial",
     ]
     serialized = repr(status)
     assert "pk_test" not in serialized
@@ -1082,3 +1084,168 @@ def test_the_dry_run_names_the_thread_and_the_hold(media_file: Path) -> None:
     assert "Thread of 3 posts" in plan["twitter"]
     assert "Caption only - this network does not take a thread" in plan["instagram"]
     assert "Held for approval" in plan["twitter"]
+
+
+# --- WoopSocial ---------------------------------------------------------------
+
+
+def woop_accounts_payload() -> list[dict[str, object]]:
+    return [
+        {"id": "w1", "platform": "TIKTOK", "username": "halcyon", "status": "CONNECTED"},
+        {"id": "w2", "platform": "X", "username": "halcyonbooks", "status": "CONNECTED"},
+        {"id": "w3", "platform": "LINKEDIN_PAGES", "username": "Halcyon", "status": "CONNECTED"},
+        {"id": "w4", "platform": "WOOPTEST", "username": "sandbox", "status": "CONNECTED"},
+        {"id": "w5", "platform": "FACEBOOK", "username": "pageish", "status": "DISCONNECTED"},
+    ]
+
+
+def test_woopsocial_accounts_are_normalized(monkeypatch, media_file: Path) -> None:
+    monkeypatch.setattr(
+        publishing, "_woopsocial_request", lambda *a, **k: woop_accounts_payload()
+    )
+    accounts = publishing.discover_integrations("woopsocial")["accounts"]
+
+    by_id = {item["id"]: item for item in accounts}
+    assert by_id["w2"]["platform"] == "twitter"
+    # Their two LinkedIn kinds are one platform to us.
+    assert by_id["w3"]["platform"] == "linkedin"
+    # The sandbox destination is not a network anyone has an audience on, so it
+    # is never offered as somewhere a post can go.
+    assert "w4" not in by_id
+    # A disconnected account is shown and marked rather than hidden: it is a
+    # thing to fix, and hiding it reads as the account having been removed.
+    assert by_id["w5"]["label"].endswith("(reconnect)")
+
+
+def test_woopsocial_uploads_then_creates_a_post(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    use_provider(monkeypatch, tmp_path, "woopsocial")
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        if path == "/projects":
+            return [{"id": "proj_1", "name": "Default"}]
+        if path.startswith("/media"):
+            sent["media_path"] = path
+            return {"mediaId": "med_1"}
+        if path == "/social-accounts":
+            return woop_accounts_payload()
+        if path == "/posts":
+            sent["body"] = kwargs["body"]
+            return {
+                "id": "post_1",
+                "socialAccountPosts": [
+                    {"socialAccountId": "w1", "platform": "TIKTOK",
+                     "deliveryStatus": "SENDING", "externalPostUrl": None},
+                ],
+            }
+        return {}
+
+    monkeypatch.setattr(publishing, "_woopsocial_request", fake_request)
+
+    result = publishing._execute_publish(request(
+        media_file,
+        targets=[publishing.PublishTarget(platform="tiktok", integration_id="w1")],
+        schedule=True,
+        confirm_external_action=True,
+    ))
+    body = sent["body"]
+
+    assert result["provider"] == "woopsocial"
+    assert result["post_ids"] == ["post_1"]
+    # Media is uploaded into a project, so the id has to be on the request.
+    assert "projectId=proj_1" in str(sent["media_path"])
+    assert body["content"] == [{
+        "text": "Launch clip",
+        "media": [{"type": "MEDIA_LIBRARY", "mediaId": "med_1"}],
+    }]
+    assert body["schedule"]["type"] == "SCHEDULE_FOR_LATER"
+    assert body["socialAccounts"][0]["platform"] == "TIKTOK"
+    assert body["socialAccounts"][0]["privacyLevel"] == "PUBLIC_TO_EVERYONE"
+    # Reported per destination: three of four networks reached is not the same
+    # outcome as all four, and only this engine says so.
+    assert result["delivery"][0]["platform"] == "tiktok"
+
+
+def test_woopsocial_draft_and_now_are_first_class(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    """All three deliveries are the engine's own, not something we simulate."""
+    use_provider(monkeypatch, tmp_path, "woopsocial")
+    seen: list[str] = []
+
+    def fake_request(method, path, **kwargs):
+        if path == "/projects":
+            return [{"id": "proj_1"}]
+        if path.startswith("/media"):
+            return {"mediaId": "med_1"}
+        if path == "/social-accounts":
+            return woop_accounts_payload()
+        if path == "/posts":
+            seen.append(kwargs["body"]["schedule"]["type"])
+            return {"id": "p"}
+        return {}
+
+    monkeypatch.setattr(publishing, "_woopsocial_request", fake_request)
+    target = [publishing.PublishTarget(platform="tiktok", integration_id="w1")]
+    publishing._execute_publish(
+        request(media_file, targets=target, confirm_external_action=True)
+    )
+    publishing._execute_publish(request(
+        media_file, targets=target, delivery="now", confirm_external_action=True
+    ))
+    assert seen == ["DRAFT", "PUBLISH_NOW"]
+
+
+def test_woopsocial_reads_the_platform_off_the_account(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    """LINKEDIN and LINKEDIN_PAGES are both `linkedin` to us.
+
+    The post body is a discriminated union that rejects the wrong one, so the
+    name has to come back from the account rather than be mapped from ours.
+    """
+    use_provider(monkeypatch, tmp_path, "woopsocial")
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        if path == "/projects":
+            return [{"id": "proj_1"}]
+        if path.startswith("/media"):
+            return {"mediaId": "med_1"}
+        if path == "/social-accounts":
+            return woop_accounts_payload()
+        if path == "/posts":
+            sent["body"] = kwargs["body"]
+            return {"id": "p"}
+        return {}
+
+    monkeypatch.setattr(publishing, "_woopsocial_request", fake_request)
+    publishing._execute_publish(request(
+        media_file,
+        targets=[publishing.PublishTarget(platform="linkedin", integration_id="w3")],
+        confirm_external_action=True,
+    ))
+    assert sent["body"]["socialAccounts"][0]["platform"] == "LINKEDIN_PAGES"
+
+
+def test_woopsocial_refuses_an_account_it_no_longer_lists(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    # Rather than sending a platform guessed from ours, which would either be
+    # rejected or, worse, accepted for the wrong account.
+    use_provider(monkeypatch, tmp_path, "woopsocial")
+
+    def fake_request(method, path, **kwargs):
+        if path == "/projects":
+            return [{"id": "proj_1"}]
+        if path.startswith("/media"):
+            return {"mediaId": "med_1"}
+        if path == "/social-accounts":
+            return []
+        return {}
+
+    monkeypatch.setattr(publishing, "_woopsocial_request", fake_request)
+    with pytest.raises(RuntimeError, match="no longer lists"):
+        publishing._execute_publish(request(media_file, confirm_external_action=True))

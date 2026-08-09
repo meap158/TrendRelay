@@ -81,6 +81,19 @@ FREE_PLAN: dict[str, dict[str, Any]] = {
         "comments_per_month": None,
         "source": "https://zernio.com/pricing",
     },
+    "woopsocial": {
+        "plan": "Free",
+        "accounts": 2,
+        # Genuinely uncapped: every plan advertises unlimited posts, and the
+        # monthly credits meter AI content generation rather than publishing.
+        # TrendRelay writes its own captions, so it never spends one - and
+        # recording credits as a posting allowance would eventually grey out
+        # destinations that are in fact free to post.
+        "posts_per_month": None,
+        "comments_per_month": None,
+        "ai_credits_per_month": 30,
+        "source": "https://woopsocial.com/pricing",
+    },
     "buffer": {
         "plan": "Free",
         "accounts": 3,
@@ -145,6 +158,9 @@ BUFFER_TIER_BY_REQUESTS: dict[int, str] = {
 #: enough to name the tier.
 BUNDLE_FREE_DAILY_POSTS = 20
 
+#: How to name an engine in a sentence about its own pricing.
+PLAN_LABELS: dict[str, str] = {"zernio": "Zernio", "woopsocial": "WoopSocial"}
+
 
 @dataclass(frozen=True)
 class Plan:
@@ -203,13 +219,16 @@ def infer_plan(
                 f"Paid. The engine reports {limit} posts a day, above the free "
                 "plan's cap. Which paid tier is not something it says."
             ))
-    elif provider_id == "zernio":
-        # Zernio charges per connected account and gives the first two away, so
-        # the count is the answer here rather than evidence towards one.
-        paid = account_count > 2
+    elif provider_id in {"zernio", "woopsocial"}:
+        # Both sell connected accounts rather than posts, and both give the
+        # first two away, so the count is the answer here rather than evidence
+        # towards one.
+        allowed = int((plan or {}).get("accounts") or 2)
+        paid = account_count > allowed
+        label = PLAN_LABELS[provider_id]
         return Plan("Paid" if paid else "Free", "counted", (
-            f"{'Paid' if paid else 'Free'}. Zernio charges per connected "
-            f"account and the first 2 are free; {account_count} connected."
+            f"{'Paid' if paid else 'Free'}. {label} charges per connected "
+            f"account and the first {allowed} are free; {account_count} connected."
         ))
 
     return Plan(None, "published", (

@@ -11,7 +11,7 @@ export type PublishingPlatform =
   | "threads" | "pinterest" | "reddit" | "bluesky" | "mastodon" | "telegram"
   | "googlebusiness";
 
-export type PublishingProvider = "bundle_social" | "zernio" | "buffer";
+export type PublishingProvider = "bundle_social" | "zernio" | "buffer" | "woopsocial";
 
 const platformTint: Record<PublishingPlatform, string> = {
   tiktok: "#111418",
@@ -153,6 +153,7 @@ const providerTint: Record<PublishingProvider, string> = {
   bundle_social: "#5b5bd6",
   zernio: "#0f9d8f",
   buffer: "#168eea",
+  woopsocial: "#f2564b",
 };
 
 function providerGlyph(provider: PublishingProvider) {
@@ -175,6 +176,16 @@ function providerGlyph(provider: PublishingProvider) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    );
+  }
+  if (provider === "woopsocial") {
+    // Two arcs leaving one point: one post, several destinations, which is the
+    // thing this engine does that the mark has to carry at 20px.
+    return (
+      <g fill="none" stroke="#fff" strokeWidth="2.1" strokeLinecap="round">
+        <path d="M7.3 8.2c2.4 4.6 7 4.6 9.4 0" />
+        <path d="M7.3 13.4c2.4 4.6 7 4.6 9.4 0" opacity="0.6" />
+      </g>
     );
   }
   return (

@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from secrets import token_hex
 from typing import Any, Literal
+from urllib.parse import quote
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -43,6 +44,7 @@ JOB_SESSION_FACTORY = SessionFactory
 BUNDLE_SOCIAL_API = "https://api.bundle.social/api/v1"
 ZERNIO_API = "https://zernio.com/api/v1"
 BUFFER_API = "https://api.buffer.com"
+WOOPSOCIAL_API = "https://api.woopsocial.com/v1"
 
 Platform = Literal[
     "tiktok", "instagram", "youtube", "facebook", "twitter", "linkedin",
@@ -273,8 +275,73 @@ PROVIDERS: dict[str, ProviderDefinition] = {
             "reachable until the post publishes."
         ),
     ),
+    "woopsocial": ProviderDefinition(
+        id="woopsocial",
+        label="WoopSocial",
+        tagline="Agent-oriented publishing API",
+        summary=(
+            "One bearer token, media uploaded directly, and draft, schedule and "
+            "publish-now as first-class choices. Reports delivery per destination "
+            "rather than per post."
+        ),
+        homepage="https://woopsocial.com",
+        dashboard_url="https://app.woopsocial.com/api-access",
+        channels_url="https://app.woopsocial.com",
+        docs_url="https://docs.woopsocial.com",
+        accent="#f2564b",
+        platforms=(
+            "tiktok", "instagram", "youtube", "facebook", "twitter",
+            "linkedin", "threads", "pinterest",
+        ),
+        credentials=(
+            CredentialField(
+                id="api_key",
+                key="WOOPSOCIAL_API_KEY",
+                label="API key",
+                secret=True,
+                required=True,
+                help="app.woopsocial.com -> API access.",
+            ),
+            CredentialField(
+                id="project_id",
+                key="WOOPSOCIAL_PROJECT_ID",
+                label="Project ID (optional)",
+                secret=False,
+                required=False,
+                help=(
+                    "Leave empty to use the first project. Media is uploaded into a "
+                    "project, and every destination in one post must share it."
+                ),
+            ),
+        ),
+        requires_public_media=False,
+        media_note=(
+            "The approved local MP4 is uploaded to WoopSocial before the post is "
+            "created. Single-request uploads are capped at 100 MB."
+        ),
+    ),
 }
 SUPPORTED_PLATFORMS = tuple(PLATFORM_LABELS)
+
+#: WoopSocial's platform names, and ours.
+#:
+#: Their LINKEDIN and LINKEDIN_PAGES are one platform to us, which is why the
+#: reverse direction is never guessed: the post body needs the exact name the
+#: account was connected under, so it is read back from the account itself.
+WOOPSOCIAL_PLATFORMS: dict[str, str] = {
+    "FACEBOOK": "facebook",
+    "INSTAGRAM": "instagram",
+    "THREADS": "threads",
+    "TIKTOK": "tiktok",
+    "X": "twitter",
+    "YOUTUBE": "youtube",
+    "LINKEDIN": "linkedin",
+    "LINKEDIN_PAGES": "linkedin",
+    "PINTEREST": "pinterest",
+    # WOOPTEST is their sandbox destination. Deliberately absent: it is not a
+    # network anyone has an audience on, and listing it as a destination would
+    # put a decoy in the picker.
+}
 
 
 @dataclass(frozen=True)
@@ -978,6 +1045,176 @@ def _zernio_publish(
     }
 
 
+def _woopsocial_headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {_required_credential(PROVIDERS['woopsocial'], 'api_key')}"}
+
+
+def _woopsocial_request(method: str, path: str, **kwargs: Any) -> Any:
+    return _http(method, f"{WOOPSOCIAL_API}{path}", headers=_woopsocial_headers(), **kwargs)
+
+
+def _woopsocial_project_id() -> str:
+    """The project media is uploaded into, configured or discovered.
+
+    Every destination in one post has to share a project, and media belongs to
+    one. A workspace with a single project - which is what a free account has -
+    should not have to find its id to publish, so it is only asked for when
+    there is more than one and the wrong one would be chosen.
+    """
+    configured = _credential(
+        next(field for field in PROVIDERS["woopsocial"].credentials if field.id == "project_id")
+    )
+    if configured:
+        return configured
+    projects = _woopsocial_request("GET", "/projects", timeout=30) or []
+    if not projects:
+        raise RuntimeError(
+            "No WoopSocial project is available for this API key. Create one in the "
+            "dashboard, or save its ID here."
+        )
+    return str(projects[0]["id"])
+
+
+def _woopsocial_upload(video: Path) -> str:
+    """Upload the approved cut and return the media id the post will reference."""
+    boundary = f"----WoopSocial{token_hex(16)}"
+    parts = [
+        f"--{boundary}\r\n".encode(),
+        (
+            f'Content-Disposition: form-data; name="file"; filename="{video.name}"\r\n'
+            f"Content-Type: video/mp4\r\n\r\n"
+        ).encode(),
+        video.read_bytes(),
+        f"\r\n--{boundary}--\r\n".encode(),
+    ]
+    result = _woopsocial_request(
+        "POST",
+        f"/media?projectId={quote(_woopsocial_project_id())}",
+        data=b"".join(parts),
+        content_type=f"multipart/form-data; boundary={boundary}",
+        timeout=900,
+    ) or {}
+    media_id = result.get("mediaId")
+    if not media_id:
+        raise RuntimeError("WoopSocial did not return a media ID for the upload.")
+    return str(media_id)
+
+
+def _woopsocial_account_platforms() -> dict[str, str]:
+    """Each account's platform as WoopSocial names it, keyed by account id.
+
+    Read rather than derived. Their LINKEDIN and LINKEDIN_PAGES both arrive here
+    as `linkedin`, so mapping back from ours would have to guess - and the post
+    body is a discriminated union that rejects the wrong one.
+    """
+    accounts = _woopsocial_request("GET", "/social-accounts", timeout=30) or []
+    return {str(item["id"]): str(item.get("platform") or "") for item in accounts}
+
+
+#: Our post types, in the names WoopSocial's per-platform schema uses.
+_WOOPSOCIAL_POST_TYPES: dict[str, dict[str, str]] = {
+    "instagram": {"reel": "REEL", "story": "STORY", "post": "POST"},
+    "facebook": {"reel": "REEL", "story": "STORY", "post": "VIDEO"},
+}
+
+
+def _woopsocial_publish(request: PublishRequest, video: Path | None) -> dict[str, Any]:
+    if video is None:
+        raise ValueError("WoopSocial needs an approved local MP4 to upload.")
+    media_id = _woopsocial_upload(video)
+    known = _woopsocial_account_platforms()
+
+    if request.mode == "now":
+        schedule: dict[str, Any] = {"type": "PUBLISH_NOW"}
+    elif request.mode == "schedule":
+        schedule = {
+            "type": "SCHEDULE_FOR_LATER",
+            "scheduledFor": request.date.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    else:
+        schedule = {"type": "DRAFT"}
+
+    accounts: list[dict[str, Any]] = []
+    for target in request.targets:
+        platform = known.get(target.integration_id)
+        if not platform:
+            raise RuntimeError(
+                f"WoopSocial no longer lists the account behind {target.platform}. "
+                "Reload accounts and choose the destination again."
+            )
+        entry: dict[str, Any] = {"platform": platform, "socialAccountId": target.integration_id}
+        if platform in {"INSTAGRAM", "FACEBOOK"}:
+            entry["postType"] = _WOOPSOCIAL_POST_TYPES[target.platform][target.kind.id]
+        elif platform == "TIKTOK":
+            entry["postType"] = "VIDEO"
+            entry["privacyLevel"] = (
+                "PUBLIC_TO_EVERYONE" if request.visibility == "public" else "SELF_ONLY"
+            )
+            entry["isAiGeneratedContent"] = request.made_with_ai
+        elif platform == "YOUTUBE":
+            entry["title"] = _post_title(request)[:100]
+            entry["privacy"] = request.visibility
+            entry["category"] = request.youtube_category_id
+            entry["madeForKids"] = False
+        elif platform == "PINTEREST":
+            entry["pinterestBoardId"] = request.board
+            entry["title"] = _post_title(request)[:100]
+        accounts.append(entry)
+
+    result = _woopsocial_request(
+        "POST",
+        "/posts",
+        body={
+            "content": [{
+                "text": request.caption,
+                "media": [{"type": "MEDIA_LIBRARY", "mediaId": media_id}],
+            }],
+            "schedule": schedule,
+            "socialAccounts": accounts,
+        },
+        content_type="application/json",
+        timeout=180,
+    ) or {}
+    delivered = result.get("socialAccountPosts") or []
+    return {
+        "post_ids": [str(result.get("id", ""))],
+        "media_id": media_id,
+        # Per destination rather than per post: this engine reports each one
+        # separately, and a post that reached three of four networks is not the
+        # same outcome as one that reached all of them.
+        "delivery": [
+            {
+                "account_id": item.get("socialAccountId"),
+                "platform": WOOPSOCIAL_PLATFORMS.get(item.get("platform") or "", "other"),
+                "status": item.get("deliveryStatus"),
+                "url": item.get("externalPostUrl"),
+                "error": item.get("errorMessage"),
+            }
+            for item in delivered
+        ],
+    }
+
+
+def _woopsocial_accounts() -> list[dict[str, str]]:
+    payload = _woopsocial_request("GET", "/social-accounts", timeout=30) or []
+    accounts: list[dict[str, str]] = []
+    for account in payload:
+        platform = WOOPSOCIAL_PLATFORMS.get(str(account.get("platform") or ""))
+        if not platform:
+            continue
+        username = str(account.get("username") or "").strip()
+        label = username or f"{platform.title()} account"
+        if str(account.get("status") or "").upper() != "CONNECTED":
+            label = f"{label} (reconnect)"
+        accounts.append({
+            "id": str(account["id"]),
+            "platform": platform,
+            "label": label[:160],
+            "handle": username or None,  # type: ignore[dict-item]
+        })
+    return accounts
+
+
 def _zernio_accounts() -> list[dict[str, str]]:
     # Zernio rejects the call unless page and limit arrive together, so send
     # both rather than relying on a default that does not exist.
@@ -1290,6 +1527,7 @@ ACCOUNT_READERS = {
     "bundle_social": lambda: _bundle_accounts(),
     "zernio": lambda: _zernio_accounts(),
     "buffer": lambda: _buffer_accounts(),
+    "woopsocial": lambda: _woopsocial_accounts(),
 }
 
 
@@ -1435,6 +1673,10 @@ def _authenticate(provider: ProviderDefinition) -> None:
     elif provider.id == "zernio":
         # Zernio rejects a limit without a page, so the probe sends both.
         _zernio_request("GET", "/accounts?page=1&limit=1", timeout=10)
+    elif provider.id == "woopsocial":
+        # Projects rather than accounts: it answers for a key with nothing
+        # connected yet, which is the state a new account is in.
+        _woopsocial_request("GET", "/projects", timeout=10)
     else:
         _buffer_graphql("query { account { id } }", timeout=10)
 
@@ -1758,6 +2000,8 @@ def _dispatch(
         return _bundle_publish(request, video)  # type: ignore[arg-type]
     if provider.id == "zernio":
         return _zernio_publish(request, video, request_id)
+    if provider.id == "woopsocial":
+        return _woopsocial_publish(request, video)
     return _buffer_publish(request)
 
 

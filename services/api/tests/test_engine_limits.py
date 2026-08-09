@@ -286,6 +286,29 @@ def test_room_to_spare_blocks_nothing() -> None:
     assert exhausted(items) is None
 
 
+def test_woopsocial_credits_never_stop_a_post() -> None:
+    """Its monthly credits meter AI content generation, not publishing.
+
+    Posts are unlimited on every plan, and TrendRelay writes its own captions so
+    it never spends a credit. Recording them as a posting allowance would grey
+    out destinations that are in fact free to post to - which is the exact
+    failure the measured/counted/published split exists to prevent.
+    """
+    found = by_id(allowances("woopsocial", account_count=1))
+    assert found["posts_per_month"].unlimited
+    assert "Uncapped" in found["posts_per_month"].note
+    # Not offered as an allowance at all, so nothing can exhaust it.
+    assert "credits" not in found
+    assert exhausted(allowances("woopsocial", account_count=2)) is None
+
+
+def test_woopsocial_is_counted_by_connected_accounts() -> None:
+    assert infer_plan("woopsocial", account_count=2).name == "Free"
+    paid = infer_plan("woopsocial", account_count=3)
+    assert (paid.name, paid.confidence) == ("Paid", "counted")
+    assert "WoopSocial" in paid.note
+
+
 def test_every_plan_records_where_it_was_read_from() -> None:
     for provider, plan in FREE_PLAN.items():
         assert plan["source"].startswith("https://"), provider
