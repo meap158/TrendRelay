@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   allRoutesSpent,
+  mediaProblem,
   moveImage,
   preferredRoute,
   togglePageTargets,
@@ -127,5 +128,57 @@ test("other pages' destinations are left alone", () => {
   assert.deepEqual(
     togglePageTargets(["other-1"], [zernio], true),
     ["other-1", "z9"],
+  );
+});
+
+// --- does the post have the media its destinations need? ----------------------
+
+const video = {
+  needsPublicMedia: false,
+  hostsLocalMedia: false,
+  localPath: "",
+  mediaUrl: "",
+  carouselTargets: 0,
+  totalTargets: 1,
+  imageCount: 0,
+};
+
+test("a video post needs a file or a URL", () => {
+  assert.equal(mediaProblem(video), "needs-local-path");
+  assert.equal(mediaProblem({ ...video, localPath: "clip.mp4" }), null);
+  assert.equal(mediaProblem({ ...video, mediaUrl: "https://cdn/c.mp4" }), null);
+});
+
+test("a fetch-only engine needs a URL unless we can host the file", () => {
+  const fetchOnly = { ...video, needsPublicMedia: true, localPath: "clip.mp4" };
+  // Buffer cannot take an upload, so a local path alone is not enough...
+  assert.equal(mediaProblem(fetchOnly), "needs-public-url");
+  // ...unless object storage is configured and can give that file a URL.
+  assert.equal(mediaProblem({ ...fetchOnly, hostsLocalMedia: true }), null);
+  assert.equal(mediaProblem({ ...fetchOnly, mediaUrl: "https://cdn/c.mp4" }), null);
+});
+
+test("a carousel needs images and is not asked for a video", () => {
+  const gallery = { ...video, carouselTargets: 1, totalTargets: 1 };
+  assert.equal(mediaProblem(gallery), "carousel-needs-images");
+  // No local path, no URL, and that is correct: it posts its images.
+  assert.equal(mediaProblem({ ...gallery, imageCount: 3 }), null);
+});
+
+test("a carousel beside a video destination is two posts", () => {
+  // The video destination would be handed the images, or nothing at all.
+  assert.equal(
+    mediaProblem({ ...video, carouselTargets: 1, totalTargets: 2, imageCount: 3 }),
+    "mixed-carousel",
+  );
+});
+
+test("a fetch-only engine does not make a carousel demand a URL", () => {
+  // The carousel rules come first: its media is images either way.
+  assert.equal(
+    mediaProblem({
+      ...video, needsPublicMedia: true, carouselTargets: 1, totalTargets: 1, imageCount: 2,
+    }),
+    null,
   );
 });

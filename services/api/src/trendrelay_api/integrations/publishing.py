@@ -571,13 +571,27 @@ class PublishRequest(BaseModel):
         carousel that also names an MP4 is ambiguous about which one publishes.
         """
         try:
-            carousel = any(target.kind.id == "photo" for target in self.targets)
+            photo = [target for target in self.targets if target.kind.id == "photo"]
         except ValueError:
             # A post type this network does not have is a different complaint,
             # and `_validate_request` words it far better than a wrapped
             # validation error would. Leave it to say so.
             return self
+        carousel = bool(photo)
         if carousel:
+            # One post carries one set of media. A carousel alongside a video
+            # destination would hand that destination the images as a video, or
+            # nothing at all - so the two are separate posts, not one.
+            if len(photo) != len(self.targets):
+                others = ", ".join(sorted({
+                    PLATFORM_LABELS.get(target.platform, target.platform)
+                    for target in self.targets if target.kind.id != "photo"
+                }))
+                raise ValueError(
+                    "A photo carousel is its own post, so it cannot go out with a "
+                    f"video destination in the same one ({others}). Send those "
+                    "separately."
+                )
             if not self.image_paths:
                 raise ValueError("A photo carousel needs at least one image.")
             if self.video_path.strip():

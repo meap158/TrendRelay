@@ -293,6 +293,8 @@ export const zh: Messages = {
     carouselEmpty: "轮播至少需要一张图片，将按此顺序滑动浏览。",
     moveEarlier: "前移",
     moveLater: "后移",
+    carouselIsItsOwnPost: "图片轮播不能与视频目标放在同一条帖子中发布，请分开发送。",
+    carouselNeedsImages: "轮播至少需要一张图片，请从素材库添加。",
     mediaHosting: "媒体托管",
     mediaHostingNeeded: "需要媒体托管",
     whatGoesOut: "要发布的内容",

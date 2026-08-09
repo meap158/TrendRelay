@@ -301,6 +301,8 @@ export const vi: Messages = {
     carouselEmpty: "Carousel cần ít nhất một ảnh. Người xem sẽ vuốt theo thứ tự này.",
     moveEarlier: "Đưa lên trước",
     moveLater: "Đưa xuống sau",
+    carouselIsItsOwnPost: "Carousel ảnh không thể đăng chung bài với đích video. Hãy gửi riêng.",
+    carouselNeedsImages: "Carousel cần ít nhất một ảnh. Thêm từ Thư viện.",
     mediaHosting: "Lưu trữ media",
     mediaHostingNeeded: "cần nơi lưu trữ media",
     whatGoesOut: "Nội dung sẽ đăng",

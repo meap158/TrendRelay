@@ -102,3 +102,47 @@ export function togglePageTargets(
   const route = preferredRoute(routes, chosen);
   return route ? [...without, route.id] : without;
 }
+
+
+/** What is stopping this post from being submitted, if anything. */
+export type MediaProblem =
+  | "mixed-carousel"
+  | "carousel-needs-images"
+  | "needs-public-url"
+  | "needs-local-path"
+  | null;
+
+/**
+ * Whether the post has the media its destinations need.
+ *
+ * The engines disagree about media, so this is the one place that reconciles
+ * them: an engine that only fetches needs a URL unless we can host the file
+ * ourselves, a carousel needs images and nothing else, and a post mixing a
+ * carousel with a video destination is two posts rather than one.
+ *
+ * Returns a code rather than a sentence, so the wording - which names engines
+ * and is translated - stays with the component that draws it.
+ */
+export function mediaProblem(state: {
+  /** Some destination's engine fetches media rather than accepting an upload. */
+  needsPublicMedia: boolean;
+  /** Object storage is configured, so a local file can be given a URL. */
+  hostsLocalMedia: boolean;
+  localPath: string;
+  mediaUrl: string;
+  carouselTargets: number;
+  totalTargets: number;
+  imageCount: number;
+}): MediaProblem {
+  const carousel = state.carouselTargets > 0;
+  if (carousel && state.carouselTargets !== state.totalTargets) return "mixed-carousel";
+  if (carousel) return state.imageCount ? null : "carousel-needs-images";
+  if (state.needsPublicMedia && !state.mediaUrl
+      && !(state.hostsLocalMedia && state.localPath)) {
+    return "needs-public-url";
+  }
+  if (!state.needsPublicMedia && !state.localPath && !state.mediaUrl) {
+    return "needs-local-path";
+  }
+  return null;
+}

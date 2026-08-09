@@ -306,6 +306,8 @@ export const fr: Messages = {
     carouselEmpty: "Un carrousel nécessite au moins une image. Elles défilent dans cet ordre.",
     moveEarlier: "Déplacer avant",
     moveLater: "Déplacer après",
+    carouselIsItsOwnPost: "Un carrousel photo ne peut pas partir dans la même publication qu'une destination vidéo. Envoyez-les séparément.",
+    carouselNeedsImages: "Un carrousel nécessite au moins une image. Ajoutez-les depuis la bibliothèque.",
     mediaHosting: "Hébergement du média",
     mediaHostingNeeded: "hébergement du média requis",
     whatGoesOut: "Ce qui sera publié",

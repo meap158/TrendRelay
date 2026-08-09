@@ -1732,3 +1732,32 @@ def test_every_credential_key_is_documented_in_the_env_template() -> None:
     }
     missing = sorted(publishing.revealable_keys() - documented)
     assert not missing, f"absent from .env.example: {', '.join(missing)}"
+
+
+def test_a_carousel_cannot_share_a_post_with_a_video_destination(
+    carousel_images: list[str]
+) -> None:
+    """One post carries one set of media.
+
+    The video destination would be handed the images as a video, or nothing at
+    all - which is what happened before this: an Instagram reel went out with
+    no media while the carousel published normally.
+    """
+    with pytest.raises(ValueError, match="cannot go out with a video destination"):
+        carousel(carousel_images, targets=[
+            publishing.PublishTarget(
+                platform="tiktok", integration_id="a1", post_type="photo"),
+            publishing.PublishTarget(
+                platform="instagram", integration_id="a2", post_type="reel"),
+        ])
+
+
+def test_two_carousel_destinations_are_one_post(carousel_images: list[str]) -> None:
+    # Two TikTok accounts both getting the same carousel is one post, not a
+    # mixture - the rule is about media, not about how many destinations there
+    # are.
+    body = carousel(carousel_images, targets=[
+        publishing.PublishTarget(platform="tiktok", integration_id="a1", post_type="photo"),
+        publishing.PublishTarget(platform="tiktok", integration_id="a2", post_type="photo"),
+    ])
+    assert len(body.targets) == 2

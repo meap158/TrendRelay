@@ -305,6 +305,8 @@ export const en = {
     carouselEmpty: "A carousel needs at least one image. They are swiped through in this order.",
     moveEarlier: "Move earlier",
     moveLater: "Move later",
+    carouselIsItsOwnPost: "A photo carousel cannot go out in the same post as a video destination. Send those separately.",
+    carouselNeedsImages: "A carousel needs at least one image. Add them from the Library.",
     mediaHosting: "Media hosting",
     mediaHostingNeeded: "media hosting needed",
     whatGoesOut: "What goes out",

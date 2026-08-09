@@ -30,6 +30,7 @@ import { Badge, Switch } from "../ui/primitives";
 import { CredentialRow } from "../ui/credential-field";
 import {
   allRoutesSpent,
+  mediaProblem,
   moveImage,
   preferredRoute,
   togglePageTargets,
@@ -485,6 +486,13 @@ export default function PublishPage() {
    * images can be added and the destination then switched back to a video, and
    * the chosen type is what the operator actually decided.
    */
+  const carouselTargetCount = useMemo(
+    () => chosenAccounts.filter((account) => (
+      postTypes[account.id] ?? postTypesFor(account.id)[0]?.id
+    ) === "photo").length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chosenAccounts, postTypes],
+  );
   const wantsCarousel = useMemo(
     () => chosenAccounts.some((account) => (
       postTypes[account.id] ?? postTypesFor(account.id)[0]?.id
@@ -853,7 +861,24 @@ export default function PublishPage() {
     if (!localDate) throw new Error("Choose a date and time.");
     const mediaUrl = String(form.get("media_url") ?? "").trim();
     const localPath = String(form.get("video_path") ?? "").trim();
-    if (needsPublicMedia && !mediaUrl && !(hostsLocalMedia && localPath)) {
+    // One rule for every engine's media, tested away from the browser. The
+    // wording stays here because it names the engine that is actually asking.
+    const problem = mediaProblem({
+      needsPublicMedia,
+      hostsLocalMedia,
+      localPath,
+      mediaUrl,
+      carouselTargets: carouselTargetCount,
+      totalTargets: selectedTargets.length,
+      imageCount: imagePaths.length,
+    });
+    if (problem === "mixed-carousel") {
+      throw new Error(t("publish.carouselIsItsOwnPost"));
+    }
+    if (problem === "carousel-needs-images") {
+      throw new Error(t("publish.carouselNeedsImages"));
+    }
+    if (problem === "needs-public-url") {
       // Names the engine that actually needs it, which may not be the one that
       // happens to be active - otherwise the message sends you to check the
       // settings of an engine this post never touches.
@@ -864,11 +889,8 @@ export default function PublishPage() {
           : `${asking?.label} needs a public media URL. ${asking?.media_note}`,
       );
     }
-    if (!wantsCarousel && !needsPublicMedia && !localPath && !mediaUrl) {
+    if (problem === "needs-local-path") {
       throw new Error("Enter the approved local MP4 path.");
-    }
-    if (wantsCarousel && !imagePaths.length) {
-      throw new Error("A carousel needs at least one image. Add them from the Library.");
     }
     return {
       workspace_id: workspaceId,
