@@ -25,7 +25,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from trendrelay_api.env_store import configured_keys, effective_value, write_env_values
+from trendrelay_api.env_store import (
+    configured_keys,
+    effective_value,
+    masked_value,
+    write_env_values,
+)
 
 CREDENTIAL_FIELDS: tuple[dict[str, Any], ...] = (
     {
@@ -225,7 +230,15 @@ def status() -> dict[str, Any]:
         "missing_keys": missing,
         "credential_keys": list(CREDENTIAL_KEYS),
         "credential_fields": [
-            {**field, "configured": configured[field["key"]]} for field in CREDENTIAL_FIELDS
+            {
+                **field,
+                "configured": configured[field["key"]],
+                # Same reason as the engine keys: an empty box reads as nothing
+                # saved, and these five are exactly the fields somebody re-pastes
+                # by mistake because they cannot see which one is wrong.
+                "preview": masked_value(field["key"]),
+            }
+            for field in CREDENTIAL_FIELDS
         ],
         "reason": None
         if not missing

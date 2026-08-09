@@ -1,8 +1,15 @@
 """Local .env reader/writer for operator-supplied provider credentials.
 
-Values are only ever written; they are never returned to a caller. Callers
-receive configured booleans so the interface can show setup state without
-exposing a secret.
+Values are written, and read back only in two deliberate shapes.
+
+`masked_value` is what a screen shows: the last few characters, enough to tell
+one saved key from another and to see that the right one is in place, and not
+enough to use. It is safe in an ordinary status payload.
+
+`effective_value` returns the secret itself and is for the code that calls the
+engine. Anything handing it to a browser must gate it the way a mutation is
+gated - loopback, role, explicit confirmation - and must restrict which keys can
+be asked for, or the same endpoint reads every secret in the file.
 """
 
 from __future__ import annotations
@@ -66,6 +73,30 @@ def configured_keys(keys: tuple[str, ...]) -> dict[str, bool]:
     """Report which of the requested keys hold a non-empty value."""
     stored = read_env_file()
     return {key: bool(os.environ.get(key) or stored.get(key)) for key in keys}
+
+
+#: How much of a saved secret a masked preview keeps. Four is what a payment
+#: form or an API dashboard shows, and it is enough to recognise which key is in
+#: place without being enough to use one.
+MASK_TAIL = 4
+
+
+def masked_value(key: str) -> str | None:
+    """A saved value with everything but its last few characters hidden.
+
+    None when nothing is saved, which a caller shows as "not set" rather than as
+    an empty secret.
+
+    A value too short to mask keeps none of itself. Showing the last four of a
+    six-character secret would give away most of it, and the point of the tail is
+    recognition, not verification.
+    """
+    value = effective_value(key)
+    if not value:
+        return None
+    if len(value) <= MASK_TAIL * 2:
+        return "•" * len(value)
+    return "•" * (len(value) - MASK_TAIL) + value[-MASK_TAIL:]
 
 
 def write_env_values(values: dict[str, str]) -> list[str]:

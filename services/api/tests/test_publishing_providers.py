@@ -43,6 +43,14 @@ def media_file(monkeypatch, tmp_path: Path) -> Path:
         "WOOPSOCIAL_API_KEY": "woop_test",
     }
     monkeypatch.setattr(publishing, "effective_value", lambda key: credentials.get(key, ""))
+    # `masked_value` reads the real .env, so without this the preview in a status
+    # payload - and any assertion about it - depends on whose machine is running
+    # the suite.
+    monkeypatch.setattr(
+        publishing,
+        "masked_value",
+        lambda key: ("•" * 8 + credentials[key][-4:]) if credentials.get(key) else None,
+    )
     monkeypatch.setattr(
         publishing,
         "configured_keys",
@@ -293,11 +301,20 @@ def test_connection_status_reports_every_engine_without_exposing_values(
     for provider in status["providers"]:
         for field in provider["credential_fields"]:
             assert set(field) == {
-                "id", "key", "label", "secret", "required", "help", "configured"
+                "id", "key", "label", "secret", "required", "help", "configured", "preview"
             }
             # The preview exists so a saved key is recognisable, so it must
             # carry the tail and nothing before it. A mask that leaked the front
             # of a key would defeat the point of masking at all.
+            preview = field["preview"]
+            if preview:
+                visible = preview.lstrip("•")
+                # At most a tail, and everything before it hidden. Written this
+                # way so a value too short to mask - which keeps none of itself -
+                # passes rather than looking like a leak.
+                assert len(visible) <= 4, preview
+                assert set(preview[: len(preview) - len(visible)]) <= {"•"}
+
 
 def test_saving_credentials_writes_only_known_keys(monkeypatch, media_file: Path) -> None:
     written: dict[str, str] = {}
@@ -1414,3 +1431,63 @@ def test_a_dry_run_survives_the_engine_refusing_to_answer(
     ))
     assert preview["status"] == "dry_run"
     assert preview["engine_problems"] == []
+
+
+# --- seeing what is saved without exposing it ---------------------------------
+
+
+def test_a_masked_preview_shows_the_tail_and_nothing_else(monkeypatch) -> None:
+    from trendrelay_api import env_store
+
+    monkeypatch.setattr(env_store, "effective_value", lambda key: "sk_live_abcdef123456")
+    preview = env_store.masked_value("ANY")
+    assert preview is not None
+    assert preview.endswith("3456")
+    assert "sk_live" not in preview
+    assert set(preview[:-4]) == {"\u2022"}
+
+
+def test_a_short_secret_keeps_none_of_itself(monkeypatch) -> None:
+    """The tail is for recognition, not verification.
+
+    Four characters of a six-character secret gives away most of it, so a value
+    too short to mask is masked entirely.
+    """
+    from trendrelay_api import env_store
+
+    monkeypatch.setattr(env_store, "effective_value", lambda key: "abc123")
+    assert env_store.masked_value("ANY") == "\u2022" * 6
+
+
+def test_nothing_saved_previews_as_nothing(monkeypatch) -> None:
+    from trendrelay_api import env_store
+
+    monkeypatch.setattr(env_store, "effective_value", lambda key: "")
+    # None rather than an empty string, so a screen says "not set" instead of
+    # rendering an empty secret.
+    assert env_store.masked_value("ANY") is None
+
+
+def test_reveal_reaches_no_further_than_save(monkeypatch, media_file: Path) -> None:
+    """Otherwise the button is "read any environment variable".
+
+    Every secret on the machine - the database URL, a service key - would sit
+    behind a control meant for an engine's API key.
+    """
+    assert "BUFFER_API_KEY" in publishing.revealable_keys()
+    assert "R2_SECRET_ACCESS_KEY" in publishing.revealable_keys()
+    assert "SUPABASE_SERVICE_ROLE_KEY" not in publishing.revealable_keys()
+
+    with pytest.raises(ValueError, match="not a credential"):
+        publishing.reveal_credential("SUPABASE_SERVICE_ROLE_KEY")
+    with pytest.raises(ValueError, match="not a credential"):
+        publishing.reveal_credential("PATH")
+
+
+def test_revealing_a_saved_credential_returns_it(monkeypatch, media_file: Path) -> None:
+    assert publishing.reveal_credential("BUFFER_API_KEY") == "buffer_test"
+
+
+def test_revealing_an_unset_credential_says_so(monkeypatch, media_file: Path) -> None:
+    with pytest.raises(ValueError, match="no saved value"):
+        publishing.reveal_credential("WOOPSOCIAL_PROJECT_ID")

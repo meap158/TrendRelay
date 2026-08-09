@@ -25,7 +25,12 @@ from pydantic import BaseModel, Field, field_validator
 from trendrelay_api.campaign_autopilot import resolve_placement
 from trendrelay_api.config import get_settings
 from trendrelay_api.database import SessionFactory
-from trendrelay_api.env_store import configured_keys, effective_value, write_env_values
+from trendrelay_api.env_store import (
+    configured_keys,
+    effective_value,
+    masked_value,
+    write_env_values,
+)
 from trendrelay_api.integrations import engine_limits, media_hosting
 from trendrelay_api.integrations.account_identity import consolidate, page_payload
 from trendrelay_api.jobs import (
@@ -1866,6 +1871,10 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
                 "required": field.required,
                 "help": field.help,
                 "configured": configured_map[field.key],
+                # Enough to recognise which key is saved, never enough to use
+                # it. The field used to render empty, which reads as "nothing
+                # saved" and invites re-pasting a key that was already right.
+                "preview": masked_value(field.key),
             }
             for field in provider.credentials
         ],
@@ -1915,6 +1924,34 @@ def connection_status(probe: bool = True) -> dict[str, Any]:
         ),
         "providers": providers,
     }
+
+
+def revealable_keys() -> set[str]:
+    """The `.env` keys a screen is allowed to ask for in full.
+
+    Built from the credential fields the same screen offers to write, so reveal
+    can never reach further than save already does. Without this the endpoint is
+    "read any environment variable", which is every secret on the machine - the
+    database URL, the Supabase service key - behind a button meant for an
+    engine's API key.
+    """
+    keys = {field.key for provider in PROVIDERS.values() for field in provider.credentials}
+    return keys | set(media_hosting.CREDENTIAL_KEYS)
+
+
+def reveal_credential(key: str) -> str:
+    """The saved value of one credential, for an operator who asked to see it.
+
+    These live in a `.env` on the operator's own machine, which they can open in
+    any editor; the reason this is gated at all is that the browser is a wider
+    door than the file, not that the value is being kept from them.
+    """
+    if key not in revealable_keys():
+        raise ValueError(f"{key} is not a credential this screen can reveal.")
+    value = effective_value(key)
+    if not value:
+        raise ValueError(f"{key} has no saved value.")
+    return value
 
 
 def save_provider_credentials(provider_id: str, values: dict[str, str]) -> dict[str, Any]:

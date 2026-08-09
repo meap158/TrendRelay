@@ -23,6 +23,7 @@ from trendrelay_api.integrations.publishing import (
     list_publish_jobs,
     preview_publish,
     publish_job,
+    reveal_credential,
     run_publish_job,
     save_provider_credentials,
     set_active_provider,
@@ -236,6 +237,37 @@ def publishing_integrations(
         raise HTTPException(status_code=422, detail=str(error)) from error
     except RuntimeError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.post("/credentials/{key}/reveal")
+def reveal_publishing_credential(
+    workspace_id: str,
+    key: str,
+    body: ExternalConfirmation,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Show one saved credential in full, to the operator who saved it.
+
+    These sit in a `.env` on this machine, openable in any editor, so the value
+    is not being withheld from the person asking - the gate is here because a
+    browser is a wider door than the file. Loopback only, the same roles that
+    may write a key, and confirmed like any other outward-facing action.
+
+    Only keys the credential screens themselves offer to write can be asked for.
+    Without that restriction this is "read any environment variable", which is
+    every secret on the machine behind a button meant for an engine's API key.
+    """
+    require_local_request(request)
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(status_code=400, detail="Revealing a credential requires confirmation.")
+    try:
+        return {"key": key, "value": reveal_credential(key)}
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @router.post("/accounts/{provider}/{integration_id}/boards")

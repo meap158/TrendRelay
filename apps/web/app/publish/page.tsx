@@ -27,6 +27,7 @@ import { AffiliateLink, type LinkPlacement,
 import { ActionIcon } from "../ui/action-icons";
 import { Button, buttonClass } from "../ui/button";
 import { Badge, Switch } from "../ui/primitives";
+import { CredentialRow } from "../ui/credential-field";
 import {
   MEDIA_DRAG_TYPE,
   MediaPicker,
@@ -123,6 +124,8 @@ type CredentialField = {
   required: boolean;
   help: string;
   configured: boolean;
+  /** The saved value with all but its last few characters hidden. */
+  preview?: string | null;
 };
 type PostTypeOption = { id: string; label: string; help: string };
 type PlatformLimit = { caption: number; title: number | null };
@@ -1018,6 +1021,40 @@ export default function PublishPage() {
    * object and reads it back through the public URL, because that last hop is
    * the one an engine makes and the one nothing else can prove.
    */
+  /** Every credential row says the same things, so it says them from one place. */
+  const credentialLabels = {
+    configured: t("publish.configured"),
+    required: t("publish.requiredField"),
+    optional: t("publish.optionalField"),
+    notSet: t("publish.notSaved"),
+    reveal: t("publish.revealCredential"),
+    hide: t("publish.hideCredential"),
+    replace: t("publish.enterReplacement"),
+    paste: t("publish.pasteValue"),
+  };
+
+  /**
+   * The saved value of one credential, in full.
+   *
+   * Null on refusal rather than an error: the reveal is a convenience on a
+   * value the operator can read out of the `.env` themselves, so a failure
+   * should leave the row masked, not interrupt what they were doing.
+   */
+  async function revealCredential(key: string): Promise<string | null> {
+    if (!workspaceId) return null;
+    try {
+      const body = await json<{ value: string }>(
+        await apiFetch(
+          `/api/workspaces/${workspaceId}/publishing/credentials/${encodeURIComponent(key)}/reveal`,
+          { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
+        ),
+      );
+      return body.value;
+    } catch {
+      return null;
+    }
+  }
+
   async function testHosting() {
     setBusy("hosting-probe");
     setError(null);
@@ -1556,27 +1593,18 @@ export default function PublishPage() {
                 {open && (
                   <div className="engine-credentials">
                     {provider.credential_fields.map((field) => (
-                      <label key={field.id}>
-                        <span>
-                          {field.label}
-                          <b className={field.configured ? "configured" : "missing"}>
-                            {field.configured ? "configured" : field.required ? "required" : "optional"}
-                          </b>
-                        </span>
-                        <input
-                          autoComplete={field.secret ? "new-password" : "off"}
-                          disabled={!canExecute}
-                          onChange={(event) => setCredentialDrafts((current) => ({
-                            ...current,
-                            [provider.id]: { ...current[provider.id], [field.id]: event.target.value },
-                          }))}
-                          placeholder={field.configured ? "Enter a new value to replace" : `Paste ${field.label.toLowerCase()}`}
-                          spellCheck={false}
-                          type={field.secret ? "password" : "text"}
-                          value={credentialDrafts[provider.id]?.[field.id] ?? ""}
-                        />
-                        <small>{field.help} Stored as <code>{field.key}</code>.</small>
-                      </label>
+                      <CredentialRow
+                        key={field.id}
+                        field={field}
+                        disabled={!canExecute}
+                        labels={credentialLabels}
+                        onReveal={revealCredential}
+                        value={credentialDrafts[provider.id]?.[field.id] ?? ""}
+                        onChange={(next) => setCredentialDrafts((current) => ({
+                          ...current,
+                          [provider.id]: { ...current[provider.id], [field.id]: next },
+                        }))}
+                      />
                     ))}
                     <div className="engine-credential-actions">
                       <Button
@@ -1668,27 +1696,17 @@ export default function PublishPage() {
             {hostingOpen && (
               <div className="engine-credentials">
                 {hosting.credential_fields.map((field) => (
-                  <label key={field.id}>
-                    <span>
-                      {field.label}
-                      <b className={field.configured ? "configured" : "missing"}>
-                        {field.configured ? "configured" : field.required ? "required" : "optional"}
-                      </b>
-                    </span>
-                    <input
-                      autoComplete={field.secret ? "new-password" : "off"}
-                      disabled={!canExecute}
-                      onChange={(event) => setHostingDraft((current) => ({
-                        ...current,
-                        [field.id]: event.target.value,
-                      }))}
-                      placeholder={field.configured ? "Enter a new value to replace" : `Paste ${field.label.toLowerCase()}`}
-                      spellCheck={false}
-                      type={field.secret ? "password" : "text"}
-                      value={hostingDraft[field.id] ?? ""}
-                    />
-                    <small>{field.help} Stored as <code>{field.key}</code>.</small>
-                  </label>
+                  <CredentialRow
+                    key={field.id}
+                    field={field}
+                    disabled={!canExecute}
+                    labels={credentialLabels}
+                    onReveal={revealCredential}
+                    value={hostingDraft[field.id] ?? ""}
+                    onChange={(next) => setHostingDraft((current) => ({
+                      ...current, [field.id]: next,
+                    }))}
+                  />
                 ))}
                 <div className="engine-credential-actions">
                   <Button
