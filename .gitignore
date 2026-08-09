@@ -64,3 +64,6 @@ Thumbs.db
 Desktop.ini
 .idea/
 .vscode/
+
+# Session handover: local working notes, not project history.
+AGENT_HANDOVER.md

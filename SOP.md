@@ -16,7 +16,7 @@ This document contains the durable operating rules for humans and agents working
 
 ## Development workflow
 
-1. Begin by reading `README.md`, `SOP.md`, and `AGENT_HANDOVER.md`, then inspect `git status` before editing.
+1. Begin by reading `README.md`, `SOP.md`, and `AGENT_HANDOVER.md` if it is present, then inspect `git status` before editing. The handover is local working notes and is not in the repository, so a fresh clone will not have one; `README.md` and `docs/architecture/` are the record that travels.
 2. Preserve unrelated user changes. Work in the smallest independently verifiable slice.
 3. Never commit credentials, private source media, or local research. `Research/` and `References/` remain ignored.
 4. Record important architectural decisions in `docs/architecture/`.
@@ -28,7 +28,7 @@ This document contains the durable operating rules for humans and agents working
 2. **Always use descriptive commit messages.** Use an imperative subject that states the outcome; add a body when motivation or tradeoffs are not obvious.
 3. Do not mix formatting, refactors, dependency upgrades, and product behavior unless inseparable.
 4. Before every commit, inspect the staged diff and run relevant validation. Never claim checks that were not run.
-5. **Always maintain `AGENT_HANDOVER.md`.** Update it in the same atomic commit whenever project state, decisions, setup, risks, validation, or next steps change.
+5. **Always maintain `AGENT_HANDOVER.md`.** It is git-ignored working notes rather than project history, so it is kept current but never committed. Anything that belongs in the repository's own record - a decision, a setup step, a behaviour worth knowing - goes to `README.md` or `docs/architecture/` in the commit that changes it, and does not rely on the handover to survive.
 6. Keep the handover concise and current. Replace stale status instead of accumulating a session diary.
 7. End every session with completed work, validation, blockers, and the next recommended action recorded in the handover.
 
