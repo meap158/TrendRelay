@@ -377,6 +377,14 @@ export const en = {
     destinationsAcross:
       "{destinations, plural, one {# destination} other {# destinations}} across {engines, plural, one {# engine} other {# engines}}",
     nowDefault: "{label} is now the default engine.",
+    pagesChosen: "{chosen} of {total} chosen",
+    pagesConnected: "{count, plural, one {# page} other {# pages}} connected",
+    selectAll: "All",
+    selectNone: "None",
+    viaOneOf: "{provider} · on {count} engines",
+    deliverVia: "Deliver {label} through",
+    destinationCount: "{pages, plural, one {# page} other {# pages}} on {networks, plural, one {# network} other {# networks}}",
+    noneSelected: "none selected",
   },
 
   autopilot: {

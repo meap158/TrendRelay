@@ -381,6 +381,14 @@ export const fr: Messages = {
     destinationsAcross:
       "{destinations, plural, one {# destination} other {# destinations}} sur {engines, plural, one {# moteur} other {# moteurs}}",
     nowDefault: "{label} est désormais le moteur par défaut.",
+    pagesChosen: "{chosen} sur {total} choisies",
+    pagesConnected: "{count, plural, one {# page connectée} other {# pages connectées}}",
+    selectAll: "Toutes",
+    selectNone: "Aucune",
+    viaOneOf: "{provider} · sur {count} moteurs",
+    deliverVia: "Publier {label} via",
+    destinationCount: "{pages, plural, one {# page} other {# pages}} sur {networks, plural, one {# réseau} other {# réseaux}}",
+    noneSelected: "aucune sélection",
   },
 
   autopilot: {

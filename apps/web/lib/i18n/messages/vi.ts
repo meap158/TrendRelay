@@ -373,6 +373,14 @@ export const vi: Messages = {
     noEngineOnHelp: "Hãy bật một công cụ trong Thiết lập công cụ để thấy các đích đến.",
     destinationsAcross: "{destinations} đích đến trên {engines} công cụ",
     nowDefault: "{label} giờ là công cụ mặc định.",
+    pagesChosen: "Đã chọn {chosen}/{total}",
+    pagesConnected: "Đã kết nối {count} trang",
+    selectAll: "Tất cả",
+    selectNone: "Bỏ chọn",
+    viaOneOf: "{provider} · trên {count} công cụ",
+    deliverVia: "Đăng {label} qua",
+    destinationCount: "{pages} trang trên {networks} nền tảng",
+    noneSelected: "chưa chọn",
   },
 
   autopilot: {

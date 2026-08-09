@@ -25,6 +25,7 @@ from trendrelay_api.config import get_settings
 from trendrelay_api.database import SessionFactory
 from trendrelay_api.env_store import configured_keys, effective_value, write_env_values
 from trendrelay_api.integrations import media_hosting
+from trendrelay_api.integrations.account_identity import consolidate, page_payload
 from trendrelay_api.jobs import (
     claim_job,
     complete_job,
@@ -831,9 +832,15 @@ def _bundle_accounts() -> list[dict[str, str]]:
                 or account.get("name")
                 or f"{platform.title()} account"
             )
-            accounts.append(
-                {"id": account["id"], "platform": platform, "label": str(label).strip()[:160]}
-            )
+            accounts.append({
+                "id": account["id"],
+                "platform": platform,
+                "label": str(label).strip()[:160],
+                # `username` only. `name` is a display-name fallback here - the
+                # label above falls back to it for exactly that reason - and
+                # merging two engines on a display name is the wrong merge.
+                "handle": account.get("username"),
+            })
     return accounts
 
 
@@ -969,9 +976,12 @@ def _zernio_accounts() -> list[dict[str, str]]:
         )
         if account.get("isActive") is False or account.get("needsReconnection"):
             label = f"{label} (reconnect)"
-        accounts.append(
-            {"id": str(account["_id"]), "platform": platform, "label": str(label).strip()[:160]}
-        )
+        accounts.append({
+            "id": str(account["_id"]),
+            "platform": platform,
+            "label": str(label).strip()[:160],
+            "handle": account.get("username"),
+        })
     return accounts
 
 
@@ -1034,9 +1044,13 @@ def _buffer_accounts() -> list[dict[str, str]]:
         label = channel.get("displayName") or channel.get("name") or f"{platform.title()} channel"
         if channel.get("isQueuePaused"):
             label = f"{label} (queue paused)"
-        accounts.append(
-            {"id": str(channel["id"]), "platform": platform, "label": str(label).strip()[:160]}
-        )
+        accounts.append({
+            "id": str(channel["id"]),
+            "platform": platform,
+            "label": str(label).strip()[:160],
+            # Buffer's `name` is the handle; `displayName` is the pretty one.
+            "handle": channel.get("name"),
+        })
     return accounts
 
 
@@ -1262,12 +1276,17 @@ def discover_all_integrations() -> dict[str, Any]:
             "id": provider_id, "label": provider.label,
             "reachable": True, "reason": None, "account_count": len(found),
         })
+    ordered = sorted(
+        accounts,
+        key=lambda item: (item["platform"], item["provider"], item["label"].casefold()),
+    )
     return {
         "engines": engines,
-        "accounts": sorted(
-            accounts,
-            key=lambda item: (item["platform"], item["provider"], item["label"].casefold()),
-        ),
+        "accounts": ordered,
+        # The same accounts grouped by the page they actually are. A workspace
+        # with two engines on one brand sees its Instagram twice otherwise, and
+        # picking both would publish to that audience twice.
+        "pages": [page_payload(page) for page in consolidate(ordered)],
     }
 
 

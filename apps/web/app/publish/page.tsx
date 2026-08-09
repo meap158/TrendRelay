@@ -47,6 +47,23 @@ type Delivery = "draft" | "schedule" | "now";
 const isDelivery = oneOf<Delivery>("draft", "schedule", "now");
 
 type Workspace = { id: string; name: string; role: string };
+type SocialPage = {
+  key: string;
+  platform: PublishingPlatform;
+  handle: string | null;
+  label: string;
+  shared: boolean;
+  engine_count: number;
+  reachable_by: Array<{
+    provider: PublishingProvider;
+    provider_label: string;
+    id: string;
+    label: string;
+  }>;
+  default_provider: PublishingProvider;
+  default_integration_id: string;
+};
+
 type Account = {
   id: string;
   label: string;
@@ -167,6 +184,16 @@ export default function PublishPage() {
   // Accounts from every engine at once, each carrying its own, so one post can
   // reach a TikTok on one engine and a YouTube on another.
   const [allAccounts, setAllAccounts] = useState<Account[]>([]);
+  /**
+   * Accounts grouped by the page they actually are.
+   *
+   * Two engines on one brand report its Instagram twice under two ids. Picking
+   * both would publish the same post to the same audience twice, so the picker
+   * offers the page and the post goes through one engine.
+   */
+  const [pages, setPages] = useState<SocialPage[]>([]);
+  /** Where the operator has overridden which engine delivers a shared page. */
+  const [routeFor, setRouteFor] = useState<Record<string, string>>({});
   const [engineReach, setEngineReach] = useState<EngineReach[]>([]);
   const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [connection, setConnection] = useState<Connection | null>(null);
@@ -391,6 +418,51 @@ export default function PublishPage() {
   // upload - and reading this from whichever engine happened to be active let a
   // post reach submission with nothing for that engine to fetch.
   const fetchOnlyProviders = chosenProviders.filter((item) => item.requires_public_media);
+  /**
+   * Which engine delivers a page, honouring an override.
+   *
+   * Falls back to the first route rather than failing, so a stale override -
+   * an engine that has since been switched off, say - degrades to posting
+   * through a working one instead of silently dropping the destination.
+   */
+  const routeOf = (page: SocialPage) => {
+    const chosen = routeFor[page.key];
+    return page.reachable_by.find((item) => `${item.provider}:${item.id}` === chosen)
+      ?? page.reachable_by[0];
+  };
+  /** A page is chosen when any of its routes is in the target list. */
+  const pageChosen = (page: SocialPage) =>
+    page.reachable_by.some((item) => targets.includes(item.id));
+  /**
+   * Select or clear a page.
+   *
+   * Every route is cleared before one is added, so a page can never contribute
+   * two targets. That is the duplicate this grouping exists to prevent, and it
+   * would be caused by the grouping itself.
+   */
+  const togglePage = (page: SocialPage, on: boolean) => setTargets((current) => {
+    const without = current.filter(
+      (id) => !page.reachable_by.some((item) => item.id === id));
+    return on ? [...without, routeOf(page).id] : without;
+  });
+  const switchRoute = (page: SocialPage, provider: string, id: string) => {
+    setRouteFor((current) => ({ ...current, [page.key]: `${provider}:${id}` }));
+    setTargets((current) => {
+      if (!page.reachable_by.some((item) => current.includes(item.id))) return current;
+      return [
+        ...current.filter((existing) => !page.reachable_by.some((item) => item.id === existing)),
+        id,
+      ];
+    });
+  };
+  /** Pages whose engine is switched off here are not offered at all. */
+  const offeredPages = pages
+    .map((page) => ({
+      ...page,
+      reachable_by: page.reachable_by.filter((item) => !engineOff(item.provider)),
+    }))
+    .filter((page) => page.reachable_by.length > 0);
+
   /** "Buffer" or "Buffer and Zernio" - what this post actually goes out through. */
   const engineNames = (list: Provider[]) =>
     list.length > 1
@@ -951,11 +1023,14 @@ export default function PublishPage() {
     try {
       // Every engine at once: a post can address destinations on more than one,
       // so offering only the active engine's accounts would hide the rest.
-      const result = await json<{ accounts: Account[]; engines: EngineReach[] }>(await apiFetch(
+      const result = await json<{
+        accounts: Account[]; engines: EngineReach[]; pages?: SocialPage[];
+      }>(await apiFetch(
         `/api/workspaces/${workspaceId}/publishing/integrations/all`,
         { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
       ));
       setAllAccounts(result.accounts);
+      setPages(result.pages ?? []);
       setEngineReach(result.engines);
       setAccountsLoaded(true);
       // Keep what is still there, drop what the refresh no longer returns: a
@@ -1681,9 +1756,10 @@ export default function PublishPage() {
                   counting networks made choosing the second look like it had
                   done nothing. */}
               <b>{targets.length
-                ? `${targets.length} account${targets.length === 1 ? "" : "s"}`
-                  + ` on ${chosen.length} network${chosen.length === 1 ? "" : "s"}`
-                : "none selected"}</b>
+                ? t("publish.destinationCount", {
+                    pages: targets.length, networks: chosen.length,
+                  })
+                : t("publish.noneSelected")}</b>
             </legend>
             {!connection?.authenticated ? (
               <p className="picker-empty">
@@ -1737,9 +1813,9 @@ export default function PublishPage() {
                   </p>
                 )}
                 <div className="platform-grid">{connectedPlatforms.map((platform) => {
-                  const platformAccounts = accounts.filter((account) => account.platform === platform);
-                  const picked = platformAccounts.filter((account) => targets.includes(account.id));
-                  const engines = new Set(platformAccounts.map((item) => item.provider));
+                  const platformPages = offeredPages.filter((page) => page.platform === platform);
+                  if (!platformPages.length) return null;
+                  const picked = platformPages.filter(pageChosen);
                   return (
                     <section key={platform} className={`platform-card${picked.length ? " chosen" : ""}`}>
                       <div className="platform-card-head">
@@ -1748,60 +1824,89 @@ export default function PublishPage() {
                           <strong>{platformLabels[platform]}</strong>
                           <span>
                             {picked.length
-                              ? `${picked.length} of ${platformAccounts.length} chosen`
-                              : `${platformAccounts.length} connected`}
-                            {engines.size > 1 && ` · ${engines.size} engines`}
+                              ? t("publish.pagesChosen", {
+                                  chosen: picked.length, total: platformPages.length,
+                                })
+                              : t("publish.pagesConnected", { count: platformPages.length })}
                           </span>
                         </div>
                         {/* One reach-everything action per network. Choosing
-                            eight accounts one at a time is the work this page
+                            eight pages one at a time is the work this page
                             exists to remove. */}
-                        {platformAccounts.length > 1 && (
+                        {platformPages.length > 1 && (
                           <button
                             type="button"
                             className="platform-card-all"
-                            onClick={() => setTargets((current) => (
-                              picked.length === platformAccounts.length
-                                ? current.filter((id) => !platformAccounts.some((account) => account.id === id))
-                                : [...current, ...platformAccounts
-                                    .filter((account) => !current.includes(account.id))
-                                    .map((account) => account.id)]
-                            ))}
-                          >{picked.length === platformAccounts.length ? "None" : "All"}</button>
+                            onClick={() => {
+                              const all = picked.length === platformPages.length;
+                              platformPages.forEach((page) => togglePage(page, !all));
+                            }}
+                          >{picked.length === platformPages.length
+                            ? t("publish.selectNone") : t("publish.selectAll")}</button>
                         )}
                       </div>
-                      <div className="account-options">{platformAccounts.map((account) => {
-                        const on = targets.includes(account.id);
+                      <div className="account-options">{platformPages.map((page) => {
+                        const on = pageChosen(page);
+                        const route = routeOf(page);
                         return (
                           <button
                             type="button"
-                            key={account.id}
+                            key={page.key}
                             aria-pressed={on}
                             className={on ? "selected" : ""}
-                            title={account.label}
-                            onClick={() => setTargets((current) => (
-                              on
-                                ? current.filter((id) => id !== account.id)
-                                : [...current, account.id]
-                            ))}
-                          ><span>{account.label}</span><i>{account.provider_label}</i></button>
+                            title={page.handle ? `@${page.handle}` : page.label}
+                            onClick={() => togglePage(page, !on)}
+                          >
+                            <span>{page.label}</span>
+                            {/* One page, several engines: say so, and say which
+                                one is actually delivering. Two rows that look
+                                like two accounts is how the same audience gets
+                                posted to twice. */}
+                            <i>{page.reachable_by.length > 1
+                              ? t("publish.viaOneOf", {
+                                  provider: route.provider_label,
+                                  count: page.reachable_by.length,
+                                })
+                              : route.provider_label}</i>
+                          </button>
                         );
                       })}</div>
-                      {/* Per account, not per network: the same post can be a
-                          Reel on one Instagram account and a Story on another. */}
-                      {picked.map((account) => {
-                        const kinds = postTypesFor(account.id);
+
+                      {/* Only where there is a real choice to make. */}
+                      {picked.filter((page) => page.reachable_by.length > 1).map((page) => (
+                        <div className="page-route" key={`${page.key}-route`}>
+                          <em>{t("publish.deliverVia", { label: page.label })}</em>
+                          {page.reachable_by.map((item) => {
+                            const active = routeOf(page).id === item.id;
+                            return (
+                              <button
+                                type="button"
+                                key={`${item.provider}:${item.id}`}
+                                aria-pressed={active}
+                                className={active ? "selected" : ""}
+                                onClick={() => switchRoute(page, item.provider, item.id)}
+                              >{item.provider_label}</button>
+                            );
+                          })}
+                        </div>
+                      ))}
+
+                      {/* Per page, not per network: the same post can be a Reel
+                          on one Instagram page and a Story on another. */}
+                      {picked.map((page) => {
+                        const route = routeOf(page);
+                        const kinds = postTypesFor(route.id);
                         if (kinds.length < 2) return null;
                         return (
                           <div
                             className="post-types"
-                            key={account.id}
+                            key={page.key}
                             role="tablist"
-                            aria-label={`${account.label} post type`}
+                            aria-label={`${page.label} post type`}
                           >
-                            {picked.length > 1 && <em className="post-types-for">{account.label}</em>}
+                            {picked.length > 1 && <em className="post-types-for">{page.label}</em>}
                             {kinds.map((kind) => {
-                              const active = (postTypes[account.id] ?? kinds[0]?.id) === kind.id;
+                              const active = (postTypes[route.id] ?? kinds[0]?.id) === kind.id;
                               return (
                                 <button
                                   type="button"
@@ -1809,7 +1914,7 @@ export default function PublishPage() {
                                   aria-pressed={active}
                                   className={active ? "selected" : ""}
                                   title={kind.help}
-                                  onClick={() => setPostTypes({ ...postTypes, [account.id]: kind.id })}
+                                  onClick={() => setPostTypes({ ...postTypes, [route.id]: kind.id })}
                                 >{kind.label}</button>
                               );
                             })}

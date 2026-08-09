@@ -139,10 +139,12 @@ def test_bundle_accounts_are_normalized(monkeypatch, media_file: Path) -> None:
     assert result["provider"] == "bundle_social"
     # Each account names the engine that reaches it, which is what lets one post
     # address destinations on more than one engine at a time.
+    # `handle` rides alongside the label because only the handle identifies a page
+    # when two engines both report it; a display name repeats and changes.
     assert result["accounts"] == [
-        {"id": "a1", "platform": "tiktok", "label": "TrendRelay",
+        {"id": "a1", "platform": "tiktok", "label": "TrendRelay", "handle": None,
          "provider": "bundle_social", "provider_label": "Bundle.social"},
-        {"id": "a3", "platform": "youtube", "label": "Video Channel",
+        {"id": "a3", "platform": "youtube", "label": "Video Channel", "handle": None,
          "provider": "bundle_social", "provider_label": "Bundle.social"},
     ]
 

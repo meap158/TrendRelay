@@ -371,6 +371,14 @@ export const ar: Messages = {
     destinationsAcross:
       "{destinations, plural, zero {لا وجهات} one {وجهة واحدة} two {وجهتان} few {# وجهات} many {# وجهة} other {# وجهة}} عبر {engines} محرّك",
     nowDefault: "أصبح {label} المحرّك الافتراضي.",
+    pagesChosen: "اختير {chosen} من {total}",
+    pagesConnected: "{count, plural, zero {لا صفحات} one {صفحة واحدة} two {صفحتان} few {# صفحات} many {# صفحة} other {# صفحة}} متصلة",
+    selectAll: "الكل",
+    selectNone: "لا شيء",
+    viaOneOf: "{provider} · متاحة عبر {count} محرّكات",
+    deliverVia: "انشر {label} عبر",
+    destinationCount: "{pages, plural, zero {لا صفحات} one {صفحة واحدة} two {صفحتان} few {# صفحات} many {# صفحة} other {# صفحة}} على {networks} شبكات",
+    noneSelected: "لم يُختر شيء",
   },
 
   autopilot: {

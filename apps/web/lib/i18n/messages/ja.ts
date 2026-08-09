@@ -373,6 +373,14 @@ export const ja: Messages = {
     noEngineOnHelp: "エンジン設定でいずれかをオンにすると配信先が表示されます。",
     destinationsAcross: "{engines}件のエンジンに{destinations}件の配信先",
     nowDefault: "{label} を既定のエンジンにしました。",
+    pagesChosen: "{total}件中{chosen}件を選択",
+    pagesConnected: "{count}ページを接続済み",
+    selectAll: "すべて",
+    selectNone: "解除",
+    viaOneOf: "{provider}・{count}エンジンで到達可",
+    deliverVia: "{label} の配信経路",
+    destinationCount: "{networks}ネットワークの{pages}ページ",
+    noneSelected: "未選択",
   },
 
   autopilot: {

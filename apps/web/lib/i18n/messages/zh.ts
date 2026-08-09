@@ -363,6 +363,14 @@ export const zh: Messages = {
     noEngineOnHelp: "在引擎设置中启用一个，即可看到其目标。",
     destinationsAcross: "{engines} 个引擎共 {destinations} 个目标",
     nowDefault: "{label} 已设为默认引擎。",
+    pagesChosen: "已选 {chosen}/{total}",
+    pagesConnected: "已连接 {count} 个主页",
+    selectAll: "全选",
+    selectNone: "全不选",
+    viaOneOf: "{provider} · {count} 个引擎可达",
+    deliverVia: "{label} 的发布通道",
+    destinationCount: "{networks} 个平台上的 {pages} 个主页",
+    noneSelected: "未选择",
   },
 
   autopilot: {

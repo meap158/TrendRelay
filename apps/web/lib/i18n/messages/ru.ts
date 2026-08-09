@@ -380,6 +380,14 @@ export const ru: Messages = {
     destinationsAcross:
       "{destinations, plural, one {# направление} few {# направления} many {# направлений} other {# направления}} в {engines, plural, one {# движке} few {# движках} many {# движках} other {# движках}}",
     nowDefault: "Теперь {label} — движок по умолчанию.",
+    pagesChosen: "выбрано {chosen} из {total}",
+    pagesConnected: "{count, plural, one {# страница} few {# страницы} many {# страниц} other {# страницы}} подключено",
+    selectAll: "Все",
+    selectNone: "Снять",
+    viaOneOf: "{provider} · доступно через {count} движка",
+    deliverVia: "Публиковать {label} через",
+    destinationCount: "{pages, plural, one {# страница} few {# страницы} many {# страниц} other {# страницы}} в {networks, plural, one {# сети} few {# сетях} many {# сетях} other {# сетях}}",
+    noneSelected: "ничего не выбрано",
   },
 
   autopilot: {

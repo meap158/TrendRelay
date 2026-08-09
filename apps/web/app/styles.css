@@ -596,3 +596,9 @@ nav strong { color: #1c2b33; }
 .thread-note { color: var(--muted); font-size: 11px; line-height: 1.45; }
 /* An action that reads as part of the sentence it sits in. */
 .link-action { border: 0; padding: 0; background: transparent; color: var(--link); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+/* Which engine delivers a page that two of them can reach. Shown only when
+   there is a real choice, because otherwise it is a control over nothing. */
+.page-route { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.page-route em { flex: 1 0 100%; color: var(--muted); font-size: 10px; font-style: normal; }
+.publish-form .page-route button { width: auto; min-height: 24px; padding: 2px 9px; border: 1px solid var(--line-strong); border-radius: 999px; background: transparent; color: var(--muted); font-size: 11px; }
+.publish-form .page-route button.selected { border-color: var(--green); color: var(--green); font-weight: 600; }
