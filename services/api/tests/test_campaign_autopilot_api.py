@@ -6,7 +6,7 @@ import asyncio
 
 import httpx
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -322,3 +322,53 @@ def test_the_preview_carries_a_verdict_for_every_post(workspace) -> None:
     ).json()
     assert "problems" in body
     assert all("problem" in post for post in body["posts"])
+
+
+def test_an_autopilot_link_carries_sub_ids_too(workspace) -> None:
+    """These are the links that matter most and they were getting none.
+
+    The autopilot mints its own rather than going through the attribution
+    endpoint, so it missed the assignment entirely - and its posts are the
+    unattended ones, whose conversions come back through the network's report
+    or not at all.
+    """
+    from trendrelay_api.attribution_models import TrackingLink
+    from trendrelay_api.attribution_subids import link_key
+    from trendrelay_api.autopilot_models import CampaignAutopilot, CampaignDestination
+    from trendrelay_api.campaign_autopilot_api import link_url_for
+    from trendrelay_api.opportunity_models import ProductOffer
+
+    campaign_id = campaign(workspace)
+    with TestingSession.begin() as session:
+        # A network we have a sub-ID contract for; the fixture's offer points at
+        # a host we deliberately leave alone.
+        session.get(ProductOffer, "offer-1").affiliate_url = "https://shopee.vn/thing-i.1.2"
+
+    request(
+        "PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
+        json={"enabled": False, "offer_id": "offer-1", "confirm_external_action": True},
+    )
+    request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/destinations",
+        json={"provider": "buffer", "integration_id": "acct-1",
+              "platform": "instagram", "label": "brand on Instagram"},
+    )
+
+    with TestingSession.begin() as session:
+        autopilot = session.scalars(select(CampaignAutopilot)).one()
+        destination = session.scalars(select(CampaignDestination)).one()
+        code = link_url_for(session, autopilot, destination)
+        assert code
+        link = session.scalars(
+            select(TrackingLink).where(TrackingLink.code == code)
+        ).one()
+
+        assert link.sub_ids["sub_id1"] == link_key(code)
+        assert link.sub_ids["sub_id3"] == "instagram"
+        assert link.sub_ids["sub_id4"] == "Launch"
+        # One link serves a destination and is reused for every video sent to
+        # it, so there is no content to name. The slot stays empty rather than
+        # being labelled with whichever video happened to go out first - and the
+        # slots after it do not shift up to close the gap, because a network
+        # reads them positionally.
+        assert "sub_id2" not in link.sub_ids

@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from trendrelay_api import attribution_subids
 from trendrelay_api.attribution_api import _https_url, _public_url
 from trendrelay_api.attribution_models import TrackingLink
 from trendrelay_api.autopilot_models import (
@@ -34,7 +35,7 @@ from trendrelay_api.foundation import (
     membership,
     require_role,
 )
-from trendrelay_api.models import Campaign
+from trendrelay_api.models import Campaign, utc_now
 from trendrelay_api.opportunity_models import ProductOffer
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/campaigns", tags=["campaigns"])
@@ -163,8 +164,29 @@ def link_url_for(session: Session, autopilot: CampaignAutopilot,
         destination_url = _https_url(offer.affiliate_url)
     except ValueError:
         return None
+    code = token_urlsafe(8)
+    campaign = session.get(Campaign, autopilot.campaign_id)
+    minted_at = utc_now()
+    # The same sub IDs a hand-made link gets. Without this the links that matter
+    # most carry none: these are the ones the autopilot posts with, unattended,
+    # and their conversions come back through the network's report or not at all.
+    #
+    # No content dimension, because one link serves a destination rather than a
+    # post and is reused across every video sent to it. The slot is left empty
+    # rather than filled with the first video's hash, which would label a year of
+    # clicks with whatever happened to go out first. Slots do not shift to close
+    # the gap - they are read positionally, so placement stays in its own.
+    sub_ids = attribution_subids.assign(destination_url, attribution_subids.LinkContext(
+        code=code,
+        platform=destination.platform,
+        campaign_id=autopilot.campaign_id,
+        campaign_name=campaign.name if campaign else None,
+        created_at=minted_at,
+        product_id=offer.product_id,
+    ))
     link = TrackingLink(
-        code=token_urlsafe(8),
+        code=code,
+        sub_ids=sub_ids,
         workspace_id=autopilot.workspace_id,
         campaign_id=autopilot.campaign_id,
         offer_id=offer.id,
