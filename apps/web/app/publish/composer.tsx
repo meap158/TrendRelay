@@ -255,7 +255,19 @@ export function PostPreview({
             against something nobody will see. The thumbnail is the fallback
             for a clip picked from the Library before its file can be read. */}
         {showing && !sourceIsImage ? (
-          <video src={showing} controls playsInline preload="metadata" poster={thumbnail || undefined} />
+          // `nodownload` removes the download entry from Chrome's overflow menu,
+          // and `preload="none"` means nothing is fetched until somebody presses
+          // play. This is a preview of what is about to be published, not a copy
+          // of it - offering to save the file here answers a question nobody
+          // asked and contradicts the promise made under the other player.
+          <video
+            src={showing}
+            controls
+            controlsList="nodownload"
+            playsInline
+            preload="none"
+            poster={thumbnail || undefined}
+          />
         ) : showing ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img alt="" src={showing} />
@@ -830,8 +842,8 @@ export function UploadPreview({ source, poster }: { source: string; poster?: str
 
   if (requested) {
     return (
-      <video className="blur-preview" controls autoPlay preload="none"
-        poster={poster || undefined} src={source} />
+      <video className="blur-preview" controls controlsList="nodownload" autoPlay
+        preload="none" poster={poster || undefined} src={source} />
     );
   }
   return (
