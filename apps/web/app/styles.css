@@ -296,7 +296,20 @@ nav strong { color: #1c2b33; }
 .engine-note { margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .engine-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .engine-active-tag { border-radius: 999px; padding: 5px 10px; background: var(--engine-accent, var(--green)); color: #fff; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
-.engine-credentials { display: grid; gap: 12px; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); }
+.engine-credentials { display: grid; gap: 0; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); }
+/* A rule between fields, because five of them run together otherwise.
+   Each row is a label, a saved value, a box and a line of help, so without a
+   divider the help for one field sits directly above the name of the next and
+   reads as belonging to it - which is how an account ID in the access-key field
+   went unnoticed. Between rather than around: no line above the first or below
+   the last, so the group still reads as one panel. */
+.engine-credentials > .credential-field { padding-block: 12px; }
+.engine-credentials > .credential-field:first-child { padding-block-start: 0; }
+.engine-credentials > .credential-field + .credential-field { border-block-start: 1px solid var(--line); }
+/* The buttons are not another field, so they get the same rule and their own
+   space rather than inheriting a gap that no longer exists. */
+.engine-credentials > .engine-credential-actions { padding-block-start: 12px; border-block-start: 1px solid var(--line); }
+.engine-credentials > .privacy-note { margin-block-start: 8px; }
 .engine-credentials label { display: grid; gap: 5px; }
 .engine-credentials label > span { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 500; }
 /* What is saved, above the box that would replace it. Its own line rather than
