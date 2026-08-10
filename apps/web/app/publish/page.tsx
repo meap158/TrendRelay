@@ -445,6 +445,19 @@ export default function PublishPage() {
     const engine = engineFor(accountId);
     return (engine ? providerById.get(engine) : null) ?? activeProvider;
   };
+  // Every network any engine can reach, rather than one engine's list.
+  const platforms = useMemo(
+    () => [...new Set(accounts.map((account) => account.platform))],
+    [accounts],
+  );
+  const connectedPlatforms = platforms;
+  /** The accounts this post goes to, in the order they were chosen. */
+  const chosenAccounts = useMemo(
+    () => targets
+      .map((id) => accounts.find((account) => account.id === id))
+      .filter((account): account is Account => Boolean(account)),
+    [accounts, targets],
+  );
   /**
    * Every engine delivering one network on this post.
    *
@@ -463,19 +476,6 @@ export default function PublishPage() {
       Boolean(item));
     return found.length ? found : activeProvider ? [activeProvider] : [];
   };
-  // Every network any engine can reach, rather than one engine's list.
-  const platforms = useMemo(
-    () => [...new Set(accounts.map((account) => account.platform))],
-    [accounts],
-  );
-  const connectedPlatforms = platforms;
-  /** The accounts this post goes to, in the order they were chosen. */
-  const chosenAccounts = useMemo(
-    () => targets
-      .map((id) => accounts.find((account) => account.id === id))
-      .filter((account): account is Account => Boolean(account)),
-    [accounts, targets],
-  );
   /** The networks reached, each named once however many accounts are on it. */
   const chosen = useMemo(
     () => [...new Set(chosenAccounts.map((account) => account.platform))],
@@ -488,27 +488,29 @@ export default function PublishPage() {
    * images can be added and the destination then switched back to a video, and
    * the chosen type is what the operator actually decided.
    */
+  /** Post types this account can take, from the engine that will deliver it. */
+  const postTypesFor = (accountId: string) => {
+    const account = accounts.find((item) => item.id === accountId);
+    if (!account) return [];
+    return providerById.get(account.provider)?.post_types?.[account.platform] ?? [];
+  };
   const carouselTargetCount = useMemo(
     () => chosenAccounts.filter((account) => (
       postTypes[account.id] ?? postTypesFor(account.id)[0]?.id
     ) === "photo").length,
+    // `postTypesFor` is rebuilt every render and reads provider state that
+    // `chosenAccounts` already moves with.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [chosenAccounts, postTypes],
   );
-  const wantsCarousel = useMemo(
-    () => chosenAccounts.some((account) => (
-      postTypes[account.id] ?? postTypesFor(account.id)[0]?.id
-    ) === "photo"),
-    // `postTypesFor` reads provider state that changes with the connection,
-    // which `chosenAccounts` and `postTypes` already move with.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chosenAccounts, postTypes],
-  );
+  /** Derived rather than counted twice: one predicate, one place to be wrong. */
+  const wantsCarousel = carouselTargetCount > 0;
   /** The Pinterest destination, if this post has one. */
   const pinterestTarget = useMemo(
     () => chosenAccounts.find((account) => account.platform === "pinterest") ?? null,
     [chosenAccounts],
   );
+  const boards = pinterestTarget ? boardsByAccount[pinterestTarget.id] ?? [] : [];
   /** The engines actually delivering this post, in the order chosen. */
   const chosenEngines = useMemo(() => {
     const seen: PublishingProvider[] = [];
@@ -676,12 +678,6 @@ export default function PublishPage() {
   // The preview stands in for the first destination, which is the one being composed.
   const previewAccount = chosenAccounts[0] ?? null;
   const previewPlatform = previewAccount?.platform ?? null;
-  /** Post types this account can take, from the engine that will deliver it. */
-  const postTypesFor = (accountId: string) => {
-    const account = accounts.find((item) => item.id === accountId);
-    if (!account) return [];
-    return providerById.get(account.provider)?.post_types?.[account.platform] ?? [];
-  };
   const previewType = previewAccount
     ? postTypesFor(previewAccount.id).find(
         (kind) => kind.id === (postTypes[previewAccount.id]
@@ -1268,7 +1264,6 @@ export default function PublishPage() {
       });
     return () => { cancelled = true; };
   }, [workspaceId, pinterestTarget, boardsByAccount, apiFetch]);
-  const boards = pinterestTarget ? boardsByAccount[pinterestTarget.id] ?? [] : [];
 
   async function refreshAccounts(options: { quiet?: boolean } = {}) {
     if (!workspaceId) return;

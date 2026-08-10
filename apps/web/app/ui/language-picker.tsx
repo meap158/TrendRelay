@@ -15,6 +15,18 @@
 import { LOCALES, Locale, isLocale } from "../../lib/i18n/locales";
 import { useLocale } from "../i18n-provider";
 
+const SR_ONLY: React.CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+  border: 0,
+};
+
 export function LanguagePicker({ compact = false }: { compact?: boolean }) {
   const { locale, setLocale, t } = useLocale();
 
@@ -59,14 +71,3 @@ export function LanguagePicker({ compact = false }: { compact?: boolean }) {
 }
 
 /** Visible to a screen reader, not to the eye. */
-const SR_ONLY: React.CSSProperties = {
-  position: "absolute",
-  width: 1,
-  height: 1,
-  padding: 0,
-  margin: -1,
-  overflow: "hidden",
-  clip: "rect(0 0 0 0)",
-  whiteSpace: "nowrap",
-  border: 0,
-};
