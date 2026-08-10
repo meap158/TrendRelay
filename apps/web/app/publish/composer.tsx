@@ -1,6 +1,6 @@
 "use client";
 
-import { clipLength, isBlurred } from "../../lib/media-rules";
+import { clipLength, fileName, handoffPath, isBlurred } from "../../lib/media-rules";
 import { useEffect, useMemo, useState } from "react";
 
 import { PlatformIcon, platformLabels, type PublishingPlatform } from "../publishing-icons";
@@ -49,7 +49,7 @@ export type PickerFilters = {
 // Re-exported so the screens importing them from here keep working, while the
 // rules themselves live somewhere they can be tested. Imported as well as
 // re-exported because this file uses them too.
-export { clipLength, isBlurred };
+export { clipLength, fileName, handoffPath, isBlurred };
 
 function AssetThumbnail({
   asset,

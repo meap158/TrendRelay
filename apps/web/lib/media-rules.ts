@@ -56,3 +56,14 @@ export function blurredVersion(asset: VersionedAsset): AssetVersion | null {
 export function handoffPath(asset: VersionedAsset): string {
   return blurredVersion(asset)?.path ?? asset.original_path;
 }
+
+/**
+ * The file's own name, whichever separator the path uses.
+ *
+ * Windows paths arrive with backslashes, so a split on `/` alone returns the
+ * whole absolute path - which is what the carousel list was showing instead of
+ * a name.
+ */
+export function fileName(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}

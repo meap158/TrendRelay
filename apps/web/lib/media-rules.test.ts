@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { blurredVersion, clipLength, handoffPath, isBlurred } from "./media-rules.ts";
+import { blurredVersion, clipLength, fileName, handoffPath, isBlurred } from "./media-rules.ts";
 
 const original = { original_path: "S:\\media\\clip.mp4", versions: [{ kind: "original" }] };
 
@@ -72,4 +72,21 @@ test("a thumbnail is not a blurred cut", () => {
   };
   assert.equal(isBlurred(asset), false);
   assert.equal(handoffPath(asset), "S:\\media\\clip.mp4");
+});
+
+// --- naming a file ------------------------------------------------------------
+
+test("a windows path gives up its file name", () => {
+  // A split on "/" alone leaves a backslash path untouched, so the carousel
+  // list showed a 120-character absolute path where a name belonged.
+  assert.equal(fileName("S:\\media\\ws_1\\abc\\original.jpg"), "original.jpg");
+  assert.equal(fileName("/var/media/abc/original.jpg"), "original.jpg");
+});
+
+test("a bare name is already the answer", () => {
+  assert.equal(fileName("clip.mp4"), "clip.mp4");
+});
+
+test("a trailing separator does not produce an empty name", () => {
+  assert.equal(fileName("S:\\media\\folder\\"), "folder");
 });

@@ -46,6 +46,8 @@ import {
   UpcomingPosts,
   WeekCalendar,
   clipLength,
+  fileName,
+  handoffPath,
   isBlurred,
   localValue,
   upcomingSlots,
@@ -318,6 +320,16 @@ export default function PublishPage() {
    * the same search, and a second copy would drift from this one.
    */
   const [pickerMode, setPickerMode] = useState<"video" | "images">("video");
+  /**
+   * What each carousel image is called, keyed by the path that will be sent.
+   *
+   * Every asset is stored as `<digest>/original.jpg`, so a file name labels all
+   * of them identically. The library title is the only thing that tells two
+   * frames apart in writing, and a thumbnail cannot be read aloud.
+   */
+  const [imageLabels, setImageLabels] = useState<
+    Record<string, { title: string; blurred: boolean }>
+  >({});
   /** A TikTok carousel's images, in the order they will be swiped through. */
   const [imagePaths, setImagePaths] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
@@ -1059,11 +1071,22 @@ export default function PublishPage() {
     void loadLibrary(mode === "images" ? IMAGE_PICKER_BASE : PICKER_BASE);
   }
 
-  /** Add one image to the carousel, keeping the picker open for the next. */
+  /**
+   * Add one image to the carousel, keeping the picker open for the next.
+   *
+   * The blurred cut when there is one, through the same helper the rest of the
+   * app hands media on with. Taking `original_path` here published the faces
+   * somebody had deliberately blurred, and did it quietly: the picker was
+   * filtered to blurred assets and then returned the one file in them that is
+   * not blurred.
+   */
   function addCarouselImage(asset: LibraryAsset) {
-    setImagePaths((current) => (
-      current.includes(asset.original_path) ? current : [...current, asset.original_path]
-    ));
+    const path = handoffPath(asset);
+    setImageLabels((current) => ({
+      ...current,
+      [path]: { title: asset.title, blurred: isBlurred(asset) },
+    }));
+    setImagePaths((current) => (current.includes(path) ? current : [...current, path]));
   }
 
   /** Move an image one place along. Order is the post, so it is editable. */
@@ -1093,7 +1116,9 @@ export default function PublishPage() {
   /** Take a clip from the library, and show the frame it will go out with. */
   function pickClip(asset: LibraryAsset) {
     setClip(asset);
-    setVideoPath(asset.original_path);
+    // The blurred cut when there is one. Same reasoning as the carousel: the
+    // original is the copy that still has the faces in it.
+    setVideoPath(handoffPath(asset));
     setPickerOpen(false);
     setThumbnail("");
     if (!asset.versions.some((version) => version.kind === "thumbnail")) return;
@@ -2253,7 +2278,10 @@ export default function PublishPage() {
                         <li key={path}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img alt="" className="carousel-thumb" src={mediaUrlFor(path)} />
-                          <code>{path.split(/[\/]/).pop()}</code>
+                          <code>{imageLabels[path]?.title ?? fileName(path)}</code>
+                          {imageLabels[path]?.blurred && (
+                            <em className="blurred-tag">{t("publish.facesBlurred")}</em>
+                          )}
                           {/* The first frame is the one that appears in a feed,
                               so which one it is should not have to be counted. */}
                           {index === 0 && <em className="carousel-cover">{t("publish.coverFrame")}</em>}
