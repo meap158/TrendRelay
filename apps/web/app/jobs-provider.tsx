@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 import { useAuth } from "./auth-provider";
 import { apiBaseUrl } from "../lib/api";
+import { assetHref } from "../lib/job-links";
 
 type JobStatus = "queued" | "running" | "succeeded" | "failed";
 type JobCategory = "fetch" | "media" | "render" | "publish" | "research" | "blur";
@@ -27,13 +28,6 @@ export type BaseJob = {
   raw: any;
 };
 
-/** The Library entry a job produced or worked on, by id or by source path. */
-function assetHref(job: any): string | undefined {
-  const asset = job?.result?.asset_id ?? job?.payload?.asset_id ?? job?.asset_id;
-  if (asset) return `/library?asset=${encodeURIComponent(asset)}`;
-  const path = job?.result?.source_path ?? job?.payload?.source_path;
-  return path ? `/library?asset=${encodeURIComponent(path)}` : undefined;
-}
 
 type JobsContextValue = {
   jobs: BaseJob[];
