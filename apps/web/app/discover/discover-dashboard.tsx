@@ -12,6 +12,8 @@ import { numberIn, oneOf, usePersistedCache, usePersistedState } from "../ui/use
 import { useJobs } from "../jobs-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { OpportunityScoring } from "./opportunity-scoring";
+import { TrendingTopics } from "./trending-topics";
+import { SHAPE_COPY, searchTerm, type Topic as RankedTopic } from "../../lib/trend-shapes";
 
 type Workspace = { id: string; name: string; role: string };
 type ReachChannel = {
@@ -1138,6 +1140,27 @@ export default function ResearchDashboard() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  /**
+   * Carry a consolidated topic into scoring with its evidence already written.
+   *
+   * The reason it ranked is the reason to score it, and asking somebody to
+   * retype what the list just told them is how the evidence field ends up
+   * empty on every score.
+   */
+  function scoreTopic(topic: RankedTopic) {
+    setScorePrefill({
+      trend: searchTerm(topic),
+      evidence: [
+        SHAPE_COPY[topic.shape].meaning,
+        `Seen by ${topic.sources.join(", ") || "no source"} in ${topic.region}.`,
+        topic.best_rank ? `Best rank ${topic.best_rank}.` : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+      job: "",
+    });
+  }
+
   useEffect(() => {
     let cancelled = false;
     fetch(`${apiBaseUrl()}/api/research/tiktok/status`)
@@ -1430,6 +1453,13 @@ export default function ResearchDashboard() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* First among the result sections, because it is the answer the boards
+          below are evidence for: they each say what one source shows, this says
+          what to make. */}
+      <div style={S.section}>
+        <TrendingTopics onResearch={exploreTopic} onScore={scoreTopic} />
       </div>
 
       <div style={S.section}>
