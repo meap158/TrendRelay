@@ -180,7 +180,6 @@ export const ja: Messages = {
     intro:
       "オリジナルはそのまま保ち、参考クリップを検索できるクリエイティブレシピに変えます。",
     playPreview: "プレビューを再生",
-    viewPreview: "プレビューを表示",
     loadingPreview: "プレビューを読み込み中…",
     previewUnavailable: "プレビューを表示できません",
     previewPosition: "{total} 件中 {position} 件目",

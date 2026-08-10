@@ -174,7 +174,6 @@ export const zh: Messages = {
     eyebrow: "创意分析",
     intro: "保持原始文件不变，把参考片段转化为可搜索的创意配方。",
     playPreview: "播放预览",
-    viewPreview: "查看预览",
     loadingPreview: "正在加载预览…",
     previewUnavailable: "无法预览",
     previewPosition: "第 {position} / {total} 项",

@@ -180,7 +180,6 @@ export const ar: Messages = {
     intro:
       "احتفظ بالنسخ الأصلية كما هي، وحوّل المقاطع المرجعية إلى وصفات إبداعية قابلة للبحث.",
     playPreview: "تشغيل المعاينة",
-    viewPreview: "عرض المعاينة",
     loadingPreview: "جارٍ تحميل المعاينة…",
     previewUnavailable: "المعاينة غير متاحة",
     previewPosition: "{position} من {total}",

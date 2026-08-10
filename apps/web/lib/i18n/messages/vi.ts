@@ -181,7 +181,6 @@ export const vi: Messages = {
     intro:
       "Giữ nguyên bản gốc và biến clip tham khảo thành công thức sáng tạo có thể tìm kiếm.",
     playPreview: "Phát video xem trước",
-    viewPreview: "Xem trước",
     loadingPreview: "Đang tải bản xem trước…",
     previewUnavailable: "Không xem trước được",
     previewPosition: "{position} / {total}",

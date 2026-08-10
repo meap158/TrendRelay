@@ -185,7 +185,6 @@ export const en = {
     intro:
       "Keep originals immutable and turn reference clips into searchable creative recipes.",
     playPreview: "Play video preview",
-    viewPreview: "View preview",
     loadingPreview: "Loading preview…",
     previewUnavailable: "Preview unavailable",
     previewPosition: "{position} of {total}",

@@ -206,7 +206,18 @@ function MediaPreview({
   const t = useT();
   const [source, setSource] = useState("");
   const [error, setError] = useState("");
-  const [requested, setRequested] = useState(autoStart);
+  /**
+   * Whether the media has been asked for.
+   *
+   * The gate exists so a video is not fetched until somebody wants it: they are
+   * large, and one starts playing the moment it arrives. An image is neither -
+   * it is small, it does nothing on arrival, and it is the thing being reviewed,
+   * so asking for a click before showing it is a step that buys nothing.
+   *
+   * Safe to read at mount because the preview is keyed by asset, so selecting a
+   * different one remounts this and asks the question again.
+   */
+  const [requested, setRequested] = useState(autoStart || asset.media_kind === "image");
   // A blurred cut is watched in the same player as the original, so the two are
   // compared in place rather than in a second, smaller video somewhere else.
   const [cut, setCut] = useState<"original" | "blurred">("original");
@@ -304,13 +315,11 @@ function MediaPreview({
         {!requested ? (
           <button type="button" className="library-preview-launch" onClick={startPlayback}>
             <Thumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
+            {/* Only video and audio reach this now: an image is shown on
+                arrival, and those are the only three kinds there are. */}
             <span className="library-preview-launch-overlay">
-              <span className="library-preview-launch-icon" aria-hidden="true">
-                {playable ? "▶" : "⛶"}
-              </span>
-              <strong>
-                {playable ? t("library.playPreview") : t("library.viewPreview")}
-              </strong>
+              <span className="library-preview-launch-icon" aria-hidden="true">&#9654;</span>
+              <strong>{t("library.playPreview")}</strong>
               <small>{t("library.privatePreview")}</small>
             </span>
           </button>

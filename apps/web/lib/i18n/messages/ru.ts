@@ -184,7 +184,6 @@ export const ru: Messages = {
     intro:
       "Оригиналы остаются неизменными, а референсные ролики превращаются в креативные рецепты с поиском.",
     playPreview: "Воспроизвести превью",
-    viewPreview: "Показать превью",
     loadingPreview: "Загрузка превью…",
     previewUnavailable: "Превью недоступно",
     previewPosition: "{position} из {total}",
