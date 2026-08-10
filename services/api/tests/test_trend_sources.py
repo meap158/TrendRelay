@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+
 from trendrelay_api.integrations.trend_consolidation import rank
 from trendrelay_api.integrations.trend_sources import (
     collect,
