@@ -154,6 +154,9 @@ const TIKTOK_PERIODS: ReadonlyArray<readonly [number, string]> = [
 
 const TIKTOK_PREFERENCE_KEY = "trendrelay.discover.tiktok";
 
+/** Where "Score it" sends you. */
+const SCORING_ANCHOR = "score-the-case";
+
 type TikTokPreference = { category: string; region: string; period: number };
 
 function readTikTokPreference(): TikTokPreference | null {
@@ -1148,6 +1151,16 @@ export default function ResearchDashboard() {
    * empty on every score.
    */
   function scoreTopic(topic: RankedTopic) {
+    // Research scrolls to the search box it just filled; this has to do the
+    // same for the form it just filled, or the click looks like it did
+    // nothing whenever the scoring section is below the fold - which it is,
+    // since the evidence sits between the two.
+    requestAnimationFrame(() => {
+      document.getElementById(SCORING_ANCHOR)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
     setScorePrefill({
       trend: searchTerm(topic),
       evidence: [
@@ -1937,7 +1950,7 @@ export default function ResearchDashboard() {
           evidence and the job id in a query string - a hand-off that existed
           only because they were two pages. */}
       {workspaceId && (
-        <div style={S.jobsSection}>
+        <div style={S.jobsSection} id={SCORING_ANCHOR}>
           <hr style={S.divider} />
           <OpportunityScoring
             key={`${workspaceId}:${scorePrefill.job}:${scorePrefill.trend}`}
