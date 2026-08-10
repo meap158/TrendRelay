@@ -31,6 +31,7 @@ export const vi: Messages = {
     cancel: "Hủy",
     close: "Đóng",
     delete: "Xóa",
+    remove: "Xoá",
     confirm: "Xác nhận",
     retry: "Thử lại",
     reload: "Tải lại",
@@ -1024,6 +1025,7 @@ export const vi: Messages = {
     presetWarning:
       "Mẫu có sẵn sẽ thay thế danh sách phía trên. Mỗi mẫu đều giả định điều gì đó về nơi khán giả của bạn đang ở.",
     chooseClip: "Chọn một clip",
+    chooseImages: "Chọn ảnh cho carousel",
     openCalendar: "Mở lịch đăng bài",
     days: "Ngày",
     timeOfDay: "Giờ trong ngày",

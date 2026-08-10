@@ -31,6 +31,7 @@ export const zh: Messages = {
     cancel: "取消",
     close: "关闭",
     delete: "删除",
+    remove: "移除",
     confirm: "确认",
     retry: "重试",
     reload: "重新加载",
@@ -999,6 +1000,7 @@ export const zh: Messages = {
     presetWarning:
       "预设会替换上面的列表。每个预设都对你的受众身处何处做了假设。",
     chooseClip: "选择片段",
+    chooseImages: "选择轮播图片",
     openCalendar: "打开发布日历",
     days: "星期",
     timeOfDay: "时间点",

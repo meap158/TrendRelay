@@ -37,6 +37,7 @@ export const en = {
     cancel: "Cancel",
     close: "Close",
     delete: "Delete",
+    remove: "Remove",
     confirm: "Confirm",
     retry: "Retry",
     reload: "Reload",
@@ -1027,6 +1028,7 @@ export const en = {
     presetWarning:
       "A preset replaces the list above. Each assumes something about where your audience is.",
     chooseClip: "Choose a clip",
+    chooseImages: "Choose carousel images",
     openCalendar: "Open the posting calendar",
     days: "Days",
     timeOfDay: "Time of day",

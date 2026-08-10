@@ -31,6 +31,7 @@ export const ja: Messages = {
     cancel: "キャンセル",
     close: "閉じる",
     delete: "削除",
+    remove: "削除",
     confirm: "確認",
     retry: "再試行",
     reload: "再読み込み",
@@ -1017,6 +1018,7 @@ export const ja: Messages = {
     presetWarning:
       "プリセットは上の一覧を置き換えます。どのプリセットも、視聴者がどこにいるかを前提にしています。",
     chooseClip: "クリップを選択",
+    chooseImages: "カルーセル画像を選択",
     openCalendar: "投稿カレンダーを開く",
     days: "曜日",
     timeOfDay: "時刻",

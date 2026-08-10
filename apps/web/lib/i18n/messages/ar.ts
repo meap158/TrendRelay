@@ -33,6 +33,7 @@ export const ar: Messages = {
     cancel: "إلغاء",
     close: "إغلاق",
     delete: "حذف",
+    remove: "إزالة",
     confirm: "تأكيد",
     retry: "إعادة المحاولة",
     reload: "إعادة التحميل",
@@ -1027,6 +1028,7 @@ export const ar: Messages = {
     presetWarning:
       "الإعداد الجاهز يستبدل القائمة أعلاه، وكل إعداد يفترض شيئًا عن مكان جمهورك.",
     chooseClip: "اختر مقطعًا",
+    chooseImages: "اختر صور العرض الدوّار",
     openCalendar: "فتح تقويم النشر",
     days: "الأيام",
     timeOfDay: "وقت اليوم",

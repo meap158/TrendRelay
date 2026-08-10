@@ -32,6 +32,7 @@ export const ru: Messages = {
     cancel: "Отмена",
     close: "Закрыть",
     delete: "Удалить",
+    remove: "Убрать",
     confirm: "Подтвердить",
     retry: "Повторить",
     reload: "Перезагрузить",
@@ -1042,6 +1043,7 @@ export const ru: Messages = {
     presetWarning:
       "Пресет заменяет список выше. Каждый из них исходит из предположения о том, где находится ваша аудитория.",
     chooseClip: "Выбрать нарезку",
+    chooseImages: "Выберите изображения карусели",
     openCalendar: "Открыть календарь публикаций",
     days: "Дни",
     timeOfDay: "Время суток",

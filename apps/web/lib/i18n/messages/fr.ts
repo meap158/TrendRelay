@@ -31,6 +31,7 @@ export const fr: Messages = {
     cancel: "Annuler",
     close: "Fermer",
     delete: "Supprimer",
+    remove: "Retirer",
     confirm: "Confirmer",
     retry: "Réessayer",
     reload: "Recharger",
@@ -1041,6 +1042,7 @@ export const fr: Messages = {
     presetWarning:
       "Un préréglage remplace la liste ci-dessus. Chacun suppose quelque chose sur l'endroit où se trouve votre audience.",
     chooseClip: "Choisir un clip",
+    chooseImages: "Choisir les images du carrousel",
     openCalendar: "Ouvrir le calendrier de publication",
     days: "Jours",
     timeOfDay: "Heure de la journée",
