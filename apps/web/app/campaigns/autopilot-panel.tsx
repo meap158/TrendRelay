@@ -15,6 +15,7 @@
  * scheduler should feel like delegating, not gambling.
  */
 
+import { clipLength } from "../../lib/media-rules";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -97,12 +98,6 @@ type LibraryAsset = {
 };
 
 /** Seconds, rounded, for a clip length nobody needs to the millisecond. */
-function clipLength(ms: number | null): string | null {
-  if (!ms) return null;
-  const total = Math.round(ms / 1000);
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
-}
-
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
   if (!response.ok) throw new Error(body.detail ?? "Autopilot request failed.");
@@ -505,7 +500,7 @@ export function AutopilotPanel({
                 <li key={asset.id}>
                   <span>
                     <strong>{asset.title}</strong>
-                    <small>{clipLength(asset.duration_ms) ?? asset.media_kind}</small>
+                    <small>{clipLength(asset.duration_ms) || asset.media_kind}</small>
                   </span>
                   <Button variant="quiet" size="sm" onClick={() => setDrafting(asset)}>
                     {t("autopilot.writeCopy")}

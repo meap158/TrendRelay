@@ -1,5 +1,6 @@
 "use client";
 
+import { clipLength, isBlurred } from "../../lib/media-rules";
 import { useEffect, useMemo, useState } from "react";
 
 import { PlatformIcon, platformLabels, type PublishingPlatform } from "../publishing-icons";
@@ -43,16 +44,10 @@ export type PickerFilters = {
   maxSeconds?: number;
 };
 
-export function clipLength(durationMs: number | null) {
-  if (!durationMs) return "";
-  const total = Math.round(durationMs / 1000);
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
-}
-
-/** Blurred renders are registered as another version of the same asset. */
-export function isBlurred(asset: LibraryAsset) {
-  return asset.versions.some((version) => version.kind === "blurred");
-}
+// Re-exported so the screens importing them from here keep working, while the
+// rules themselves live somewhere they can be tested. Imported as well as
+// re-exported because this file uses them too.
+export { clipLength, isBlurred };
 
 function AssetThumbnail({
   asset,

@@ -7,6 +7,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { apiBaseUrl } from "../../lib/api";
 import { useAuth } from "../auth-provider";
 import { useT } from "../i18n-provider";
+import { blurredVersion, handoffPath } from "../../lib/media-rules";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, buttonClass } from "../ui/button";
 import { ActionIcon, bulkActionIcon } from "../ui/action-icons";
@@ -867,15 +868,7 @@ export default function LibraryPage() {
   }
 
 
-  function blurredVersion(asset: Asset) {
-    // Latest wins when a clip was re-blurred with different settings.
-    const blurred = asset.versions.filter((version) => version.kind === "blurred");
-    return blurred.length ? blurred[blurred.length - 1] : null;
-  }
 
-  function handoffPath(asset: Asset) {
-    return blurredVersion(asset)?.path ?? asset.original_path;
-  }
 
   async function blurFaces(asset: Asset) {
     // A preview is cheap and reversible, so it runs on one click. The full
