@@ -528,12 +528,25 @@ def import_conversions(
     # by in SQL - and doing it per row would be a full scan per conversion.
     by_key: dict[str, TrackingLink] = {}
     if any(column != "tracking_code" for column in link_columns):
-        by_key = {
-            attribution_subids.link_key(candidate.code): candidate
-            for candidate in session.scalars(
-                select(TrackingLink).where(TrackingLink.workspace_id == workspace_id)
-            ).all()
-        }
+        for candidate in session.scalars(
+            select(TrackingLink).where(TrackingLink.workspace_id == workspace_id)
+        ).all():
+            key = attribution_subids.link_key(candidate.code)
+            clash = by_key.get(key)
+            if clash is not None and clash.code != candidate.code:
+                # Vanishingly unlikely, and silent if it ever happened: one link
+                # would overwrite the other and every conversion reported under
+                # that sub ID would be credited to the wrong campaign. Refusing
+                # the import turns invisible mis-attribution into a stoppage.
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"Tracking codes {clash.code} and {candidate.code} share a "
+                        "sub ID, so conversions cannot be told apart. Disable one "
+                        "and reissue its link before importing."
+                    ),
+                )
+            by_key[key] = candidate
     created = 0
     updated = 0
     matched_clicks = 0

@@ -416,3 +416,36 @@ def test_a_usable_post_type_is_still_accepted(workspace) -> None:
     })
     assert response.status_code == 201, response.text
     assert response.json()["destination"]["post_type"] == "story"
+
+
+def test_a_destination_names_an_engine_that_exists(workspace) -> None:
+    campaign_id = campaign(workspace)
+    response = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/destinations",
+        json={"provider": "not-an-engine", "integration_id": "a1",
+              "platform": "tiktok", "label": "brand"},
+    )
+    assert response.status_code == 422
+    assert "Unknown publishing provider" in response.json()["detail"]
+
+
+def test_a_destination_pairs_a_network_its_engine_can_reach(workspace) -> None:
+    """Buffer has no Reddit, and a campaign would find that out once a slot.
+
+    The pairing is the thing that has to hold: each is a real name on its own,
+    and only together are they a destination nothing can deliver.
+    """
+    campaign_id = campaign(workspace)
+    response = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/destinations",
+        json={"provider": "buffer", "integration_id": "a1",
+              "platform": "reddit", "label": "brand"},
+    )
+    assert response.status_code == 422
+    assert "does not publish to reddit" in response.json()["detail"]
+    # The same network through an engine that has it is fine.
+    assert request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/destinations",
+        json={"provider": "zernio", "integration_id": "a2",
+              "platform": "reddit", "label": "brand"},
+    ).status_code == 201

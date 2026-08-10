@@ -35,7 +35,7 @@ from trendrelay_api.foundation import (
     membership,
     require_role,
 )
-from trendrelay_api.integrations.publishing import resolve_post_type
+from trendrelay_api.integrations.publishing import resolve_post_type, resolve_provider
 from trendrelay_api.models import Campaign, utc_now
 from trendrelay_api.opportunity_models import ProductOffer
 
@@ -301,9 +301,19 @@ def add_destination(
     )
     if existing:
         raise HTTPException(status_code=409, detail="That account is already a destination.")
-    # Checked when it is set rather than at every scheduled run. An unusable
-    # post type here is not one failed post: this destination is fed by a
-    # standing programme, so it would fail unattended, on every slot, forever.
+    # Checked when it is set rather than at every scheduled run. Nothing here is
+    # one failed post: this destination is fed by a standing programme, so an
+    # engine, network or post type it cannot use fails unattended, on every
+    # slot, until somebody reads why nothing has gone out.
+    try:
+        engine = resolve_provider(body.provider)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    if body.platform not in engine.platforms:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{engine.label} does not publish to {body.platform}.",
+        )
     try:
         kind = resolve_post_type(body.platform, body.post_type)
     except ValueError as error:

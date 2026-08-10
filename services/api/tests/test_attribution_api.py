@@ -475,3 +475,47 @@ def test_a_csv_identifying_no_link_is_refused_by_name() -> None:
     )
     assert response.status_code == 422
     assert "sub_id1" in response.json()["detail"]
+
+
+def test_two_links_sharing_a_sub_id_stop_the_import() -> None:
+    """Vanishingly unlikely, and silent if it ever happened.
+
+    One link would overwrite the other in the lookup and every conversion
+    reported under that sub ID would be credited to the wrong campaign. A
+    stoppage is recoverable; mis-attributed revenue is not noticed.
+    """
+    workspace_id = create_workspace()
+    campaign_id = create_campaign(workspace_id, "https://shopee.vn/fallback-i.1.2")
+    offer_id = import_shopee_offer(workspace_id)
+    links = [
+        asyncio.run(request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/attribution/links",
+            json={"campaign_id": campaign_id, "offer_id": offer_id,
+                  "platform": "tiktok", "confirm_external_action": True},
+        )).json()["link"]
+        for _ in range(2)
+    ]
+    # Forced, because the real thing is a 48-bit collision nobody can arrange.
+    original = attribution_api.attribution_subids.link_key
+    attribution_api.attribution_subids.link_key = lambda code: "collided"
+    try:
+        occurred_at = (datetime.now(UTC) + timedelta(minutes=1)).isoformat()
+        response = asyncio.run(request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/attribution/conversions/import",
+            json={
+                "csv_text": (
+                    "sub_id1,network,conversion_id,occurred_at,status,currency,commission\n"
+                    f"collided,Shopee,order-1,{occurred_at},approved,VND,1000\n"
+                ),
+                "confirm_external_action": True,
+            },
+        ))
+    finally:
+        attribution_api.attribution_subids.link_key = original
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert links[0]["code"] in detail and links[1]["code"] in detail
+    assert "cannot be told apart" in detail
