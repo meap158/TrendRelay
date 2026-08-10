@@ -505,6 +505,20 @@ export default function PublishPage() {
   );
   /** Derived rather than counted twice: one predicate, one place to be wrong. */
   const wantsCarousel = carouselTargetCount > 0;
+  /**
+   * The media to play, wherever it came from.
+   *
+   * A public URL is what the engine will fetch, so it wins. Otherwise the local
+   * file is streamed through the publishing media roots - the same boundary
+   * that decides whether it could be published at all.
+   */
+  const previewSource = useMemo(() => {
+    const local = wantsCarousel ? imagePaths[0] : videoPath;
+    if (!wantsCarousel && mediaUrl.trim()) return mediaUrl.trim();
+    if (!local || !workspaceId) return "";
+    return `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview`
+      + `?path=${encodeURIComponent(local)}`;
+  }, [wantsCarousel, imagePaths, videoPath, mediaUrl, workspaceId]);
   /** The Pinterest destination, if this post has one. */
   const pinterestTarget = useMemo(
     () => chosenAccounts.find((account) => account.platform === "pinterest") ?? null,
@@ -2569,7 +2583,7 @@ export default function PublishPage() {
                   className="blur-preview"
                   controls
                   preload="metadata"
-                  src={mediaUrl || `${apiBaseUrl()}/api/workspaces/${workspaceId}/media/library/face-blur/media?path=${encodeURIComponent(videoPath)}`}
+                  src={previewSource}
                 />
                 <p className="privacy-note">
                   {mediaUrl
@@ -2592,6 +2606,9 @@ export default function PublishPage() {
                 caption={caption}
                 title={title}
                 thumbnail={thumbnail}
+                source={previewSource}
+                sourceIsImage={wantsCarousel}
+                carouselCount={wantsCarousel ? imagePaths.length : 0}
               />
               <p className="privacy-note">
                 A rehearsal of the caption and frame against this network&apos;s shape,

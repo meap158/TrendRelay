@@ -200,6 +200,9 @@ export function PostPreview({
   caption,
   title,
   thumbnail,
+  source,
+  sourceIsImage,
+  carouselCount,
 }: {
   platform: PublishingPlatform;
   postTypeLabel: string;
@@ -207,6 +210,12 @@ export function PostPreview({
   caption: string;
   title: string;
   thumbnail: string;
+  /** The media itself, so the frame is the post rather than a still of it. */
+  source?: string;
+  /** True when `source` is an image: a carousel frame rather than a clip. */
+  sourceIsImage?: boolean;
+  /** How many images a carousel carries, when this is one. */
+  carouselCount?: number;
 }) {
   const t = useT();
   const story = postTypeLabel.toLowerCase() === "story";
@@ -222,12 +231,24 @@ export function PostPreview({
         </span>
       </figcaption>
       <div className="post-preview-frame">
-        {thumbnail ? (
+        {/* The media, where there is any: a network shows the clip, not a
+            still of it, and a caption judged against a frozen frame is judged
+            against something nobody will see. The thumbnail is the fallback
+            for a clip picked from the Library before its file can be read. */}
+        {source && !sourceIsImage ? (
+          <video src={source} controls playsInline preload="metadata" poster={thumbnail || undefined} />
+        ) : source ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img alt="" src={source} />
+        ) : thumbnail ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img alt="" src={thumbnail} />
         ) : (
           <p>{t("composer.chooseClipForFrame")}</p>
         )}
+        {/* A carousel is swiped, and how many there are changes how the first
+            frame is read - so the count sits on it rather than being implied. */}
+        {carouselCount ? <em className="post-preview-count">1 / {carouselCount}</em> : null}
       </div>
       {story ? (
         <p className="post-preview-note">

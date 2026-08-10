@@ -379,7 +379,12 @@ nav strong { color: #1c2b33; }
 .post-preview figcaption small { color: var(--muted); font-size: 11px; }
 .post-preview-frame { display: grid; place-items: center; aspect-ratio: 4 / 5; border-radius: var(--radius); background: var(--panel-raised); overflow: hidden; }
 .post-preview.story .post-preview-frame { aspect-ratio: 9 / 16; }
+.post-preview-frame { position: relative; }
 .post-preview-frame img { width: 100%; height: 100%; object-fit: cover; }
+/* Contain rather than cover: this frame is for judging what fits, and cropping
+   the clip to fill it would hide the very edges being judged. */
+.post-preview-frame video { width: 100%; height: 100%; object-fit: contain; background: #111820; }
+.post-preview-count { position: absolute; inset-block-start: 6px; inset-inline-end: 6px; border-radius: 999px; padding: 1px 7px; background: rgba(20, 28, 38, .78); color: #fff; font-size: 10px; font-style: normal; font-variant-numeric: tabular-nums; }
 .post-preview-frame p { margin: 0; padding: 0 16px; color: var(--muted); text-align: center; line-height: 1.5; }
 .post-preview-copy { display: grid; gap: 3px; }
 .post-preview-copy strong { font-weight: 500; }
