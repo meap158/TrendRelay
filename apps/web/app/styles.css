@@ -777,3 +777,28 @@ nav strong { color: #1c2b33; }
    order the pictures are in - which is the only thing this list is for. */
 .carousel-thumb { flex: none; inline-size: 34px; block-size: 34px; border-radius: var(--radius-sm); object-fit: cover; background: var(--panel); }
 .carousel-cover { flex: none; border-radius: 999px; padding: 1px 6px; background: var(--green-dark); color: var(--green); font-size: 9px; font-style: normal; font-weight: 700; text-transform: uppercase; }
+
+
+/* What will be sent: bounded, and behind a click.
+   The player had no ceiling, so a portrait clip - which is most of them here -
+   grew to whatever its aspect ratio wanted and pushed everything under it off
+   the screen. A fixed stage keeps the panel the same height whatever is in it. */
+.publish-media-preview .blur-preview,
+.publish-media-preview .blur-preview-launch { display: block; inline-size: 100%; block-size: clamp(180px, 26vh, 300px); border-radius: var(--radius-sm); background: #111820; }
+.publish-media-preview .blur-preview { object-fit: contain; }
+.blur-preview-launch { position: relative; overflow: hidden; border: 0; padding: 0; cursor: pointer; }
+.blur-preview-launch img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.blur-preview-empty { display: block; inline-size: 100%; block-size: 100%; background: #111820; }
+.blur-preview-overlay { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 5px; background: linear-gradient(180deg, rgba(10, 17, 24, .12), rgba(10, 17, 24, .62)); color: #fff; }
+.blur-preview-overlay span[aria-hidden] { display: grid; place-items: center; inline-size: 38px; block-size: 38px; border-radius: 50%; padding-inline-start: 3px; color: #111820; background: #fff; font-size: 14px; }
+.blur-preview-overlay strong { font-size: 12px; }
+.blur-preview-overlay small { color: #e2e8ee; font-size: 10px; }
+
+/* On a narrow screen the aside is under the composer rather than beside it, so
+   the stage can be shorter still - the caption is what is being worked on. */
+@media (max-width: 760px) {
+  .publish-media-preview .blur-preview,
+  .publish-media-preview .blur-preview-launch { block-size: clamp(150px, 30vw, 220px); }
+  .post-preview-frame { aspect-ratio: 1 / 1; }
+  .carousel-list code { font-size: 10px; }
+}
