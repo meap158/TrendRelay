@@ -25,6 +25,20 @@ test("no duration is an empty string, not a null", () => {
   assert.equal(clipLength(0), "");
 });
 
+test("a still image is not given a running time", () => {
+  // The library reports a few milliseconds of nominal duration for a picture,
+  // so every image in the carousel picker was labelled "0:00" - which is not a
+  // length, and reads as a video that failed to load.
+  assert.equal(clipLength(40), "");
+  assert.equal(clipLength(499), "");
+});
+
+test("a real short clip still gets its length", () => {
+  // The rule is "rounds to nothing", not "is short": a second is a second.
+  assert.equal(clipLength(1_000), "0:01");
+  assert.equal(clipLength(600), "0:01");
+});
+
 // --- which cut goes out -------------------------------------------------------
 
 test("an asset with no blurred cut hands on its original", () => {

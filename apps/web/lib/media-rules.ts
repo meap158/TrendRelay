@@ -26,6 +26,10 @@ export type VersionedAsset = { original_path: string; versions: AssetVersion[] }
 export function clipLength(durationMs: number | null | undefined): string {
   if (!durationMs) return "";
   const total = Math.round(durationMs / 1000);
+  // "0:00" is not a length, and it is what a still image reports: the library
+  // gives a picture a few milliseconds of nominal duration, so every image in
+  // the carousel picker was labelled with a running time.
+  if (total < 1) return "";
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
