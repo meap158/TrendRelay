@@ -13,7 +13,7 @@ import { useJobs } from "../jobs-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { OpportunityScoring } from "./opportunity-scoring";
 import { TrendingTopics } from "./trending-topics";
-import { SHAPE_COPY, searchTerm, type Topic as RankedTopic } from "../../lib/trend-shapes";
+import { searchTerm, shapeMeaning, type Topic as RankedTopic } from "../../lib/trend-shapes";
 
 type Workspace = { id: string; name: string; role: string };
 type ReachChannel = {
@@ -1151,7 +1151,7 @@ export default function ResearchDashboard() {
     setScorePrefill({
       trend: searchTerm(topic),
       evidence: [
-        SHAPE_COPY[topic.shape].meaning,
+        shapeMeaning(topic),
         `Seen by ${topic.sources.join(", ") || "no source"} in ${topic.region}.`,
         topic.best_rank ? `Best rank ${topic.best_rank}.` : "",
       ]

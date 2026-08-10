@@ -25,7 +25,7 @@ export type Topic = {
 type ShapeCopy = {
   /** What to call it. */
   label: string;
-  /** What the data actually showed. */
+  /** What the shape means in general. For one topic use `shapeMeaning`. */
   meaning: string;
   /** What to do about it, which is the only reason to show the shape at all. */
   advice: string;
@@ -61,7 +61,7 @@ export const SHAPE_COPY: Record<Shape, ShapeCopy> = {
 
 /** How the score is explained, in the order a person would ask. */
 const REASON_COPY: Record<string, (topic: Topic) => string> = {
-  durability: (topic) => SHAPE_COPY[topic.shape].meaning,
+  durability: shapeMeaning,
   sources: (topic) =>
     topic.sources.length > 1
       ? `Seen by ${topic.sources.length} sources (${topic.sources.join(", ")}).`
@@ -73,6 +73,41 @@ const REASON_COPY: Record<string, (topic: Topic) => string> = {
   position: (topic) =>
     topic.best_rank ? `Ranked ${ordinal(topic.best_rank)} where it appeared.` : "Ranked highly.",
 };
+
+/**
+ * What the windows actually showed for this one topic.
+ *
+ * The general wording overclaims on a real row: `durable` needs the 7 and 120
+ * day windows and does not need the 30, so a fixed "held across 7, 30 and 120
+ * days" says a topic was somewhere it never appeared. On a list whose whole
+ * job is deciding what to film, that is the sentence somebody acts on.
+ */
+export function shapeMeaning(topic: Topic): string {
+  const windows = [...(topic.windows ?? [])].sort((left, right) => left - right);
+  if (!windows.length) return SHAPE_COPY[topic.shape].meaning;
+  const shortest = windows[0];
+  const longest = windows[windows.length - 1];
+  switch (topic.shape) {
+    case "durable":
+      return `Held its place across ${andList(windows)} days.`;
+    case "emerging":
+      return windows.length > 1
+        ? `Better placed over ${shortest} days than over ${longest}, and absent before that.`
+        : `Only in the last ${shortest} days.`;
+    case "fading":
+      return windows.includes(7)
+        ? `Bigger over ${longest} days than over ${shortest}.`
+        : `Gone from the last week; last seen over ${longest} days.`;
+    default:
+      return `Seen in the ${shortest}-day window only, so its direction is unknown.`;
+  }
+}
+
+/** `7`, `7 and 120`, `7, 30 and 120` - so a reason reads as a sentence. */
+function andList(values: number[]): string {
+  if (values.length === 1) return String(values[0]);
+  return `${values.slice(0, -1).join(", ")} and ${values[values.length - 1]}`;
+}
 
 /**
  * Why this topic sits where it does, strongest reason first.

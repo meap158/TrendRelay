@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { SHAPE_COPY, reasons, searchTerm, windowSummary, type Topic } from "./trend-shapes.ts";
+import {
+  SHAPE_COPY,
+  reasons,
+  searchTerm,
+  shapeMeaning,
+  windowSummary,
+  type Topic,
+} from "./trend-shapes.ts";
 
 function topic(overrides: Partial<Topic> = {}): Topic {
   return {
@@ -35,7 +42,7 @@ test("a reason worth nothing is not shown", () => {
 
 test("each reason says what happened rather than naming a field", () => {
   const [durability] = reasons(topic());
-  assert.equal(durability.text, SHAPE_COPY.durable.meaning);
+  assert.equal(durability.text, shapeMeaning(topic()));
   const sources = reasons(topic({ sources: ["tiktok", "douyin"] })).find((r) => r.key === "sources");
   assert.match(sources!.text, /2 sources \(tiktok, douyin\)/);
 });
@@ -101,4 +108,54 @@ test("a merged topic searches without its hash", () => {
 
 test("a label that is only a hash still searches for something", () => {
   assert.equal(searchTerm(topic({ label: "#" })), "#");
+});
+
+// --- what this topic actually did ---------------------------------------------
+
+test("an evergreen topic names the windows it was really in", () => {
+  // `durable` needs the 7 and 120 day windows and does not need the 30. A fixed
+  // "held across 7, 30 and 120 days" therefore puts a topic somewhere it never
+  // appeared - and on this list that is the sentence somebody films on.
+  assert.equal(
+    shapeMeaning(topic({ windows: [7, 120] })),
+    "Held its place across 7 and 120 days.",
+  );
+  assert.equal(
+    shapeMeaning(topic({ windows: [7, 30, 120] })),
+    "Held its place across 7, 30 and 120 days.",
+  );
+});
+
+test("an emerging topic in two windows is not described as only in one", () => {
+  assert.equal(
+    shapeMeaning(topic({ shape: "emerging", windows: [7, 30] })),
+    "Better placed over 7 days than over 30, and absent before that.",
+  );
+  assert.equal(
+    shapeMeaning(topic({ shape: "emerging", windows: [7] })),
+    "Only in the last 7 days.",
+  );
+});
+
+test("a fading topic says whether it is gone or merely smaller", () => {
+  // Still in this week but bigger before is a different decision from absent.
+  assert.equal(
+    shapeMeaning(topic({ shape: "fading", windows: [7, 120] })),
+    "Bigger over 120 days than over 7.",
+  );
+  assert.equal(
+    shapeMeaning(topic({ shape: "fading", windows: [30, 120] })),
+    "Gone from the last week; last seen over 120 days.",
+  );
+});
+
+test("an unread topic names the one window that saw it", () => {
+  assert.equal(
+    shapeMeaning(topic({ shape: "single", windows: [30] })),
+    "Seen in the 30-day window only, so its direction is unknown.",
+  );
+});
+
+test("no windows falls back to the general wording rather than a broken sentence", () => {
+  assert.equal(shapeMeaning(topic({ windows: [] })), SHAPE_COPY.durable.meaning);
 });
