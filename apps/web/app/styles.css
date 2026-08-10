@@ -783,9 +783,9 @@ nav strong { color: #1c2b33; }
    The player had no ceiling, so a portrait clip - which is most of them here -
    grew to whatever its aspect ratio wanted and pushed everything under it off
    the screen. A fixed stage keeps the panel the same height whatever is in it. */
-.publish-media-preview .blur-preview,
-.publish-media-preview .blur-preview-launch { display: block; inline-size: 100%; block-size: clamp(180px, 26vh, 300px); border-radius: var(--radius-sm); background: #111820; }
-.publish-media-preview .blur-preview { object-fit: contain; }
+.post-preview-frame .blur-preview,
+.post-preview-frame .blur-preview-launch { display: block; inline-size: 100%; block-size: clamp(180px, 26vh, 300px); border-radius: var(--radius-sm); background: #111820; }
+.post-preview-frame .blur-preview { object-fit: contain; }
 .blur-preview-launch { position: relative; overflow: hidden; border: 0; padding: 0; cursor: pointer; }
 .blur-preview-launch img { inline-size: 100%; block-size: 100%; object-fit: cover; }
 .blur-preview-empty { display: block; inline-size: 100%; block-size: 100%; background: #111820; }
@@ -797,8 +797,8 @@ nav strong { color: #1c2b33; }
 /* On a narrow screen the aside is under the composer rather than beside it, so
    the stage can be shorter still - the caption is what is being worked on. */
 @media (max-width: 760px) {
-  .publish-media-preview .blur-preview,
-  .publish-media-preview .blur-preview-launch { block-size: clamp(150px, 30vw, 220px); }
+  .post-preview-frame .blur-preview,
+  .post-preview-frame .blur-preview-launch { block-size: clamp(150px, 30vw, 220px); }
   .post-preview-frame { aspect-ratio: 1 / 1; }
   .carousel-list code { font-size: 10px; }
 }

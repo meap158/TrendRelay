@@ -40,7 +40,6 @@ import {
   MediaPicker,
   IMAGE_PICKER_BASE,
   PICKER_BASE,
-  UploadPreview,
   PostPreview,
   SlotEditor,
   UpcomingPosts,
@@ -2645,22 +2644,6 @@ export default function PublishPage() {
               });
             }}
           />
-          <article className="publish-media-preview">
-            <h2>{t("publish.whatWillBeSent")}</h2>
-            {videoPath || mediaUrl ? (
-              <>
-                <UploadPreview key={previewSource} source={previewSource} poster={thumbnail} />
-                <p className="privacy-note">
-                  {mediaUrl
-                    ? "Streaming the public URL the engine will fetch."
-                    : "Playing the local file this delivery will upload. If a blurred "
-                      + "version replaced the original, this is the blurred one."}
-                </p>
-              </>
-            ) : (
-              <p>{t("publish.chooseMediaFirst")}</p>
-            )}
-          </article>
           {previewPlatform && (
             <article>
               <h2>{t("publish.howItWillLook")}</h2>
@@ -2675,7 +2658,15 @@ export default function PublishPage() {
                 sourceIsImage={wantsCarousel}
                 carousel={carouselSources}
               />
+              {/* What the removed "What will be sent" card said that this one
+                  did not: which file is playing. The panels showed the same
+                  clip, but only one of them promised it was the cut that
+                  actually uploads. */}
               <p className="privacy-note">
+                {mediaUrl
+                  ? "Playing the public URL the engine will fetch. "
+                  : "Playing the local file this delivery will upload — the blurred cut "
+                    + "where one replaced the original. "}
                 A rehearsal of the caption and frame against this network&apos;s shape,
                 not a render of what {deliveringNames || activeProvider?.label} will produce.
               </p>

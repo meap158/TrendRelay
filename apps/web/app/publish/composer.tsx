@@ -255,19 +255,11 @@ export function PostPreview({
             against something nobody will see. The thumbnail is the fallback
             for a clip picked from the Library before its file can be read. */}
         {showing && !sourceIsImage ? (
-          // `nodownload` removes the download entry from Chrome's overflow menu,
-          // and `preload="none"` means nothing is fetched until somebody presses
-          // play. This is a preview of what is about to be published, not a copy
-          // of it - offering to save the file here answers a question nobody
-          // asked and contradicts the promise made under the other player.
-          <video
-            src={showing}
-            controls
-            controlsList="nodownload"
-            playsInline
-            preload="none"
-            poster={thumbnail || undefined}
-          />
+          // The same gated player the Library uses, rather than a second one.
+          // This panel used to sit beside a separate "What will be sent" card
+          // that played the identical file, so the page asked the same question
+          // twice and answered it two different ways.
+          <UploadPreview key={showing} source={showing} poster={thumbnail} />
         ) : showing ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img alt="" src={showing} />
