@@ -1,7 +1,7 @@
 # ADR 0017: Consolidate trending topics, and separate durable interest from a spike
 
-Status: Accepted for the consolidation core. The adapter wiring and the Discover
-surface are not built yet.
+Status: Accepted and built - consolidation core, provider readers,
+`GET /api/research/trends/consolidated`, and the Discover section.
 
 ## Context
 
@@ -59,3 +59,10 @@ keeps `single` from being folded into `emerging`.
 
 The core is pure and tested away from any adapter, so a fourth source is a new
 kind of `Sighting` rather than a change to how topics are merged or ranked.
+
+One request costs three Creative Center renders, because a shape cannot be read
+from a single window. Creative Center's own cache absorbs the repeat cost, and
+the endpoint deliberately does not let a caller ask for fewer windows: doing so
+would return a list where every topic is `single` and quietly remove the only
+reading the feature exists for. The time control therefore filters the ranked
+result rather than narrowing the fetch.
