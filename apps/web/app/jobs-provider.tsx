@@ -14,9 +14,26 @@ export type BaseJob = {
   created_at: string;
   title: string;
   error?: string | null;
+  /**
+   * Where this notification goes when opened, if anywhere.
+   *
+   * A job that produced something the app can show links to it; one that did
+   * not stays plain rather than becoming a link to somewhere unrelated. A blur
+   * only knows its asset once it has finished, so a running one has nothing to
+   * open yet - which is correct, there is nothing there to look at.
+   */
+  href?: string;
   // Specific payloads preserved for UI needs
   raw: any;
 };
+
+/** The Library entry a job produced or worked on, by id or by source path. */
+function assetHref(job: any): string | undefined {
+  const asset = job?.result?.asset_id ?? job?.payload?.asset_id ?? job?.asset_id;
+  if (asset) return `/library?asset=${encodeURIComponent(asset)}`;
+  const path = job?.result?.source_path ?? job?.payload?.source_path;
+  return path ? `/library?asset=${encodeURIComponent(path)}` : undefined;
+}
 
 type JobsContextValue = {
   jobs: BaseJob[];
@@ -54,6 +71,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
           created_at: j.created_at,
           title: `Research: ${j.topic}`,
           error: j.error,
+          href: "/discover",
           raw: j,
         })))
         .catch(() => []);
@@ -70,6 +88,9 @@ export function JobsProvider({ children }: { children: ReactNode }) {
             created_at: j.created_at,
             title: `Fetch: ${j.payload?.request?.urls?.[0] ?? j.id}`,
             error: j.error,
+            // The batch downloader is the root screen, and a finished fetch is
+            // read there next to the queue it came from.
+            href: "/",
             raw: j,
           })))
           .catch(() => []);
@@ -84,6 +105,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
             created_at: j.created_at ?? j.payload?.created_at,
             title: `Library: ${j.payload?.title ?? j.id}`,
             error: j.error,
+            href: assetHref(j) ?? "/library",
             raw: j,
           })))
           .catch(() => []);
@@ -101,6 +123,8 @@ export function JobsProvider({ children }: { children: ReactNode }) {
               ? `Faces blurred: ${Math.round((j.result.coverage ?? 0) * 100)}% of frames, ${j.result.faces_tracked ?? 0} face(s)`
               : "Blurring faces",
             error: j.error,
+            // The asset it produced, which it only knows once it has one.
+            href: assetHref(j),
             raw: j,
           })))
           .catch(() => []);
@@ -115,6 +139,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
             created_at: j.created_at,
             title: `Render: ${j.id}`,
             error: j.error,
+            href: assetHref(j) ?? "/library",
             raw: j,
           })))
           .catch(() => []);
@@ -130,6 +155,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
             created_at: j.created_at,
             title: `Publish: ${j.payload?.title ?? j.id}`,
             error: j.error,
+            href: "/publish",
             raw: j,
           })))
           .catch(() => []);

@@ -718,3 +718,8 @@ nav strong { color: #1c2b33; }
 .carousel-list button { flex: none; inline-size: 22px; block-size: 22px; padding: 0; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: var(--muted); cursor: pointer; }
 .carousel-list button:hover:not(:disabled) { color: var(--text); border-color: var(--text); }
 .carousel-list button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* A notification that goes somewhere reads as a link, and one that does not is
+   left as plain text rather than looking clickable and doing nothing. */
+.notification-title.linked { color: inherit; font-weight: 600; text-decoration: none; }
+.notification-title.linked:hover { color: var(--link); text-decoration: underline; }

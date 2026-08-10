@@ -670,12 +670,15 @@ export default function LibraryPage() {
   }
 
   useEffect(() => {
-    // Downloads links a rendered artifact here by path; select it once the
-    // list has loaded so the asset opens rather than the library's default.
+    // Downloads links a rendered artifact here by path, and a notification
+    // links one by id - a finished blur knows the asset it produced, not where
+    // it came from. Either is accepted, so both callers can use one parameter.
     queueMicrotask(() => {
       const wanted = new URLSearchParams(window.location.search).get("asset");
       if (!wanted) return;
-      const match = assets.find((asset) => asset.original_path === wanted);
+      const match = assets.find(
+        (asset) => asset.original_path === wanted || asset.id === wanted,
+      );
       if (!match) return;
       setSelectedId(match.id);
       window.history.replaceState({}, "", window.location.pathname);

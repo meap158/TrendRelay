@@ -235,7 +235,21 @@ export function GlobalNav() {
                           )}
                           <span className={`notification-status status-${job.status.replace(/[^a-z0-9_-]/gi, "-")}`}>{statusLabel(job.status)}</span>
                         </div>
-                        <strong className="notification-title">{job.title}</strong>
+                        {/* Opened rather than merely read. A notification says
+                            something finished, and the next thing anyone wants
+                            is to look at it - so the title is the way there
+                            when the job produced something to see, and stays
+                            plain text when it did not rather than becoming a
+                            link to somewhere unrelated. */}
+                        {job.href ? (
+                          <Link
+                            className="notification-title linked"
+                            href={job.href}
+                            onClick={() => { markRead(group); setDrawerOpen(false); }}
+                          >{job.title}</Link>
+                        ) : (
+                          <strong className="notification-title">{job.title}</strong>
+                        )}
                         {job.error && <p className="notification-error">{job.error}</p>}
                         <footer>
                           <time dateTime={job.created_at}>{new Date(job.created_at).toLocaleString()}</time>
