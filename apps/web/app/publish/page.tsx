@@ -1778,6 +1778,16 @@ export default function PublishPage() {
                     busy={busy === "hosting-credentials"}
                     onClick={() => void saveHosting()}
                   >{busy === "hosting-credentials" ? "Saving" : "Save to .env"}</Button>
+                  {/* Beside Save, because this is where the values are typed.
+                      It was only in the card's header, which is off-screen once
+                      the form is open - so the way to check a key was to scroll
+                      away from the key. */}
+                  <Button
+                    variant="secondary"
+                    busy={busy === "hosting-probe"}
+                    disabled={!canExecute}
+                    onClick={() => void testHosting()}
+                  >{t("publish.testStorage")}</Button>
                   <a className={buttonClass({ variant: "quiet" })} href="https://dash.cloudflare.com/?to=/:account/r2" target="_blank" rel="noopener noreferrer">
                     Open R2
                   </a>
