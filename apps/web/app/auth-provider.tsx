@@ -49,6 +49,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
  * report a signed-in operator as signed out.
  */
 const LOCAL_PROBE_MS = 5000;
+/** How often to ask the local API again while nothing has answered. */
+const RETRY_EVERY_MS = 3000;
 
 function identity(status: DesktopStatus): AuthUser | null {
   return status.paired ? { id: status.userId, email: status.email } : null;
@@ -148,16 +150,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     document.addEventListener("visibilitychange", retry);
     window.addEventListener("focus", retry);
     window.addEventListener("pageshow", retry);
-    // Still kept, for a tab that is visible the whole time and simply never
-    // gets an answer. A backstop now rather than the only way out.
+    // And keep asking, which is the part that was missing.
+    //
+    // Every escape here was a one-shot: three events that only fire when
+    // somebody comes back to the tab, and a single deadline that gives up. If
+    // the API was restarting - the exact case this panel names - nothing ever
+    // asked it a second time, so the page sat on "Loading workspace…" for as
+    // long as it was left there, however healthy the API became.
+    //
+    // Watching the tab is enough to keep this running: a hidden one throttles
+    // the interval, which is fine, because nobody is waiting on it.
+    const again = window.setInterval(retry, RETRY_EVERY_MS);
+    // Still kept, so a tab that never gets an answer at all reaches a screen it
+    // can act on rather than a spinner. The interval outlives it: giving up on
+    // this attempt is not the same as giving up on the API.
     const ceiling = window.setTimeout(() => setLoading(false), 8000);
     return () => {
       document.removeEventListener("visibilitychange", retry);
       window.removeEventListener("focus", retry);
       window.removeEventListener("pageshow", retry);
+      window.clearInterval(again);
       window.clearTimeout(ceiling);
     };
   }, [loading]);
+
+  // Once the shell has given up and shown a signed-out screen, a local API that
+  // comes back should still be noticed - otherwise the ceiling above turns a
+  // restart into a manual reload.
+  useEffect(() => {
+    if (loading || localUser || session || desktopUser) return;
+    const again = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      if (probeInFlight.current && Date.now() - probeStartedAt.current < LOCAL_PROBE_MS) {
+        return;
+      }
+      setProbeAttempt((count) => count + 1);
+    }, RETRY_EVERY_MS);
+    return () => window.clearInterval(again);
+  }, [loading, localUser, session, desktopUser]);
 
   useEffect(() => {
     if (!localCheckComplete) return;
