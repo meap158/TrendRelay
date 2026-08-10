@@ -218,10 +218,17 @@ nav strong { color: #1c2b33; }
    38px icon button only 6px of content box and shrank the glyph. */
 .ui-button svg.spinning { animation: spin 1s linear infinite; }
 
-.publish-page { padding-top: 24px; }
+/* The page title is read once and then scrolled past, so it is sized to be
+   recognised rather than to be impressive. Most of what it used to cost was
+   not the text: the eyebrow is a <p> carrying a browser's default 1em margins
+   above and below, which is invisible in the markup and was the single biggest
+   piece of the header. */
+.publish-page { padding-top: 14px; }
 .publish-page .publish-heading, .publish-page .section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
-.publish-heading h1 { margin: 6px 0 10px; font-size: 24px; font-weight: 500; line-height: 1.2; letter-spacing: normal; }
-.publish-heading .lede { max-width: 74ch; margin: 0; }
+.publish-page .publish-heading { margin-bottom: 14px; }
+.publish-heading .eyebrow { margin: 0; }
+.publish-heading h1 { margin: 2px 0 4px; font-size: 20px; font-weight: 500; line-height: 1.25; letter-spacing: normal; }
+.publish-heading .lede { max-width: 78ch; margin: 0; font-size: 13px; line-height: 1.45; }
 .publish-heading-side { display: grid; justify-items: end; gap: 6px; }
 .active-engine-chip { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 8px; border: 1px solid #cbd2d9; border-inline-start: 3px solid var(--engine-accent, #006b4e); border-radius: var(--radius-lg); background: #fff; }
 .active-engine-chip > div { display: grid; gap: 1px; }
