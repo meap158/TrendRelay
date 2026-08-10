@@ -195,3 +195,24 @@ def collect(
         "notes": notes + failures,
         "complete": not failures,
     }
+
+
+def live_readers() -> tuple[TikTokReader, DouyinReader]:
+    """The real providers, bound to the shapes `collect` expects.
+
+    Imported here rather than at module scope so that consolidating topics stays
+    testable without dragging in a headless browser bridge, and so a provider
+    that fails to import is one failed source instead of a dead endpoint.
+    """
+    from .douyin_trending import fetch as fetch_douyin
+    from .tiktok_creative import TikTokTrendRequest, fetch_tiktok_trends
+
+    def tiktok(*, region: str, period: int, limit: int) -> dict[str, Any]:
+        return fetch_tiktok_trends(
+            TikTokTrendRequest(category="hashtag", region=region, period=period, limit=limit)
+        )
+
+    def douyin(*, limit: int) -> dict[str, Any]:
+        return fetch_douyin(limit=limit)
+
+    return tiktok, douyin

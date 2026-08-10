@@ -38,6 +38,8 @@ from typing import Any, Literal
 WINDOWS: tuple[int, ...] = (7, 30, 120)
 
 Shape = Literal["durable", "emerging", "fading", "single"]
+#: The same four, iterable, for validating what a caller asked for.
+SHAPES: tuple[Shape, ...] = ("durable", "emerging", "fading", "single")
 
 #: Everything that is not a letter, a digit or an inner space. Hashes, quotes and
 #: punctuation are how the same topic arrives looking like three.

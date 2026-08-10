@@ -2,6 +2,7 @@ import asyncio
 import os
 import subprocess
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -51,6 +52,10 @@ from trendrelay_api.integrations.tiktok_creative import (
 from trendrelay_api.integrations.tiktok_creative import (
     provider_status as tiktok_provider_status,
 )
+from trendrelay_api.integrations.trend_consolidation import SHAPES, WINDOWS
+from trendrelay_api.integrations.trend_consolidation import rank as rank_topics
+from trendrelay_api.integrations.trend_sources import collect as collect_sightings
+from trendrelay_api.integrations.trend_sources import live_readers
 from trendrelay_api.media_api import router as media_router
 from trendrelay_api.media_library_api import router as media_library_router
 from trendrelay_api.opportunities_api import router as opportunities_router
@@ -311,6 +316,68 @@ async def tiktok_discovery(
         # The page rendered nothing usable; that is a provider state, not a bug.
         raise HTTPException(status_code=503, detail=str(error)) from error
     return {"result": result}
+
+
+def _consolidated_trends(
+    region: str, windows: tuple[int, ...], shapes: tuple[str, ...] | None, limit: int
+) -> dict[str, object]:
+    """One ranked list of topics, and everything the fetch could not do.
+
+    Kept as a plain function so the blocking provider calls happen in a thread
+    and the route stays readable.
+    """
+    tiktok_reader, douyin_reader = live_readers()
+    collected = collect_sightings(
+        region=region,
+        windows=windows,
+        limit=limit,
+        tiktok_reader=tiktok_reader,
+        douyin_reader=douyin_reader,
+    )
+    topics = rank_topics(collected["sightings"], shapes=shapes)
+    return {
+        "region": collected["region"],
+        "windows": collected["windows"],
+        "sources": collected["sources"],
+        # A caller can tell "nothing is trending" from "we could not look".
+        "complete": collected["complete"],
+        "notes": collected["notes"],
+        "topics": topics,
+        "topic_count": len(topics),
+        "public_data_only": True,
+    }
+
+
+@app.get("/api/research/trends/consolidated", tags=["research"])
+async def consolidated_trends(
+    request: Request,
+    region: str = Query(default="US", min_length=2, max_length=2),
+    shape: Annotated[list[str] | None, Query()] = None,
+    limit: int = Query(default=20, ge=1, le=50),
+) -> dict[str, object]:
+    """Trending topics merged across sources and ranked for what to make next.
+
+    Every window is always fetched, because the shape of a topic is read from
+    which windows it appears in: asking for only the last 7 days would make
+    every topic `single` and take the evergreen reading away entirely. `shape`
+    narrows what comes back afterwards, which is the time control - `durable`
+    for evergreen ideas, `emerging` for something quick.
+    """
+    require_local_mutation(request)
+    wanted = tuple(shape or ())
+    unknown = [value for value in wanted if value not in SHAPES]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown trend shape {unknown[0]!r}. Expected one of {', '.join(SHAPES)}.",
+        )
+    result = await asyncio.to_thread(
+        _consolidated_trends, region, WINDOWS, wanted or None, limit
+    )
+    if not result["topics"] and not result["complete"]:
+        # No sources answered at all: a provider state rather than an empty week.
+        raise HTTPException(status_code=503, detail=" ".join(result["notes"]))
+    return result
 
 
 @app.post("/api/research/meta-ads/briefing", tags=["research"])
