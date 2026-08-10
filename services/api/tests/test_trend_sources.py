@@ -173,3 +173,50 @@ def test_a_single_window_says_so_before_anyone_reads_the_shapes() -> None:
 
 def _unused(**_: Any) -> dict[str, Any]:
     raise AssertionError("this source should not have been consulted")
+
+
+def test_a_providers_own_caveat_is_carried_through() -> None:
+    """Dropping it is how a truncated list arrives looking complete.
+
+    Signed out, Creative Center serves three rows of a much longer board. Three
+    rows per window turns "durable" into "happened to be top three twice", and
+    nothing on the page would say so.
+    """
+    def tiktok(**kwargs: Any) -> dict[str, Any]:
+        return {
+            **tiktok_page(period=kwargs["period"], names=["#x"]),
+            "notes": ["TikTok shows only a preview to signed-out visitors."],
+        }
+
+    result = collect(region="US", tiktok_reader=tiktok, douyin_reader=_unused)
+
+    # Said once, not once per window: three lines saying one thing is how a
+    # real warning stops being read.
+    [note] = [note for note in result["notes"] if "signed-out" in note]
+    assert "every window" in note
+    # And it is a caveat, not a failure: the rows we did get are still usable.
+    assert result["complete"] is True
+
+
+def test_a_caveat_affecting_some_windows_names_them() -> None:
+    """"Every window" and "the 7-day window" are different problems."""
+    def tiktok(**kwargs: Any) -> dict[str, Any]:
+        page = tiktok_page(period=kwargs["period"], names=["#x"])
+        return {**page, "notes": ["Truncated."]} if kwargs["period"] != 30 else page
+
+    result = collect(region="US", tiktok_reader=tiktok, douyin_reader=_unused)
+
+    [note] = [note for note in result["notes"] if "Truncated." in note]
+    assert "the 7 and 120-day windows" in note
+
+
+def test_the_same_caveat_from_one_window_is_not_repeated() -> None:
+    def tiktok(**kwargs: Any) -> dict[str, Any]:
+        return {
+            **tiktok_page(period=kwargs["period"], names=["#x"]),
+            "notes": ["Truncated.", "Truncated."],
+        }
+
+    result = collect(region="US", windows=(7,), tiktok_reader=tiktok, douyin_reader=_unused)
+
+    assert sum("Truncated." in note for note in result["notes"]) == 1

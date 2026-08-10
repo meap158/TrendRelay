@@ -149,6 +149,10 @@ def collect(
     consulted: list[str] = []
     notes: list[str] = []
     failures: list[str] = []
+    #: One caveat to the windows it applied to. The same warning repeated once
+    #: per window is three lines saying one thing, and noise is how a real
+    #: warning stops being read.
+    caveats: dict[str, list[int]] = {}
 
     for window in windows:
         try:
@@ -160,6 +164,12 @@ def collect(
         sightings.extend(found)
         if found and "tiktok" not in consulted:
             consulted.append("tiktok")
+        # A provider's own caveat is about the rows it just handed over, and
+        # dropping it here is how a truncated list arrives looking complete.
+        # Signed out, Creative Center serves three rows of a much longer board,
+        # which turns "durable" into "happened to be top three twice".
+        for caveat in result.get("notes") or []:
+            caveats.setdefault(str(caveat), []).append(window)
 
     if region.upper() == DOUYIN_REGION:
         try:
@@ -177,6 +187,14 @@ def collect(
         notes.append(
             f"The Douyin board covers China only, so it was not consulted for {region.upper()}."
         )
+
+    for caveat, affected in caveats.items():
+        span = (
+            "every window"
+            if len(affected) == len(windows) > 1
+            else f"the {_and_list(affected)}-day window{'s' if len(affected) > 1 else ''}"
+        )
+        notes.append(f"{caveat} (Reported for {span}.)")
 
     windows_answered = sorted({sighting.window_days for sighting in sightings})
     if len(windows_answered) < 2:
@@ -216,3 +234,10 @@ def live_readers() -> tuple[TikTokReader, DouyinReader]:
         return fetch_douyin(limit=limit)
 
     return tiktok, douyin
+
+
+def _and_list(values: list[int]) -> str:
+    """`7`, `7 and 30`, `7, 30 and 120` - so a note reads as a sentence."""
+    if len(values) == 1:
+        return str(values[0])
+    return f"{', '.join(str(value) for value in values[:-1])} and {values[-1]}"
