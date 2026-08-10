@@ -770,6 +770,18 @@ def _approved_media_path(path: str, *, suffixes: frozenset[str], described: str)
     return resolved
 
 
+def approved_media_path(path: str) -> Path:
+    """Any file this workspace could publish - a clip or a carousel image.
+
+    One boundary for both, so previewing cannot reach further than publishing.
+    """
+    return _approved_media_path(
+        path,
+        suffixes=IMAGE_SUFFIXES | {".mp4"},
+        described="MP4 or image (" + ", ".join(sorted(IMAGE_SUFFIXES)) + ")",
+    )
+
+
 def approved_video_path(video_path: str) -> Path:
     return _approved_media_path(video_path, suffixes=frozenset({".mp4"}), described="MP4 file")
 

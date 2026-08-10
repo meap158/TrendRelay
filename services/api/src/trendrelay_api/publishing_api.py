@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -15,6 +16,7 @@ from trendrelay_api.foundation import membership, require_role
 from trendrelay_api.integrations import media_hosting, posting_slots
 from trendrelay_api.integrations.publishing import (
     PublishRequest,
+    approved_media_path,
     board_options,
     connection_status,
     create_publish_job,
@@ -247,6 +249,32 @@ def publishing_integrations(
         raise HTTPException(status_code=422, detail=str(error)) from error
     except RuntimeError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.get("/media/preview")
+def preview_publishing_media(
+    workspace_id: str,
+    path: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> FileResponse:
+    """Stream a file this workspace could publish, so it can be seen first.
+
+    Bounded by the same approved media roots publishing itself resolves against,
+    which is the honest boundary: anything publishable is previewable, and
+    nothing else is readable. The existing player borrowed the face-blur route
+    for this, and that one is confined to blurred renders - so an ordinary clip
+    answered 403 and the preview showed a black frame.
+    """
+    membership(session, workspace_id, user.id)
+    try:
+        resolved = approved_media_path(path)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    kind = "video/mp4" if resolved.suffix.lower() == ".mp4" else f"image/{resolved.suffix.lstrip('.')}"
+    return FileResponse(resolved, media_type=kind)
 
 
 @router.post("/credentials/{key}/reveal")
