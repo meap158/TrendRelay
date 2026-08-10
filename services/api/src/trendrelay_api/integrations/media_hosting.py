@@ -146,6 +146,25 @@ PROBE_KEY = "trendrelay/access-check.txt"
 #: The empty payload's SHA-256, which SigV4 requires for a body-less request.
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 
+#: Sent on the unauthenticated public fetch, because Cloudflare answers 403 to
+#: urllib's default ``Python-urllib/3.x`` regardless of whether the bucket is
+#: public. Without this the probe blames the bucket for a bot filter and sends
+#: an operator to turn on a setting that was already on - which it did, and
+#: which cost real time before the identical URL was tried with curl and
+#: answered 200. Any string that is not the urllib default is accepted; naming
+#: ourselves is simply the honest one.
+PUBLIC_FETCH_USER_AGENT = "TrendRelay/1.0 (+media-hosting-check)"
+
+
+def public_fetch(url: str) -> urllib.request.Request:
+    """A GET that Cloudflare will answer, carrying no credentials.
+
+    Credential-free is the point: it is the same request an engine makes when
+    it collects the media, so anything this cannot fetch, an engine cannot
+    either.
+    """
+    return urllib.request.Request(url, headers={"User-Agent": PUBLIC_FETCH_USER_AGENT})
+
 
 class MediaHostingUnavailable(RuntimeError):
     """Raised when object storage is not configured or refuses an upload."""
@@ -467,13 +486,14 @@ def probe(draft: dict[str, str] | None = None) -> dict[str, Any]:
     # with no credentials at all.
     url = public_url(values["R2_PUBLIC_BASE_URL"], PROBE_KEY)
     try:
-        with urllib.request.urlopen(url, timeout=PROBE_TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(public_fetch(url), timeout=PROBE_TIMEOUT_SECONDS) as response:
             served = response.read(len(body) + 64)
     except urllib.error.HTTPError as error:
         checks.append(_check("public", "Public URL serves it", False, (
             f"{url} answered HTTP {error.code}. Turn on the bucket's public "
             "development URL or attach a custom domain, then check the public "
-            "base URL matches it."
+            "base URL matches it. If it is already on, check that no WAF or "
+            "bot rule is filtering the request."
         )))
         return {"ok": False, "checks": checks}
     except (OSError, urllib.error.URLError) as error:

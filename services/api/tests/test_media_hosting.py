@@ -440,3 +440,20 @@ def test_a_draft_repeating_the_account_id_is_reported_not_raised(monkeypatch) ->
     result = media_hosting.probe({"access_key_id": CONFIGURED["R2_ACCOUNT_ID"]})
     assert result["ok"] is False
     assert "same as the account ID" in result["checks"][0]["detail"]
+
+
+def test_the_public_check_names_itself_rather_than_urllib() -> None:
+    """Cloudflare answers 403 to `Python-urllib/3.x` however public the bucket is.
+
+    This cost real time: the probe reported "turn on the public development
+    URL" for a bucket whose toggle was already on, and the identical URL
+    answered 200 to curl a minute later. The header is the whole fix.
+    """
+    request = media_hosting.public_fetch("https://pub-example.r2.dev/key.txt")
+
+    agent = request.get_header("User-agent") or ""
+    assert agent
+    assert "urllib" not in agent.lower()
+    # And no credentials, because that is what makes the check meaningful: it
+    # is the same request an engine makes when it collects the media.
+    assert "Authorization" not in dict(request.headers)
