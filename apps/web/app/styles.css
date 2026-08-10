@@ -311,7 +311,10 @@ nav strong { color: #1c2b33; }
 .engine-credentials > .engine-credential-actions { padding-block-start: 12px; border-block-start: 1px solid var(--line); }
 .engine-credentials > .privacy-note { margin-block-start: 8px; }
 .engine-credentials label { display: grid; gap: 5px; }
-.engine-credentials label > span { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 500; }
+/* 600 is this interface's emphasis weight. At 500 the field name carried no more
+   weight than the help text under it, so a panel of five read as one list rather
+   than five headed groups. */
+.engine-credentials label > span { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 600; }
 /* What is saved, above the box that would replace it. Its own line rather than
    inside the input, so a row of dots can never be submitted over a working key. */
 .credential-saved { display: flex; align-items: center; gap: 6px; min-width: 0; }
