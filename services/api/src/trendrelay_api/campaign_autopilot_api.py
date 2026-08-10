@@ -35,6 +35,7 @@ from trendrelay_api.foundation import (
     membership,
     require_role,
 )
+from trendrelay_api.integrations.publishing import resolve_post_type
 from trendrelay_api.models import Campaign, utc_now
 from trendrelay_api.opportunity_models import ProductOffer
 
@@ -300,6 +301,24 @@ def add_destination(
     )
     if existing:
         raise HTTPException(status_code=409, detail="That account is already a destination.")
+    # Checked when it is set rather than at every scheduled run. An unusable
+    # post type here is not one failed post: this destination is fed by a
+    # standing programme, so it would fail unattended, on every slot, forever.
+    try:
+        kind = resolve_post_type(body.platform, body.post_type)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    if kind.id == "photo":
+        # The queue holds clips. A carousel is a different post made of images,
+        # and nothing here could supply them - so it is refused where somebody
+        # is watching instead of noted in `last_note` once a slot.
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "A campaign posts from its queue of clips, so a destination "
+                "cannot be set to a photo carousel. Post one from Publish."
+            ),
+        )
     item = CampaignDestination(
         workspace_id=workspace_id, campaign_id=campaign_id, provider=body.provider,
         integration_id=body.integration_id, platform=body.platform, label=body.label,

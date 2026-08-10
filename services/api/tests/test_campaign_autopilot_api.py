@@ -372,3 +372,47 @@ def test_an_autopilot_link_carries_sub_ids_too(workspace) -> None:
         # slots after it do not shift up to close the gap, because a network
         # reads them positionally.
         assert "sub_id2" not in link.sub_ids
+
+
+def test_a_destination_post_type_is_checked_when_it_is_set(workspace) -> None:
+    """Not at every scheduled run, which is where it would otherwise surface.
+
+    A campaign destination is fed by a standing programme, so an unusable post
+    type is not one failed post - it fails unattended, on every slot, until
+    somebody reads a note explaining why nothing has gone out.
+    """
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}/destinations"
+    response = request("POST", base, json={
+        "provider": "buffer", "integration_id": "acct-1", "platform": "tiktok",
+        "label": "brand", "post_type": "story",
+    })
+    assert response.status_code == 422
+    assert "does not accept 'story'" in response.json()["detail"]
+
+
+def test_a_campaign_destination_cannot_be_a_photo_carousel(workspace) -> None:
+    """Its queue holds clips, and nothing here could supply images.
+
+    Refused where somebody is watching rather than noted once a slot in
+    `last_note`, which is where the failure would land otherwise.
+    """
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}/destinations"
+    response = request("POST", base, json={
+        "provider": "zernio", "integration_id": "acct-9", "platform": "tiktok",
+        "label": "brand", "post_type": "photo",
+    })
+    assert response.status_code == 422
+    assert "queue of clips" in response.json()["detail"]
+
+
+def test_a_usable_post_type_is_still_accepted(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}/destinations"
+    response = request("POST", base, json={
+        "provider": "buffer", "integration_id": "acct-2", "platform": "instagram",
+        "label": "brand", "post_type": "story",
+    })
+    assert response.status_code == 201, response.text
+    assert response.json()["destination"]["post_type"] == "story"
