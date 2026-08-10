@@ -75,8 +75,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .notification-trigger:hover, .notification-trigger[aria-expanded="true"] { border-color: var(--line); color: var(--text); background: var(--panel-raised); }
 .notification-trigger:focus-visible, .notification-panel button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .notification-trigger svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.notification-count { position: absolute; top: -3px; right: -5px; display: grid; min-width: 17px; height: 17px; place-items: center; border: 2px solid var(--panel); border-radius: 999px; padding: 0 3px; color: #fff; background: var(--red); font-size: 9px; font-weight: 800; line-height: 1; }
-.notification-panel { position: fixed; z-index: 140; top: 58px; right: 12px; display: flex; flex-direction: column; width: min(390px, calc(100vw - 24px)); max-height: min(620px, calc(100vh - 72px)); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); box-shadow: 0 14px 40px rgba(28, 43, 51, .18); }
+.notification-count { position: absolute; top: -3px; inset-inline-end: -5px; display: grid; min-width: 17px; height: 17px; place-items: center; border: 2px solid var(--panel); border-radius: 999px; padding: 0 3px; color: #fff; background: var(--red); font-size: 9px; font-weight: 800; line-height: 1; }
+.notification-panel { position: fixed; z-index: 140; top: 58px; inset-inline-end: 12px; display: flex; flex-direction: column; width: min(390px, calc(100vw - 24px)); max-height: min(620px, calc(100vh - 72px)); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); box-shadow: 0 14px 40px rgba(28, 43, 51, .18); }
 .notification-heading { display: flex; flex: 0 0 auto; justify-content: space-between; gap: 16px; align-items: center; border-bottom: 1px solid var(--line-strong); padding: 14px 16px; }
 .notification-heading h2 { margin: 0; font-size: 15px; font-weight: 600; }
 .notification-heading p { margin: 3px 0 0; color: var(--muted); font-size: 10px; }
@@ -89,7 +89,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .notification-item { position: relative; display: grid; width: 100%; min-width: 0; box-sizing: border-box; gap: 7px; border-bottom: 1px solid var(--line-strong); padding: 12px 16px 11px 19px; }
 .notification-item:last-child { border-bottom: 0; }
 .notification-item.unread { background: #f4f8fc; }
-.notification-item.unread::before { position: absolute; top: 17px; left: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--link); content: ""; }
+.notification-item.unread::before { position: absolute; top: 17px; inset-inline-start: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--link); content: ""; }
 .notification-item.read { background: var(--panel); }
 .notification-item-topline, .notification-item footer { display: flex; justify-content: space-between; gap: 12px; align-items: center; min-width: 0; }
 .notification-category { color: var(--muted); font-size: 9px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; }
@@ -232,7 +232,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .research-sources-menu > summary { display: flex; gap: 8px; align-items: center; min-height: 34px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 11px; color: var(--ink); background: var(--surface); font-size: 11px; font-weight: 650; cursor: pointer; list-style: none; white-space: nowrap; }
 .research-sources-menu > summary::-webkit-details-marker { display: none; }
 .source-pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px #dff1ea; }
-.research-sources-popover { position: absolute; z-index: 20; top: calc(100% + 8px); right: 0; display: grid; gap: 2px; width: min(410px, calc(100vw - 32px)); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 10px; background: var(--surface); box-shadow: 0 14px 40px rgba(28, 43, 51, .14); }
+.research-sources-popover { position: absolute; z-index: 20; top: calc(100% + 8px); inset-inline-end: 0; display: grid; gap: 2px; width: min(410px, calc(100vw - 32px)); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 10px; background: var(--surface); box-shadow: 0 14px 40px rgba(28, 43, 51, .14); }
 .sources-popover-heading { display: flex; justify-content: space-between; gap: 16px; align-items: start; padding: 6px 6px 10px; }
 .sources-popover-heading div { display: grid; gap: 3px; }
 .sources-popover-heading small, .source-health-row small { color: var(--muted); font-size: 10px; font-weight: 400; }
@@ -319,7 +319,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .research-header-controls, .inspiration-heading { align-items: stretch; flex-direction: column; }
   .research-header-controls { display: grid; }
   .research-sources-menu > summary { justify-content: center; }
-  .research-sources-popover { right: auto; left: 0; }
+  .research-sources-popover { inset-inline-end: auto; inset-inline-start: 0; }
   .research-query-form, .account-validation-form { grid-template-columns: 1fr; }
   .research-query-form .query-short-field { grid-row: auto; }
   .inspiration-heading { display: grid; }
@@ -469,7 +469,7 @@ html { scroll-behavior: smooth; }
 .download-guide h2 { margin-bottom: 20px; }
 .download-guide ol { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
 .download-guide li { position: relative; display: grid; grid-template-columns: 28px 1fr; gap: 10px; padding: 0 0 20px; }
-.download-guide li:not(:last-child)::after { content: ""; position: absolute; left: 13px; top: 28px; bottom: 0; width: 1px; background: var(--line); }
+.download-guide li:not(:last-child)::after { content: ""; position: absolute; inset-inline-start: 13px; top: 28px; bottom: 0; width: 1px; background: var(--line); }
 .download-guide li > span { z-index: 1; display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--link); background: var(--panel); font-weight: 700; }
 .download-guide li div { display: grid; gap: 3px; padding-top: 2px; }
 .download-guide li strong { font-weight: 600; }

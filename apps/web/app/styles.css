@@ -341,7 +341,7 @@ nav strong { color: #1c2b33; }
 .picker-result:hover { border-color: var(--green); background: var(--green-dark); }
 .picker-thumb { position: relative; display: grid; place-items: center; width: 76px; height: 44px; border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--muted); overflow: hidden; }
 .picker-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.picker-thumb i { position: absolute; right: 3px; bottom: 3px; border-radius: var(--radius-sm); padding: 0 4px; background: rgba(28, 43, 51, .78); color: #fff; font-size: 10px; font-style: normal; font-variant-numeric: tabular-nums; }
+.picker-thumb i { position: absolute; inset-inline-end: 3px; bottom: 3px; border-radius: var(--radius-sm); padding: 0 4px; background: rgba(28, 43, 51, .78); color: #fff; font-size: 10px; font-style: normal; font-variant-numeric: tabular-nums; }
 .picker-meta { display: grid; gap: 2px; min-width: 0; }
 .picker-meta strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .picker-meta small { color: var(--muted); font-size: 11px; }
@@ -581,7 +581,7 @@ nav strong { color: #1c2b33; }
 .access-guide > summary > b { flex: 0 0 auto; border-radius: 999px; padding: 5px 8px; color: #006b4e; background: #e6f6ee; font-size: .68rem; text-transform: uppercase; }
 .access-guide-body { display: grid; gap: 14px; border-top: 1px solid #e4e7ea; padding: 16px; }
 .access-guide-callout { border-inline-start: 3px solid #006b4e; padding: 10px 12px; background: #f1f8f5; }
-.access-guide-callout.warning { border-left-color: #b78103; background: #fff8e1; }
+.access-guide-callout.warning { border-inline-start-color: #b78103; background: #fff8e1; }
 .access-guide-callout p { margin: 4px 0 0; color: #44515d; line-height: 1.45; }
 .access-guide-steps { display: grid; gap: 1px; border: 1px solid #e4e7ea; background: #e4e7ea; }
 .access-guide-steps p { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 9px; margin: 0; padding: 10px; color: #44515d; background: #fff; line-height: 1.45; }
