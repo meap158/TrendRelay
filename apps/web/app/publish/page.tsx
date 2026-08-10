@@ -1125,7 +1125,10 @@ export default function PublishPage() {
       const body = await json<{ probe: HostingProbe }>(
         await apiFetch(`/api/workspaces/${workspaceId}/publishing/media-hosting/probe`, {
           method: "POST",
-          body: JSON.stringify({ confirm_external_action: true }),
+          // Whatever is typed but not saved, so a replacement can be tried
+          // before it overwrites the value it is replacing. Empty fields fall
+          // back to what is stored, which is the usual case.
+          body: JSON.stringify({ values: hostingDraft, confirm_external_action: true }),
         }),
       );
       setHostingProbe(body.probe);
@@ -1723,7 +1726,7 @@ export default function PublishPage() {
                     it more: an engine at least answers its own probe, while
                     these five settings were saved unchecked and only failed
                     later, mid-publish. */}
-                {hosting.configured && (
+                {(hosting.configured || Object.values(hostingDraft).some((value) => value.trim())) && (
                   <Button
                     variant="quiet"
                     size="sm"

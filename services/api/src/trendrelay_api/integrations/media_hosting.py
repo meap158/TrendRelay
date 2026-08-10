@@ -52,7 +52,8 @@ CREDENTIAL_FIELDS: tuple[dict[str, Any], ...] = (
         "required": True,
         "help": (
             "R2 → API → Manage API tokens → Create token, with Object Read & Write "
-            "on this bucket."
+            "on this bucket. Then take the Access Key ID from under \"Use the "
+            "following credentials for S3 clients\"."
         ),
     },
     {
@@ -61,7 +62,13 @@ CREDENTIAL_FIELDS: tuple[dict[str, Any], ...] = (
         "label": "Secret access key",
         "secret": True,
         "required": True,
-        "help": "Shown once when the R2 API token is created.",
+        # The page shows a Token value above these two, and it is also shown
+        # once - so "shown once" on its own points at the wrong credential.
+        "help": (
+            "The Secret Access Key under \"Use the following credentials for S3 "
+            "clients\", shown once. Not the Token value above it: that is for "
+            "Cloudflare's own API and is never used here."
+        ),
     },
     {
         "id": "bucket",
@@ -189,8 +196,24 @@ def authorization_header(
     )
 
 
-def _settings() -> dict[str, str]:
+def _settings(draft: dict[str, str] | None = None) -> dict[str, str]:
+    """The settings to use, with anything typed but not yet saved on top.
+
+    A draft is normalised exactly as saving would normalise it, so testing
+    answers the question saving would ask rather than a slightly different one -
+    a pasted S3 endpoint becomes an account ID here too.
+
+    Partial drafts are the point: replacing one wrong value means typing one
+    field, and the other four should come from what is already stored rather
+    than having to be retyped to be tested.
+    """
     values = {key: effective_value(key).strip() for key in CREDENTIAL_KEYS}
+    fields = {field["id"]: field for field in CREDENTIAL_FIELDS}
+    for field_id, raw in (draft or {}).items():
+        field = fields.get(field_id)
+        if not field or not (raw or "").strip():
+            continue
+        values[str(field["key"])] = normalise(field_id, raw)
     missing = [key for key, value in values.items() if not value]
     if missing:
         raise MediaHostingUnavailable(
@@ -331,8 +354,12 @@ def _check(id: str, label: str, ok: bool, detail: str) -> dict[str, Any]:
     return {"id": id, "label": label, "ok": ok, "detail": detail}
 
 
-def probe() -> dict[str, Any]:
+def probe(draft: dict[str, str] | None = None) -> dict[str, Any]:
     """Try the whole path a published clip takes, and say which part broke.
+
+    A draft tests values that are only on screen. That matters most when what
+    is stored is wrong: without it, the only way to find out whether a
+    replacement works is to save over the thing you are replacing.
 
     Five settings have to agree before a fetch-only engine can collect a video,
     and until now nothing tried them. A wrong account ID, bucket or public URL
@@ -351,11 +378,24 @@ def probe() -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
 
     try:
-        values = _settings()
+        values = _settings(draft)
     except MediaHostingUnavailable as error:
-        checks.append(_check("settings", "Settings saved", False, str(error)))
+        checks.append(_check("settings", "Settings present", False, str(error)))
         return {"ok": False, "checks": checks}
-    checks.append(_check("settings", "Settings saved", True, "All five settings are present."))
+    try:
+        # The same two paste errors saving refuses, reported here as a failed
+        # stage rather than raised - the point of testing first is to be told
+        # what is wrong, not to be stopped at the door.
+        _reject_obvious_mix_ups(values)
+    except ValueError as error:
+        checks.append(_check("settings", "Settings present", False, str(error)))
+        return {"ok": False, "checks": checks}
+    checks.append(_check(
+        "settings", "Settings present",
+        True,
+        "All five settings are present"
+        + (", including the ones you have typed but not saved." if draft else "."),
+    ))
 
     # The account ID and credentials, against the bucket itself. HEAD writes
     # nothing and its failures are the ones that separate the fields: a host
@@ -368,10 +408,19 @@ def probe() -> dict[str, Any]:
         ):
             pass
     except urllib.error.HTTPError as error:
+        # A secret that is not 64 hex characters is usually the Token value from
+        # the same page, which looks like a credential and is not this one.
+        secret = values["R2_SECRET_ACCESS_KEY"]
+        wrong_shape = (
+            " The Secret Access Key is 64 hexadecimal characters; this one is not,"
+            " so it may be the Token value shown above it on that page."
+            if not re.fullmatch(r"[0-9a-fA-F]{64}", secret) else ""
+        )
         detail = {
             403: "The access key was refused. Check the access key ID and secret, "
-                 "and that the token has Object Read & Write on this bucket.",
-            401: "The access key was refused. Check the access key ID and secret.",
+                 "and that the token has Object Read & Write on this bucket." + wrong_shape,
+            401: "The access key was refused. Check the access key ID and secret."
+                 + wrong_shape,
             404: f"No bucket named {values['R2_BUCKET']} on this account. Check the "
                  "bucket, and that the account ID belongs to the same account.",
         }.get(error.code, f"Cloudflare answered HTTP {error.code}.")

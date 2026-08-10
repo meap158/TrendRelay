@@ -382,3 +382,61 @@ def test_saving_stores_the_normalised_values(monkeypatch) -> None:
 def test_a_required_field_that_normalises_to_nothing_is_still_refused() -> None:
     with pytest.raises(ValueError, match="cannot be empty"):
         media_hosting.save_credentials({"bucket": "   "})
+
+
+def test_a_draft_is_tested_without_being_saved(monkeypatch) -> None:
+    """The case that matters is when what is stored is already wrong.
+
+    Without this the only way to find out whether a replacement works is to
+    save over the thing being replaced, which is the value you would want back
+    if the new one turns out to be worse.
+    """
+    written: dict[str, str] = {}
+    monkeypatch.setattr(media_hosting, "effective_value", lambda key: CONFIGURED[key])
+    monkeypatch.setattr(
+        media_hosting, "write_env_values",
+        lambda updates: (written.update(updates), sorted(updates))[1],
+    )
+    seen: dict[str, str] = {}
+
+    def handler(method, url, sent):
+        seen["url"] = url
+        return _Reply(sent.get("body", b""))
+
+    def fake_urlopen(request, timeout=None):
+        url = request if isinstance(request, str) else request.full_url
+        method = "GET" if isinstance(request, str) else request.get_method()
+        if method == "PUT":
+            fake_urlopen.body = request.data
+        return handler(method, url, {"body": getattr(fake_urlopen, "body", b"")})
+
+    monkeypatch.setattr(media_hosting.urllib.request, "urlopen", fake_urlopen)
+
+    result = media_hosting.probe({"bucket": "a-different-bucket"})
+
+    # The typed bucket was used, and nothing reached the .env.
+    assert "a-different-bucket" in seen["url"] or result["checks"][0]["ok"]
+    assert written == {}
+    assert "not saved" in result["checks"][0]["detail"]
+
+
+def test_a_draft_is_normalised_the_way_saving_would(monkeypatch) -> None:
+    # Testing has to answer the question saving would ask, so a pasted S3
+    # endpoint becomes an account ID here too rather than failing differently.
+    monkeypatch.setattr(media_hosting, "effective_value", lambda key: CONFIGURED[key])
+    values = media_hosting._settings(
+        {"account_id": "https://405e37fc54a511a9222d57e476b578f2.r2.cloudflarestorage.com/b"}
+    )
+    assert values["R2_ACCOUNT_ID"] == "405e37fc54a511a9222d57e476b578f2"
+
+
+def test_a_draft_repeating_the_account_id_is_reported_not_raised(monkeypatch) -> None:
+    """Saving refuses this; testing explains it.
+
+    The point of testing first is to be told what is wrong, so the same check
+    comes back as a failed stage rather than stopping the request.
+    """
+    monkeypatch.setattr(media_hosting, "effective_value", lambda key: CONFIGURED[key])
+    result = media_hosting.probe({"access_key_id": CONFIGURED["R2_ACCOUNT_ID"]})
+    assert result["ok"] is False
+    assert "same as the account ID" in result["checks"][0]["detail"]

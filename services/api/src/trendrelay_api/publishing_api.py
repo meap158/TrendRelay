@@ -123,10 +123,20 @@ def save_media_hosting_credentials(
     return {"result": result, "connection": connection_status(probe=False)}
 
 
+class HostingProbe(BaseModel):
+    """A probe, optionally of values that are only on screen."""
+
+    #: Field ids to test in place of what is stored. Partial: the fields left
+    #: out come from the saved settings, so replacing one wrong value means
+    #: typing one field rather than retyping all five to test them.
+    values: dict[str, str] = Field(default_factory=dict, max_length=20)
+    confirm_external_action: bool = False
+
+
 @router.post("/media-hosting/probe")
 def probe_media_hosting(
     workspace_id: str,
-    body: ExternalConfirmation,
+    body: HostingProbe,
     request: Request,
     user: AuthenticatedUser,
     session: DatabaseSession,
@@ -142,7 +152,7 @@ def probe_media_hosting(
     require_governed_assurance(user)
     if not body.confirm_external_action:
         raise HTTPException(status_code=400, detail="Testing storage requires confirmation.")
-    return {"probe": media_hosting.probe()}
+    return {"probe": media_hosting.probe(body.values or None)}
 
 
 class SlotEntry(BaseModel):
