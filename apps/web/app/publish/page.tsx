@@ -1435,7 +1435,11 @@ export default function PublishPage() {
               rel="noopener noreferrer"
             >{provider.label}</a>
           ))}
+          {/* The one control in this row that opens something rather than
+              leaving for a provider's dashboard, and it read as one more link
+              among them. The icon is what separates it at a glance. */}
           <Button variant="quiet" size="sm" onClick={() => setSetupOpen(true)}>
+            <ActionIcon name="setup" />
             {t("publish.engineSetup")}
           </Button>
         </div>
