@@ -2183,51 +2183,6 @@ export default function PublishPage() {
                     order is the post - a carousel opens on its first image and
                     is swiped from there - so it is numbered and reorderable
                     rather than being whatever order they were clicked in. */}
-                {wantsCarousel && (
-                  <div className="carousel-field">
-                    <span className="carousel-head">
-                      <strong>{t("publish.carouselImages", { count: imagePaths.length })}</strong>
-                      <Button variant="quiet" size="sm" onClick={() => openPicker("images")}>
-                        <ActionIcon name="clip" />{t("publish.addImages")}
-                      </Button>
-                    </span>
-                    {imagePaths.length ? (
-                      <ol className="carousel-list">
-                        {imagePaths.map((path, index) => (
-                          <li key={path}>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img alt="" className="carousel-thumb" src={mediaUrlFor(path)} />
-                            <code>{path.split(/[\/]/).pop()}</code>
-                            {/* The first frame is the one that appears in a feed,
-                                so which one it is should not have to be counted. */}
-                            {index === 0 && <em className="carousel-cover">{t("publish.coverFrame")}</em>}
-                            <button
-                              type="button"
-                              aria-label={t("publish.moveEarlier")}
-                              disabled={index === 0}
-                              onClick={() => moveCarouselImage(index, -1)}
-                            >&#8593;</button>
-                            <button
-                              type="button"
-                              aria-label={t("publish.moveLater")}
-                              disabled={index === imagePaths.length - 1}
-                              onClick={() => moveCarouselImage(index, 1)}
-                            >&#8595;</button>
-                            <button
-                              type="button"
-                              aria-label={t("common.remove")}
-                              onClick={() => setImagePaths(
-                                (current) => current.filter((item) => item !== path),
-                              )}
-                            >&#215;</button>
-                          </li>
-                        ))}
-                      </ol>
-                    ) : (
-                      <small className="ui-field-note">{t("publish.carouselEmpty")}</small>
-                    )}
-                  </div>
-                )}
                 <small className="ui-field-note">
                   Uploaded to {hosting?.label} when the post runs, so {fetchingNames || activeProvider?.label} can
                   fetch it. If the clip has a blurred version, that is the cut that gets uploaded.
@@ -2248,7 +2203,16 @@ export default function PublishPage() {
                   onDrop={dropMedia}
                 >
                   <label>{t("publish.approvedPath")}
-                    <input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} placeholder=".data\media\approved-clip.mp4" required />
+                    {/* Not required for a carousel: that post carries images and
+                        sends no video path at all, so demanding one here blocks
+                        a submit the request builder already handles. */}
+                    <input
+                      name="video_path"
+                      value={videoPath}
+                      onChange={(event) => setVideoPath(event.target.value)}
+                      placeholder=".data\media\approved-clip.mp4"
+                      required={!wantsCarousel}
+                    />
                   </label>
                   <Button variant="quiet" onClick={() => openPicker()}><ActionIcon name="clip" />{t("publish.chooseFromLibrary")}</Button>
                 </div>
@@ -2267,6 +2231,59 @@ export default function PublishPage() {
               </label>
             </>
           )}
+
+          {/* Outside the media branch above, deliberately. It used to sit in
+              the branch for engines that fetch rather than upload, so the one
+              platform that can post a carousel - TikTok, through an engine
+              that accepts an upload - rendered the other branch and never
+              offered a way to add images at all. The post type decides
+              whether this is needed; how the engine collects the file does
+              not. */}
+              {wantsCarousel && (
+                <div className="carousel-field">
+                  <span className="carousel-head">
+                    <strong>{t("publish.carouselImages", { count: imagePaths.length })}</strong>
+                    <Button variant="quiet" size="sm" onClick={() => openPicker("images")}>
+                      <ActionIcon name="clip" />{t("publish.addImages")}
+                    </Button>
+                  </span>
+                  {imagePaths.length ? (
+                    <ol className="carousel-list">
+                      {imagePaths.map((path, index) => (
+                        <li key={path}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img alt="" className="carousel-thumb" src={mediaUrlFor(path)} />
+                          <code>{path.split(/[\/]/).pop()}</code>
+                          {/* The first frame is the one that appears in a feed,
+                              so which one it is should not have to be counted. */}
+                          {index === 0 && <em className="carousel-cover">{t("publish.coverFrame")}</em>}
+                          <button
+                            type="button"
+                            aria-label={t("publish.moveEarlier")}
+                            disabled={index === 0}
+                            onClick={() => moveCarouselImage(index, -1)}
+                          >&#8593;</button>
+                          <button
+                            type="button"
+                            aria-label={t("publish.moveLater")}
+                            disabled={index === imagePaths.length - 1}
+                            onClick={() => moveCarouselImage(index, 1)}
+                          >&#8595;</button>
+                          <button
+                            type="button"
+                            aria-label={t("common.remove")}
+                            onClick={() => setImagePaths(
+                              (current) => current.filter((item) => item !== path),
+                            )}
+                          >&#215;</button>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <small className="ui-field-note">{t("publish.carouselEmpty")}</small>
+                  )}
+                </div>
+              )}
 
           {/* Only where a chosen destination has a title field. Most posts do
               not, and an always-present input labelled "used by YouTube, Reddit
