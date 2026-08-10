@@ -220,7 +220,17 @@ export default function WorkspacesPage() {
     }
   }
 
-  if (authLoading) return <StatePage title={t("workspaces.checkingSession")} body="TrendRelay is verifying the browser or desktop session." />;
+  // The escape is a plain anchor for the same reason the dashboard's is: when
+  // hydration is what died, a React button needs the thing that is broken.
+  if (authLoading) {
+    return (
+      <StatePage
+        title={t("workspaces.checkingSession")}
+        body="TrendRelay is verifying the browser or desktop session."
+        action={<a href="/workspaces">{t("common.reload")}</a>}
+      />
+    );
+  }
   if (!configured) return <StatePage title={t("workspaces.authSetupRequired")} body="Configure the Supabase public URL and publishable key, then restart TrendRelay." />;
   if (!user) return <StatePage title={t("workspaces.signInPrompt")} body="Workspace data is protected by verified Supabase access tokens." action={<Link className={buttonClass({ variant: "primary" })} href="/sign-in">{t("workspaces.openSignIn")}</Link>} />;
 

@@ -25,6 +25,7 @@ import {
 import { AffiliateLink, type LinkPlacement,
   type TrackingLink as AffiliateTrackingLink } from "./affiliate-link";
 import { ActionIcon } from "../ui/action-icons";
+import { WaitingScreen } from "../ui/waiting-screen";
 import { Button, buttonClass } from "../ui/button";
 import { Badge, Switch } from "../ui/primitives";
 import { CredentialRow } from "../ui/credential-field";
@@ -1391,7 +1392,13 @@ export default function PublishPage() {
     }
   }
 
-  if (loading) return <main className="publish-page"><p>{t("publish.checkingSession")}</p></main>;
+  // Not a plain <p>: a stall caused by hydration never happening leaves this
+  // markup on screen with no client to rescue it.
+  if (loading) {
+    return (
+      <WaitingScreen className="publish-page" message={t("publish.checkingSession")} />
+    );
+  }
   if (!user) return <main className="publish-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Fpublish">{t("publish.signInPrompt")}</Link></main>;
 
   return (
