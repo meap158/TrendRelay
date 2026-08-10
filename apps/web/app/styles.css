@@ -469,9 +469,16 @@ nav strong { color: #1c2b33; }
 .publish-actions button:disabled, .platform-card button:disabled { cursor: not-allowed; opacity: .5; }
 
 .publish-form { gap: 16px; border-radius: var(--radius-lg); }
-.publish-form label > i { display: block; margin-top: -2px; color: var(--muted); font-style: normal; font-size: 11px; font-weight: 400; letter-spacing: normal; text-transform: none; }
+.publish-form label i { display: block; margin-top: -2px; color: var(--muted); font-style: normal; font-size: 11px; font-weight: 400; letter-spacing: normal; text-transform: none; }
 .publish-form label > small { color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.45; letter-spacing: normal; text-transform: none; }
-.publish-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+/* Two fields side by side, whose inputs have to line up.
+   Each label is itself a grid, so its heading, control and help text would
+   otherwise be measured on their own - a two-line heading or a help line under
+   only one of them left the two inputs at different heights. Subgrid puts every
+   label on the same three rows, so the controls align whatever the text does. */
+.publish-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto auto auto; gap: 12px; }
+.publish-grid > label { grid-row: span 3; grid-template-rows: subgrid; align-content: start; row-gap: 6px; }
+.publish-grid > label > span { display: block; }
 .checkbox-row { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
 .checkbox-row small { grid-column: 2; color: var(--muted); font-size: 11px; }
 

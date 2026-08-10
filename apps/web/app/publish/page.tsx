@@ -2381,7 +2381,7 @@ export default function PublishPage() {
           </div>
 
           <div className="publish-grid">
-            <label>{delivery === "schedule" ? "Publish at" : "Reference time"}
+            <label><span>{delivery === "schedule" ? "Publish at" : "Reference time"}</span>
               <input
                 name="date"
                 type="datetime-local"
@@ -2400,7 +2400,10 @@ export default function PublishPage() {
                     : "Stored with the draft; the engine does not act on it."}
               </small>
             </label>
-            <label>{t("publish.visibility")} <i>{t("publish.visibilityScope")}</i>
+            {/* The heading and its hint are one item, not two. Each child of a
+                label is a grid row, so the loose <i> put the select a row lower
+                than the field beside it. */}
+            <label><span>{t("publish.visibility")} <i>{t("publish.visibilityScope")}</i></span>
               <select name="visibility" defaultValue="public">
                 <option value="public">{t("publish.public")}</option>
                 <option value="private">{t("publish.privateOnlyMe")}</option>
