@@ -85,11 +85,23 @@ export function CredentialRow({
         </b>
       </span>
 
-      {/* What is stored, above the box that would replace it. */}
+      {/* What is stored sits in the box, as its placeholder.
+          A placeholder and not a value, deliberately: it shows through until
+          something is typed, and it can never be submitted - so there is no
+          path where a row of dots is saved over a working credential. */}
       <span className="credential-saved">
-        <code className={revealed ? "revealed" : ""}>
-          {revealed ?? field.preview ?? labels.notSet}
-        </code>
+        <input
+          autoComplete={field.secret ? "new-password" : "off"}
+          className={revealed ? "revealed" : ""}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={
+            revealed ?? (field.configured ? field.preview ?? labels.replace : labels.paste)
+          }
+          spellCheck={false}
+          type={field.secret && !revealed ? "password" : "text"}
+          value={value}
+        />
         {field.configured && (
           <button
             type="button"
@@ -104,16 +116,6 @@ export function CredentialRow({
           </button>
         )}
       </span>
-
-      <input
-        autoComplete={field.secret ? "new-password" : "off"}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={field.configured ? labels.replace : labels.paste}
-        spellCheck={false}
-        type={field.secret ? "password" : "text"}
-        value={value}
-      />
       <small>{field.help}</small>
     </label>
   );

@@ -318,8 +318,11 @@ nav strong { color: #1c2b33; }
 /* What is saved, above the box that would replace it. Its own line rather than
    inside the input, so a row of dots can never be submitted over a working key. */
 .credential-saved { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.credential-saved code { flex: 1 1 auto; min-width: 0; overflow: hidden; padding: 3px 8px; border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.credential-saved code.revealed { color: var(--text); user-select: all; }
+.credential-saved input { flex: 1 1 auto; min-width: 0; }
+/* The stored value shows through as the placeholder, so it reads as what is
+   there rather than as a hint about what to type. */
+.credential-saved input::placeholder { color: var(--muted); opacity: 1; }
+.credential-saved input.revealed::placeholder { color: var(--text); }
 .credential-eye { display: inline-flex; flex: none; align-items: center; justify-content: center; inline-size: 26px; block-size: 26px; padding: 0; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--muted); cursor: pointer; }
 .credential-eye:hover:not(:disabled) { color: var(--text); border-color: var(--text); }
 .credential-eye[aria-pressed="true"] { color: var(--link); border-color: var(--link); }
