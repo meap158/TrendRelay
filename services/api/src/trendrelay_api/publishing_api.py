@@ -273,7 +273,8 @@ def preview_publishing_media(
         raise HTTPException(status_code=403, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    kind = "video/mp4" if resolved.suffix.lower() == ".mp4" else f"image/{resolved.suffix.lstrip('.')}"
+    suffix = resolved.suffix.lower()
+    kind = "video/mp4" if suffix == ".mp4" else f"image/{suffix.lstrip('.')}"
     return FileResponse(resolved, media_type=kind)
 
 
