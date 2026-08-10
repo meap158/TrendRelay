@@ -176,3 +176,16 @@ def test_the_same_input_always_ranks_the_same_way() -> None:
     # A list that reshuffles between reads cannot be worked through.
     sightings = [seen("b", window=7, position=3), seen("a", window=7, position=3)]
     assert [item["label"] for item in rank(sightings)] == ["a", "b"]
+
+
+def test_the_best_place_reached_is_reported_not_implied() -> None:
+    """So a reader is not tied to the weighting.
+
+    The position contribution is derived from this rank; recovering the rank
+    back out of it would break silently the moment the weights change.
+    """
+    [item] = rank([
+        seen("thing", window=7, position=6),
+        seen("thing", window=30, position=2),
+    ])
+    assert item["best_rank"] == 2

@@ -213,6 +213,10 @@ def score(topic: Topic) -> dict[str, Any]:
         "sources": list(topic.sources),
         "windows": list(topic.windows),
         "momentum": climb,
+        # The best place it reached anywhere. Reported rather than left to be
+        # reverse-engineered from the position contribution, which would tie a
+        # reader to the weighting and break silently when the weights change.
+        "best_rank": best if topic.ranks else None,
         "contributions": contributions,
         "score": sum(contributions.values()),
     }
