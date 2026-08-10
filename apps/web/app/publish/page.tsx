@@ -40,6 +40,7 @@ import {
   MediaPicker,
   IMAGE_PICKER_BASE,
   PICKER_BASE,
+  UploadPreview,
   PostPreview,
   SlotEditor,
   UpcomingPosts,
@@ -2599,12 +2600,7 @@ export default function PublishPage() {
             <h2>{t("publish.whatWillBeSent")}</h2>
             {videoPath || mediaUrl ? (
               <>
-                <video
-                  className="blur-preview"
-                  controls
-                  preload="metadata"
-                  src={previewSource}
-                />
+                <UploadPreview key={previewSource} source={previewSource} poster={thumbnail} />
                 <p className="privacy-note">
                   {mediaUrl
                     ? "Streaming the public URL the engine will fetch."

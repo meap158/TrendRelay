@@ -812,3 +812,39 @@ export function SlotEditor({
     </div>
   );
 }
+
+
+/**
+ * The file this delivery will upload, shown only when asked for.
+ *
+ * `preload` alone still pulls the file down as soon as the panel renders, and
+ * this is the whole upload rather than a thumbnail - which is why the Library
+ * gates its player the same way instead of loading every clip scrolled past.
+ *
+ * Keyed on the source by its caller, so choosing different media puts the gate
+ * back rather than autoplaying whatever was picked next.
+ */
+export function UploadPreview({ source, poster }: { source: string; poster?: string }) {
+  const t = useT();
+  const [requested, setRequested] = useState(false);
+
+  if (requested) {
+    return (
+      <video className="blur-preview" controls autoPlay preload="none"
+        poster={poster || undefined} src={source} />
+    );
+  }
+  return (
+    <button type="button" className="blur-preview-launch" onClick={() => setRequested(true)}>
+      {poster
+        // eslint-disable-next-line @next/next/no-img-element
+        ? <img alt="" src={poster} />
+        : <span className="blur-preview-empty" />}
+      <span className="blur-preview-overlay">
+        <span aria-hidden="true">&#9654;</span>
+        <strong>{t("library.playPreview")}</strong>
+        <small>{t("library.privatePreview")}</small>
+      </span>
+    </button>
+  );
+}
