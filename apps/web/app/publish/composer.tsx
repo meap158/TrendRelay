@@ -37,6 +37,8 @@ export const MEDIA_DRAG_TYPE = "application/x-trendrelay-media";
  * rather than to nothing at all.
  */
 export const PICKER_BASE: AssetFilterValues = { mediaKind: "video" };
+/** The same dialog, looking for a carousel's frames instead of a clip. */
+export const IMAGE_PICKER_BASE: AssetFilterValues = { mediaKind: "image" };
 
 /** @deprecated Superseded by AssetFilterValues, shared with the Library page. */
 export type PickerFilters = {
@@ -108,6 +110,7 @@ export function MediaPicker({
   onSearch,
   onPick,
   onClose,
+  mediaKind = "video",
 }: {
   open: boolean;
   assets: LibraryAsset[];
@@ -119,9 +122,16 @@ export function MediaPicker({
   onSearch: (filters: AssetFilterValues) => void;
   onPick: (asset: LibraryAsset) => void;
   onClose: () => void;
+  /** What this dialog is being opened to find. */
+  mediaKind?: "video" | "image";
 }) {
   const t = useT();
-  const [filters, setFilters] = useState<AssetFilterValues>(PICKER_BASE);
+  const images = mediaKind === "image";
+  const base = images ? IMAGE_PICKER_BASE : PICKER_BASE;
+  // Initialised from what this dialog is looking for. The caller keys it on
+  // `mediaKind`, so opening it for carousel frames after opening it for a clip
+  // starts a fresh dialog rather than one still filtered to videos.
+  const [filters, setFilters] = useState<AssetFilterValues>(base);
 
   /** Applied on change, because narrowing the list is a new search either way. */
   function apply(next: AssetFilterValues) {
@@ -134,8 +144,10 @@ export function MediaPicker({
   return (
     <Dialog
       open={open}
-      title={t("composer.chooseClip")}
-      description="Videos in this workspace's library."
+      title={images ? t("composer.chooseImages") : t("composer.chooseClip")}
+      description={images
+        ? "Images in this workspace's library. Pick them in the order they are swiped."
+        : "Videos in this workspace's library."}
       onClose={onClose}
     >
       {/* The same control the Library uses, minus the media kind: this dialog
@@ -144,13 +156,15 @@ export function MediaPicker({
         values={filters}
         facets={facets}
         fields={["query", "effect", "channel", "platform", "length"]}
-        cleared={PICKER_BASE}
+        cleared={base}
         onChange={apply}
       />
       {failure && <p className="engine-warning" role="status">{failure}</p>}
       {!failure && !loading && !assets.length && (
         <p className="picker-empty">
-          No videos matched. Import clips in the Library tab, then pick one here.
+          {images
+            ? "No images matched. Import them in the Library tab, then pick them here."
+            : "No videos matched. Import clips in the Library tab, then pick one here."}
         </p>
       )}
       <ul className="picker-results">
@@ -202,7 +216,7 @@ export function PostPreview({
   thumbnail,
   source,
   sourceIsImage,
-  carouselCount,
+  carousel,
 }: {
   platform: PublishingPlatform;
   postTypeLabel: string;
@@ -214,11 +228,16 @@ export function PostPreview({
   source?: string;
   /** True when `source` is an image: a carousel frame rather than a clip. */
   sourceIsImage?: boolean;
-  /** How many images a carousel carries, when this is one. */
-  carouselCount?: number;
+  /** Every frame of a carousel, in swipe order, so the preview can be swiped. */
+  carousel?: string[];
 }) {
   const t = useT();
   const story = postTypeLabel.toLowerCase() === "story";
+  // Which frame the preview is showing. A carousel is swiped, so the question
+  // "does this read" is asked of each one, not only of the cover.
+  const [frame, setFrame] = useState(0);
+  const frames = carousel ?? [];
+  const showing = frames.length ? frames[Math.min(frame, frames.length - 1)] : source;
   const showsTitle = platform === "youtube" || platform === "reddit" || platform === "pinterest";
 
   return (
@@ -235,20 +254,41 @@ export function PostPreview({
             still of it, and a caption judged against a frozen frame is judged
             against something nobody will see. The thumbnail is the fallback
             for a clip picked from the Library before its file can be read. */}
-        {source && !sourceIsImage ? (
-          <video src={source} controls playsInline preload="metadata" poster={thumbnail || undefined} />
-        ) : source ? (
+        {showing && !sourceIsImage ? (
+          <video src={showing} controls playsInline preload="metadata" poster={thumbnail || undefined} />
+        ) : showing ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img alt="" src={source} />
+          <img alt="" src={showing} />
         ) : thumbnail ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img alt="" src={thumbnail} />
         ) : (
           <p>{t("composer.chooseClipForFrame")}</p>
         )}
-        {/* A carousel is swiped, and how many there are changes how the first
-            frame is read - so the count sits on it rather than being implied. */}
-        {carouselCount ? <em className="post-preview-count">1 / {carouselCount}</em> : null}
+        {/* Stepped rather than counted. The count alone says a carousel exists;
+            being able to move through it is what answers whether the third
+            frame still makes sense without the first. */}
+        {frames.length > 1 && (
+          <>
+            <em className="post-preview-count">
+              {Math.min(frame, frames.length - 1) + 1} / {frames.length}
+            </em>
+            <button
+              type="button"
+              className="post-preview-step start"
+              aria-label={t("publish.moveEarlier")}
+              disabled={frame === 0}
+              onClick={() => setFrame((current) => Math.max(0, current - 1))}
+            >&#8249;</button>
+            <button
+              type="button"
+              className="post-preview-step end"
+              aria-label={t("publish.moveLater")}
+              disabled={frame >= frames.length - 1}
+              onClick={() => setFrame((current) => Math.min(frames.length - 1, current + 1))}
+            >&#8250;</button>
+          </>
+        )}
       </div>
       {story ? (
         <p className="post-preview-note">

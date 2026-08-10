@@ -38,6 +38,7 @@ import {
 import {
   MEDIA_DRAG_TYPE,
   MediaPicker,
+  IMAGE_PICKER_BASE,
   PICKER_BASE,
   PostPreview,
   SlotEditor,
@@ -512,6 +513,18 @@ export default function PublishPage() {
    * file is streamed through the publishing media roots - the same boundary
    * that decides whether it could be published at all.
    */
+  /** A frame of the carousel, served from the roots it could be published from. */
+  const mediaUrlFor = useCallback(
+    (path: string) => (workspaceId && path
+      ? `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview`
+        + `?path=${encodeURIComponent(path)}`
+      : ""),
+    [workspaceId],
+  );
+  const carouselSources = useMemo(
+    () => (wantsCarousel ? imagePaths.map(mediaUrlFor).filter(Boolean) : []),
+    [wantsCarousel, imagePaths, mediaUrlFor],
+  );
   const previewSource = useMemo(() => {
     const local = wantsCarousel ? imagePaths[0] : videoPath;
     if (!wantsCarousel && mediaUrl.trim()) return mediaUrl.trim();
@@ -1040,7 +1053,9 @@ export default function PublishPage() {
   function openPicker(mode: "video" | "images" = "video") {
     setPickerMode(mode);
     setPickerOpen(true);
-    void loadLibrary();
+    // Loaded for what is being looked for: the dialog searching for images
+    // while the list holds videos would come back empty and look broken.
+    void loadLibrary(mode === "images" ? IMAGE_PICKER_BASE : PICKER_BASE);
   }
 
   /** Add one image to the carousel, keeping the picker open for the next. */
@@ -2175,7 +2190,12 @@ export default function PublishPage() {
                       <ol className="carousel-list">
                         {imagePaths.map((path, index) => (
                           <li key={path}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img alt="" className="carousel-thumb" src={mediaUrlFor(path)} />
                             <code>{path.split(/[\/]/).pop()}</code>
+                            {/* The first frame is the one that appears in a feed,
+                                so which one it is should not have to be counted. */}
+                            {index === 0 && <em className="carousel-cover">{t("publish.coverFrame")}</em>}
                             <button
                               type="button"
                               aria-label={t("publish.moveEarlier")}
@@ -2608,7 +2628,7 @@ export default function PublishPage() {
                 thumbnail={thumbnail}
                 source={previewSource}
                 sourceIsImage={wantsCarousel}
-                carouselCount={wantsCarousel ? imagePaths.length : 0}
+                carousel={carouselSources}
               />
               <p className="privacy-note">
                 A rehearsal of the caption and frame against this network&apos;s shape,
@@ -2699,6 +2719,9 @@ export default function PublishPage() {
       </section>
       {workspaceId && (
         <MediaPicker
+          // Remounts when the dialog changes what it is looking for, which
+          // resets its filters without setting state inside an effect.
+          key={pickerMode}
           open={pickerOpen}
           assets={library}
           workspaceId={workspaceId}
@@ -2707,6 +2730,7 @@ export default function PublishPage() {
           failure={libraryState.failure}
           facets={libraryFacets}
           onSearch={(filters) => void loadLibrary(filters)}
+          mediaKind={pickerMode === "images" ? "image" : "video"}
           onPick={pickerMode === "images" ? addCarouselImage : pickClip}
           onClose={() => setPickerOpen(false)}
         />
