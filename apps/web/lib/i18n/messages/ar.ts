@@ -300,6 +300,8 @@ export const ar: Messages = {
     moveLater: "تحريك للخلف",
     carouselIsItsOwnPost: "لا يمكن إرسال العرض الدوّار في المنشور نفسه مع وجهة فيديو. أرسلهما بشكل منفصل.",
     carouselNeedsImages: "يحتاج العرض الدوّار إلى صورة واحدة على الأقل. أضفها من المكتبة.",
+    attributable: "قابل للإسناد",
+    notAttributable: "غير قابل للإسناد",
     mediaHosting: "استضافة الوسائط",
     mediaHostingNeeded: "يلزم استضافة للوسائط",
     whatGoesOut: "ما الذي سيُنشر",

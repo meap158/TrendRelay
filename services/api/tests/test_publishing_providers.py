@@ -32,6 +32,7 @@ def media_file(monkeypatch, tmp_path: Path) -> Path:
         lambda: SimpleNamespace(
             publishing_media_root_list=[str(tmp_path)],
             publishing_provider="bundle_social",
+            attribution_public_url="https://go.example.test",
         ),
     )
     credentials = {
@@ -78,6 +79,9 @@ def use_provider(monkeypatch, tmp_path: Path, provider: str) -> None:
         lambda: SimpleNamespace(
             publishing_media_root_list=[str(tmp_path)],
             publishing_provider=provider,
+            # The preview reads this to recognise our own tracking links, so a
+            # double without it stands in for settings that cannot exist.
+            attribution_public_url="https://go.example.test",
         ),
     )
 
@@ -1761,3 +1765,52 @@ def test_two_carousel_destinations_are_one_post(carousel_images: list[str]) -> N
         publishing.PublishTarget(platform="tiktok", integration_id="a2", post_type="photo"),
     ])
     assert len(body.targets) == 2
+
+
+# --- attribution, said while it can still be changed ---------------------------
+
+
+def test_a_preview_says_when_a_post_cannot_be_attributed(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    """The one thing this app exists to optimise, and it was silent about it.
+
+    Clicks exist only because somebody followed a `/c/` link, so a post
+    published without one earns whatever it earns under the network's report
+    with nothing on our side to join it to. No later import repairs that.
+    """
+    use_provider(monkeypatch, tmp_path, "zernio")
+
+    plain = publishing.preview_publish(request(media_file))
+    assert plain["attribution"]["tracked"] is False
+    assert "nothing it earns can be attributed" in plain["attribution"]["note"]
+
+    tracked = publishing.preview_publish(request(
+        media_file,
+        caption="Great espresso https://go.example.test/c/abc123",
+    ))
+    assert tracked["attribution"]["tracked"] is True
+
+
+def test_a_link_in_the_first_comment_counts(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    # Instagram and TikTok captions are not clickable, so the link often lives
+    # in the comment instead - and that post is just as attributable.
+    use_provider(monkeypatch, tmp_path, "zernio")
+    preview = publishing.preview_publish(request(
+        media_file, first_comment="Link: https://go.example.test/c/xyz789",
+    ))
+    assert preview["attribution"]["tracked"] is True
+
+
+def test_someone_elses_link_is_not_our_attribution(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    # A bare affiliate URL earns commission but records no click here, which is
+    # exactly the case that looks tracked and is not.
+    use_provider(monkeypatch, tmp_path, "zernio")
+    preview = publishing.preview_publish(request(
+        media_file, caption="Buy it https://shopee.vn/thing-i.1.2?af=me",
+    ))
+    assert preview["attribution"]["tracked"] is False

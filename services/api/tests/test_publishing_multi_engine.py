@@ -22,6 +22,8 @@ def media_file(monkeypatch, tmp_path: Path) -> Path:
         lambda: SimpleNamespace(
             publishing_media_root_list=[str(tmp_path)],
             publishing_provider="bundle_social",
+            # The preview reads this to recognise our own tracking links.
+            attribution_public_url="https://go.example.test",
         ),
     )
     credentials = {

@@ -202,6 +202,8 @@ type Preview = {
   visibility: string;
   made_with_ai: boolean;
   destinations: Destination[];
+  /** Whether this post carries a tracking link, and what that means. */
+  attribution?: { tracked: boolean; note: string };
 };
 
 async function json<T>(response: Response): Promise<T> {
@@ -2614,6 +2616,20 @@ export default function PublishPage() {
                     </li>
                   ))}
                 </ul>
+                {/* The one thing that cannot be fixed afterwards. A click is
+                    only ever recorded because somebody followed our link, so a
+                    post published without one earns whatever it earns with
+                    nothing on this side to join it to. Said here, while the
+                    caption can still be changed, rather than in a report weeks
+                    later that cannot explain the gap. */}
+                {preview.attribution && (
+                  <p className={`preview-attribution${preview.attribution.tracked ? " tracked" : ""}`}>
+                    <b>{preview.attribution.tracked
+                      ? t("publish.attributable")
+                      : t("publish.notAttributable")}</b>
+                    <span>{preview.attribution.note}</span>
+                  </p>
+                )}
                 <p className="privacy-note">Nothing has been sent. {preview.media_handling}</p>
               </div>
             )}

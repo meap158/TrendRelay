@@ -306,6 +306,8 @@ export const ru: Messages = {
     moveLater: "Переместить позже",
     carouselIsItsOwnPost: "Фотокарусель нельзя отправить в одной публикации с видео-назначением. Отправьте их отдельно.",
     carouselNeedsImages: "Карусели нужно хотя бы одно изображение. Добавьте их из библиотеки.",
+    attributable: "Атрибутируется",
+    notAttributable: "Не атрибутируется",
     mediaHosting: "Хранение медиа",
     mediaHostingNeeded: "нужно хранилище медиа",
     whatGoesOut: "Что уйдёт в публикацию",

@@ -302,6 +302,8 @@ export const vi: Messages = {
     moveLater: "Đưa xuống sau",
     carouselIsItsOwnPost: "Carousel ảnh không thể đăng chung bài với đích video. Hãy gửi riêng.",
     carouselNeedsImages: "Carousel cần ít nhất một ảnh. Thêm từ Thư viện.",
+    attributable: "Có thể quy nguồn",
+    notAttributable: "Không thể quy nguồn",
     mediaHosting: "Lưu trữ media",
     mediaHostingNeeded: "cần nơi lưu trữ media",
     whatGoesOut: "Nội dung sẽ đăng",

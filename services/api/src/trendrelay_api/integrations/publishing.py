@@ -899,6 +899,24 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
         )
 
 
+def carries_tracking_link(request: PublishRequest) -> bool:
+    """Whether anything this post says contains one of our tracking links.
+
+    Attribution is won or lost at this moment and cannot be recovered later: a
+    click is only ever recorded because somebody followed a `/c/` link, so a
+    post published without one is unattributable for as long as it exists. No
+    later import can repair that, because there is nothing on the other side to
+    join to.
+
+    Read from the text rather than from a field, because the link is inserted
+    into the caption or the first comment and there is no separate place it is
+    declared.
+    """
+    marker = f"{get_settings().attribution_public_url.rstrip('/')}/c/"
+    written = [request.caption, request.first_comment or "", *(request.thread or [])]
+    return any(marker in (part or "") for part in written)
+
+
 def _is_photo_post(request: PublishRequest) -> bool:
     """Whether this request is a carousel rather than a video.
 
@@ -2316,6 +2334,20 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
         # Empty means either nothing wrong or nothing asked; the engine list
         # above says which engines could be asked at all.
         "engine_problems": engine_problems,
+        # Said before the post goes out, because afterwards is too late. A post
+        # without a tracking link earns whatever it earns under somebody else's
+        # report, with nothing on our side to join it to.
+        "attribution": {
+            "tracked": carries_tracking_link(request),
+            "note": (
+                "This post carries a tracking link, so its clicks and any "
+                "commission can be traced back to it."
+                if carries_tracking_link(request)
+                else "No tracking link in this post. It can still be published, "
+                     "but nothing it earns can be attributed to it afterwards - "
+                     "clicks are only recorded when somebody follows one."
+            ),
+        },
         "engines": [
             {
                 "id": provider_id,

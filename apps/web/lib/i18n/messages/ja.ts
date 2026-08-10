@@ -302,6 +302,8 @@ export const ja: Messages = {
     moveLater: "後ろへ",
     carouselIsItsOwnPost: "写真カルーセルは動画の配信先と同じ投稿では送れません。別々に投稿してください。",
     carouselNeedsImages: "カルーセルには画像が最低1枚必要です。ライブラリから追加してください。",
+    attributable: "計測できます",
+    notAttributable: "計測できません",
     mediaHosting: "メディアの配置先",
     mediaHostingNeeded: "メディアの配置先が必要です",
     whatGoesOut: "投稿する内容",

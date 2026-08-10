@@ -723,3 +723,12 @@ nav strong { color: #1c2b33; }
    left as plain text rather than looking clickable and doing nothing. */
 .notification-title.linked { color: inherit; font-weight: 600; text-decoration: none; }
 .notification-title.linked:hover { color: var(--link); text-decoration: underline; }
+
+/* Whether this post can be traced back to what it earns. Amber rather than red
+   when it cannot: publishing untracked is a legitimate choice, it is just one
+   that cannot be undone afterwards. */
+.preview-attribution { display: grid; gap: 2px; margin: 8px 0 0; padding: 8px 10px; border-radius: var(--radius-sm); background: #fdf5db; }
+.preview-attribution b { color: #7a5c00; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.preview-attribution span { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.preview-attribution.tracked { background: var(--green-dark); }
+.preview-attribution.tracked b { color: var(--green); }

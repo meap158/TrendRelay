@@ -306,6 +306,8 @@ export const en = {
     moveLater: "Move later",
     carouselIsItsOwnPost: "A photo carousel cannot go out in the same post as a video destination. Send those separately.",
     carouselNeedsImages: "A carousel needs at least one image. Add them from the Library.",
+    attributable: "Attributable",
+    notAttributable: "Not attributable",
     mediaHosting: "Media hosting",
     mediaHostingNeeded: "media hosting needed",
     whatGoesOut: "What goes out",
