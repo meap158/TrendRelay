@@ -293,6 +293,12 @@ def parse_rows(rows: Any, definition: CategoryDefinition) -> list[dict[str, Any]
         link = row.get("link")
         if isinstance(link, str) and link.startswith(("http://", "https://", "/")):
             record["url"] = link[:2048]
+        # The card's own cover. The video tab renders no link at all - its
+        # "View details" needs a signed-in session - so this image is the only
+        # thing that shows which video a row is actually about.
+        image = row.get("image")
+        if isinstance(image, str) and image.startswith("https://"):
+            record["thumbnail"] = image[:2048]
         records.append(record)
     return records
 

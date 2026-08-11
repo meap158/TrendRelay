@@ -315,3 +315,29 @@ def test_video_build_result_reports_the_card_extraction() -> None:
     assert result["category_label"] == "Videos"
     # The video tab was served directly, so no redirect note.
     assert not any("redirected" in note for note in result["notes"])
+
+
+def test_a_row_keeps_the_cover_the_bridge_extracted() -> None:
+    """The video tab renders no link, so the cover is all a row has.
+
+    The bridge has always read `image` off each card; the parser dropped it,
+    which left a board of popular posts unable to show any of them.
+    """
+    rows = [{
+        "index": "0",
+        "cells": ["bigweirdworld", "2.4M followers", "Video views", "56.3M"],
+        "link": None,
+        "image": "https://p16-common-sign.tiktokcdn-us.com/cover.jpeg",
+    }]
+
+    [item] = tt.parse_rows(rows, tt.CATEGORIES["video"])
+
+    assert item["thumbnail"] == "https://p16-common-sign.tiktokcdn-us.com/cover.jpeg"
+
+
+def test_a_cover_that_is_not_https_never_reaches_a_record() -> None:
+    # These are rendered straight into a page, so the scheme is not negotiable.
+    for hostile in ["javascript:alert(1)", "http://cdn/x.jpg", "data:image/png;base64,AA", 7]:
+        rows = [{"index": "0", "cells": ["name", "1.2M followers"], "image": hostile}]
+        records = tt.parse_rows(rows, tt.CATEGORIES["video"])
+        assert all("thumbnail" not in record for record in records), hostile
