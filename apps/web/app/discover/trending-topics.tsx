@@ -9,13 +9,13 @@
  * "what is on TikTok right now".
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { SHAPE_COPY, reasons, searchTerm, windowSummary, type Shape, type Topic } from "../../lib/trend-shapes";
 import { Button } from "../ui/button";
-import { usePersistedState } from "../ui/use-persisted-state";
+import { usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 
 type Consolidated = {
   region: string;
@@ -167,7 +167,19 @@ export function TrendingTopics({
     "all",
     (value): value is string => LENSES.some((item) => item.id === value),
   );
-  const [result, setResult] = useState<Consolidated | null>(null);
+  /**
+   * Kept between visits, because building it is three Creative Center renders.
+   *
+   * Half an hour: long enough that walking between pages does not re-render
+   * TikTok three times, short enough that a list called "worth making" is not
+   * describing yesterday.
+   */
+  const [result, setResult, , cacheReady] = usePersistedCache<Consolidated>(
+    "trendrelay.discover.consolidated",
+    30 * 60 * 1000,
+    (value): value is Consolidated =>
+      typeof value === "object" && value !== null && Array.isArray((value as Consolidated).topics),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -194,7 +206,33 @@ export function TrendingTopics({
     } finally {
       setBusy(false);
     }
-  }, [lens, region]);
+  }, [lens, region, setResult]);
+
+  /**
+   * Build it without being asked, once there is nothing cached to show.
+   *
+   * A section headed "Topics worth making" that is empty until a button is
+   * found is a section most people never see. It waits for the cache to be
+   * read first, so a fresh visit with a good answer already stored does not
+   * spend three renders re-fetching it.
+   */
+  const autoBuilt = useRef(false);
+  useEffect(() => {
+    if (!cacheReady || result || busy || error || autoBuilt.current) return;
+    autoBuilt.current = true;
+    void load();
+  }, [cacheReady, result, busy, error, load]);
+
+  // A different country is a different question, so the answer on screen no
+  // longer belongs to it. The lens only filters, and is left to the button.
+  const firstRegion = useRef(region);
+  useEffect(() => {
+    if (firstRegion.current === region) return;
+    firstRegion.current = region;
+    void load();
+    // `load` is rebuilt whenever the region changes, which would run this again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [region]);
 
   const activeLens = LENSES.find((item) => item.id === lens) ?? LENSES[0];
 
