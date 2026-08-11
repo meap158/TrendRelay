@@ -107,6 +107,15 @@ const S: Record<string, React.CSSProperties> = {
     minWidth: "20px",
     fontVariantNumeric: "tabular-nums",
   },
+  cover: {
+    inlineSize: "44px",
+    blockSize: "58px",
+    flexShrink: 0,
+    objectFit: "cover",
+    borderRadius: "6px",
+    background: "var(--panel-raised)",
+  },
+  coverMissing: { border: "1px dashed var(--line-strong)" },
   body: { flex: 1, minWidth: 0 },
   creator: {
     fontSize: "15px",
@@ -256,6 +265,15 @@ export function PopularPosts({ onResearch }: { onResearch: (term: string) => voi
                 return (
                   <li key={`${post.creator}:${post.rank}`} style={S.row}>
                     <span style={S.place} aria-hidden>{post.rank}</span>
+                    {/* The cover is the post. Without it a row is a creator's
+                        name and two numbers, which is not what was asked for.
+                        Decorative: the creator beside it already names it. */}
+                    {post.thumbnail ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img alt="" src={post.thumbnail} style={S.cover} loading="lazy" />
+                    ) : (
+                      <span style={{ ...S.cover, ...S.coverMissing }} aria-hidden />
+                    )}
                     <div style={S.body}>
                       <span style={S.creator}>{post.creator}</span>
                       {post.niche && <span style={S.niche}>{post.niche}</span>}

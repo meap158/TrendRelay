@@ -21,6 +21,7 @@ function post(overrides: Partial<PopularPost> = {}): PopularPost {
     followers: 156_100,
     likes: null,
     url: null,
+    thumbnail: null,
     ...overrides,
   };
 }

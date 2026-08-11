@@ -18,6 +18,8 @@ export type PopularPost = {
   likes: number | null;
   /** Null on every row today: the source renders no link to the video. */
   url: string | null;
+  /** The video's own cover, which is what shows the post rather than the name. */
+  thumbnail: string | null;
 };
 
 /** `12M`, `156.1K`. Counts on this board are read at a glance, not audited. */
