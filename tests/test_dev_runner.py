@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import scripts.dev as dev
@@ -166,7 +167,9 @@ def test_unified_runner_includes_hot_reload_durable_worker() -> None:
         service for service in dev.build_services(False) if service.name == "Worker"
     )
 
-    assert worker.command[-2:] == ["scripts/worker.py", "--watch"]
+    assert worker.command[1:3] == ["scripts/worker.py", "--watch"]
+    # Told which runner owns it, so a hard stop leaves nothing behind.
+    assert worker.command[3] == "--parent-pid"
     assert worker.health_url is None
     assert worker.restart_on_exit is True
 
@@ -396,3 +399,19 @@ def test_a_production_build_is_left_alone(monkeypatch, tmp_path) -> None:
 def test_nothing_to_clean_is_not_an_error(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(dev, "ROOT", tmp_path)
     dev._cleanup_stale_nextjs()
+
+
+def test_the_worker_is_told_which_runner_started_it() -> None:
+    """So a hard stop of the runner does not leave one behind.
+
+    The runner reclaims its ports on the way back up, which kills a leftover API
+    or dev server. The worker holds no port, so nothing ever noticed it: three
+    generations were found alive at once, all polling the same SQLite database
+    as the API that was being waited on.
+    """
+    worker = next(
+        service for service in dev.build_services(False) if service.name == "Worker"
+    )
+
+    assert "--parent-pid" in worker.command
+    assert worker.command[worker.command.index("--parent-pid") + 1] == str(os.getpid())

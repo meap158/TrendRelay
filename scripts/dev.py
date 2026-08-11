@@ -384,7 +384,9 @@ def build_services(include_desktop: bool, *, may_terminate: bool = True) -> list
     services.append(
         Service(
             "Worker",
-            [str(python), "scripts/worker.py", "--watch"],
+            # Told who started it, so a hard stop of this runner does not leave
+            # a worker behind polling the database forever.
+            [str(python), "scripts/worker.py", "--watch", "--parent-pid", str(os.getpid())],
             "yellow",
             restart_on_exit=True,
         )

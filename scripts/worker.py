@@ -99,6 +99,38 @@ def source_snapshot() -> tuple[tuple[str, int, int], ...]:
     return tuple(sorted(files))
 
 
+#: Windows reports a live process with this exit code.
+_STILL_ACTIVE = 259
+
+
+def process_is_alive(pid: int) -> bool:
+    """Whether a process is still running, without a third-party dependency."""
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+
+        # Query-only access, so this works against a process we do not own.
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            if not ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return False
+            return code.value == _STILL_ACTIVE
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # Alive, and owned by somebody else.
+        return True
+    return True
+
+
 def start_watched_worker() -> subprocess.Popen[bytes]:
     creation_flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     return subprocess.Popen(
@@ -120,7 +152,18 @@ def stop_watched_worker(process: subprocess.Popen[bytes]) -> None:
         process.wait(timeout=5)
 
 
-def watch_worker() -> int:
+def watch_worker(parent_pid: int = 0) -> int:
+    """Run the worker, reloading it when its source changes.
+
+    `parent_pid` is the runner that started this. When it is gone this returns,
+    and the `finally` below stops the worker it spawned.
+
+    Without that, every hard stop of the runner leaked two processes. The runner
+    reclaims its ports on the way back up, which kills a leftover API or dev
+    server, but the worker holds no port and so nothing ever noticed it: three
+    generations of them were found alive at once, all polling the same SQLite
+    database as the API that was being waited on.
+    """
     snapshot = source_snapshot()
     process = start_watched_worker()
     try:
@@ -128,6 +171,9 @@ def watch_worker() -> int:
             return_code = process.poll()
             if return_code is not None:
                 return return_code or 1
+            if parent_pid and not process_is_alive(parent_pid):
+                print("Runner is gone; stopping the worker.", flush=True)
+                return 0
             time.sleep(0.5)
             updated_snapshot = source_snapshot()
             if updated_snapshot == snapshot:
@@ -150,12 +196,18 @@ def main() -> int:
     parser.add_argument(
         "--watch", action="store_true", help="reload the worker after code changes"
     )
+    parser.add_argument(
+        "--parent-pid",
+        type=int,
+        default=0,
+        help="exit when this process is gone, so a stopped runner leaves nothing behind",
+    )
     args = parser.parse_args()
     if args.once:
         print(f"Processed {process_available()} durable job(s).")
         return 0
     if args.watch:
-        return watch_worker()
+        return watch_worker(args.parent_pid)
     worker_main()
     return 0
 
