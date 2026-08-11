@@ -778,6 +778,11 @@ export default function PublishPage() {
       ? t("publish.blockedEngine", { engines: engineNames(brokenChoices) })
       : !chosen.length
       ? "Choose at least one destination"
+      // Before the caption, deliberately. This is a conflict between the
+      // destinations just chosen, and burying it under "Write a caption" meant
+      // finding out only after the post had been written.
+      : wantsCarousel && carouselTargetCount !== chosenAccounts.length
+        ? t("publish.carouselIsItsOwnPost")
       : !caption.trim()
         ? "Write a caption"
         : captionOver > 0
