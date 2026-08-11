@@ -174,3 +174,39 @@ def test_an_unknown_period_is_refused_rather_than_quietly_changed(monkeypatch) -
 
 def test_the_board_is_local_machine_only() -> None:
     assert get("/api/research/posts/popular", host="192.0.2.10").status_code == 403
+
+
+# --- showing the post itself --------------------------------------------------
+
+
+def test_a_post_carries_the_cover_of_the_video() -> None:
+    """The only thing on the card that shows which video a row is about.
+
+    The video tab renders no link - its "View details" needs a signed-in
+    session - so without the cover a row is just a creator's name.
+    """
+    page = video_page(items=[{
+        "name": "bigweirdworld",
+        "metrics": {"views": 56_300_000},
+        "thumbnail": "https://p16-common-sign.tiktokcdn-us.com/cover.jpeg",
+    }])
+
+    [post] = posts_from_tiktok(page)
+
+    assert post["thumbnail"] == "https://p16-common-sign.tiktokcdn-us.com/cover.jpeg"
+
+
+def test_a_cover_that_is_not_https_is_refused() -> None:
+    # These are loaded straight into the page, so the scheme is not negotiable.
+    for hostile in ["http://cdn/cover.jpg", "javascript:alert(1)", "//cdn/x.jpg", 12, None]:
+        page = video_page(items=[{"name": "x", "thumbnail": hostile}])
+        [post] = posts_from_tiktok(page)
+        assert post["thumbnail"] is None, hostile
+
+
+def test_a_card_with_no_cover_still_makes_a_post() -> None:
+    # A missing cover costs the picture, not the row.
+    [post] = posts_from_tiktok(video_page(items=[{"name": "Quiet", "metrics": {}}]))
+
+    assert post["creator"] == "Quiet"
+    assert post["thumbnail"] is None

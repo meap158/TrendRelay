@@ -12,10 +12,12 @@ something in it and it worked.
 
 Two limits are worth stating, because they bound what this list can claim.
 
-**There is no link, and no caption.** Creative Center renders a creator, a
-niche and two counts, and nothing else that identifies the video. Offering an
-"open this post" action would mean inventing a URL, so the list does not offer
-one. What it gives is a name to search for on the platform.
+**There is a cover, but no link and no caption.** Each card carries the video's
+own thumbnail, which is what makes this a board of posts rather than a list of
+names - you can see what was made. What it does not carry is a URL: the card's
+"View details" needs a signed-in session, so every row's link comes back empty
+and offering an "open this post" action would mean inventing one. The cover
+links are signed and expire, so they are shown and never stored.
 
 **The Douyin board is not a source here.** It ranks hot searches, not posts:
 every entry is a term with a representative cover, and the search behind it is
@@ -70,9 +72,18 @@ def posts_from_tiktok(result: dict[str, Any]) -> list[dict[str, Any]]:
                 # Said explicitly rather than left out, so a reader is not left
                 # wondering whether the link failed to load.
                 "url": None,
+                # The card's cover, which is what makes this a board of posts
+                # rather than a list of names. Signed CDN links that expire, so
+                # they are shown rather than stored.
+                "thumbnail": _https(item.get("thumbnail")),
             }
         )
     return posts
+
+
+def _https(value: Any) -> str | None:
+    """A cover we are willing to load, or nothing."""
+    return value if isinstance(value, str) and value.startswith("https://") else None
 
 
 def _count(value: Any) -> int | None:
