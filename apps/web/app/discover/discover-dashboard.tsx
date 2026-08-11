@@ -12,8 +12,7 @@ import { numberIn, oneOf, usePersistedCache, usePersistedState } from "../ui/use
 import { useJobs } from "../jobs-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { OpportunityScoring } from "./opportunity-scoring";
-import { TrendingTopics } from "./trending-topics";
-import { searchTerm, shapeMeaning, type Topic as RankedTopic } from "../../lib/trend-shapes";
+import { PopularPosts } from "./popular-posts";
 
 type Workspace = { id: string; name: string; role: string };
 type ReachChannel = {
@@ -1143,36 +1142,6 @@ export default function ResearchDashboard() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  /**
-   * Carry a consolidated topic into scoring with its evidence already written.
-   *
-   * The reason it ranked is the reason to score it, and asking somebody to
-   * retype what the list just told them is how the evidence field ends up
-   * empty on every score.
-   */
-  function scoreTopic(topic: RankedTopic) {
-    // Research scrolls to the search box it just filled; this has to do the
-    // same for the form it just filled, or the click looks like it did
-    // nothing whenever the scoring section is below the fold - which it is,
-    // since the evidence sits between the two.
-    requestAnimationFrame(() => {
-      document.getElementById(SCORING_ANCHOR)?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    });
-    setScorePrefill({
-      trend: searchTerm(topic),
-      evidence: [
-        shapeMeaning(topic),
-        `Seen by ${topic.sources.join(", ") || "no source"} in ${topic.region}.`,
-        topic.best_rank ? `Best rank ${topic.best_rank}.` : "",
-      ]
-        .filter(Boolean)
-        .join(" "),
-      job: "",
-    });
-  }
 
   useEffect(() => {
     let cancelled = false;
@@ -1468,11 +1437,10 @@ export default function ResearchDashboard() {
         </div>
       </div>
 
-      {/* First among the result sections, because it is the answer the boards
-          below are evidence for: they each say what one source shows, this says
-          what to make. */}
+      {/* First among the result sections. The boards below each say what one
+          source shows; this says who is already winning with it. */}
       <div style={S.section}>
-        <TrendingTopics onResearch={exploreTopic} onScore={scoreTopic} />
+        <PopularPosts onResearch={exploreTopic} />
       </div>
 
       <div style={S.section}>
