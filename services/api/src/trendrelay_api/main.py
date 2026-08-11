@@ -44,6 +44,8 @@ from trendrelay_api.integrations.meta_ads_kit import (
 from trendrelay_api.integrations.meta_ads_kit import (
     run_briefing as run_meta_ads_briefing,
 )
+from trendrelay_api.integrations.popular_posts import PERIODS as POST_PERIODS
+from trendrelay_api.integrations.popular_posts import collect_posts, live_reader
 from trendrelay_api.integrations.tiktok_creative import (
     TikTokTrendRequest,
     TikTokUnavailable,
@@ -346,6 +348,34 @@ def _consolidated_trends(
         "topic_count": len(topics),
         "public_data_only": True,
     }
+
+
+@app.get("/api/research/posts/popular", tags=["research"])
+async def popular_posts(
+    request: Request,
+    region: str = Query(default="US", min_length=2, max_length=2),
+    period: int = Query(default=7),
+    limit: int = Query(default=20, ge=1, le=50),
+) -> dict[str, object]:
+    """The posts doing best in one country, and who made them.
+
+    One window rather than three: a post is popular or it is not, and the
+    window comparison the topic list needs would be renders spent on a question
+    nobody asked here.
+    """
+    require_local_mutation(request)
+    if period not in POST_PERIODS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown period {period}. Expected one of {', '.join(map(str, POST_PERIODS))}.",
+        )
+    result = await asyncio.to_thread(
+        collect_posts, region=region, period=period, limit=limit, tiktok_reader=live_reader()
+    )
+    if not result["posts"] and not result["complete"]:
+        # Nothing answered, which is a provider state rather than a quiet week.
+        raise HTTPException(status_code=503, detail=" ".join(result["notes"]))
+    return result
 
 
 @app.get("/api/research/trends/consolidated", tags=["research"])
