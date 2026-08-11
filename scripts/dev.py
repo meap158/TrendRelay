@@ -48,6 +48,16 @@ class Service:
     restart_limit: int = 5
     restart_window: float = 60
     required: bool = True
+    #: Directories whose .py files should restart this service when they change.
+    #:
+    #: uvicorn's own --reload works, and then quietly stops: a backend left
+    #: running for an hour serves the code it started with, however many times
+    #: its files are touched. Forcing watchfiles to poll was the previous
+    #: attempt and it degrades the same way. The worker has always watched its
+    #: own source from Python and is still reloading after hours, so services
+    #: are watched the same way here - by the supervisor that can already
+    #: restart them.
+    reload_roots: tuple[str, ...] = ()
 
 
 @dataclass
@@ -56,6 +66,8 @@ class RunningService:
     process: subprocess.Popen[str]
     output_thread: threading.Thread | None
     restart_times: list[float] = field(default_factory=list)
+    #: The source this process was started from, for comparison later.
+    sources: tuple[tuple[str, int, int], ...] = ()
 
 
 COLORS = {
@@ -165,6 +177,30 @@ def find_free_port(
     return port
 
 
+#: How often to look for source changes. Cheap: a stat() over a few hundred
+#: files, and only for services that asked to be watched.
+RELOAD_POLL_SECONDS = 1.0
+
+
+def source_snapshot(roots: tuple[str, ...]) -> tuple[tuple[str, int, int], ...]:
+    """Every watched .py file, by path, modification time and size.
+
+    Size as well as mtime because a coarse filesystem clock can leave two edits
+    inside the same tick, and an edit that only changes length would be missed.
+    """
+    files: list[tuple[str, int, int]] = []
+    for root in roots:
+        for path in (ROOT / root).rglob("*.py"):
+            try:
+                stat = path.stat()
+            except OSError:
+                # A file being written as it is read is not a change worth
+                # crashing the runner over; the next pass will see it.
+                continue
+            files.append((str(path), stat.st_mtime_ns, stat.st_size))
+    return tuple(sorted(files))
+
+
 #: Where `next dev` builds, and where it used to build.
 #
 # The dev server moved to its own directory so that `next build` could stop
@@ -243,7 +279,9 @@ def start_service(service: Service) -> RunningService:
     print(
         f"{paint(f'[{service.name}]', service.color)} Started monitor for PID {process.pid}."
     )
-    return RunningService(service, process, thread)
+    # Taken now rather than on the first poll, so an edit made while the service
+    # was starting is still noticed.
+    return RunningService(service, process, thread, sources=source_snapshot(service.reload_roots))
 
 
 def restart_exited_service(
@@ -373,25 +411,24 @@ def build_services(include_desktop: bool, *, may_terminate: bool = True) -> list
                 "0.0.0.0",
                 "--port",
                 str(backend_port),
-                "--reload",
-                "--reload-dir",
-                "services/api/src",
             ],
             "cyan",
             f"http://127.0.0.1:{backend_port}/api/auth/local-session",
-            # Poll for changes rather than subscribe to them.
+            # Reloaded by this runner rather than by uvicorn.
             #
-            # The event-driven watcher stopped delivering on a long-running
-            # backend: edits to the API, and a touch of main.py, left the worker
-            # from hours earlier still serving. A fresh process with these exact
-            # arguments reloads correctly, so the watch is being lost rather
-            # than never set up - which fits ReadDirectoryChangesW dropping a
-            # subscription under load and never getting it back.
+            # `--reload` works, and then quietly stops. A backend left running
+            # for an hour served the code it started with, however many times
+            # its files were touched - while the identical command in a fresh
+            # process reloaded correctly every time, so the watch is lost rather
+            # than never set up. Forcing watchfiles to poll was the previous
+            # attempt at this and degraded the same way.
             #
-            # Polling cannot be lost that way, and it is a stat() over a few
-            # hundred files. A reloader that silently stops is worse than one
-            # that costs a little: the failure looks like the code not working.
-            environment={"WATCHFILES_FORCE_POLLING": "1"},
+            # `reload_roots` puts the watch in the supervisor loop instead,
+            # which is where the worker has always kept its own and is still
+            # reloading after hours. A reloader that silently stops is worse
+            # than a restart that costs a second: the failure looks exactly
+            # like the code not working.
+            reload_roots=("services/api/src",),
             restart_on_exit=True,
             port=backend_port,
         ),
@@ -644,6 +681,7 @@ def main() -> int:
         open_browser_app(args.desktop, services)
 
         next_health_check = time.monotonic() + 2
+        next_reload_check = time.monotonic() + RELOAD_POLL_SECONDS
         reused_failures = {service.name: 0 for service in reused}
         while True:
             index = 0
@@ -692,6 +730,19 @@ def main() -> int:
                         print(f"Reused {service.name} service is no longer available.")
                         return 1
                 next_health_check = time.monotonic() + 2
+            if time.monotonic() >= next_reload_check:
+                for index, item in enumerate(running):
+                    if not item.definition.reload_roots:
+                        continue
+                    current = source_snapshot(item.definition.reload_roots)
+                    if current == item.sources:
+                        continue
+                    print(
+                        f"{item.definition.name} source changed; restarting it."
+                    )
+                    stop_service(item)
+                    running[index] = start_service(item.definition)
+                next_reload_check = time.monotonic() + RELOAD_POLL_SECONDS
             time.sleep(0.25)
     except KeyboardInterrupt:
         print("\nShutdown requested. Stopping TrendRelay...")

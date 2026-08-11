@@ -475,3 +475,71 @@ def test_a_service_that_ignores_the_request_is_still_forced(monkeypatch) -> None
 
     assert forced and forced[0][:2] == ["taskkill", "/PID"]
     assert "/F" in forced[0]
+
+
+def test_the_backend_is_watched_by_the_runner_not_by_uvicorn(monkeypatch, tmp_path) -> None:
+    """`--reload` works and then quietly stops.
+
+    A backend left running for an hour served the code it started with, however
+    many times its files were touched, while the identical command in a fresh
+    process reloaded every time. The watch is lost rather than never set up, so
+    it lives in the supervisor loop now.
+    """
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    monkeypatch.setattr(dev.shutil, "which", lambda _name: "available")
+    monkeypatch.setattr(dev, "find_free_port", lambda preferred, *_a, **_k: preferred)
+
+    backend = next(
+        service for service in dev.build_services(False) if service.name == "Backend"
+    )
+
+    assert "--reload" not in backend.command, "two reloaders would fight over one process"
+    assert backend.reload_roots == ("services/api/src",)
+
+
+def test_a_source_snapshot_notices_an_edit(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    source = tmp_path / "api"
+    source.mkdir()
+    module = source / "thing.py"
+    module.write_text("x = 1", encoding="utf-8")
+
+    before = dev.source_snapshot(("api",))
+    module.write_text("x = 2", encoding="utf-8")
+
+    assert dev.source_snapshot(("api",)) != before
+
+
+def test_a_snapshot_notices_an_edit_that_keeps_the_length(monkeypatch, tmp_path) -> None:
+    # Size alone would miss it, and a coarse filesystem clock can put two edits
+    # in the same tick - so both are compared.
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    source = tmp_path / "api"
+    source.mkdir()
+    module = source / "thing.py"
+    module.write_text("x = 1", encoding="utf-8")
+    before = dev.source_snapshot(("api",))
+
+    module.write_text("x = 9", encoding="utf-8")
+
+    assert len(dev.source_snapshot(("api",))) == len(before)
+
+
+def test_a_service_with_nothing_to_watch_snapshots_nothing(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    assert dev.source_snapshot(()) == ()
+
+
+def test_a_file_that_vanishes_mid_scan_does_not_stop_the_runner(monkeypatch, tmp_path) -> None:
+    """A file being written as it is read is not worth crashing over."""
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    source = tmp_path / "api"
+    source.mkdir()
+    (source / "thing.py").write_text("x = 1", encoding="utf-8")
+
+    def explode(self):
+        raise OSError("gone")
+
+    monkeypatch.setattr(dev.Path, "stat", explode)
+
+    assert dev.source_snapshot(("api",)) == ()
