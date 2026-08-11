@@ -24,12 +24,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   // the first client render agree; a mismatch here blanks the page.
   return (
     <html lang="en" dir="ltr">
-      <head>
-        {/* Runs while this HTML is parsed, which is the point: it is the only
-            recovery left when React never starts. See hydration-rescue.tsx. */}
-        <script dangerouslySetInnerHTML={{ __html: HYDRATION_RESCUE_SCRIPT }} />
-      </head>
       <body>
+        {/* Runs while this HTML is parsed, which is the point: it is the only
+            recovery left when React never starts. See hydration-rescue.tsx.
+            In <body> rather than a hand-written <head>, which the App Router
+            owns and answers with a 500 when a layout tries to supply one. */}
+        <script dangerouslySetInnerHTML={{ __html: HYDRATION_RESCUE_SCRIPT }} />
         <HydrationBeacon />
         <LocaleProvider>
           <AuthProvider>
