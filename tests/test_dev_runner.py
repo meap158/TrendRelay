@@ -331,3 +331,68 @@ def test_a_free_port_is_left_alone(monkeypatch) -> None:
     dev.restart_exited_service(dev.RunningService(service, Exited(), None), now=100.0)
 
     assert freed == []
+
+
+def _stage_dev_dir(root: Path, name: str, pid: int) -> Path:
+    dev_dir = root / "apps" / "web" / name / "dev"
+    dev_dir.mkdir(parents=True)
+    (dev_dir / "pid").write_text(str(pid), encoding="utf-8")
+    return dev_dir
+
+
+def test_a_stale_dev_server_is_found_where_it_actually_builds(monkeypatch, tmp_path) -> None:
+    """The dev server moved directories, and this is what has to follow it.
+
+    `next dev` builds into `.next-dev` so that `next build` cannot overwrite the
+    files a running app is serving from. If this cleanup kept looking only in
+    `.next`, a leftover dev server would never be killed - it would keep holding
+    the frontend port, and the runner would quietly move to another one.
+    """
+    killed: list[int] = []
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    monkeypatch.setattr(dev.subprocess, "run", lambda cmd, **_: killed.append(int(cmd[2])))
+    monkeypatch.setattr(dev.os, "kill", lambda pid, _signal: killed.append(pid))
+    monkeypatch.setattr(dev, "IS_WINDOWS", True)
+    dev_dir = _stage_dev_dir(tmp_path, ".next-dev", 4242)
+
+    dev._cleanup_stale_nextjs()
+
+    assert killed == [4242]
+    assert not dev_dir.exists()
+
+
+def test_a_dev_server_left_by_the_old_layout_is_still_cleaned(monkeypatch, tmp_path) -> None:
+    # A checkout from before the split still has .next/dev/pid in it, and the
+    # process it names is exactly what this exists to kill.
+    killed: list[int] = []
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    monkeypatch.setattr(dev.subprocess, "run", lambda cmd, **_: killed.append(int(cmd[2])))
+    monkeypatch.setattr(dev, "IS_WINDOWS", True)
+    legacy = _stage_dev_dir(tmp_path, ".next", 99)
+
+    dev._cleanup_stale_nextjs()
+
+    assert killed == [99]
+    assert not legacy.exists()
+
+
+def test_a_production_build_is_left_alone(monkeypatch, tmp_path) -> None:
+    """Only the dev subdirectory goes.
+
+    Removing .next itself would delete a production build every time the app
+    started, which is not this function's business.
+    """
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    monkeypatch.setattr(dev, "IS_WINDOWS", True)
+    build = tmp_path / "apps" / "web" / ".next"
+    build.mkdir(parents=True)
+    (build / "BUILD_ID").write_text("abc", encoding="utf-8")
+
+    dev._cleanup_stale_nextjs()
+
+    assert (build / "BUILD_ID").is_file()
+
+
+def test_nothing_to_clean_is_not_an_error(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    dev._cleanup_stale_nextjs()

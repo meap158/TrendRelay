@@ -160,27 +160,37 @@ def find_free_port(
     return port
 
 
+#: Where `next dev` builds, and where it used to build.
+#
+# The dev server moved to its own directory so that `next build` could stop
+# overwriting the files a running app was serving from - a collision that took
+# the whole stack down through the restart budget below. The old location stays
+# in this list because a checkout that predates the split still has a stale
+# `.next/dev/pid` in it, and the process that pid names is exactly what this
+# function exists to kill.
+NEXT_DEV_DIRS = (".next-dev", ".next")
+
+
 def _cleanup_stale_nextjs() -> None:
-    next_dir = ROOT / "apps" / "web" / ".next"
-    if not next_dir.is_dir():
-        return
-    pid_file = next_dir / "dev" / "pid"
-    if pid_file.is_file():
-        try:
-            pid = int(pid_file.read_text().strip())
-            if IS_WINDOWS:
-                subprocess.run(
-                    ["taskkill", "/PID", str(pid), "/T", "/F"],
-                    check=False,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-            else:
-                os.kill(pid, signal.SIGTERM)
-        except (ValueError, OSError):
-            pass
-    dev_dir = next_dir / "dev"
-    if dev_dir.is_dir():
+    for name in NEXT_DEV_DIRS:
+        dev_dir = ROOT / "apps" / "web" / name / "dev"
+        if not dev_dir.is_dir():
+            continue
+        pid_file = dev_dir / "pid"
+        if pid_file.is_file():
+            try:
+                pid = int(pid_file.read_text().strip())
+                if IS_WINDOWS:
+                    subprocess.run(
+                        ["taskkill", "/PID", str(pid), "/T", "/F"],
+                        check=False,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                else:
+                    os.kill(pid, signal.SIGTERM)
+            except (ValueError, OSError):
+                pass
         shutil.rmtree(dev_dir, ignore_errors=True)
 
 
