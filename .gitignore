@@ -4,6 +4,7 @@
 # JavaScript and application builds
 node_modules/
 .next/
+.next-dev/
 dist/
 out/
 build/
