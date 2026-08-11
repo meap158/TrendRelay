@@ -390,7 +390,7 @@ nav strong { color: #1c2b33; }
    into a 4:5 box - which is the whole question this panel answers. The value
    here is only what is used before the media has loaded, and the cap stops a
    tall vertical from pushing everything below it off the screen. */
-.post-preview-frame { display: grid; place-items: center; aspect-ratio: var(--preview-ratio, 4 / 5); max-block-size: min(56vh, 440px); border-radius: var(--radius); background: var(--panel-raised); overflow: hidden; }
+.post-preview-frame { display: grid; place-items: center; justify-self: center; max-inline-size: 100%; aspect-ratio: var(--preview-ratio, 4 / 5); max-block-size: min(56vh, 440px); border-radius: var(--radius); background: var(--panel-raised); overflow: hidden; }
 .post-preview.story .post-preview-frame { --preview-ratio: 9 / 16; }
 .post-preview-frame { position: relative; }
 /* Contain, like the video below it. The frame is already the media's own
