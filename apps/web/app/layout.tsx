@@ -8,6 +8,7 @@ import "./catalog.css";
 import "./sticky-headers.css";
 import "./ui/ui.css";
 import { AuthProvider } from "./auth-provider";
+import { HYDRATION_RESCUE_SCRIPT, HydrationBeacon } from "./hydration-rescue";
 import { GlobalNav } from "./global-nav";
 import { LocaleProvider } from "./i18n-provider";
 import { JobsProvider } from "./jobs-provider";
@@ -23,7 +24,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   // the first client render agree; a mismatch here blanks the page.
   return (
     <html lang="en" dir="ltr">
+      <head>
+        {/* Runs while this HTML is parsed, which is the point: it is the only
+            recovery left when React never starts. See hydration-rescue.tsx. */}
+        <script dangerouslySetInnerHTML={{ __html: HYDRATION_RESCUE_SCRIPT }} />
+      </head>
       <body>
+        <HydrationBeacon />
         <LocaleProvider>
           <AuthProvider>
             <JobsProvider>
