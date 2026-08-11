@@ -236,8 +236,23 @@ export function PostPreview({
   // Which frame the preview is showing. A carousel is swiped, so the question
   // "does this read" is asked of each one, not only of the cover.
   const [frame, setFrame] = useState(0);
+  /**
+   * The media's own width divided by its height, once the browser knows it.
+   *
+   * Measured rather than guessed from the platform: a 4:5 box letterboxed a
+   * 9:16 clip and cropped a landscape one, and neither is what gets posted.
+   *
+   * Stored with the source it was measured from, so stepping to the next
+   * carousel frame stops using the previous frame's shape without needing an
+   * effect to clear it - the stale value simply stops matching.
+   */
+  const [measured, setMeasured] = useState<{ source: string; ratio: number } | null>(null);
   const frames = carousel ?? [];
   const showing = frames.length ? frames[Math.min(frame, frames.length - 1)] : source;
+  const ratio = measured && measured.source === showing ? measured.ratio : null;
+  const measure = (width: number, height: number) => {
+    if (width && height && showing) setMeasured({ source: showing, ratio: width / height });
+  };
   const showsTitle = platform === "youtube" || platform === "reddit" || platform === "pinterest";
 
   return (
@@ -249,7 +264,10 @@ export function PostPreview({
           <small>{platformLabels[platform]} · {postTypeLabel}</small>
         </span>
       </figcaption>
-      <div className="post-preview-frame">
+      <div
+        className="post-preview-frame"
+        style={ratio ? ({ "--preview-ratio": String(ratio) } as React.CSSProperties) : undefined}
+      >
         {/* The media, where there is any: a network shows the clip, not a
             still of it, and a caption judged against a frozen frame is judged
             against something nobody will see. The thumbnail is the fallback
@@ -259,13 +277,19 @@ export function PostPreview({
           // This panel used to sit beside a separate "What will be sent" card
           // that played the identical file, so the page asked the same question
           // twice and answered it two different ways.
-          <UploadPreview key={showing} source={showing} poster={thumbnail} />
+          <UploadPreview key={showing} source={showing} poster={thumbnail} onNaturalRatio={(value) => showing && setMeasured({ source: showing, ratio: value })} />
         ) : showing ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img alt="" src={showing} />
+          <img alt="" src={showing} onLoad={(event) => {
+            const { naturalWidth, naturalHeight } = event.currentTarget;
+            measure(naturalWidth, naturalHeight);
+          }} />
         ) : thumbnail ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img alt="" src={thumbnail} />
+          <img alt="" src={thumbnail} onLoad={(event) => {
+            const { naturalWidth, naturalHeight } = event.currentTarget;
+            measure(naturalWidth, naturalHeight);
+          }} />
         ) : (
           <p>{t("composer.chooseClipForFrame")}</p>
         )}
@@ -828,21 +852,39 @@ export function SlotEditor({
  * Keyed on the source by its caller, so choosing different media puts the gate
  * back rather than autoplaying whatever was picked next.
  */
-export function UploadPreview({ source, poster }: { source: string; poster?: string }) {
+export function UploadPreview({
+  source,
+  poster,
+  onNaturalRatio,
+}: {
+  source: string;
+  poster?: string;
+  /** The media's own width/height, once the browser knows it. */
+  onNaturalRatio?: (ratio: number) => void;
+}) {
   const t = useT();
   const [requested, setRequested] = useState(false);
 
   if (requested) {
     return (
       <video className="blur-preview" controls controlsList="nodownload" autoPlay
-        preload="none" poster={poster || undefined} src={source} />
+        preload="none" poster={poster || undefined} src={source}
+        onLoadedMetadata={(event) => {
+          const { videoWidth, videoHeight } = event.currentTarget;
+          if (videoWidth && videoHeight) onNaturalRatio?.(videoWidth / videoHeight);
+        }} />
     );
   }
   return (
     <button type="button" className="blur-preview-launch" onClick={() => setRequested(true)}>
       {poster
         // eslint-disable-next-line @next/next/no-img-element
-        ? <img alt="" src={poster} />
+        ? <img alt="" src={poster} onLoad={(event) => {
+            // The poster is the first frame, so it has the clip's shape and
+            // arrives long before anyone presses play.
+            const { naturalWidth, naturalHeight } = event.currentTarget;
+            if (naturalWidth && naturalHeight) onNaturalRatio?.(naturalWidth / naturalHeight);
+          }} />
         : <span className="blur-preview-empty" />}
       <span className="blur-preview-overlay">
         <span aria-hidden="true">&#9654;</span>

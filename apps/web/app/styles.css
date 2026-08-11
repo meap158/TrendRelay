@@ -384,10 +384,19 @@ nav strong { color: #1c2b33; }
 .post-preview figcaption span { display: grid; gap: 1px; min-width: 0; }
 .post-preview figcaption strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .post-preview figcaption small { color: var(--muted); font-size: 11px; }
-.post-preview-frame { display: grid; place-items: center; aspect-ratio: 4 / 5; border-radius: var(--radius); background: var(--panel-raised); overflow: hidden; }
-.post-preview.story .post-preview-frame { aspect-ratio: 9 / 16; }
+/* The frame takes the shape of the media in it.
+   `--preview-ratio` is set from the clip's own dimensions once they are known,
+   so a 9:16 vertical is shown as a 9:16 vertical instead of being letterboxed
+   into a 4:5 box - which is the whole question this panel answers. The value
+   here is only what is used before the media has loaded, and the cap stops a
+   tall vertical from pushing everything below it off the screen. */
+.post-preview-frame { display: grid; place-items: center; aspect-ratio: var(--preview-ratio, 4 / 5); max-block-size: min(56vh, 440px); border-radius: var(--radius); background: var(--panel-raised); overflow: hidden; }
+.post-preview.story .post-preview-frame { --preview-ratio: 9 / 16; }
 .post-preview-frame { position: relative; }
-.post-preview-frame img { width: 100%; height: 100%; object-fit: cover; }
+/* Contain, like the video below it. The frame is already the media's own
+   shape, so there is nothing to crop away - and cropping here hid the
+   edges of the very thing being judged. */
+.post-preview-frame img { width: 100%; height: 100%; object-fit: contain; }
 /* Contain rather than cover: this frame is for judging what fits, and cropping
    the clip to fill it would hide the very edges being judged. */
 .post-preview-frame video { width: 100%; height: 100%; object-fit: contain; background: #111820; }
@@ -790,11 +799,13 @@ nav strong { color: #1c2b33; }
    The player had no ceiling, so a portrait clip - which is most of them here -
    grew to whatever its aspect ratio wanted and pushed everything under it off
    the screen. A fixed stage keeps the panel the same height whatever is in it. */
+/* Fill the frame rather than setting a height of their own: the frame is now
+   the thing that carries the media's aspect ratio. */
 .post-preview-frame .blur-preview,
-.post-preview-frame .blur-preview-launch { display: block; inline-size: 100%; block-size: clamp(180px, 26vh, 300px); border-radius: var(--radius-sm); background: #111820; }
+.post-preview-frame .blur-preview-launch { display: block; inline-size: 100%; block-size: 100%; border-radius: var(--radius-sm); background: #111820; }
 .post-preview-frame .blur-preview { object-fit: contain; }
 .blur-preview-launch { position: relative; overflow: hidden; border: 0; padding: 0; cursor: pointer; }
-.blur-preview-launch img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.blur-preview-launch img { inline-size: 100%; block-size: 100%; object-fit: contain; }
 .blur-preview-empty { display: block; inline-size: 100%; block-size: 100%; background: #111820; }
 .blur-preview-overlay { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 5px; background: linear-gradient(180deg, rgba(10, 17, 24, .12), rgba(10, 17, 24, .62)); color: #fff; }
 .blur-preview-overlay span[aria-hidden] { display: grid; place-items: center; inline-size: 38px; block-size: 38px; border-radius: 50%; padding-inline-start: 3px; color: #111820; background: #fff; font-size: 14px; }
