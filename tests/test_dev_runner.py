@@ -415,3 +415,63 @@ def test_the_worker_is_told_which_runner_started_it() -> None:
 
     assert "--parent-pid" in worker.command
     assert worker.command[worker.command.index("--parent-pid") + 1] == str(os.getpid())
+
+
+class StoppableProcess:
+    """A child that exits when asked, after `waits_before_exit` checks."""
+
+    def __init__(self, waits_before_exit: int = 0) -> None:
+        self.pid = 4321
+        self.waits_before_exit = waits_before_exit
+        self.exited = False
+        self.killed = False
+
+    def poll(self):
+        return 0 if self.exited else None
+
+    def wait(self, timeout=None):
+        if self.waits_before_exit <= 0:
+            self.exited = True
+            return 0
+        self.waits_before_exit -= 1
+        raise dev.subprocess.TimeoutExpired("cmd", timeout)
+
+    def kill(self):
+        self.killed = True
+        self.exited = True
+
+
+def test_a_service_is_asked_to_stop_before_it_is_forced(monkeypatch) -> None:
+    """Forcing corrupts Turbopack's cache database.
+
+    `taskkill /F` is a SIGKILL: killing the dev server mid-write leaves that
+    database unreadable, after which every route answers 500 and the only cure
+    is deleting the build directory. A normal shutdown is the common case and
+    deserves the second it costs to exit properly.
+    """
+    signals: list[int] = []
+    forced: list[list[str]] = []
+    monkeypatch.setattr(dev, "IS_WINDOWS", True)
+    monkeypatch.setattr(dev.os, "kill", lambda _pid, sig: signals.append(sig))
+    monkeypatch.setattr(dev.subprocess, "run", lambda cmd, **_: forced.append(cmd))
+    process = StoppableProcess()
+
+    dev.stop_service(dev.RunningService(dev.Service("Frontend", ["npm"], "green"), process, None))
+
+    assert signals == [dev.signal.CTRL_BREAK_EVENT]
+    assert forced == [], "a child that stopped on request must not be killed as well"
+
+
+def test_a_service_that_ignores_the_request_is_still_forced(monkeypatch) -> None:
+    # Graceful is a preference, not a promise: a wedged dev server must not keep
+    # the runner hanging on shutdown.
+    forced: list[list[str]] = []
+    monkeypatch.setattr(dev, "IS_WINDOWS", True)
+    monkeypatch.setattr(dev.os, "kill", lambda _pid, _sig: None)
+    monkeypatch.setattr(dev.subprocess, "run", lambda cmd, **_: forced.append(cmd))
+    process = StoppableProcess(waits_before_exit=1)
+
+    dev.stop_service(dev.RunningService(dev.Service("Frontend", ["npm"], "green"), process, None))
+
+    assert forced and forced[0][:2] == ["taskkill", "/PID"]
+    assert "/F" in forced[0]

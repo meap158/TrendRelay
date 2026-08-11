@@ -20,6 +20,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 IS_WINDOWS = os.name == "nt"
 
+#: How long a service gets to shut down cleanly before it is forced.
+#: Long enough for Turbopack to close its cache database, short enough
+#: that Ctrl+C still feels immediate.
+GRACEFUL_STOP_SECONDS = 6
+
 for output in (sys.stdout, sys.stderr):
     if hasattr(output, "reconfigure"):
         output.reconfigure(encoding="utf-8", errors="replace")
@@ -284,6 +289,36 @@ def stop_service(running: RunningService) -> None:
         return
 
     print(f"Stopping {running.definition.name} (PID {process.pid})...")
+    # Ask before forcing.
+    #
+    # This used to go straight to `taskkill /F`, which is a SIGKILL: the child
+    # gets no chance to close anything. Turbopack keeps a persistent cache in a
+    # database under the dev build directory, and killing it mid-write leaves
+    # that database corrupt - after which the dev server answers every route
+    # with 500 and logs "Unable to open static sorted file", or serves chunks
+    # that do not exist and takes hydration down with them. Restarting the app
+    # appears to fix it only because startup deletes the directory.
+    #
+    # A normal shutdown is the common case, so it is worth the second it costs
+    # to let the child exit properly. Force is still there for one that will
+    # not.
+    if IS_WINDOWS:
+        # The process group is created in `start_service`, which is what makes
+        # this reach the child rather than this runner.
+        try:
+            os.kill(process.pid, signal.CTRL_BREAK_EVENT)
+        except (OSError, AttributeError, ValueError):
+            pass
+    else:
+        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+
+    try:
+        process.wait(timeout=GRACEFUL_STOP_SECONDS)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+
+    print(f"{running.definition.name} did not stop on request; forcing it.")
     if IS_WINDOWS:
         subprocess.run(
             ["taskkill", "/PID", str(process.pid), "/T", "/F"],
@@ -292,7 +327,7 @@ def stop_service(running: RunningService) -> None:
             stderr=subprocess.DEVNULL,
         )
     else:
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
 
     try:
         process.wait(timeout=5)
