@@ -2157,8 +2157,13 @@ export default function PublishPage() {
 
               Whether the media has to be publicly hosted depends on which
               engine delivers it, so asking for it first meant warning about
-              a constraint from a destination nobody had chosen. */}
-          {needsPublicMedia && !hostsLocalMedia ? (
+              a constraint from a destination nobody had chosen.
+
+              None of it applies to a carousel. That post carries images and
+              sends no video path at all, so offering a clip field - and a
+              picker filtered to videos - invited choosing a file that would
+              have been dropped from the request without a word. */}
+          {wantsCarousel ? null : needsPublicMedia && !hostsLocalMedia ? (
             <div className="ui-field">
               {/* The picker belongs here too. This engine fetches rather than
                   uploads, but a clip still has to be chosen before anyone can
