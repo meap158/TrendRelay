@@ -505,14 +505,16 @@ def test_a_source_snapshot_notices_an_edit(monkeypatch, tmp_path) -> None:
     module.write_text("x = 1", encoding="utf-8")
 
     before = dev.source_snapshot(("api",))
-    module.write_text("x = 2", encoding="utf-8")
+    # Longer, not just different. Two same-length writes inside one filesystem
+    # clock tick produce an identical snapshot, which made an earlier version
+    # of this test fail only when the suite ran fast enough.
+    module.write_text("x = 1  # changed", encoding="utf-8")
 
     assert dev.source_snapshot(("api",)) != before
 
 
 def test_a_snapshot_notices_an_edit_that_keeps_the_length(monkeypatch, tmp_path) -> None:
-    # Size alone would miss it, and a coarse filesystem clock can put two edits
-    # in the same tick - so both are compared.
+    """Size alone would miss it, so the modification time is compared too."""
     monkeypatch.setattr(dev, "ROOT", tmp_path)
     source = tmp_path / "api"
     source.mkdir()
@@ -521,8 +523,14 @@ def test_a_snapshot_notices_an_edit_that_keeps_the_length(monkeypatch, tmp_path)
     before = dev.source_snapshot(("api",))
 
     module.write_text("x = 9", encoding="utf-8")
+    # Set explicitly rather than hoping the clock moved: this is a test of what
+    # the snapshot compares, not of the filesystem's timer resolution.
+    stat = module.stat()
+    os.utime(module, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
 
-    assert len(dev.source_snapshot(("api",))) == len(before)
+    after = dev.source_snapshot(("api",))
+    assert after != before
+    assert [entry[2] for entry in after] == [entry[2] for entry in before], "same size"
 
 
 def test_a_service_with_nothing_to_watch_snapshots_nothing(monkeypatch, tmp_path) -> None:
