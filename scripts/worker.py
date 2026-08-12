@@ -21,7 +21,7 @@ from trendrelay_api.integrations.publishing import run_publish_job  # noqa: E402
 from trendrelay_api.media_library import run_ingest_job  # noqa: E402
 from trendrelay_api.campaign_runner import tick as campaign_tick  # noqa: E402
 from trendrelay_api.database import SessionFactory  # noqa: E402
-from trendrelay_api.jobs import recoverable_job_ids  # noqa: E402
+from trendrelay_api.jobs import abandon_expired_jobs, recoverable_job_ids  # noqa: E402
 
 
 #: Campaign autopilot is time-driven rather than queue-driven, so it is asked
@@ -43,7 +43,27 @@ def tick_autopilot(now: float) -> None:
         print(f"Campaign autopilot tick failed: {error}", flush=True)
 
 
+#: Every queue this worker drains. Named once so the sweep below cannot drift
+#: out of step with the list of things actually processed.
+JOB_KINDS = (
+    "douyin_download",
+    "trend_research",
+    "social_publish",
+    "openmontage_render",
+    "media_ingest",
+    "media_face_blur",
+)
+
+
 def process_available() -> int:
+    # Before claiming anything: a job whose worker died with no attempts left
+    # is invisible to the recovery below, and stays "running" until somebody
+    # notices it never finished. Giving it a terminal state is what puts it in
+    # front of them.
+    for kind in JOB_KINDS:
+        for job_id in abandon_expired_jobs(kind):
+            print(f"Abandoned {kind} job {job_id}: its worker never came back.", flush=True)
+
     download_ids = recoverable_job_ids("douyin_download")
     research_ids = recoverable_job_ids("trend_research")
     publishing_ids = recoverable_job_ids("social_publish")
