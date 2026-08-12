@@ -1814,3 +1814,94 @@ def test_someone_elses_link_is_not_our_attribution(
         media_file, caption="Buy it https://shopee.vn/thing-i.1.2?af=me",
     ))
     assert preview["attribution"]["tracked"] is False
+
+
+# --- threads topics -----------------------------------------------------------
+
+
+def threads_request(**overrides) -> publishing.PublishRequest:
+    payload = {
+        "workspace_id": "workspace-1",
+        "video_path": "",
+        "media_url": "https://cdn.example.test/clip.mp4",
+        "caption": "Launch clip",
+        "date": datetime.now(UTC) + timedelta(hours=2),
+        "targets": [publishing.PublishTarget(platform="threads", integration_id="channel-1")],
+    }
+    payload.update(overrides)
+    return publishing.PublishRequest(**payload)
+
+
+def test_a_topic_loses_the_hash_somebody_typed() -> None:
+    """Threads shows the hash itself.
+
+    Typing one is the natural thing to do, and sending it would tag "#coffee"
+    rather than "coffee".
+    """
+    assert threads_request(topic="#coldbrew").topic == "coldbrew"
+    assert threads_request(topic="  cold brew  ").topic == "cold brew"
+
+
+def test_a_topic_of_nothing_is_no_topic() -> None:
+    assert threads_request(topic="   ").topic is None
+    assert threads_request(topic="#").topic is None
+
+
+@pytest.mark.parametrize("bad", ["cold.brew", "tea & coffee"])
+def test_a_topic_meta_will_not_take_is_refused_here(bad: str) -> None:
+    # Finding this out from Buffer means the post did not go out.
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        threads_request(topic=bad)
+
+
+def test_a_topic_longer_than_meta_allows_is_refused() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        threads_request(topic="x" * 51)
+
+
+def test_buffer_sends_the_topic_it_declares_on_threads(monkeypatch, tmp_path: Path) -> None:
+    use_provider(monkeypatch, tmp_path, "buffer")
+    metadata = publishing._buffer_metadata(
+        "threads", threads_request(topic="coldbrew"), publishing.PostType("post", "Post", "")
+    )
+
+    assert 'topic: "coldbrew"' in metadata
+
+
+def test_no_topic_means_no_field_at_all(monkeypatch, tmp_path: Path) -> None:
+    # An empty topic is not an empty string to Buffer; it is a field that
+    # should not be there.
+    use_provider(monkeypatch, tmp_path, "buffer")
+    metadata = publishing._buffer_metadata(
+        "threads", threads_request(), publishing.PostType("post", "Post", "")
+    )
+
+    assert "topic:" not in metadata
+
+
+def test_a_network_without_topics_never_receives_one(monkeypatch, tmp_path: Path) -> None:
+    """Buffer rejects a field a network does not declare, outright.
+
+    Only ThreadsPostMetadataInput carries `topic`, so sending it anywhere else
+    would fail the post rather than be ignored.
+    """
+    use_provider(monkeypatch, tmp_path, "buffer")
+    request = threads_request(
+        topic="coldbrew",
+        targets=[publishing.PublishTarget(platform="instagram", integration_id="channel-2")],
+    )
+
+    metadata = publishing._buffer_metadata(
+        "instagram", request, publishing.PostType("reel", "Reel", "")
+    )
+
+    assert "topic:" not in metadata
+
+
+def test_only_engines_with_a_topic_contract_advertise_one() -> None:
+    assert publishing.provider_status("buffer", probe=False)["topic_platforms"] == ["threads"]
+    assert publishing.provider_status("zernio", probe=False)["topic_platforms"] == []

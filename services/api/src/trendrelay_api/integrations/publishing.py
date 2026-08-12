@@ -179,6 +179,15 @@ class ProviderDefinition:
     #: choice and discovering mid-publish that it cannot is worse than not
     #: offering it, because the post is already half-made by then.
     photo_carousel_platforms: tuple[str, ...] = ()
+    #: Platforms this engine can attach a topic to.
+    #:
+    #: Threads is the only network with one: a single tag per post that readers
+    #: tap to reach the conversation, which Meta says earns a post more views
+    #: than going without. Buffer's schema declares `topic` on its Threads
+    #: metadata and nowhere else, and it rejects a field a network does not
+    #: declare outright - so this is a list of what has been read in a schema,
+    #: not of what seems likely.
+    topic_platforms: tuple[str, ...] = ()
 
 
 PROVIDERS: dict[str, ProviderDefinition] = {
@@ -296,6 +305,9 @@ PROVIDERS: dict[str, ProviderDefinition] = {
             "Buffer has no upload endpoint. Provide a public HTTPS media URL that stays "
             "reachable until the post publishes."
         ),
+        # Read from Buffer's schema: ThreadsPostMetadataInput declares `topic`,
+        # and no other network's metadata does.
+        topic_platforms=("threads",),
     ),
     "woopsocial": ProviderDefinition(
         id="woopsocial",
@@ -516,6 +528,13 @@ class PublishRequest(BaseModel):
     #: approval request as a draft, so it cannot be combined with a live send.
     needs_approval: bool = False
     youtube_category_id: str = Field(default=DEFAULT_YOUTUBE_CATEGORY, max_length=4)
+    #: Threads' topic tag: one per post, tapped to reach the conversation.
+    #:
+    #: Meta's own limits, kept here rather than trusted to the engine: 1 to 50
+    #: characters, and no full stop or ampersand. A post rejected for its topic
+    #: is a post that did not go out, and finding that out from Buffer is worse
+    #: than finding it out from the field.
+    topic: str | None = Field(default=None, max_length=50)
     subreddit: str | None = Field(default=None, max_length=100)
     board: str | None = Field(default=None, max_length=200)
     #: The chosen board's name, when it was picked from the engine rather than
@@ -544,6 +563,26 @@ class PublishRequest(BaseModel):
     @classmethod
     def tidy_first_comment(cls, value: str | None) -> str | None:
         return (value or "").strip() or None
+
+    @field_validator("topic")
+    @classmethod
+    def usable_topic(cls, value: str | None) -> str | None:
+        """A topic as Threads will take it.
+
+        The leading hash goes because Threads shows one itself; typing it is
+        the natural thing to do and sending it would tag "#coffee" rather than
+        "coffee".
+        """
+        if value is None:
+            return None
+        topic = value.strip().lstrip("#").strip()
+        if not topic:
+            return None
+        if "." in topic or "&" in topic:
+            raise ValueError("A Threads topic cannot contain a full stop or an ampersand.")
+        if len(topic) > 50:
+            raise ValueError("A Threads topic is at most 50 characters.")
+        return topic
 
     @field_validator("subreddit")
     @classmethod
@@ -1692,6 +1731,13 @@ def _buffer_metadata(platform: str, request: PublishRequest, kind: PostType) -> 
     )
     # Buffer wants every part of the thread including the root, and the root has
     # to be the same text as the post itself, so the caption leads the array.
+    # Only where the engine's schema declares it. Buffer rejects a field a
+    # network does not accept outright, so this is not a field to send hopefully.
+    topic = (
+        f" topic: {_graphql_literal(request.topic)}"
+        if request.topic and platform in PROVIDERS["buffer"].topic_platforms
+        else ""
+    )
     thread = ""
     if request.thread and platform in THREAD_PLATFORMS:
         parts = ", ".join(
@@ -1715,7 +1761,7 @@ def _buffer_metadata(platform: str, request: PublishRequest, kind: PostType) -> 
         ),
         # TikTok's input declares no post type.
         "tiktok": f"tiktok: {{ isAiGenerated: {disclosure} }}",
-        "threads": f"threads: {{ type: {kind.id}{thread} }}",
+        "threads": f"threads: {{ type: {kind.id}{thread}{topic} }}",
         "twitter": f"twitter: {{ isAiGenerated: {disclosure}{thread} }}",
         "mastodon": f"mastodon: {{{thread} }}" if thread else "",
         "bluesky": f"bluesky: {{{thread} }}" if thread else "",
@@ -2080,6 +2126,9 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
             ]
             for platform in provider.platforms
         },
+        # Same reasoning as post_types: the composer can only offer a topic
+        # where the engine delivering that destination declares one.
+        "topic_platforms": list(provider.topic_platforms),
         "credential_fields": [
             {
                 "id": field.id,
