@@ -142,6 +142,8 @@ type PostTypeOption = { id: string; label: string; help: string };
 type PlatformLimit = { caption: number; title: number | null };
 type Provider = {
   post_types: Record<string, PostTypeOption[]>;
+  /** Platforms this engine can attach a topic to. Threads, where it can. */
+  topic_platforms?: string[];
   limits: Record<string, PlatformLimit>;
   first_comment_platforms: string[];
   thread_platforms: string[];
@@ -273,6 +275,8 @@ export default function PublishPage() {
   /** Post type per destination, keyed by account: two accounts on one network
       can go out as a Reel and as a Story. */
   const [postTypes, setPostTypes] = useState<Record<string, string>>({});
+  /** Threads' one topic tag, when a destination can carry it. */
+  const [topic, setTopic] = useState("");
   /**
    * Engines switched off for publishing, by id.
    *
@@ -519,6 +523,34 @@ export default function PublishPage() {
   );
   /** Derived rather than counted twice: one predicate, one place to be wrong. */
   const wantsCarousel = carouselTargetCount > 0;
+  /**
+   * Whether any chosen destination can carry a topic.
+   *
+   * Asked of the engine delivering that destination rather than of the network,
+   * because Threads through an engine with no contract for one cannot take it -
+   * and the field would then be a promise nothing keeps.
+   */
+  /**
+   * What Meta will refuse, said while it can still be corrected.
+   *
+   * The API enforces this too - it has to, since it is the last thing before
+   * the engine - but a post rejected for its topic is a post that did not go
+   * out, and reading that afterwards is worse than reading it here.
+   */
+  const topicProblem = useMemo(() => {
+    const value = topic.trim().replace(/^#+/, "").trim();
+    if (!value) return null;
+    if (value.includes(".") || value.includes("&")) {
+      return "A topic cannot contain a full stop or an ampersand.";
+    }
+    return value.length > 50 ? "A topic is at most 50 characters." : null;
+  }, [topic]);
+  const topicTargets = useMemo(
+    () => chosenAccounts.filter((account) => (
+      providerById.get(account.provider)?.topic_platforms ?? []
+    ).includes(account.platform)),
+    [chosenAccounts, providerById],
+  );
   /**
    * The media to play, wherever it came from.
    *
@@ -783,6 +815,8 @@ export default function PublishPage() {
       // finding out only after the post had been written.
       : wantsCarousel && carouselTargetCount !== chosenAccounts.length
         ? t("publish.carouselIsItsOwnPost")
+      : topicProblem
+        ? topicProblem
       : !caption.trim()
         ? "Write a caption"
         : captionOver > 0
@@ -963,6 +997,9 @@ export default function PublishPage() {
       // and the post type then switched back, and sending them would make the
       // request look like a carousel that nobody chose.
       image_paths: wantsCarousel ? imagePaths : [],
+      // Only where something can carry it: a topic left behind after switching
+      // destinations would otherwise travel to an engine that rejects it.
+      topic: topicTargets.length ? topic.trim() || null : null,
       subreddit: form.get("subreddit") || null,
       board: form.get("board") || null,
       // Sent alongside the id when the board came from the account's own list.
@@ -2341,6 +2378,25 @@ export default function PublishPage() {
               <i>tightest: {platformLabels[titleLimit.platform as PublishingPlatform]}</i>
             </small>
           </label>
+          )}
+          {/* Only where a chosen destination can carry one. Threads gives a post
+              a single topic that readers tap to reach the conversation, and it
+              is the engine - not the network - that decides whether it can be
+              sent, so the field appears with the destination rather than
+              sitting there being ignored. */}
+          {topicTargets.length > 0 && (
+            <label>{t("publish.threadsTopic")} <i>{t("publish.threadsTopicNote")}</i>
+              <input
+                name="topic"
+                value={topic}
+                maxLength={50}
+                onChange={(event) => setTopic(event.target.value)}
+                placeholder="coldbrew"
+              />
+              <small className={topicProblem ? "char-count over" : undefined}>
+                {topicProblem ?? t("publish.threadsTopicHelp")}
+              </small>
+            </label>
           )}
           <label>{t("publish.caption")}
             <textarea name="caption" rows={5} maxLength={5000} required value={caption} onChange={(event) => setCaption(event.target.value)} />
