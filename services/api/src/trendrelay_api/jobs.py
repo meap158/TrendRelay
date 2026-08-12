@@ -97,6 +97,62 @@ def list_job_records(
         return [serialize_job(item) for item in items]
 
 
+#: What an abandoned job's error says. Written once so the worker, the API and
+#: the tests all agree on the wording somebody will read on a stuck row.
+ABANDONED_ERROR = (
+    "The worker handling this stopped before it finished, and no attempts were "
+    "left to retry with. Anything already downloaded is on disk; resume to "
+    "finish from what is there."
+)
+
+
+def abandon_expired_jobs(
+    kind: str,
+    limit: int = 50,
+    *,
+    factory: SessionMaker = SessionFactory,
+) -> list[str]:
+    """Fail jobs whose worker vanished and which cannot be retried.
+
+    `recoverable_job_ids` requeues a running job once its lease expires, but
+    only while it has attempts left. A job that used its last attempt and then
+    lost its worker matches neither that query nor anything else, so it stayed
+    `running` for as long as the database survived - one download in this
+    workspace had been "Downloading now" for four days, with its lease four
+    days expired and no error recorded.
+
+    Nothing is retried here. The point is that a job nobody is working on says
+    so, which is what puts it in front of somebody who can resume it.
+    """
+    timestamp = now_utc()
+    abandoned: list[str] = []
+    with factory.begin() as session:
+        items = session.scalars(
+            select(DurableJob)
+            .where(
+                DurableJob.kind == kind,
+                DurableJob.status == "running",
+                DurableJob.lease_expires_at.is_not(None),
+                DurableJob.lease_expires_at <= timestamp,
+                DurableJob.attempt_count >= DurableJob.max_attempts,
+            )
+            .order_by(DurableJob.created_at)
+            .limit(limit)
+        ).all()
+        for item in items:
+            item.status = "failed"
+            # Only when nothing else explained it. A worker that recorded why it
+            # failed and then died knows more than this does.
+            if not item.last_error:
+                item.last_error = ABANDONED_ERROR
+            item.lease_owner = None
+            item.lease_expires_at = None
+            item.completed_at = timestamp
+            item.updated_at = timestamp
+            abandoned.append(item.id)
+    return abandoned
+
+
 def recoverable_job_ids(
     kind: str,
     limit: int = 20,
