@@ -218,3 +218,111 @@ _SECRET = re.compile(r"(SPC_EC|SPC_U|SPC_ST|SPC_R_T_ID|SPC_T_ID)=[^;\s]+", re.IG
 def redact(text: str) -> str:
     """Anything that quotes a session, with the session taken out."""
     return _SECRET.sub(lambda found: f"{found.group(1)}=…", text or "")
+
+
+def _stage(id: str, label: str, ok: bool, detail: str) -> dict[str, object]:
+    return {"id": id, "label": label, "ok": ok, "detail": detail}
+
+
+#: What a probe is allowed to spend before giving up on one stage. A connection
+#: check that hangs is worse than one that fails: nobody waits twice.
+PROBE_TIMEOUT_SECONDS = 20
+
+
+def probe(
+    sample_url: str | None = None,
+    *,
+    fetcher: object = None,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Walk the whole path an import takes, and say which step broke.
+
+    Every stage can fail for its own reason and each is reported separately,
+    because "the import did not work" is not something anyone can act on. A
+    session that is present but expired, a session that works but cannot reach
+    the product, and a product that loads but parses to nothing are three
+    different problems with three different fixes.
+
+    Stages stop at the first failure. Reporting "could not parse the product"
+    underneath "not signed in" would be noise: the second is caused by the
+    first, and a list of consequences buries the cause.
+    """
+    stages: list[dict[str, object]] = []
+    state = health(now)
+
+    stages.append(_stage(
+        "session", "Session stored", bool(state.source != "none"),
+        f"Read from {state.source}." if state.source != "none"
+        else "No Shopee session is stored on this machine yet.",
+    ))
+    if state.source == "none":
+        return {"ok": False, "stages": stages, "reconnect": True}
+
+    stages.append(_stage(
+        "complete", "Session is complete", not state.missing,
+        "Every cookie an import needs is present."
+        if not state.missing else
+        f"Missing {', '.join(state.missing)}. Connect Shopee again to store a full session.",
+    ))
+    if state.missing:
+        return {"ok": False, "stages": stages, "reconnect": True}
+
+    stages.append(_stage(
+        "fresh", "Session is still valid", state.ready,
+        state.detail,
+    ))
+    if not state.ready:
+        return {"ok": False, "stages": stages, "reconnect": True}
+
+    if not sample_url:
+        # Nothing was given to try, and inventing a product to fetch would test
+        # somebody else's listing rather than this session.
+        return {"ok": True, "stages": stages, "reconnect": False, "tired": state.tired}
+
+    fetch = fetcher or _default_fetcher()
+    try:
+        page = fetch(sample_url)  # type: ignore[operator]
+    except Exception as error:  # noqa: BLE001 - a provider state, not a bug
+        message = redact(str(error))
+        expired = looks_like_auth_failure(message)
+        stages.append(_stage(
+            "reach", "Product page reachable", False,
+            (f"Shopee refused the request as a signed-out visitor: {message}" if expired
+             else f"Could not reach the product: {message}"),
+        ))
+        # Only an authentication failure means reconnecting. A timeout does not,
+        # and saying so would send somebody to re-authenticate over a slow link.
+        return {"ok": False, "stages": stages, "reconnect": expired}
+
+    stages.append(_stage(
+        "reach", "Product page reachable", True,
+        "Fetched the product as the signed-in account.",
+    ))
+
+    details = page if isinstance(page, dict) else {}
+    found = [field for field in ("name", "image_url", "price") if details.get(field)]
+    stages.append(_stage(
+        "parse", "Product details read", bool(found),
+        (f"Read {', '.join(found)}." if found else
+         "The page loaded but nothing recognisable was read from it, which "
+         "usually means Shopee changed its markup."),
+    ))
+    return {
+        "ok": bool(found),
+        "stages": stages,
+        "reconnect": False,
+        "tired": state.tired,
+        "details": details,
+    }
+
+
+def _default_fetcher():
+    """The real fetch, imported late so a probe stays testable without a browser."""
+    def fetch(url: str) -> dict[str, object]:
+        raise RuntimeError(
+            "Reading a Shopee product needs the browser runtime, which is not "
+            "wired up yet. Import the bulk export in the meantime - it carries "
+            "everything but the images."
+        )
+
+    return fetch

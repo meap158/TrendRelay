@@ -207,3 +207,120 @@ def test_the_file_never_holds_anything_but_cookies(tmp_path, monkeypatch) -> Non
     stored = json.loads((tmp_path / "cookies.json").read_text(encoding="utf-8"))
 
     assert set(stored) == {"cookies", "saved_at", "expires_at"}
+
+
+# --- the probe ----------------------------------------------------------------
+
+
+def stage_ids(result) -> list[str]:
+    return [stage["id"] for stage in result["stages"]]
+
+
+def test_with_nothing_stored_the_probe_stops_at_the_first_step() -> None:
+    """Reporting "could not parse the product" under "not signed in" is noise.
+
+    The second is caused by the first, and a list of consequences buries the
+    cause somebody has to act on.
+    """
+    result = shopee.probe("https://shopee.vn/product/1/2")
+
+    assert result["ok"] is False
+    assert stage_ids(result) == ["session"]
+    assert result["reconnect"] is True
+
+
+def test_a_half_stored_session_says_which_cookie_is_missing() -> None:
+    shopee.save_cookies({"SPC_EC": "abc"})
+
+    result = shopee.probe()
+
+    assert stage_ids(result) == ["session", "complete"]
+    assert "SPC_U" in result["stages"][-1]["detail"]
+    assert result["reconnect"] is True
+
+
+def test_an_expired_session_stops_before_anything_is_fetched() -> None:
+    shopee.save_cookies(LIVE, expires_at=datetime.now(UTC) - timedelta(minutes=1))
+
+    def explode(_url):
+        raise AssertionError("nothing should have been fetched")
+
+    result = shopee.probe("https://shopee.vn/product/1/2", fetcher=explode)
+
+    assert stage_ids(result) == ["session", "complete", "fresh"]
+    assert result["reconnect"] is True
+
+
+def test_a_good_session_with_nothing_to_try_passes_without_inventing_a_fetch() -> None:
+    # Picking a product to fetch would test somebody else's listing rather than
+    # this session.
+    shopee.save_cookies(LIVE)
+
+    result = shopee.probe()
+
+    assert result["ok"] is True
+    assert stage_ids(result) == ["session", "complete", "fresh"]
+
+
+def test_a_full_pass_reports_every_step_and_what_it_read() -> None:
+    shopee.save_cookies(LIVE)
+
+    result = shopee.probe(
+        "https://shopee.vn/product/1/2",
+        fetcher=lambda _url: {"name": "Giấy ăn rút", "image_url": "https://cf.shopee.vn/x.jpg"},
+    )
+
+    assert result["ok"] is True
+    assert stage_ids(result) == ["session", "complete", "fresh", "reach", "parse"]
+    assert "name" in result["stages"][-1]["detail"]
+    assert result["details"]["name"] == "Giấy ăn rút"
+
+
+def test_being_refused_as_a_stranger_asks_for_a_reconnection() -> None:
+    shopee.save_cookies(LIVE)
+
+    def refused(_url):
+        raise RuntimeError("HTTP 403: Cần đăng nhập")
+
+    result = shopee.probe("https://shopee.vn/product/1/2", fetcher=refused)
+
+    assert result["ok"] is False
+    assert result["reconnect"] is True
+    assert stage_ids(result)[-1] == "reach"
+
+
+def test_a_slow_link_is_not_reported_as_a_dead_session() -> None:
+    """Otherwise a timeout sends somebody to re-authenticate for nothing."""
+    shopee.save_cookies(LIVE)
+
+    def slow(_url):
+        raise TimeoutError("timed out after 20 seconds")
+
+    result = shopee.probe("https://shopee.vn/product/1/2", fetcher=slow)
+
+    assert result["ok"] is False
+    assert result["reconnect"] is False, "a timeout is not an expiry"
+
+
+def test_a_page_that_loads_but_says_nothing_is_a_parsing_problem() -> None:
+    # Distinct from being signed out: the session worked, the markup changed.
+    shopee.save_cookies(LIVE)
+
+    result = shopee.probe("https://shopee.vn/product/1/2", fetcher=lambda _url: {})
+
+    assert result["ok"] is False
+    assert result["reconnect"] is False
+    assert "changed its markup" in result["stages"][-1]["detail"]
+
+
+def test_a_failure_never_quotes_the_session_back(caplog) -> None:
+    """An error carrying a cookie hands the session to whoever reads it."""
+    shopee.save_cookies(LIVE)
+
+    def leaky(_url):
+        raise RuntimeError("refused with Cookie: SPC_EC=supersecret; SPC_U=42")
+
+    result = shopee.probe("https://shopee.vn/product/1/2", fetcher=leaky)
+
+    assert "supersecret" not in result["stages"][-1]["detail"]
+    assert "SPC_EC=…" in result["stages"][-1]["detail"]
