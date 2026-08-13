@@ -1905,3 +1905,58 @@ def test_a_network_without_topics_never_receives_one(monkeypatch, tmp_path: Path
 def test_only_engines_with_a_topic_contract_advertise_one() -> None:
     assert publishing.provider_status("buffer", probe=False)["topic_platforms"] == ["threads"]
     assert publishing.provider_status("zernio", probe=False)["topic_platforms"] == []
+
+
+# --- story and feed post ------------------------------------------------------
+
+
+@pytest.mark.parametrize("kind_id", ["reel", "story", "post"])
+def test_buffer_sends_facebook_a_type_its_own_enum_accepts(media_file: Path, kind_id: str) -> None:
+    """Facebook uses PostTypeFacebook, not PostType.
+
+    Introspected against Buffer's live schema: PostTypeFacebook accepts exactly
+    post, reel and story, so these three ids go through as they are. Only
+    `reel` was covered before, which left both of the modes somebody actually
+    asks about untested.
+    """
+    meta = publishing._buffer_metadata(
+        "facebook", request(media_file), publishing.resolve_post_type("facebook", kind_id)
+    )
+
+    assert f"type: {kind_id}" in meta
+
+
+def test_a_feed_post_is_not_cross_posted_as_a_reel(media_file: Path) -> None:
+    # shouldShareToFeed is the Reels cross-post toggle and Buffer requires it,
+    # so a feed post sends false: it is already in the feed.
+    meta = publishing._buffer_metadata(
+        "instagram", request(media_file), publishing.resolve_post_type("instagram", "post")
+    )
+
+    assert "type: post" in meta
+    assert "shouldShareToFeed: false" in meta
+
+
+@pytest.mark.parametrize(
+    ("platform", "kind_id", "expected"),
+    [
+        ("instagram", "story", "STORY"),
+        ("instagram", "post", "POST"),
+        ("facebook", "story", "STORY"),
+        # WoopSocial calls a Facebook feed post a video.
+        ("facebook", "post", "VIDEO"),
+    ],
+)
+def test_woopsocial_maps_every_mode_it_offers(platform: str, kind_id: str, expected: str) -> None:
+    assert publishing._WOOPSOCIAL_POST_TYPES[platform][kind_id] == expected
+
+
+def test_every_offered_mode_has_a_woopsocial_mapping() -> None:
+    """A mode with no entry would raise a KeyError mid-publish.
+
+    The lookup is a plain subscript, so a type offered by the platform and
+    missing from the table fails the post rather than falling back.
+    """
+    for platform, table in publishing._WOOPSOCIAL_POST_TYPES.items():
+        offered = {kind.id for kind in publishing.post_types_for(platform)}
+        assert offered <= set(table), f"{platform} is missing {offered - set(table)}"
