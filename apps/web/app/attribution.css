@@ -14,6 +14,12 @@
 .attribution-side { position: sticky; top: 68px; }
 /* The two things done rather than read. They sit above the products they act
    on, and are buttons because there is no longer anywhere to navigate to. */
+/* What an import did, under the form that did it. Problems are named rather
+   than counted: a row that did not import is one somebody has to go and look
+   at, and a number does not say which. */
+.attribution-import-outcome { margin-block-start: 12px; padding-block-start: 12px; border-block-start: 1px solid var(--line); font-size: 13px; }
+.attribution-import-problems { margin: 8px 0 0; padding-inline-start: 18px; color: var(--warn, #9a6700); font-size: 12px; }
+.attribution-import-problems li { margin-block: 2px; }
 .attribution-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 .attribution-panel { padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .attribution-panel h2 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
