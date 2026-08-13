@@ -763,6 +763,12 @@ nav strong { color: #1c2b33; }
 .carousel-field { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
 .carousel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .carousel-head strong { color: var(--muted); font-size: 11px; font-weight: 600; }
+/* The count sits with the heading, not with the button: it describes what
+   is there rather than what pressing something would do. `auto` on the
+   inline end keeps the button against the far edge as before. */
+.carousel-room, .carousel-over { margin-inline-end: auto; font-size: 11px; font-style: normal; font-variant-numeric: tabular-nums; }
+.carousel-room { color: var(--muted); }
+.carousel-over { color: var(--danger, #b42318); font-weight: 600; }
 /* Numbered with a counter rather than a marker. Laying each row out with flex
    is what puts the filename and its three buttons on one line, and that also
    stops the item being a list-item at all - so ::marker had nothing to draw and

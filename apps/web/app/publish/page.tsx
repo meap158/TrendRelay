@@ -31,6 +31,7 @@ import { Badge, Switch } from "../ui/primitives";
 import { CredentialRow } from "../ui/credential-field";
 import {
   allRoutesSpent,
+  carouselCapacity,
   mediaProblem,
   moveImage,
   preferredRoute,
@@ -139,7 +140,7 @@ type CredentialField = {
   preview?: string | null;
 };
 type PostTypeOption = { id: string; label: string; help: string };
-type PlatformLimit = { caption: number; title: number | null };
+type PlatformLimit = { caption: number; title: number | null; carousel?: number };
 type Provider = {
   post_types: Record<string, PostTypeOption[]>;
   /** Platforms this engine can attach a topic to. Threads, where it can. */
@@ -524,6 +525,26 @@ export default function PublishPage() {
   /** Derived rather than counted twice: one predicate, one place to be wrong. */
   const wantsCarousel = carouselTargetCount > 0;
   /**
+   * How many images every chosen destination will accept.
+   *
+   * The tightest wins: one carousel goes to all of them, so a post addressing
+   * TikTok and Instagram is bound by Instagram's ten rather than TikTok's
+   * thirty-five. Shown where the images are chosen, because finding out at
+   * submit means picking fifteen and then deciding which five to lose.
+   */
+  const imageCapacity = useMemo(() => {
+    // Assembled from each destination's own engine rather than the first one's:
+    // a post can span engines, and a platform missing from one engine's map
+    // would otherwise read as a network that takes no carousel at all.
+    const caps: Record<string, PlatformLimit> = {};
+    for (const account of chosenAccounts) {
+      const limit = providerById.get(account.provider)?.limits?.[account.platform];
+      if (limit) caps[account.platform] = limit;
+    }
+    return carouselCapacity(chosenAccounts, caps);
+  }, [chosenAccounts, providerById]);
+  const tooManyImages = imageCapacity > 0 && imagePaths.length > imageCapacity;
+  /**
    * Whether any chosen destination can carry a topic.
    *
    * Asked of the engine delivering that destination rather than of the network,
@@ -815,6 +836,8 @@ export default function PublishPage() {
       // finding out only after the post had been written.
       : wantsCarousel && carouselTargetCount !== chosenAccounts.length
         ? t("publish.carouselIsItsOwnPost")
+      : tooManyImages
+        ? `That carousel has ${imagePaths.length} images and the tightest destination takes ${imageCapacity}`
       : topicProblem
         ? topicProblem
       : !caption.trim()
@@ -2321,7 +2344,17 @@ export default function PublishPage() {
                 <div className="carousel-field">
                   <span className="carousel-head">
                     <strong>{t("publish.carouselImages", { count: imagePaths.length })}</strong>
-                    <Button variant="quiet" size="sm" onClick={() => openPicker("images")}>
+                    {imageCapacity > 0 && (
+                      <em className={tooManyImages ? "carousel-over" : "carousel-room"}>
+                        {imagePaths.length} / {imageCapacity}
+                      </em>
+                    )}
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      disabled={imageCapacity > 0 && imagePaths.length >= imageCapacity}
+                      onClick={() => openPicker("images")}
+                    >
                       <ActionIcon name="clip" />{t("publish.addImages")}
                     </Button>
                   </span>
