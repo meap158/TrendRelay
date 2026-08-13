@@ -21,6 +21,7 @@ from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, ensure_profile, membership, require_role
 from trendrelay_api.integrations.last30days import get_job
 from trendrelay_api.models import Campaign
+from trendrelay_api.money import to_minor
 from trendrelay_api.opportunity_models import (
     Opportunity,
     OpportunityCampaign,
@@ -86,16 +87,22 @@ def _key(*values: str | None) -> str:
     return sha256(normalized.encode("utf-8")).hexdigest()
 
 
-def _money(value: str | None, field: str) -> int | None:
+def _money(value: str | None, field: str, currency: str = "USD") -> int | None:
+    """An amount as written, stored as whole units of the currency's smallest.
+
+    The currency matters and used to be ignored. This multiplied by a hundred
+    whatever the code said, which is right for dollars and a hundred times wrong
+    for dong - and a Shopee price is in dong. Nothing downstream could catch it,
+    because there is no second source for a price to disagree with.
+    """
     if not _clean(value, 100):
         return None
     try:
-        decimal = Decimal(str(value).strip())
-    except InvalidOperation as error:
+        return to_minor(str(value).strip(), currency)
+    except ValueError as error:
+        if "negative" in str(error):
+            raise ValueError(f"{field} cannot be negative.") from error
         raise ValueError(f"{field} must be a decimal number.") from error
-    if decimal < 0:
-        raise ValueError(f"{field} cannot be negative.")
-    return int((decimal * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def _integer(value: str | None, field: str, maximum: int) -> int | None:
@@ -418,9 +425,11 @@ def import_offers(
             currency = (_clean(row.get("currency"), 3) or "USD").upper()
             if not re.fullmatch(r"[A-Z]{3}", currency):
                 raise ValueError("currency must be a three-letter code.")
-            price_cents = _money(row.get("price"), "price")
+            price_cents = _money(row.get("price"), "price", currency)
             commission_bps = _commission_bps(row.get("commission_percent"))
-            commission_flat_cents = _money(row.get("commission_flat"), "commission_flat")
+            commission_flat_cents = _money(
+                row.get("commission_flat"), "commission_flat", currency
+            )
             cookie_days = _integer(row.get("cookie_days"), "cookie_days", 3650)
             restrictions = [
                 item.strip() for item in (row.get("restrictions") or "").split("|") if item.strip()
