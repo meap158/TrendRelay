@@ -652,7 +652,7 @@ def test_stored_jobs_without_a_delivery_field_still_resolve(media_file: Path) ->
 
 def test_a_network_only_offers_the_types_it_can_actually_publish() -> None:
     assert [kind.id for kind in publishing.post_types_for("instagram")] == [
-        "reel", "story", "post",
+        "reel", "story", "post", "photo",
     ]
     # TikTok has no Story surface in any of these APIs, but it does have photo
     # carousels - offered by the platform here and refused per engine, since
@@ -1951,12 +1951,108 @@ def test_woopsocial_maps_every_mode_it_offers(platform: str, kind_id: str, expec
     assert publishing._WOOPSOCIAL_POST_TYPES[platform][kind_id] == expected
 
 
-def test_every_offered_mode_has_a_woopsocial_mapping() -> None:
+def test_every_mode_woopsocial_offers_has_a_mapping() -> None:
     """A mode with no entry would raise a KeyError mid-publish.
 
-    The lookup is a plain subscript, so a type offered by the platform and
-    missing from the table fails the post rather than falling back.
+    The lookup is a plain subscript, so a type this engine offers and the table
+    omits fails the post rather than falling back. Asked of what the engine
+    offers rather than of what the platform has: Instagram has a carousel, and
+    WoopSocial has no contract for one, so it never reaches this table.
     """
+    provider = publishing.PROVIDERS["woopsocial"]
     for platform, table in publishing._WOOPSOCIAL_POST_TYPES.items():
-        offered = {kind.id for kind in publishing.post_types_for(platform)}
+        offered = {
+            kind.id
+            for kind in publishing.post_types_for(platform)
+            if kind.id != "photo" or platform in provider.photo_carousel_platforms
+        }
         assert offered <= set(table), f"{platform} is missing {offered - set(table)}"
+
+
+# --- instagram carousels ------------------------------------------------------
+
+
+def instagram_carousel(images: list[str], **overrides):
+    payload = {
+        "workspace_id": "workspace-1",
+        "video_path": "",
+        "image_paths": images,
+        "caption": "Launch set",
+        "date": datetime.now(UTC) + timedelta(hours=2),
+        "targets": [publishing.PublishTarget(
+            platform="instagram", integration_id="channel-1", post_type="photo",
+        )],
+    }
+    payload.update(overrides)
+    return publishing.PublishRequest(**payload)
+
+
+def test_instagram_offers_a_carousel_only_through_an_engine_with_one() -> None:
+    """Buffer's schema has it; the others were not checked, so they do not offer it."""
+    assert publishing.PROVIDERS["buffer"].photo_carousel_platforms == ("instagram",)
+    assert "instagram" not in publishing.PROVIDERS["zernio"].photo_carousel_platforms
+
+
+def test_buffer_calls_a_carousel_what_its_own_enum_calls_it(media_file: Path) -> None:
+    """Our id is `photo`; Buffer's PostType has no such value.
+
+    Introspected from the live schema - it declares `carousel` - and Buffer
+    rejects a value it does not declare outright, so sending our own word would
+    have failed every carousel rather than being ignored.
+    """
+    meta = publishing._buffer_metadata(
+        "instagram", request(media_file), publishing.resolve_post_type("instagram", "photo")
+    )
+
+    assert "type: carousel" in meta
+    assert "type: photo" not in meta
+
+
+def test_a_carousel_is_sent_as_one_image_asset_per_slide(carousel_images: list[str]) -> None:
+    body = instagram_carousel(carousel_images, image_urls=[
+        "https://cdn.example.test/a.jpg",
+        "https://cdn.example.test/b.jpg",
+        "https://cdn.example.test/c.jpg",
+    ])
+
+    sent: list[str] = []
+    import trendrelay_api.integrations.publishing as module
+
+    original = module._buffer_graphql
+    module._buffer_graphql = lambda query, **_: (
+        sent.append(query) or {"createPost": {"post": {"id": "p1", "status": "draft"}}}
+    )
+    try:
+        module._buffer_publish(body)
+    finally:
+        module._buffer_graphql = original
+
+    assert 'image: { url: "https://cdn.example.test/a.jpg" }' in sent[0]
+    # Order is the post: a carousel opens on its first image.
+    assert sent[0].index("a.jpg") < sent[0].index("b.jpg") < sent[0].index("c.jpg")
+    assert "video:" not in sent[0]
+
+
+def test_instagram_refuses_an_eleventh_image(carousel_images: list[str], tmp_path: Path) -> None:
+    """Meta's API takes ten, however many the app lets somebody swipe in.
+
+    Refused here rather than by Instagram, which would reject the post after it
+    had already been built and uploaded.
+    """
+    many = []
+    for index in range(11):
+        image = tmp_path / f"slide{index}.jpg"
+        image.write_bytes(b"jpeg-bytes")
+        many.append(str(image))
+
+    with pytest.raises(ValueError, match="at most 10 images"):
+        publishing._validate_request(
+            publishing.PROVIDERS["buffer"], instagram_carousel(many)
+        )
+
+
+def test_tiktok_still_takes_thirty_five() -> None:
+    # The ceilings are per network and nowhere near each other.
+    assert publishing.carousel_limit("tiktok") == 35
+    assert publishing.carousel_limit("instagram") == 10
+    assert publishing.carousel_limit("threads") == 0
