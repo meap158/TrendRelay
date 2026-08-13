@@ -266,7 +266,15 @@ export function PostPreview({
       </figcaption>
       <div
         className="post-preview-frame"
-        style={ratio ? ({ "--preview-ratio": String(ratio) } as React.CSSProperties) : undefined}
+        // Not on a Story. That surface is 9:16 full bleed whatever the clip is,
+        // and the CSS says so - but an inline variable beats any rule, so
+        // measuring one here would quietly replace the network's shape with the
+        // file's, which is the opposite of what this preview is for.
+        style={
+          ratio && !story
+            ? ({ "--preview-ratio": String(ratio) } as React.CSSProperties)
+            : undefined
+        }
       >
         {/* The media, where there is any: a network shows the clip, not a
             still of it, and a caption judged against a frozen frame is judged
