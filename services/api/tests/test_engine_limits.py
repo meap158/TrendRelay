@@ -5,8 +5,10 @@ from __future__ import annotations
 from trendrelay_api.integrations.engine_limits import (
     FREE_PLAN,
     Allowance,
+    Plan,
     allowances,
     exhausted,
+    feature_available,
     infer_plan,
     parse_rate_limit,
     parse_rate_limit_policy,
@@ -320,3 +322,41 @@ def test_every_plan_records_where_it_was_read_from() -> None:
     for provider, plan in FREE_PLAN.items():
         assert plan["source"].startswith("https://"), provider
         assert plan["plan"], provider
+
+
+# --- what the plan actually includes ------------------------------------------
+
+
+def test_a_free_account_is_not_offered_a_feature_it_would_be_charged_for() -> None:
+    """Buffer answers "First comment requires a paid plan" after the post is sent.
+
+    That is the worst moment to learn it: the post has already been built and
+    the rejection is what tells you.
+    """
+    free = Plan("Free", "measured", ())
+
+    assert feature_available("buffer", "first_comment", free) is False
+
+
+def test_a_paid_account_keeps_it() -> None:
+    paid = Plan("Essentials", "measured", ())
+
+    assert feature_available("buffer", "first_comment", paid) is True
+
+
+def test_an_unknown_plan_is_treated_as_having_it() -> None:
+    """Hiding a feature somebody pays for is the worse failure.
+
+    A plan nothing observed could name is a real answer, and it is not the same
+    answer as Free.
+    """
+    unknown = Plan(None, "published", ())
+
+    assert feature_available("buffer", "first_comment", unknown) is True
+
+
+def test_a_feature_nobody_charges_for_is_always_available() -> None:
+    free = Plan("Free", "measured", ())
+
+    assert feature_available("buffer", "threads", free) is True
+    assert feature_available("zernio", "first_comment", free) is True

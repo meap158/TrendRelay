@@ -176,6 +176,30 @@ class Plan:
     note: str
 
 
+#: Features an engine sells rather than includes, by the plan that has to be
+#: bought for them. Buffer's free tier answered "First comment requires a paid
+#: plan. Please upgrade to use this feature." after a post had already been
+#: built and sent, which is the worst moment to learn it.
+PAID_ONLY_FEATURES: dict[str, frozenset[str]] = {
+    "buffer": frozenset({"first_comment"}),
+}
+
+#: The plan names that get nothing extra. Anything else is a paid tier.
+FREE_PLAN_NAMES = frozenset({"Free"})
+
+
+def feature_available(provider_id: str, feature: str, plan: Plan) -> bool:
+    """Whether this account's plan includes a feature the engine sells.
+
+    Unknown counts as available. A plan nothing observed could name is a real
+    answer, and hiding a feature somebody is paying for - because a header was
+    missing - is a worse failure than offering one they have to upgrade for.
+    """
+    if feature not in PAID_ONLY_FEATURES.get(provider_id, frozenset()):
+        return True
+    return plan.name not in FREE_PLAN_NAMES
+
+
 def infer_plan(
     provider_id: str,
     *,

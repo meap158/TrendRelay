@@ -2135,9 +2135,25 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
         ) if provider.id == "buffer" else [],
         "max_thread_parts": MAX_THREAD_PARTS,
         "supports_approval": provider.id == "buffer",
+        # Offered only where the plan includes it. Buffer sells first comments,
+        # and a free account is told so by the API only after the post has been
+        # built and sent - so the field is withheld rather than the rejection
+        # being the way somebody finds out.
         "first_comment_platforms": sorted(
             set(provider.platforms) & FIRST_COMMENT_PLATFORMS
-        ) if provider.id == "buffer" else [],
+        ) if provider.id == "buffer" and engine_limits.feature_available(
+            provider.id,
+            "first_comment",
+            # Read from the rate-limit policy Buffer returns on every call, the
+            # same way the plan shown beside the engine is. Asking without it
+            # would name no plan, and an unnamed plan keeps the feature.
+            engine_limits.infer_plan(
+                provider.id,
+                policy=engine_limits.parse_rate_limit_policy(
+                    buffer_rate_limit_policy_header()
+                ),
+            ),
+        ) else [],
         "youtube_categories": [
             {"id": key, "label": label}
             for key, label in sorted(YOUTUBE_CATEGORIES.items(), key=lambda item: int(item[0]))
