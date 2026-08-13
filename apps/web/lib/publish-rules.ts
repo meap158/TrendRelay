@@ -146,3 +146,21 @@ export function mediaProblem(state: {
   }
   return null;
 }
+
+/**
+ * How many images the chosen destinations will all accept.
+ *
+ * The tightest wins, because one carousel goes to all of them: TikTok takes
+ * thirty-five and Instagram's API takes ten, so a post addressing both is an
+ * Instagram post as far as the count is concerned. Zero means nothing chosen
+ * can take a carousel at all.
+ */
+export function carouselCapacity(
+  destinations: Array<{ platform: string }>,
+  limits: Record<string, { carousel?: number }>,
+): number {
+  const caps = destinations
+    .map((destination) => limits[destination.platform]?.carousel ?? 0)
+    .filter((cap) => cap > 0);
+  return caps.length ? Math.min(...caps) : 0;
+}

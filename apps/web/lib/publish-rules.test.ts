@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   allRoutesSpent,
+  carouselCapacity,
   mediaProblem,
   moveImage,
   preferredRoute,
@@ -181,4 +182,33 @@ test("a fetch-only engine does not make a carousel demand a URL", () => {
     }),
     null,
   );
+});
+
+// --- how many images fit ------------------------------------------------------
+
+const CAPS = { tiktok: { carousel: 35 }, instagram: { carousel: 10 }, threads: { carousel: 0 } };
+
+test("the tightest destination decides how many images fit", () => {
+  // One carousel goes to all of them, so a post addressing TikTok and Instagram
+  // is an Instagram post as far as the count is concerned.
+  assert.equal(carouselCapacity([{ platform: "tiktok" }], CAPS), 35);
+  assert.equal(carouselCapacity([{ platform: "instagram" }], CAPS), 10);
+  assert.equal(
+    carouselCapacity([{ platform: "tiktok" }, { platform: "instagram" }], CAPS),
+    10,
+  );
+});
+
+test("a network with no carousel does not drag the limit to zero", () => {
+  // Threads cannot take one at all; it is not a destination with a cap of none.
+  assert.equal(carouselCapacity([{ platform: "tiktok" }, { platform: "threads" }], CAPS), 35);
+});
+
+test("nothing that can take a carousel is a capacity of none", () => {
+  assert.equal(carouselCapacity([{ platform: "threads" }], CAPS), 0);
+  assert.equal(carouselCapacity([], CAPS), 0);
+});
+
+test("an unknown network is treated as unable rather than unlimited", () => {
+  assert.equal(carouselCapacity([{ platform: "bluesky" }], CAPS), 0);
 });
