@@ -308,10 +308,13 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         # Read from Buffer's schema: ThreadsPostMetadataInput declares `topic`,
         # and no other network's metadata does.
         topic_platforms=("threads",),
-        # Its PostType enum carries `carousel`, and AssetInput carries `image`,
-        # so several images in one post is something this engine can express.
-        # TikTok is absent because that is a different contract, unchecked.
-        photo_carousel_platforms=("instagram",),
+        # Empty, and the reason is worth keeping: Buffer's PostType enum does
+        # declare `carousel`, but that enum is shared across every network and
+        # Buffer validates per network at publish time. Instagram answered
+        # "does not support the 'carousel' post type. Valid types are post,
+        # story, or reel." A type existing in the schema is not a contract for
+        # the network being posted to.
+        photo_carousel_platforms=(),
     ),
     "woopsocial": ProviderDefinition(
         id="woopsocial",
@@ -528,10 +531,6 @@ class PublishRequest(BaseModel):
     #: required rather than becoming one of two optional media fields that a
     #: caller has to know to pick between.
     image_paths: list[str] = Field(default_factory=list, max_length=MAX_CAROUSEL_IMAGES)
-    #: Public URLs for those images, filled in at publish time for an engine
-    #: that fetches rather than accepts an upload. Ordered like `image_paths`,
-    #: because a carousel's order is the post.
-    image_urls: list[str] = Field(default_factory=list, max_length=MAX_CAROUSEL_IMAGES)
     caption: str = Field(min_length=1, max_length=5000)
     title: str | None = Field(default=None, max_length=200)
     date: datetime
@@ -1747,14 +1746,6 @@ def _buffer_platform(service: str | None) -> str:
     return {"x": "twitter", "google_business": "googlebusiness"}.get(normalized, normalized)
 
 
-#: Where our post-type ids and Buffer's PostType enum disagree.
-#:
-#: Only one does: a set of images is `photo` here and `carousel` there. Read
-#: from the live schema, whose values are carousel, event, ghost_post, offer,
-#: post, reel, short, story, thread and whats_new.
-BUFFER_POST_TYPES: dict[str, str] = {"photo": "carousel"}
-
-
 def _buffer_metadata(platform: str, request: PublishRequest, kind: PostType) -> str:
     """Per-network metadata Buffer requires before it will accept a post.
 
@@ -1766,10 +1757,6 @@ def _buffer_metadata(platform: str, request: PublishRequest, kind: PostType) -> 
     """
     disclosure = "true" if request.made_with_ai else "false"
     title = _graphql_literal((request.title or request.caption)[:100])
-    # Our platform-neutral id for a set of images is `photo`; Buffer's PostType
-    # enum calls it `carousel`. Introspected, not assumed - the enum has no
-    # `photo`, and Buffer rejects a value it does not declare outright.
-    kind_token = BUFFER_POST_TYPES.get(kind.id, kind.id)
     # A Story is not added to the grid, so the feed cross-post only applies to a Reel.
     share_to_feed = "true" if kind.id == "reel" else "false"
     comment = (
@@ -1795,11 +1782,11 @@ def _buffer_metadata(platform: str, request: PublishRequest, kind: PostType) -> 
         thread = f" thread: [{parts}]"
     fields = {
         "instagram": (
-            f"instagram: {{ type: {kind_token} shouldShareToFeed: {share_to_feed} "
+            f"instagram: {{ type: {kind.id} shouldShareToFeed: {share_to_feed} "
             f"isAiGenerated: {disclosure}{comment} }}"
         ),
         # Facebook's input declares no isAiGenerated; sending one is rejected.
-        "facebook": f"facebook: {{ type: {kind_token}{comment} }}",
+        "facebook": f"facebook: {{ type: {kind.id}{comment} }}",
         "linkedin": f"linkedin: {{{comment} }}" if comment else "",
         # categoryId is required on create and has no default.
         "youtube": (
@@ -1809,7 +1796,7 @@ def _buffer_metadata(platform: str, request: PublishRequest, kind: PostType) -> 
         ),
         # TikTok's input declares no post type.
         "tiktok": f"tiktok: {{ isAiGenerated: {disclosure} }}",
-        "threads": f"threads: {{ type: {kind_token}{thread}{topic} }}",
+        "threads": f"threads: {{ type: {kind.id}{thread}{topic} }}",
         "twitter": f"twitter: {{ isAiGenerated: {disclosure}{thread} }}",
         "mastodon": f"mastodon: {{{thread} }}" if thread else "",
         "bluesky": f"bluesky: {{{thread} }}" if thread else "",
@@ -1835,21 +1822,11 @@ def _buffer_publish(request: PublishRequest) -> dict[str, Any]:
     # Only ever sent alongside a draft, which validation has already enforced.
     if request.needs_approval:
         scheduling += " needsApproval: true"
-    if _is_photo_post(request):
-        # A carousel is several assets rather than one, and Buffer's AssetInput
-        # carries `image` alongside `video`. Order is the post: the array is the
-        # swipe order, so it follows the URLs as given.
-        images = ", ".join(
-            f"{{ image: {{ url: {_graphql_literal(url)} }} }}"
-            for url in request.image_urls
-        )
-        assets = f"assets: [{images}]"
-    else:
-        assets = (
-            "assets: [{ video: { url: "
-            f"{_graphql_literal(request.media_url or '')}"
-            " metadata: { thumbnailOffset: 1000 } } }]"
-        )
+    assets = (
+        "assets: [{ video: { url: "
+        f"{_graphql_literal(request.media_url or '')}"
+        " metadata: { thumbnailOffset: 1000 } } }]"
+    )
     post_ids: list[str] = []
     for target in request.targets:
         metadata = _buffer_metadata(target.platform, request, target.kind)
@@ -1942,21 +1919,6 @@ def host_media_for_engine(request: PublishRequest) -> dict[str, Any]:
     )
     hosted = media_hosting.upload(source, digest)
     return {**hosted, "blurred": blurred}
-
-
-def host_images_for_engine(request: PublishRequest) -> list[str]:
-    """Upload a carousel's images, in swipe order, for an engine that fetches.
-
-    One upload each, because a carousel is several media rather than one. The
-    order is the post - a carousel opens on its first image - so the URLs come
-    back in the order the images were given rather than as a set.
-    """
-    from trendrelay_api.media_library import file_sha256
-
-    return [
-        media_hosting.upload(image, file_sha256(image))["url"]
-        for image in approved_image_paths(request.image_paths)
-    ]
 
 
 def bundle_daily_limits(social_account_id: str) -> dict[str, Any] | None:
@@ -2556,21 +2518,11 @@ def _execute_publish(request: PublishRequest, request_id: str | None = None) -> 
         # uploading it per engine would pay for the same bytes repeatedly.
         # Done now rather than at request time so a scheduled job sends what the
         # asset actually looks like when it goes out.
-        if _is_photo_post(request):
-            # The images are the media here; there is no video to host, and
-            # asking for one would fail on a path the request deliberately
-            # leaves empty.
-            image_urls = host_images_for_engine(request)
-            scoped = {
-                provider_id: part.model_copy(update={"image_urls": image_urls})
-                for provider_id, part in scoped.items()
-            }
-        else:
-            hosted = host_media_for_engine(request)
-            scoped = {
-                provider_id: part.model_copy(update={"media_url": hosted["url"]})
-                for provider_id, part in scoped.items()
-            }
+        hosted = host_media_for_engine(request)
+        scoped = {
+            provider_id: part.model_copy(update={"media_url": hosted["url"]})
+            for provider_id, part in scoped.items()
+        }
 
     deliveries: list[dict[str, Any]] = []
     for provider_id, part in scoped.items():

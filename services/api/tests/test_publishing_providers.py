@@ -1987,68 +1987,40 @@ def instagram_carousel(images: list[str], **overrides):
     return publishing.PublishRequest(**payload)
 
 
-def test_instagram_offers_a_carousel_only_through_an_engine_with_one() -> None:
-    """Buffer's schema has it; the others were not checked, so they do not offer it."""
-    assert publishing.PROVIDERS["buffer"].photo_carousel_platforms == ("instagram",)
-    assert "instagram" not in publishing.PROVIDERS["zernio"].photo_carousel_platforms
+def test_no_engine_claims_an_instagram_carousel() -> None:
+    """The schema said yes and the network said no.
 
-
-def test_buffer_calls_a_carousel_what_its_own_enum_calls_it(media_file: Path) -> None:
-    """Our id is `photo`; Buffer's PostType has no such value.
-
-    Introspected from the live schema - it declares `carousel` - and Buffer
-    rejects a value it does not declare outright, so sending our own word would
-    have failed every carousel rather than being ignored.
+    Buffer's PostType enum declares `carousel`, but that enum is shared across
+    every network and Buffer validates per network at publish time. Instagram
+    answered: "does not support the 'carousel' post type. Valid types are post,
+    story, or reel." A type existing in the schema is not a contract for the
+    network being posted to, and this is the test that remembers that.
     """
-    meta = publishing._buffer_metadata(
-        "instagram", request(media_file), publishing.resolve_post_type("instagram", "photo")
-    )
-
-    assert "type: carousel" in meta
-    assert "type: photo" not in meta
+    for provider in publishing.PROVIDERS.values():
+        assert "instagram" not in provider.photo_carousel_platforms, provider.label
 
 
-def test_a_carousel_is_sent_as_one_image_asset_per_slide(carousel_images: list[str]) -> None:
-    body = instagram_carousel(carousel_images, image_urls=[
-        "https://cdn.example.test/a.jpg",
-        "https://cdn.example.test/b.jpg",
-        "https://cdn.example.test/c.jpg",
-    ])
+def test_a_network_refuses_more_images_than_it_swipes(
+    monkeypatch, carousel_images: list[str]
+) -> None:
+    """Refused here rather than by the network, which rejects a built post.
 
-    sent: list[str] = []
-    import trendrelay_api.integrations.publishing as module
-
-    original = module._buffer_graphql
-    module._buffer_graphql = lambda query, **_: (
-        sent.append(query) or {"createPost": {"post": {"id": "p1", "status": "draft"}}}
-    )
-    try:
-        module._buffer_publish(body)
-    finally:
-        module._buffer_graphql = original
-
-    assert 'image: { url: "https://cdn.example.test/a.jpg" }' in sent[0]
-    # Order is the post: a carousel opens on its first image.
-    assert sent[0].index("a.jpg") < sent[0].index("b.jpg") < sent[0].index("c.jpg")
-    assert "video:" not in sent[0]
-
-
-def test_instagram_refuses_an_eleventh_image(carousel_images: list[str], tmp_path: Path) -> None:
-    """Meta's API takes ten, however many the app lets somebody swipe in.
-
-    Refused here rather than by Instagram, which would reject the post after it
-    had already been built and uploaded.
+    The ceilings differ by network - TikTok takes thirty-five, Instagram's API
+    ten - and only the largest bounds the request itself. This lowers TikTok's
+    for the length of the test rather than asserting against Instagram, which
+    no engine can post a carousel to today.
     """
-    many = []
-    for index in range(11):
-        image = tmp_path / f"slide{index}.jpg"
-        image.write_bytes(b"jpeg-bytes")
-        many.append(str(image))
+    monkeypatch.setattr(publishing, "CAROUSEL_LIMITS", {"tiktok": 2})
+    body = carousel(carousel_images)  # three images
 
-    with pytest.raises(ValueError, match="at most 10 images"):
-        publishing._validate_request(
-            publishing.PROVIDERS["buffer"], instagram_carousel(many)
-        )
+    with pytest.raises(ValueError, match="at most 2 images"):
+        publishing._validate_request(publishing.PROVIDERS["zernio"], body)
+
+
+def test_the_request_itself_is_bounded_by_the_largest_ceiling() -> None:
+    # Whatever the network, a request carrying more than any of them takes is
+    # refused before it reaches a provider at all.
+    assert publishing.MAX_CAROUSEL_IMAGES == 35
 
 
 def test_tiktok_still_takes_thirty_five() -> None:
