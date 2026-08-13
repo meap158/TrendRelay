@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from trendrelay_api import attribution_subids
+from trendrelay_api import attribution_shopee_import, attribution_subids
 from trendrelay_api.attribution_models import ClickEvent, Conversion, TrackingLink
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
 from trendrelay_api.config import get_settings
@@ -941,6 +941,87 @@ def follow_tracking_link(
             "X-Robots-Tag": "noindex, nofollow",
         },
     )
+
+
+
+
+class ShopeeImport(BaseModel):
+    """A batch of Shopee offers to file, and where their links should point."""
+
+    campaign_id: str = Field(min_length=1, max_length=64)
+    platform: Platform
+    #: The bulk export, pasted or uploaded whole.
+    csv_text: str = Field(default="", max_length=2_000_000)
+    #: Links on their own, for when somebody copied a handful rather than
+    #: exporting them. Both may be given; they are filed the same way.
+    links: str = Field(default="", max_length=200_000)
+    disclosure: str = Field(default="Affiliate link", min_length=2, max_length=500)
+    #: Off by default, like every other outward step here. This mints a real
+    #: tracking link per product, and doing that to a two-hundred-row export by
+    #: accident is not something anybody undoes quickly.
+    confirm_external_action: bool = False
+
+
+@workspace_router.post("/shopee/import", status_code=201)
+def import_shopee_offers(
+    workspace_id: str,
+    body: ShopeeImport,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """File a batch of Shopee offers, minting a tracking link for each new one.
+
+    One campaign and one platform for the whole batch: an export is a set of
+    products chosen for one purpose, and asking per row would make importing
+    two hundred of them a two hundred step job.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400, detail="Importing Shopee offers requires confirmation."
+        )
+    campaign = _campaign_record(session, workspace_id, body.campaign_id)
+    ensure_profile(session, user)
+
+    rows, problems = attribution_shopee_import.rows_from(body.csv_text, body.links)
+    if not rows and not problems:
+        raise HTTPException(
+            status_code=422,
+            detail="Nothing to import. Paste the Shopee export, or some product links.",
+        )
+    outcome = attribution_shopee_import.import_rows(
+        session,
+        workspace_id,
+        user.id,
+        campaign,
+        rows,
+        platform=body.platform,
+        disclosure=body.disclosure,
+    )
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "attribution.shopee_imported",
+        "campaign",
+        campaign.id,
+        {
+            "created": outcome.created,
+            "already_present": outcome.already_present,
+            "links": len(outcome.links),
+        },
+    )
+    return {
+        "created": outcome.created,
+        "already_present": outcome.already_present,
+        "links": outcome.links,
+        # Reported rather than raised: an export of two hundred with three odd
+        # rows should file a hundred and ninety-seven and name the three.
+        "problems": problems + outcome.problems,
+    }
 
 
 router.include_router(workspace_router)
