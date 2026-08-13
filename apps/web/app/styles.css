@@ -406,6 +406,10 @@ nav strong { color: #1c2b33; }
 .post-preview-step.end { inset-inline-end: 6px; }
 .post-preview-step:disabled { opacity: .35; cursor: not-allowed; }
 .post-preview-count { position: absolute; inset-block-start: 6px; inset-inline-end: 6px; border-radius: 999px; padding: 1px 7px; background: rgba(20, 28, 38, .78); color: #fff; font-size: 10px; font-style: normal; font-variant-numeric: tabular-nums; }
+/* Fetched, never seen. A neighbouring carousel frame is loaded so that stepping
+   to it reads from cache instead of starting a request and blanking the box.
+   Given a size rather than display:none so the load is never skipped. */
+.preview-preload { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
 .post-preview-frame p { margin: 0; padding: 0 16px; color: var(--muted); text-align: center; line-height: 1.5; }
 .post-preview-copy { display: grid; gap: 3px; }
 .post-preview-copy strong { font-weight: 500; }

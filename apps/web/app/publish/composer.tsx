@@ -242,16 +242,24 @@ export function PostPreview({
    * Measured rather than guessed from the platform: a 4:5 box letterboxed a
    * 9:16 clip and cropped a landscape one, and neither is what gets posted.
    *
-   * Stored with the source it was measured from, so stepping to the next
-   * carousel frame stops using the previous frame's shape without needing an
-   * effect to clear it - the stale value simply stops matching.
+   * Deliberately not cleared when the frame changes. Holding the last shape is
+   * what keeps the box still while the next image loads; clearing it snapped
+   * the box to the CSS default and out again, so every step jumped twice.
    */
-  const [measured, setMeasured] = useState<{ source: string; ratio: number } | null>(null);
+  const [measured, setMeasured] = useState<number | null>(null);
   const frames = carousel ?? [];
   const showing = frames.length ? frames[Math.min(frame, frames.length - 1)] : source;
-  const ratio = measured && measured.source === showing ? measured.ratio : null;
+  const ratio = measured;
+  // The frames either side, rendered but not shown, so stepping reads from
+  // cache rather than starting a fresh request and blanking the box.
+  const neighbours = frames.length > 1
+    ? [frames[frame - 1], frames[frame + 1]].filter(Boolean)
+    : [];
   const measure = (width: number, height: number) => {
-    if (width && height && showing) setMeasured({ source: showing, ratio: width / height });
+    // Frames of one carousel are usually the same shape, so this is often the
+    // same number again; where they differ the box settles once, on load,
+    // rather than bouncing through a default nobody chose.
+    if (width && height) setMeasured(width / height);
   };
   const showsTitle = platform === "youtube" || platform === "reddit" || platform === "pinterest";
 
@@ -285,7 +293,7 @@ export function PostPreview({
           // This panel used to sit beside a separate "What will be sent" card
           // that played the identical file, so the page asked the same question
           // twice and answered it two different ways.
-          <UploadPreview key={showing} source={showing} poster={thumbnail} onNaturalRatio={(value) => showing && setMeasured({ source: showing, ratio: value })} />
+          <UploadPreview key={showing} source={showing} poster={thumbnail} onNaturalRatio={setMeasured} />
         ) : showing ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img alt="" src={showing} onLoad={(event) => {
@@ -301,6 +309,10 @@ export function PostPreview({
         ) : (
           <p>{t("composer.chooseClipForFrame")}</p>
         )}
+        {neighbours.map((source) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={source} src={source} alt="" aria-hidden="true" className="preview-preload" />
+        ))}
         {/* Stepped rather than counted. The count alone says a carousel exists;
             being able to move through it is what answers whether the third
             frame still makes sense without the first. */}
