@@ -103,8 +103,11 @@ const csvTemplate = [
   "PASTE_CODE,impact,ORDER_REFERENCE,2026-07-26T12:00:00+07:00,approved,USD,89.99,12.50",
 ].join("\n");
 
-const TABS = ["products", "links", "books", "imports"] as const;
-const isTab = oneOf(...TABS);
+//: The two panels that are opened rather than always shown. Everything else
+//: on this page is one screen: products, the links under them, and the books
+//: those products belong to.
+const PANELS = ["none", "links", "imports"] as const;
+const isPanel = oneOf(...PANELS);
 
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
@@ -139,7 +142,7 @@ export default function AttributionPage() {
   const [campaignId, setCampaignId] = useState("");
   const [csvText, setCsvText] = useState(csvTemplate);
   const [busy, setBusy] = useState("");
-  const [tab, setTab] = usePersistedState("trendrelay.attribution.tab", "products", isTab);
+  const [panel, setPanel] = usePersistedState("trendrelay.attribution.panel", "none", isPanel);
   // Set when someone builds a link from a product row, so the form opens with
   // the offer already chosen instead of asking them to find it again in a list.
   const [presetOffer, setPresetOffer] = useState("");
@@ -202,7 +205,7 @@ export default function AttributionPage() {
   // on arrival, so it does not fight the stored preference on later visits.
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("tab");
-    if (isTab(requested)) setTab(requested);
+    if (isPanel(requested)) setPanel(requested);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -290,11 +293,11 @@ export default function AttributionPage() {
   /** From a product row: carry the offer over rather than make them find it. */
   const startLinkFromProduct = useCallback((_product: ProductRow, offerId: string) => {
     setPresetOffer(offerId);
-    setTab("links");
+    setPanel("links");
     queueMicrotask(() => {
       linkFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
-  }, [setTab]);
+  }, [setPanel]);
 
   async function importConversions(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -386,40 +389,43 @@ export default function AttributionPage() {
         ))}
       </section>
 
-      {/* Sections of one subject, not separate tools; the totals above stay
-          visible across all of them because they describe the whole page. */}
-      <nav className="attribution-tabs" aria-label={t("attribution.sections")}>
-        {TABS.map((name) => (
-          <button
-            key={name}
-            type="button"
-            className={tab === name ? "active" : ""}
-            aria-current={tab === name ? "true" : undefined}
-            onClick={() => setTab(name)}
-          >{t(`attribution.tab.${name}`)}</button>
-        ))}
+      {/* No tabs. A product, the links under it and the book above it are one
+          subject, and splitting them into sections meant reading three screens
+          to answer one question. Making a link and importing a batch are the
+          two things that are done rather than read, so they are buttons. */}
+      <nav className="attribution-actions" aria-label={t("attribution.sections")}>
+        <button
+          type="button"
+          className={buttonClass({ variant: panel === "links" ? "primary" : "secondary" })}
+          aria-expanded={panel === "links"}
+          onClick={() => setPanel(panel === "links" ? "none" : "links")}
+        >{t("attribution.tab.links")}</button>
+        <button
+          type="button"
+          className={buttonClass({ variant: panel === "imports" ? "primary" : "secondary" })}
+          aria-expanded={panel === "imports"}
+          onClick={() => setPanel(panel === "imports" ? "none" : "imports")}
+        >{t("attribution.tab.imports")}</button>
       </nav>
 
-      {tab === "products" && (
-        <section className="attribution-tab-panel">
-          <ProductTable
-            products={products}
-            works={works}
-            canCreate={canCreate}
-            canChangeStatus={canChangeStatus}
-            busy={busy}
-            onCreateLink={startLinkFromProduct}
-            onCopyLink={copyLink}
-            onSetLinkStatus={(id, status) => void setLinkStatus(id, status)}
-          />
-          {/* Said where the two figures meet, not in a footnote: the same
-              conversion is a product's commission and a book's royalty. */}
-          <p className="attribution-note">{t("attribution.notAdditive")}</p>
-          {measurementNotes}
-        </section>
-      )}
+      <section className="attribution-tab-panel">
+        <ProductTable
+          products={products}
+          works={works}
+          canCreate={canCreate}
+          canChangeStatus={canChangeStatus}
+          busy={busy}
+          onCreateLink={startLinkFromProduct}
+          onCopyLink={copyLink}
+          onSetLinkStatus={(id, status) => void setLinkStatus(id, status)}
+        />
+        {/* Said where the two figures meet, not in a footnote: the same
+            conversion is a product's commission and a book's royalty. */}
+        <p className="attribution-note">{t("attribution.notAdditive")}</p>
+        {measurementNotes}
+      </section>
 
-      {tab === "links" && (
+      {panel === "links" && (
         <section className="attribution-layout attribution-tab-panel">
           <div className="attribution-main">
             <article className="attribution-panel">
@@ -519,22 +525,20 @@ export default function AttributionPage() {
         </section>
       )}
 
-      {tab === "books" && (
-        <section className="attribution-tab-panel catalog-page">
-          <p className="attribution-note">{t("attribution.booksIntro")}</p>
-          {workspaceId && (
-            <BooksPanel
-              workspaceId={workspaceId}
-              canEdit={canEditBooks}
-              apiFetch={apiFetch}
-              succeed={succeed}
-              fail={fail}
-            />
-          )}
-        </section>
-      )}
+      <section className="attribution-tab-panel catalog-page">
+        <p className="attribution-note">{t("attribution.booksIntro")}</p>
+        {workspaceId && (
+          <BooksPanel
+            workspaceId={workspaceId}
+            canEdit={canEditBooks}
+            apiFetch={apiFetch}
+            succeed={succeed}
+            fail={fail}
+          />
+        )}
+      </section>
 
-      {tab === "imports" && (
+      {panel === "imports" && (
         <section className="attribution-tab-panel">
           {canImport ? (
             <article className="attribution-panel">
