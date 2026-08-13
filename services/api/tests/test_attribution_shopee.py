@@ -199,3 +199,142 @@ def test_a_link_that_could_not_be_followed_says_so(monkeypatch) -> None:
 
     with pytest.raises(ValueError, match="did not answer"):
         shopee.resolve_short_link(SHORT)
+
+
+# --- the bulk export ----------------------------------------------------------
+
+#: Three real rows from a "Lấy link sản phẩm hàng loạt" export, headings and
+#: number formats untouched. The reference file itself is git-ignored, so the
+#: shapes that matter live here instead.
+EXPORT = (
+    "Mã sản phẩm,Tên sản phẩm,Giá,Doanh thu,Tên cửa hàng,"
+    "Tỉ lệ hoa hồng,Hoa hồng,Link sản phẩm,Link ưu đãi\n"
+    "57860887539,Giấy ăn rút Topgia thùng 40 gói,\"95,0k\",8k+,TOP_GIA HOME,"
+    "2%,₫1.900,https://shopee.vn/product/1834061111/57860887539,https://s.shopee.vn/70JJHPqb6V\n"
+    "20567055749,Tẩy Tế Bào Chết Body Dove,\"183,0k\",900k+,Unilever,"
+    "8%,₫14.640,https://shopee.vn/product/111138057/20567055749,https://s.shopee.vn/6AkCHstlnM\n"
+    "27386960576,Ba lô chống gù đi học,\"176,0k\",10k+,Dailynecessities,"
+    "9%,₫15.840,https://shopee.vn/product/1218445657/27386960576,https://s.shopee.vn/60Qm5ZuP8L\n"
+)
+
+
+def test_the_real_export_reads_without_complaint() -> None:
+    from trendrelay_api.attribution_shopee import read_export
+
+    products, problems = read_export(EXPORT)
+
+    assert problems == []
+    assert [p.name[:12] for p in products] == ["Giấy ăn rút ", "Tẩy Tế Bào C", "Ba lô chống "]
+
+
+def test_the_commission_column_agrees_with_price_times_rate() -> None:
+    """The strongest check available: two parsers meeting on a third number.
+
+    Vietnamese money puts the decimal point where English puts the thousands
+    separator, so reading one as the other is wrong by a factor of a thousand
+    rather than slightly wrong. If the money and the rate are both read right,
+    their product is the commission Shopee itself printed.
+    """
+    from trendrelay_api.attribution_shopee import read_export
+
+    products, _ = read_export(EXPORT)
+
+    for product in products:
+        expected = round(product.price_dong * product.commission_bps / 10_000)
+        assert product.commission_dong == expected, product.name
+
+
+@pytest.mark.parametrize(("written", "dong"), [
+    ("95,0k", 95_000),
+    ("183,0k", 183_000),
+    ("₫1.900", 1_900),
+    ("₫14.640", 14_640),
+    ("1,5tr", 1_500_000),
+    ("", None),
+    ("--", None),
+])
+def test_vietnamese_money_is_read_as_written(written: str, dong: int | None) -> None:
+    from trendrelay_api.attribution_shopee import parse_money
+
+    assert parse_money(written) == dong
+
+
+def test_no_price_is_not_a_price_of_zero() -> None:
+    # No number is a fact about the export; zero is a claim about the product.
+    from trendrelay_api.attribution_shopee import parse_money
+
+    assert parse_money("") is None
+
+
+@pytest.mark.parametrize(("written", "bps"), [("2%", 200), ("8%", 800), ("2,5%", 250), ("", None)])
+def test_a_commission_rate_becomes_basis_points(written: str, bps: int | None) -> None:
+    from trendrelay_api.attribution_shopee import parse_rate_bps
+
+    assert parse_rate_bps(written) == bps
+
+
+def test_identity_needs_both_columns_read_together() -> None:
+    """The id column is the item alone; the shop is only in the product URL."""
+    from trendrelay_api.attribution_shopee import read_export
+
+    products, _ = read_export(EXPORT)
+
+    assert products[0].identifier == "1834061111.57860887539"
+
+
+def test_a_row_without_a_link_is_reported_rather_than_dropped() -> None:
+    from trendrelay_api.attribution_shopee import read_export
+
+    broken = EXPORT + "999,Something,\"1,0k\",1k+,Shop,1%,₫10,,\n"
+
+    products, problems = read_export(broken)
+
+    assert len(products) == 3
+    assert any("Row 5" in problem and "Something" in problem for problem in problems)
+
+
+def test_two_hundred_rows_with_three_bad_ones_import_a_hundred_and_ninety_seven() -> None:
+    # Stopping at the first odd row would make the whole file unusable because
+    # of three of them.
+    from trendrelay_api.attribution_shopee import read_export
+
+    products, problems = read_export(EXPORT + "1,No link,,,,,,,\n" * 3)
+
+    assert len(products) == 3
+    assert len(problems) == 3
+
+
+def test_a_trailing_blank_line_is_not_a_problem() -> None:
+    from trendrelay_api.attribution_shopee import read_export
+
+    products, problems = read_export(EXPORT + ",,,,,,,,\n")
+
+    assert len(products) == 3
+    assert problems == []
+
+
+def test_an_export_in_english_reads_the_same_way() -> None:
+    from trendrelay_api.attribution_shopee import read_export
+
+    english = (
+        "Product ID,Product Name,Price,Shop Name,Commission Rate,Commission,"
+        "Product Link,Offer Link\n"
+        "57860887539,A product,\"95,0k\",A shop,2%,₫1.900,"
+        "https://shopee.vn/product/1834061111/57860887539,https://s.shopee.vn/70JJHPqb6V\n"
+    )
+
+    products, problems = read_export(english)
+
+    assert problems == []
+    assert products[0].identifier == "1834061111.57860887539"
+    assert products[0].price_dong == 95_000
+
+
+def test_a_file_that_is_not_an_export_says_so_rather_than_importing_nothing() -> None:
+    """Silence would read as "your export was empty", which is a different problem."""
+    from trendrelay_api.attribution_shopee import read_export
+
+    products, problems = read_export("date,clicks\n2026-08-01,12\n")
+
+    assert products == []
+    assert problems and "does not look like a Shopee product export" in problems[0]

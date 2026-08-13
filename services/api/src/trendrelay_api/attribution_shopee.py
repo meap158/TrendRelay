@@ -189,3 +189,142 @@ def resolve_short_link(url: str, *, timeout: float = RESOLVE_TIMEOUT_SECONDS) ->
     if not is_shopee_link(final):
         raise ValueError("That link redirected somewhere that is not Shopee.")
     return final
+
+
+#: The bulk export from Shopee's offer page, by the column headings it writes.
+#:
+#: Vietnamese, because that is what the portal produces; the English headings
+#: are accepted too so an account in another language imports the same way.
+EXPORT_COLUMNS: dict[str, tuple[str, ...]] = {
+    "item_id": ("mã sản phẩm", "product id", "item id"),
+    "name": ("tên sản phẩm", "product name"),
+    "price": ("giá", "price"),
+    "sales": ("doanh thu", "sales", "revenue"),
+    "shop": ("tên cửa hàng", "shop name", "store name"),
+    "commission_rate": ("tỉ lệ hoa hồng", "tỷ lệ hoa hồng", "commission rate"),
+    "commission": ("hoa hồng", "commission"),
+    "product_url": ("link sản phẩm", "product link", "product url"),
+    "affiliate_url": ("link ưu đãi", "offer link", "affiliate link"),
+}
+
+#: `95,0k`, `1,5tr`, `₫1.900`. Vietnamese money, where the comma is the decimal
+#: point and the dot groups thousands - the opposite of the English convention,
+#: so reading one as the other is off by a factor of a thousand rather than
+#: slightly wrong.
+_MULTIPLIERS = {"k": 1_000, "tr": 1_000_000, "m": 1_000_000}
+_MONEY = re.compile(r"([\d.,]+)\s*(tr|k|m)?", re.IGNORECASE)
+
+
+def parse_money(value: str) -> int | None:
+    """A dong amount as a whole number of dong.
+
+    Returns None rather than zero for anything unreadable: no price is a fact
+    about the export, while zero is a claim about the product.
+    """
+    text = (value or "").strip().replace("₫", "").replace("đ", "").strip()
+    if not text:
+        return None
+    found = _MONEY.match(text)
+    if not found:
+        return None
+    digits, suffix = found.group(1), (found.group(2) or "").lower()
+    if suffix:
+        # `95,0k` - the comma is a decimal point, and the dot never appears here.
+        amount = float(digits.replace(".", "").replace(",", "."))
+        return int(round(amount * _MULTIPLIERS[suffix]))
+    # `1.900` - grouped thousands, no decimals in a dong amount.
+    return int(digits.replace(".", "").replace(",", "") or 0)
+
+
+def parse_rate_bps(value: str) -> int | None:
+    """`2%` as basis points, so a rate never has to be stored as a float."""
+    text = (value or "").strip().rstrip("%").replace(",", ".").strip()
+    if not text:
+        return None
+    try:
+        return int(round(float(text) * 100))
+    except ValueError:
+        return None
+
+
+def _column_map(headings: list[str]) -> dict[str, str]:
+    """Which heading in this file answers to which field."""
+    found: dict[str, str] = {}
+    for heading in headings:
+        key = (heading or "").strip().casefold()
+        for field, accepted in EXPORT_COLUMNS.items():
+            if key in accepted and field not in found:
+                found[field] = heading
+    return found
+
+
+@dataclass(frozen=True)
+class ExportedProduct:
+    """One row of the bulk export, read into the shapes the catalogue uses."""
+
+    item_id: str | None
+    shop_id: str | None
+    name: str
+    shop: str | None
+    price_dong: int | None
+    commission_dong: int | None
+    commission_bps: int | None
+    product_url: str | None
+    affiliate_url: str | None
+
+    @property
+    def identifier(self) -> str | None:
+        return f"{self.shop_id}.{self.item_id}" if self.shop_id and self.item_id else None
+
+
+def read_export(text: str) -> tuple[list[ExportedProduct], list[str]]:
+    """Read a bulk export, and say what could not be read.
+
+    Returns the rows alongside their problems rather than raising on the first
+    one: an export of two hundred products with three odd rows should import
+    a hundred and ninety-seven, and say which three it did not.
+    """
+    import csv
+    import io
+
+    reader = csv.DictReader(io.StringIO(text))
+    columns = _column_map(list(reader.fieldnames or []))
+    missing = [
+        field for field in ("name", "affiliate_url") if field not in columns
+    ]
+    if missing:
+        return [], [
+            "That file does not look like a Shopee product export: it has no "
+            + " or ".join(f"'{EXPORT_COLUMNS[field][0]}'" for field in missing)
+            + " column."
+        ]
+
+    def cell(row: dict[str, str], field: str) -> str:
+        return (row.get(columns[field]) or "").strip() if field in columns else ""
+
+    products: list[ExportedProduct] = []
+    problems: list[str] = []
+    for number, row in enumerate(reader, start=2):
+        name = cell(row, "name")
+        affiliate_url = cell(row, "affiliate_url")
+        if not name and not affiliate_url:
+            continue  # A blank line at the end of a spreadsheet is not a problem.
+        if not affiliate_url:
+            problems.append(f"Row {number} ({name[:40]}) has no affiliate link.")
+            continue
+        product_url = cell(row, "product_url")
+        # The shop is only in the product URL; the export's own id column is the
+        # item alone, so identity needs both read together.
+        shop_id, url_item = parse_ids(product_url)
+        products.append(ExportedProduct(
+            item_id=cell(row, "item_id") or url_item,
+            shop_id=shop_id,
+            name=name,
+            shop=cell(row, "shop") or None,
+            price_dong=parse_money(cell(row, "price")),
+            commission_dong=parse_money(cell(row, "commission")),
+            commission_bps=parse_rate_bps(cell(row, "commission_rate")),
+            product_url=canonical_url(product_url) or (product_url or None),
+            affiliate_url=affiliate_url,
+        ))
+    return products, problems
