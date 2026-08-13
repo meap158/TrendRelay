@@ -22,6 +22,7 @@ import { useAuth } from "../auth-provider";
 import { BooksPanel } from "./books-panel";
 import { OfferImport } from "./offer-import";
 import { ProductTable } from "./product-table";
+import { ShopeeImport } from "./shopee-import";
 import { buttonClass } from "../ui/button";
 import { StatusToasts, useStatus } from "../ui/status";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
@@ -550,6 +551,19 @@ export default function AttributionPage() {
               </form>
             </article>
           ) : <p>{t("attribution.importNotPermitted")}</p>}
+          {/* Shopee first: it is the network these links actually come from,
+              and its export carries names, prices and commission, so importing
+              one is the shortest path from an offer page to a postable link. */}
+          {workspaceId && canImport && (
+            <ShopeeImport
+              workspaceId={workspaceId}
+              campaigns={campaigns}
+              apiFetch={apiFetch}
+              succeed={succeed}
+              fail={fail}
+              onImported={() => void refresh()}
+            />
+          )}
           {/* The import that creates the rows this page is about. It used to be
               the first step of a separate page, so an empty product table and
               the way to fill it were two different destinations. */}
