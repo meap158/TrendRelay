@@ -2184,6 +2184,9 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
             platform: {
                 "caption": limits_for(platform).caption,
                 "title": limits_for(platform).title,
+                # Zero where the network has no carousel at all, so the composer
+                # can tell "not offered" from "offered, up to ten".
+                "carousel": carousel_limit(platform),
             }
             for platform in provider.platforms
         },
