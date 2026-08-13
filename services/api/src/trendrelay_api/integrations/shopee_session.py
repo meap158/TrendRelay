@@ -34,7 +34,6 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 COOKIE_FILE = PROJECT_ROOT / ".data" / "shopee" / "cookies.json"
