@@ -1161,6 +1161,8 @@ export const ja: Messages = {
     face_swap: {
       label: "顔を差し替える",
       summary: "特定の一人の顔を別の顔に置き換え、クリップ全体で追跡します。",
+      source_face: "使用する顔",
+      source_faceHelp: ".data/face-swap/faces に置いた顔写真。鮮明で正面を向いたものほど結果が安定します。",
       swap_subject: "被写体を差し替える",
       swap_subjectHelp: "オフにすると、被写体以外の全員を差し替えます。",
       match_threshold: "同一人物の判定",

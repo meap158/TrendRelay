@@ -1171,6 +1171,8 @@ export const en = {
     face_swap: {
       label: "Replace a face",
       summary: "Put a different face on one person, tracked across the clip.",
+      source_face: "Face to use",
+      source_faceHelp: "A portrait dropped into .data/face-swap/faces. The clearest, most front-facing one gives the steadiest result.",
       swap_subject: "Replace the subject",
       swap_subjectHelp: "Off replaces everyone except the subject instead.",
       match_threshold: "Identity strictness",

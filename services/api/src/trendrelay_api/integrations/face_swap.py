@@ -43,6 +43,12 @@ from trendrelay_api.tool_registry import PROJECT_ROOT
 #: mode for weights in a repository is that nobody notices until it is public.
 MODEL_DIR = PROJECT_ROOT / ".data" / "face-swap"
 LICENCE_FILE = MODEL_DIR / "licence.json"
+#: Portraits to swap *in*, dropped here by the operator. Beside the model and
+#: under `.data` for the same reason: a photograph of somebody's face is not
+#: repository content, and the failure mode for one committed by accident is
+#: that nobody notices until it is public.
+FACES_DIR = MODEL_DIR / "faces"
+FACE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
 #: Accepted names, newest first. InsightFace's current models are better than
 #: the withdrawn 128 baseline: higher resolution, steadier identity across a
 #: clip. If they license you something else, add it here rather than renaming
@@ -84,8 +90,13 @@ class FaceSwapUnavailable(RuntimeError):
 
 @dataclass(frozen=True)
 class SwapSettings:
-    """Which identity is replaced, and how sure the detector has to be."""
+    """Which identity is replaced, with what, and how sure the detector is."""
 
+    #: The portrait to put on, named by its file stem in `FACES_DIR`. A name
+    #: rather than a path: a recipe is stored and re-run, and an absolute path
+    #: in a stored recipe is both a portability problem and a way to read a
+    #: file nobody meant to offer.
+    source_face: str = ""
     #: Cosine similarity above which two faces are the same person. Shared with
     #: the identity blur so "the subject" means the same thing in both.
     match_threshold: float = 0.4
@@ -93,6 +104,90 @@ class SwapSettings:
     #: which is the bystander case.
     swap_subject: bool = True
     confidence: float = 0.5
+
+
+# --------------------------------------------------------------------------- #
+# The face being swapped in
+# --------------------------------------------------------------------------- #
+
+
+def available_faces() -> tuple[dict[str, Any], ...]:
+    """Portraits the operator has made available, newest name order.
+
+    Read on every describe and every validation rather than cached, so a
+    portrait dropped in the folder is selectable without a restart - and, more
+    to the point, so validation cannot fall behind the list offered.
+    """
+    if not FACES_DIR.is_dir():
+        return ()
+    found = [
+        {
+            "value": item.stem,
+            "label": item.stem.replace("_", " ").replace("-", " ").strip() or item.stem,
+            "group": "Faces",
+        }
+        for item in sorted(FACES_DIR.iterdir())
+        if item.is_file() and item.suffix.lower() in FACE_SUFFIXES
+    ]
+    return tuple(found)
+
+
+def face_file(name: str) -> Path | None:
+    """The portrait a name refers to, or nothing.
+
+    Resolved by matching the catalogue rather than by joining the name onto a
+    path, so a name carrying `..` or an absolute path selects nothing instead
+    of reaching a file outside the folder.
+    """
+    wanted = (name or "").strip()
+    if not wanted:
+        return None
+    for item in sorted(FACES_DIR.iterdir()) if FACES_DIR.is_dir() else []:
+        if item.is_file() and item.suffix.lower() in FACE_SUFFIXES and item.stem == wanted:
+            return item
+    return None
+
+
+def reference_face(name: str, confidence: float = 0.5) -> Any:
+    """The face to swap in, read from its portrait.
+
+    The largest face in the picture, because a portrait with a bystander in it
+    should still give the portrait's subject. Refused rather than guessed when
+    there is no face at all: swapping in nothing produces a clip that looks
+    untouched, which reads as a broken render rather than a bad input.
+    """
+    from trendrelay_api.integrations import face_identity
+
+    path = face_file(name)
+    if path is None:
+        offered = ", ".join(item["value"] for item in available_faces())
+        raise FaceSwapUnavailable(
+            f"No portrait named {name!r} in {FACES_DIR}. "
+            + (f"Available: {offered}." if offered else "The folder is empty.")
+        )
+    cv2 = _load_cv2()
+    picture = cv2.imread(str(path))
+    if picture is None:
+        raise FaceSwapUnavailable(f"{path.name} could not be read as an image.")
+    app, _provider = face_identity.analyser(confidence)
+    faces = app.get(picture)
+    if not faces:
+        raise FaceSwapUnavailable(
+            f"No face was found in {path.name}. A clear, front-facing portrait "
+            "works best."
+        )
+    return max(faces, key=lambda face: _area(face.bbox))
+
+
+def _area(bbox: Any) -> float:
+    left, top, right, bottom = (float(value) for value in bbox[:4])
+    return max(0.0, right - left) * max(0.0, bottom - top)
+
+
+def _load_cv2() -> Any:
+    from trendrelay_api.integrations.face_blur import _load_opencv
+
+    return _load_opencv()
 
 
 # --------------------------------------------------------------------------- #
@@ -181,6 +276,14 @@ def runtime_status() -> dict[str, Any]:
             "is a judgement about your own footing, and the app should not "
             "make it on your behalf."
         )
+    elif not available_faces():
+        # The last thing missing, and the only one the operator supplies per
+        # use rather than once. Named as its own step so "nothing to swap in"
+        # never reads as "the model is broken".
+        reason = (
+            "No portrait to swap in. Put a clear, front-facing photograph of "
+            f"the face you have permission to use in {FACES_DIR}."
+        )
     else:
         reason = None
 
@@ -249,6 +352,155 @@ def swapper() -> Any:
             providers=[face_identity.chosen_provider(), face_identity.CPU_PROVIDER],
         )
     return _SWAPPER
+
+
+def render_swapped(
+    source: Path,
+    destination: Path,
+    settings: SwapSettings | None = None,
+    preview_seconds: float | None = None,
+) -> dict[str, Any]:
+    """Replace one person's face across a clip, leaving everyone else alone.
+
+    Two passes, for the reason the identity blur takes two: who the subject is
+    is a fact about the whole clip, not about any one frame. The first pass
+    reads every face and its embedding; only then can they be grouped into
+    people and the subject identified. Deciding per frame would swap whoever
+    was largest at that moment and flicker between people mid-clip.
+
+    Unlike the blur, the first pass keeps the detected faces themselves rather
+    than boxes: the swap needs the landmarks to align what it pastes, and a box
+    cannot say which way a head is turned.
+    """
+    from trendrelay_api.integrations import face_identity
+    from trendrelay_api.integrations.face_blur import (
+        PREVIEW_WIDTH,
+        FaceBlurUnavailable,
+        _remux_audio,
+    )
+
+    model = _require_available()
+    settings = settings or SwapSettings()
+    cv2 = _load_cv2()
+    if not source.is_file():
+        raise FaceSwapUnavailable(f"No such media file: {source}")
+
+    # Read before the long pass, so a missing portrait fails in a moment rather
+    # than after every frame of the clip has been analysed.
+    replacement = reference_face(settings.source_face, settings.confidence)
+
+    def _open() -> Any:
+        capture = cv2.VideoCapture(str(source))
+        if not capture.isOpened():
+            raise FaceBlurUnavailable(f"OpenCV could not read {source.name}.")
+        return capture
+
+    def _read_faces(force_cpu: bool) -> tuple[list[list[Any]], dict[str, Any], str]:
+        app, provider = face_identity.analyser(settings.confidence, force_cpu=force_cpu)
+        capture = _open()
+        try:
+            shape = {
+                "fps": capture.get(cv2.CAP_PROP_FPS) or 25.0,
+                "width": int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                "height": int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+            }
+            limit = int(shape["fps"] * preview_seconds) if preview_seconds else None
+            read: list[list[Any]] = []
+            while limit is None or len(read) < limit:
+                ok, frame = capture.read()
+                if not ok:
+                    break
+                read.append(list(app.get(frame)))
+            return read, shape, provider
+        finally:
+            capture.release()
+
+    try:
+        timeline, shape, provider = _read_faces(force_cpu=False)
+    except Exception as error:
+        # A GPU provider can build a session and still throw partway through a
+        # clip. Restarting on CPU loses time; not restarting loses the render.
+        if face_identity.chosen_provider() == face_identity.CPU_PROVIDER:
+            raise
+        fallback_reason = f"{type(error).__name__}: {str(error)[:200]}"
+        timeline, shape, provider = _read_faces(force_cpu=True)
+    else:
+        fallback_reason = None
+
+    if not timeline:
+        raise FaceSwapUnavailable(f"{source.name} contained no readable frames.")
+
+    fps, width, height = shape["fps"], shape["width"], shape["height"]
+    flat = [face for frame_faces in timeline for face in frame_faces]
+    labels = face_identity.cluster([face.normed_embedding for face in flat],
+                                   settings.match_threshold)
+    subject = face_identity.main_identity(labels)
+    report = face_identity.identity_report(labels)
+
+    # Walked in the order the labels were produced, so label i belongs to the
+    # i-th face read. Any other pairing swaps the wrong person's face, which is
+    # the one failure here that is worse than not rendering at all.
+    per_frame: list[list[tuple[Any, int]]] = []
+    cursor = 0
+    for frame_faces in timeline:
+        row = []
+        for face in frame_faces:
+            row.append((face, labels[cursor]))
+            cursor += 1
+        per_frame.append(row)
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    silent = destination.with_suffix(".silent.mp4")
+    scale = min(1.0, PREVIEW_WIDTH / float(width)) if preview_seconds and width else 1.0
+    out_size = (int(width * scale), int(height * scale)) if scale < 1.0 else (width, height)
+
+    engine = swapper()
+    capture = _open()
+    writer = cv2.VideoWriter(str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, out_size)
+    swapped = 0
+    try:
+        for row in per_frame:
+            ok, frame = capture.read()
+            if not ok:
+                break
+            for face, label in row:
+                if (label == subject) != settings.swap_subject:
+                    continue
+                # paste_back so the result is the whole frame with the new face
+                # composited in, rather than the aligned crop on its own.
+                frame = engine.get(frame, face, replacement, paste_back=True)
+                swapped += 1
+            if scale < 1.0:
+                frame = cv2.resize(frame, out_size, interpolation=cv2.INTER_AREA)
+            writer.write(frame)
+    finally:
+        writer.release()
+        capture.release()
+
+    if _remux_audio(silent, source, destination):
+        silent.unlink(missing_ok=True)
+    else:
+        silent.replace(destination)
+
+    return {
+        "frames": len(timeline),
+        "faces_found": len(flat),
+        "faces_swapped": swapped,
+        "identities": len(report),
+        # The guess and the evidence for it, so the wrong person being swapped
+        # is diagnosable rather than only visible.
+        "subject_identity": subject,
+        "identity_report": report,
+        "swapped_subject": settings.swap_subject,
+        # What was put on, and what did the putting. This output is synthetic
+        # media of a real person; a render that cannot say which face it used
+        # or which model made it is not one anybody can account for later.
+        "source_face": settings.source_face,
+        "model": model.name,
+        "provider": provider,
+        "gpu_fallback_reason": fallback_reason,
+        "output": str(destination),
+    }
 
 
 def install_hint() -> str:

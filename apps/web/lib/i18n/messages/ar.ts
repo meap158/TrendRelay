@@ -1171,6 +1171,8 @@ export const ar: Messages = {
     face_swap: {
       label: "استبدال وجه",
       summary: "يضع وجهًا آخر على شخص واحد، ويتابعه عبر المقطع كله.",
+      source_face: "الوجه المستخدم",
+      source_faceHelp: "صورة شخصية توضع في .data/face-swap/faces. كلما كانت أوضح وأكثر مواجهة للكاميرا كانت النتيجة أثبت.",
       swap_subject: "استبدال الشخص الرئيسي",
       swap_subjectHelp: "عند إيقافه يُستبدل كل من عداه بدلًا منه.",
       match_threshold: "صرامة تحديد الهوية",

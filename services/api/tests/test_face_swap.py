@@ -25,6 +25,7 @@ def slot(tmp_path, monkeypatch):
     """An empty model directory, so no test touches the real one."""
     monkeypatch.setattr(face_swap, "MODEL_DIR", tmp_path)
     monkeypatch.setattr(face_swap, "LICENCE_FILE", tmp_path / "licence.json")
+    monkeypatch.setattr(face_swap, "FACES_DIR", tmp_path / "faces")
     monkeypatch.setattr(face_swap, "_SWAPPER", None)
     return tmp_path
 
@@ -35,6 +36,12 @@ def licensed(slot) -> None:
 
 def with_model(slot, name: str = "inswapper-512-live.onnx") -> None:
     (slot / name).write_bytes(b"not a real model, but a file that exists")
+
+
+def with_portrait(slot, name: str = "ada.jpg") -> None:
+    """The third prerequisite: something to swap in."""
+    (slot / "faces").mkdir(exist_ok=True)
+    (slot / "faces" / name).write_bytes(b"pretend this is a JPEG")
 
 
 # --- what it refuses --------------------------------------------------------
@@ -89,6 +96,7 @@ def test_research_use_is_a_footing_of_its_own(slot) -> None:
     matters.
     """
     with_model(slot)
+    with_portrait(slot)
     record_licence("local-admin", reference="Grant 41/2026", basis="research")
 
     status = runtime_status()
@@ -119,6 +127,7 @@ def test_an_invented_footing_is_refused(slot) -> None:
 
 def test_a_withdrawn_licence_closes_the_gate_again(slot) -> None:
     with_model(slot)
+    with_portrait(slot)
     licensed(slot)
     assert runtime_status()["available"] is True
     record_licence("local-admin", reference="INV-2026-0042", licensed=False)
@@ -158,6 +167,7 @@ def test_consent_is_stated_separately_from_the_licence(slot) -> None:
     # whether the footage may be published, and conflating the two is how a
     # legal question gets mistaken for a solved one.
     with_model(slot)
+    with_portrait(slot)
     licensed(slot)
     status = runtime_status()
     assert status["available"] is True
@@ -203,3 +213,171 @@ def test_a_mirror_must_be_https(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(face_anon, "ENDPOINT_FILE", tmp_path / "endpoint")
     with pytest.raises(ValueError, match="https"):
         face_anon.save_hf_endpoint("http://mirror.example")
+
+
+# --- the portrait being swapped in --------------------------------------------
+#
+# The model cannot run in a test, so what is exercised here is everything
+# around it: which portraits are offered, which names resolve, and the pairing
+# of faces to identities - which is the one piece whose failure swaps the wrong
+# person rather than merely failing.
+
+
+@pytest.fixture
+def faces(slot):
+    folder = slot / "faces"
+    folder.mkdir()
+    return folder
+
+
+def portrait(faces, name: str = "ada.jpg") -> None:
+    (faces / name).write_bytes(b"pretend this is a JPEG")
+
+
+def test_portraits_dropped_in_the_folder_are_offered(faces) -> None:
+    portrait(faces, "ada.jpg")
+    portrait(faces, "grace_hopper.png")
+
+    offered = face_swap.available_faces()
+
+    assert [item["value"] for item in offered] == ["ada", "grace_hopper"]
+    assert offered[1]["label"] == "grace hopper"
+
+
+def test_files_that_are_not_pictures_are_not_offered(faces) -> None:
+    (faces / "notes.txt").write_text("not a portrait", encoding="utf-8")
+
+    assert face_swap.available_faces() == ()
+
+
+def test_an_empty_folder_offers_nothing_rather_than_failing(faces) -> None:
+    assert face_swap.available_faces() == ()
+
+
+def test_a_name_reaching_outside_the_folder_selects_nothing(faces) -> None:
+    """A recipe is stored and re-run, so its face name is untrusted input."""
+    portrait(faces)
+    (faces.parent / "licence.json").write_text("{}", encoding="utf-8")
+
+    for attempt in ("../licence", "..\\licence", "/etc/passwd", "ada/../../licence"):
+        assert face_swap.face_file(attempt) is None, attempt
+
+
+def test_the_portrait_a_name_means_is_found(faces) -> None:
+    portrait(faces)
+
+    assert face_swap.face_file("ada").name == "ada.jpg"
+
+
+def test_no_portrait_is_its_own_missing_step(faces) -> None:
+    # Not "the model is broken". It is the one thing supplied per use rather
+    # than once, so it gets said as itself.
+    with_model(faces.parent)
+    licensed(faces.parent)
+
+    status = runtime_status()
+
+    assert status["available"] is False
+    assert "No portrait to swap in" in status["reason"]
+
+
+def test_a_portrait_completes_the_gate(faces, monkeypatch) -> None:
+    with_model(faces.parent)
+    licensed(faces.parent)
+    portrait(faces)
+    monkeypatch.setattr(
+        "trendrelay_api.integrations.face_identity.runtime_status",
+        lambda: {"runtime_installed": True, "reason": None, "available": True,
+                 "provider": "CPUExecutionProvider", "gpu_accelerated": False},
+    )
+
+    assert runtime_status()["available"] is True
+
+
+def test_asking_for_a_portrait_that_is_not_there_names_what_is(faces) -> None:
+    portrait(faces, "ada.jpg")
+
+    with pytest.raises(FaceSwapUnavailable, match="ada"):
+        face_swap.reference_face("someone-else")
+
+
+# --- the settings the editor produces -----------------------------------------
+
+
+def test_the_face_is_named_rather_than_pathed() -> None:
+    """An absolute path in a stored recipe travels badly and reads widely."""
+    settings = SwapSettings(source_face="ada")
+
+    assert settings.source_face == "ada"
+    assert "/" not in settings.source_face and "\\" not in settings.source_face
+
+
+# --- who gets replaced --------------------------------------------------------
+#
+# The render itself needs the model and a real clip, so what is tested here is
+# the decision it makes per face. It is worth isolating: every other failure in
+# this module produces no output, while this one produces a finished clip with
+# the wrong person's face on it.
+
+
+def swap_targets(labels, subject, swap_subject):
+    """The faces the renderer would replace, by index."""
+    return [
+        index for index, label in enumerate(labels)
+        if (label == subject) == swap_subject
+    ]
+
+
+def test_only_the_subject_is_replaced_by_default() -> None:
+    # Two people: the subject appears three times, the bystander twice.
+    labels = [0, 1, 0, 1, 0]
+
+    assert swap_targets(labels, subject=0, swap_subject=True) == [0, 2, 4]
+
+
+def test_inverting_it_replaces_the_bystanders_instead() -> None:
+    """The anonymise-the-crowd case, where the creator stays themselves."""
+    labels = [0, 1, 0, 1, 0]
+
+    assert swap_targets(labels, subject=0, swap_subject=False) == [1, 3]
+
+
+def test_a_clip_with_one_person_replaces_only_them() -> None:
+    labels = [0, 0, 0]
+
+    assert swap_targets(labels, subject=0, swap_subject=True) == [0, 1, 2]
+    assert swap_targets(labels, subject=0, swap_subject=False) == []
+
+
+def test_no_identifiable_subject_replaces_nobody_rather_than_everybody() -> None:
+    """An empty clip must not become a clip where everyone was replaced.
+
+    `main_identity` returns None when there is nothing to choose, and None
+    equals no label - so the comparison already declines rather than matching
+    every face. Pinned because the opposite failure is unrecoverable.
+    """
+    labels = [0, 1, 2]
+
+    assert swap_targets(labels, subject=None, swap_subject=True) == []
+
+
+def test_the_faces_read_line_up_with_the_labels_they_were_given() -> None:
+    """The pairing walk, which is where the wrong person would get swapped.
+
+    Labels come back as one flat list over every face in the clip; the renderer
+    re-walks the timeline to pair them up. Getting the cursor wrong by one
+    silently shifts every face onto the next person's identity.
+    """
+    timeline = [["a"], [], ["b", "c"], ["d"]]
+    labels = [0, 1, 0, 1]
+
+    paired, cursor = [], 0
+    for frame_faces in timeline:
+        row = []
+        for face in frame_faces:
+            row.append((face, labels[cursor]))
+            cursor += 1
+        paired.append(row)
+
+    assert paired == [[("a", 0)], [], [("b", 1), ("c", 0)], [("d", 1)]]
+    assert cursor == len(labels), "every label was consumed exactly once"

@@ -1168,6 +1168,8 @@ export const vi: Messages = {
     face_swap: {
       label: "Thay khuôn mặt",
       summary: "Đặt một khuôn mặt khác lên một người, bám theo suốt clip.",
+      source_face: "Khuôn mặt dùng để thay",
+      source_faceHelp: "Ảnh chân dung đặt trong .data/face-swap/faces. Ảnh rõ nét, nhìn thẳng cho kết quả ổn định nhất.",
       swap_subject: "Thay mặt nhân vật chính",
       swap_subjectHelp: "Tắt đi thì thay mặt tất cả những người khác, trừ nhân vật chính.",
       match_threshold: "Độ chặt khi nhận dạng",

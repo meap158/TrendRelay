@@ -1143,6 +1143,8 @@ export const zh: Messages = {
     face_swap: {
       label: "替换人脸",
       summary: "把某个人的脸换成另一张，并在整段片段中持续跟踪。",
+      source_face: "使用的人脸",
+      source_faceHelp: "放入 .data/face-swap/faces 的人像照片。越清晰、越正面，效果越稳定。",
       swap_subject: "替换主角",
       swap_subjectHelp: "关闭后改为替换除主角以外的所有人。",
       match_threshold: "身份判定严格度",

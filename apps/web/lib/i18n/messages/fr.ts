@@ -1185,6 +1185,8 @@ export const fr: Messages = {
     face_swap: {
       label: "Remplacer un visage",
       summary: "Pose un autre visage sur une personne, suivie tout au long du clip.",
+      source_face: "Visage à utiliser",
+      source_faceHelp: "Un portrait déposé dans .data/face-swap/faces. Le plus net et le plus de face donne le résultat le plus stable.",
       swap_subject: "Remplacer le sujet",
       swap_subjectHelp: "Désactivé, remplace tout le monde sauf le sujet.",
       match_threshold: "Rigueur d'identification",
