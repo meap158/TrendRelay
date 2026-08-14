@@ -52,6 +52,8 @@ type TrackingLink = {
   campaign_id: string;
   plan_id?: string | null;
   offer_id?: string | null;
+  /** Which product this link is for, so a selection of rows can find its links. */
+  product_id?: string | null;
   destination_host: string;
   country_destinations: Record<string, string>;
   platform: string;
@@ -317,6 +319,26 @@ export default function AttributionPage() {
     }
   }, [apiFetch, links, refresh, succeed, fail, t, workspaceId]);
 
+  /**
+   * Every tracking link on the chosen products, one per line.
+   *
+   * The reason to choose several at once: a batch of links goes into a
+   * scheduling sheet or a message, and copying them a row at a time is the
+   * work selecting removes. Resolved here because this is where the public
+   * URLs live; a product row carries only the codes.
+   */
+  const copySelectedLinks = useCallback((productIds: string[]) => {
+    const wanted = new Set(productIds);
+    const urls = links.filter((link) => link.product_id && wanted.has(link.product_id))
+      .map((link) => link.url);
+    if (!urls.length) {
+      fail("Those products have no tracking links yet.");
+      return;
+    }
+    void navigator.clipboard.writeText(urls.join("\n"));
+    succeed(`${urls.length} link${urls.length === 1 ? "" : "s"} copied`);
+  }, [links, succeed, fail]);
+
   const copyLink = useCallback((code: string) => {
     const link = links.find((item) => item.code === code);
     if (link) void navigator.clipboard.writeText(link.url);
@@ -451,6 +473,7 @@ export default function AttributionPage() {
           onCreateLink={startLinkFromProduct}
           onCopyLink={copyLink}
           onSetLinkStatus={(id, status) => void setLinkStatus(id, status)}
+          onCopySelected={copySelectedLinks}
         />
       </section>
 

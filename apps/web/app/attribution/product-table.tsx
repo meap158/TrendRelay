@@ -52,6 +52,7 @@ export function ProductTable({
   onCopyLink,
   onSetLinkStatus,
   canChangeStatus,
+  onCopySelected,
 }: {
   products: ProductRow[];
   works: WorkRow[];
@@ -61,10 +62,13 @@ export function ProductTable({
   onCreateLink: (product: ProductRow, offerId: string) => void;
   onCopyLink: (code: string) => void;
   onSetLinkStatus: (linkId: string, status: "active" | "disabled") => void;
+  /** Asked to copy every tracking link on these products, in one go. */
+  onCopySelected?: (productIds: string[]) => void;
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
 
   /**
    * Name, brand, shop or marketplace - whatever somebody half-remembers.
@@ -83,6 +87,31 @@ export function ProductTable({
     ].some((field) => (field || "").toLowerCase().includes(needle)));
   }, [products, query]);
   const workTitle = new Map(works.map((work) => [work.work_id, work.title]));
+
+  /**
+   * How many may be chosen at once.
+   *
+   * Shopee's own offer page caps a selection at a hundred and says so while
+   * you pick - "0 / 100" - rather than refusing the hundred and first without
+   * explanation. Matched here so a batch built in one place fits in the other,
+   * and because a cap nobody can see is one they hit by surprise.
+   */
+  const SELECTION_LIMIT = 100;
+  const atLimit = picked.size >= SELECTION_LIMIT;
+
+  function choose(id: string) {
+    setPicked((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else if (next.size < SELECTION_LIMIT) next.add(id);
+      return next;
+    });
+  }
+
+  /** Everything on screen, which is what a search has narrowed it to. */
+  function chooseShown(all: boolean) {
+    setPicked(all ? new Set(shown.slice(0, SELECTION_LIMIT).map((row) => row.id)) : new Set());
+  }
 
   function toggle(id: string) {
     setExpanded((current) => {
@@ -114,10 +143,37 @@ export function ProductTable({
         placeholder={t("attribution.searchProducts")}
         aria-label={t("attribution.searchProducts")}
       />
+      {/* Present only once something is chosen. A bar that is always there
+          takes a row of the screen to say nothing, which is the opposite of
+          what it is for. */}
+      {picked.size > 0 && (
+        <div className="product-bulk">
+          <strong>{picked.size} / {SELECTION_LIMIT}</strong>
+          <span>{t("attribution.selected")}</span>
+          {/* Resolved by the page, which holds the tracking links: a product
+              row carries its codes, not the public URL those codes resolve to,
+              and building that URL here would be a second place that has to
+              agree about it. */}
+          <button type="button" onClick={() => onCopySelected?.([...picked])}>
+            {t("attribution.copyLinks")}
+          </button>
+          <button type="button" onClick={() => chooseShown(false)}>
+            {t("attribution.clearSelection")}
+          </button>
+        </div>
+      )}
       <div className="catalog-table-scroll">
         <table className="catalog-table product-table">
           <thead>
             <tr>
+              <th scope="col" className="product-choose">
+                <input
+                  type="checkbox"
+                  aria-label={t("attribution.selectAll")}
+                  checked={picked.size > 0 && picked.size >= Math.min(shown.length, SELECTION_LIMIT)}
+                  onChange={(event) => chooseShown(event.target.checked)}
+                />
+              </th>
               <th scope="col">{t("attribution.product")}</th>
               <th scope="col" className="numeric">{t("attribution.price")}</th>
               <th scope="col" className="numeric">{t("attribution.rate")}</th>
@@ -134,7 +190,18 @@ export function ProductTable({
                 .map((id) => workTitle.get(id))
                 .filter(Boolean)[0];
               return [
-                <tr key={product.id}>
+                <tr key={product.id} data-chosen={picked.has(product.id) || undefined}>
+                  <td className="product-choose">
+                    <input
+                      type="checkbox"
+                      aria-label={product.name}
+                      checked={picked.has(product.id)}
+                      // Disabled rather than silently ignored at the cap, so
+                      // the limit is visible on the control it applies to.
+                      disabled={atLimit && !picked.has(product.id)}
+                      onChange={() => choose(product.id)}
+                    />
+                  </td>
                   <th scope="row">
                     <button
                       type="button"
@@ -142,15 +209,29 @@ export function ProductTable({
                       aria-expanded={open}
                       onClick={() => toggle(product.id)}
                     >
-                      <span>{product.name}</span>
-                      <small>
-                        {[product.brand, product.marketplace].filter(Boolean).join(" · ")}
-                        {/* Named on the row: the same book in two formats is two
-                            products here, and without this they read as
-                            duplicates of each other. */}
-                        {book && ` · ${book}`}
-                        {product.product_form && ` (${product.product_form})`}
-                      </small>
+                      {/* Leading with the picture, as the offer page does:
+                          a product is recognised by sight before its name is
+                          read, and these names are long enough to truncate.
+                          Absent until enrichment has fetched one, so the cell
+                          keeps its shape either way. */}
+                      {product.image_url
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img className="product-thumb" src={product.image_url} alt="" loading="lazy" />
+                        : <span className="product-thumb product-thumb-empty" aria-hidden="true" />}
+                      {/* Name over subtitle, beside the picture rather than
+                          after it - the three are a row of two things, not a
+                          row of three. */}
+                      <span className="product-named">
+                        <span>{product.name}</span>
+                        <small>
+                          {[product.brand, product.marketplace].filter(Boolean).join(" · ")}
+                          {/* Named on the row: the same book in two formats is
+                              two products here, and without this they read as
+                              duplicates of each other. */}
+                          {book && ` · ${book}`}
+                          {product.product_form && ` (${product.product_form})`}
+                        </small>
+                      </span>
                     </button>
                   </th>
                   {/* Shown only when one offer answers for the product. With
@@ -185,7 +266,7 @@ export function ProductTable({
                 </tr>,
                 open && (
                   <tr key={`${product.id}-detail`} className="catalog-edition-row">
-                    <td colSpan={7}>
+                    <td colSpan={8}>
                       <div className="product-detail">
                         <section>
                           <h4>{t("attribution.whereItGoes")}</h4>
