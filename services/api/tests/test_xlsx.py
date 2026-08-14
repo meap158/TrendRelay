@@ -28,7 +28,8 @@ def sheet_rows(data: bytes) -> list[list[str]]:
         for cell in row.findall("main:c", NS):
             inline = cell.find("main:is/main:t", NS)
             number = cell.find("main:v", NS)
-            cells.append(inline.text if inline is not None else (number.text if number is not None else ""))
+            found = inline if inline is not None else number
+            cells.append(found.text if found is not None else "")
         rows.append(cells)
     return rows
 
