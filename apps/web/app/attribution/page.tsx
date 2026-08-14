@@ -113,7 +113,7 @@ const csvTemplate = [
 //: Four views of one subject, exactly one on screen. Not tabs over separate
 //: tools - a product, its links and what they earned are the same thing asked
 //: about three ways, and the fourth is how any of it got here.
-const VIEWS = ["products", "links", "money", "import"] as const;
+const VIEWS = ["products", "links", "money", "imports"] as const;
 const isView = oneOf(...VIEWS);
 
 async function json<T>(response: Response): Promise<T> {
@@ -341,12 +341,12 @@ export default function AttributionPage() {
           {campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select></label>
         <label>{t("attribution.publicationPlan")}<select name="plan_id" defaultValue="">
-          <option value="">{t("attribution.noPlan")}</option>
+          <option value="">{t("attribution.campaignLevelLink")}</option>
           {plans.filter((item) => item.campaign_id === campaignId).map((item) => <option key={item.id} value={item.id}>{item.title} · {item.platform}</option>)}
         </select></label>
         <label>{t("attribution.affiliateOffer")}<select name="offer_id" value={presetOffer} onChange={(event) => setPresetOffer(event.target.value)}>
-          <option value="">{t("attribution.campaignDestination")}</option>
-          {offers.map((item) => <option key={item.id} value={item.id}>{item.product.name} · {item.network}</option>)}
+          <option value="">{t("attribution.useCampaignDestination")}</option>
+          {offers.filter((item) => item.availability !== "unavailable").map((item) => <option key={item.id} value={item.id}>{item.product.name} · {item.network}</option>)}
         </select></label>
         <label>{t("library.platform")}<select name="platform" defaultValue="tiktok">
           {["tiktok", "instagram", "youtube", "douyin", "other"].map((item) => <option key={item} value={item}>{item}</option>)}
@@ -457,8 +457,8 @@ export default function AttributionPage() {
                         // guessing a parameter name breaks the sale rather than
                         // tracking it. The key is still what a report will match.
                         <span className="tracking-subids none">
-                          <em title={t("attribution.subIdUnsupported")}>
-                            {t("attribution.subIdKey")}<b>{link.sub_id_key}</b>
+                          <em title={t("attribution.subIdUnknownHelp")}>
+                            {t("attribution.subIdUnknown")}<b>{link.sub_id_key}</b>
                           </em>
                         </span>
                       ) : null}
@@ -546,7 +546,7 @@ export default function AttributionPage() {
         </section>
       )}
 
-      {view === "import" && (
+      {view === "imports" && (
         <section className="attribution-view">
           {!canImport && <p className="attribution-note">{t("attribution.importNotPermitted")}</p>}
           {/* Shopee first: it is the network these links actually come from,
