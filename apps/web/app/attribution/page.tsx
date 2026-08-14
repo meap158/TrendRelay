@@ -23,6 +23,7 @@ import { BooksPanel } from "./books-panel";
 import { OfferImport } from "./offer-import";
 import { ProductTable } from "./product-table";
 import { ShopeeImport } from "./shopee-import";
+import { ShopeeSession } from "./shopee-session";
 import { buttonClass } from "../ui/button";
 import { StatusToasts, useStatus } from "../ui/status";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
@@ -558,6 +559,21 @@ export default function AttributionPage() {
           {/* Shopee first: it is the network these links actually come from,
               and its export carries names, prices and commission, so importing
               one is the shortest path from an offer page to a postable link. */}
+          {workspaceId && canImport && (
+            <article className="attribution-panel">
+              {/* The connection above the form that uses it. Shown here rather
+                  than in Tools because this is where somebody finds out they
+                  needed it: an import works without a session and fills in
+                  images with one. */}
+              <ShopeeSession
+                workspaceId={workspaceId}
+                canConnect={workspace?.role === "owner"}
+                apiFetch={apiFetch}
+                succeed={succeed}
+                fail={fail}
+              />
+            </article>
+          )}
           {workspaceId && canImport && (
             <ShopeeImport
               workspaceId={workspaceId}

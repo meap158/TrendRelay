@@ -110,3 +110,27 @@
 @media (max-width: 700px) {
   .attribution-tabs button { flex: 0 0 auto; padding: 9px 12px; }
 }
+
+/* The Shopee connection. A line rather than a panel: it sits above the import
+   form that is the actual subject, and a connection that works is a one-line
+   fact. It grows only when there is something to read or something to do. */
+.shopee-session { display: grid; gap: 10px; margin-block-end: 12px; padding: 10px 12px; border: 1px solid var(--line); border-inline-start: 3px solid var(--line-strong); border-radius: var(--radius-sm); font-size: 12px; }
+.shopee-session[data-tone="on"] { border-inline-start-color: var(--green); }
+.shopee-session[data-tone="tired"] { border-inline-start-color: #d9a400; }
+.shopee-session-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; color: var(--muted); }
+.shopee-session-line strong { color: var(--text); }
+.shopee-session-dot { inline-size: 7px; block-size: 7px; border-radius: 999px; background: var(--line-strong); }
+.shopee-session[data-tone="on"] .shopee-session-dot { background: var(--green); }
+.shopee-session[data-tone="tired"] .shopee-session-dot { background: #d9a400; }
+/* Pushed to the end of the line rather than given a row of their own. */
+.shopee-session-buttons { display: flex; gap: 6px; margin-inline-start: auto; }
+.shopee-session-buttons button { padding: 4px 9px; font-size: 11px; }
+.shopee-session-stages { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.shopee-session-stages li { display: grid; gap: 2px; padding-inline-start: 16px; position: relative; line-height: 1.45; }
+/* Said as a mark rather than a colour alone, so the result survives being read
+   by somebody who cannot tell the two colours apart. */
+.shopee-session-stages li::before { content: "✓"; position: absolute; inset-inline-start: 0; color: var(--green); font-weight: 700; }
+.shopee-session-stages li[data-ok="false"]::before { content: "✕"; color: #a11; }
+.shopee-session-stages span { color: var(--muted); }
+.shopee-session-connect { display: grid; gap: 8px; }
+.shopee-session-connect code { font-family: ui-monospace, monospace; }
