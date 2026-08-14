@@ -642,9 +642,34 @@ def existing_runner() -> int | None:
     return pid
 
 
-def claim_runner_lock() -> None:
+def claim_runner_lock() -> int | None:
+    """Take the lock, or name the runner that already holds it.
+
+    Created exclusively, so two runners starting together cannot both succeed.
+    Reading the lock and then writing it is not enough: the work between those
+    two points - probing ports, waiting up to eight seconds for each to come
+    free, validating - takes long enough for a second terminal to pass the same
+    check before the first has written anything. Both then proceeded, and the
+    second deleted `.next-dev` out from under the first's frontend.
+
+    Returns None when the lock is ours, or the other runner's pid when it is
+    not. A file left by a crashed runner is cleared and the claim retried once,
+    because a crash must not require deleting a file by hand before starting.
+    """
     RUNNER_LOCK.parent.mkdir(parents=True, exist_ok=True)
-    RUNNER_LOCK.write_text(str(os.getpid()), encoding="utf-8")
+    for _attempt in (1, 2):
+        try:
+            handle = os.open(RUNNER_LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            holder = existing_runner()
+            if holder is not None:
+                return holder
+            # `existing_runner` removed a stale file; try once more to take it.
+            continue
+        with os.fdopen(handle, "w", encoding="utf-8") as file:
+            file.write(str(os.getpid()))
+        return None
+    return existing_runner()
 
 
 def release_runner_lock() -> None:
@@ -657,7 +682,13 @@ def release_runner_lock() -> None:
 
 def main() -> int:
     args = parse_args()
-    running_pid = existing_runner()
+    # Claimed before anything destructive, not after.
+    #
+    # Everything below this point takes ports from whatever holds them and
+    # deletes the frontend's build directory. Doing that while another runner
+    # is mid-start is what left a live server with no files and no way back, so
+    # the right to do it is taken first, atomically, or not at all.
+    running_pid = existing_runner() if args.check else claim_runner_lock()
     if running_pid and not args.check:
         print(
             f"TrendRelay is already running in another terminal (PID {running_pid}). "
@@ -671,6 +702,7 @@ def main() -> int:
     services = build_services(args.desktop, may_terminate=not args.check)
     errors = validation_errors(args.desktop, services)
     if errors:
+        release_runner_lock()
         for error in errors:
             print(error, file=sys.stderr)
         return 1
@@ -689,9 +721,6 @@ def main() -> int:
         )
 
     running: list[RunningService] = []
-    # Claimed only once this process is actually going to supervise services,
-    # so a failed validation never leaves a lock behind.
-    claim_runner_lock()
     try:
         for index, service in enumerate(startable):
             running.append(start_service(service))

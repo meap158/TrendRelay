@@ -609,3 +609,50 @@ def test_check_mode_never_deletes_anything(monkeypatch) -> None:
     dev.build_services(False, may_terminate=False)
 
     assert "delete" not in order
+
+
+# --- one runner at a time -----------------------------------------------------
+#
+# Two runners is the failure behind every "it will not load" this week: the
+# second one takes the first's ports and deletes the frontend's build directory
+# while it is serving from it, leaving a live server with no files and no way
+# back. The lock existed already; it was read at the start and written twenty
+# seconds later, with the port probing in between, so two terminals started
+# together both passed the read before either wrote.
+
+
+def test_the_lock_is_taken_atomically_so_a_second_runner_loses(monkeypatch, tmp_path) -> None:
+    lock = tmp_path / "dev-runner.pid"
+    monkeypatch.setattr(dev, "RUNNER_LOCK", lock)
+    first = os.getpid()
+
+    assert dev.claim_runner_lock() is None, "the first runner takes it"
+
+    # A second runner: a different pid, and the first one still alive.
+    monkeypatch.setattr(dev.os, "getpid", lambda: 999_001)
+    monkeypatch.setattr(dev, "_process_alive", lambda pid: True)
+
+    assert dev.claim_runner_lock() == first, "the second is told who holds it"
+    assert lock.read_text(encoding="utf-8").strip() == str(first), "and cannot overwrite it"
+
+
+def test_a_crashed_runner_does_not_block_the_next_start(monkeypatch, tmp_path) -> None:
+    """A lock file outliving its process must not need deleting by hand."""
+    lock = tmp_path / "dev-runner.pid"
+    monkeypatch.setattr(dev, "RUNNER_LOCK", lock)
+    lock.write_text("424242", encoding="utf-8")
+    monkeypatch.setattr(dev, "_process_alive", lambda pid: False)
+
+    assert dev.claim_runner_lock() is None
+    assert lock.read_text(encoding="utf-8").strip() == str(os.getpid())
+
+
+def test_releasing_only_removes_a_lock_this_process_holds(monkeypatch, tmp_path) -> None:
+    # Otherwise a runner exiting would free the lock of the one that beat it.
+    lock = tmp_path / "dev-runner.pid"
+    monkeypatch.setattr(dev, "RUNNER_LOCK", lock)
+    lock.write_text("424242", encoding="utf-8")
+
+    dev.release_runner_lock()
+
+    assert lock.exists(), "another runner's lock must survive"
