@@ -626,6 +626,7 @@ export const vi: Messages = {
     recentConversions: "Chuyển đổi gần đây",
     noReports: "Chưa nhập báo cáo chuyển đổi nào.",
     createLink: "Tạo liên kết theo dõi",
+    settings: "Cài đặt",
     publicationPlan: "Kế hoạch đăng bài",
     campaignLevelLink: "Liên kết cấp chiến dịch",
     affiliateOffer: "Ưu đãi tiếp thị",

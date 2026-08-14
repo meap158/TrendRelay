@@ -613,6 +613,7 @@ export const zh: Messages = {
     recentConversions: "近期转化",
     noReports: "尚未导入转化报告。",
     createLink: "创建追踪链接",
+    settings: "设置",
     publicationPlan: "发布计划",
     campaignLevelLink: "广告系列级链接",
     affiliateOffer: "联盟优惠",

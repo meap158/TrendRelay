@@ -633,6 +633,7 @@ export const ru: Messages = {
     recentConversions: "Недавние конверсии",
     noReports: "Отчёты о конверсиях не импортированы.",
     createLink: "Создать ссылку для отслеживания",
+    settings: "Настройки",
     publicationPlan: "План публикации",
     campaignLevelLink: "Ссылка на уровне кампании",
     affiliateOffer: "Партнёрское предложение",

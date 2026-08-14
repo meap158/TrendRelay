@@ -630,6 +630,7 @@ export const en = {
     recentConversions: "Recent conversions",
     noReports: "No conversion reports imported.",
     createLink: "Create a tracking link",
+    settings: "Settings",
     publicationPlan: "Publication plan",
     campaignLevelLink: "Campaign-level link",
     affiliateOffer: "Affiliate offer",

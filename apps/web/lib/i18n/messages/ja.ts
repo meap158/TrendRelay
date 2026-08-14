@@ -626,6 +626,7 @@ export const ja: Messages = {
     recentConversions: "最近のコンバージョン",
     noReports: "コンバージョンレポートは未取り込みです。",
     createLink: "計測リンクを作成",
+    settings: "設定",
     publicationPlan: "配信プラン",
     campaignLevelLink: "キャンペーン単位のリンク",
     affiliateOffer: "アフィリエイト案件",

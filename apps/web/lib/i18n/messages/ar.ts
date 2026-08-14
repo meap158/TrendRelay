@@ -624,6 +624,7 @@ export const ar: Messages = {
     recentConversions: "التحويلات الأخيرة",
     noReports: "لم تُستورد أي تقارير تحويلات.",
     createLink: "إنشاء رابط تتبع",
+    settings: "الإعدادات",
     publicationPlan: "خطة النشر",
     campaignLevelLink: "رابط على مستوى الحملة",
     affiliateOffer: "عرض تسويق بالعمولة",

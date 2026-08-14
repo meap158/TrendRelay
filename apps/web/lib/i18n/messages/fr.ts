@@ -635,6 +635,7 @@ export const fr: Messages = {
     recentConversions: "Conversions récentes",
     noReports: "Aucun rapport de conversion importé.",
     createLink: "Créer un lien de suivi",
+    settings: "Paramètres",
     publicationPlan: "Plan de publication",
     campaignLevelLink: "Lien au niveau de la campagne",
     affiliateOffer: "Offre d'affiliation",
