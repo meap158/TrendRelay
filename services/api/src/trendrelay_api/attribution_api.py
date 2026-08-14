@@ -1081,7 +1081,11 @@ def read_shopee_session(
     return _session_state()
 
 
-@workspace_router.put("/shopee/session")
+# POST rather than PUT, and a named path rather than DELETE: this API
+# allows GET and POST only, and a browser's preflight turns anything
+# else into "failed to fetch" with nothing in the server log to explain
+# it. Every other write here is a POST for the same reason.
+@workspace_router.post("/shopee/session")
 def connect_shopee_session(
     workspace_id: str,
     body: ShopeeSession,
@@ -1129,7 +1133,7 @@ def connect_shopee_session(
     return _session_state()
 
 
-@workspace_router.delete("/shopee/session", status_code=204)
+@workspace_router.post("/shopee/session/disconnect", status_code=204)
 def disconnect_shopee_session(
     workspace_id: str,
     request: Request,

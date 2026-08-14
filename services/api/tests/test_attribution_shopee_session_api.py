@@ -81,7 +81,7 @@ def workspace() -> str:
 
 def connect(workspace_id: str, header: str = SECRET, **extra) -> httpx.Response:
     return request(
-        "PUT",
+        "POST",
         f"/api/workspaces/{workspace_id}/attribution/shopee/session",
         json={"cookie_header": header, "confirm_external_action": True, **extra},
     )
@@ -119,7 +119,7 @@ def test_one_cookie_instead_of_the_header_names_what_is_missing(workspace) -> No
 
 def test_storing_a_session_needs_confirming(workspace) -> None:
     response = request(
-        "PUT",
+        "POST",
         f"/api/workspaces/{workspace}/attribution/shopee/session",
         json={"cookie_header": SECRET},
     )
@@ -132,7 +132,7 @@ def test_disconnecting_removes_the_session(workspace) -> None:
     connect(workspace)
 
     response = request(
-        "DELETE", f"/api/workspaces/{workspace}/attribution/shopee/session"
+        "POST", f"/api/workspaces/{workspace}/attribution/shopee/session/disconnect"
     )
 
     assert response.status_code == 204

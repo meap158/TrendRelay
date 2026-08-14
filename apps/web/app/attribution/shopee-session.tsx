@@ -151,7 +151,7 @@ export function ShopeeSession({
     setBusy("save");
     try {
       const response = await apiFetch(path, {
-        method: "PUT",
+        method: "POST",
         body: JSON.stringify({
           cookie_header: cookieHeader,
           confirm_external_action: true,
@@ -195,7 +195,7 @@ export function ShopeeSession({
   async function forget() {
     setBusy("forget");
     try {
-      const response = await apiFetch(path, { method: "DELETE" });
+      const response = await apiFetch(`${path}/disconnect`, { method: "POST" });
       if (!response.ok && response.status !== 204) throw new Error("Could not disconnect.");
       setProbe(null);
       await read();
