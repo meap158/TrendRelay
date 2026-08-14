@@ -27,6 +27,12 @@ type SessionState = {
   detail: string;
 };
 
+/** What the sign-in window is doing, while it is open. */
+type Connection = { state: string; message: string; updated_at: string | null };
+
+/** States in which a browser window is still waiting for somebody. */
+const OPEN_STATES = ["starting", "opening_browser", "waiting_for_login"];
+
 type Stage = { id: string; label: string; ok: boolean; detail: string };
 type Probe = { ok: boolean; reconnect: boolean; stages: Stage[] };
 
@@ -64,9 +70,10 @@ export function ShopeeSession({
   const [state, setState] = useState<SessionState | null>(null);
   const [work, setWork] = useState<Enrichment | null>(null);
   const [probe, setProbe] = useState<Probe | null>(null);
+  const [connection, setConnection] = useState<Connection | null>(null);
   const [cookieHeader, setCookieHeader] = useState("");
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState<"" | "save" | "probe" | "forget">("");
+  const [busy, setBusy] = useState<"" | "save" | "probe" | "forget" | "signin">("");
 
   const path = `/api/workspaces/${workspaceId}/attribution/shopee/session`;
 
@@ -89,6 +96,56 @@ export function ShopeeSession({
     // synchronously here is the cascading-render pattern React warns about.
     queueMicrotask(() => { void read(); });
   }, [read]);
+
+  /**
+   * Open Shopee's own login page in a browser and wait for the session.
+   *
+   * Polled rather than pushed, because the window is a separate process on
+   * this machine and the only thing it shares with the app is a file it writes
+   * when it succeeds. Two seconds is fast enough that closing the loop feels
+   * immediate and slow enough that a window left open all afternoon is not
+   * hammering the API.
+   */
+  async function signIn() {
+    setBusy("signin");
+    setProbe(null);
+    try {
+      const response = await apiFetch(`${path}/connect`, {
+        method: "POST",
+        body: JSON.stringify({ confirm_external_action: true }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.detail ?? "The sign-in could not start.");
+      setConnection(payload.connection as Connection);
+    } catch (problem) {
+      fail(problem instanceof Error ? problem.message : String(problem));
+      setBusy("");
+    }
+  }
+
+  const watching = Boolean(connection && OPEN_STATES.includes(connection.state));
+
+  useEffect(() => {
+    if (!watching) return;
+    let live = true;
+    const timer = setInterval(async () => {
+      try {
+        const response = await apiFetch(`${path}/connect`);
+        if (!response.ok || !live) return;
+        const payload = await response.json();
+        setConnection(payload.connection as Connection);
+        setState(payload.session as SessionState);
+        if (!OPEN_STATES.includes(payload.connection.state)) {
+          setBusy("");
+          if (payload.session?.ready) succeed("Shopee connected");
+        }
+      } catch {
+        // A poll that failed is not a sign-in that failed. The next one will
+        // say so, and the window is still open either way.
+      }
+    }, 2000);
+    return () => { live = false; clearInterval(timer); };
+  }, [watching, apiFetch, path, succeed]);
 
   async function save() {
     setBusy("save");
@@ -169,9 +226,18 @@ export function ShopeeSession({
               {busy === "probe" ? "Checking…" : "Check"}
             </button>
           )}
+          {/* Signing in first: it is the one that needs no explaining, and
+              the only one that learns when the session expires. */}
+          {canConnect && (
+            <button type="button" onClick={() => void signIn()} disabled={busy !== ""}>
+              {watching ? "Waiting…" : connected ? "Sign in again" : "Sign in"}
+            </button>
+          )}
+          {/* Kept, because the window needs a browser runtime and a machine
+              with a screen, and neither is guaranteed. */}
           {canConnect && (
             <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}>
-              {connected ? "Replace" : "Connect"}
+              Paste header
             </button>
           )}
           {canConnect && connected && (
@@ -181,6 +247,15 @@ export function ShopeeSession({
           )}
         </span>
       </p>
+
+      {/* Said while it happens, because the window opens behind the browser
+          as often as in front of it, and a button that did nothing visible is
+          one somebody presses again. */}
+      {connection && connection.state !== "connected" && connection.message && (
+        <p className="shopee-session-work" data-open={watching || undefined}>
+          {connection.message}
+        </p>
+      )}
 
       {/* Each step separately, because "the import did not work" is not
           something anybody can act on. An expired session, a page that cannot

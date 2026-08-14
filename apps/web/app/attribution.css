@@ -150,3 +150,7 @@
    conversions behind them are read together or not at all. */
 .attribution-money { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
 .attribution-money .attribution-limits { grid-column: 1 / -1; }
+/* While a window is open, the line is the only thing on screen that knows it.
+   Shopee's login can open behind the browser as easily as in front of it. */
+.shopee-session-work[data-open] { color: var(--text); }
+.shopee-session-work[data-open]::before { content: "◌ "; color: var(--muted); }
