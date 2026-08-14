@@ -16,7 +16,7 @@ from threading import Lock
 from typing import Annotated, Any, Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
@@ -28,6 +28,7 @@ from trendrelay_api.auth import CurrentUser, current_user, require_governed_assu
 from trendrelay_api.config import get_settings
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, ensure_profile, membership, require_role
+from trendrelay_api.integrations import shopee_session
 from trendrelay_api.media_models import CreativeAnalysis, MediaAsset
 from trendrelay_api.models import Campaign, PublicationPlan, utc_now
 from trendrelay_api.opportunity_models import ProductOffer
@@ -1022,6 +1023,130 @@ def import_shopee_offers(
         # rows should file a hundred and ninety-seven and name the three.
         "problems": problems + outcome.problems,
     }
+
+
+class ShopeeSession(BaseModel):
+    """A signed-in Shopee session, as the browser itself would send it."""
+
+    #: Pasted whole from the browser, `a=1; b=2`, because that is the form it
+    #: can actually be copied in. Picked apart here rather than asking somebody
+    #: to name each cookie.
+    cookie_header: str = Field(min_length=1, max_length=20_000)
+    confirm_external_action: bool = False
+
+
+def _session_state() -> dict[str, Any]:
+    """What to say about the connection, with nothing of it in the answer.
+
+    Cookie values never appear here. This is read by a browser and logged by
+    whatever sits in front of it.
+    """
+    state = shopee_session.health()
+    return {
+        "ready": state.ready,
+        "tired": state.tired,
+        "source": state.source,
+        "missing": state.missing,
+        "expires_at": state.expires_at.isoformat() if state.expires_at else None,
+        "detail": state.detail,
+    }
+
+
+@workspace_router.get("/shopee/session")
+def read_shopee_session(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Whether Shopee is connected, and how long that will remain true."""
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    return _session_state()
+
+
+@workspace_router.put("/shopee/session")
+def connect_shopee_session(
+    workspace_id: str,
+    body: ShopeeSession,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Store a Shopee session so imports can read product details.
+
+    Owners only, and confirmed: this is a credential for somebody's own Shopee
+    account, and everything done with it is done as them.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400, detail="Storing a Shopee session requires confirmation."
+        )
+    cookies = shopee_session.parse_cookie_header(body.cookie_header)
+    missing = [key for key in shopee_session.REQUIRED_COOKIE_KEYS if not cookies.get(key)]
+    if missing:
+        # Named, because the usual cause is copying one cookie rather than the
+        # request's whole Cookie header.
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"That session is missing {', '.join(missing)}. Copy the whole "
+                "Cookie header from a signed-in request, not a single cookie."
+            ),
+        )
+    shopee_session.save_cookies(cookies)
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "attribution.shopee_session_connected",
+        "workspace",
+        workspace_id,
+        # The count, never the cookies. This row is kept.
+        {"cookies": len(cookies)},
+    )
+    return _session_state()
+
+
+@workspace_router.delete("/shopee/session", status_code=204)
+def disconnect_shopee_session(
+    workspace_id: str,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> Response:
+    """Forget the stored session."""
+    require_role(membership(session, workspace_id, user.id), {"owner"})
+    shopee_session.forget_cookies()
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "attribution.shopee_session_disconnected",
+        "workspace",
+        workspace_id,
+        {},
+    )
+    return Response(status_code=204)
+
+
+@workspace_router.post("/shopee/session/probe")
+def probe_shopee_session(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Walk the path an import takes and say which step broke.
+
+    Worth its own endpoint rather than being inferred from a failed import:
+    "the import did not work" is not something anybody can act on, and a
+    session that is expired, one that cannot reach the page, and a page that
+    parses to nothing have three different fixes.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    return shopee_session.probe()
 
 
 router.include_router(workspace_router)

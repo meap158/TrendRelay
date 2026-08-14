@@ -58,7 +58,7 @@ AUTH_FAILURE_MARKERS = (
 )
 
 
-def _parse_cookie_header(header: str) -> dict[str, str]:
+def parse_cookie_header(header: str) -> dict[str, str]:
     """`a=1; b=2` into a mapping, ignoring anything shapeless."""
     cookies: dict[str, str] = {}
     for part in header.split(";"):
@@ -76,7 +76,7 @@ def load_cookies() -> tuple[dict[str, str], str]:
     """
     header = os.getenv(COOKIE_ENV, "").strip()
     if header:
-        parsed = _parse_cookie_header(header)
+        parsed = parse_cookie_header(header)
         if parsed:
             return parsed, COOKIE_ENV
     try:
@@ -108,6 +108,15 @@ def save_cookies(cookies: dict[str, str], *, expires_at: datetime | None = None)
         ),
         encoding="utf-8",
     )
+
+
+def forget_cookies() -> None:
+    """Drop the stored session.
+
+    Deleted rather than blanked, so what is left on disk matches what somebody
+    was told: disconnecting means the cookies are gone, not emptied in place.
+    """
+    COOKIE_FILE.unlink(missing_ok=True)
 
 
 def merge_refreshed(current: dict[str, str], set_cookie_headers: list[str]) -> dict[str, str]:
