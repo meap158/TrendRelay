@@ -31,7 +31,7 @@ import { ShopeeImport } from "./shopee-import";
 import { ShopeeSession } from "./shopee-session";
 import { buttonClass } from "../ui/button";
 import { StatusToasts, useStatus } from "../ui/status";
-import { oneOf, usePersistedState } from "../ui/use-persisted-state";
+import { Dialog } from "../ui/dialog";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { useT } from "../i18n-provider";
 import { money } from "./format";
@@ -110,12 +110,6 @@ const csvTemplate = [
   "PASTE_CODE,impact,ORDER_REFERENCE,2026-07-26T12:00:00+07:00,approved,USD,89.99,12.50",
 ].join("\n");
 
-//: Four views of one subject, exactly one on screen. Not tabs over separate
-//: tools - a product, its links and what they earned are the same thing asked
-//: about three ways, and the fourth is how any of it got here.
-const VIEWS = ["products", "links", "money", "imports"] as const;
-const isView = oneOf(...VIEWS);
-
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
   if (!response.ok) throw new Error(body.detail ?? "Attribution request failed.");
@@ -149,7 +143,10 @@ export default function AttributionPage() {
   const [campaignId, setCampaignId] = useState("");
   const [csvText, setCsvText] = useState(csvTemplate);
   const [busy, setBusy] = useState("");
-  const [view, setView] = usePersistedState("trendrelay.attribution.view", "products", isView);
+  // Opened deliberately, closed when done. Neither is a place to be: making a
+  // link and bringing rows in are things you do to the table, not other screens
+  // to read.
+  const [panel, setPanel] = useState<"" | "link" | "import">("");
   // Set when someone builds a link from a product row, so the form opens with
   // the offer already chosen instead of asking them to find it again in a list.
   const [presetOffer, setPresetOffer] = useState("");
@@ -211,14 +208,6 @@ export default function AttributionPage() {
     return () => { cancelled = true; };
   }, [apiFetch, user, fail]);
 
-  // A link from elsewhere can name the view it wants. Honoured once, on
-  // arrival, so it does not fight the stored preference on later visits.
-  useEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get("view");
-    if (isView(requested)) setView(requested);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   useEffect(() => {
     if (!workspaceId) return;
     queueMicrotask(() => {
@@ -259,6 +248,7 @@ export default function AttributionPage() {
         succeed(t("attribution.linkCreated", { url: body.link.url }));
       }
       setPresetOffer("");
+      setPanel("");
       await refresh();
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "Tracking link creation failed.");
@@ -303,11 +293,8 @@ export default function AttributionPage() {
   /** From a product row: carry the offer over rather than make them find it. */
   const startLinkFromProduct = useCallback((_product: ProductRow, offerId: string) => {
     setPresetOffer(offerId);
-    setView("links");
-    queueMicrotask(() => {
-      linkFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
-  }, [setView]);
+    setPanel("link");
+  }, []);
 
   async function importConversions(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -337,8 +324,7 @@ export default function AttributionPage() {
   if (!user) return <main className="attribution-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Fattribution">{t("attribution.signInPrompt")}</Link></main>;
 
   const linkForm = (
-    <article className="attribution-panel">
-      <h2>{t("attribution.createLink")}</h2>
+    <article className="attribution-panel attribution-panel-bare">
       <form onSubmit={createLink} ref={linkFormRef}>
         <label>{t("attribution.campaign")}<select name="campaign_id" required value={campaignId} onChange={(event) => setCampaignId(event.target.value)}>
           {campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -396,216 +382,247 @@ export default function AttributionPage() {
         </select></label>
       </header>
 
-      {/* Exactly one view on screen, all of it. The panels this replaced
-          defaulted to closed, so the page opened with its actions hidden and
-          nothing whole in sight. */}
-      <nav className="attribution-views" role="tablist" aria-label={t("attribution.sections")}>
-        {VIEWS.map((name) => (
-          <button
-            key={name}
-            type="button"
-            role="tab"
-            aria-selected={view === name}
-            className={view === name ? "selected" : undefined}
-            onClick={() => setView(name)}
-          >{t(`attribution.tab.${name}`)}</button>
-        ))}
-      </nav>
+      {/* One page. A product, the links under it and what they earned are the
+          same subject asked about three ways, and the two things anyone comes
+          here to *do* are actions on that table rather than places to visit. */}
+      <div className="attribution-bar">
+        <span>{products.length} product{products.length === 1 ? "" : "s"}</span>
+        <span className="attribution-bar-actions">
+          {canImport && (
+            <button
+              type="button"
+              className={buttonClass({ variant: "secondary" })}
+              onClick={() => setPanel("import")}
+            >{t("attribution.tab.imports")}</button>
+          )}
+          {canCreate && (
+            <button
+              type="button"
+              className={buttonClass({ variant: "primary" })}
+              onClick={() => setPanel("link")}
+              disabled={!campaigns.length}
+            >{t("attribution.createLink")}</button>
+          )}
+        </span>
+      </div>
 
-      {view === "products" && (
-        <section className="attribution-view">
-          <ProductTable
-            products={products}
-            works={works}
-            canCreate={canCreate}
-            canChangeStatus={canChangeStatus}
-            busy={busy}
-            onCreateLink={startLinkFromProduct}
-            onCopyLink={copyLink}
-            onSetLinkStatus={(id, status) => void setLinkStatus(id, status)}
-          />
-        </section>
-      )}
+      <section className="attribution-view">
+        <ProductTable
+          products={products}
+          works={works}
+          canCreate={canCreate}
+          canChangeStatus={canChangeStatus}
+          busy={busy}
+          onCreateLink={startLinkFromProduct}
+          onCopyLink={copyLink}
+          onSetLinkStatus={(id, status) => void setLinkStatus(id, status)}
+        />
+      </section>
 
-      {view === "links" && (
-        <section className="attribution-view attribution-layout">
-          <div className="attribution-main">
+      {/* Below the table rather than behind a tab: the campaign totals are read
+          after the products they came from, not instead of them. */}
+      <details className="attribution-money-details">
+        <summary>{t("attribution.tab.money")}</summary>
+        <div className="attribution-view attribution-money">
+
+          <section className="attribution-view attribution-money">
             <article className="attribution-panel">
-              <div className="panel-heading"><div><h2>{t("attribution.trackingLinks")}</h2><p>{t("attribution.trackingLinksHelp")}</p></div></div>
-              <div className="tracking-list">
-                {links.map((link) => (
-                  <div key={link.id}>
-                    <div className="tracking-copy">
-                      <strong>{campaigns.find((item) => item.id === link.campaign_id)?.name ?? t("attribution.campaign")}</strong>
-                      <a href={`${link.url}/info`} target="_blank" rel="noreferrer">{link.url}</a>
-                      <small>→ {link.destination_host} · {link.platform} · {link.disclosure}</small>
-                      {/* What the network's own report will call this link.
-                          Worth showing: those columns are read back off a
-                          dashboard we do not control, and reconciling a payout
-                          means knowing which column is which. Compact, because
-                          it qualifies the link rather than competing with it. */}
-                      {link.sub_id_slots?.length ? (
-                        <span className="tracking-subids">
-                          {link.sub_id_slots.map((slot) => (
-                            <em
-                              key={slot.parameter}
-                              title={t(`attribution.subIdDimension.${slot.dimension}`)}
-                            >
-                              {slot.parameter}<b>{slot.value}</b>
-                            </em>
-                          ))}
-                        </span>
-                      ) : link.sub_id_key ? (
-                        // No contract for this network, so nothing was added -
-                        // guessing a parameter name breaks the sale rather than
-                        // tracking it. The key is still what a report will match.
-                        <span className="tracking-subids none">
-                          <em title={t("attribution.subIdUnknownHelp")}>
-                            {t("attribution.subIdUnknown")}<b>{link.sub_id_key}</b>
-                          </em>
-                        </span>
-                      ) : null}
-                      {Object.entries(link.country_destinations).map(([country, host]) => (
-                        <small key={country}>{country} → {host}</small>
-                      ))}
-                    </div>
-                    <div className="tracking-metrics">
-                      <span>{link.clicks}<small>{t("attribution.clicks")}</small></span>
-                      <span>{link.conversions}<small>{t("attribution.conversions")}</small></span>
-                      {Object.entries(link.commission_by_currency).map(([currency, amount]) => (
-                        <span key={currency}>{money(amount, currency)}<small>{currency}</small></span>
-                      ))}
-                      <em className={`tracking-status ${link.status}`}>{link.status}</em>
-                    </div>
-                    <div className="tracking-actions">
-                      <button type="button" onClick={() => copyLink(link.code)}>{t("attribution.copy")}</button>
-                      {canChangeStatus && link.status !== "expired" && (
-                        <button
-                          type="button"
-                          disabled={busy === link.id}
-                          onClick={() => void setLinkStatus(link.id, link.status === "active" ? "disabled" : "active")}
-                        >{link.status === "active" ? t("attribution.disable") : t("attribution.activate")}</button>
-                      )}
-                    </div>
+              <h2>{t("attribution.revenueByCampaign")}</h2>
+              <div className="revenue-table">
+                <div className="table-head"><span>{t("attribution.campaign")}</span><span>{t("attribution.conversions")}</span><span>{t("attribution.netCommission")}</span></div>
+                {summary?.campaigns.map((row) => (
+                  <div key={`${row.campaign_id}-${row.currency}`}>
+                    <span>{row.campaign_name}<small>{row.currency}</small></span>
+                    <span>{row.approved_conversions}</span>
+                    <strong>{money(row.net_commission_cents, row.currency)}</strong>
                   </div>
                 ))}
-                {!links.length && <p>{t("attribution.noLinks")}</p>}
+                {!summary?.campaigns.length && <p>{t("attribution.noRevenue")}</p>}
+              </div>
+              {!!summary?.creative_formats.length && <>
+                <h3>{t("attribution.earningsByFormat")}</h3>
+                <div className="format-chips">{summary.creative_formats.map((row) => (
+                  <span key={`${row.creative_format}-${row.currency}`}><strong>{row.creative_format}</strong>{money(row.net_commission_cents, row.currency)}</span>
+                ))}</div>
+              </>}
+            </article>
+
+            <article className="attribution-panel">
+              <h2>{t("attribution.recentConversions")}</h2>
+              <div className="conversion-list">
+                {conversions.slice(0, 30).map((item) => (
+                  <div key={item.id}>
+                    <span><strong>{item.network}</strong><small>{new Date(item.occurred_at).toLocaleString()} · {item.tracking_code}</small></span>
+                    <em className={`conversion-status ${item.status}`}>{item.status}</em>
+                    <strong>{money(item.commission_cents, item.currency)}</strong>
+                    <small>{item.click_matched ? t("attribution.matchedClick") : t("attribution.noEligibleClick")}</small>
+                  </div>
+                ))}
+                {!conversions.length && <p>{t("attribution.noReports")}</p>}
               </div>
             </article>
+
+            {/* Beside the figures they qualify, and only here. These caveats used
+                to be rendered twice on one screen, which is how a caveat stops
+                being read. */}
+            <details className="attribution-limits">
+              <summary>{t("attribution.measurementNotes")}</summary>
+              <ul>
+                <li>{t("attribution.notAdditive")}</li>
+                {summary?.limitations.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            </details>
+          </section>
+        </div>
+      </details>
+
+      <details className="attribution-money-details">
+        <summary>{t("attribution.trackingLinks")}</summary>
+        <div className="attribution-view">
+
+          <div className="attribution-layout">
+            <div className="attribution-main">
+              <article className="attribution-panel">
+                <div className="panel-heading"><div><h2>{t("attribution.trackingLinks")}</h2><p>{t("attribution.trackingLinksHelp")}</p></div></div>
+                <div className="tracking-list">
+                  {links.map((link) => (
+                    <div key={link.id}>
+                      <div className="tracking-copy">
+                        <strong>{campaigns.find((item) => item.id === link.campaign_id)?.name ?? t("attribution.campaign")}</strong>
+                        <a href={`${link.url}/info`} target="_blank" rel="noreferrer">{link.url}</a>
+                        <small>→ {link.destination_host} · {link.platform} · {link.disclosure}</small>
+                        {/* What the network's own report will call this link.
+                            Worth showing: those columns are read back off a
+                            dashboard we do not control, and reconciling a payout
+                            means knowing which column is which. Compact, because
+                            it qualifies the link rather than competing with it. */}
+                        {link.sub_id_slots?.length ? (
+                          <span className="tracking-subids">
+                            {link.sub_id_slots.map((slot) => (
+                              <em
+                                key={slot.parameter}
+                                title={t(`attribution.subIdDimension.${slot.dimension}`)}
+                              >
+                                {slot.parameter}<b>{slot.value}</b>
+                              </em>
+                            ))}
+                          </span>
+                        ) : link.sub_id_key ? (
+                          // No contract for this network, so nothing was added -
+                          // guessing a parameter name breaks the sale rather than
+                          // tracking it. The key is still what a report will match.
+                          <span className="tracking-subids none">
+                            <em title={t("attribution.subIdUnknownHelp")}>
+                              {t("attribution.subIdUnknown")}<b>{link.sub_id_key}</b>
+                            </em>
+                          </span>
+                        ) : null}
+                        {Object.entries(link.country_destinations).map(([country, host]) => (
+                          <small key={country}>{country} → {host}</small>
+                        ))}
+                      </div>
+                      <div className="tracking-metrics">
+                        <span>{link.clicks}<small>{t("attribution.clicks")}</small></span>
+                        <span>{link.conversions}<small>{t("attribution.conversions")}</small></span>
+                        {Object.entries(link.commission_by_currency).map(([currency, amount]) => (
+                          <span key={currency}>{money(amount, currency)}<small>{currency}</small></span>
+                        ))}
+                        <em className={`tracking-status ${link.status}`}>{link.status}</em>
+                      </div>
+                      <div className="tracking-actions">
+                        <button type="button" onClick={() => copyLink(link.code)}>{t("attribution.copy")}</button>
+                        {canChangeStatus && link.status !== "expired" && (
+                          <button
+                            type="button"
+                            disabled={busy === link.id}
+                            onClick={() => void setLinkStatus(link.id, link.status === "active" ? "disabled" : "active")}
+                          >{link.status === "active" ? t("attribution.disable") : t("attribution.activate")}</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {!links.length && <p>{t("attribution.noLinks")}</p>}
+                </div>
+              </article>
+            </div>
+
+            <aside className="attribution-side">{linkForm}</aside>
           </div>
+        </div>
+      </details>
 
-          <aside className="attribution-side">{linkForm}</aside>
-        </section>
-      )}
+      <Dialog
+        open={panel === "import"}
+        title={t("attribution.tab.imports")}
+        onClose={() => setPanel("")}
+      >
+        <div className="attribution-view">
 
-      {view === "money" && (
-        <section className="attribution-view attribution-money">
-          <article className="attribution-panel">
-            <h2>{t("attribution.revenueByCampaign")}</h2>
-            <div className="revenue-table">
-              <div className="table-head"><span>{t("attribution.campaign")}</span><span>{t("attribution.conversions")}</span><span>{t("attribution.netCommission")}</span></div>
-              {summary?.campaigns.map((row) => (
-                <div key={`${row.campaign_id}-${row.currency}`}>
-                  <span>{row.campaign_name}<small>{row.currency}</small></span>
-                  <span>{row.approved_conversions}</span>
-                  <strong>{money(row.net_commission_cents, row.currency)}</strong>
-                </div>
-              ))}
-              {!summary?.campaigns.length && <p>{t("attribution.noRevenue")}</p>}
-            </div>
-            {!!summary?.creative_formats.length && <>
-              <h3>{t("attribution.earningsByFormat")}</h3>
-              <div className="format-chips">{summary.creative_formats.map((row) => (
-                <span key={`${row.creative_format}-${row.currency}`}><strong>{row.creative_format}</strong>{money(row.net_commission_cents, row.currency)}</span>
-              ))}</div>
-            </>}
-          </article>
-
-          <article className="attribution-panel">
-            <h2>{t("attribution.recentConversions")}</h2>
-            <div className="conversion-list">
-              {conversions.slice(0, 30).map((item) => (
-                <div key={item.id}>
-                  <span><strong>{item.network}</strong><small>{new Date(item.occurred_at).toLocaleString()} · {item.tracking_code}</small></span>
-                  <em className={`conversion-status ${item.status}`}>{item.status}</em>
-                  <strong>{money(item.commission_cents, item.currency)}</strong>
-                  <small>{item.click_matched ? t("attribution.matchedClick") : t("attribution.noEligibleClick")}</small>
-                </div>
-              ))}
-              {!conversions.length && <p>{t("attribution.noReports")}</p>}
-            </div>
-          </article>
-
-          {/* Beside the figures they qualify, and only here. These caveats used
-              to be rendered twice on one screen, which is how a caveat stops
-              being read. */}
-          <details className="attribution-limits">
-            <summary>{t("attribution.measurementNotes")}</summary>
-            <ul>
-              <li>{t("attribution.notAdditive")}</li>
-              {summary?.limitations.map((line) => <li key={line}>{line}</li>)}
-            </ul>
-          </details>
-        </section>
-      )}
-
-      {view === "imports" && (
-        <section className="attribution-view">
-          {!canImport && <p className="attribution-note">{t("attribution.importNotPermitted")}</p>}
-          {/* Shopee first: it is the network these links actually come from,
-              and its export carries names, prices and commission, so importing
-              one is the shortest path from an offer page to a postable link. */}
-          {workspaceId && canImport && (
-            <article className="attribution-panel">
-              {/* The connection above the form that uses it, because this is
-                  where somebody finds out they needed it: an import works
-                  without a session and fills in images with one. */}
-              <ShopeeSession
+          <div>
+            {!canImport && <p className="attribution-note">{t("attribution.importNotPermitted")}</p>}
+            {/* Shopee first: it is the network these links actually come from,
+                and its export carries names, prices and commission, so importing
+                one is the shortest path from an offer page to a postable link. */}
+            {workspaceId && canImport && (
+              <article className="attribution-panel">
+                {/* The connection above the form that uses it, because this is
+                    where somebody finds out they needed it: an import works
+                    without a session and fills in images with one. */}
+                <ShopeeSession
+                  workspaceId={workspaceId}
+                  canConnect={workspace?.role === "owner"}
+                  apiFetch={apiFetch}
+                  succeed={succeed}
+                  fail={fail}
+                  onReady={setShopeeReady}
+                />
+              </article>
+            )}
+            {workspaceId && canImport && (
+              <ShopeeImport
                 workspaceId={workspaceId}
-                canConnect={workspace?.role === "owner"}
+                campaigns={campaigns}
+                connected={shopeeReady}
                 apiFetch={apiFetch}
                 succeed={succeed}
                 fail={fail}
-                onReady={setShopeeReady}
+                onImported={() => void refresh()}
               />
-            </article>
-          )}
-          {workspaceId && canImport && (
-            <ShopeeImport
-              workspaceId={workspaceId}
-              campaigns={campaigns}
-              connected={shopeeReady}
-              apiFetch={apiFetch}
-              succeed={succeed}
-              fail={fail}
-              onImported={() => void refresh()}
-            />
-          )}
-          {/* The import that creates the rows this page is about. It used to be
-              the first step of a separate page, so an empty product table and
-              the way to fill it were two different destinations. */}
-          {workspaceId && (
-            <OfferImport
-              workspaceId={workspaceId}
-              canEdit={canEditCatalog}
-              apiFetch={apiFetch}
-              onImported={() => void refresh()}
-              succeed={succeed}
-              fail={fail}
-            />
-          )}
-          {canImport && (
-            <article className="attribution-panel">
-              <h2>{t("attribution.importConversions")}</h2>
-              <p>{t("attribution.importHelp")}</p>
-              <form onSubmit={importConversions}>
-                <textarea aria-label={t("attribution.conversionCsv")} rows={10} value={csvText} onChange={(event) => setCsvText(event.target.value)} />
-                <button className={buttonClass({ variant: "primary" })} disabled={busy === "import"}>{busy === "import" ? t("attribution.importing") : t("attribution.importReport")}</button>
-              </form>
-            </article>
-          )}
-        </section>
-      )}
+            )}
+            {/* The import that creates the rows this page is about. It used to be
+                the first step of a separate page, so an empty product table and
+                the way to fill it were two different destinations. */}
+            {workspaceId && (
+              <OfferImport
+                workspaceId={workspaceId}
+                canEdit={canEditCatalog}
+                apiFetch={apiFetch}
+                onImported={() => void refresh()}
+                succeed={succeed}
+                fail={fail}
+              />
+            )}
+            {canImport && (
+              <article className="attribution-panel">
+                <h2>{t("attribution.importConversions")}</h2>
+                <p>{t("attribution.importHelp")}</p>
+                <form onSubmit={importConversions}>
+                  <textarea aria-label={t("attribution.conversionCsv")} rows={10} value={csvText} onChange={(event) => setCsvText(event.target.value)} />
+                  <button className={buttonClass({ variant: "primary" })} disabled={busy === "import"}>{busy === "import" ? t("attribution.importing") : t("attribution.importReport")}</button>
+                </form>
+              </article>
+            )}
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={panel === "link"}
+        title={t("attribution.createLink")}
+        onClose={() => setPanel("")}
+      >
+        {linkForm}
+      </Dialog>
 
       <StatusToasts messages={statusMessages} onDismiss={dismiss} />
     </main>

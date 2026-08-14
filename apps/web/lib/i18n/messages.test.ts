@@ -83,39 +83,3 @@ test("the scan actually finds keys, so a green run means something", () => {
   assert.ok(requested.length > 200, `only found ${requested.length} keys`);
   assert.ok(requested.some(({ key }) => key === "composer.chooseImages"));
 });
-
-/**
- * Labels built from a closed set, which the literal scan above cannot see.
- *
- * `t(`attribution.tab.${view}`)` is computed, so nothing checked that each view
- * had a label - and the Attribution switcher shipped reading "Products Links
- * Money attribution.tab.import", because the views were renamed and the key
- * behind one of them still said `imports`.
- *
- * Each entry names a source file, the `as const` array in it that drives the
- * labels, and the namespace those labels live under. Adding a switcher means
- * adding a line here; the alternative is inferring which array feeds which
- * template, which is guesswork this test would then be trusted for.
- */
-const LABELLED_SETS = [
-  { file: "attribution/page.tsx", array: "VIEWS", namespace: "attribution.tab" },
-];
-
-test("every member of a labelled set has a label", () => {
-  const root = path.join(import.meta.dirname, "..", "..", "app");
-  for (const { file, array, namespace } of LABELLED_SETS) {
-    const source = readFileSync(path.join(root, file), "utf8");
-    const declared = new RegExp(
-      `const ${array} = \\[([^\\]]*)\\] as const`,
-    ).exec(source);
-    assert.ok(declared, `${array} not found in ${file}`);
-    const members = [...declared[1].matchAll(/"([a-zA-Z0-9_]+)"/g)].map((m) => m[1]);
-    assert.ok(members.length > 1, `${array} in ${file} parsed to ${members.length} members`);
-    for (const member of members) {
-      assert.ok(
-        english.has(`${namespace}.${member}`),
-        `${namespace}.${member} is missing, so "${member}" renders as its own key`,
-      );
-    }
-  }
-});
