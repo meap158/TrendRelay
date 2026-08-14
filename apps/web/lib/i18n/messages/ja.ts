@@ -655,6 +655,9 @@ export const ja: Messages = {
     noProducts:
       "商品がまだありません。「機会」でアフィリエイト案件を取り込むと、そのリンク・クリック・報酬がここに表示されます。",
     product: "商品",
+    searchProducts: "商品を検索",
+    price: "価格",
+    rate: "料率",
     offers: "案件",
     links: "リンク",
     whereItGoes: "リンク先",

@@ -664,6 +664,9 @@ export const fr: Messages = {
     noProducts:
       "Aucun produit pour l’instant. Importez des offres d’affiliation dans Opportunités : chaque lien, clic et commission apparaîtra ici.",
     product: "Produit",
+    searchProducts: "Rechercher un produit",
+    price: "Prix",
+    rate: "Taux",
     offers: "Offres",
     links: "Liens",
     whereItGoes: "Où il mène",

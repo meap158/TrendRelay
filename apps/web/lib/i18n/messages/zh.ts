@@ -642,6 +642,9 @@ export const zh: Messages = {
     noProducts:
       "暂无商品。请在「机会」中导入联盟优惠，其链接、点击与佣金都会显示在这里。",
     product: "商品",
+    searchProducts: "搜索商品",
+    price: "价格",
+    rate: "佣金率",
     offers: "优惠",
     links: "链接",
     whereItGoes: "跳转去向",

@@ -659,6 +659,9 @@ export const en = {
     noProducts:
       "No products yet. Import affiliate offers in Opportunities; every link, click and commission on them appears here.",
     product: "Product",
+    searchProducts: "Search products",
+    price: "Price",
+    rate: "Rate",
     offers: "Offers",
     links: "Links",
     whereItGoes: "Where it goes",

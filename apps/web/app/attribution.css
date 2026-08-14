@@ -20,6 +20,16 @@
 .attribution-import-outcome { margin-block-start: 12px; padding-block-start: 12px; border-block-start: 1px solid var(--line); font-size: 13px; }
 .attribution-import-problems { margin: 8px 0 0; padding-inline-start: 18px; color: var(--warn, #9a6700); font-size: 12px; }
 .attribution-import-problems li { margin-block: 2px; }
+/* Above the table it filters, full width, because an import brings in a batch
+   at a time and a list that can only be scrolled stops being usable at about
+   the second one. */
+.product-search { inline-size: 100%; margin-block-end: 12px; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font: inherit; font-size: 13px; }
+/* A footnote that folds. True, occasionally decisive, and not worth a panel on
+   every visit. */
+.attribution-limits { margin-block-start: 12px; color: var(--muted); font-size: 12px; }
+.attribution-limits summary { cursor: pointer; font-weight: 600; }
+.attribution-limits ul { margin: 8px 0 0; padding-inline-start: 18px; }
+.attribution-limits li { margin-block: 3px; }
 .attribution-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 .attribution-panel { padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .attribution-panel h2 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }

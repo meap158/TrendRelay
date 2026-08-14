@@ -655,6 +655,9 @@ export const vi: Messages = {
     noProducts:
       "Chưa có sản phẩm nào. Hãy nhập ưu đãi tiếp thị liên kết ở mục Cơ hội; mọi liên kết, lượt nhấp và hoa hồng của chúng sẽ xuất hiện tại đây.",
     product: "Sản phẩm",
+    searchProducts: "Tìm sản phẩm",
+    price: "Giá",
+    rate: "Tỉ lệ",
     offers: "Ưu đãi",
     links: "Liên kết",
     whereItGoes: "Dẫn đến đâu",

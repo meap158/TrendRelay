@@ -10,7 +10,7 @@
  * worth copying ended up.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Badge, Card } from "../ui/primitives";
 import { Button } from "../ui/button";
@@ -24,6 +24,21 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 /** Commission as a percentage, because basis points are not a unit anyone reads. */
+function offerPrice(product: ProductRow): string {
+  const priced = product.offers.filter((offer) => offer.price_cents !== null);
+  if (priced.length !== 1) return "";
+  const [offer] = priced;
+  return money(offer.price_cents as number, offer.currency);
+}
+
+
+function offerRate(product: ProductRow): string {
+  const rated = product.offers.filter((offer) => offer.commission_bps !== null);
+  if (rated.length !== 1) return "";
+  return commission(rated[0].commission_bps);
+}
+
+
 function commission(bps: number | null): string {
   return bps === null ? "—" : `${(bps / 100).toFixed(bps % 100 ? 2 : 0)}%`;
 }
@@ -49,6 +64,24 @@ export function ProductTable({
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState("");
+
+  /**
+   * Name, brand, shop or marketplace - whatever somebody half-remembers.
+   *
+   * An import brings in a batch at a time, so a list that can only be scrolled
+   * stops being usable at about the second import.
+   */
+  const shown = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return products;
+    return products.filter((product) => [
+      product.name,
+      product.brand,
+      product.marketplace,
+      ...product.offers.map((offer) => offer.merchant),
+    ].some((field) => (field || "").toLowerCase().includes(needle)));
+  }, [products, query]);
   const workTitle = new Map(works.map((work) => [work.work_id, work.title]));
 
   function toggle(id: string) {
@@ -73,11 +106,21 @@ export function ProductTable({
       eyebrow={t("attribution.productsEyebrow")}
       title={t("attribution.productCount", { count: products.length })}
     >
+      <input
+        type="search"
+        className="product-search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder={t("attribution.searchProducts")}
+        aria-label={t("attribution.searchProducts")}
+      />
       <div className="catalog-table-scroll">
         <table className="catalog-table product-table">
           <thead>
             <tr>
               <th scope="col">{t("attribution.product")}</th>
+              <th scope="col" className="numeric">{t("attribution.price")}</th>
+              <th scope="col" className="numeric">{t("attribution.rate")}</th>
               <th scope="col">{t("attribution.offers")}</th>
               <th scope="col">{t("attribution.links")}</th>
               <th scope="col" className="numeric">{t("attribution.clicks")}</th>
@@ -85,7 +128,7 @@ export function ProductTable({
             </tr>
           </thead>
           <tbody>
-            {products.map((product) => {
+            {shown.map((product) => {
               const open = expanded.has(product.id);
               const book = product.work_ids
                 .map((id) => workTitle.get(id))
@@ -110,6 +153,16 @@ export function ProductTable({
                       </small>
                     </button>
                   </th>
+                  {/* Shown only when one offer answers for the product. With
+                      several, a single column would have to pick one, and
+                      picking silently is how a wrong number gets read as the
+                      product's price. */}
+                  <td className="numeric">
+                    {offerPrice(product) || <span className="catalog-no-data">—</span>}
+                  </td>
+                  <td className="numeric">
+                    {offerRate(product) || <span className="catalog-no-data">—</span>}
+                  </td>
                   <td>{product.offers.length}</td>
                   <td>{product.links.length}</td>
                   <td className="numeric">{product.clicks}</td>
@@ -132,7 +185,7 @@ export function ProductTable({
                 </tr>,
                 open && (
                   <tr key={`${product.id}-detail`} className="catalog-edition-row">
-                    <td colSpan={5}>
+                    <td colSpan={7}>
                       <div className="product-detail">
                         <section>
                           <h4>{t("attribution.whereItGoes")}</h4>

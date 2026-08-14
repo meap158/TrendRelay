@@ -357,11 +357,18 @@ export default function AttributionPage() {
     </article>
   );
 
+  // Folded away rather than deleted. These are true and occasionally decisive -
+  // a click figure means less once you know views are not synchronised - but
+  // they are a footnote, and a footnote printed at full size on every visit is
+  // read once and skipped forever after.
   const measurementNotes = (
-    <article className="attribution-panel attribution-limits">
-      <h2>{t("attribution.measurementNotes")}</h2>
-      <ul>{summary?.limitations.map((item) => <li key={item}>{item}</li>)}</ul>
-    </article>
+    <details className="attribution-limits">
+      <summary>{t("attribution.measurementNotes")}</summary>
+      <ul>
+        <li>{t("attribution.notAdditive")}</li>
+        {summary?.limitations.map((item) => <li key={item}>{item}</li>)}
+      </ul>
+    </details>
   );
 
   return (
@@ -371,7 +378,6 @@ export default function AttributionPage() {
         <div>
           <p className="section-kicker">{t("attribution.eyebrow")}</p>
           <h1>{t("attribution.heading")}</h1>
-          <p>{t("attribution.intro")}</p>
         </div>
         <label>{t("workspace.select")}<select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
           {workspaces.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.role}</option>)}
@@ -422,7 +428,6 @@ export default function AttributionPage() {
         />
         {/* Said where the two figures meet, not in a footnote: the same
             conversion is a product's commission and a book's royalty. */}
-        <p className="attribution-note">{t("attribution.notAdditive")}</p>
         {measurementNotes}
       </section>
 
@@ -527,7 +532,6 @@ export default function AttributionPage() {
       )}
 
       <section className="attribution-tab-panel catalog-page">
-        <p className="attribution-note">{t("attribution.booksIntro")}</p>
         {workspaceId && (
           <BooksPanel
             workspaceId={workspaceId}
