@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -324,3 +326,179 @@ def test_a_failure_never_quotes_the_session_back(caplog) -> None:
 
     assert "supersecret" not in result["stages"][-1]["detail"]
     assert "SPC_EC=…" in result["stages"][-1]["detail"]
+
+
+# --- reading a product through the browser ------------------------------------
+#
+# The bridge itself is a real browser and cannot run in a test, so it is stubbed
+# at the process boundary. What is worth testing is everything around it: what
+# it is handed, what is done with what it returns, and which failures mean
+# "sign in again" rather than "try later".
+
+PRODUCT_URL = "https://shopee.vn/product/1834061111/57860887539"
+
+
+@pytest.fixture
+def bridge(monkeypatch, tmp_path):
+    """Stand in for the browser, and record how it was called."""
+    from trendrelay_api.integrations import tiktok_creative
+
+    monkeypatch.setattr(tiktok_creative, "runtime_python", lambda: "python.exe")
+    monkeypatch.setattr(tiktok_creative, "scoped_environment", lambda: {"NO_COLOR": "1"})
+    monkeypatch.setattr(shopee, "BRIDGE_PATH", tmp_path / "bridge.py")
+    (tmp_path / "bridge.py").write_text("", encoding="utf-8")
+
+    calls: list[dict] = []
+    answer = {"returncode": 0, "stdout": "{}", "stderr": ""}
+
+    def fake_run(command, **kwargs):
+        calls.append({"command": command, **kwargs})
+        if isinstance(answer.get("raises"), BaseException):
+            raise answer["raises"]
+        return SimpleNamespace(
+            returncode=answer["returncode"],
+            stdout=answer["stdout"],
+            stderr=answer["stderr"],
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    return SimpleNamespace(calls=calls, answer=answer)
+
+
+def replies(bridge, payload: dict) -> None:
+    bridge.answer["stdout"] = json.dumps(payload)
+
+
+def test_the_stored_session_is_handed_in_rather_than_read_by_the_browser(bridge) -> None:
+    """One place decides which session is used."""
+    shopee.save_cookies(LIVE)
+    replies(bridge, {"name": "Giấy ăn rút Topgia"})
+
+    shopee.fetch_product(PRODUCT_URL)
+
+    handed = json.loads(bridge.calls[0]["input"])
+    assert handed["url"] == PRODUCT_URL
+    assert handed["cookies"]["SPC_EC"] == "abc123"
+
+
+def test_the_browser_inherits_a_scoped_environment_not_this_one(bridge) -> None:
+    # It carries a live session into a browser; nothing else this process holds
+    # has any business going with it.
+    shopee.save_cookies(LIVE)
+    replies(bridge, {"name": "Anything"})
+
+    shopee.fetch_product(PRODUCT_URL)
+
+    assert bridge.calls[0]["env"] == {"NO_COLOR": "1"}
+
+
+def test_what_the_page_said_comes_back(bridge) -> None:
+    shopee.save_cookies(LIVE)
+    replies(bridge, {
+        "name": "Giấy ăn rút Topgia",
+        "image_url": "https://down-vn.img.susercontent.com/file/abc",
+        "price": "₫95.000",
+    })
+
+    found = shopee.fetch_product(PRODUCT_URL)
+
+    assert found["name"] == "Giấy ăn rút Topgia"
+    assert found["image_url"].endswith("/abc")
+
+
+def test_rotated_cookies_are_kept_so_the_session_lives_its_full_term(bridge) -> None:
+    """The whole point of returning them.
+
+    Replaying the cookies a session started with is how one that should last
+    weeks stops working in days.
+    """
+    shopee.save_cookies(LIVE)
+    replies(bridge, {
+        "name": "Anything",
+        "refreshed_cookies": {"SPC_EC": "rotated", "SPC_U": "42"},
+    })
+
+    shopee.fetch_product(PRODUCT_URL)
+
+    assert shopee.load_cookies()[0]["SPC_EC"] == "rotated"
+
+
+def test_nothing_rotated_leaves_the_session_alone(bridge) -> None:
+    shopee.save_cookies(LIVE)
+    replies(bridge, {"name": "Anything"})
+
+    shopee.fetch_product(PRODUCT_URL)
+
+    assert shopee.load_cookies()[0]["SPC_EC"] == "abc123"
+
+
+def test_a_rotated_session_never_comes_back_to_the_caller(bridge) -> None:
+    """Cookies are stored, never returned. What comes back gets logged."""
+    shopee.save_cookies(LIVE)
+    replies(bridge, {"name": "Anything", "refreshed_cookies": {"SPC_EC": "rotated"}})
+
+    found = shopee.fetch_product(PRODUCT_URL)
+
+    assert "refreshed_cookies" not in found
+
+
+# --- when it does not work ----------------------------------------------------
+
+
+def test_a_login_wall_reads_as_authentication(bridge) -> None:
+    shopee.save_cookies(LIVE)
+    replies(bridge, {"login_wall": True, "title": "Shopee"})
+
+    with pytest.raises(RuntimeError) as raised:
+        shopee.fetch_product(PRODUCT_URL)
+
+    assert shopee.looks_like_auth_failure(str(raised.value))
+
+
+def test_a_timeout_is_not_an_expiry(bridge) -> None:
+    """Sending somebody to re-authenticate over a slow link helps nobody."""
+    shopee.save_cookies(LIVE)
+    bridge.answer["raises"] = subprocess.TimeoutExpired("bridge", 90)
+
+    with pytest.raises(RuntimeError) as raised:
+        shopee.fetch_product(PRODUCT_URL)
+
+    assert not shopee.looks_like_auth_failure(str(raised.value))
+
+
+def test_no_session_is_refused_before_a_browser_is_started(bridge) -> None:
+    with pytest.raises(RuntimeError) as raised:
+        shopee.fetch_product(PRODUCT_URL)
+
+    assert bridge.calls == [], "nothing should have been launched"
+    assert shopee.looks_like_auth_failure(str(raised.value))
+
+
+def test_a_failing_bridge_never_reports_a_cookie(bridge) -> None:
+    """A failing subprocess is exactly what ends up quoted in a log."""
+    shopee.save_cookies(LIVE)
+    bridge.answer["returncode"] = 1
+    bridge.answer["stderr"] = "refused with SPC_EC=abc123 present"
+
+    with pytest.raises(RuntimeError) as raised:
+        shopee.fetch_product(PRODUCT_URL)
+
+    assert "abc123" not in str(raised.value)
+
+
+def test_an_unreadable_answer_says_so_rather_than_raising_a_json_error(bridge) -> None:
+    shopee.save_cookies(LIVE)
+    bridge.answer["stdout"] = "<html>maintenance</html>"
+
+    with pytest.raises(RuntimeError, match="unreadable"):
+        shopee.fetch_product(PRODUCT_URL)
+
+
+def test_without_a_browser_runtime_it_says_where_one_comes_from(bridge, monkeypatch) -> None:
+    from trendrelay_api.integrations import tiktok_creative
+
+    shopee.save_cookies(LIVE)
+    monkeypatch.setattr(tiktok_creative, "runtime_python", lambda: None)
+
+    with pytest.raises(RuntimeError, match="browser runtime"):
+        shopee.fetch_product(PRODUCT_URL)

@@ -34,6 +34,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 COOKIE_FILE = PROJECT_ROOT / ".data" / "shopee" / "cookies.json"
@@ -316,13 +317,88 @@ def probe(
     }
 
 
-def _default_fetcher():
-    """The real fetch, imported late so a probe stays testable without a browser."""
-    def fetch(url: str) -> dict[str, object]:
-        raise RuntimeError(
-            "Reading a Shopee product needs the browser runtime, which is not "
-            "wired up yet. Import the bulk export in the meantime - it carries "
-            "everything but the images."
-        )
+#: Where the bridge lives, and how long it may take. Generous: this renders a
+#: real page and waits for Shopee to fill it in.
+BRIDGE_PATH = PROJECT_ROOT / "scripts" / "shopee_product_bridge.py"
+BRIDGE_TIMEOUT_SECONDS = 90
 
-    return fetch
+
+def fetch_product(url: str, *, timeout: float = BRIDGE_TIMEOUT_SECONDS) -> dict[str, Any]:
+    """Read one product page as the connected account.
+
+    Runs in the browser runtime rather than in this process, because that is
+    where Playwright lives, and hands the session in on stdin rather than
+    letting the bridge read it from disk - so there is one place that decides
+    which session is used.
+
+    Cookies Shopee rotated during the read are written back before returning.
+    That is what keeps a session alive to its full term instead of expiring
+    early because every read replayed the cookies it started with.
+    """
+    import json
+    import subprocess
+
+    from .tiktok_creative import runtime_python, scoped_environment
+
+    interpreter = runtime_python()
+    if not interpreter:
+        raise RuntimeError(
+            "No browser runtime is installed. Shopee renders its product pages "
+            "in the browser, so reading one needs it; connect Douyin or TikTok "
+            "from Tools and the runtime is installed with them."
+        )
+    if not BRIDGE_PATH.is_file():
+        raise RuntimeError("The Shopee product bridge script is missing.")
+
+    cookies, _source = load_cookies()
+    missing = [key for key in REQUIRED_COOKIE_KEYS if not cookies.get(key)]
+    if missing:
+        # Worded so it reads as authentication rather than a fault, because
+        # that is what it is and that is where it should send somebody.
+        raise RuntimeError(f"No Shopee session is connected: missing {', '.join(missing)}.")
+
+    try:
+        completed = subprocess.run(
+            [interpreter, str(BRIDGE_PATH)],
+            input=json.dumps({"url": url, "cookies": cookies}),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            check=False,
+            cwd=PROJECT_ROOT,
+            # The session is handed in on stdin; nothing else this process
+            # holds has any business travelling into a browser.
+            env=scoped_environment(),
+        )
+    except subprocess.TimeoutExpired as error:
+        # Said as a timeout, never as an expiry. A slow page is not a reason to
+        # make somebody sign in again.
+        raise RuntimeError(
+            f"Shopee did not finish loading the product within {timeout:.0f}s."
+        ) from error
+    if completed.returncode != 0:
+        # Redacted, because a failing subprocess is exactly the kind of thing
+        # that ends up in a log.
+        raise RuntimeError(redact((completed.stderr or "").strip()[-400:] or "The bridge failed."))
+    try:
+        found = json.loads(completed.stdout)
+    except ValueError as error:
+        raise RuntimeError("The Shopee bridge returned something unreadable.") from error
+
+    if found.get("login_wall"):
+        # Named as what it is, in the words the auth check looks for. The probe
+        # turns this into "reconnect"; a changed layout is a different problem
+        # and reads differently.
+        raise RuntimeError("Shopee showed a login wall: this session is no longer signed in.")
+
+    rotated = found.pop("refreshed_cookies", None)
+    if isinstance(rotated, dict) and rotated:
+        save_cookies(merge_refreshed(cookies, [f"{k}={v}" for k, v in rotated.items()]))
+    return found
+
+
+def _default_fetcher():
+    """The real fetch, referenced late so a probe stays testable without a browser."""
+    return fetch_product
