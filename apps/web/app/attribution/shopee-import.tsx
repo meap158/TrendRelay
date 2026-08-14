@@ -24,6 +24,8 @@ type Outcome = {
   already_present: number;
   links: { id: string; code: string; product: string }[];
   problems: string[];
+  /** Product pages queued to be read for their images. */
+  enriching: number;
 };
 
 const PLATFORMS = ["tiktok", "instagram", "youtube", "douyin", "other"] as const;
@@ -165,6 +167,15 @@ export function ShopeeImport({
             {outcome.already_present > 0 && <> · {outcome.already_present} already filed</>}
             {outcome.links.length > 0 && <> · {outcome.links.length} links minted</>}
           </p>
+          {/* Said rather than left to happen. An image appearing minutes after
+              an import looks like a bug when nothing announced it was coming,
+              and its absence looks like one when nothing said it would not. */}
+          {outcome.enriching > 0 && (
+            <p className="attribution-note">
+              Fetching product images for {outcome.enriching} of them in the
+              background. They will appear as each page is read.
+            </p>
+          )}
           {/* Named rather than counted. A row that did not import is one
               somebody has to go and look at, and a number does not say which. */}
           {outcome.problems.length > 0 && (
