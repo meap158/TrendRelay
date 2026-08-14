@@ -33,10 +33,14 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[4]
+from trendrelay_api.tool_registry import PROJECT_ROOT
+
+# The shared one, rather than counting directories up from this file. This
+# module sits a level deeper than the one that convention was copied from,
+# so the count landed on `services/` and quietly put the session file and
+# the bridge in a tree that does not exist.
 COOKIE_FILE = PROJECT_ROOT / ".data" / "shopee" / "cookies.json"
 
 #: Without these, Shopee treats the request as a stranger. `SPC_EC` is the

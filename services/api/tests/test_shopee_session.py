@@ -502,3 +502,29 @@ def test_without_a_browser_runtime_it_says_where_one_comes_from(bridge, monkeypa
 
     with pytest.raises(RuntimeError, match="browser runtime"):
         shopee.fetch_product(PRODUCT_URL)
+
+# --- where things actually live -----------------------------------------------
+#
+# Every other test here patches these paths, which is right for isolation and
+# is exactly why both of them could point into a directory that does not exist
+# while the suite stayed green. These check the unpatched values.
+
+
+def test_the_bridge_is_where_the_session_looks_for_it(monkeypatch) -> None:
+    """The one path never exercised: the subprocess is stubbed everywhere else."""
+    monkeypatch.undo()
+
+    assert shopee.BRIDGE_PATH.is_file(), f"no bridge script at {shopee.BRIDGE_PATH}"
+
+
+def test_the_session_is_stored_under_the_repository_root(monkeypatch) -> None:
+    """Not under `services/`, which is where a copied directory count landed it.
+
+    `.data` is git-ignored at the root; a session written a level down is both
+    the wrong place and one rename away from not being ignored at all.
+    """
+    monkeypatch.undo()
+    root = shopee.PROJECT_ROOT
+
+    assert (root / "scripts").is_dir() and (root / "apps").is_dir(), root
+    assert shopee.COOKIE_FILE.parent.parent == root / ".data"
