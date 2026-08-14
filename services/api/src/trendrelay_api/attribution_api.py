@@ -22,7 +22,12 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from trendrelay_api import attribution_shopee_import, attribution_subids, shopee_enrichment
+from trendrelay_api import (
+    attribution_shopee,
+    attribution_shopee_import,
+    attribution_subids,
+    shopee_enrichment,
+)
 from trendrelay_api.attribution_models import ClickEvent, Conversion, TrackingLink
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
 from trendrelay_api.config import get_settings
@@ -1214,6 +1219,89 @@ def read_shopee_sign_in(
     """
     require_role(membership(session, workspace_id, user.id), {"owner"})
     return {"connection": shopee_session.connection_status(), "session": _session_state()}
+
+
+class ShopeeOfferFetch(BaseModel):
+    """Pull the affiliate offer list straight from Shopee and file it."""
+
+    campaign_id: str = Field(min_length=1, max_length=64)
+    platform: Platform
+    limit: int = Field(default=200, ge=1, le=1000)
+    disclosure: str = Field(default="Affiliate link", min_length=2, max_length=500)
+    confirm_external_action: bool = False
+
+
+@workspace_router.post("/shopee/offers/fetch", status_code=201)
+def fetch_shopee_offers(
+    workspace_id: str,
+    body: ShopeeOfferFetch,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Read the offer page with the connected session, then import what it says.
+
+    The same destination as pasting the CSV export, minus the download. It
+    reads the JSON the offer page's own front-end fetches rather than its
+    markup, so a redesign that changes nothing about the data changes nothing
+    here.
+
+    Nothing is generated on Shopee's side. The affiliate links returned are the
+    ones the account already has; the tracking links minted from them are ours,
+    and are minted exactly once per offer as they are for any other import.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400, detail="Importing Shopee offers requires confirmation."
+        )
+    campaign = _campaign_record(session, workspace_id, body.campaign_id)
+    ensure_profile(session, user)
+
+    try:
+        found = shopee_session.fetch_offers(body.limit)
+    except RuntimeError as error:
+        message = str(error)
+        # An expired session is a 401 so the interface can send somebody to
+        # reconnect; anything else is a 502, because the failure is Shopee's
+        # end rather than the request's.
+        raise HTTPException(
+            status_code=401 if shopee_session.looks_like_auth_failure(message) else 502,
+            detail=message,
+        ) from error
+
+    rows, problems = attribution_shopee.read_api_offers(found.get("offers") or [])
+    if not rows:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "The offer page returned no offers. If your account has offers, "
+                "download the CSV export and import that instead."
+            ),
+        )
+    outcome = attribution_shopee_import.import_rows(
+        session, workspace_id, user.id, campaign, rows,
+        platform=body.platform, disclosure=body.disclosure,
+    )
+    session.commit()
+    enrichment = (
+        shopee_enrichment.enqueue(workspace_id, outcome.products)
+        if shopee_session.health().ready else []
+    )
+    audit(
+        session, request, workspace_id, user.id,
+        "attribution.shopee_offers_fetched", "campaign", campaign.id,
+        {"created": outcome.created, "already_present": outcome.already_present,
+         "links": len(outcome.links), "enriching": len(enrichment)},
+    )
+    return {
+        "created": outcome.created,
+        "already_present": outcome.already_present,
+        "links": outcome.links,
+        "enriching": len(enrichment),
+        "problems": problems + outcome.problems,
+    }
 
 
 @workspace_router.get("/shopee/enrichment")

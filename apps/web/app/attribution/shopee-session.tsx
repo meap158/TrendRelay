@@ -59,10 +59,13 @@ export function ShopeeSession({
   apiFetch,
   succeed,
   fail,
+  onReady,
 }: {
   workspaceId: string;
   /** Owners only: this is a credential for somebody's own Shopee account. */
   canConnect: boolean;
+  /** Told upward so the import form below can offer the direct read. */
+  onReady?: (ready: boolean) => void;
   apiFetch: Fetcher;
   succeed: (message: string) => void;
   fail: (message: string) => void;
@@ -208,6 +211,9 @@ export function ShopeeSession({
   }
 
   const connected = Boolean(state?.ready);
+  // Reported rather than lifted into the page: this component is the one that
+  // asks, and two places asking would answer differently for a moment.
+  useEffect(() => { onReady?.(connected); }, [connected, onReady]);
   const expires = state?.expires_at ? new Date(state.expires_at) : null;
 
   return (

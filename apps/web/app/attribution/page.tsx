@@ -153,6 +153,9 @@ export default function AttributionPage() {
   // Set when someone builds a link from a product row, so the form opens with
   // the offer already chosen instead of asking them to find it again in a list.
   const [presetOffer, setPresetOffer] = useState("");
+  // Whether Shopee can be read directly. Asked here rather than inside the
+  // import form so the two Shopee panels agree about it.
+  const [shopeeReady, setShopeeReady] = useState(false);
   const linkFormRef = useRef<HTMLFormElement>(null);
   // Reported over the page. Rendered in flow, these shifted everything below
   // them whenever an action finished, which reads as the interface flinching.
@@ -563,6 +566,7 @@ export default function AttributionPage() {
                 apiFetch={apiFetch}
                 succeed={succeed}
                 fail={fail}
+                onReady={setShopeeReady}
               />
             </article>
           )}
@@ -570,6 +574,7 @@ export default function AttributionPage() {
             <ShopeeImport
               workspaceId={workspaceId}
               campaigns={campaigns}
+              connected={shopeeReady}
               apiFetch={apiFetch}
               succeed={succeed}
               fail={fail}

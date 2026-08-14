@@ -158,3 +158,6 @@
    Shopee's login can open behind the browser as easily as in front of it. */
 .shopee-session-work[data-open] { color: var(--text); }
 .shopee-session-work[data-open]::before { content: "◌ "; color: var(--muted); }
+/* The direct import, above the paste form it can replace. */
+.shopee-fetch { display: grid; gap: 6px; justify-items: start; }
+.shopee-fetch small { color: var(--muted); font-size: 11px; line-height: 1.45; }

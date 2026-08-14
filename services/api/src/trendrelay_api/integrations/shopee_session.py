@@ -558,6 +558,80 @@ def start_connection() -> dict[str, Any]:
         return connection_status()
 
 
+OFFERS_PATH = PROJECT_ROOT / "scripts" / "shopee_offers_bridge.py"
+#: Longer than a single product read: this loads a list page and scrolls it.
+OFFERS_TIMEOUT_SECONDS = 240
+
+
+def fetch_offers(limit: int = 200, *, timeout: float = OFFERS_TIMEOUT_SECONDS) -> dict[str, Any]:
+    """Read the affiliate offer list as the connected account.
+
+    The same data as the bulk CSV export, without the download. Returned raw
+    for the importer to interpret, because the currency's minor units are known
+    there and guessing a scale here is how a price ends up a hundred times out.
+    """
+    import json as _json
+    import subprocess
+
+    from .tiktok_creative import runtime_python, scoped_environment
+
+    interpreter = runtime_python()
+    if not interpreter:
+        raise RuntimeError(
+            "No browser runtime is installed. The affiliate offer page renders "
+            "in the browser, so reading it needs one; connect Douyin or TikTok "
+            "from Tools and the runtime is installed with them."
+        )
+    if not OFFERS_PATH.is_file():
+        raise RuntimeError("The Shopee offers bridge script is missing.")
+
+    cookies, _source = load_cookies()
+    missing = [key for key in REQUIRED_COOKIE_KEYS if not cookies.get(key)]
+    if missing:
+        raise RuntimeError(f"No Shopee session is connected: missing {', '.join(missing)}.")
+
+    try:
+        completed = subprocess.run(
+            [interpreter, str(OFFERS_PATH)],
+            input=_json.dumps({"cookies": cookies, "limit": limit}),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            check=False,
+            cwd=PROJECT_ROOT,
+            env=scoped_environment(),
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(
+            f"The affiliate offer page did not finish loading within {timeout:.0f}s."
+        ) from error
+    if completed.returncode != 0:
+        raise RuntimeError(redact((completed.stderr or "").strip()[-400:] or "The bridge failed."))
+    try:
+        found = _json.loads(completed.stdout)
+    except ValueError as error:
+        raise RuntimeError("The Shopee offers bridge returned something unreadable.") from error
+
+    if found.get("login_wall"):
+        raise RuntimeError("Shopee showed a login wall: this session is no longer signed in.")
+    if not found.get("offers") and found.get("payloads_seen"):
+        # Told apart on purpose: the page answered, and nothing in it looked
+        # like an offer any more. That is a changed payload, not an empty
+        # account and not an expired session.
+        raise RuntimeError(
+            "The offer page loaded but none of its data looked like offers, "
+            "which usually means Shopee changed the payload. Download the CSV "
+            "export and import that instead."
+        )
+
+    rotated = found.pop("refreshed_cookies", None)
+    if isinstance(rotated, dict) and rotated:
+        save_cookies(merge_refreshed(cookies, [f"{k}={v}" for k, v in rotated.items()]))
+    return found
+
+
 def _default_fetcher():
     """The real fetch, referenced late so a probe stays testable without a browser."""
     return fetch_product

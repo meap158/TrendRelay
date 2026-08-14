@@ -37,9 +37,12 @@ export function ShopeeImport({
   succeed,
   fail,
   onImported,
+  connected,
 }: {
   workspaceId: string;
   campaigns: Campaign[];
+  /** Fetching from Shopee needs a session; pasting an export does not. */
+  connected: boolean;
   apiFetch: Fetcher;
   succeed: (message: string) => void;
   fail: (message: string) => void;
@@ -50,6 +53,7 @@ export function ShopeeImport({
   const [csvText, setCsvText] = useState("");
   const [links, setLinks] = useState("");
   const [busy, setBusy] = useState(false);
+  const [fetching, setFetching] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -95,6 +99,44 @@ export function ShopeeImport({
     }
   }
 
+  /**
+   * Read the offer page with the connected session instead of downloading it.
+   *
+   * The same destination as pasting the export - one importer, one
+   * deduplication rule - so doing both is safe and the second one adds only
+   * what the first did not have.
+   */
+  async function fetchFromShopee() {
+    if (!campaignId) {
+      fail("Choose the campaign these offers belong to.");
+      return;
+    }
+    setFetching(true);
+    setOutcome(null);
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/attribution/shopee/offers/fetch`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            campaign_id: campaignId,
+            platform,
+            confirm_external_action: true,
+          }),
+        },
+      );
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.detail ?? "Shopee refused the request.");
+      setOutcome(payload as Outcome);
+      succeed(`Imported ${payload.created} offer${payload.created === 1 ? "" : "s"} from Shopee`);
+      onImported();
+    } catch (problem) {
+      fail(problem instanceof Error ? problem.message : String(problem));
+    } finally {
+      setFetching(false);
+    }
+  }
+
   return (
     <article className="attribution-panel">
       <h2>Import from Shopee</h2>
@@ -136,6 +178,24 @@ export function ShopeeImport({
             </select>
           </label>
         </div>
+        {/* The shorter path when a session exists. Reads the offer page's own
+            data rather than asking for a download of the same thing. */}
+        {connected && (
+          <div className="shopee-fetch">
+            <button
+              type="button"
+              className="ui-button ui-button-primary ui-button-md"
+              onClick={() => void fetchFromShopee()}
+              disabled={fetching || busy || !campaignId}
+            >
+              {fetching ? "Reading Shopee…" : "Import from Shopee"}
+            </button>
+            <small>
+              Reads your offer page directly. Takes a minute; the export below
+              still works and imports the same thing.
+            </small>
+          </div>
+        )}
         <label>
           Bulk export
           <textarea

@@ -328,3 +328,94 @@ def read_export(text: str) -> tuple[list[ExportedProduct], list[str]]:
             affiliate_url=affiliate_url,
         ))
     return products, problems
+
+
+#: Shopee's own APIs report money in the smallest unit times 100_000 - the
+#: "cent" convention its front-end divides before display. Detected rather than
+#: assumed: the same field arrives already-divided on some payloads, and a
+#: figure a hundred thousand times out is the one mistake here nobody spots on
+#: a screen because it is simply "a big number".
+SHOPEE_API_SCALE = 100_000
+
+
+def _api_amount(value: object) -> int | None:
+    """One money field from Shopee's own JSON, as whole dong.
+
+    Values at or above the scale are taken as scaled, below it as already whole.
+    A real product priced under one dong does not exist, and a scaled value
+    below the threshold would mean a price under 0.00001 dong - so the ambiguous
+    range is empty in practice rather than merely unlikely.
+    """
+    if value in (None, ""):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number <= 0:
+        return None
+    return round(number / SHOPEE_API_SCALE) if number >= SHOPEE_API_SCALE else round(number)
+
+
+def _api_rate_bps(value: object) -> int | None:
+    """A commission rate from Shopee's JSON, as basis points.
+
+    Arrives as a fraction (0.02), a percentage (2), or scaled like the money
+    fields. Read in that order of likelihood, and a rate above 100% is treated
+    as scaled rather than believed.
+    """
+    if value in (None, ""):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number <= 0:
+        return None
+    # Three bands, decided by magnitude because the payload never says which
+    # convention it used:
+    #   below 1      a fraction, 0.02 being 2%
+    #   1 to 100     a percentage, 2 being 2%
+    #   above 100    a fraction scaled the way the money fields are, since no
+    #                real commission rate is above 100%
+    if number < 1:
+        return round(number * 10_000)
+    if number <= 100:
+        return round(number * 100)
+    return round(number / SHOPEE_API_SCALE * 10_000)
+
+
+def read_api_offers(rows: list[dict]) -> tuple[list[ExportedProduct], list[str]]:
+    """The affiliate page's own JSON, as the rows an import already understands.
+
+    Deliberately the same output as `read_export`, so an offer fetched through
+    the session and one downloaded as CSV are the same thing to everything
+    downstream - one importer, one deduplication rule, one set of tests.
+    """
+    found: list[ExportedProduct] = []
+    problems: list[str] = []
+    for index, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "").strip()
+        affiliate_url = str(row.get("affiliate_url") or "").strip()
+        product_url = str(row.get("product_url") or "").strip()
+        if not affiliate_url and not product_url:
+            problems.append(f"Offer {index} ({name or 'unnamed'}) carried no link.")
+            continue
+        item_id = row.get("item_id")
+        shop_id = row.get("shop_id")
+        found.append(ExportedProduct(
+            item_id=str(item_id) if item_id else None,
+            shop_id=str(shop_id) if shop_id else None,
+            name=name or "Shopee product",
+            shop=(str(row.get("shop")).strip() or None) if row.get("shop") else None,
+            price_dong=_api_amount(row.get("price")),
+            commission_dong=_api_amount(row.get("commission")),
+            commission_bps=_api_rate_bps(row.get("commission_rate")),
+            product_url=product_url or None,
+            # The link the account already has. Nothing here mints one: a
+            # tracking link is minted by us, from this, exactly once.
+            affiliate_url=affiliate_url or product_url or None,
+        ))
+    return found, problems
