@@ -53,10 +53,15 @@ class ImportOutcome:
     already_present: int = 0
     links: list[dict[str, Any]] = None  # type: ignore[assignment]
     problems: list[str] = None  # type: ignore[assignment]
+    #: Every product the batch touched, new or already filed. Kept so the caller
+    #: can queue the page reads that fill in images without going back to the
+    #: database to work out which rows those were.
+    products: list[Any] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         self.links = self.links or []
         self.problems = self.problems or []
+        self.products = self.products or []
 
 
 def rows_from(
@@ -122,6 +127,8 @@ def import_rows(
         if not row.affiliate_url:
             continue
         product = _upsert_product(session, workspace_id, user_id, row)
+        if product not in outcome.products:
+            outcome.products.append(product)
         fingerprint = content_key(NETWORK, row.affiliate_url)
         if session.scalar(
             select(ProductOffer.id).where(

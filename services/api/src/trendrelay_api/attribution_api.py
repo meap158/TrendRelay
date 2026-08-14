@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from trendrelay_api import attribution_shopee_import, attribution_subids
+from trendrelay_api import attribution_shopee_import, attribution_subids, shopee_enrichment
 from trendrelay_api.attribution_models import ClickEvent, Conversion, TrackingLink
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
 from trendrelay_api.config import get_settings
@@ -1001,6 +1001,17 @@ def import_shopee_offers(
         platform=body.platform,
         disclosure=body.disclosure,
     )
+    # Committed before anything is queued: a worker reads the database of its
+    # own accord, and would find no product to fill in if this were still
+    # sitting in an uncommitted transaction.
+    session.commit()
+    # Only worth opening a browser for if there is a session to open it with.
+    # Otherwise the rows are filed and the images stay missing, which is what
+    # the connection line above the form says will happen.
+    enrichment = (
+        shopee_enrichment.enqueue(workspace_id, outcome.products)
+        if shopee_session.health().ready else []
+    )
     audit(
         session,
         request,
@@ -1013,12 +1024,17 @@ def import_shopee_offers(
             "created": outcome.created,
             "already_present": outcome.already_present,
             "links": len(outcome.links),
+            "enriching": len(enrichment),
         },
     )
     return {
         "created": outcome.created,
         "already_present": outcome.already_present,
         "links": outcome.links,
+        # How many product pages will be read in the background. Said plainly:
+        # an image appearing minutes after an import looks like a bug when
+        # nothing announced it was coming.
+        "enriching": len(enrichment),
         # Reported rather than raised: an export of two hundred with three odd
         # rows should file a hundred and ninety-seven and name the three.
         "problems": problems + outcome.problems,
