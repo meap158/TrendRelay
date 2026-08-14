@@ -133,7 +133,7 @@
 /* The figures the page exists to produce, as one line under the title rather
    than a row of cards. They qualify the heading; they were competing with the
    view below for the first screen. */
-.attribution-figures { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.attribution-figures { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 0; color: var(--muted); font-size: 12px; }
 .attribution-figures strong { color: var(--text); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .attribution-figures span { display: flex; align-items: baseline; gap: 5px; }
 
@@ -157,7 +157,19 @@
 
 /* One row: name, figures, and the controls. Wraps rather than truncates, since
    a narrow window should stack these and not hide the workspace picker. */
-.attribution-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; margin-bottom: 16px; padding: 0 0 12px; border: 0; border-block-end: 1px solid var(--line); border-radius: 0; background: none; }
+.attribution-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-bottom: 16px; padding: 12px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .attribution-heading h1 { margin: 0; font-size: 20px; font-weight: 600; }
 .attribution-bar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-inline-start: auto; }
 .attribution-bar-actions select { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 6px 9px; background: var(--panel); color: var(--text); font: inherit; font-size: 12px; }
+
+/* The marketplace this workspace reads, and whether it can right now. Publish
+   shows its engines this way; the difference worth naming is that this one is
+   a borrowed browser session rather than a key, so it lapses on its own - which
+   is why the chip says what kind of connection it is, not just that there is
+   one. Clicking it opens the place where it is fixed. */
+.attribution-provider { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel); color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.attribution-provider:hover { border-color: var(--link); color: var(--text); }
+.attribution-provider em { color: var(--muted); font-size: 10px; font-style: normal; }
+.attribution-provider[data-connected] { border-color: var(--green); color: var(--text); }
+.attribution-provider-dot { inline-size: 7px; block-size: 7px; border-radius: 999px; background: var(--line-strong); }
+.attribution-provider[data-connected] .attribution-provider-dot { background: var(--green); }

@@ -141,9 +141,8 @@ export function ShopeeImport({
     <article className="attribution-panel">
       <h2>Import from Shopee</h2>
       <p>
-        Paste the bulk export from Shopee&apos;s offer page, or the share links
-        themselves. Each product gets a tracking link with sub-IDs, so a
-        re-imported export only adds what is new.
+        Every offer gets a tracking link with sub-IDs, so importing twice adds
+        only what is new.
       </p>
       {/* A tracking link belongs to a campaign, so there is nothing to import
           into until one exists. Said here rather than left as a select with one
@@ -178,24 +177,24 @@ export function ShopeeImport({
             </select>
           </label>
         </div>
-        {/* The shorter path when a session exists. Reads the offer page's own
-            data rather than asking for a download of the same thing. */}
-        {connected && (
-          <div className="shopee-fetch">
-            <button
-              type="button"
-              className="ui-button ui-button-primary ui-button-md"
-              onClick={() => void fetchFromShopee()}
-              disabled={fetching || busy || !campaignId}
-            >
-              {fetching ? "Reading Shopee…" : "Import from Shopee"}
-            </button>
-            <small>
-              Reads your offer page directly. Takes a minute; the export below
-              still works and imports the same thing.
-            </small>
-          </div>
-        )}
+        {/* Always shown, disabled when there is no session rather than hidden.
+            A capability that appears only once its prerequisite is met is one
+            nobody discovers, because nothing on screen says it exists. */}
+        <div className="shopee-fetch">
+          <button
+            type="button"
+            className="ui-button ui-button-primary ui-button-md"
+            onClick={() => void fetchFromShopee()}
+            disabled={!connected || fetching || busy || !campaignId}
+          >
+            {fetching ? "Reading Shopee…" : "Import everything from Shopee"}
+          </button>
+          <small>
+            {connected
+              ? "Reads your offer page directly and files every offer with its link. Takes a minute."
+              : "Sign in to Shopee above to read your offer page directly. Until then, paste the export below."}
+          </small>
+        </div>
         <label>
           Bulk export
           <textarea

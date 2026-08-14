@@ -160,6 +160,12 @@ export default function AttributionPage() {
       json<Summary>(await apiFetch(`${base}/attribution/summary`)),
       json<ProductsPayload>(await apiFetch(`${base}/attribution/products`)),
     ]);
+    // Tolerated rather than awaited with the rest: an analyst may not be
+    // allowed to read it, and that is not a reason for the page to fail.
+    apiFetch(`${base}/attribution/shopee/session`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((state) => setShopeeReady(Boolean(state?.ready)))
+      .catch(() => setShopeeReady(false));
     setCampaigns(campaignBody.campaigns);
     setPlans(planBody.plans);
     setOffers(offerBody.offers);
@@ -333,6 +339,24 @@ export default function AttributionPage() {
             </span>
           ))}
         </p>
+        {/* Which marketplace this workspace can actually read, and whether it
+            can right now. Publish shows its engines the same way; the
+            difference worth naming is that this one is a borrowed browser
+            session rather than an API key, so it lapses on its own. */}
+        <button
+          type="button"
+          className="attribution-provider"
+          data-connected={shopeeReady || undefined}
+          onClick={() => setPanel("import")}
+          title={shopeeReady
+            ? "Shopee is connected. Product pages can be read for images."
+            : "Shopee is not connected. Imports still work; images will be missing."}
+        >
+          <span className="attribution-provider-dot" aria-hidden="true" />
+          Shopee
+          <em>{shopeeReady ? "cookie session" : "not connected"}</em>
+        </button>
+
         <div className="attribution-bar-actions">
           <select
             aria-label={t("workspace.select")}
