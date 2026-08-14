@@ -212,3 +212,112 @@ def test_one_bad_page_costs_that_product_alone(factory) -> None:
 
     assert get_job_record(good_job, factory=factory)["status"] == "succeeded"
     assert read(factory, good.id).image_url is not None
+
+
+# --- how the batch is going ---------------------------------------------------
+#
+# The import returns in a second; the pages take a minute each. By the time
+# anything has gone wrong, the response that started it is long gone - so the
+# progress has to be askable separately.
+
+
+def due_now(factory, job_id) -> None:
+    """Wind back the retry backoff, rather than sleeping through it."""
+    from datetime import UTC, datetime, timedelta
+
+    from trendrelay_api.models import DurableJob
+
+    with factory.begin() as session:
+        job = session.get(DurableJob, job_id)
+        if job:
+            job.available_at = datetime.now(UTC) - timedelta(seconds=1)
+
+
+def queue_two(factory):
+    return enrichment.enqueue(
+        "workspace-1",
+        [read(factory, add_product(factory, catalog_key=key)) for key in ("a", "b")],
+        factory=factory,
+    )
+
+
+def test_nothing_queued_reads_as_nothing_to_report(factory) -> None:
+    assert enrichment.progress("workspace-1", factory=factory) == {
+        "pending": 0, "succeeded": 0, "failed": 0, "retrying": 0,
+        "fields_filled": 0, "problem": None, "reconnect": False,
+    }
+
+
+def test_queued_pages_are_counted_as_pending(factory) -> None:
+    queue_two(factory)
+
+    assert enrichment.progress("workspace-1", factory=factory)["pending"] == 2
+
+
+def test_what_was_actually_gained_is_counted_not_just_jobs_finished(factory) -> None:
+    """A page that loads with nothing new to add succeeds and fills nothing."""
+    first, second = queue_two(factory)
+    enrichment.run_enrich_job(first, factory=factory, fetch=lambda _url: PAGE)
+    enrichment.run_enrich_job(second, factory=factory, fetch=lambda _url: {})
+
+    state = enrichment.progress("workspace-1", factory=factory)
+
+    assert state["succeeded"] == 2 and state["pending"] == 0
+    assert state["fields_filled"] == 2, "image and name, from the one useful page"
+
+
+def test_an_expired_session_says_reconnect_rather_than_retry(factory) -> None:
+    # They nearly always fail together and for one cause, so the interface is
+    # told which cause rather than left to read the message.
+    first, _second = queue_two(factory)
+
+    def expired(_url):
+        raise RuntimeError("Shopee showed a login wall: this session is no longer signed in.")
+
+    enrichment.run_enrich_job(first, factory=factory, fetch=expired)
+
+    state = enrichment.progress("workspace-1", factory=factory)
+    # Said on the first failure, not after the retries run out: every retry
+    # against an expired session fails identically.
+    assert state["retrying"] == 1 and state["failed"] == 0
+    assert state["reconnect"] is True
+
+
+def test_a_timeout_is_not_a_reason_to_reconnect(factory) -> None:
+    first, _second = queue_two(factory)
+
+    def slow(_url):
+        raise RuntimeError("Shopee did not finish loading the product within 90s.")
+
+    enrichment.run_enrich_job(first, factory=factory, fetch=slow)
+
+    state = enrichment.progress("workspace-1", factory=factory)
+    assert state["reconnect"] is False
+    assert "90s" in state["problem"]
+
+
+def test_a_settled_failure_is_preferred_over_one_still_retrying(factory) -> None:
+    """One is "it may still work"; the other is "it will not"."""
+    first, second = queue_two(factory)
+
+    def refuse(message):
+        def fetch(_url):
+            raise RuntimeError(message)
+        return fetch
+
+    enrichment.run_enrich_job(first, factory=factory, fetch=refuse("still trying"))
+    # Twice, so this one exhausts its attempts and gives up. The retry backoff
+    # is wound back between attempts rather than waited out.
+    for _ in range(2):
+        enrichment.run_enrich_job(second, factory=factory, fetch=refuse("gave up here"))
+        due_now(factory, second)
+
+    state = enrichment.progress("workspace-1", factory=factory)
+    assert state["failed"] == 1 and state["retrying"] == 1
+    assert state["problem"] == "gave up here"
+
+
+def test_another_workspace_sees_none_of_this(factory) -> None:
+    queue_two(factory)
+
+    assert enrichment.progress("someone-else", factory=factory)["pending"] == 0

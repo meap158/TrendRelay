@@ -134,3 +134,5 @@
 .shopee-session-stages span { color: var(--muted); }
 .shopee-session-connect { display: grid; gap: 8px; }
 .shopee-session-connect code { font-family: ui-monospace, monospace; }
+.shopee-session-work { margin: 0; color: var(--muted); line-height: 1.5; }
+.shopee-session-problem { display: block; margin-block-start: 3px; color: var(--warn, #9a6700); }

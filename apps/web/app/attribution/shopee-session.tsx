@@ -30,6 +30,17 @@ type SessionState = {
 type Stage = { id: string; label: string; ok: boolean; detail: string };
 type Probe = { ok: boolean; reconnect: boolean; stages: Stage[] };
 
+/** How the queued product pages are getting on. */
+type Enrichment = {
+  pending: number;
+  succeeded: number;
+  failed: number;
+  retrying: number;
+  fields_filled: number;
+  problem: string | null;
+  reconnect: boolean;
+};
+
 /** Working, working-but-nearly-out, and not working are three different states. */
 function tone(state: SessionState | null): "on" | "tired" | "off" {
   if (!state?.ready) return "off";
@@ -51,6 +62,7 @@ export function ShopeeSession({
   fail: (message: string) => void;
 }) {
   const [state, setState] = useState<SessionState | null>(null);
+  const [work, setWork] = useState<Enrichment | null>(null);
   const [probe, setProbe] = useState<Probe | null>(null);
   const [cookieHeader, setCookieHeader] = useState("");
   const [open, setOpen] = useState(false);
@@ -60,13 +72,17 @@ export function ShopeeSession({
 
   const read = useCallback(async () => {
     try {
-      const response = await apiFetch(path);
-      if (response.ok) setState(await response.json());
+      const [session, enrichment] = await Promise.all([
+        apiFetch(path),
+        apiFetch(`/api/workspaces/${workspaceId}/attribution/shopee/enrichment`),
+      ]);
+      if (session.ok) setState(await session.json());
+      if (enrichment.ok) setWork(await enrichment.json());
     } catch {
       // A connection nobody asked about is not worth an error banner; the
       // status line simply stays unknown.
     }
-  }, [apiFetch, path]);
+  }, [apiFetch, path, workspaceId]);
 
   useEffect(() => {
     // Deferred out of the effect body: the read settles state, and doing that
@@ -178,6 +194,27 @@ export function ShopeeSession({
             </li>
           ))}
         </ul>
+      )}
+
+      {/* What became of the pages queued by an import. Said here rather than
+          in the import outcome, which is gone by the time any of this
+          resolves: the import returns in a second and each page takes a
+          minute. */}
+      {work && (work.pending > 0 || work.failed > 0 || work.retrying > 0) && (
+        <p className="shopee-session-work">
+          {work.pending > 0 && <>Reading {work.pending} product page{work.pending === 1 ? "" : "s"} for images. </>}
+          {work.retrying > 0 && <>{work.retrying} retrying. </>}
+          {work.failed > 0 && <>{work.failed} gave up. </>}
+          {work.problem && (
+            <span className="shopee-session-problem">
+              {work.reconnect
+                // The fix is a new session, not another attempt - every retry
+                // against an expired one fails the same way.
+                ? "Shopee stopped accepting this session — reconnect and import again."
+                : work.problem}
+            </span>
+          )}
+        </p>
       )}
 
       {open && canConnect && (

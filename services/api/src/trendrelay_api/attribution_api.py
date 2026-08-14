@@ -1148,6 +1148,22 @@ def disconnect_shopee_session(
     return Response(status_code=204)
 
 
+@workspace_router.get("/shopee/enrichment")
+def read_shopee_enrichment(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Whether the queued product pages are being read, and what stopped them.
+
+    Worth asking separately from the import that queued them. The import
+    finishes in a second and the pages take a minute each, so by the time
+    anything has gone wrong the response that started it is long gone.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    return shopee_enrichment.progress(workspace_id)
+
+
 @workspace_router.post("/shopee/session/probe")
 def probe_shopee_session(
     workspace_id: str,

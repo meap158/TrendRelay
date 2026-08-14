@@ -91,6 +91,60 @@ def enqueue(
     return queued
 
 
+def progress(workspace_id: str, *, limit: int = 200, factory: Any = SessionFactory) -> dict:
+    """How the queued page reads are going, in one answer.
+
+    Counts rather than rows. The question somebody has after an import is "are
+    the images coming, and if not why", and a list of forty job records answers
+    it worse than four numbers and the reason the failures gave.
+
+    The failure reason is carried once rather than per job because when these
+    fail they nearly always fail together and for one cause - the session
+    expired partway through the batch - and forty copies of that sentence would
+    bury it.
+    """
+    from trendrelay_api.jobs import list_job_records
+
+    jobs = list_job_records(workspace_id, JOB_KIND, limit, factory=factory)
+    counts = {"queued": 0, "running": 0, "succeeded": 0, "failed": 0, "cancelled": 0}
+    filled = 0
+    #: Taken from a job that has given up in preference to one still retrying,
+    #: because that one is settled. But taken from a retrying job too: when
+    #: these fail it is usually the session, every retry will fail the same way,
+    #: and waiting for the attempts to run out before saying so helps nobody.
+    problem: str | None = None
+    problem_is_final = False
+    for job in jobs:
+        status = job.get("status") or "queued"
+        counts[status] = counts.get(status, 0) + 1
+        if status == "succeeded":
+            filled += len((job.get("result") or {}).get("filled") or [])
+            continue
+        error = job.get("error")
+        if error and (not problem or (status == "failed" and not problem_is_final)):
+            problem, problem_is_final = error, status == "failed"
+    pending = counts["queued"] + counts["running"]
+    return {
+        "pending": pending,
+        "succeeded": counts["succeeded"],
+        "failed": counts["failed"],
+        # Told apart from a settled failure: one is "it may still work", the
+        # other is "it will not". They deserve different words on a screen.
+        "retrying": sum(
+            1 for job in jobs
+            if job.get("error") and (job.get("status") or "queued") in {"queued", "running"}
+        ),
+        # What was actually gained, which is not the same as how many jobs
+        # finished: a page that loaded but had nothing new to add succeeds and
+        # fills nothing.
+        "fields_filled": filled,
+        "problem": problem,
+        # Whether the fix is to reconnect rather than to retry. Worked out here
+        # so the interface does not have to pattern-match an error message.
+        "reconnect": bool(problem and shopee_session.looks_like_auth_failure(problem)),
+    }
+
+
 def run_enrich_job(
     job_id: str,
     worker_id: str = "shopee-enrich-worker",
