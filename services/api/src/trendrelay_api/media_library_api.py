@@ -16,7 +16,7 @@ from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from trendrelay_api import bulk_actions
-from trendrelay_api.auth import CurrentUser, current_user
+from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, ensure_profile, membership, require_role
 from trendrelay_api.media_library import (
@@ -894,6 +894,81 @@ def list_effects(
     from trendrelay_api.integrations.effects import describe
 
     return {"effects": describe()}
+
+
+
+class SwapLicence(BaseModel):
+    """What permits face swapping to run here, and what it rests on."""
+
+    #: A purchased licence, or non-commercial research use. Two genuinely
+    #: different permissions, recorded as themselves.
+    basis: Literal["commercial", "research"]
+    #: An order or contract id for a commercial licence; the institution, grant
+    #: or project for research use. Never blank - a footing with nothing named
+    #: behind it is the record that proves worthless exactly when it is asked
+    #: for.
+    reference: str = Field(min_length=1, max_length=300)
+    #: Withdrawing one closes the gate again, which is the point of recording
+    #: it somewhere revocable.
+    licensed: bool = True
+    confirm_external_action: bool = False
+
+
+@router.get("/effects/face-swap/licence")
+def read_swap_licence(
+    workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
+) -> dict[str, Any]:
+    """Whether face swapping has a footing recorded, and what it permits."""
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations import face_swap
+
+    return face_swap.runtime_status()
+
+
+@router.post("/effects/face-swap/licence")
+def record_swap_licence(
+    workspace_id: str,
+    body: SwapLicence,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Record what permits face swapping, and who says so.
+
+    Owners only. This is an assertion about what the organisation is allowed to
+    do, made on its behalf, and the audit row is the part that matters if it is
+    ever questioned - so it keeps the footing and the reference, not merely that
+    somebody switched something on.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400, detail="Recording a licence footing requires confirmation."
+        )
+    from trendrelay_api.integrations import face_swap
+
+    try:
+        record = face_swap.record_licence(
+            user.id, body.reference, licensed=body.licensed, basis=body.basis
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media.face_swap_licence_recorded",
+        "workspace",
+        workspace_id,
+        {
+            "basis": record["basis"],
+            "reference": record["reference"],
+            "licensed": record["licensed"],
+        },
+    )
+    return face_swap.runtime_status()
 
 
 def _recipe_row(session: Session, workspace_id: str, asset_id: str) -> Any:
