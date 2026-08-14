@@ -27,6 +27,7 @@ from trendrelay_api import (
     attribution_shopee_import,
     attribution_subids,
     shopee_enrichment,
+    xlsx,
 )
 from trendrelay_api.attribution_models import ClickEvent, Conversion, TrackingLink
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
@@ -1302,6 +1303,106 @@ def fetch_shopee_offers(
         "enriching": len(enrichment),
         "problems": problems + outcome.problems,
     }
+
+
+#: What one export may carry, matching what Shopee's own offer page hands out
+#: in a batch. A cap rather than paging: the reason to export is to work on the
+#: rows somewhere else, and a file that took ten minutes to assemble is one
+#: nobody waits for.
+MAX_OFFERS_PER_EXPORT = 100
+
+#: The columns, in the order Shopee's own export uses them. Kept in that order
+#: on purpose - somebody who has worked with the marketplace's file should not
+#: have to learn a second layout to read ours.
+OFFER_COLUMNS = (
+    "Item ID",
+    "Shop ID",
+    "Product",
+    "Shop",
+    "Price (VND)",
+    "Commission rate (%)",
+    "Commission (VND)",
+    "Product link",
+    "Affiliate link",
+)
+
+
+class ShopeeOfferExport(BaseModel):
+    """Read the affiliate offer list and hand it back as a workbook."""
+
+    limit: int = Field(default=MAX_OFFERS_PER_EXPORT, ge=1, le=MAX_OFFERS_PER_EXPORT)
+    confirm_external_action: bool = False
+
+
+@workspace_router.post("/shopee/offers/export")
+def export_shopee_offers(
+    workspace_id: str,
+    body: ShopeeOfferExport,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> Response:
+    """The offer list as a spreadsheet, without filing any of it.
+
+    Deliberately separate from importing. Exporting is how somebody looks at
+    what is available - to price it, to choose from it, to send it to someone -
+    and filing two hundred products as a side effect of looking would be a
+    surprise nobody asked for.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400, detail="Reading the Shopee offer page requires confirmation."
+        )
+    try:
+        found = shopee_session.fetch_offers(body.limit)
+    except RuntimeError as error:
+        message = str(error)
+        raise HTTPException(
+            status_code=401 if shopee_session.looks_like_auth_failure(message) else 502,
+            detail=message,
+        ) from error
+
+    rows, problems = attribution_shopee.read_api_offers(found.get("offers") or [])
+    if not rows:
+        raise HTTPException(
+            status_code=422,
+            detail="The offer page returned no offers to export.",
+        )
+    sheet = [
+        [
+            # Ids as text: they are identity, not quantity, and a spreadsheet
+            # left to guess turns 57860887539 into 5.78609E+10.
+            row.item_id or "",
+            row.shop_id or "",
+            row.name,
+            row.shop or "",
+            row.price_dong,
+            round(row.commission_bps / 100, 2) if row.commission_bps is not None else None,
+            row.commission_dong,
+            row.product_url or "",
+            row.affiliate_url or "",
+        ]
+        for row in rows[:body.limit]
+    ]
+    audit(
+        session, request, workspace_id, user.id,
+        "attribution.shopee_offers_exported", "workspace", workspace_id,
+        {"offers": len(sheet), "problems": len(problems)},
+    )
+    stamp = utc_now().strftime("%Y%m%d-%H%M")
+    return Response(
+        content=xlsx.workbook(list(OFFER_COLUMNS), sheet, sheet_name="Shopee offers"),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="shopee-offers-{stamp}.xlsx"',
+            # Named so a browser reading the count does not have to parse the
+            # file to know whether anything was skipped.
+            "X-Offers-Exported": str(len(sheet)),
+            "X-Offers-Skipped": str(len(problems)),
+        },
+    )
 
 
 @workspace_router.get("/shopee/enrichment")

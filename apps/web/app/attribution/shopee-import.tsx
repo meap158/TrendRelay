@@ -54,6 +54,7 @@ export function ShopeeImport({
   const [links, setLinks] = useState("");
   const [busy, setBusy] = useState(false);
   const [fetching, setFetching] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -96,6 +97,46 @@ export function ShopeeImport({
       fail(problem instanceof Error ? problem.message : String(problem));
     } finally {
       setBusy(false);
+    }
+  }
+
+  /**
+   * The offer list as a spreadsheet, saved rather than filed.
+   *
+   * The response is the file itself, so it is read as a blob and handed to a
+   * link the browser clicks for us. That is the only way to start a download
+   * from a request that needed a body and an auth header - a plain anchor
+   * could carry neither.
+   */
+  async function exportFromShopee() {
+    setExporting(true);
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/attribution/shopee/offers/export`,
+        {
+          method: "POST",
+          body: JSON.stringify({ confirm_external_action: true }),
+        },
+      );
+      if (!response.ok) {
+        // An error here is JSON, not a workbook.
+        const problem = await response.json().catch(() => null);
+        throw new Error(problem?.detail ?? "Shopee refused the request.");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `shopee-offers-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      anchor.click();
+      // Revoked once the click has been handled, or the blob is held for the
+      // lifetime of the page.
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      succeed(`Downloaded ${response.headers.get("X-Offers-Exported") ?? ""} offers`.trim());
+    } catch (problem) {
+      fail(problem instanceof Error ? problem.message : String(problem));
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -144,6 +185,27 @@ export function ShopeeImport({
         Every offer gets a tracking link with sub-IDs, so importing twice adds
         only what is new.
       </p>
+      {/* Outside the campaign gate, because downloading files nothing and so
+          needs nowhere to file it. Kept apart from importing for the same
+          reason: importing creates a product and mints a link for every row,
+          and doing that as a side effect of wanting a spreadsheet would be a
+          surprise. */}
+      <div className="shopee-fetch">
+        <button
+          type="button"
+          className="ui-button ui-button-secondary ui-button-md"
+          onClick={() => void exportFromShopee()}
+          disabled={!connected || exporting || busy}
+        >
+          {exporting ? "Building the file…" : "Download offers as Excel"}
+        </button>
+        <small>
+          {connected
+            ? "Up to 100 offers as a spreadsheet. Nothing is saved and no links are minted."
+            : "Sign in to Shopee above to read your offer page."}
+        </small>
+      </div>
+
       {/* A tracking link belongs to a campaign, so there is nothing to import
           into until one exists. Said here rather than left as a select with one
           unusable option and no explanation for why nothing happens. */}
@@ -191,8 +253,8 @@ export function ShopeeImport({
           </button>
           <small>
             {connected
-              ? "Reads your offer page directly and files every offer with its link. Takes a minute."
-              : "Sign in to Shopee above to read your offer page directly. Until then, paste the export below."}
+              ? "Reads your offer page and files every offer with its link. Takes a minute."
+              : "Sign in to Shopee above to import directly. Until then, paste the export below."}
           </small>
         </div>
         <label>
