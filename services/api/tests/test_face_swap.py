@@ -44,14 +44,17 @@ def test_nothing_runs_without_a_recorded_licence(slot) -> None:
     with_model(slot)
     status = runtime_status()
     assert status["available"] is False
-    assert "licensed commercially" in status["reason"]
+    # Both footings named, because a research project and a paying one have
+    # different answers and the message must not assume either.
+    assert "commercial licence" in status["reason"]
+    assert "research" in status["reason"]
 
 
 def test_nothing_runs_without_a_model(slot) -> None:
     licensed(slot)
     status = runtime_status()
     assert status["available"] is False
-    assert "No licensed swap model" in status["reason"]
+    assert "No swap model is present" in status["reason"]
 
 
 def test_the_refusal_does_not_point_at_a_mirror(slot) -> None:
@@ -60,8 +63,8 @@ def test_the_refusal_does_not_point_at_a_mirror(slot) -> None:
     licensed(slot)
     reason = runtime_status()["reason"]
     assert "withdrawn" in reason
-    assert "non-commercial research" in reason
     assert "does not download" in reason
+    assert "ships no mirror" in reason or "does not ship a mirror" in reason
 
 
 def test_loading_refuses_before_both_are_present(slot) -> None:
@@ -71,8 +74,47 @@ def test_loading_refuses_before_both_are_present(slot) -> None:
 
 def test_a_licence_needs_a_reference_not_just_a_claim(slot) -> None:
     # "We have a licence" is not a record. An order number is.
-    with pytest.raises(ValueError, match="reference"):
+    with pytest.raises(ValueError, match="rests on"):
         record_licence("local-admin", reference="   ")
+
+
+# --- the two footings --------------------------------------------------------
+
+
+def test_research_use_is_a_footing_of_its_own(slot) -> None:
+    """A non-profit research project is not a company that skipped paying.
+
+    The research licence permits exactly this, so recording it as a commercial
+    licence nobody bought would make the record false in the direction that
+    matters.
+    """
+    with_model(slot)
+    record_licence("local-admin", reference="Grant 41/2026", basis="research")
+
+    status = runtime_status()
+    assert status["available"] is True
+    assert status["licence_basis"] == "research"
+    assert "research and evaluation only" in status["licence_terms"]
+
+
+def test_the_research_footing_says_what_would_end_it(slot) -> None:
+    # The condition it depends on is the thing that changes silently.
+    record_licence("local-admin", reference="Grant 41/2026", basis="research")
+
+    terms = runtime_status()["licence_terms"]
+    assert "starts earning" in terms
+    assert "commercial licence is required" in terms
+
+
+def test_research_use_still_needs_naming_what_it_is(slot) -> None:
+    """"We are a research project" with nothing behind it is not a record."""
+    with pytest.raises(ValueError, match="rests on"):
+        record_licence("local-admin", reference="  ", basis="research")
+
+
+def test_an_invented_footing_is_refused(slot) -> None:
+    with pytest.raises(ValueError, match="Unknown licence basis"):
+        record_licence("local-admin", reference="whatever", basis="fair-use")
 
 
 def test_a_withdrawn_licence_closes_the_gate_again(slot) -> None:

@@ -1,10 +1,14 @@
 """Face swapping, behind a licence you have to actually hold.
 
-This is the capability InsightFace sells rather than gives away. `inswapper_128`
-was withdrawn from public distribution, and the copies still circulating are
-unauthorised re-uploads of weights licensed for non-commercial research. This
-module will not load one: it requires a model file *you* placed there under a
-licence *you* recorded, and it says so rather than falling back to anything.
+InsightFace's swap models are licensed for non-commercial research, and sold
+separately for anything else. `inswapper_128` was also withdrawn from public
+distribution, so every circulating copy is a re-upload its authors did not
+sanction - which makes obtaining one a judgement about your own footing rather
+than something an app should decide for you.
+
+So this downloads nothing and ships no mirror. It runs a model file *you*
+placed there, on a footing *you* recorded - commercial licence or research use
+- and says which, rather than falling back to anything.
 
 That is not a technicality. The model turns a real, identifiable person's video
 into footage of someone who was never there, and this product republishes other
@@ -45,11 +49,32 @@ LICENCE_FILE = MODEL_DIR / "licence.json"
 #: the file to match - the name is the record of what you are running.
 KNOWN_MODELS = ("inswapper-512-live.onnx", "inswapper_512.onnx", "inswapper_128.onnx")
 
+#: The two footings this can legitimately stand on, and what each one commits
+#: the operator to. Kept apart because they are genuinely different permissions
+#: and recording the wrong one is worse than recording nothing: a false record
+#: is what gets relied on later.
+LICENCE_BASES: dict[str, str] = {
+    "commercial": (
+        "A commercial licence held from InsightFace (contact@insightface.ai). "
+        "Permits commercial use of the licensed model. The weights remain "
+        "InsightFace's property and are not redistributable."
+    ),
+    "research": (
+        "Non-commercial research use, under the research licence InsightFace's "
+        "swap models carry. Permits research and evaluation only - not a "
+        "commercial product, a paid service, or client work. If this project "
+        "starts earning, this record stops being true and a commercial licence "
+        "is required."
+    ),
+}
+DEFAULT_BASIS = "commercial"
+
 LICENCE_SUMMARY = (
-    "InsightFace's swap models are licensed commercially and are not "
-    "redistributable. Record the licence you hold from InsightFace before "
-    "this runs; TrendRelay will not download a model or accept one from a "
-    "third-party mirror."
+    "Face swapping needs a footing recorded before it runs: either a "
+    "commercial licence from InsightFace, or non-commercial research use "
+    "under the licence the models already carry. TrendRelay will not download "
+    "a model or fetch one from a third-party mirror either way - place the "
+    f"file in {MODEL_DIR} yourself."
 )
 
 
@@ -96,21 +121,37 @@ def record_licence(
     actor_user_id: str,
     reference: str,
     licensed: bool = True,
+    basis: str = DEFAULT_BASIS,
 ) -> dict[str, Any]:
-    """Record the licence held from InsightFace.
+    """Record what permits this to run, and who says so.
 
-    `reference` is whatever identifies the agreement - an order number, a
-    contract id, the date of the email. Stored so that "are we allowed to run
-    this" has an answer that is not somebody's memory.
+    Two footings, because there are two. A commercial licence is bought from
+    InsightFace. Non-commercial research use is already permitted by the
+    licence the models carry, and needs no purchase - but it is a claim about
+    what this project *is*, and a project that starts earning has quietly
+    stopped meeting it.
+
+    `reference` is whatever identifies the footing - an order number or contract
+    id for a commercial licence; for research use, the institution, grant or
+    project it is being done under. Either way it is stored so that "are we
+    allowed to run this" has an answer that is not somebody's memory.
     """
+    if basis not in LICENCE_BASES:
+        raise ValueError(
+            f"Unknown licence basis {basis!r}: expected one of {', '.join(LICENCE_BASES)}."
+        )
     if licensed and not reference.strip():
-        raise ValueError("Record the licence reference, not just that one exists.")
+        # Refused for research too. "We are a research project" with nothing
+        # naming the project is the record that turns out to be worthless
+        # precisely when somebody asks.
+        raise ValueError("Record what the licence rests on, not just that it does.")
     payload = {
         "licensed": bool(licensed),
+        "basis": basis,
         "reference": reference.strip(),
         "actor_user_id": actor_user_id,
         "supplier": "InsightFace (contact@insightface.ai)",
-        "terms": LICENCE_SUMMARY,
+        "terms": LICENCE_BASES[basis],
         "recorded_at": datetime.now(UTC).isoformat(),
     }
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
@@ -134,11 +175,11 @@ def runtime_status() -> dict[str, Any]:
         reason = LICENCE_SUMMARY
     elif model is None:
         reason = (
-            "No licensed swap model is present. Put the model InsightFace "
-            f"licensed to you in {MODEL_DIR}. TrendRelay does not download one, "
-            "and will not use a copy from a mirror: the publicly circulating "
-            "inswapper_128 was withdrawn by its authors and is licensed for "
-            "non-commercial research only."
+            f"No swap model is present. Put the model file in {MODEL_DIR}. "
+            "TrendRelay does not download one and does not ship a mirror: "
+            "inswapper_128 was withdrawn by its authors, so obtaining a copy "
+            "is a judgement about your own footing, and the app should not "
+            "make it on your behalf."
         )
     else:
         reason = None
@@ -151,7 +192,13 @@ def runtime_status() -> dict[str, Any]:
         "model_dir": str(MODEL_DIR),
         "licence_recorded": licence is not None,
         "licence_reference": (licence or {}).get("reference"),
+        # Which footing, and what that footing actually permits. Shown rather
+        # than reduced to "licensed", because research use and a commercial
+        # licence allow different things and the difference is the point.
+        "licence_basis": (licence or {}).get("basis"),
+        "licence_terms": (licence or {}).get("terms"),
         "licence_summary": LICENCE_SUMMARY,
+        "licence_bases": dict(LICENCE_BASES),
         "provider": identity.get("provider"),
         "gpu_accelerated": identity.get("gpu_accelerated", False),
         # Said plainly, because it is the part a licence does not settle.
@@ -206,7 +253,8 @@ def swapper() -> Any:
 
 def install_hint() -> str:
     return (
-        "Licence a swap model from InsightFace (contact@insightface.ai), put "
-        f"the file in {MODEL_DIR}, and record the licence reference. Nothing "
-        "here downloads a model."
+        "Record what permits this - a commercial licence from InsightFace "
+        "(contact@insightface.ai), or non-commercial research use - put the "
+        f"model file in {MODEL_DIR}, and name what the footing rests on. "
+        "Nothing here downloads a model."
     )
