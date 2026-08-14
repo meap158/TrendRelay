@@ -1,17 +1,23 @@
 /** Money and ratio formatting, shared so the merged page speaks one dialect. */
 
+import { fromMinorUnits } from "../../lib/minor-units";
+
 /**
  * The currency comes from the row, never from a default.
  *
  * Formatting an amount with the wrong symbol is how a table ends up showing
  * dong figures under a dollar heading and nobody notices for a month.
+ *
+ * The scale comes from the row too. This divided by a hundred whatever the
+ * currency was, so a Shopee commission of 95,000 dong - stored correctly as
+ * 95,000 - was shown as ₫950. A hundred times too small, and plausible enough
+ * on screen that nothing would have questioned it.
  */
-export function money(cents: number, currency: string): string {
+export function money(value: number, currency: string): string {
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
-    maximumFractionDigits: 2,
-  }).format(cents / 100);
+  }).format(fromMinorUnits(value, currency));
 }
 
 /** An em dash, not a zero: a ratio with no denominator has no value to show. */
