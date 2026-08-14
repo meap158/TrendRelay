@@ -659,7 +659,7 @@ export const fr: Messages = {
     products: "Produits",
     productCount: "{count, plural, one {# produit} other {# produits}}",
     noProducts:
-      "Aucun produit pour l’instant. Importez des offres d’affiliation dans Opportunités : chaque lien, clic et commission apparaîtra ici.",
+      "Aucun produit pour l'instant. Utilisez Imports ci-dessus pour importer vos offres Shopee ; chaque lien, clic et commission apparaîtra ici.",
     product: "Produit",
     searchProducts: "Rechercher un produit",
     price: "Prix",

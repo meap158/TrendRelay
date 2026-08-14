@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Products, the links under them, what they earned, and how they got here.
+ * Products, and everything that happened to them.
  *
  * Attribution, Catalog and Opportunities were three pages over one model: every
  * row already carried `product_id`. The split was navigation, not data. What
@@ -9,23 +9,21 @@
  * product do?" rather than "what did this link do?" - which is where every link
  * manager worth copying ended up.
  *
- * What changed since is how it is arranged. Merging the pages left one screen
- * carrying five stacked sections, two of them behind toggles that opened
- * closed, so the page both buried its actions and never showed a whole subject
- * at once. These are four views of one subject instead: exactly one is on
- * screen, all of it, and switching is a click rather than a scroll.
+ * What changed since is how much of it there is. The merge left five stacked
+ * sections; splitting those into four tabbed views fixed the burying and kept
+ * the fragmentation, when three of the four were not places anyone needed to
+ * go. A product row already carries its offers and the links minted from them,
+ * so the table is the page.
  *
- * Products is the default because it is the only view that shows a product's
- * whole story. Links keeps the campaign-shaped view for people who think in
- * campaigns. Money is what the figures add up to, with the caveats beside them.
- * Import is how rows get in.
+ * The two things anyone comes here to *do* - make a link, bring rows in - are
+ * actions on that table. They open a dialog and close again rather than being
+ * screens to visit, which is why nothing here is navigable except the table.
  */
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "../auth-provider";
-import { OfferImport } from "./offer-import";
 import { ProductTable } from "./product-table";
 import { ShopeeImport } from "./shopee-import";
 import { ShopeeSession } from "./shopee-session";
@@ -67,18 +65,6 @@ type TrackingLink = {
   conversions: number;
   pending_conversions: number;
   commission_by_currency: Record<string, number>;
-};
-type Conversion = {
-  id: string;
-  tracking_code: string;
-  campaign_id: string;
-  network: string;
-  occurred_at: string;
-  status: string;
-  currency: string;
-  order_value_cents?: number | null;
-  commission_cents: number;
-  click_matched: boolean;
 };
 type Summary = {
   totals: { links: number; active_links: number; clicks: number; unique_visitors: number };
@@ -136,12 +122,10 @@ export default function AttributionPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [links, setLinks] = useState<TrackingLink[]>([]);
-  const [conversions, setConversions] = useState<Conversion[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [works, setWorks] = useState<WorkRow[]>([]);
   const [campaignId, setCampaignId] = useState("");
-  const [csvText, setCsvText] = useState(csvTemplate);
   const [busy, setBusy] = useState("");
   // Opened deliberately, closed when done. Neither is a place to be: making a
   // link and bringing rows in are things you do to the table, not other screens
@@ -162,19 +146,17 @@ export default function AttributionPage() {
   const canCreate = ["owner", "editor", "approver"].includes(workspace?.role ?? "");
   const canChangeStatus = ["owner", "approver"].includes(workspace?.role ?? "");
   const canImport = ["owner", "editor", "analyst"].includes(workspace?.role ?? "");
-  const canEditCatalog = ["owner", "editor"].includes(workspace?.role ?? "");
 
   const refresh = useCallback(async (nextWorkspace = workspaceId) => {
     if (!nextWorkspace) return;
     const base = `/api/workspaces/${nextWorkspace}`;
     const [
-      campaignBody, planBody, offerBody, linkBody, conversionBody, summaryBody, productBody,
+      campaignBody, planBody, offerBody, linkBody, summaryBody, productBody,
     ] = await Promise.all([
       json<{ campaigns: Campaign[] }>(await apiFetch(`${base}/campaigns`)),
       json<{ plans: Plan[] }>(await apiFetch(`${base}/campaigns/calendar`)),
       json<{ offers: Offer[] }>(await apiFetch(`${base}/opportunities/offers`)),
       json<{ links: TrackingLink[] }>(await apiFetch(`${base}/attribution/links`)),
-      json<{ conversions: Conversion[] }>(await apiFetch(`${base}/attribution/conversions`)),
       json<Summary>(await apiFetch(`${base}/attribution/summary`)),
       json<ProductsPayload>(await apiFetch(`${base}/attribution/products`)),
     ]);
@@ -182,7 +164,6 @@ export default function AttributionPage() {
     setPlans(planBody.plans);
     setOffers(offerBody.offers);
     setLinks(linkBody.links);
-    setConversions(conversionBody.conversions);
     setSummary(summaryBody);
     setProducts(productBody.products);
     setWorks(productBody.works);
@@ -296,29 +277,6 @@ export default function AttributionPage() {
     setPanel("link");
   }, []);
 
-  async function importConversions(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy("import");
-    try {
-      const result = await json<{ created: number; updated: number; matched_clicks: number }>(
-        await apiFetch(`/api/workspaces/${workspaceId}/attribution/conversions/import`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ csv_text: csvText, confirm_external_action: true }),
-        }),
-      );
-      succeed(t("attribution.imported", {
-        created: result.created,
-        updated: result.updated,
-        matched: result.matched_clicks,
-      }));
-      await refresh();
-    } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "Conversion import failed.");
-    } finally {
-      setBusy("");
-    }
-  }
 
   if (loading) return <main className="attribution-page"><p>{t("attribution.opening")}</p></main>;
   if (!user) return <main className="attribution-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Fattribution">{t("attribution.signInPrompt")}</Link></main>;
@@ -355,39 +313,34 @@ export default function AttributionPage() {
   return (
     <main className="attribution-page">
       <WorkspaceSectionNav area="publish" />
+      {/* One row: what this is, what it came to, where it applies, and the two
+          things you can do to it. The kicker, the sentence-long heading, the
+          separate figures block and the standalone count were four rows saying
+          what one row says. */}
       <header className="attribution-heading">
-        <div>
-          <p className="section-kicker">{t("attribution.eyebrow")}</p>
-          <h1>{t("attribution.heading")}</h1>
-          {/* One line rather than a row of cards. These are the figures the
-              page exists to produce, and they qualify the title rather than
-              competing with the view below for the first screen. */}
-          <p className="attribution-figures">
-            <span><strong>{summary?.totals.active_links ?? 0}</strong> {t("attribution.activeLinks")}</span>
-            <span><strong>{summary?.totals.clicks ?? 0}</strong> {t("attribution.clicks")}</span>
-            {/* Kept beside the clicks it qualifies. A click count without the
-                visitors behind it reads as traffic when it may be one person
-                nine times, and this is the number the routing goes to trouble
-                to make countable without identifying anybody. */}
-            <span>{t("attribution.privacySafeVisitors", { count: summary?.totals.unique_visitors ?? 0 })}</span>
-            {Object.entries(summary?.by_currency ?? {}).map(([currency, item]) => (
-              <span key={currency}>
-                <strong>{money(item.net_commission_cents, currency)}</strong> {t("attribution.netCommission")}
-              </span>
-            ))}
-          </p>
-        </div>
-        <label>{t("workspace.select")}<select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
-          {workspaces.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.role}</option>)}
-        </select></label>
-      </header>
-
-      {/* One page. A product, the links under it and what they earned are the
-          same subject asked about three ways, and the two things anyone comes
-          here to *do* are actions on that table rather than places to visit. */}
-      <div className="attribution-bar">
-        <span>{products.length} product{products.length === 1 ? "" : "s"}</span>
-        <span className="attribution-bar-actions">
+        <h1>{t("attribution.tab.products")}</h1>
+        <p className="attribution-figures">
+          <span><strong>{summary?.totals.active_links ?? 0}</strong> {t("attribution.activeLinks")}</span>
+          <span><strong>{summary?.totals.clicks ?? 0}</strong> {t("attribution.clicks")}</span>
+          {/* Beside the clicks it qualifies: a click count on its own reads as
+              traffic when it may be one person nine times, and this is the
+              number the routing goes to trouble to make countable without
+              identifying anybody. */}
+          <span>{t("attribution.privacySafeVisitors", { count: summary?.totals.unique_visitors ?? 0 })}</span>
+          {Object.entries(summary?.by_currency ?? {}).map(([currency, item]) => (
+            <span key={currency}>
+              <strong>{money(item.net_commission_cents, currency)}</strong> {t("attribution.netCommission")}
+            </span>
+          ))}
+        </p>
+        <div className="attribution-bar-actions">
+          <select
+            aria-label={t("workspace.select")}
+            value={workspaceId}
+            onChange={(event) => setWorkspaceId(event.target.value)}
+          >
+            {workspaces.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
           {canImport && (
             <button
               type="button"
@@ -403,8 +356,8 @@ export default function AttributionPage() {
               disabled={!campaigns.length}
             >{t("attribution.createLink")}</button>
           )}
-        </span>
-      </div>
+        </div>
+      </header>
 
       <section className="attribution-view">
         <ProductTable
@@ -419,145 +372,12 @@ export default function AttributionPage() {
         />
       </section>
 
-      {/* Below the table rather than behind a tab: the campaign totals are read
-          after the products they came from, not instead of them. */}
-      <details className="attribution-money-details">
-        <summary>{t("attribution.tab.money")}</summary>
-        <div className="attribution-view attribution-money">
-
-          <section className="attribution-view attribution-money">
-            <article className="attribution-panel">
-              <h2>{t("attribution.revenueByCampaign")}</h2>
-              <div className="revenue-table">
-                <div className="table-head"><span>{t("attribution.campaign")}</span><span>{t("attribution.conversions")}</span><span>{t("attribution.netCommission")}</span></div>
-                {summary?.campaigns.map((row) => (
-                  <div key={`${row.campaign_id}-${row.currency}`}>
-                    <span>{row.campaign_name}<small>{row.currency}</small></span>
-                    <span>{row.approved_conversions}</span>
-                    <strong>{money(row.net_commission_cents, row.currency)}</strong>
-                  </div>
-                ))}
-                {!summary?.campaigns.length && <p>{t("attribution.noRevenue")}</p>}
-              </div>
-              {!!summary?.creative_formats.length && <>
-                <h3>{t("attribution.earningsByFormat")}</h3>
-                <div className="format-chips">{summary.creative_formats.map((row) => (
-                  <span key={`${row.creative_format}-${row.currency}`}><strong>{row.creative_format}</strong>{money(row.net_commission_cents, row.currency)}</span>
-                ))}</div>
-              </>}
-            </article>
-
-            <article className="attribution-panel">
-              <h2>{t("attribution.recentConversions")}</h2>
-              <div className="conversion-list">
-                {conversions.slice(0, 30).map((item) => (
-                  <div key={item.id}>
-                    <span><strong>{item.network}</strong><small>{new Date(item.occurred_at).toLocaleString()} · {item.tracking_code}</small></span>
-                    <em className={`conversion-status ${item.status}`}>{item.status}</em>
-                    <strong>{money(item.commission_cents, item.currency)}</strong>
-                    <small>{item.click_matched ? t("attribution.matchedClick") : t("attribution.noEligibleClick")}</small>
-                  </div>
-                ))}
-                {!conversions.length && <p>{t("attribution.noReports")}</p>}
-              </div>
-            </article>
-
-            {/* Beside the figures they qualify, and only here. These caveats used
-                to be rendered twice on one screen, which is how a caveat stops
-                being read. */}
-            <details className="attribution-limits">
-              <summary>{t("attribution.measurementNotes")}</summary>
-              <ul>
-                <li>{t("attribution.notAdditive")}</li>
-                {summary?.limitations.map((line) => <li key={line}>{line}</li>)}
-              </ul>
-            </details>
-          </section>
-        </div>
-      </details>
-
-      <details className="attribution-money-details">
-        <summary>{t("attribution.trackingLinks")}</summary>
-        <div className="attribution-view">
-
-          <div className="attribution-layout">
-            <div className="attribution-main">
-              <article className="attribution-panel">
-                <div className="panel-heading"><div><h2>{t("attribution.trackingLinks")}</h2><p>{t("attribution.trackingLinksHelp")}</p></div></div>
-                <div className="tracking-list">
-                  {links.map((link) => (
-                    <div key={link.id}>
-                      <div className="tracking-copy">
-                        <strong>{campaigns.find((item) => item.id === link.campaign_id)?.name ?? t("attribution.campaign")}</strong>
-                        <a href={`${link.url}/info`} target="_blank" rel="noreferrer">{link.url}</a>
-                        <small>→ {link.destination_host} · {link.platform} · {link.disclosure}</small>
-                        {/* What the network's own report will call this link.
-                            Worth showing: those columns are read back off a
-                            dashboard we do not control, and reconciling a payout
-                            means knowing which column is which. Compact, because
-                            it qualifies the link rather than competing with it. */}
-                        {link.sub_id_slots?.length ? (
-                          <span className="tracking-subids">
-                            {link.sub_id_slots.map((slot) => (
-                              <em
-                                key={slot.parameter}
-                                title={t(`attribution.subIdDimension.${slot.dimension}`)}
-                              >
-                                {slot.parameter}<b>{slot.value}</b>
-                              </em>
-                            ))}
-                          </span>
-                        ) : link.sub_id_key ? (
-                          // No contract for this network, so nothing was added -
-                          // guessing a parameter name breaks the sale rather than
-                          // tracking it. The key is still what a report will match.
-                          <span className="tracking-subids none">
-                            <em title={t("attribution.subIdUnknownHelp")}>
-                              {t("attribution.subIdUnknown")}<b>{link.sub_id_key}</b>
-                            </em>
-                          </span>
-                        ) : null}
-                        {Object.entries(link.country_destinations).map(([country, host]) => (
-                          <small key={country}>{country} → {host}</small>
-                        ))}
-                      </div>
-                      <div className="tracking-metrics">
-                        <span>{link.clicks}<small>{t("attribution.clicks")}</small></span>
-                        <span>{link.conversions}<small>{t("attribution.conversions")}</small></span>
-                        {Object.entries(link.commission_by_currency).map(([currency, amount]) => (
-                          <span key={currency}>{money(amount, currency)}<small>{currency}</small></span>
-                        ))}
-                        <em className={`tracking-status ${link.status}`}>{link.status}</em>
-                      </div>
-                      <div className="tracking-actions">
-                        <button type="button" onClick={() => copyLink(link.code)}>{t("attribution.copy")}</button>
-                        {canChangeStatus && link.status !== "expired" && (
-                          <button
-                            type="button"
-                            disabled={busy === link.id}
-                            onClick={() => void setLinkStatus(link.id, link.status === "active" ? "disabled" : "active")}
-                          >{link.status === "active" ? t("attribution.disable") : t("attribution.activate")}</button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  {!links.length && <p>{t("attribution.noLinks")}</p>}
-                </div>
-              </article>
-            </div>
-
-            <aside className="attribution-side">{linkForm}</aside>
-          </div>
-        </div>
-      </details>
-
       <Dialog
         open={panel === "import"}
         title={t("attribution.tab.imports")}
         onClose={() => setPanel("")}
       >
         <div className="attribution-view">
-
           <div>
             {!canImport && <p className="attribution-note">{t("attribution.importNotPermitted")}</p>}
             {/* Shopee first: it is the network these links actually come from,
@@ -588,29 +408,6 @@ export default function AttributionPage() {
                 fail={fail}
                 onImported={() => void refresh()}
               />
-            )}
-            {/* The import that creates the rows this page is about. It used to be
-                the first step of a separate page, so an empty product table and
-                the way to fill it were two different destinations. */}
-            {workspaceId && (
-              <OfferImport
-                workspaceId={workspaceId}
-                canEdit={canEditCatalog}
-                apiFetch={apiFetch}
-                onImported={() => void refresh()}
-                succeed={succeed}
-                fail={fail}
-              />
-            )}
-            {canImport && (
-              <article className="attribution-panel">
-                <h2>{t("attribution.importConversions")}</h2>
-                <p>{t("attribution.importHelp")}</p>
-                <form onSubmit={importConversions}>
-                  <textarea aria-label={t("attribution.conversionCsv")} rows={10} value={csvText} onChange={(event) => setCsvText(event.target.value)} />
-                  <button className={buttonClass({ variant: "primary" })} disabled={busy === "import"}>{busy === "import" ? t("attribution.importing") : t("attribution.importReport")}</button>
-                </form>
-              </article>
             )}
           </div>
         </div>

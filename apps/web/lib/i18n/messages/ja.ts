@@ -650,7 +650,7 @@ export const ja: Messages = {
     products: "商品",
     productCount: "{count}件の商品",
     noProducts:
-      "商品がまだありません。「機会」でアフィリエイト案件を取り込むと、そのリンク・クリック・報酬がここに表示されます。",
+      "商品はまだありません。上部の「インポート」から Shopee のオファーを取り込むと、リンク・クリック・報酬がここに表示されます。",
     product: "商品",
     searchProducts: "商品を検索",
     price: "価格",

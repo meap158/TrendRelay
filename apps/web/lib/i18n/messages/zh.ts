@@ -637,7 +637,7 @@ export const zh: Messages = {
     products: "商品",
     productCount: "{count} 个商品",
     noProducts:
-      "暂无商品。请在「机会」中导入联盟优惠，其链接、点击与佣金都会显示在这里。",
+      "还没有商品。用上方的“导入”把 Shopee 的优惠带进来，之后每个链接、点击和佣金都会显示在这里。",
     product: "商品",
     searchProducts: "搜索商品",
     price: "价格",
