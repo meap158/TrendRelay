@@ -227,7 +227,7 @@ function isVisibleForFilter(job: DownloadJob, filter: QueueFilter): boolean {
 
 export default function Dashboard() {
   const t = useT();
-  const { loading, user, apiFetch, retryAuth } = useAuth();
+  const { loading, user, apiFetch, retryAuth, probeError } = useAuth();
   const { jobs: allJobs, busy: jobsBusy, setActiveWorkspaceId, refresh: refreshJobs } = useJobs();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
@@ -524,6 +524,9 @@ export default function Dashboard() {
   if (loading) return <main className="console-page"><div className="loading-panel">
     <strong>{t("workspace.loading")}</strong>
     <span>Waiting on TrendRelay&apos;s local API. If it is restarting this can hang.</span>
+    {/* What actually went wrong, rather than leaving a refused connection and
+        an API that has not started looking identical. */}
+    {probeError && <code className="loading-panel-error">{probeError}</code>}
     <div className="loading-panel-actions">
       <Button variant="secondary" size="sm" onClick={retryAuth}>{t("downloads.tryAgain")}</Button>
       {/* A plain anchor on purpose. next/link navigates on the client, which

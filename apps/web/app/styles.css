@@ -830,3 +830,6 @@ nav strong { color: #1c2b33; }
   .post-preview-frame { aspect-ratio: 1 / 1; }
   .carousel-list code { font-size: 10px; }
 }
+/* The probe's own words on the waiting screen. Monospace because it carries a
+   URL, and wrapped because a refusal message is longer than the panel. */
+.loading-panel-error { display: block; max-width: 60ch; margin-block-start: 4px; color: var(--muted); font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }

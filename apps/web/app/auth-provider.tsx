@@ -32,6 +32,16 @@ type AuthContextValue = {
   desktopAvailable: boolean;
   mfaRequired: boolean;
   localMode: boolean;
+  /**
+   * Why the last local-API probe did not answer, if it did not.
+   *
+   * A refused connection and an API that has not finished starting look the
+   * same from here - both leave the shell waiting - so the waiting screen said
+   * "this can hang" and nothing else. Naming the address and the failure turns
+   * that into something somebody can act on, and is the difference between a
+   * bug report of "it hangs" and one that says which host was refused.
+   */
+  probeError: string | null;
   /** Run the session probe again after it stalled. */
   retryAuth: () => void;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
@@ -66,6 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [desktopAvailable, setDesktopAvailable] = useState(false);
   const [mfaRequired, setMfaRequired] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [probeError, setProbeError] = useState<string | null>(null);
   const [event, setEvent] = useState<AuthChangeEvent | null>(null);
   /** Bumped to run the local-session probe again after a stalled attempt. */
   const [probeAttempt, setProbeAttempt] = useState(0);
@@ -107,9 +118,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .then((result) => {
         if (replaced) return;
         setLocalUser(result.enabled ? result.user : null);
+        setProbeError(result.enabled
+          ? null
+          // Answered, and said local mode is off. Worth distinguishing from a
+          // refusal: the API is up and this is a configuration answer.
+          : `${apiBaseUrl()} answered, but local sign-in is disabled there.`);
         if (result.enabled) setLoading(false);
       })
-      .catch(() => { if (!replaced) setLocalUser(null); })
+      .catch((reason) => {
+        if (replaced) return;
+        setLocalUser(null);
+        setProbeError(
+          `${apiBaseUrl()} did not answer: ${reason instanceof Error ? reason.message : String(reason)}`,
+        );
+      })
       .finally(() => {
         window.clearTimeout(timer);
         if (replaced) return;
@@ -345,6 +367,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       desktopAvailable,
       mfaRequired,
       localMode: Boolean(localUser),
+      probeError,
       retryAuth,
       apiFetch,
       pairDesktop,
