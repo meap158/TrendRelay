@@ -551,3 +551,61 @@ def test_a_file_that_vanishes_mid_scan_does_not_stop_the_runner(monkeypatch, tmp
     monkeypatch.setattr(dev.Path, "stat", explode)
 
     assert dev.source_snapshot(("api",)) == ()
+
+
+# --- the build directory belongs to whatever is serving the port -------------
+#
+# These pin an ordering, which is not usually worth a test. This one is: the
+# reverse order deleted a running server's files and left it answering
+# "ENOENT: routes-manifest.json" to every request, permanently, because Next
+# writes that manifest on a successful first build and never again.
+
+
+def _record_order(monkeypatch, *, port_comes_free: bool) -> list[str]:
+    order: list[str] = []
+
+    def freeing(preferred, name, *args, **kwargs):
+        order.append(f"free:{name}")
+        if preferred == 3001 and not port_comes_free:
+            return 3002
+        return preferred
+
+    monkeypatch.setattr(dev, "find_free_port", freeing)
+    monkeypatch.setattr(dev, "_cleanup_stale_nextjs", lambda: order.append("delete"))
+    return order
+
+
+def test_the_port_is_freed_before_its_build_directory_is_deleted(monkeypatch) -> None:
+    order = _record_order(monkeypatch, port_comes_free=True)
+
+    dev.build_services(False)
+
+    assert order.index("free:Frontend") < order.index("delete")
+
+
+def test_a_frontend_that_could_not_take_its_port_refuses_to_start(monkeypatch) -> None:
+    """Rather than starting a second server against the first one's directory.
+
+    Two of them write the same webpack cache, which is what "Another write batch
+    or compaction is already active" is from the inside.
+    """
+    order = _record_order(monkeypatch, port_comes_free=False)
+
+    try:
+        dev.build_services(False)
+    except SystemExit as stop:
+        assert "3001" in str(stop)
+    else:
+        raise AssertionError("starting on a fallback port should have been refused")
+
+    assert "delete" not in order, "a live server's files must survive the refusal"
+
+
+def test_check_mode_never_deletes_anything(monkeypatch) -> None:
+    # `--check` is documented as validating without starting services, and a
+    # check that wipes the running stack's build directory is worse than none.
+    order = _record_order(monkeypatch, port_comes_free=False)
+
+    dev.build_services(False, may_terminate=False)
+
+    assert "delete" not in order

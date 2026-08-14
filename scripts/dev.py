@@ -403,9 +403,32 @@ def build_services(include_desktop: bool, *, may_terminate: bool = True) -> list
     python = ROOT / ".venv" / ("Scripts/python.exe" if IS_WINDOWS else "bin/python")
     npm = "npm.cmd" if IS_WINDOWS else "npm"
 
-    _cleanup_stale_nextjs()
     backend_port = find_free_port(8011, "Backend", may_terminate=may_terminate)
     frontend_port = find_free_port(3001, "Frontend", may_terminate=may_terminate)
+
+    # Freed first, deleted second, and only when the port actually came free.
+    #
+    # This used to delete before freeing, which meant starting the stack while
+    # an older one was alive pulled the build directory out from under a running
+    # server. On Windows the kill that followed often reached the npm wrapper
+    # and not the `next` child, so that server kept the port with none of its
+    # files left - answering every request with "ENOENT: routes-manifest.json"
+    # for as long as it was left running, and never recovering, because Next
+    # writes that manifest on a successful first build and not again.
+    #
+    # A fallback port is refused for the same reason rather than accepted: two
+    # dev servers sharing one build directory both write its webpack cache, and
+    # "Another write batch or compaction is already active" is what that sounds
+    # like from the inside.
+    if may_terminate:
+        if frontend_port != 3001:
+            raise SystemExit(
+                "Port 3001 is still held by something this could not stop, and a "
+                "second dev server would share the first one's build directory "
+                "and corrupt it. Close the other TrendRelay stack - or whatever "
+                "is on 3001 - and start this again."
+            )
+        _cleanup_stale_nextjs()
 
     services = [
         Service(
