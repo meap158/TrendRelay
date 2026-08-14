@@ -603,12 +603,8 @@ export const en = {
     signInPrompt: "Sign in to open Attribution",
     eyebrow: "Revenue loop",
     heading: "Measure distribution performance",
-    intro:
-      "Create transparent first-party links, measure privacy-minimized clicks, and reconcile affiliate commission.",
     activeLinks: "Active links",
     clicks: "Clicks",
-    subIdUnknown: "Sub ID",
-    subIdUnknownHelp: "This network is not one we know the sub-ID parameters for, so nothing was added automatically. Paste this value into its own sub-ID field to match conversions back.",
     subIdDimension: {
       link: "Identifies this link, and matches its conversions on import",
       content: "The video this link was made for",
@@ -617,7 +613,6 @@ export const en = {
       date: "When the link was made",
     },
     trackingLinks: "Tracking links",
-    clicksLower: "clicks",
     approved: "approved",
     copy: "Copy",
     disable: "Disable",
@@ -634,9 +629,7 @@ export const en = {
     noReports: "No conversion reports imported.",
     createLink: "Create a tracking link",
     publicationPlan: "Publication plan",
-    campaignLevelLink: "Campaign-level link",
     affiliateOffer: "Affiliate offer",
-    useCampaignDestination: "Use campaign or plan destination",
     campaignParameter: "Campaign parameter",
     platformParameter: "Platform parameter",
     countryDestinations: "Country destinations",
@@ -650,7 +643,7 @@ export const en = {
     tab: {
       products: "Products",
       links: "Links",
-      books: "Books",
+      money: "Money",
       imports: "Imports",
     },
     productsEyebrow: "Everything on one row",
@@ -672,12 +665,9 @@ export const en = {
     noLinksHere: "No tracking links for this product yet.",
     approvedCount: "{count, plural, one {# approved} other {# approved}}",
     pendingCount: "{count, plural, one {# pending} other {# pending}}",
-    totalLinks: "{count} total",
     privacySafeVisitors: "{count} privacy-safe visitors",
     notAdditive:
       "A product\u2019s commission and its book\u2019s royalty are the same conversions counted once, grouped two ways. Never add them together.",
-    booksIntro:
-      "Ad economics belong to the book rather than the format: a paperback and an ebook are separate products sharing one budget.",
     trackingLinksHelp:
       "Visitors always see your first-party host; the public info endpoint exposes the destination host and disclosure.",
     countryDestinationsHelp:
@@ -687,8 +677,6 @@ export const en = {
     importing: "Importing\u2026",
     importReport: "Import report",
     importNotPermitted: "Your role cannot import conversion reports.",
-    spendImportLivesInBooks:
-      "Ad spend is imported under Books, beside the titles it is attributed to.",
     linkCreatedCopied:
       "Tracking link created and copied. The destination host and disclosure remain visible.",
     linkCreated: "Tracking link created: {url}",

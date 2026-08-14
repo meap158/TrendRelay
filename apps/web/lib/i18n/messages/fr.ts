@@ -608,12 +608,8 @@ export const fr: Messages = {
     signInPrompt: "Connectez-vous pour ouvrir l'attribution",
     eyebrow: "Boucle de revenus",
     heading: "Mesurer la performance de diffusion",
-    intro:
-      "Créez des liens propriétaires transparents, mesurez les clics en limitant les données personnelles et rapprochez les commissions d'affiliation.",
     activeLinks: "Liens actifs",
     clicks: "Clics",
-    subIdUnknown: "Sub ID",
-    subIdUnknownHelp: "Nous ne connaissons pas les paramètres de sub ID de ce réseau, rien n'a donc été ajouté automatiquement. Collez cette valeur dans son propre champ de sub ID pour rapprocher les conversions.",
     subIdDimension: {
       link: "Identifie ce lien et rapproche ses conversions à l'import",
       content: "La vidéo pour laquelle ce lien a été créé",
@@ -622,7 +618,6 @@ export const fr: Messages = {
       date: "Date de création du lien",
     },
     trackingLinks: "Liens de suivi",
-    clicksLower: "clics",
     approved: "validé",
     copy: "Copier",
     disable: "Désactiver",
@@ -639,9 +634,7 @@ export const fr: Messages = {
     noReports: "Aucun rapport de conversion importé.",
     createLink: "Créer un lien de suivi",
     publicationPlan: "Plan de publication",
-    campaignLevelLink: "Lien au niveau de la campagne",
     affiliateOffer: "Offre d'affiliation",
-    useCampaignDestination: "Utiliser la destination de la campagne ou du plan",
     campaignParameter: "Paramètre de campagne",
     platformParameter: "Paramètre de plateforme",
     countryDestinations: "Destinations par pays",
@@ -655,7 +648,7 @@ export const fr: Messages = {
     tab: {
       products: "Produits",
       links: "Liens",
-      books: "Livres",
+      money: "Argent",
       imports: "Imports",
     },
     productsEyebrow: "Tout sur une seule ligne",
@@ -677,12 +670,9 @@ export const fr: Messages = {
     noLinksHere: "Aucun lien de suivi pour ce produit.",
     approvedCount: "{count, plural, one {# approuvée} other {# approuvées}}",
     pendingCount: "{count, plural, one {# en attente} other {# en attente}}",
-    totalLinks: "{count} au total",
     privacySafeVisitors: "{count} visiteurs anonymisés",
     notAdditive:
       "La commission d’un produit et les droits d’auteur de son livre sont les mêmes conversions, comptées une fois et regroupées de deux façons. Ne les additionnez jamais.",
-    booksIntro:
-      "La rentabilité publicitaire se mesure au livre, pas au format : un broché et un ebook sont deux produits qui partagent un même budget.",
     trackingLinksHelp:
       "Les visiteurs voient toujours votre propre domaine ; le point d’accès public expose l’hôte de destination et la mention d’affiliation.",
     countryDestinationsHelp:
@@ -692,8 +682,6 @@ export const fr: Messages = {
     importing: "Import…",
     importReport: "Importer le rapport",
     importNotPermitted: "Votre rôle ne permet pas d’importer des rapports de conversion.",
-    spendImportLivesInBooks:
-      "Les dépenses publicitaires s’importent dans Livres, à côté des titres auxquels elles sont attribuées.",
     linkCreatedCopied:
       "Lien de suivi créé et copié. L’hôte de destination et la mention restent visibles.",
     linkCreated: "Lien de suivi créé : {url}",

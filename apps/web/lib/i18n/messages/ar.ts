@@ -597,12 +597,8 @@ export const ar: Messages = {
     signInPrompt: "سجّل الدخول لفتح إسناد النتائج",
     eyebrow: "دورة الإيرادات",
     heading: "قياس أداء التوزيع",
-    intro:
-      "أنشئ روابط خاصة بك وشفافة، وقِس النقرات بأقل قدر من البيانات الشخصية، وطابِق عمولات التسويق بالعمولة.",
     activeLinks: "الروابط النشطة",
     clicks: "النقرات",
-    subIdUnknown: "معرّف فرعي",
-    subIdUnknownHelp: "لا نعرف معاملات المعرّف الفرعي لهذه الشبكة، لذلك لم يُضف شيء تلقائيًا. الصق هذه القيمة في حقل المعرّف الفرعي لديها لمطابقة التحويلات.",
     subIdDimension: {
       link: "يحدّد هذا الرابط ويطابق تحويلاته عند الاستيراد",
       content: "الفيديو الذي أُنشئ الرابط من أجله",
@@ -611,7 +607,6 @@ export const ar: Messages = {
       date: "وقت إنشاء الرابط",
     },
     trackingLinks: "روابط التتبع",
-    clicksLower: "نقرة",
     approved: "معتمد",
     copy: "نسخ",
     disable: "تعطيل",
@@ -628,9 +623,7 @@ export const ar: Messages = {
     noReports: "لم تُستورد أي تقارير تحويلات.",
     createLink: "إنشاء رابط تتبع",
     publicationPlan: "خطة النشر",
-    campaignLevelLink: "رابط على مستوى الحملة",
     affiliateOffer: "عرض تسويق بالعمولة",
-    useCampaignDestination: "استخدام وجهة الحملة أو الخطة",
     campaignParameter: "معامل الحملة",
     platformParameter: "معامل المنصة",
     countryDestinations: "وجهات حسب الدولة",
@@ -644,7 +637,7 @@ export const ar: Messages = {
     tab: {
       products: "المنتجات",
       links: "الروابط",
-      books: "الكتب",
+      money: "الأموال",
       imports: "الاستيراد",
     },
     productsEyebrow: "كل شيء في صف واحد",
@@ -670,12 +663,9 @@ export const ar: Messages = {
       "{count, plural, zero {لا شيء معتمد} one {واحدة معتمدة} two {اثنتان معتمدتان} few {# معتمدة} many {# معتمدة} other {# معتمدة}}",
     pendingCount:
       "{count, plural, zero {لا شيء معلّق} one {واحدة معلّقة} two {اثنتان معلّقتان} few {# معلّقة} many {# معلّقة} other {# معلّقة}}",
-    totalLinks: "{count} إجمالًا",
     privacySafeVisitors: "{count} زائرًا مجهول الهوية",
     notAdditive:
       "عمولة المنتج وحقوق ملكية الكتاب هما التحويلات نفسها، تُحتسب مرة واحدة وتُجمَّع بطريقتين. لا تجمعهما أبدًا.",
-    booksIntro:
-      "جدوى الإعلان تخص الكتاب لا الصيغة: النسخة الورقية والنسخة الرقمية منتجان منفصلان يتشاركان ميزانية واحدة.",
     trackingLinksHelp:
       "يرى الزائرون دائمًا نطاقك أنت؛ وتكشف نقطة المعلومات العامة عن مضيف الوجهة وعن الإفصاح.",
     countryDestinationsHelp:
@@ -685,8 +675,6 @@ export const ar: Messages = {
     importing: "جارٍ الاستيراد…",
     importReport: "استيراد التقرير",
     importNotPermitted: "دورك لا يسمح باستيراد تقارير التحويلات.",
-    spendImportLivesInBooks:
-      "يُستورد الإنفاق الإعلاني ضمن قسم «الكتب»، بجوار العناوين المُسنَد إليها.",
     linkCreatedCopied:
       "أُنشئ رابط التتبّع ونُسخ. يبقى مضيف الوجهة والإفصاح ظاهرين.",
     linkCreated: "أُنشئ رابط التتبّع: {url}",

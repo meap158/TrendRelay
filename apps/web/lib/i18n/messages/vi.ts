@@ -599,12 +599,8 @@ export const vi: Messages = {
     signInPrompt: "Đăng nhập để mở Phân bổ",
     eyebrow: "Vòng doanh thu",
     heading: "Đo hiệu quả phân phối",
-    intro:
-      "Tạo liên kết minh bạch của riêng bạn, đo lượt nhấp hạn chế dữ liệu cá nhân và đối soát hoa hồng tiếp thị.",
     activeLinks: "Liên kết đang hoạt động",
     clicks: "Lượt nhấp",
-    subIdUnknown: "Sub ID",
-    subIdUnknownHelp: "Chúng tôi chưa có thông số sub ID của mạng này nên không tự động thêm. Dán giá trị này vào ô sub ID của họ để đối soát chuyển đổi.",
     subIdDimension: {
       link: "Định danh liên kết này và khớp chuyển đổi khi nhập",
       content: "Video mà liên kết này được tạo cho",
@@ -613,7 +609,6 @@ export const vi: Messages = {
       date: "Thời điểm tạo liên kết",
     },
     trackingLinks: "Liên kết theo dõi",
-    clicksLower: "lượt nhấp",
     approved: "đã duyệt",
     copy: "Sao chép",
     disable: "Tắt",
@@ -630,9 +625,7 @@ export const vi: Messages = {
     noReports: "Chưa nhập báo cáo chuyển đổi nào.",
     createLink: "Tạo liên kết theo dõi",
     publicationPlan: "Kế hoạch đăng bài",
-    campaignLevelLink: "Liên kết cấp chiến dịch",
     affiliateOffer: "Ưu đãi tiếp thị",
-    useCampaignDestination: "Dùng đích của chiến dịch hoặc kế hoạch",
     campaignParameter: "Tham số chiến dịch",
     platformParameter: "Tham số nền tảng",
     countryDestinations: "Đích theo quốc gia",
@@ -646,7 +639,7 @@ export const vi: Messages = {
     tab: {
       products: "Sản phẩm",
       links: "Liên kết",
-      books: "Sách",
+      money: "Tiền",
       imports: "Nhập dữ liệu",
     },
     productsEyebrow: "Tất cả trên một hàng",
@@ -668,12 +661,9 @@ export const vi: Messages = {
     noLinksHere: "Sản phẩm này chưa có liên kết theo dõi nào.",
     approvedCount: "{count} đã duyệt",
     pendingCount: "{count} chờ duyệt",
-    totalLinks: "tổng cộng {count}",
     privacySafeVisitors: "{count} khách truy cập ẩn danh",
     notAdditive:
       "Hoa hồng của sản phẩm và tiền bản quyền của cuốn sách là cùng một lượt chuyển đổi, chỉ đếm một lần theo hai cách nhóm. Đừng bao giờ cộng chúng lại.",
-    booksIntro:
-      "Hiệu quả quảng cáo thuộc về cuốn sách chứ không phải định dạng: bản bìa mềm và bản ebook là hai sản phẩm riêng dùng chung một ngân sách.",
     trackingLinksHelp:
       "Người xem luôn thấy tên miền của chính bạn; điểm cuối thông tin công khai hiển thị máy chủ đích và lời tuyên bố.",
     countryDestinationsHelp:
@@ -683,8 +673,6 @@ export const vi: Messages = {
     importing: "Đang nhập…",
     importReport: "Nhập báo cáo",
     importNotPermitted: "Vai trò của bạn không thể nhập báo cáo chuyển đổi.",
-    spendImportLivesInBooks:
-      "Chi phí quảng cáo được nhập trong mục Sách, ngay cạnh những tựa sách được quy cho.",
     linkCreatedCopied:
       "Đã tạo và sao chép liên kết theo dõi. Máy chủ đích và lời tuyên bố vẫn hiển thị.",
     linkCreated: "Đã tạo liên kết theo dõi: {url}",

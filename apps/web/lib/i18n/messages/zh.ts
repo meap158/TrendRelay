@@ -587,12 +587,8 @@ export const zh: Messages = {
     signInPrompt: "登录后即可打开归因分析",
     eyebrow: "收入闭环",
     heading: "衡量分发效果",
-    intro:
-      "创建透明的第一方链接，在尽量少收集个人数据的前提下统计点击，并核对联盟佣金。",
     activeLinks: "生效中的链接",
     clicks: "点击量",
-    subIdUnknown: "子 ID",
-    subIdUnknownHelp: "我们尚未收录该联盟网络的子 ID 参数，因此没有自动添加。请将此值粘贴到对方的子 ID 字段，以便回传匹配转化。",
     subIdDimension: {
       link: "标识此链接，并在导入时匹配其转化",
       content: "此链接对应的视频",
@@ -601,7 +597,6 @@ export const zh: Messages = {
       date: "链接创建时间",
     },
     trackingLinks: "追踪链接",
-    clicksLower: "次点击",
     approved: "已审核",
     copy: "复制",
     disable: "停用",
@@ -617,9 +612,7 @@ export const zh: Messages = {
     noReports: "尚未导入转化报告。",
     createLink: "创建追踪链接",
     publicationPlan: "发布计划",
-    campaignLevelLink: "广告系列级链接",
     affiliateOffer: "联盟优惠",
-    useCampaignDestination: "使用广告系列或计划的落地页",
     campaignParameter: "广告系列参数",
     platformParameter: "平台参数",
     countryDestinations: "分国家落地页",
@@ -633,7 +626,7 @@ export const zh: Messages = {
     tab: {
       products: "商品",
       links: "链接",
-      books: "图书",
+      money: "收入",
       imports: "导入",
     },
     productsEyebrow: "一行看全",
@@ -655,12 +648,9 @@ export const zh: Messages = {
     noLinksHere: "该商品暂无追踪链接。",
     approvedCount: "已确认 {count} 笔",
     pendingCount: "待确认 {count} 笔",
-    totalLinks: "共 {count} 条",
     privacySafeVisitors: "{count} 位匿名访客",
     notAdditive:
       "商品佣金与图书版税是同一批转化，只计一次，只是分组方式不同。切勿相加。",
-    booksIntro:
-      "广告效益归属于作品而非版本：平装本与电子书是两个商品，共用一份预算。",
     trackingLinksHelp:
       "访客始终看到你自己的域名；公开信息接口会展示目标主机与披露说明。",
     countryDestinationsHelp:
@@ -670,8 +660,6 @@ export const zh: Messages = {
     importing: "导入中…",
     importReport: "导入报表",
     importNotPermitted: "你的角色无权导入转化报表。",
-    spendImportLivesInBooks:
-      "广告支出在「图书」中导入，紧挨着它所归属的书名。",
     linkCreatedCopied:
       "追踪链接已创建并复制。目标主机与披露说明依然可见。",
     linkCreated: "追踪链接已创建：{url}",

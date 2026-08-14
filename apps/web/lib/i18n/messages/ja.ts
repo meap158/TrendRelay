@@ -599,12 +599,8 @@ export const ja: Messages = {
     signInPrompt: "効果測定を開くにはログインしてください",
     eyebrow: "収益ループ",
     heading: "配信の成果を測る",
-    intro:
-      "透明性のある自社リンクを作り、個人情報を抑えたクリック計測を行い、アフィリエイト報酬を突き合わせます。",
     activeLinks: "有効なリンク",
     clicks: "クリック数",
-    subIdUnknown: "サブID",
-    subIdUnknownHelp: "このネットワークのサブIDパラメータは未対応のため、自動では追加されていません。この値を相手側のサブID欄に貼り付けると、コンバージョンを照合できます。",
     subIdDimension: {
       link: "このリンクを識別し、取り込み時にコンバージョンを照合します",
       content: "このリンクの対象となる動画",
@@ -613,7 +609,6 @@ export const ja: Messages = {
       date: "リンクを作成した日",
     },
     trackingLinks: "計測リンク",
-    clicksLower: "クリック",
     approved: "承認済み",
     copy: "コピー",
     disable: "無効化",
@@ -630,9 +625,7 @@ export const ja: Messages = {
     noReports: "コンバージョンレポートは未取り込みです。",
     createLink: "計測リンクを作成",
     publicationPlan: "配信プラン",
-    campaignLevelLink: "キャンペーン単位のリンク",
     affiliateOffer: "アフィリエイト案件",
-    useCampaignDestination: "キャンペーンまたはプランの遷移先を使う",
     campaignParameter: "キャンペーンパラメータ",
     platformParameter: "プラットフォームパラメータ",
     countryDestinations: "国別の遷移先",
@@ -646,7 +639,7 @@ export const ja: Messages = {
     tab: {
       products: "商品",
       links: "リンク",
-      books: "書籍",
+      money: "収益",
       imports: "インポート",
     },
     productsEyebrow: "すべてを一行に",
@@ -668,12 +661,9 @@ export const ja: Messages = {
     noLinksHere: "この商品にはまだトラッキングリンクがありません。",
     approvedCount: "承認済み{count}件",
     pendingCount: "保留中{count}件",
-    totalLinks: "全{count}件",
     privacySafeVisitors: "プライバシー保護済み訪問者{count}人",
     notAdditive:
       "商品の報酬と書籍の印税は、同じコンバージョンを二通りに集計したものです。合計しないでください。",
-    booksIntro:
-      "広告の採算は形式ではなく作品に属します。ペーパーバックと電子書籍は別々の商品ですが、予算は一つです。",
     trackingLinksHelp:
       "閲覧者には常に自社ドメインが表示されます。公開情報エンドポイントでは遷移先ホストと開示文を確認できます。",
     countryDestinationsHelp:
@@ -683,8 +673,6 @@ export const ja: Messages = {
     importing: "インポート中…",
     importReport: "レポートを取り込む",
     importNotPermitted: "現在の権限ではコンバージョンレポートを取り込めません。",
-    spendImportLivesInBooks:
-      "広告費は「書籍」タブで、対象の作品の隣から取り込みます。",
     linkCreatedCopied:
       "トラッキングリンクを作成してコピーしました。遷移先ホストと開示文は引き続き表示されます。",
     linkCreated: "トラッキングリンクを作成しました: {url}",

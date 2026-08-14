@@ -4,11 +4,6 @@
 .attribution-heading p { margin: 0; color: var(--muted); }
 .attribution-heading label { display: grid; gap: 5px; min-width: 230px; color: var(--muted); font-size: 11px; font-weight: 600; }
 .attribution-heading select, .attribution-panel input, .attribution-panel select, .attribution-panel textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; }
-.attribution-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin-bottom: 16px; }
-.attribution-totals article { display: grid; gap: 5px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
-.attribution-totals span { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
-.attribution-totals strong { font-size: 22px; font-weight: 500; }
-.attribution-totals small { color: var(--muted); }
 .attribution-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
 .attribution-main, .attribution-side { display: grid; gap: 16px; min-width: 0; }
 .attribution-side { position: sticky; top: 68px; }
@@ -91,7 +86,7 @@
 
 /* --- The merged page: tabs, and the product row that replaced three pages --- */
 
-.attribution-tab-panel { display: grid; gap: 16px; align-items: start; }
+.attribution-view { display: grid; gap: 16px; align-items: start; }
 /* Not a footnote. It sits where the two figures it is about are read. */
 .attribution-note { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-inline-start: 3px solid var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 12px; line-height: 1.5; }
 
@@ -108,7 +103,6 @@
 .product-links code { font-family: ui-monospace, monospace; font-size: 12px; }
 
 @media (max-width: 700px) {
-  .attribution-tabs button { flex: 0 0 auto; padding: 9px 12px; }
 }
 
 /* The Shopee connection. A line rather than a panel: it sits above the import
@@ -136,3 +130,23 @@
 .shopee-session-connect code { font-family: ui-monospace, monospace; }
 .shopee-session-work { margin: 0; color: var(--muted); line-height: 1.5; }
 .shopee-session-problem { display: block; margin-block-start: 3px; color: var(--warn, #9a6700); }
+
+/* The figures the page exists to produce, as one line under the title rather
+   than a row of cards. They qualify the heading; they were competing with the
+   view below for the first screen. */
+.attribution-figures { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.attribution-figures strong { color: var(--text); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.attribution-figures span { display: flex; align-items: baseline; gap: 5px; }
+
+/* One bordered group rather than four floating buttons, matching the segmented
+   control Publish already uses. */
+.attribution-views { display: flex; overflow: hidden; margin-bottom: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.attribution-views button { flex: 1; padding: 9px 12px; border: 0; border-inline-start: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; font-weight: 500; cursor: pointer; }
+.attribution-views button:first-child { border-inline-start: 0; }
+.attribution-views button:hover { background: var(--panel-raised); color: var(--text); }
+.attribution-views button.selected { background: var(--green-dark); box-shadow: inset 0 2px 0 var(--green); color: var(--green); }
+
+/* Two panels side by side where there is room: the campaign totals and the
+   conversions behind them are read together or not at all. */
+.attribution-money { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+.attribution-money .attribution-limits { grid-column: 1 / -1; }
