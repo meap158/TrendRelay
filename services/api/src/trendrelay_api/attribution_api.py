@@ -1047,7 +1047,9 @@ class ShopeeSession(BaseModel):
     #: Pasted whole from the browser, `a=1; b=2`, because that is the form it
     #: can actually be copied in. Picked apart here rather than asking somebody
     #: to name each cookie.
-    cookie_header: str = Field(min_length=1, max_length=20_000)
+    #: Empty when the session is being captured by signing in rather than
+    #: pasted, which is why this is not required at the model.
+    cookie_header: str = Field(default="", max_length=20_000)
     confirm_external_action: bool = False
 
 
@@ -1098,6 +1100,8 @@ def connect_shopee_session(
         raise HTTPException(
             status_code=400, detail="Storing a Shopee session requires confirmation."
         )
+    if not body.cookie_header.strip():
+        raise HTTPException(status_code=422, detail="Paste the Cookie header to store.")
     cookies = shopee_session.parse_cookie_header(body.cookie_header)
     missing = [key for key in shopee_session.REQUIRED_COOKIE_KEYS if not cookies.get(key)]
     if missing:
@@ -1146,6 +1150,66 @@ def disconnect_shopee_session(
         {},
     )
     return Response(status_code=204)
+
+
+@workspace_router.post("/shopee/session/connect", status_code=202)
+def open_shopee_sign_in(
+    workspace_id: str,
+    body: ShopeeSession | None,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Open a browser at Shopee's own login page and keep the session it makes.
+
+    Local-machine only, and not as a policy: this opens a window on whatever
+    machine the API runs on, so anywhere else it would either do nothing
+    visible or open a window in front of the wrong person.
+
+    Nothing here handles a password. The window is Shopee's own login page, the
+    operator types their credentials into Shopee, and what is kept is the
+    session cookies that result.
+    """
+    host = request.client.host if request.client else ""
+    if host not in {"127.0.0.1", "::1", "testclient"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Signing in to Shopee opens a browser, so it only works on this machine.",
+        )
+    require_role(membership(session, workspace_id, user.id), {"owner"})
+    require_governed_assurance(user)
+    if not (body and body.confirm_external_action):
+        raise HTTPException(
+            status_code=400, detail="Opening the Shopee sign-in window requires confirmation."
+        )
+    connection = shopee_session.start_connection()
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "attribution.shopee_sign_in_opened",
+        "workspace",
+        workspace_id,
+        {"state": connection["state"]},
+    )
+    return {"connection": connection, "session": _session_state()}
+
+
+@workspace_router.get("/shopee/session/connect")
+def read_shopee_sign_in(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """How the sign-in window is getting on.
+
+    Polled while a window is open, and it is what adopts the captured session
+    once one appears - so the browser closing and the connection existing are
+    the same moment as far as anybody watching is concerned.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner"})
+    return {"connection": shopee_session.connection_status(), "session": _session_state()}
 
 
 @workspace_router.get("/shopee/enrichment")

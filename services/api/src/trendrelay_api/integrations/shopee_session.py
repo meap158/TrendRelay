@@ -33,6 +33,8 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path  # noqa: F401  re-exported for callers
+from threading import Lock
 from typing import Any
 
 from trendrelay_api.tool_registry import PROJECT_ROOT
@@ -410,6 +412,150 @@ def fetch_product(url: str, *, timeout: float = BRIDGE_TIMEOUT_SECONDS) -> dict[
     if isinstance(rotated, dict) and rotated:
         save_cookies(merge_refreshed(cookies, [f"{k}={v}" for k, v in rotated.items()]))
     return found
+
+
+# --------------------------------------------------------------------------- #
+# Signing in, rather than pasting what a sign-in produced
+# --------------------------------------------------------------------------- #
+
+CAPTURE_PATH = PROJECT_ROOT / "scripts" / "shopee_cookie_capture.py"
+#: Beside the session, and git-ignored with it. Written by the capture process
+#: and read by the API, because the two are different processes and a status a
+#: browser window holds in memory is one nothing else can see.
+CAPTURE_STATUS_FILE = COOKIE_FILE.parent / "connect-status.json"
+CAPTURE_OUTPUT_FILE = COOKIE_FILE.parent / "connect-captured.json"
+#: Long enough to find a password and answer whatever Shopee asks for; short
+#: enough that a forgotten window does not sit open all day.
+CAPTURE_TIMEOUT_SECONDS = 600
+
+#: States where a window is already open. Asking to connect again while one is
+#: waiting should return to that window rather than opening a second.
+CAPTURE_RUNNING = frozenset({"starting", "opening_browser", "waiting_for_login"})
+
+_CAPTURE_LOCK = Lock()
+_CAPTURE_PROCESS: Any = None
+
+
+def _write_capture_status(state: str, message: str) -> dict[str, Any]:
+    payload = {"state": state, "message": message, "updated_at": _now_text()}
+    CAPTURE_STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = CAPTURE_STATUS_FILE.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    temporary.replace(CAPTURE_STATUS_FILE)
+    return payload
+
+
+def _now_text() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _adopt_captured() -> bool:
+    """Move a finished capture into the stored session.
+
+    The capture process writes its own file rather than the session file, so a
+    half-written capture can never be mistaken for a live session - and so the
+    expiry it found is folded in here, where saving already happens.
+    """
+    try:
+        payload = json.loads(CAPTURE_OUTPUT_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    cookies = payload.get("cookies")
+    if not isinstance(cookies, dict) or not all(cookies.get(k) for k in REQUIRED_COOKIE_KEYS):
+        return False
+    expires_at = None
+    stamp = payload.get("expires_at")
+    if isinstance(stamp, str) and stamp:
+        try:
+            expires_at = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        except ValueError:
+            expires_at = None
+    save_cookies(cookies, expires_at=expires_at)
+    # Removed once adopted: it is a second copy of a live session, and one is
+    # already more than anybody wants lying about.
+    CAPTURE_OUTPUT_FILE.unlink(missing_ok=True)
+    return True
+
+
+def connection_status() -> dict[str, Any]:
+    """What the sign-in window is doing, if anything.
+
+    A connected session outranks whatever the last attempt said: the point is
+    whether Shopee is reachable now, not how it was last arrived at.
+    """
+    if CAPTURE_OUTPUT_FILE.is_file():
+        _adopt_captured()
+    try:
+        payload = json.loads(CAPTURE_STATUS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        payload = None
+
+    state = str((payload or {}).get("state") or "disconnected")
+    if health().ready and state not in CAPTURE_RUNNING:
+        return {"state": "connected", "message": "Shopee is connected.",
+                "updated_at": (payload or {}).get("updated_at")}
+    if state in CAPTURE_RUNNING and _CAPTURE_PROCESS is not None \
+            and _CAPTURE_PROCESS.poll() is not None:
+        # The window is gone but the file still says it is waiting, which is
+        # what a crash looks like. Reported rather than left saying "waiting"
+        # at somebody indefinitely.
+        return _write_capture_status(
+            "failed", "The sign-in window closed before a session was captured."
+        )
+    if payload is None:
+        return {"state": "disconnected",
+                "message": "Sign in to Shopee to read product details.",
+                "updated_at": None}
+    return {"state": state, "message": str(payload.get("message", "")),
+            "updated_at": payload.get("updated_at")}
+
+
+def start_connection() -> dict[str, Any]:
+    """Open a browser at Shopee's login page and wait for the session.
+
+    Local-machine only by the time it reaches here: this opens a window on
+    whatever machine the API runs on, which is only ever useful when that is
+    the operator's own.
+    """
+    global _CAPTURE_PROCESS
+    import subprocess
+
+    from .tiktok_creative import runtime_python, scoped_environment
+
+    with _CAPTURE_LOCK:
+        current = connection_status()
+        if current["state"] in CAPTURE_RUNNING:
+            # Return to the window already open rather than opening a second
+            # one, which would race the first for the same cookie file.
+            return current
+
+        interpreter = runtime_python()
+        if not interpreter:
+            return _write_capture_status(
+                "failed",
+                "No browser runtime is installed, so there is no window to open. "
+                "Paste the Cookie header instead, or install the runtime with "
+                "Douyin or TikTok from Tools.",
+            )
+        if not CAPTURE_PATH.is_file():
+            return _write_capture_status("failed", "The sign-in script is missing.")
+
+        # Cleared first: a capture left from a previous attempt would be
+        # adopted the moment this one is asked about.
+        CAPTURE_OUTPUT_FILE.unlink(missing_ok=True)
+        _write_capture_status("starting", "Preparing the Shopee sign-in window.")
+        _CAPTURE_PROCESS = subprocess.Popen(
+            [interpreter, str(CAPTURE_PATH),
+             "--output", str(CAPTURE_OUTPUT_FILE),
+             "--status", str(CAPTURE_STATUS_FILE),
+             "--timeout-seconds", str(CAPTURE_TIMEOUT_SECONDS)],
+            cwd=PROJECT_ROOT,
+            env=scoped_environment(),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+        )
+        return connection_status()
 
 
 def _default_fetcher():

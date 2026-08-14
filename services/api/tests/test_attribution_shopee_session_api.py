@@ -202,3 +202,85 @@ def test_probing_without_a_session_stops_at_the_first_failure(workspace) -> None
     assert body["ok"] is False
     assert len(body["stages"]) == 1
     assert body["stages"][0]["id"] == "session"
+
+
+# --- signing in rather than pasting -------------------------------------------
+
+
+def connect_window(workspace_id: str, host: str = "127.0.0.1", **body) -> httpx.Response:
+    async def go():
+        transport = httpx.ASGITransport(app=app, client=(host, 50000))
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            return await client.post(
+                f"/api/workspaces/{workspace_id}/attribution/shopee/session/connect",
+                json={"confirm_external_action": True, **body},
+            )
+    return asyncio.run(go())
+
+
+def test_opening_the_window_needs_confirming(workspace, monkeypatch) -> None:
+    opened = []
+    monkeypatch.setattr(shopee, "start_connection", lambda: opened.append(1) or {})
+
+    response = connect_window(workspace, confirm_external_action=False)
+
+    assert response.status_code == 400
+    assert opened == [], "no browser should have been launched"
+
+
+def test_a_remote_caller_is_refused_because_the_window_opens_here(workspace, monkeypatch) -> None:
+    """Not policy: it opens a window on whatever machine the API runs on."""
+    opened = []
+    monkeypatch.setattr(shopee, "start_connection", lambda: opened.append(1) or {})
+
+    response = connect_window(workspace, host="203.0.113.9")
+
+    assert response.status_code == 403
+    assert opened == []
+
+
+def test_opening_the_window_reports_what_it_is_doing(workspace, monkeypatch) -> None:
+    monkeypatch.setattr(shopee, "start_connection", lambda: {
+        "state": "waiting_for_login", "message": "Sign in to Shopee…", "updated_at": None,
+    })
+
+    response = connect_window(workspace)
+
+    assert response.status_code == 202
+    assert response.json()["connection"]["state"] == "waiting_for_login"
+
+
+def test_the_sign_in_is_recorded_as_having_been_opened(workspace, monkeypatch) -> None:
+    monkeypatch.setattr(shopee, "start_connection", lambda: {"state": "starting", "message": ""})
+
+    connect_window(workspace)
+
+    with TestingSession() as session:
+        event = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "attribution.shopee_sign_in_opened"
+            )
+        )
+    assert event is not None and event.detail == {"state": "starting"}
+
+
+def test_progress_can_be_polled_while_the_window_is_open(workspace, monkeypatch) -> None:
+    monkeypatch.setattr(shopee, "connection_status", lambda: {
+        "state": "waiting_for_login", "message": "Sign in to Shopee…", "updated_at": None,
+    })
+
+    response = request(
+        "GET", f"/api/workspaces/{workspace}/attribution/shopee/session/connect"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["connection"]["state"] == "waiting_for_login"
+    # The session state travels with it, so the moment it connects is one read.
+    assert response.json()["session"]["ready"] is False
+
+
+def test_pasting_nothing_is_still_refused(workspace) -> None:
+    """The paste path keeps its own requirement now the model does not."""
+    response = connect(workspace, "")
+
+    assert response.status_code == 422
