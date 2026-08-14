@@ -214,7 +214,8 @@ NEXT_DEV_DIRS = (".next-dev", ".next")
 
 def _cleanup_stale_nextjs() -> None:
     for name in NEXT_DEV_DIRS:
-        dev_dir = ROOT / "apps" / "web" / name / "dev"
+        root = ROOT / "apps" / "web" / name
+        dev_dir = root / "dev"
         if not dev_dir.is_dir():
             continue
         pid_file = dev_dir / "pid"
@@ -232,7 +233,16 @@ def _cleanup_stale_nextjs() -> None:
                     os.kill(pid, signal.SIGTERM)
             except (ValueError, OSError):
                 pass
-        shutil.rmtree(dev_dir, ignore_errors=True)
+        # `.next-dev` belongs to the dev server alone, so it goes whole. Only
+        # the `dev` subdirectory is taken out of `.next`, which also holds the
+        # production build and must survive.
+        #
+        # Whole matters here: the bundler keeps a persistent cache beside the
+        # output, and leaving it while deleting what it describes is how a
+        # rebuild starts from a cache that disagrees with the tree - the
+        # failure that reads as "no such file: build-manifest.json" for a route
+        # that plainly exists.
+        shutil.rmtree(root if name == ".next-dev" else dev_dir, ignore_errors=True)
 
 
 def paint(text: str, color: str) -> str:
