@@ -8,6 +8,7 @@ import { useT } from "../i18n-provider";
 import { AutopilotPanel } from "./autopilot-panel";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Button } from "../ui/button";
+import { Dialog } from "../ui/dialog";
 import { clipLength, handoffPath, type AssetVersion } from "../../lib/media-rules";
 
 type Workspace = { id: string; name: string; role: string };
@@ -100,6 +101,7 @@ export default function CampaignsPage() {
   const [planPickerOpen, setPlanPickerOpen] = useState(false);
   const [packages, setPackages] = useState<Record<string, ManualPackage>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [newCampaignOpen, setNewCampaignOpen] = useState(false);
   // Reported over the page. Rendered in flow, these shifted everything below
   // them whenever an action finished, which reads as the interface flinching.
   const { messages: statusMessages, succeed, fail, dismiss } = useStatus();
@@ -215,6 +217,7 @@ export default function CampaignsPage() {
       formElement.reset();
       await refresh(workspaceId);
       setCampaignId(body.campaign.id);
+      setNewCampaignOpen(false);
       succeed("Campaign created. Add its first publication plan.");
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "Campaign creation failed.");
@@ -417,18 +420,9 @@ export default function CampaignsPage() {
             {!campaigns.length && <p>{t("campaigns.empty")}</p>}
           </div>
           {canCreateCampaign && (
-            <details className="campaign-create">
-              <summary>{t("campaigns.create")}</summary>
-              <form onSubmit={createCampaign}>
-                <label>{t("campaigns.name")}<input name="name" required maxLength={160} /></label>
-                <label>{t("campaigns.objective")}<textarea name="objective" rows={3} required /></label>
-                <label>{t("campaigns.audience")}<textarea name="audience" rows={3} required /></label>
-                <label>{t("campaigns.markets")}<input name="markets" placeholder="TH, US" /></label>
-                <label>{t("campaigns.languages")}<input name="languages" placeholder="en, th" /></label>
-                <label>{t("campaigns.affiliateUrl")}<input name="affiliate_url" type="url" /></label>
-                <Button type="submit" variant="primary" busy={busy === "campaign"}>{t("campaigns.createButton")}</Button>
-              </form>
-            </details>
+            <Button variant="primary" onClick={() => setNewCampaignOpen(true)}>
+              + {t("campaigns.create")}
+            </Button>
           )}
         </aside>
 
@@ -467,6 +461,11 @@ export default function CampaignsPage() {
                 fail={fail}
               />
 
+              <details className="campaign-manual-work">
+                <summary>
+                  <span>One-off approvals</span>
+                  <small>{visiblePlans.length} planned posts · advanced workflow</small>
+                </summary>
               {canCreatePlan && selectedCampaign.status !== "archived" && (
                 <details className="plan-create" open={visiblePlans.length === 0}>
                   <summary>{t("campaigns.addPlan")}</summary>
@@ -562,6 +561,7 @@ export default function CampaignsPage() {
                   );
                 })}
               </section>
+              </details>
             </>
           ) : (
             <section className="empty-console">
@@ -571,6 +571,29 @@ export default function CampaignsPage() {
           )}
         </div>
       </section>
+      <Dialog
+        open={newCampaignOpen}
+        title={t("campaigns.create")}
+        description="Set the campaign goal once. Media, accounts, schedule, and deployment come next in this workspace."
+        onClose={() => setNewCampaignOpen(false)}
+      >
+        <form className="campaign-dialog-form" onSubmit={createCampaign}>
+          <label>{t("campaigns.name")}<input name="name" required maxLength={160} autoFocus /></label>
+          <div className="campaign-dialog-grid">
+            <label>{t("campaigns.objective")}<textarea name="objective" rows={3} required /></label>
+            <label>{t("campaigns.audience")}<textarea name="audience" rows={3} required /></label>
+          </div>
+          <div className="campaign-dialog-grid">
+            <label>{t("campaigns.markets")}<input name="markets" placeholder="TH, US" /></label>
+            <label>{t("campaigns.languages")}<input name="languages" placeholder="en, th" /></label>
+          </div>
+          <label>{t("campaigns.affiliateUrl")}<input name="affiliate_url" type="url" placeholder="Optional default destination" /></label>
+          <div className="campaign-dialog-actions">
+            <Button type="button" variant="quiet" onClick={() => setNewCampaignOpen(false)}>Cancel</Button>
+            <Button type="submit" variant="primary" busy={busy === "campaign"}>{t("campaigns.createButton")}</Button>
+          </div>
+        </form>
+      </Dialog>
       <StatusToasts messages={statusMessages} onDismiss={dismiss} />
     </main>
   );

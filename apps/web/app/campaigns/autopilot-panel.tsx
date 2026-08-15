@@ -15,15 +15,28 @@
  * scheduler should feel like delegating, not gambling.
  */
 
-import { clipLength, handoffPath, type AssetVersion } from "../../lib/media-rules";
+import { clipLength, handoffPath } from "../../lib/media-rules";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../ui/button";
 import { Badge, Card, Switch } from "../ui/primitives";
 import { SearchSelect } from "../ui/search-select";
 import { useT } from "../i18n-provider";
 import { EffectEditor } from "../library/effect-editor";
+import {
+  AssetFilters,
+  EMPTY_FACETS,
+  assetFilterParams,
+  type AssetFacets,
+  type AssetFilterValues,
+} from "../ui/asset-filters";
+import {
+  AssetThumbnail,
+  SlotEditor,
+  type Slot,
+  type SlotPreset,
+} from "../publish/composer";
 
 type Account = {
   id: string;
@@ -97,7 +110,11 @@ type LibraryAsset = {
   original_path: string;
   media_kind: string;
   duration_ms: number | null;
-  versions: AssetVersion[];
+  platform: string | null;
+  creator: string | null;
+  width: number | null;
+  height: number | null;
+  versions: { id: string; kind: string; path?: string }[];
 };
 
 /** Seconds, rounded, for a clip length nobody needs to the millisecond. */
@@ -138,19 +155,25 @@ export function AutopilotPanel({
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const [offers, setOffers] = useState<Offer[]>([]);
-  const [slotCount, setSlotCount] = useState<number | null>(null);
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [slotPresets, setSlotPresets] = useState<SlotPreset[]>([]);
   const [preview, setPreview] = useState<
     { note: string; posts: PreviewPost[]; problems: number } | null
   >(null);
   const [busy, setBusy] = useState("");
   const [adding, setAdding] = useState(false);
   const [library, setLibrary] = useState<LibraryAsset[]>([]);
+  const [libraryFacets, setLibraryFacets] = useState<AssetFacets>(EMPTY_FACETS);
+  const [libraryFilters, setLibraryFilters] = useState<AssetFilterValues>({ mediaKind: "video" });
+  const [libraryTotal, setLibraryTotal] = useState(0);
   /** The clips sharing this campaign copy. Empty when the composer is closed. */
   const [drafting, setDrafting] = useState<LibraryAsset[]>([]);
-  const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
+  const [selectedAssets, setSelectedAssets] = useState<Record<string, LibraryAsset>>({});
   const [effectOpen, setEffectOpen] = useState(false);
   const [editing, setEditing] = useState<QueueItem | null>(null);
   const [picking, setPicking] = useState(false);
+  const [section, setSection] = useState<"media" | "accounts" | "schedule" | "settings">("media");
+  const searchTimer = useRef<number | null>(null);
 
   const base = `/api/workspaces/${workspaceId}/campaigns/${campaignId}`;
 
@@ -171,15 +194,19 @@ export function AutopilotPanel({
       // different subsystem, and the point of the checklist is that it names
       // which one is missing rather than reporting a single blank "not ready".
       void apiFetch(`/api/workspaces/${workspaceId}/publishing/slots`)
-        .then((response) => json<{ slots: unknown[] }>(response))
-        .then((body) => setSlotCount(body.slots.length))
-        .catch(() => setSlotCount(0));
+        .then((response) => json<{ slots: Slot[]; presets: SlotPreset[] }>(response))
+        .then((body) => { setSlots(body.slots); setSlotPresets(body.presets); })
+        .catch(() => { setSlots([]); setSlotPresets([]); });
       void apiFetch(`/api/workspaces/${workspaceId}/opportunities/offers`)
         .then((response) => json<{ offers: Offer[] }>(response))
         .then((body) => setOffers(body.offers))
         .catch(() => setOffers([]));
     });
   }, [refresh, apiFetch, workspaceId, fail]);
+
+  useEffect(() => () => {
+    if (searchTimer.current) window.clearTimeout(searchTimer.current);
+  }, []);
 
   async function loadAccounts() {
     setBusy("accounts");
@@ -198,23 +225,35 @@ export function AutopilotPanel({
     }
   }
 
-  async function loadLibrary() {
+  async function loadLibrary(filters: AssetFilterValues = libraryFilters) {
     setBusy("library");
     try {
       // Video only, and only what the library considers ready. The queue posts
       // unattended, so an asset still being processed has no business in it.
-      const body = await json<{ assets: LibraryAsset[] }>(await apiFetch(
-        `/api/workspaces/${workspaceId}/media/library/assets?media_kind=video&limit=40`,
+      const params = assetFilterParams({ ...filters, mediaKind: "video" });
+      params.set("limit", "100");
+      const body = await json<{
+        assets: LibraryAsset[]; facets?: AssetFacets; total?: number;
+      }>(await apiFetch(
+        `/api/workspaces/${workspaceId}/media/library/assets?${params.toString()}`,
       ));
       setLibrary(body.assets ?? []);
+      if (body.facets) setLibraryFacets(body.facets);
+      setLibraryTotal(body.total ?? body.assets?.length ?? 0);
       setDrafting([]);
-      setSelectedAssets(new Set());
       setPicking(true);
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "The library could not be read.");
     } finally {
       setBusy("");
     }
+  }
+
+  function filterLibrary(next: AssetFilterValues) {
+    const normalized = { ...next, mediaKind: "video" as const };
+    setLibraryFilters(normalized);
+    if (searchTimer.current) window.clearTimeout(searchTimer.current);
+    searchTimer.current = window.setTimeout(() => void loadLibrary(normalized), 220);
   }
 
   const run = useCallback(async (label: string, work: () => Promise<string>) => {
@@ -228,6 +267,20 @@ export function AutopilotPanel({
       setBusy("");
     }
   }, [refresh, succeed, fail]);
+
+  async function saveSlots(entries: { weekday: number; time: string }[]) {
+    await run("slots", async () => {
+      const body = await json<{ slots: Slot[]; presets: SlotPreset[] }>(await apiFetch(
+        `/api/workspaces/${workspaceId}/publishing/slots`, {
+          method: "POST",
+          body: JSON.stringify({ slots: entries }),
+        },
+      ));
+      setSlots(body.slots);
+      setSlotPresets(body.presets);
+      return "Posting times updated for this campaign workspace.";
+    });
+  }
 
   async function save(changes: Partial<Autopilot>, { confirm = false } = {}) {
     if (!autopilot) return;
@@ -277,18 +330,18 @@ export function AutopilotPanel({
       },
       {
         id: "slots",
-        met: (slotCount ?? 0) > 0,
+        met: slots.length > 0,
         label: t("autopilot.needSlots"),
-        href: "/publish",
+        href: null,
       },
     ];
     return { rows, all: rows.every((row) => row.met) };
-  }, [campaignStatus, destinations.length, autopilot?.queue_approved, slotCount, t]);
+  }, [campaignStatus, destinations.length, autopilot?.queue_approved, slots.length, t]);
 
   if (!autopilot) return null;
 
   const unmet = ready.rows.filter((row) => !row.met);
-  const selectedLibrary = library.filter((asset) => selectedAssets.has(asset.id));
+  const selectedLibrary = Object.values(selectedAssets);
 
   return (
     <div className="autopilot">
@@ -309,20 +362,26 @@ export function AutopilotPanel({
       >
         <p className="autopilot-lede">{t("autopilot.lede")}</p>
 
-        <nav className="campaign-flow-map" aria-label="Campaign workflow">
-          <Link href="/library"><span>1</span><strong>Library</strong><small>Select and edit media</small></Link>
-          <div className={autopilot.queue_total ? "complete" : "current"}>
-            <span>2</span><strong>Campaign</strong><small>{autopilot.queue_total} queued clips</small>
-          </div>
-          <div className={destinations.length ? "complete" : "current"}>
-            <span>3</span><strong>Accounts</strong><small>{destinations.length} destinations</small>
-          </div>
-          <Link href="/publish" className={slotCount ? "complete" : "current"}>
-            <span>4</span><strong>Schedule & publish</strong><small>{slotCount ?? 0} posting times</small>
-          </Link>
-          <Link href={`/attribution?campaign=${campaignId}`}>
-            <span>5</span><strong>Attribution</strong><small>Track clicks and revenue</small>
-          </Link>
+        <nav className="campaign-work-tabs" aria-label="Campaign workspace">
+          <button type="button" className={section === "media" ? "active" : ""}
+            onClick={() => setSection("media")}>
+            <span>Media</span><strong>{autopilot.queue_total}</strong><small>clips queued</small>
+          </button>
+          <button type="button" className={section === "accounts" ? "active" : ""}
+            onClick={() => {
+              setSection("accounts");
+              if (!accounts.length) void loadAccounts();
+            }}>
+            <span>Accounts</span><strong>{destinations.length}</strong><small>destinations</small>
+          </button>
+          <button type="button" className={section === "schedule" ? "active" : ""}
+            onClick={() => setSection("schedule")}>
+            <span>Schedule</span><strong>{slots.length}</strong><small>posting times</small>
+          </button>
+          <button type="button" className={section === "settings" ? "active" : ""}
+            onClick={() => setSection("settings")}>
+            <span>Settings</span><strong>{autopilot.offer_id ? "1" : "—"}</strong><small>affiliate offer</small>
+          </button>
         </nav>
 
         {/* Before the switch, not after it. An autopilot switched on with
@@ -348,7 +407,7 @@ export function AutopilotPanel({
           </p>
         )}
 
-        <div className="autopilot-settings">
+        {section === "settings" && <div className="autopilot-settings">
           <label>{t("autopilot.offer")}
             <SearchSelect
               value={autopilot.offer_id ?? ""}
@@ -418,10 +477,10 @@ export function AutopilotPanel({
               <small>{t("autopilot.deliveryHelp")}</small>
             </label>
           </div>
-        </div>
+        </div>}
       </Card>
 
-      <Card
+      {section === "accounts" && <Card
         eyebrow={t("autopilot.whereEyebrow")}
         title={t("autopilot.destinations", { count: destinations.length })}
         aside={canEdit ? (
@@ -435,9 +494,14 @@ export function AutopilotPanel({
           <ul className="autopilot-destinations">
             {destinations.map((item) => (
               <li key={item.id}>
-                <div>
-                  <strong>{item.label}</strong>
-                  <small>{item.platform} · {item.provider}</small>
+                <div className="campaign-account-identity">
+                  <span className="campaign-account-avatar" aria-hidden="true">
+                    {item.label.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span>
+                    <strong>{item.label}</strong>
+                    <small>{item.platform} · {item.provider}</small>
+                  </span>
                 </div>
                 {/* The decision, next to the account it applies to. Someone who
                     expects a tappable link on TikTok needs to find out here,
@@ -505,9 +569,12 @@ export function AutopilotPanel({
                           if (next.has(key)) next.delete(key); else next.add(key);
                           return next;
                         })} />
+                      <span className="campaign-account-avatar" aria-hidden="true">
+                        {account.label.slice(0, 1).toUpperCase()}
+                      </span>
                       <span>
-                      <strong>{account.label}</strong>
-                      <small>{account.platform} · {account.provider_label}</small>
+                        <strong>{account.label}</strong>
+                        <small>{account.platform} · {account.provider_label}</small>
                       </span>
                     </label>
                   </li>
@@ -516,9 +583,9 @@ export function AutopilotPanel({
             </ul>
           </div>
         )}
-      </Card>
+      </Card>}
 
-      <Card
+      {section === "media" && <Card
         eyebrow={t("autopilot.queueEyebrow")}
         title={t("autopilot.queue", {
           approved: autopilot.queue_approved, total: autopilot.queue_total,
@@ -534,41 +601,63 @@ export function AutopilotPanel({
             form with a path field: the path is not something anyone should be
             typing, and the copy is the part that deserves the room. */}
         {picking && drafting.length === 0 && (
-          <div className="autopilot-account-picker">
-            <div className="autopilot-picker-head">
-              <strong>{selectedAssets.size
-                ? `${selectedAssets.size} clips selected`
+          <div className="campaign-media-browser">
+            <div className="campaign-media-browser-head">
+              <div>
+                <strong>{selectedLibrary.length
+                ? `${selectedLibrary.length} clips selected`
                 : t("autopilot.chooseClip")}</strong>
+                <small>{libraryTotal.toLocaleString()} matching videos · showing {library.length}</small>
+              </div>
               <Button variant="quiet" size="sm" onClick={() => setPicking(false)}>
                 {t("common.close")}
               </Button>
             </div>
-            <div className="autopilot-picker-tools">
-              <Button variant="secondary" size="sm" disabled={!selectedAssets.size}
+            <AssetFilters
+              values={libraryFilters}
+              facets={libraryFacets}
+              fields={["query", "effect", "channel", "platform", "length"]}
+              cleared={{ mediaKind: "video" }}
+              onChange={filterLibrary}
+            />
+            <div className="campaign-media-actions">
+              <span>{selectedLibrary.length
+                ? `${selectedLibrary.length} ready for campaign actions`
+                : "Select clips to edit or add to the campaign"}</span>
+              <Button variant="secondary" size="sm" disabled={!selectedLibrary.length}
                 onClick={() => setEffectOpen(true)}>Apply effects</Button>
-              <Button variant="primary" size="sm" disabled={!selectedAssets.size}
+              <Button variant="primary" size="sm" disabled={!selectedLibrary.length}
                 onClick={() => setDrafting(selectedLibrary)}>Write campaign copy</Button>
+              {selectedLibrary.length > 0 && (
+                <Button variant="quiet" size="sm" onClick={() => setSelectedAssets({})}>
+                  Clear selection
+                </Button>
+              )}
             </div>
-            <ul className="autopilot-media-picker">
+            <ul className="campaign-media-grid">
               {library.map((asset) => (
                 <li key={asset.id}>
-                  <label>
-                    <input type="checkbox" checked={selectedAssets.has(asset.id)}
+                  <label className={selectedAssets[asset.id] ? "selected" : ""}>
+                    <input className="sr-only" type="checkbox"
+                      checked={Boolean(selectedAssets[asset.id])}
                       onChange={() => setSelectedAssets((current) => {
-                        const next = new Set(current);
-                        if (next.has(asset.id)) next.delete(asset.id); else next.add(asset.id);
+                        const next = { ...current };
+                        if (next[asset.id]) delete next[asset.id]; else next[asset.id] = asset;
                         return next;
                       })} />
-                    <span>
-                    <strong>{asset.title}</strong>
-                    <small>{clipLength(asset.duration_ms) || asset.media_kind}
-                      {asset.versions.some((version) => ["blurred", "edited"].includes(version.kind))
-                        ? " · edited cut" : " · original"}</small>
+                    <AssetThumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
+                    <span className="campaign-media-meta">
+                      <strong>{asset.title}</strong>
+                      <small>{[asset.creator, asset.platform, clipLength(asset.duration_ms)]
+                        .filter(Boolean).join(" · ") || "No source recorded"}</small>
+                      <em>{asset.versions.some((version) => ["blurred", "edited"].includes(version.kind))
+                        ? "Effects applied" : "Original"}</em>
                     </span>
+                    <b className="campaign-media-check" aria-hidden="true">✓</b>
                   </label>
                 </li>
               ))}
-              {!library.length && <li>{t("autopilot.noClips")}</li>}
+              {!library.length && <li className="campaign-media-empty">{t("autopilot.noClips")}</li>}
             </ul>
           </div>
         )}
@@ -597,7 +686,7 @@ export function AutopilotPanel({
                 }))));
                 const count = drafting.length;
                 setDrafting([]);
-                setSelectedAssets(new Set());
+                setSelectedAssets({});
                 setPicking(false);
                 return `${count} ${count === 1 ? "clip" : "clips"} added to the campaign queue.`;
               });
@@ -700,7 +789,7 @@ export function AutopilotPanel({
             <Button type="submit" variant="primary" busy={busy === "edit-copy"}>Save copy</Button>
           </form>
         )}
-      </Card>
+      </Card>}
 
       <EffectEditor
         open={effectOpen}
@@ -718,6 +807,20 @@ export function AutopilotPanel({
         onRendered={succeed}
       />
 
+      {section === "schedule" && <>
+      <Card
+        eyebrow="Campaign rhythm"
+        title="Posting times"
+      >
+        <SlotEditor
+          slots={slots}
+          presets={slotPresets}
+          timezone={Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"}
+          canEdit={canEdit}
+          busy={busy === "slots"}
+          onSave={(entries) => void saveSlots(entries)}
+        />
+      </Card>
       <Card
         eyebrow={t("autopilot.nextEyebrow")}
         title={t("autopilot.next")}
@@ -780,7 +883,44 @@ export function AutopilotPanel({
         {!preview && unmet.length > 0 && (
           <p className="autopilot-empty">{t("autopilot.previewBlocked")}</p>
         )}
+        <div className="campaign-deploy-bar">
+          <div>
+            <strong>{ready.all ? "Ready to deploy" : `${unmet.length} setup items remaining`}</strong>
+            <small>{autopilot.delivery === "draft"
+              ? "Creates reviewable drafts in the assigned social accounts."
+              : "Schedules the next posts at the posting times above."}</small>
+          </div>
+          <Button variant="primary" disabled={!canEdit || !ready.all}
+            busy={busy === "deploy"} onClick={() => {
+              if (!window.confirm(
+                `Deploy this campaign now using ${autopilot.delivery} delivery?`,
+              )) return;
+              void run("deploy", async () => {
+                if (!autopilot.enabled) {
+                  await json(await apiFetch(`${base}/autopilot`, {
+                    method: "PUT",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({
+                      enabled: true,
+                      offer_id: autopilot.offer_id,
+                      disclosure: autopilot.disclosure,
+                      bio_hint: autopilot.bio_hint,
+                      min_recycle_days: autopilot.min_recycle_days,
+                      daily_cap_per_account: autopilot.daily_cap_per_account,
+                      delivery: autopilot.delivery,
+                      confirm_external_action: true,
+                    }),
+                  }));
+                }
+                const body = await json<{ note: string; posts: unknown[] }>(await apiFetch(
+                  `${base}/autopilot/run`, { method: "POST" },
+                ));
+                return body.note || `${body.posts.length} posts deployed.`;
+              });
+            }}>Deploy campaign</Button>
+        </div>
       </Card>
+      </>}
     </div>
   );
 }

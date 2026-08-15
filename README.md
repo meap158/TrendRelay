@@ -16,7 +16,7 @@ TrendRelay is a local-first Windows workspace for collecting reference media fro
 - **Avoid duplicate work** through local metadata, file checks, and incremental downloading.
 - **Review media locally** using thumbnails, filters, gallery/list views, and an in-page video player.
 - **Apply non-destructive effects** to one clip or a campaign-sized selection while keeping every original immutable.
-- **Build campaigns from the Library** by selecting clips and social accounts in batches, writing captions, attaching imported affiliate offers, and previewing scheduled posts.
+- **Deploy campaigns from one workspace** by filtering and selecting Library clips, applying effects, assigning social accounts, writing captions, attaching imported affiliate offers, setting posting times, previewing, and launching without leaving Campaigns.
 - **Hand approved plans to Publish** with media, copy, disclosure, affiliate placement, and schedule restored together.
 - **Follow campaign performance** into Attribution with plan, tracking-link, click, and commission context.
 - **Keep downloads private** in the local `.data/` directory, which is excluded from Git.
@@ -89,11 +89,11 @@ This supported path does not give TrendRelay a Shopee cookie and does not depend
 2. Optionally choose **Apply effects** to render one non-destructive effect stack across the selected clips.
 3. Add shared campaign copy, then edit individual captions and hashtags where a clip needs different wording.
 4. Assign one or more connected social accounts. Choose an imported affiliate offer; TrendRelay creates destination-specific tracking links and places them according to each network.
-5. Add posting times in **Publish**, preview the campaign's next day, approve the queue, and use draft delivery for the safest first live run.
+5. Open **Schedule** in Campaigns, add posting times, preview the next day, approve the queue, and choose **Deploy campaign**. Draft delivery is the safest first live run.
 6. For a one-off governed post, create an approval plan with **Choose from Library**. Opening an approved plan in Publish restores its clip, caption, disclosure, affiliate placement, and schedule.
 7. Choose **Measure revenue** to open Attribution focused on that campaign, including its plan count, tracking links, clicks, commission, and top-link chart.
 
-The workflow map in Campaigns links all five stages—Library, Campaign, Accounts, Schedule & Publish, and Attribution—so each incomplete stage identifies the page or action that resolves it.
+Campaigns uses four compact work areas—**Media**, **Accounts**, **Schedule**, and **Settings**—with readiness shown beside them. The visual Library picker supports search plus effect, channel, source, and length filters; selection remains intact while filters change. **Measure revenue** remains the direct handoff to Attribution after deployment.
 
 ## Download behavior
 

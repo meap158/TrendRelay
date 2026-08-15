@@ -45,7 +45,7 @@ export const IMAGE_PICKER_BASE: AssetFilterValues = { mediaKind: "image" };
 // re-exported because this file uses them too.
 export { clipLength, fileName, handoffPath, isBlurred };
 
-function AssetThumbnail({
+export function AssetThumbnail({
   asset,
   workspaceId,
   apiFetch,
