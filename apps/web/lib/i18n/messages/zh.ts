@@ -614,6 +614,7 @@ export const zh: Messages = {
     noReports: "尚未导入转化报告。",
     createLink: "创建追踪链接",
     settings: "设置",
+    addProducts: "添加商品",
     selected: "已选择",
     copyLinks: "复制链接",
     clearSelection: "清除",

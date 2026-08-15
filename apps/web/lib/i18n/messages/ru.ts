@@ -634,6 +634,7 @@ export const ru: Messages = {
     noReports: "Отчёты о конверсиях не импортированы.",
     createLink: "Создать ссылку для отслеживания",
     settings: "Настройки",
+    addProducts: "Добавить товары",
     selected: "выбрано",
     copyLinks: "Скопировать ссылки",
     clearSelection: "Снять выбор",

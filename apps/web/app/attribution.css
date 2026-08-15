@@ -210,3 +210,18 @@
    fourth button competing with the ordinary one. */
 .shopee-session-alt { justify-self: start; padding: 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 11px; text-decoration: underline; cursor: pointer; }
 .shopee-session-alt:hover { color: var(--link); }
+
+/* The add-products form, inside a dialog rather than a panel.
+   It inherits the panel's label and field rules, which are sized for a dense
+   page; in a modal with room to breathe they read as cramped, and the three
+   ways in ran together into one undifferentiated stack. */
+.ui-dialog .attribution-panel-bare form { gap: 14px; margin-top: 0; }
+.ui-dialog .attribution-panel-bare label { gap: 6px; font-size: 12px; }
+.ui-dialog .attribution-panel-bare label small { color: var(--muted); font-size: 11px; }
+.ui-dialog .attribution-panel-bare textarea { min-height: 0; resize: vertical; }
+/* Separated by a rule, because taking the whole page is a different decision
+   from adding the links in front of you - not the next field in a form. */
+.ui-dialog .shopee-actions { margin-block-start: 4px; padding-block-start: 14px; border-block-start: 1px solid var(--line); }
+.ui-dialog .shopee-paste { padding-block-start: 12px; border-block-start: 1px solid var(--line); }
+/* The primary action sits with the field it acts on rather than stretching. */
+.ui-dialog .attribution-panel-bare > form > .ui-button { justify-self: start; }

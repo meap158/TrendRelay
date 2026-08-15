@@ -631,6 +631,7 @@ export const en = {
     noReports: "No conversion reports imported.",
     createLink: "Create a tracking link",
     settings: "Settings",
+    addProducts: "Add products",
     selected: "selected",
     copyLinks: "Copy links",
     clearSelection: "Clear",

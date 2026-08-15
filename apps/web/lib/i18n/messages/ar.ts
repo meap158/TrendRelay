@@ -625,6 +625,7 @@ export const ar: Messages = {
     noReports: "لم تُستورد أي تقارير تحويلات.",
     createLink: "إنشاء رابط تتبع",
     settings: "الإعدادات",
+    addProducts: "إضافة منتجات",
     selected: "محدد",
     copyLinks: "نسخ الروابط",
     clearSelection: "مسح التحديد",

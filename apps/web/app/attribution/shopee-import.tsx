@@ -215,16 +215,34 @@ export function ShopeeImport({
           </div>
         )}
 
-        {/* Both readings of the same page, side by side: one files what it
-            finds, the other only hands it back. Shown disabled without a
-            session rather than hidden - a capability that appears only once its
-            prerequisite is met is one nobody discovers. One line of state under
-            the pair, because the same sentence beneath each button was the same
-            sentence twice. */}
+        {/* First, because it is the common case: one product somebody is
+            looking at. Several is the same operation, so the field takes them
+            rather than making anyone open this again. */}
+        <label>
+          Shopee links
+          <textarea
+            rows={3}
+            value={links}
+            onChange={(event) => setLinks(event.target.value)}
+            placeholder="https://s.shopee.vn/…"
+            spellCheck={false}
+          />
+          <small>One per line. A link already filed adds nothing the second time.</small>
+        </label>
+        <button
+          className="ui-button ui-button-primary ui-button-md"
+          disabled={busy || !campaignId || (!links.trim() && !csvText.trim())}
+        >
+          {busy ? "Adding…" : "Add these"}
+        </button>
+
+        {/* The whole page at once, for when the answer is "all of them". Shown
+            disabled without a session rather than hidden - a capability that
+            appears only once its prerequisite is met is one nobody discovers. */}
         <div className="shopee-actions">
           <button
             type="button"
-            className="ui-button ui-button-primary ui-button-md"
+            className="ui-button ui-button-secondary ui-button-md"
             onClick={() => void fetchFromShopee()}
             disabled={!connected || fetching || busy || !campaignId}
           >
@@ -240,18 +258,17 @@ export function ShopeeImport({
           </button>
           <small>
             {!connected
-              ? "Sign in above to read your offer page. Pasting an export works without a session."
+              ? "Sign in under the gear to read your offer page. Pasting works without a session."
               : !campaignId
                 ? "Importing needs a campaign; downloading does not."
                 : "Import files every offer with a tracking link. Download gives you up to 100 rows and saves nothing."}
           </small>
         </div>
 
-        {/* Folded, because it is the path for when the direct read is not
-            available - no session, or a file already downloaded. Two textareas
-            open by default made the shorter route look like the longer one. */}
+        {/* Folded: the path for a file already downloaded, which is the least
+            likely of the three now that the page can be read directly. */}
         <details className="shopee-paste">
-          <summary>Paste an export or links instead</summary>
+          <summary>Paste a downloaded export instead</summary>
           <label>
             Bulk export
             <textarea
@@ -261,21 +278,6 @@ export function ShopeeImport({
               placeholder="Mã sản phẩm,Tên sản phẩm,Giá,…"
             />
           </label>
-          <label>
-            Or paste links
-            <textarea
-              rows={3}
-              value={links}
-              onChange={(event) => setLinks(event.target.value)}
-              placeholder="https://s.shopee.vn/…"
-            />
-          </label>
-          <button
-            className="ui-button ui-button-secondary ui-button-md"
-            disabled={busy || !campaignId || (!csvText.trim() && !links.trim())}
-          >
-            {busy ? "Importing…" : "Import what is pasted"}
-          </button>
         </details>
       </form>
 

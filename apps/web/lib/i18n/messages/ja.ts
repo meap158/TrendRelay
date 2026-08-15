@@ -627,6 +627,7 @@ export const ja: Messages = {
     noReports: "コンバージョンレポートは未取り込みです。",
     createLink: "計測リンクを作成",
     settings: "設定",
+    addProducts: "商品を追加",
     selected: "選択中",
     copyLinks: "リンクをコピー",
     clearSelection: "選択を解除",

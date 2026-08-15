@@ -133,9 +133,6 @@ export default function AttributionPage() {
   // link and bringing rows in are things you do to the table, not other screens
   // to read.
   const [panel, setPanel] = useState<"" | "link" | "import" | "add">("");
-  // One Shopee URL, pasted. The import endpoint already takes links, so
-  // this is the shortest path from seeing a product to owning a link for it.
-  const [addLink, setAddLink] = useState("");
   // Set when someone builds a link from a product row, so the form opens with
   // the offer already chosen instead of asking them to find it again in a list.
   const [presetOffer, setPresetOffer] = useState("");
@@ -208,46 +205,6 @@ export default function AttributionPage() {
     });
   }, [refresh, workspaceId, fail]);
 
-  /**
-   * One pasted Shopee link, turned into a product, an offer and a tracking link.
-   *
-   * Sent through the same import as a whole export, so a product added this way
-   * is the same object as one that arrived in a batch - same deduplication, so
-   * pasting a link twice adds nothing the second time, and same enrichment, so
-   * the picture arrives behind it if a session is connected.
-   */
-  async function addShopeeLink(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!campaignId) {
-      fail(t("attribution.campaign"));
-      return;
-    }
-    setBusy("add");
-    try {
-      const body = await json<{ created: number; already_present: number; enriching: number }>(
-        await apiFetch(`/api/workspaces/${workspaceId}/attribution/shopee/import`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            campaign_id: campaignId,
-            platform: "tiktok",
-            links: addLink,
-            confirm_external_action: true,
-          }),
-        }),
-      );
-      succeed(body.created
-        ? `Added ${body.created} product${body.created === 1 ? "" : "s"}`
-        : "That link was already filed.");
-      setAddLink("");
-      setPanel("");
-      await refresh();
-    } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "That link could not be read.");
-    } finally {
-      setBusy("");
-    }
-  }
 
   async function createLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -435,8 +392,7 @@ export default function AttributionPage() {
               type="button"
               className={buttonClass({ variant: "secondary" })}
               onClick={() => setPanel("add")}
-              title="Paste a Shopee link to add the product and mint its link"
-            ><ActionIcon name="add" /> Add Shopee link</button>
+            ><ActionIcon name="add" /> {t("attribution.addProducts")}</button>
           )}
           {/* A gear, because what is behind it is the Shopee connection and how
               imports behave - configuration, not something done once and
@@ -479,74 +435,37 @@ export default function AttributionPage() {
         title={t("attribution.settings")}
         onClose={() => setPanel("")}
       >
-        <div className="attribution-view">
-          <div>
-            {!canImport && <p className="attribution-note">{t("attribution.importNotPermitted")}</p>}
-            {/* Shopee first: it is the network these links actually come from,
-                and its export carries names, prices and commission, so importing
-                one is the shortest path from an offer page to a postable link. */}
-            {workspaceId && canImport && (
-              <>
-                {/* The connection above the form that uses it, because this is
-                    where somebody finds out they needed it: an import works
-                    without a session and fills in images with one. */}
-                <ShopeeSession
-                  workspaceId={workspaceId}
-                  canConnect={workspace?.role === "owner"}
-                  apiFetch={apiFetch}
-                  succeed={succeed}
-                  fail={fail}
-                  onReady={setShopeeReady}
-                />
-              </>
-            )}
-            {workspaceId && canImport && (
-              <ShopeeImport
-                workspaceId={workspaceId}
-                campaigns={campaigns}
-                connected={shopeeReady}
-                apiFetch={apiFetch}
-                succeed={succeed}
-                fail={fail}
-                onImported={() => void refresh()}
-              />
-            )}
-          </div>
-        </div>
+        {/* The connection, and nothing else. Everything that brings products in
+            moved to the dialog that is about bringing products in. */}
+        {!canImport && <p className="attribution-note">{t("attribution.importNotPermitted")}</p>}
+        {workspaceId && canImport && (
+          <ShopeeSession
+            workspaceId={workspaceId}
+            canConnect={workspace?.role === "owner"}
+            apiFetch={apiFetch}
+            succeed={succeed}
+            fail={fail}
+            onReady={setShopeeReady}
+          />
+        )}
       </Dialog>
 
       <Dialog
         open={panel === "add"}
-        title="Add a Shopee link"
-        description="Paste a product or share link. The product, its offer and a tracking link are created together."
+        title={t("attribution.addProducts")}
         onClose={() => setPanel("")}
       >
-        <form className="attribution-panel attribution-panel-bare" onSubmit={addShopeeLink}>
-          <label>
-            {t("attribution.campaign")}
-            <select value={campaignId} onChange={(event) => setCampaignId(event.target.value)} required>
-              {campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-          </label>
-          <label>
-            Shopee link
-            <textarea
-              rows={3}
-              value={addLink}
-              onChange={(event) => setAddLink(event.target.value)}
-              placeholder={"https://s.shopee.vn/…\nhttps://shopee.vn/product/…"}
-              spellCheck={false}
-              required
-            />
-            {/* Several is the same operation as one, so the field takes them
-                rather than making somebody open this dialog repeatedly. */}
-            <small>One per line. A link already filed adds nothing the second time.</small>
-          </label>
-          <button
-            className={buttonClass({ variant: "primary" })}
-            disabled={busy === "add" || !addLink.trim() || !campaignId}
-          >{busy === "add" ? "Reading…" : "Add"}</button>
-        </form>
+        {workspaceId && (
+          <ShopeeImport
+            workspaceId={workspaceId}
+            campaigns={campaigns}
+            connected={shopeeReady}
+            apiFetch={apiFetch}
+            succeed={succeed}
+            fail={fail}
+            onImported={() => { setPanel(""); void refresh(); }}
+          />
+        )}
       </Dialog>
 
       <Dialog

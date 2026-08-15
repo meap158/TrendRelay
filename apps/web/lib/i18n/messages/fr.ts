@@ -636,6 +636,7 @@ export const fr: Messages = {
     noReports: "Aucun rapport de conversion importé.",
     createLink: "Créer un lien de suivi",
     settings: "Paramètres",
+    addProducts: "Ajouter des produits",
     selected: "sélectionnés",
     copyLinks: "Copier les liens",
     clearSelection: "Effacer",

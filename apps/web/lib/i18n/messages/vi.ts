@@ -627,6 +627,7 @@ export const vi: Messages = {
     noReports: "Chưa nhập báo cáo chuyển đổi nào.",
     createLink: "Tạo liên kết theo dõi",
     settings: "Cài đặt",
+    addProducts: "Thêm sản phẩm",
     selected: "đã chọn",
     copyLinks: "Sao chép liên kết",
     clearSelection: "Bỏ chọn",
