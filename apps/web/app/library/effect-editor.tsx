@@ -35,6 +35,12 @@ import {
 export type { EffectDefinition };
 
 type Step = { effect: string; values: Record<string, unknown> };
+export type EffectTarget = {
+  id: string;
+  title: string;
+  path: string;
+  mediaKind: string;
+};
 type PreviewJob = {
   id: string;
   status: string;
@@ -46,9 +52,8 @@ type PreviewJob = {
 export function EffectEditor({
   open,
   workspaceId,
-  assetId,
-  assetPath,
-  mediaKind,
+  targets,
+  assetIds,
   onClose,
   onRendered,
   apiFetch,
@@ -56,9 +61,10 @@ export function EffectEditor({
 }: {
   open: boolean;
   workspaceId: string;
-  assetId: string;
-  assetPath: string;
-  mediaKind: string;
+  /** Loaded targets provide a sample for preview and media compatibility. */
+  targets: EffectTarget[];
+  /** May include selected items beyond the loaded page. */
+  assetIds?: string[];
   onClose: () => void;
   onRendered: (message: string) => void;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
@@ -80,6 +86,9 @@ export function EffectEditor({
   const [picking, setPicking] = useState<number | null>(null);
 
   const base = `/api/workspaces/${workspaceId}/media/library`;
+  const targetIds = assetIds?.length ? assetIds : targets.map((target) => target.id);
+  const batch = targetIds.length > 1;
+  const primary = targets[0]!;
 
   const replacePreviewUrl = useCallback((next: string) => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
@@ -96,7 +105,9 @@ export function EffectEditor({
     try {
       const [catalogue, recipe] = await Promise.all([
         apiFetch(`${base}/effects`).then((response) => response.json()),
-        apiFetch(`${base}/assets/${assetId}/recipe`).then((response) => response.json()),
+        batch && primary
+          ? Promise.resolve({ steps: [] })
+          : apiFetch(`${base}/assets/${primary.id}/recipe`).then((response) => response.json()),
       ]);
       setEffects(catalogue.effects ?? []);
       setSteps(recipe.steps ?? []);
@@ -104,7 +115,7 @@ export function EffectEditor({
     } catch {
       setFailure("The effects could not be loaded.");
     }
-  }, [apiFetch, assetId, base]);
+  }, [apiFetch, base, batch, primary]);
 
   /**
    * Re-read the catalogue without touching the recipe being edited.
@@ -124,12 +135,14 @@ export function EffectEditor({
 
   useEffect(() => {
     if (!open) return;
-    setPreviewJob(null);
-    replacePreviewUrl("");
-    queueMicrotask(() => void load());
+    queueMicrotask(() => {
+      setPreviewJob(null);
+      replacePreviewUrl("");
+      void load();
+    });
     // Reopened for a different asset, so the recipe is read again.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, assetId, replacePreviewUrl]);
+  }, [open, primary?.id, replacePreviewUrl]);
 
   useEffect(() => {
     if (!open || !previewJob || !["queued", "running"].includes(previewJob.status)) return;
@@ -183,8 +196,16 @@ export function EffectEditor({
     };
   }, [apiFetch, base, open, previewJob, replacePreviewUrl]);
 
-  const usable = effects.filter((effect) => effect.media_kinds.includes(mediaKind));
+  // A mixed selection sees every effect that applies to at least one loaded
+  // kind. The batch endpoint then reports items incompatible with the complete
+  // stack as skipped, rather than hiding tools or pretending they ran.
+  const usable = effects.filter((effect) =>
+    targets.some((target) => effect.media_kinds.includes(target.mediaKind)),
+  );
   const definitionOf = (id: string) => effects.find((effect) => effect.id === id);
+  const previewTarget = targets.find((target) => steps.every((step) =>
+    definitionOf(step.effect)?.media_kinds.includes(target.mediaKind),
+  ));
 
   function edit(next: Step[]) {
     setSteps(next);
@@ -204,10 +225,11 @@ export function EffectEditor({
   }
 
   async function save() {
+    if (!primary || batch) return;
     setBusy("save");
     setFailure("");
     try {
-      const response = await apiFetch(`${base}/assets/${assetId}/recipe`, {
+      const response = await apiFetch(`${base}/assets/${primary.id}/recipe`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ steps }),
@@ -226,19 +248,44 @@ export function EffectEditor({
     setBusy("render");
     setFailure("");
     try {
-      const response = await apiFetch(`${base}/effects/render`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          source_path: assetPath,
-          steps,
-          confirm_external_action: true,
-        }),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.detail ?? "The render could not start.");
+      if (batch) {
+        const totals = { queued: 0, skipped: 0, failed: 0, missing: 0 };
+        for (let at = 0; at < targetIds.length; at += 200) {
+          const response = await apiFetch(`${base}/effects/render-batch`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              asset_ids: targetIds.slice(at, at + 200),
+              steps,
+              confirm_external_action: true,
+            }),
+          });
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.detail ?? "The batch render could not start.");
+          for (const key of Object.keys(totals) as Array<keyof typeof totals>) {
+            totals[key] += body.counts?.[key] ?? 0;
+          }
+        }
+        const details = [`${totals.queued} queued`];
+        if (totals.skipped) details.push(`${totals.skipped} skipped`);
+        if (totals.failed) details.push(`${totals.failed} failed`);
+        if (totals.missing) details.push(`${totals.missing} missing`);
+        onRendered(`Effect stack: ${details.join(" · ")}. Track each item in notifications.`);
+      } else {
+        const response = await apiFetch(`${base}/effects/render`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            source_path: primary.path,
+            steps,
+            confirm_external_action: true,
+          }),
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail ?? "The render could not start.");
+        onRendered(t("effectEditor.renderStarted"));
+      }
       void refreshJobs();
-      onRendered(t("effectEditor.renderStarted"));
       onClose();
     } catch (reason) {
       setFailure(reason instanceof Error ? reason.message : "The render could not start.");
@@ -248,6 +295,7 @@ export function EffectEditor({
   }
 
   async function preview() {
+    if (!previewTarget) return;
     setBusy("preview");
     setFailure("");
     replacePreviewUrl("");
@@ -256,9 +304,9 @@ export function EffectEditor({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          source_path: assetPath,
+          source_path: previewTarget.path,
           steps,
-          preview_seconds: mediaKind === "video" ? 5 : 1,
+          preview_seconds: previewTarget.mediaKind === "video" ? 5 : 1,
           confirm_external_action: true,
         }),
       });
@@ -313,10 +361,14 @@ export function EffectEditor({
     <Dialog
       open={open}
       size="wide"
-      title={gallery ? t("overlayPicker.heading") : t("effectEditor.edit")}
+      title={gallery
+        ? t("overlayPicker.heading")
+        : batch ? `Apply effects to ${targetIds.length.toLocaleString()} items` : t("effectEditor.edit")}
       description={gallery
         ? "Pick one, then check it on a real frame before rendering."
-        : "Stack effects on this asset. The original is never changed."}
+        : batch
+          ? "Build one stack for the selection. Every compatible item gets its own tracked job."
+          : "Stack effects on this asset. The original is never changed."}
       onClose={onClose}
       footer={gallery ? (
         <Button variant="primary" onClick={() => setPicking(null)}>
@@ -325,16 +377,16 @@ export function EffectEditor({
       ) : (
         <>
           <Button variant="quiet" onClick={onClose}>{t("common.close")}</Button>
-          <Button
-            variant="secondary"
-            busy={busy === "save"}
-            disabled={!canEdit || saved}
-            onClick={() => void save()}
-          >{saved ? "Saved" : "Save recipe"}</Button>
+          {!batch && <Button
+              variant="secondary"
+              busy={busy === "save"}
+              disabled={!canEdit || saved}
+              onClick={() => void save()}
+            >{saved ? "Saved" : "Save recipe"}</Button>}
           <Button
             variant="secondary"
             busy={busy === "preview"}
-            disabled={!canEdit || !steps.length || unavailable.length > 0
+            disabled={!canEdit || !steps.length || unavailable.length > 0 || !previewTarget
               || Boolean(previewJob && ["queued", "running", "loading"].includes(previewJob.status))}
             onClick={() => void preview()}
           >Preview</Button>
@@ -343,7 +395,7 @@ export function EffectEditor({
             busy={busy === "render"}
             disabled={!canEdit || !steps.length || unavailable.length > 0}
             onClick={() => void render()}
-          >{t("effectEditor.render")}</Button>
+          >{batch ? "Apply to selection" : t("effectEditor.render")}</Button>
         </>
       )}
     >
@@ -360,7 +412,7 @@ export function EffectEditor({
                     {[previewJob?.progress_stage,
                       typeof previewJob?.progress === "number"
                         ? `${Math.round(previewJob.progress * 100)}%`
-                        : mediaKind === "video" ? "First 5 seconds" : "Still image",
+                        : previewTarget?.mediaKind === "video" ? "First 5 seconds" : "Still image",
                     ].filter(Boolean).join(" · ")}
                   </small>
                 )}
@@ -377,10 +429,10 @@ export function EffectEditor({
             {!previewUrl && typeof previewJob?.progress === "number" && (
               <progress max={1} value={previewJob.progress} />
             )}
-            {previewUrl && mediaKind === "video" && (
+            {previewUrl && previewTarget?.mediaKind === "video" && (
               <video src={previewUrl} controls preload="metadata" />
             )}
-            {previewUrl && mediaKind === "image" && (
+            {previewUrl && previewTarget?.mediaKind === "image" && (
               // Blob URLs are private, short-lived previews and cannot use Next's optimiser.
               // eslint-disable-next-line @next/next/no-img-element
               <img src={previewUrl} alt="The current effect recipe preview" />
@@ -400,6 +452,12 @@ export function EffectEditor({
             ><ActionIcon name="add" />{effectLabel(t, effect.id, effect.label)}</Button>
           ))}
         </div>
+
+        <p className="effect-batch-note">
+          Effects are equal steps in one stack and run from top to bottom. Select
+          multiple Library items before opening this editor to apply the same stack
+          as a batch. Incompatible media are skipped and reported, never silently changed.
+        </p>
 
         {!steps.length ? (
           <p className="effect-empty">
@@ -511,7 +569,7 @@ export function EffectEditor({
         <GalleryPanel
           open
           workspaceId={workspaceId}
-          assetPath={assetPath}
+          assetPath={previewTarget?.path ?? primary.path}
           effect={gallery.effect}
           param={gallery.param}
           values={gallery.step.values ?? {}}

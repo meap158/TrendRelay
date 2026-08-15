@@ -1420,6 +1420,29 @@ def _recipe_row(session: Session, workspace_id: str, asset_id: str) -> Any:
     )
 
 
+def _store_recipe(
+    session: Session,
+    workspace_id: str,
+    asset_id: str,
+    normalised: list[dict[str, Any]],
+    user_id: str,
+) -> None:
+    """Put one validated stack on an asset, shared by single and batch edits."""
+    from trendrelay_api.media_models import MediaEditRecipe
+
+    row = _recipe_row(session, workspace_id, asset_id)
+    if row is None:
+        session.add(MediaEditRecipe(
+            workspace_id=workspace_id,
+            asset_id=asset_id,
+            steps=normalised,
+            created_by=user_id,
+        ))
+    else:
+        row.steps = normalised
+        row.updated_at = utc_now()
+
+
 @router.get("/assets/{asset_id}/recipe")
 def get_recipe(
     workspace_id: str, asset_id: str, user: AuthenticatedUser, session: DatabaseSession
@@ -1450,8 +1473,6 @@ def save_recipe(
 
     from trendrelay_api.integrations import effect_render  # noqa: F401  registers frame effects
     from trendrelay_api.integrations.effects import EffectError, read_recipe
-    from trendrelay_api.media_models import MediaEditRecipe
-
     try:
         # Validated on the way in, so a stored recipe is always renderable.
         steps = read_recipe(body.steps)
@@ -1459,18 +1480,7 @@ def save_recipe(
         raise HTTPException(status_code=422, detail=str(error)) from error
 
     normalised = [{"effect": step.effect.id, "values": step.values} for step in steps]
-    row = _recipe_row(session, workspace_id, asset_id)
-    if row is None:
-        row = MediaEditRecipe(
-            workspace_id=workspace_id,
-            asset_id=asset_id,
-            steps=normalised,
-            created_by=user.id,
-        )
-        session.add(row)
-    else:
-        row.steps = normalised
-        row.updated_at = utc_now()
+    _store_recipe(session, workspace_id, asset_id, normalised, user.id)
     session.commit()
     return {"steps": normalised}
 
@@ -1595,6 +1605,136 @@ def submit_render(
         raise HTTPException(status_code=422, detail=str(error)) from error
     background_tasks.add_task(run_render_job, job["id"])
     return {"job": job}
+
+
+class BatchEffectRenderRequest(BaseModel):
+    """One stack applied independently to a bounded Library selection."""
+
+    asset_ids: list[str] = Field(min_length=1, max_length=200)
+    steps: list[dict[str, Any]] = Field(min_length=1, max_length=24)
+    confirm_external_action: bool = False
+
+
+@router.post("/effects/render-batch", status_code=202)
+def submit_batch_render(
+    workspace_id: str,
+    body: BatchEffectRenderRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Queue the same validated stack for every compatible selected asset.
+
+    Each asset remains its own durable job. A corrupt file or an incompatible
+    media kind therefore becomes one reported outcome instead of failing the
+    whole selection, while notifications and cancellation keep working exactly
+    as they do for a single edit.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    ensure_profile(session, user)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400,
+            detail="Applying effects writes new media files and needs explicit confirmation.",
+        )
+
+    from trendrelay_api.integrations.effect_render import (
+        EffectRenderRequest,
+        check_media_kinds,
+        create_render_job,
+        run_render_job,
+    )
+    from trendrelay_api.integrations.effects import EffectError, read_recipe
+    from trendrelay_api.models import DurableJob
+
+    try:
+        steps = read_recipe(body.steps)
+    except EffectError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    normalised = [{"effect": step.effect.id, "values": step.values} for step in steps]
+    wanted = list(dict.fromkeys(body.asset_ids))
+    found_assets = session.scalars(
+        select(MediaAsset).where(
+            MediaAsset.workspace_id == workspace_id,
+            MediaAsset.id.in_(wanted),
+        )
+    ).all()
+    by_id = {asset.id: asset for asset in found_assets}
+    active_asset_ids = {
+        str(job.payload.get("asset_id"))
+        for job in session.scalars(
+            select(DurableJob).where(
+                DurableJob.workspace_key == workspace_id,
+                DurableJob.kind == "media_effect_render",
+                DurableJob.status.in_(("queued", "running")),
+            )
+        ).all()
+        if job.payload.get("asset_id")
+    }
+
+    results: list[dict[str, Any]] = []
+    jobs: list[dict[str, Any]] = []
+    for asset_id in wanted:
+        asset = by_id.get(asset_id)
+        if asset is None:
+            results.append({
+                "asset_id": asset_id,
+                "status": "missing",
+                "detail": "No such asset in this workspace.",
+            })
+            continue
+        if asset.id in active_asset_ids:
+            results.append({
+                "asset_id": asset.id,
+                "title": asset.title,
+                "status": "skipped",
+                "detail": "An effect render is already active for this item.",
+            })
+            continue
+        try:
+            check_media_kinds(steps, asset.media_kind)
+            job = create_render_job(EffectRenderRequest(
+                workspace_id=workspace_id,
+                source_path=asset.original_path,
+                steps=normalised,
+                confirm_external_action=True,
+            ))
+        except (EffectError, PermissionError, ValidationError, ValueError) as error:
+            results.append({
+                "asset_id": asset.id,
+                "title": asset.title,
+                "status": "skipped" if isinstance(error, EffectError) else "failed",
+                "detail": str(error),
+            })
+            continue
+        _store_recipe(session, workspace_id, asset.id, normalised, user.id)
+        jobs.append(job)
+        results.append({
+            "asset_id": asset.id,
+            "title": asset.title,
+            "status": "queued",
+            "job_id": job["id"],
+        })
+
+    counts = {
+        status: sum(1 for item in results if item["status"] == status)
+        for status in ("queued", "skipped", "failed", "missing")
+    }
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media.effect_batch_rendered",
+        "media_asset",
+        ",".join(wanted[:10]),
+        {"counts": counts, "effects": [step.effect.id for step in steps]},
+    )
+    session.commit()
+    for job in jobs:
+        background_tasks.add_task(run_render_job, job["id"])
+    return {"counts": counts, "results": results, "jobs": jobs}
 
 
 @router.get("/effects/jobs")

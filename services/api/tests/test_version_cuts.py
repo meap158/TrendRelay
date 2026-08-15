@@ -430,6 +430,95 @@ def test_a_finished_effect_preview_is_private_and_consumed(tmp_path, monkeypatch
     assert repeated.status_code == 404
 
 
+def test_a_batch_queues_the_same_stack_and_skips_incompatible_media(
+    tmp_path, monkeypatch
+) -> None:
+    from trendrelay_api.integrations import effect_render
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    monkeypatch.setattr(effect_render, "approved_source", lambda path: Path(path))
+    monkeypatch.setattr(effect_render, "run_render_job", lambda _job_id: None)
+    workspace = create_workspace()
+    clip = make_asset(workspace, tmp_path, name="batch-clip")
+    picture = make_asset(workspace, tmp_path, name="batch-picture", kind="image")
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/render-batch",
+        json={
+            "asset_ids": [clip, picture],
+            "steps": [{"effect": "speed", "values": {"rate": 1.25}}],
+            "confirm_external_action": True,
+        },
+    )
+    assert response.status_code == 202
+    assert response.json()["counts"] == {
+        "queued": 1, "skipped": 1, "failed": 0, "missing": 0
+    }
+    assert "cannot be applied to an image" in response.json()["results"][1]["detail"]
+    with TestingSession() as session:
+        recipe = session.query(MediaEditRecipe).filter_by(asset_id=clip).one()
+        assert [step["effect"] for step in recipe.steps] == ["speed"]
+        assert session.query(MediaEditRecipe).filter_by(asset_id=picture).one_or_none() is None
+        assert session.query(DurableJob).filter_by(kind="media_effect_render").count() == 1
+
+
+def test_a_batch_preserves_a_stack_for_every_compatible_asset(tmp_path, monkeypatch) -> None:
+    from trendrelay_api.integrations import effect_render
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    monkeypatch.setattr(effect_render, "approved_source", lambda path: Path(path))
+    monkeypatch.setattr(effect_render, "run_render_job", lambda _job_id: None)
+    workspace = create_workspace()
+    first = make_asset(workspace, tmp_path, name="batch-one")
+    second = make_asset(workspace, tmp_path, name="batch-two")
+    stack = [
+        {"effect": "flip", "values": {"axis": "horizontal"}},
+        {"effect": "colour", "values": {"brightness": 0.05}},
+    ]
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/render-batch",
+        json={
+            "asset_ids": [first, second],
+            "steps": stack,
+            "confirm_external_action": True,
+        },
+    )
+    assert response.status_code == 202
+    assert response.json()["counts"]["queued"] == 2
+    with TestingSession() as session:
+        recipes = session.query(MediaEditRecipe).order_by(MediaEditRecipe.asset_id).all()
+        assert len(recipes) == 2
+        assert all(
+            [step["effect"] for step in recipe.steps] == ["flip", "colour"]
+            for recipe in recipes
+        )
+
+
+def test_a_batch_does_not_duplicate_an_active_effect_job(tmp_path, monkeypatch) -> None:
+    from trendrelay_api.integrations import effect_render
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    monkeypatch.setattr(effect_render, "approved_source", lambda path: Path(path))
+    monkeypatch.setattr(effect_render, "run_render_job", lambda _job_id: None)
+    workspace = create_workspace()
+    asset_id = make_asset(workspace, tmp_path, name="already-running")
+    payload = {
+        "asset_ids": [asset_id],
+        "steps": [{"effect": "flip", "values": {"axis": "horizontal"}}],
+        "confirm_external_action": True,
+    }
+    route = f"/api/workspaces/{workspace}/media/library/effects/render-batch"
+
+    assert request("POST", route, json=payload).json()["counts"]["queued"] == 1
+    repeated = request("POST", route, json=payload)
+    assert repeated.status_code == 202
+    assert repeated.json()["counts"]["skipped"] == 1
+    assert "already active" in repeated.json()["results"][0]["detail"]
+
+
 def test_the_assets_endpoint_combines_media_and_effect_filters(tmp_path) -> None:
     """Exercise the route the controls call, not only its predicate helper."""
     workspace = create_workspace()

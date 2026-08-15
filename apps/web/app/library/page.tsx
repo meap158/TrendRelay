@@ -15,7 +15,6 @@ import { Button, buttonClass } from "../ui/button";
 import { ActionIcon, bulkActionIcon } from "../ui/action-icons";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Badge } from "../ui/primitives";
-import { BlurSettings } from "./blur-settings";
 import { ClipEditor } from "./clip-editor";
 import { EffectEditor } from "./effect-editor";
 import {
@@ -489,9 +488,6 @@ type BulkAction = {
 const isSortOrder = oneOf("newest", "oldest", "title", "duration");
 const isGroupBy = oneOf("none", "channel", "source");
 const isViewMode = oneOf("gallery", "list");
-const isPadding = (value: unknown): value is number =>
-  typeof value === "number" && value >= 0 && value <= 0.4;
-
 export default function LibraryPage() {
   const t = useT();
   const { loading, user, apiFetch } = useAuth();
@@ -530,17 +526,6 @@ export default function LibraryPage() {
   const [continueVideoPlayback, setContinueVideoPlayback] = useState(false);
   const autoSyncedWorkspaces = useRef(new Set<string>());
   const [busy, setBusy] = useState("");
-  const [blurResult, setBlurResult] = useState<{
-    status: string;
-    output?: string;
-    coverage?: number;
-    faces_tracked?: number;
-    warning?: string | null;
-    preview?: boolean;
-    version_registered?: boolean;
-    version_note?: string;
-    error?: string | null;
-  } | null>(null);
   // Errors are reported over the page: in flow they shifted everything below
   // them whenever an action finished. The bulk-action outcome below is not a
   // banner — it reads back inline where the run was started — so it stays put.
@@ -554,11 +539,7 @@ export default function LibraryPage() {
   const [bulkActions, setBulkActions] = useState<BulkAction[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
   const [effectsOpen, setEffectsOpen] = useState(false);
-  const [blurSettingsOpen, setBlurSettingsOpen] = useState(false);
-  /** How far past the detected face the blur reaches, kept between sessions. */
-  const [blurPadding, setBlurPadding] = usePersistedState(
-    "trendrelay.library.blurPadding", 0.08, isPadding,
-  );
+  const [batchEffectsOpen, setBatchEffectsOpen] = useState(false);
 
   const selected = assets.find((asset) => asset.id === selectedId);
   const selectedSourceLinks = selected
@@ -674,6 +655,10 @@ export default function LibraryPage() {
   const selectionList = assets.filter((asset) => selection.has(asset.id));
   const allLoadedSelected = assets.length > 0 && selectionList.length === assets.length;
   const deleteAction = bulkActions.find((action) => action.id === "delete");
+  // Face blur used to be a separate bulk tool. It now lives in the same
+  // stackable editor as every other effect; keeping both buttons would restore
+  // the special tier this workflow removes.
+  const visibleBulkActions = bulkActions.filter((action) => action.id !== "face_blur");
 
   function toggleSelection(assetId: string, extend: boolean) {
     const next = new Set(selection);
@@ -1006,71 +991,6 @@ export default function LibraryPage() {
 
 
 
-  async function blurFaces(asset: Asset) {
-    // A preview is cheap and reversible, so it runs on one click. The full
-    // render replaces what Publish sends, so that one still asks.
-    if (!window.confirm(
-      `Blur every detected face in "${asset.title}"?\n\n`
-      + "This renders a new file. The original is not modified, but Campaigns and "
-      + "Publish will use the blurred version.",
-    )) return;
-    setBusy("blur");
-    fail("");
-    setBlurResult(null);
-    try {
-      const response = await apiFetch(
-        `/api/workspaces/${workspaceId}/media/library/face-blur/jobs`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            source_path: asset.original_path,
-            padding_ratio: blurPadding,
-            confirm_external_action: true,
-          }),
-        },
-      );
-      const payload = (await response.json()) as { detail?: string; job?: { id: string } };
-      if (!response.ok || !payload.job) {
-        throw new Error(payload.detail ?? "Face blurring could not start.");
-      }
-      await followBlurJob(payload.job.id);
-    } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "Face blurring failed.");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function followBlurJob(jobId: string) {
-    // The render finishes on the worker, so the panel follows it rather than
-    // making the operator reload to find out what happened.
-    const deadline = Date.now() + 15 * 60 * 1000;
-    while (Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      const response = await apiFetch(
-        `/api/workspaces/${workspaceId}/media/library/face-blur/status`,
-      );
-      if (!response.ok) continue;
-      const payload = (await response.json()) as {
-        jobs?: Array<{ id: string; status: string; error?: string | null; result?: Record<string, unknown> | null }>;
-      };
-      const job = payload.jobs?.find((item) => item.id === jobId);
-      if (!job || job.status === "queued" || job.status === "running") continue;
-      setBlurResult({
-        status: job.status,
-        error: job.error,
-        ...(job.result ?? {}),
-      } as typeof blurResult);
-      if (job.status === "succeeded" && (job.result as { version_registered?: boolean } | null)?.version_registered) {
-        // The asset gained a version; reload so the detail and handoffs see it.
-        await refresh();
-      }
-      return;
-    }
-    fail("Still rendering. Reopen this asset shortly to see the result.");
-  }
-
   async function openAssetFolder(asset: Asset) {
     setBusy("folder");
     fail("");
@@ -1164,11 +1084,6 @@ export default function LibraryPage() {
         </header>
       </div>
 
-      {blurResult?.status === "failed" && (
-        <p className="error-banner" role="alert">
-          Blurring failed. {blurResult.error}
-        </p>
-      )}
       <section className="library-layout" aria-busy={loadingAssets}>
         <aside className="library-browser">
           <div className="library-browser-toolbar">
@@ -1268,7 +1183,17 @@ export default function LibraryPage() {
                     Clear
                   </Button>
                   <span className="library-selection-tools">
-                    {bulkActions.map((action) => (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={!canImport || selectionList.length === 0}
+                      title="Build one stack of effects and apply it to every compatible selected item"
+                      onClick={() => setBatchEffectsOpen(true)}
+                    >
+                      <ActionIcon name="edit" />
+                      Apply effect stack
+                    </Button>
+                    {visibleBulkActions.map((action) => (
                       <Button
                         key={action.id}
                         variant={action.id === "delete" ? "danger" : "secondary"}
@@ -1285,7 +1210,7 @@ export default function LibraryPage() {
                       </Button>
                     ))}
                   </span>
-                  {selection.size > Math.min(...bulkActions.map((a) => a.max_batch), Infinity) && (
+                  {selection.size > Math.min(...visibleBulkActions.map((a) => a.max_batch), Infinity) && (
                     <Badge tone="neutral">{t("library.runsInBatches")}</Badge>
                   )}
                 </>
@@ -1428,26 +1353,9 @@ export default function LibraryPage() {
                     <div className="library-action-row">
                       <Button
                         variant="secondary"
-                        busy={busy === "blur"}
-                        disabled={busy.startsWith("blur") || selected.media_kind !== "video"}
-                        title={selected.media_kind === "video"
-                          ? t("library.blurFacesHelp")
-                          : t("library.videoOnly")}
-                        onClick={() => void blurFaces(selected)}
-                      ><ActionIcon name="blur" />{busy === "blur" ? t("blurSettings.rendering") : t("blurSettings.blurFaces")}</Button>
-                      <Button
-                        variant="secondary"
-                        iconOnly
-                        aria-label={t("library.blurSettings")}
-                        title={t("library.blurSettingsHelp")}
-                        disabled={selected.media_kind !== "video"}
-                        onClick={() => setBlurSettingsOpen(true)}
-                      ><ActionIcon name="blurSettings" /></Button>
-                      <Button
-                        variant="secondary"
-                        title={t("library.effectsHelp")}
+                        title="Stack, preview, and apply any available effect, including face blur"
                         onClick={() => setEffectsOpen(true)}
-                      ><ActionIcon name="edit" />{t("library.effects")}</Button>
+                      ><ActionIcon name="edit" />Effects</Button>
                       {renderedCut(selected.versions) && (
                         <Button
                           variant="secondary"
@@ -1562,29 +1470,39 @@ export default function LibraryPage() {
         </section>
       </section>
       {workspaceId && selected && (
-        <BlurSettings
-          open={blurSettingsOpen}
-          workspaceId={workspaceId}
-          path={selected.original_path}
-          padding={blurPadding}
-          onPadding={setBlurPadding}
-          busy={busy === "blur"}
-          apiFetch={apiFetch}
-          onClose={() => setBlurSettingsOpen(false)}
-          onBlur={() => { setBlurSettingsOpen(false); void blurFaces(selected); }}
-        />
-      )}
-      {workspaceId && selected && (
         <EffectEditor
           open={effectsOpen}
           workspaceId={workspaceId}
-          assetId={selected.id}
-          assetPath={selected.original_path}
-          mediaKind={selected.media_kind}
+          targets={[{
+            id: selected.id,
+            title: selected.title,
+            path: selected.original_path,
+            mediaKind: selected.media_kind,
+          }]}
           canEdit={canImport}
           apiFetch={apiFetch}
           onClose={() => setEffectsOpen(false)}
           onRendered={(text) => setMessage(text)}
+        />
+      )}
+      {workspaceId && selectionList.length > 0 && (
+        <EffectEditor
+          open={batchEffectsOpen}
+          workspaceId={workspaceId}
+          targets={selectionList.map((asset) => ({
+            id: asset.id,
+            title: asset.title,
+            path: asset.original_path,
+            mediaKind: asset.media_kind,
+          }))}
+          assetIds={Array.from(selection)}
+          canEdit={canImport}
+          apiFetch={apiFetch}
+          onClose={() => setBatchEffectsOpen(false)}
+          onRendered={(text) => {
+            setSelection(new Set());
+            setMessage(text);
+          }}
         />
       )}
       {workspaceId && selected && (
