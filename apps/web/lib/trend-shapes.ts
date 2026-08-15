@@ -155,3 +155,14 @@ export function windowSummary(windows: number[]): string {
 export function searchTerm(topic: Topic): string {
   return topic.label.replace(/^#+/, "").trim() || topic.label;
 }
+
+/** Apply the instant Discover filters to a complete, already-ranked answer. */
+export function filterTopics(
+  topics: Topic[],
+  { shapes = [], platform = "all" }: { shapes?: Shape[]; platform?: string },
+): Topic[] {
+  return topics.filter((topic) =>
+    (!shapes.length || shapes.includes(topic.shape))
+    && (platform === "all" || topic.sources.includes(platform)),
+  );
+}

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  filterTopics,
   SHAPE_COPY,
   reasons,
   searchTerm,
@@ -158,4 +159,18 @@ test("an unread topic names the one window that saw it", () => {
 
 test("no windows falls back to the general wording rather than a broken sentence", () => {
   assert.equal(shapeMeaning(topic({ windows: [] })), SHAPE_COPY.durable.meaning);
+});
+
+test("lifecycle and platform filters compose without changing rank order", () => {
+  const durableTikTok = topic({ key: "a", label: "A", shape: "durable", sources: ["tiktok"] });
+  const emergingTikTok = topic({ key: "b", label: "B", shape: "emerging", sources: ["tiktok"] });
+  const durableDouyin = topic({ key: "c", label: "C", shape: "durable", sources: ["douyin"] });
+
+  assert.deepEqual(
+    filterTopics([durableTikTok, emergingTikTok, durableDouyin], {
+      shapes: ["durable"],
+      platform: "tiktok",
+    }).map((item) => item.key),
+    ["a"],
+  );
 });

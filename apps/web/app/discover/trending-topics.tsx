@@ -14,7 +14,7 @@ import { RefreshCw } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { seedFromTopic, type DiscoverySeed } from "../../lib/discovery-ideas";
-import { SHAPE_COPY, reasons, searchTerm, windowSummary, type Shape, type Topic } from "../../lib/trend-shapes";
+import { filterTopics, SHAPE_COPY, reasons, searchTerm, windowSummary, type Shape, type Topic } from "../../lib/trend-shapes";
 import { Button } from "../ui/button";
 import { usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 
@@ -72,6 +72,12 @@ const LENSES: ReadonlyArray<{ id: string; label: string; shapes: Shape[]; hint: 
     shapes: ["emerging"],
     hint: "Only in the last 7 days. Quick turnaround or not at all.",
   },
+];
+
+const PLATFORMS: ReadonlyArray<readonly [string, string]> = [
+  ["all", "All platforms"],
+  ["tiktok", "TikTok"],
+  ["douyin", "Douyin (China)"],
 ];
 
 const TONE_COLOUR: Record<string, string> = {
@@ -172,6 +178,11 @@ export function TrendingTopics({
     "all",
     (value): value is string => LENSES.some((item) => item.id === value),
   );
+  const [platform, setPlatform] = usePersistedState<string>(
+    "trendrelay.discover.consolidated.platform",
+    "all",
+    (value): value is string => PLATFORMS.some(([id]) => id === value),
+  );
   /**
    * Kept between visits, because building it is three Creative Center renders.
    *
@@ -180,7 +191,10 @@ export function TrendingTopics({
    * describing yesterday.
    */
   const [result, setResult, , cacheReady] = usePersistedCache<Consolidated>(
-    "trendrelay.discover.consolidated",
+    // v2 always stores the complete lifecycle set. The earlier cache could
+    // contain only one selected lens, which made switching back to Everything
+    // look like a working filter while the missing rows could never return.
+    "trendrelay.discover.consolidated.v2",
     30 * 60 * 1000,
     (value): value is Consolidated =>
       typeof value === "object" && value !== null && Array.isArray((value as Consolidated).topics),
@@ -191,9 +205,7 @@ export function TrendingTopics({
   const load = useCallback(async () => {
     setBusy(true);
     setError(null);
-    const shapes = LENSES.find((item) => item.id === lens)?.shapes ?? [];
     const query = new URLSearchParams({ region });
-    for (const shape of shapes) query.append("shape", shape);
     try {
       const response = await fetch(
         `${apiBaseUrl()}/api/research/trends/consolidated?${query.toString()}`,
@@ -211,7 +223,7 @@ export function TrendingTopics({
     } finally {
       setBusy(false);
     }
-  }, [lens, region, setResult]);
+  }, [region, setResult]);
 
   /**
    * Build it without being asked, once there is nothing cached to show.
@@ -229,7 +241,8 @@ export function TrendingTopics({
   }, [cacheReady, result, busy, error, load]);
 
   // A different country is a different question, so the answer on screen no
-  // longer belongs to it. The lens only filters, and is left to the button.
+  // longer belongs to it. Lifecycle and platform filter the complete cached
+  // answer immediately and do not spend another provider request.
   const firstRegion = useRef(region);
   useEffect(() => {
     if (firstRegion.current === region) return;
@@ -264,12 +277,26 @@ export function TrendingTopics({
           <span style={S.controlLabel}>Country</span>
           <select
             value={region}
-            onChange={(event) => setRegion(event.target.value)}
+            onChange={(event) => {
+              const next = event.target.value;
+              setRegion(next);
+              if (next !== "CN" && platform === "douyin") setPlatform("all");
+            }}
             style={S.select}
           >
             {REGIONS.map(([code, name]) => (
               <option key={code} value={code}>
                 {name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={S.control}>
+          <span style={S.controlLabel}>Platform</span>
+          <select value={platform} onChange={(event) => setPlatform(event.target.value)} style={S.select}>
+            {PLATFORMS.map(([id, label]) => (
+              <option key={id} value={id} disabled={id === "douyin" && region !== "CN"}>
+                {label}
               </option>
             ))}
           </select>
@@ -302,6 +329,8 @@ export function TrendingTopics({
         onScore={onScore}
         selectedIds={selectedIds}
         onToggle={onToggle}
+        platform={platform}
+        shapes={activeLens.shapes}
       />}
     </section>
   );
@@ -313,13 +342,18 @@ function Result({
   onScore,
   selectedIds,
   onToggle,
+  platform,
+  shapes,
 }: {
   result: Consolidated;
   onResearch: (term: string) => void;
   onScore: (topic: Topic) => void;
   selectedIds?: ReadonlySet<string>;
   onToggle?: (seed: DiscoverySeed) => void;
+  platform: string;
+  shapes: Shape[];
 }) {
+  const topics = filterTopics(result.topics, { shapes, platform });
   return (
     <>
       <p style={S.coverage}>
@@ -341,14 +375,13 @@ function Result({
         </ul>
       )}
 
-      {result.topics.length === 0 ? (
+      {topics.length === 0 ? (
         <p style={S.empty}>
-          Nothing matched. The sources answered; they just had no topic of this kind for{" "}
-          {result.region}.
+          Nothing matched this country, lifecycle, and platform combination for {result.region}.
         </p>
       ) : (
         <ol style={S.list}>
-          {result.topics.map((topic, index) => (
+          {topics.map((topic, index) => (
             <TopicRow
               key={`${topic.key}:${topic.region}`}
               topic={topic}
