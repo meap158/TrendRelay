@@ -115,6 +115,46 @@ function isEffectPreviewJob(job: BaseJob): boolean {
   return Boolean(job.raw?.payload?.request?.preview_seconds);
 }
 
+type ThumbnailEffectActivity = {
+  label: string;
+  detail: string;
+  progress: number | null;
+};
+
+/** The single most useful active render state to show on an asset card. */
+function thumbnailEffectActivity(
+  t: Translate,
+  jobs: BaseJob[],
+  assetId: string,
+  cancellingJobId = "",
+): ThumbnailEffectActivity | null {
+  const active = jobs.filter((job) =>
+    job.category === "edit"
+    && !isEffectPreviewJob(job)
+    && assetIdForEffectJob(job) === assetId
+    && ["queued", "running"].includes(job.status),
+  );
+  const job = active.find((candidate) => candidate.status === "running") ?? active[0];
+  if (!job) return null;
+
+  const effectNames = ((job.raw?.payload?.effects ?? []) as string[])
+    .map((id) => effectLabel(t, id, id));
+  const stopping = job.id === cancellingJobId;
+  const progress = typeof job.progress === "number"
+    ? Math.max(0, Math.min(1, job.progress))
+    : null;
+
+  return {
+    label: stopping
+      ? "Stopping"
+      : job.status === "queued"
+        ? "Queued"
+        : "Applying",
+    detail: effectNames.join(" + ") || "Effect stack",
+    progress,
+  };
+}
+
 function EffectActivity({
   assetId,
   jobs,
@@ -300,10 +340,12 @@ function Thumbnail({
   asset,
   workspaceId,
   apiFetch,
+  effectActivity,
 }: {
   asset: Asset;
   workspaceId: string;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  effectActivity?: ThumbnailEffectActivity | null;
 }) {
   const [source, setSource] = useState("");
   const hasThumbnail = asset.versions.some((version) => version.kind === "thumbnail");
@@ -336,8 +378,30 @@ function Thumbnail({
           <img className="library-thumbnail" src={source} alt={`${asset.title} thumbnail`} loading="lazy" />
         </>
       ) : <div className="library-thumbnail library-thumbnail-empty">{asset.media_kind}</div>}
-      {asset.media_kind === "video" && <span className="library-play-indicator" aria-hidden="true">▶</span>}
-      {asset.media_kind === "video" && <span className="library-duration-badge">{displayDuration(asset.duration_ms)}</span>}
+      {effectActivity ? (
+        <span
+          className="library-effect-processing"
+          aria-label={`${effectActivity.label}: ${effectActivity.detail}`}
+          title={`${effectActivity.label}: ${effectActivity.detail}`}
+        >
+          <span className="library-effect-processing-label">
+            <LoaderCircle className="is-spinning" size={15} aria-hidden="true" />
+            <strong>{effectActivity.label}</strong>
+            {effectActivity.progress !== null && <small>{Math.round(effectActivity.progress * 100)}%</small>}
+          </span>
+          <span
+            className={`library-effect-processing-progress ${effectActivity.progress === null ? "indeterminate" : ""}`}
+            aria-hidden="true"
+          >
+            <span style={effectActivity.progress === null ? undefined : { width: `${Math.round(effectActivity.progress * 100)}%` }} />
+          </span>
+        </span>
+      ) : (
+        <>
+          {asset.media_kind === "video" && <span className="library-play-indicator" aria-hidden="true">▶</span>}
+          {asset.media_kind === "video" && <span className="library-duration-badge">{displayDuration(asset.duration_ms)}</span>}
+        </>
+      )}
     </div>
   );
 }
@@ -860,8 +924,14 @@ export default function LibraryPage() {
   }
 
   function renderAsset(asset: Asset) {
+    const effectActivity = thumbnailEffectActivity(
+      t,
+      notificationJobs,
+      asset.id,
+      cancellingEffectJobId,
+    );
     return (
-      <button className={`${selectedId === asset.id ? "selected" : ""}${renderedCut(asset.versions) ? " has-versions" : ""}${selection.has(asset.id) ? " picked" : ""}`} key={asset.id} aria-label={`Open ${asset.title}`} aria-pressed={selectedId === asset.id} onClick={() => setSelectedId(asset.id)}>
+      <button className={`${selectedId === asset.id ? "selected" : ""}${renderedCut(asset.versions) ? " has-versions" : ""}${selection.has(asset.id) ? " picked" : ""}`} key={asset.id} aria-label={`Open ${asset.title}${effectActivity ? `. ${effectActivity.label}: ${effectActivity.detail}` : ""}`} aria-pressed={selectedId === asset.id} onClick={() => setSelectedId(asset.id)}>
         {/* A separate control, so selecting never hijacks opening a clip. */}
         <span
           className="library-pick"
@@ -877,7 +947,7 @@ export default function LibraryPage() {
             toggleSelection(asset.id, event.shiftKey);
           }}
         >{selection.has(asset.id) && <Check size={12} strokeWidth={3.5} aria-hidden="true" />}</span>
-        <Thumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} />
+        <Thumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} effectActivity={effectActivity} />
         <span>
           <strong>{asset.title}</strong>
           <small>{asset.creator ? `${asset.creator} · ` : ""}{asset.platform ?? asset.source_type} · {displayDuration(asset.duration_ms)} · {displaySize(asset.size_bytes)}</small>
