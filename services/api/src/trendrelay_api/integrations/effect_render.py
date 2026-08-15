@@ -560,6 +560,26 @@ def check_media_kinds(steps: Sequence[RecipeStep], kind: str) -> None:
         raise EffectError(f"{names} cannot be applied to {article} {kind}.")
 
 
+def ordered_render_passes(steps: Sequence[RecipeStep]) -> list[list[RecipeStep]]:
+    """Keep recipe order while combining adjacent stream effects.
+
+    FFmpeg transforms next to one another belong in one pass so they cost one
+    encode. A frame/model effect between them is an ordering boundary: moving a
+    crop from before face detection to after it changes both what is detected
+    and what lands in the output, so combining across that boundary would make
+    the editor's top-to-bottom stack untrue.
+    """
+    passes: list[list[RecipeStep]] = []
+    for step in steps:
+        if step.effect.stage == "stream" and passes and all(
+            item.effect.stage == "stream" for item in passes[-1]
+        ):
+            passes[-1].append(step)
+        else:
+            passes.append([step])
+    return passes
+
+
 def render_still_recipe(
     source: Path,
     destination: Path,
@@ -569,51 +589,52 @@ def render_still_recipe(
 ) -> dict[str, Any]:
     """Apply a whole recipe to a photograph.
 
-    The same two stages in the same order as a clip, and for the same reason:
-    every frame effect looks for something in the picture, and a stream effect
-    has usually moved it. What falls away is time — no tracking, no audio, no
-    second encode to worry about.
+    The recipe order is literal: a crop before an overlay changes what the
+    detector can see, while the same crop after it changes the finished
+    composition. Adjacent stream transforms still share one FFmpeg pass.
     """
     from trendrelay_api.integrations.effects import render_stream_still
 
-    frame_steps = [step for step in steps if step.effect.stage == "frame"]
-    stream_steps = [step for step in steps if step.effect.stage == "stream"]
     video_filters, _audio = build_filtergraph(steps)
     report: dict[str, Any] = {
         "frame_effects": [], "video_filters": video_filters, "audio_filters": [],
         "media_kind": "image",
     }
 
-    passes = len(frame_steps) + (1 if video_filters else 0)
-    slice_of = 1.0 / max(1, passes)
+    passes = ordered_render_passes(steps)
+    slice_of = 1.0 / max(1, len(passes))
     whole_progress = progress or ProgressReporter(None)
     scratch = Path(tempfile.mkdtemp(prefix="still-"))
     try:
         current = source
-        for position, step in enumerate(frame_steps):
-            if step.effect.render_still is None:
-                raise EffectError(f"{step.effect.label} cannot be applied to a picture.")
-            step_progress = whole_progress.stage(
-                step.effect.label, position * slice_of, slice_of
-            )
-            step_progress.started()
-            staged = scratch / f"{step.effect.id}{face_blur.STILL_SUFFIX}"
-            outcome = step.effect.render_still(current, staged, step.values)
-            step_progress.finished()
-            report["frame_effects"].append({"effect": step.effect.id, **outcome})
+        for position, render_pass in enumerate(passes):
+            staged = scratch / f"{position:02d}-{render_pass[0].effect.id}{face_blur.STILL_SUFFIX}"
+            if render_pass[0].effect.stage == "stream":
+                label = "Applying " + ", ".join(
+                    step.effect.label for step in render_pass
+                )
+                pass_progress = whole_progress.stage(
+                    label, position * slice_of, slice_of
+                )
+                pass_progress.started()
+                render_stream_still(current, staged, render_pass)
+                pass_progress.finished()
+            else:
+                [step] = render_pass
+                if step.effect.render_still is None:
+                    raise EffectError(
+                        f"{step.effect.label} cannot be applied to a picture."
+                    )
+                pass_progress = whole_progress.stage(
+                    step.effect.label, position * slice_of, slice_of
+                )
+                pass_progress.started()
+                outcome = step.effect.render_still(current, staged, step.values)
+                pass_progress.finished()
+                report["frame_effects"].append({"effect": step.effect.id, **outcome})
             current = staged
 
-        if video_filters:
-            label = "Applying " + ", ".join(step.effect.label for step in stream_steps)
-            stream_progress = whole_progress.stage(
-                label, len(frame_steps) * slice_of, slice_of
-            )
-            stream_progress.started()
-            render_stream_still(current, destination, steps)
-            stream_progress.finished()
-        elif current != destination:
-            # Nothing for ffmpeg to add, so the frame stage's output is the
-            # render. Moved rather than re-encoded.
+        if current != destination:
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(current), str(destination))
     finally:
@@ -635,7 +656,7 @@ def render_recipe(
     preview_seconds: float | None = None,
     progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
-    """Apply a whole recipe, frame effects first and stream effects as one pass."""
+    """Apply a whole recipe in order, combining only adjacent stream effects."""
     if not steps:
         raise EffectError("This recipe has no effects to apply.")
     if not source.is_file():
@@ -646,23 +667,46 @@ def render_recipe(
     if kind == "image":
         return render_still_recipe(source, destination, steps, progress=progress)
 
-    frame_steps = [step for step in steps if step.effect.stage == "frame"]
-    stream_steps = [step for step in steps if step.effect.stage == "stream"]
     video_filters, audio_filters = build_filtergraph(steps)
     report: dict[str, Any] = {"frame_effects": [], "video_filters": video_filters,
                               "audio_filters": audio_filters}
 
     scratch = Path(tempfile.mkdtemp(prefix="recipe-"))
-    # Each frame effect gets an equal slice of the bar. Equal because a recipe's
-    # steps are genuinely comparable — every one of them decodes the clip and
-    # writes it back — where the two passes *inside* one effect are not.
-    passes = len(frame_steps) + (1 if video_filters or audio_filters else 0)
-    slice_of = 1.0 / max(1, passes)
+    passes = ordered_render_passes(steps)
+    # Each actual encode/model pass gets an equal slice. Adjacent stream steps
+    # are one pass; a frame effect is an ordering boundary and gets its own.
+    slice_of = 1.0 / max(1, len(passes))
     whole_progress = progress or ProgressReporter(None)
     try:
         current = source
-        for position, step in enumerate(frame_steps):
-            staged = scratch / f"{step.effect.id}.mp4"
+        for position, render_pass in enumerate(passes):
+            staged = scratch / f"{position:02d}-{render_pass[0].effect.id}.mp4"
+            # A preview is a cap on the final recipe timeline. Applying it to
+            # an earlier pass can erase a later trim or let later slow motion
+            # expand beyond the requested length. Earlier passes therefore run
+            # in full and only the final pass owns the preview boundary.
+            preview_for_this_pass = (
+                preview_seconds if position == len(passes) - 1 else None
+            )
+            if render_pass[0].effect.stage == "stream":
+                label = "Applying " + ", ".join(
+                    step.effect.label for step in render_pass
+                )
+                pass_progress = whole_progress.stage(
+                    label, position * slice_of, slice_of
+                )
+                pass_progress.started()
+                render_stream(
+                    current,
+                    staged,
+                    render_pass,
+                    preview_seconds=preview_for_this_pass,
+                )
+                pass_progress.finished()
+                current = staged
+                continue
+
+            [step] = render_pass
             step_progress = whole_progress.stage(
                 step.effect.label, position * slice_of, slice_of
             )
@@ -674,29 +718,29 @@ def render_recipe(
             if step.effect.id == "face_blur":
                 outcome = face_blur.render_blurred(
                     current, staged, _blur_settings(step.values),
-                    preview_seconds=preview_seconds, progress=step_progress,
+                    preview_seconds=preview_for_this_pass, progress=step_progress,
                 )
             elif step.effect.id == "selective_face_blur":
                 outcome = face_identity.render_selective_blur(
                     current, staged, _identity_settings(step.values),
-                    preview_seconds=preview_seconds,
+                    preview_seconds=preview_for_this_pass,
                 )
             elif step.effect.id == "face_overlay":
                 outcome = face_overlays.render_overlaid(
                     current, staged, _overlay_settings(step.values),
-                    preview_seconds=preview_seconds, progress=step_progress,
+                    preview_seconds=preview_for_this_pass, progress=step_progress,
                 )
             elif step.effect.id == "face_swap":
                 from trendrelay_api.integrations import face_swap
 
                 outcome = face_swap.render_swapped(
                     current, staged, _swap_settings(step.values),
-                    preview_seconds=preview_seconds,
+                    preview_seconds=preview_for_this_pass,
                 )
             elif step.effect.id == "garment_recolour":
                 outcome = recolour.render_recoloured(
                     current, staged, _recolour_settings(step.values),
-                    preview_seconds=preview_seconds, progress=step_progress,
+                    preview_seconds=preview_for_this_pass, progress=step_progress,
                 )
             else:
                 raise EffectError(f"{step.effect.label} cannot be rendered yet.")
@@ -708,23 +752,7 @@ def render_recipe(
             report["frame_effects"].append({"effect": step.effect.id, **outcome})
             current = staged
 
-        if video_filters or audio_filters:
-            label = "Applying " + ", ".join(step.effect.label for step in stream_steps)
-            stream_progress = whole_progress.stage(
-                label, len(frame_steps) * slice_of, slice_of
-            )
-            stream_progress.started()
-            render_stream(
-                current, destination, steps,
-                # Already trimmed by the frame stage if one ran, and trimming
-                # twice would cut a preview to a fraction of itself.
-                preview_seconds=None if frame_steps else preview_seconds,
-            )
-            stream_progress.finished()
-        elif current != destination:
-            # Nothing for ffmpeg to add, so the frame stage's output is the
-            # render. Moved rather than re-encoded: a pass that applies no
-            # filter still costs a generation of quality.
+        if current != destination:
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(current), str(destination))
     finally:

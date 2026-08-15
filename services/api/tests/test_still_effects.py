@@ -11,11 +11,12 @@ picture.
 from __future__ import annotations
 
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from trendrelay_api.integrations import effect_render  # noqa: F401  registers frame effects
+from trendrelay_api.integrations import effect_render, effects
 from trendrelay_api.integrations.effects import REGISTRY, EffectError, read_recipe
 
 cv2 = pytest.importorskip("cv2")
@@ -131,11 +132,7 @@ def test_an_object_goes_onto_a_photograph(photograph, tmp_path) -> None:
 
 
 def test_a_recipe_mixes_a_frame_effect_and_a_crop_on_one_picture(photograph, tmp_path) -> None:
-    """The same two stages in the same order as a clip.
-
-    Frame effects first, because each of them looks for something in the
-    picture and a crop has usually moved it.
-    """
+    """A frame effect and crop both run through the ordered shared pipeline."""
     out = tmp_path / "mixed.png"
     report = effect_render.render_recipe(
         photograph,
@@ -167,6 +164,46 @@ def test_a_recipe_of_only_geometry_needs_no_model(flat_picture, tmp_path) -> Non
     before, after = cv2.imread(str(flat_picture)), cv2.imread(str(out))
     # A quarter turn swaps the sides.
     assert after.shape[:2] == before.shape[:2][::-1]
+
+
+def test_a_still_stack_keeps_interleaved_order_and_repeated_effects_separate(
+    tmp_path, monkeypatch
+) -> None:
+    source = tmp_path / "source.png"
+    destination = tmp_path / "finished.png"
+    source.write_bytes(b"source")
+    calls: list[tuple[str, Path, Path]] = []
+
+    def fake_stream(current, staged, _steps):
+        calls.append(("stream", current, staged))
+        staged.write_bytes(current.read_bytes() + b"-stream")
+        return {}
+
+    def fake_frame(current, staged, _values):
+        calls.append(("frame", current, staged))
+        staged.write_bytes(current.read_bytes() + b"-frame")
+        return {"rendered": True}
+
+    monkeypatch.setattr(effects, "render_stream_still", fake_stream)
+    frame = replace(REGISTRY["face_blur"], render_still=fake_frame)
+    defaults = {param.id: param.default for param in frame.params}
+    steps = [
+        effects.RecipeStep(REGISTRY["flip"], {"axis": "horizontal"}),
+        effects.RecipeStep(frame, defaults),
+        effects.RecipeStep(REGISTRY["colour"], {
+            "contrast": 1.0, "brightness": 0.0,
+            "saturation": 1.0, "gamma": 1.0,
+        }),
+        effects.RecipeStep(frame, defaults),
+    ]
+
+    effect_render.render_recipe(source, destination, steps)
+
+    assert [kind for kind, _current, _staged in calls] == [
+        "stream", "frame", "stream", "frame",
+    ]
+    assert all(current != staged for _kind, current, staged in calls)
+    assert destination.read_bytes() == b"source-stream-frame-stream-frame"
 
 
 # --- how the result is filed ------------------------------------------------------

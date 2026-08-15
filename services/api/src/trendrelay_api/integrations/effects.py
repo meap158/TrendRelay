@@ -663,16 +663,16 @@ def render_stream(
     if not video and not audio:
         raise EffectError("This recipe has nothing for ffmpeg to do.")
 
-    command = [str(FFMPEG), "-y"]
-    if preview_seconds:
-        # Placed before the input so decoding stops early too, which is what
-        # makes a preview quick rather than merely short.
-        command += ["-t", f"{preview_seconds:.3f}"]
-    command += ["-i", str(source)]
+    command = [str(FFMPEG), "-y", "-i", str(source)]
     if video:
         command += ["-vf", ",".join(video)]
     if audio:
         command += ["-af", ",".join(audio)]
+    if preview_seconds:
+        # Cap the rendered timeline, not the source timeline. A trim may start
+        # after this many source seconds and slow motion expands the source;
+        # input-side `-t` made the former empty and the latter too long.
+        command += ["-t", f"{preview_seconds:.3f}"]
     command += [
         "-c:v", "libx264",
         "-preset", "veryfast",
