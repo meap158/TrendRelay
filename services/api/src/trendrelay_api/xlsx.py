@@ -32,6 +32,11 @@ _OFFICE = "http://schemas.openxmlformats.org/officeDocument/2006"
 _SPREADSHEET = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 _DOCUMENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml"
 
+# A JSON request is already capped before it reaches this reader, but a tiny
+# zip can expand into a very large XML document. Bound the expanded workbook as
+# well so selecting an untrusted file cannot exhaust the local API process.
+MAX_UNCOMPRESSED_BYTES = 20 * 1024 * 1024
+
 CONTENT_TYPES = (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     f'<Types xmlns="{_PACKAGE}/content-types">'
@@ -178,6 +183,9 @@ def rows(data: bytes, *, maximum_rows: int = 1_001) -> list[list[str]]:
 
     namespace = {"s": _SPREADSHEET}
     with archive:
+        expanded = sum(item.file_size for item in archive.infolist())
+        if expanded > MAX_UNCOMPRESSED_BYTES:
+            raise ValueError("That Excel workbook expands beyond the 20 MB safety limit.")
         sheets = sorted(
             name for name in archive.namelist()
             if name.startswith("xl/worksheets/sheet") and name.endswith(".xml")

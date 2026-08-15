@@ -159,11 +159,9 @@ def main() -> None:
         profile = Path(__file__).resolve().parents[1] / ".data" / "shopee" / "browser-profile"
         context = playwright.chromium.launch_persistent_context(
             str(profile),
-            # Shopee sends headless Chromium to /verify/traffic/error before
-            # the Product Offer request is made. A normal native window is the
-            # same browser mode used for sign-in and lets the operator see what
-            # their account is reading while this read-only collection runs.
-            headless=False,
+            # Compatibility probes are always silent. A CAPTCHA is reported
+            # as a blocked probe; it is never put in front of the operator.
+            headless=True,
             args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
         )
         try:
@@ -191,14 +189,6 @@ def main() -> None:
                 page.goto(url, wait_until="domcontentloaded", timeout=READY_TIMEOUT_MS)
             except PlaywrightTimeout:
                 pass
-            if "/verify/" in page.url:
-                try:
-                    page.wait_for_url(
-                        re.compile(r"https://affiliate\.shopee\.vn/offer/product_offer"),
-                        timeout=VERIFY_TIMEOUT_MS,
-                    )
-                except PlaywrightTimeout:
-                    pass
             page.wait_for_timeout(SETTLE_MS)
 
             # First allow the lazy-list version of this page to ask for more.

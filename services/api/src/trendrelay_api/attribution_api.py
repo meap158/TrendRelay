@@ -10,6 +10,7 @@ import hmac
 import io
 import os
 import re
+import webbrowser
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -967,11 +968,9 @@ def follow_tracking_link(
 
 
 
-class ShopeeImport(BaseModel):
-    """A batch of Shopee offers to file, and where their links should point."""
+class ShopeeImportSource(BaseModel):
+    """The files or links that describe a Shopee batch."""
 
-    campaign_id: str = Field(min_length=1, max_length=64)
-    platform: Platform
     #: The bulk export, pasted or uploaded whole.
     csv_text: str = Field(default="", max_length=2_000_000)
     #: A real `.xlsx` selected in the interface, encoded for this JSON API.
@@ -980,11 +979,145 @@ class ShopeeImport(BaseModel):
     #: Links on their own, for when somebody copied a handful rather than
     #: exporting them. Both may be given; they are filed the same way.
     links: str = Field(default="", max_length=200_000)
+
+
+class ShopeeImport(ShopeeImportSource):
+    """A batch of Shopee offers to file, and where their links should point."""
+
+    campaign_id: str = Field(min_length=1, max_length=64)
+    platform: Platform
     disclosure: str = Field(default="Affiliate link", min_length=2, max_length=500)
     #: Off by default, like every other outward step here. This mints a real
     #: tracking link per product, and doing that to a two-hundred-row export by
     #: accident is not something anybody undoes quickly.
     confirm_external_action: bool = False
+
+
+class ShopeeOfferPageOpen(BaseModel):
+    """An explicit request to open Shopee on this local machine."""
+
+    confirm_external_action: bool = False
+
+
+def _shopee_rows(body: ShopeeImportSource) -> tuple[list[Any], list[str]]:
+    """Read every supplied source under one shared 100-product ceiling."""
+    try:
+        rows, problems = attribution_shopee_import.rows_from(
+            body.csv_text,
+            body.links,
+            limit=attribution_shopee_import.MAX_BATCH,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    if body.xlsx_base64:
+        try:
+            workbook_data = base64.b64decode(body.xlsx_base64, validate=True)
+        except binascii.Error as error:
+            raise HTTPException(
+                status_code=422, detail="That Excel workbook could not be decoded."
+            ) from error
+        try:
+            workbook_rows = xlsx.rows(
+                workbook_data,
+                maximum_rows=attribution_shopee_import.MAX_BATCH + 1,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        if not workbook_rows:
+            raise HTTPException(status_code=422, detail="That Excel workbook is empty.")
+        workbook_text = io.StringIO()
+        csv.writer(workbook_text).writerows(workbook_rows)
+        try:
+            file_rows, file_problems = attribution_shopee_import.rows_from(
+                workbook_text.getvalue(),
+                "",
+                limit=attribution_shopee_import.MAX_BATCH,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        rows.extend(file_rows)
+        problems.extend(file_problems)
+    if len(rows) > attribution_shopee_import.MAX_BATCH:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "A Shopee import can contain at most "
+                f"{attribution_shopee_import.MAX_BATCH} products across all sources."
+            ),
+        )
+    return rows, problems
+
+
+@workspace_router.post("/shopee/import/preview")
+def preview_shopee_import(
+    workspace_id: str,
+    body: ShopeeImportSource,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Validate a batch before its button promises to create tracking links."""
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    rows, problems = _shopee_rows(body)
+    fingerprints = [
+        attribution_shopee_import.content_key("shopee", row.affiliate_url)
+        for row in rows if row.affiliate_url
+    ]
+    unique = set(fingerprints)
+    existing = set(session.scalars(
+        select(ProductOffer.fingerprint).where(
+            ProductOffer.workspace_id == workspace_id,
+            ProductOffer.fingerprint.in_(unique),
+        )
+    )) if unique else set()
+    return {
+        "readable": len(rows),
+        "new_offers": len(unique - existing),
+        "already_present": len(existing),
+        "duplicates_in_file": len(fingerprints) - len(unique),
+        "problems": problems,
+    }
+
+
+@workspace_router.post("/shopee/offers/open", status_code=202)
+def open_shopee_offer_page(
+    workspace_id: str,
+    body: ShopeeOfferPageOpen,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, str]:
+    """Open the Product Offer page in the operator's normal browser.
+
+    This deliberately does not automate Shopee or capture its session. The
+    person signs in and completes any verification directly with Shopee, then
+    exports the selected products as an Excel file for TrendRelay to validate.
+    """
+    host = request.client.host if request.client else ""
+    if host not in {"127.0.0.1", "::1", "testclient"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Opening Shopee is available only on the machine running TrendRelay.",
+        )
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(status_code=400, detail="Opening Shopee requires confirmation.")
+    if not webbrowser.open(shopee_session.OFFER_URL, new=2):
+        raise HTTPException(
+            status_code=503,
+            detail="TrendRelay could not open the browser. Open Shopee Product Offer manually.",
+        )
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "attribution.shopee_offer_page_opened",
+        "workspace",
+        workspace_id,
+        {},
+    )
+    return {"url": shopee_session.OFFER_URL}
 
 
 @workspace_router.post("/shopee/import", status_code=201)
@@ -1010,27 +1143,17 @@ def import_shopee_offers(
     campaign = _campaign_record(session, workspace_id, body.campaign_id)
     ensure_profile(session, user)
 
-    rows, problems = attribution_shopee_import.rows_from(body.csv_text, body.links)
-    if body.xlsx_base64:
-        try:
-            workbook_data = base64.b64decode(body.xlsx_base64, validate=True)
-            workbook_rows = xlsx.rows(workbook_data, maximum_rows=101)
-        except (binascii.Error, ValueError) as error:
-            raise HTTPException(status_code=422, detail=str(error)) from error
-        if not workbook_rows:
-            raise HTTPException(status_code=422, detail="That Excel workbook is empty.")
-        workbook_text = io.StringIO()
-        csv.writer(workbook_text).writerows(workbook_rows)
-        file_rows, file_problems = attribution_shopee_import.rows_from(
-            workbook_text.getvalue(), ""
-        )
-        rows.extend(file_rows)
-        problems.extend(file_problems)
+    rows, problems = _shopee_rows(body)
     if not rows and not problems:
         raise HTTPException(
             status_code=422,
             detail="Nothing to import. Paste the Shopee export, or some product links.",
         )
+    if not rows:
+        detail = problems[0] if problems else "That Shopee batch has no importable products."
+        if len(problems) > 1:
+            detail += f" ({len(problems) - 1} more problem(s).)"
+        raise HTTPException(status_code=422, detail=detail)
     outcome = attribution_shopee_import.import_rows(
         session,
         workspace_id,
@@ -1040,16 +1163,8 @@ def import_shopee_offers(
         platform=body.platform,
         disclosure=body.disclosure,
     )
-    # Committed before anything is queued: a worker reads the database of its
-    # own accord, and would find no product to fill in if this were still
-    # sitting in an uncommitted transaction.
-    session.commit()
-    # Only worth opening a browser for if there is a session to open it with.
-    # Otherwise the rows are filed and the images stay missing, which is what
-    # the connection line above the form says will happen.
-    enrichment = (
-        shopee_enrichment.enqueue(workspace_id, outcome.products)
-        if shopee_session.health().ready else []
+    missing_images = sum(
+        1 for product in outcome.products if shopee_enrichment.needs_enrichment(product)
     )
     audit(
         session,
@@ -1063,9 +1178,12 @@ def import_shopee_offers(
             "created": outcome.created,
             "already_present": outcome.already_present,
             "links": len(outcome.links),
-            "enriching": len(enrichment),
+            "missing_images": missing_images,
         },
     )
+    # The import and its audit are one transaction. Jobs read through another
+    # session, so only queue them after both facts are durable.
+    session.commit()
     return {
         "created": outcome.created,
         "already_present": outcome.already_present,
@@ -1073,7 +1191,9 @@ def import_shopee_offers(
         # How many product pages will be read in the background. Said plainly:
         # an image appearing minutes after an import looks like a bug when
         # nothing announced it was coming.
-        "enriching": len(enrichment),
+        # File imports never open automated product pages. Shopee may present
+        # CAPTCHAs, and a durable bulk workflow cannot depend on defeating one.
+        "enriching": 0,
         # Reported rather than raised: an export of one hundred with three odd
         # rows should file ninety-seven and name the three.
         "problems": problems + outcome.problems,
@@ -1102,7 +1222,11 @@ def _session_state() -> dict[str, Any]:
     return {
         "ready": state.ready,
         "tired": state.tired,
-        "source": state.source,
+        "source": (
+            "environment" if state.source == shopee_session.COOKIE_ENV
+            else "local" if state.source != "none"
+            else "none"
+        ),
         "missing": state.missing,
         "expires_at": state.expires_at.isoformat() if state.expires_at else None,
         "detail": state.detail,
@@ -1181,7 +1305,16 @@ def disconnect_shopee_session(
 ) -> Response:
     """Forget the stored session."""
     require_role(membership(session, workspace_id, user.id), {"owner"})
-    shopee_session.forget_cookies()
+    try:
+        shopee_session.forget_session()
+    except OSError as error:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Close the open Shopee window, then disconnect again so its "
+                "local browser profile can be removed."
+            ),
+        ) from error
     audit(
         session,
         request,
@@ -1318,23 +1451,31 @@ def fetch_shopee_offers(
         session, workspace_id, user.id, campaign, rows,
         platform=body.platform, disclosure=body.disclosure,
     )
-    session.commit()
-    enrichment = (
-        shopee_enrichment.enqueue(workspace_id, outcome.products)
-        if shopee_session.health().ready else []
+    enrichment_candidates = sum(
+        1 for product in outcome.products if shopee_enrichment.needs_enrichment(product)
     )
     audit(
         session, request, workspace_id, user.id,
         "attribution.shopee_offers_fetched", "campaign", campaign.id,
         {"created": outcome.created, "already_present": outcome.already_present,
-         "links": len(outcome.links), "enriching": len(enrichment)},
+         "links": len(outcome.links), "enrichment_candidates": enrichment_candidates},
     )
+    session.commit()
+    enrichment: list[str] = []
+    enrichment_problem: str | None = None
+    try:
+        enrichment = shopee_enrichment.enqueue(workspace_id, outcome.products)
+    except Exception as error:  # noqa: BLE001 - import already committed
+        enrichment_problem = shopee_session.redact(str(error))
     return {
         "created": outcome.created,
         "already_present": outcome.already_present,
         "links": outcome.links,
         "enriching": len(enrichment),
-        "problems": problems + outcome.problems,
+        "problems": problems + outcome.problems + (
+            [f"Product images could not be queued: {enrichment_problem}"]
+            if enrichment_problem else []
+        ),
     }
 
 
@@ -1468,7 +1609,7 @@ def probe_shopee_session(
     parses to nothing have three different fixes.
     """
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
-    return shopee_session.probe()
+    return shopee_session.probe_offers()
 
 
 router.include_router(workspace_router)

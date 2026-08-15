@@ -330,6 +330,26 @@ def test_an_export_in_english_reads_the_same_way() -> None:
     assert products[0].price_dong == 95_000
 
 
+def test_rows_copied_from_excel_may_be_tab_delimited_with_a_preamble() -> None:
+    from trendrelay_api.attribution_shopee import read_export
+
+    pasted = (
+        "Shopee Product Offer export\nGenerated 2026-08-15\n"
+        "Product ID\tProduct Name\tPrice\tShop Name\tCommission Rate\t"
+        "Product Link\tOffer Link\n"
+        "57860887539\tA product\t95000\tA shop\t2%\t"
+        "https://shopee.vn/product/1834061111/57860887539\t"
+        "https://s.shopee.vn/70JJHPqb6V\n"
+    )
+
+    products, problems = read_export(pasted)
+
+    assert problems == []
+    assert len(products) == 1
+    assert products[0].name == "A product"
+    assert products[0].identifier == "1834061111.57860887539"
+
+
 def test_a_file_that_is_not_an_export_says_so_rather_than_importing_nothing() -> None:
     """Silence would read as "your export was empty", which is a different problem."""
     from trendrelay_api.attribution_shopee import read_export

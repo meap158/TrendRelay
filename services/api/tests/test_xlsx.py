@@ -14,6 +14,7 @@ from xml.etree import ElementTree
 
 import pytest
 
+from trendrelay_api import xlsx
 from trendrelay_api.xlsx import column_name, escape, rows, workbook
 
 NS = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
@@ -88,6 +89,16 @@ def test_the_reader_enforces_the_import_row_limit() -> None:
 
     with pytest.raises(ValueError, match="more than 100 data rows"):
         rows(data, maximum_rows=101)
+
+
+def test_the_reader_rejects_a_workbook_that_expands_past_the_safety_limit(
+    monkeypatch,
+) -> None:
+    data = workbook(["Name"], [["A perfectly ordinary product"]])
+    monkeypatch.setattr(xlsx, "MAX_UNCOMPRESSED_BYTES", 20)
+
+    with pytest.raises(ValueError, match="20 MB safety limit"):
+        rows(data)
 
 
 def test_vietnamese_names_survive_the_round_trip() -> None:

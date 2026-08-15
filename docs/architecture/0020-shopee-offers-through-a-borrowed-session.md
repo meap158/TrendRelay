@@ -1,8 +1,30 @@
-# ADR 0020: Read Shopee offers through the operator's own session, or not at all
+# ADR 0020: Import Shopee offers through operator-exported files
 
-Status: Accepted and built - export and link parsing, the cookie session, its
-sign-in capture and probe, the product and offer bridges, the workbook export,
-background enrichment, and the Attribution page.
+Status: Accepted and built. This 2026-08-15 revision supersedes the automated
+session workflow described in the historical implementation notes below.
+
+## Current decision
+
+Shopee's own Product Offer Excel export is the supported bulk boundary. The
+operator opens Shopee in their normal browser, signs in directly with Shopee,
+selects at most 100 products, exports the `.xlsx`, and gives that file to
+TrendRelay. TrendRelay previews and validates the batch before it mints any
+tracking links.
+
+The import does not capture a cookie, automate a logged-in browser, or depend
+on passing Shopee's CAPTCHA. This is a reliability boundary: a verification
+challenge is specifically designed to stop automation and cannot be treated as
+a normal setup step. The API retains the older session bridge for compatibility
+and investigation, but its probes are headless and never open a window. A
+blocked probe reports that the Excel export is required. The product UI does
+not advertise the bridge or automatically enqueue product-page reads after an
+Excel import. A browser opens only after the operator explicitly selects
+**Open Shopee Product Offer**.
+
+The file path accepts at most 100 products and 5 MB over the browser API,
+rejects oversized decompressed workbooks, supports Vietnamese and English
+headings, and previews readable, new, existing, duplicate, and problematic
+rows. A few HTTPS Shopee product links remain a secondary input.
 
 ## Context
 
@@ -28,7 +50,7 @@ data can be read from the page directly, and the product pages that carry the
 images become readable. Images are the one field a post cannot do without,
 which is why a session is worth offering - and why nothing here requires one.
 
-## Decision
+## Superseded implementation notes
 
 - **No anonymous scraping, and no scraping at all without a session.** There is
   nothing to scrape: the page carries no product data. Anything that appeared to
@@ -132,12 +154,12 @@ which is why a session is worth offering - and why nothing here requires one.
 ## Consequences
 
 An operator gets from Shopee's offer page to a batch of tracking links by
-pasting one export, with no credentials involved. Connecting a session removes
-the download step and adds the images, which is why it is offered rather than
-required, and why every refusal along that path says which step failed instead
-of reporting that the import did not work.
+choosing one export, with no credentials shared with TrendRelay. The additional
+download step is intentional: it keeps the durable path independent of
+Shopee's changing anti-bot checks. Product images are imported when the export
+contains them; TrendRelay does not promise to scrape missing images afterward.
 
-Both bridges are the part of this that cannot be tested without a live session:
+The retained bridges are the part of this that cannot be tested without a live session:
 the product one reads a rendered page, and the offer one recognises records by
 the field names Shopee happens to use. Both are written against what Shopee
 serves today, and both are the part most likely to rot. That is what the probe's

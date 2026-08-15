@@ -205,6 +205,16 @@
 .shopee-paste { display: grid; gap: 10px; }
 .shopee-paste > summary { cursor: pointer; color: var(--muted); font-size: 11px; font-weight: 600; }
 .shopee-paste > summary:hover { color: var(--text); }
+.shopee-import-flow { display: grid; gap: 16px; }
+.shopee-import-flow form { display: grid; gap: 12px; }
+.shopee-export-path { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-subtle, var(--panel)); }
+.shopee-export-path h3 { margin: 0 0 6px; font-size: 14px; }
+.shopee-export-path ol { margin: 0; padding-inline-start: 20px; color: var(--muted); line-height: 1.55; }
+.shopee-export-path > button { justify-self: start; }
+.shopee-import-preview { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 12px; border: 1px solid var(--line); border-inline-start: 3px solid var(--green); border-radius: var(--radius-sm); font-size: 12px; }
+.shopee-import-preview > span { color: var(--muted); }
+.shopee-import-preview ul { flex-basis: 100%; margin: 4px 0 0; padding-inline-start: 18px; color: var(--warn, #9a6700); }
+.product-source-link { display: inline-flex; margin-block: 0 8px; color: var(--link); font-size: 12px; font-weight: 600; }
 
 /* Pasting a header is the rare fallback, so it is a quiet link rather than a
    fourth button competing with the ordinary one. */

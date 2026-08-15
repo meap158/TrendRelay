@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from time import monotonic
@@ -90,6 +91,12 @@ async def capture(output: Path, status: Path, timeout_seconds: int) -> int:
             context = await playwright.chromium.launch_persistent_context(
                 str(profile), headless=False, locale="vi-VN"
             )
+            # This script only runs after an explicit Sign in / Sign in again
+            # action. Remove the two identity cookies so an expired profile
+            # cannot be mistaken for a new login merely because its stale keys
+            # are still present. Other browser data stays, including completed
+            # traffic verification and the stable browser identity.
+            await context.clear_cookies(name=re.compile(r"^SPC_(?:EC|U)$"))
             page = context.pages[0] if context.pages else await context.new_page()
             write_status(
                 status, "waiting_for_login",

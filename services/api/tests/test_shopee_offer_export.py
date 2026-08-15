@@ -57,9 +57,15 @@ def session_override():
             raise
 
 
-def request(method: str, path: str, **kwargs) -> httpx.Response:
+def request(
+    method: str,
+    path: str,
+    *,
+    client_address: tuple[str, int] = ("127.0.0.1", 50000),
+    **kwargs,
+) -> httpx.Response:
     async def go():
-        transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 50000))
+        transport = httpx.ASGITransport(app=app, client=client_address)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             return await client.request(method, path, **kwargs)
     return asyncio.run(go())
@@ -225,6 +231,60 @@ def test_a_hundred_is_the_most_one_export_carries(workspace, offers) -> None:
     assert attribution_api.MAX_OFFERS_PER_EXPORT == 100
 
 
+def test_opening_product_offer_uses_the_normal_browser_without_a_session(
+    workspace, monkeypatch
+) -> None:
+    opened: list[tuple[str, int]] = []
+    monkeypatch.setattr(
+        attribution_api.webbrowser,
+        "open",
+        lambda url, new=0: opened.append((url, new)) or True,
+    )
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/attribution/shopee/offers/open",
+        json={"confirm_external_action": True},
+    )
+
+    assert response.status_code == 202
+    assert opened == [(shopee.OFFER_URL, 2)]
+    assert response.json() == {"url": shopee.OFFER_URL}
+
+
+def test_opening_product_offer_requires_explicit_confirmation(workspace, monkeypatch) -> None:
+    monkeypatch.setattr(
+        attribution_api.webbrowser,
+        "open",
+        lambda *_args, **_kwargs: pytest.fail("the browser must not open"),
+    )
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/attribution/shopee/offers/open",
+        json={},
+    )
+
+    assert response.status_code == 400
+
+
+def test_a_remote_request_cannot_open_a_browser_on_the_server(workspace, monkeypatch) -> None:
+    monkeypatch.setattr(
+        attribution_api.webbrowser,
+        "open",
+        lambda *_args, **_kwargs: pytest.fail("the browser must not open"),
+    )
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/attribution/shopee/offers/open",
+        client_address=("192.0.2.10", 50000),
+        json={"confirm_external_action": True},
+    )
+
+    assert response.status_code == 403
+
+
 def test_the_requested_limit_reaches_the_reader(workspace, offers) -> None:
     offers.count(3)
 
@@ -276,6 +336,42 @@ def test_a_shopee_excel_file_imports_one_hundred_products_at_once(workspace) -> 
     with TestingSession() as db:
         assert len(db.scalars(select(Product)).all()) == 100
         assert len(db.scalars(select(TrackingLink)).all()) == 100
+
+
+def test_preview_rejects_an_excel_file_with_more_than_one_hundred_products(workspace) -> None:
+    rows = [
+        [
+            str(50_000_000_000 + index), "1834061111", f"Product {index}", "Shop",
+            350_000, 10, 35_000,
+            f"https://shopee.vn/product/1834061111/{50_000_000_000 + index}",
+            f"https://s.shopee.vn/test-{index}",
+        ]
+        for index in range(101)
+    ]
+    data = xlsx.workbook(list(attribution_api.OFFER_COLUMNS), rows)
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/attribution/shopee/import/preview",
+        json={"xlsx_base64": base64.b64encode(data).decode("ascii")},
+    )
+
+    assert response.status_code == 422
+    assert "more than 100" in response.json()["detail"]
+
+
+def test_preview_names_an_invalid_file_instead_of_reporting_zero_products(workspace) -> None:
+    data = xlsx.workbook(["date", "clicks"], [["2026-08-15", "12"]])
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/attribution/shopee/import/preview",
+        json={"xlsx_base64": base64.b64encode(data).decode("ascii")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["readable"] == 0
+    assert "does not look like a Shopee product export" in response.json()["problems"][0]
 
 
 # --- when it cannot ------------------------------------------------------------

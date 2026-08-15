@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path  # noqa: F401  re-exported for callers
@@ -44,6 +45,12 @@ from trendrelay_api.tool_registry import PROJECT_ROOT
 # so the count landed on `services/` and quietly put the session file and
 # the bridge in a tree that does not exist.
 COOKIE_FILE = PROJECT_ROOT / ".data" / "shopee" / "cookies.json"
+OFFER_URL = "https://affiliate.shopee.vn/offer/product_offer"
+
+
+def browser_profile_dir() -> Path:
+    """The one local browser identity shared by sign-in and Shopee reads."""
+    return COOKIE_FILE.parent / "browser-profile"
 
 #: Without these, Shopee treats the request as a stranger. `SPC_EC` is the
 #: session itself; `SPC_U` names the account it belongs to.
@@ -60,7 +67,7 @@ TIRED_AFTER = timedelta(days=2)
 #: asked for. Only these justify telling somebody their session is finished.
 AUTH_FAILURE_MARKERS = (
     "login", "đăng nhập", "unauthor", "forbidden", "401", "403",
-    "cookie", "session", "verify", "captcha",
+    "cookie", "session",
 )
 
 
@@ -123,6 +130,24 @@ def forget_cookies() -> None:
     was told: disconnecting means the cookies are gone, not emptied in place.
     """
     COOKIE_FILE.unlink(missing_ok=True)
+
+
+def forget_session() -> None:
+    """Remove both copies of the session, including the browser profile.
+
+    The copied cookie file gates every programmatic read, but the persistent
+    browser also holds Shopee's own cookie jar. Leaving that behind after a
+    button called Disconnect would be surprising and would keep the account
+    signed in on disk.
+    """
+    profile = browser_profile_dir().resolve()
+    root = COOKIE_FILE.parent.resolve()
+    if profile.parent != root:
+        raise RuntimeError("The Shopee browser profile resolved outside its data folder.")
+    if profile.exists():
+        shutil.rmtree(profile)
+    for path in (COOKIE_FILE, CAPTURE_STATUS_FILE, CAPTURE_OUTPUT_FILE):
+        path.unlink(missing_ok=True)
 
 
 def merge_refreshed(current: dict[str, str], set_cookie_headers: list[str]) -> dict[str, str]:
@@ -283,7 +308,10 @@ def probe(
 
     stages.append(_stage(
         "session", "Session stored", bool(state.source != "none"),
-        f"Read from {state.source}." if state.source != "none"
+        (
+            "Supplied by this process's environment."
+            if state.source == COOKIE_ENV else "Stored locally on this machine."
+        ) if state.source != "none"
         else "No Shopee session is stored on this machine yet.",
     ))
     if state.source == "none":
@@ -347,10 +375,56 @@ def probe(
     }
 
 
+def probe_offers(*, fetcher: object = None, now: datetime | None = None) -> dict[str, object]:
+    """Check the actual Product Offer path, not only whether cookies exist."""
+    result = probe(now=now)
+    if not result.get("ok"):
+        return result
+    stages = list(result["stages"])
+    fetch = fetcher or fetch_offers
+    try:
+        found = fetch(1)  # type: ignore[operator]
+    except Exception as error:  # noqa: BLE001 - provider state, not a code bug
+        message = redact(str(error))
+        reconnect = looks_like_auth_failure(message)
+        stages.append(_stage(
+            "offers_reach",
+            "Product Offer page reachable",
+            False,
+            message,
+        ))
+        return {"ok": False, "stages": stages, "reconnect": reconnect}
+
+    offers = found.get("offers") if isinstance(found, dict) else None
+    readable = offers if isinstance(offers, list) else []
+    stages.append(_stage(
+        "offers_reach",
+        "Product Offer page reachable",
+        True,
+        "Shopee accepted the saved session.",
+    ))
+    stages.append(_stage(
+        "offers_read",
+        "Product offers readable",
+        bool(readable),
+        (
+            "Read one offer successfully."
+            if readable else
+            "The page loaded but returned no readable product offers."
+        ),
+    ))
+    return {
+        "ok": bool(readable),
+        "stages": stages,
+        "reconnect": False,
+        "tired": result.get("tired", False),
+    }
+
+
 #: Where the bridge lives, and how long it may take. Generous: this renders a
 #: real page and waits for Shopee to fill it in.
 BRIDGE_PATH = PROJECT_ROOT / "scripts" / "shopee_product_bridge.py"
-BRIDGE_TIMEOUT_SECONDS = 90
+BRIDGE_TIMEOUT_SECONDS = 180
 
 
 def fetch_product(url: str, *, timeout: float = BRIDGE_TIMEOUT_SECONDS) -> dict[str, Any]:
@@ -416,6 +490,12 @@ def fetch_product(url: str, *, timeout: float = BRIDGE_TIMEOUT_SECONDS) -> dict[
         found = json.loads(completed.stdout)
     except ValueError as error:
         raise RuntimeError("The Shopee bridge returned something unreadable.") from error
+
+    if "/verify/" in str(found.get("final_url") or ""):
+        raise RuntimeError(
+            "Shopee blocked the silent product check with verification. "
+            "Use the Product Offer Excel export instead."
+        )
 
     if found.get("login_wall") and not (found.get("name") or found.get("image_url")):
         # Named as what it is, in the words the auth check looks for. The probe
@@ -674,8 +754,8 @@ def fetch_offers(limit: int = 100, *, timeout: float = OFFERS_TIMEOUT_SECONDS) -
         raise RuntimeError("Shopee showed a login wall: this session is no longer signed in.")
     if "/verify/" in str(found.get("final_url") or "") and not found.get("offers"):
         raise RuntimeError(
-            "Shopee opened a browser verification check. Try again and complete "
-            "the check in the Shopee window; TrendRelay will continue automatically."
+            "Shopee blocked the silent offer check with verification. "
+            "Use the Product Offer Excel export instead."
         )
     if not found.get("offers") and found.get("payloads_seen"):
         # Told apart on purpose: the page answered, and nothing in it looked

@@ -37,6 +37,7 @@ from trendrelay_api.opportunity_models import Product, ProductOffer
 CURRENCY = "VND"
 MARKETPLACE = "shopee"
 NETWORK = "shopee"
+MAX_BATCH = 100
 
 
 def content_key(*values: str | None) -> str:
@@ -65,7 +66,11 @@ class ImportOutcome:
 
 
 def rows_from(
-    csv_text: str, links_text: str, *, resolve: Any = None
+    csv_text: str,
+    links_text: str,
+    *,
+    resolve: Any = None,
+    limit: int | None = None,
 ) -> tuple[list[Any], list[str]]:
     """Everything a batch describes, however it was given.
 
@@ -82,8 +87,13 @@ def rows_from(
         parsed, trouble = attribution_shopee.read_export(csv_text)
         rows.extend(parsed)
         problems.extend(trouble)
+        if limit is not None and len(rows) > limit:
+            raise ValueError(f"A Shopee import can contain at most {limit} products.")
 
-    for url in attribution_shopee.split_links(links_text or ""):
+    links = attribution_shopee.split_links(links_text or "")
+    if limit is not None and len(rows) + len(links) > limit:
+        raise ValueError(f"A Shopee import can contain at most {limit} products.")
+    for url in links:
         try:
             final = follow(url) if attribution_shopee.is_short_link(url) else url
         except ValueError as error:
@@ -102,6 +112,7 @@ def rows_from(
             commission_bps=None,
             product_url=read.product_url,
             affiliate_url=read.affiliate_url,
+            image_url=None,
         ))
     return rows, problems
 
@@ -220,6 +231,8 @@ def _upsert_product(session: Session, workspace_id: str, user_id: str, row: Any)
             product.identifier = row.identifier
         if row.product_url and not product.product_url:
             product.product_url = row.product_url
+        if row.image_url and not product.image_url and row.image_url.startswith("https://"):
+            product.image_url = row.image_url[:2000]
         return product
 
     product = Product(
@@ -229,6 +242,11 @@ def _upsert_product(session: Session, workspace_id: str, user_id: str, row: Any)
         name=(row.name or "Shopee product")[:240],
         marketplace=MARKETPLACE,
         product_url=row.product_url,
+        image_url=(
+            row.image_url[:2000]
+            if row.image_url and row.image_url.startswith("https://")
+            else None
+        ),
         created_by=user_id,
     )
     session.add(product)

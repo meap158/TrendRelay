@@ -20,6 +20,7 @@ import json
 import re
 import sys
 from datetime import UTC, datetime
+from pathlib import Path
 from urllib.parse import urlparse
 
 USER_AGENT = (
@@ -102,16 +103,19 @@ def main() -> None:
         fail("playwright is not installed in this runtime")
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
+        profile = Path(__file__).resolve().parents[1] / ".data" / "shopee" / "browser-profile"
+        context = playwright.chromium.launch_persistent_context(
+            str(profile),
+            # Enrichment and probes must never interrupt the desktop. If
+            # Shopee challenges this automated read, the caller reports it and
+            # leaves the exported product data intact.
             headless=True,
             args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
+            locale="vi-VN",
+            viewport={"width": 1440, "height": 1000},
+            user_agent=USER_AGENT,
         )
         try:
-            context = browser.new_context(
-                locale="vi-VN",
-                viewport={"width": 1440, "height": 1000},
-                user_agent=USER_AGENT,
-            )
             context.add_cookies([
                 {"name": name, "value": value, "domain": ".shopee.vn", "path": "/"}
                 for name, value in cookies.items()
@@ -135,7 +139,7 @@ def main() -> None:
             }
             found["final_url"] = page.url
         finally:
-            browser.close()
+            context.close()
 
     found["collected_at"] = datetime.now(UTC).isoformat()
     json.dump(found, sys.stdout, ensure_ascii=False)

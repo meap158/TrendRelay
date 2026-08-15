@@ -26,7 +26,6 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth-provider";
 import { ProductTable } from "./product-table";
 import { ShopeeImport } from "./shopee-import";
-import { ShopeeSession } from "./shopee-session";
 import { buttonClass } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
 import { StatusToasts, useStatus } from "../ui/status";
@@ -138,7 +137,6 @@ export default function AttributionPage() {
   const [presetOffer, setPresetOffer] = useState("");
   // Whether Shopee can be read directly. Asked here rather than inside the
   // import form so the two Shopee panels agree about it.
-  const [shopeeReady, setShopeeReady] = useState(false);
   const linkFormRef = useRef<HTMLFormElement>(null);
   // Reported over the page. Rendered in flow, these shifted everything below
   // them whenever an action finished, which reads as the interface flinching.
@@ -147,7 +145,7 @@ export default function AttributionPage() {
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const canCreate = ["owner", "editor", "approver"].includes(workspace?.role ?? "");
   const canChangeStatus = ["owner", "approver"].includes(workspace?.role ?? "");
-  const canImport = ["owner", "editor", "analyst"].includes(workspace?.role ?? "");
+  const canImport = ["owner", "editor", "approver"].includes(workspace?.role ?? "");
 
   const refresh = useCallback(async (nextWorkspace = workspaceId) => {
     if (!nextWorkspace) return;
@@ -162,12 +160,6 @@ export default function AttributionPage() {
       json<Summary>(await apiFetch(`${base}/attribution/summary`)),
       json<ProductsPayload>(await apiFetch(`${base}/attribution/products`)),
     ]);
-    // Tolerated rather than awaited with the rest: an analyst may not be
-    // allowed to read it, and that is not a reason for the page to fail.
-    apiFetch(`${base}/attribution/shopee/session`)
-      .then((response) => (response.ok ? response.json() : null))
-      .then((state) => setShopeeReady(Boolean(state?.ready)))
-      .catch(() => setShopeeReady(false));
     setCampaigns(campaignBody.campaigns);
     setPlans(planBody.plans);
     setOffers(offerBody.offers);
@@ -406,22 +398,18 @@ export default function AttributionPage() {
             </span>
           ))}
         </p>
-        {/* Which marketplace this workspace can actually read, and whether it
-            can right now. Publish shows its engines the same way; the
-            difference worth naming is that this one is a borrowed browser
-            session rather than an API key, so it lapses on its own. */}
+        {/* The supported transport, not a misleading connection light. Excel
+            remains available even when Shopee challenges an automated browser. */}
         <button
           type="button"
           className="attribution-provider"
-          data-connected={shopeeReady || undefined}
-          onClick={() => setPanel("import")}
-          title={shopeeReady
-            ? "Shopee is connected. Product pages can be read for images."
-            : "Shopee is not connected. Imports still work; images will be missing."}
+          data-connected
+          onClick={() => setPanel("add")}
+          title="Import a Shopee Excel export"
         >
           <span className="attribution-provider-dot" aria-hidden="true" />
           Shopee
-          <em>{shopeeReady ? "cookie session" : "not connected"}</em>
+          <em>Excel import</em>
         </button>
 
         <div className="attribution-bar-actions">
@@ -438,18 +426,6 @@ export default function AttributionPage() {
               className={buttonClass({ variant: "secondary" })}
               onClick={() => setPanel("add")}
             ><ActionIcon name="add" /> {t("attribution.addProducts")}</button>
-          )}
-          {/* A gear, because what is behind it is the Shopee connection and how
-              imports behave - configuration, not something done once and
-              finished. It was labelled "Imports", which read as the action. */}
-          {canImport && (
-            <button
-              type="button"
-              className={buttonClass({ variant: "secondary" })}
-              onClick={() => setPanel("import")}
-              aria-label={t("attribution.settings")}
-              title={t("attribution.settings")}
-            ><ActionIcon name="setup" /></button>
           )}
           {canCreate && (
             <button
@@ -476,26 +452,6 @@ export default function AttributionPage() {
       </section>
 
       <Dialog
-        open={panel === "import"}
-        title={t("attribution.settings")}
-        onClose={() => setPanel("")}
-      >
-        {/* The connection, and nothing else. Everything that brings products in
-            moved to the dialog that is about bringing products in. */}
-        {!canImport && <p className="attribution-note">{t("attribution.importNotPermitted")}</p>}
-        {workspaceId && canImport && (
-          <ShopeeSession
-            workspaceId={workspaceId}
-            canConnect={workspace?.role === "owner"}
-            apiFetch={apiFetch}
-            succeed={succeed}
-            fail={fail}
-            onReady={setShopeeReady}
-          />
-        )}
-      </Dialog>
-
-      <Dialog
         open={panel === "add"}
         title={t("attribution.addProducts")}
         onClose={() => setPanel("")}
@@ -504,7 +460,6 @@ export default function AttributionPage() {
           <ShopeeImport
             workspaceId={workspaceId}
             campaigns={campaigns}
-            connected={shopeeReady}
             apiFetch={apiFetch}
             succeed={succeed}
             fail={fail}

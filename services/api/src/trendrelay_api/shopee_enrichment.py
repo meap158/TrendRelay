@@ -42,10 +42,10 @@ JOB_KIND = "shopee_enrich"
 #: sweep declares it abandoned.
 LEASE_SECONDS = 300
 
-#: How many pages one import is willing to open. An export can hold hundreds,
-#: and a queue that takes six hours to drain is one nobody trusts; the rest
-#: keep their export data and can be enriched by importing again.
-MAX_PER_IMPORT = 40
+#: The offer page and importer share this cap. Direct offer reads usually carry
+#: their image already, so this ceiling mainly covers Excel fallbacks and never
+#: silently leaves the back of a valid batch ineligible for enrichment.
+MAX_PER_IMPORT = 100
 
 
 def needs_enrichment(product: Product) -> bool:

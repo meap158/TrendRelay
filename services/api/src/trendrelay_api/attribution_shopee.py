@@ -253,7 +253,7 @@ def _column_map(headings: list[str]) -> dict[str, str]:
     """Which heading in this file answers to which field."""
     found: dict[str, str] = {}
     for heading in headings:
-        key = (heading or "").strip().casefold()
+        key = (heading or "").lstrip("\ufeff").strip().casefold()
         for field, accepted in EXPORT_COLUMNS.items():
             if key in accepted and field not in found:
                 found[field] = heading
@@ -273,6 +273,7 @@ class ExportedProduct:
     commission_bps: int | None
     product_url: str | None
     affiliate_url: str | None
+    image_url: str | None = None
 
     @property
     def identifier(self) -> str | None:
@@ -289,8 +290,26 @@ def read_export(text: str) -> tuple[list[ExportedProduct], list[str]]:
     import csv
     import io
 
-    reader = csv.DictReader(io.StringIO(text))
-    columns = _column_map(list(reader.fieldnames or []))
+    source = (text or "").lstrip("\ufeff")
+    sample = source[:16_384]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=",\t;")
+    except csv.Error:
+        dialect = csv.excel_tab if "\t" in sample else csv.excel
+    raw_rows = list(csv.reader(io.StringIO(source), dialect=dialect))
+    header_index = next(
+        (
+            index for index, candidate in enumerate(raw_rows[:20])
+            if {"name", "affiliate_url"}.issubset(_column_map(candidate))
+        ),
+        None,
+    )
+    headings = (
+        raw_rows[header_index]
+        if header_index is not None
+        else (raw_rows[0] if raw_rows else [])
+    )
+    columns = _column_map(headings)
     missing = [
         field for field in ("name", "affiliate_url") if field not in columns
     ]
@@ -306,7 +325,9 @@ def read_export(text: str) -> tuple[list[ExportedProduct], list[str]]:
 
     products: list[ExportedProduct] = []
     problems: list[str] = []
-    for number, row in enumerate(reader, start=2):
+    data_rows = raw_rows[(header_index + 1) if header_index is not None else 1:]
+    for number, values in enumerate(data_rows, start=(header_index or 0) + 2):
+        row = dict(zip(headings, values, strict=False))
         name = cell(row, "name")
         affiliate_url = cell(row, "affiliate_url")
         if not name and not affiliate_url:
@@ -328,6 +349,7 @@ def read_export(text: str) -> tuple[list[ExportedProduct], list[str]]:
             commission_bps=parse_rate_bps(cell(row, "commission_rate")),
             product_url=canonical_url(product_url) or (product_url or None),
             affiliate_url=affiliate_url,
+            image_url=None,
         ))
     return products, problems
 
@@ -454,5 +476,6 @@ def read_api_offers(rows: list[dict]) -> tuple[list[ExportedProduct], list[str]]
             # The link the account already has. Nothing here mints one: a
             # tracking link is minted by us, from this, exactly once.
             affiliate_url=affiliate_url or product_url or None,
+            image_url=(str(row.get("image_url")).strip() or None) if row.get("image_url") else None,
         ))
     return found, problems

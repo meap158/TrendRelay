@@ -260,6 +260,14 @@ export function ProductTable({
                       <div className="product-detail">
                         <section>
                           <h4>{t("attribution.whereItGoes")}</h4>
+                          {product.product_url && (
+                            <a
+                              className="product-source-link"
+                              href={product.product_url}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                            >{t("attribution.openShopeeProduct")}</a>
+                          )}
                           {product.offers.length ? (
                             <ul className="product-offers">
                               {product.offers.map((offer) => (

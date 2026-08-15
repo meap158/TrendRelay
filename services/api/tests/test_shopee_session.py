@@ -18,6 +18,8 @@ LIVE = {"SPC_EC": "abc123", "SPC_U": "42", "SPC_ST": "xyz"}
 def stored_here(monkeypatch, tmp_path):
     """Never read or write the operator's real session during a test."""
     monkeypatch.setattr(shopee, "COOKIE_FILE", tmp_path / "cookies.json")
+    monkeypatch.setattr(shopee, "CAPTURE_STATUS_FILE", tmp_path / "capture-status.json")
+    monkeypatch.setattr(shopee, "CAPTURE_OUTPUT_FILE", tmp_path / "capture-output.json")
     monkeypatch.delenv(shopee.COOKIE_ENV, raising=False)
 
 
@@ -60,6 +62,20 @@ def test_saving_replaces_rather_than_merges() -> None:
 
     assert "LEFTOVER" not in cookies
     assert cookies["SPC_EC"] == "new"
+
+
+def test_disconnect_removes_the_cookie_and_persistent_browser_profile() -> None:
+    shopee.save_cookies(LIVE)
+    profile = shopee.browser_profile_dir()
+    profile.mkdir(parents=True)
+    (profile / "browser-state").write_text("signed in", encoding="utf-8")
+    shopee.CAPTURE_STATUS_FILE.write_text("{}", encoding="utf-8")
+
+    shopee.forget_session()
+
+    assert not shopee.COOKIE_FILE.exists()
+    assert not profile.exists()
+    assert not shopee.CAPTURE_STATUS_FILE.exists()
 
 
 # --- keeping it alive ---------------------------------------------------------
@@ -262,6 +278,15 @@ def test_a_good_session_with_nothing_to_try_passes_without_inventing_a_fetch() -
 
     assert result["ok"] is True
     assert stage_ids(result) == ["session", "complete", "fresh"]
+
+
+def test_offer_probe_checks_that_the_saved_session_can_read_an_offer() -> None:
+    shopee.save_cookies(LIVE)
+
+    result = shopee.probe_offers(fetcher=lambda limit: {"offers": [{"name": "A"}]})
+
+    assert result["ok"] is True
+    assert stage_ids(result)[-2:] == ["offers_reach", "offers_read"]
 
 
 def test_a_full_pass_reports_every_step_and_what_it_read() -> None:
