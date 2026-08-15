@@ -228,7 +228,9 @@ def test_the_preview_refuses_settings_outside_their_declared_range() -> None:
     for values in (
         {"object": "smiley", "scale": 99},
         {"object": "smiley", "opacity": 5},
+        {"object": "smiley", "horizontal_offset": 9},
         {"object": "smiley", "offset": -9},
+        {"object": "smiley", "rotation": 181},
         {"object": "smiley", "confidence": 0.001},
     ):
         response = preview(workspace, "face_overlay", values)

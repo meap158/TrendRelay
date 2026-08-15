@@ -84,6 +84,12 @@ CYAN: RGBA = (86, 216, 226, 255)
 RED: RGBA = (226, 74, 78, 255)
 PARTY: RGBA = (232, 74, 95, 255)
 HAIR: RGBA = (62, 44, 34, 255)
+BLUE: RGBA = (56, 112, 230, 255)
+PURPLE: RGBA = (132, 86, 214, 255)
+GREEN: RGBA = (50, 190, 132, 255)
+ORANGE: RGBA = (245, 136, 52, 255)
+SOFT_PINK: RGBA = (255, 118, 168, 235)
+GLASS: RGBA = (88, 214, 236, 175)
 
 
 @dataclass(frozen=True)
@@ -179,6 +185,8 @@ def _pair(shape: Shape) -> tuple[Shape, Shape]:
 COVER = "Cover the face"
 FEATURES = "Eyes and mouth"
 HEADWEAR = "On the head"
+REACTIONS = "Reactions and accents"
+CREATOR_UI = "Creator UI"
 
 #: A stable id per group, alongside the English name.
 #:
@@ -186,7 +194,13 @@ HEADWEAR = "On the head"
 #: already does for every other label the registry serves. Keying a dictionary
 #: on the English string itself would work until somebody improved the wording,
 #: at which point six locales would silently revert to English.
-GROUP_IDS = {COVER: "cover", FEATURES: "features", HEADWEAR: "headwear"}
+GROUP_IDS = {
+    COVER: "cover",
+    FEATURES: "features",
+    HEADWEAR: "headwear",
+    REACTIONS: "reactions",
+    CREATOR_UI: "creator_ui",
+}
 
 
 _CENSOR_BLOCK = Overlay(
@@ -418,6 +432,230 @@ _PARTY_HAT = Overlay(
     ),
 )
 
+# A second, more editorial pack. These are deliberately graphic rather than
+# pseudo-photographic: clean shapes survive motion, scale well from thumbnails
+# to 4K, and look intentional over footage instead of like low-resolution clip
+# art pasted into it.
+_PIXEL_MASK = Overlay(
+    id="pixel_mask", label="Pixel mosaic", group=COVER, anchor="face",
+    width_in_faces=1.38, aspect=1.15, occludes=True,
+    note="A full-face graphic mosaic; suitable for identity coverage.",
+    shapes=tuple(
+        Shape("rect", fill=colour, centre=((column + .5) / 4, (row + .5) / 5),
+              size=(.255, .205), radius=.015)
+        for row in range(5) for column in range(4)
+        for colour in ((INK, BLUE, PURPLE, CYAN)[(row * 3 + column) % 4],)
+    ),
+)
+
+_ALIEN = Overlay(
+    id="alien", label="Alien", group=COVER, anchor="face",
+    width_in_faces=1.36, aspect=1.22, occludes=True,
+    note="A full-face character mask.",
+    shapes=(
+        Shape("ellipse", fill=GREEN, centre=(.5, .5), size=(.9, 1.0)),
+        *_pair(Shape("ellipse", fill=INK, centre=(.31, .43), size=(.25, .38), rotation=-14)),
+        Shape("ellipse", stroke=INK, stroke_width=.035, centre=(.5, .7),
+              size=(.28, .16), start_angle=205, end_angle=335),
+    ),
+)
+
+_FLOWER_FACE = Overlay(
+    id="flower_face", label="Flower bloom", group=COVER, anchor="face",
+    width_in_faces=1.48, aspect=1.0, occludes=True,
+    note="A bold full-face cover with a softer editorial feel.",
+    shapes=(
+        *tuple(Shape("ellipse", fill=SOFT_PINK,
+                     centre=(.5 + .31 * math.cos(angle), .5 + .31 * math.sin(angle)),
+                     size=(.43, .43)) for angle in (0, math.pi / 3, 2 * math.pi / 3,
+                                                   math.pi, 4 * math.pi / 3, 5 * math.pi / 3)),
+        Shape("ellipse", fill=YELLOW, centre=(.5, .5), size=(.62, .62)),
+        *_pair(Shape("ellipse", fill=INK, centre=(.39, .45), size=(.07, .1))),
+        Shape("ellipse", stroke=INK, stroke_width=.035, centre=(.5, .53),
+              size=(.26, .2), start_angle=25, end_angle=155),
+    ),
+)
+
+_CLOUD_FACE = Overlay(
+    id="cloud_face", label="Cloud", group=COVER, anchor="face",
+    width_in_faces=1.5, aspect=.82, occludes=True,
+    note="A clean full-face cover for softer compositions.",
+    shapes=(
+        Shape("ellipse", fill=WHITE, centre=(.25, .58), size=(.46, .52)),
+        Shape("ellipse", fill=WHITE, centre=(.48, .39), size=(.56, .66)),
+        Shape("ellipse", fill=WHITE, centre=(.75, .57), size=(.46, .52)),
+        Shape("rect", fill=WHITE, centre=(.5, .68), size=(.76, .34), radius=.15),
+    ),
+)
+
+_HEART_EYES = Overlay(
+    id="heart_eyes", label="Heart eyes", group=FEATURES, anchor="eyes",
+    width_in_faces=1.12, aspect=.42,
+    shapes=(
+        *tuple(shape for x in (.27, .73) for shape in (
+            Shape("ellipse", fill=SOFT_PINK, centre=(x - .06, .35), size=(.22, .42)),
+            Shape("ellipse", fill=SOFT_PINK, centre=(x + .06, .35), size=(.22, .42)),
+            Shape("polygon", fill=SOFT_PINK,
+                  points=((x - .16, .38), (x + .16, .38), (x, .96))),
+        )),
+    ),
+)
+
+_STAR_GLASSES = Overlay(
+    id="star_glasses", label="Star glasses", group=FEATURES, anchor="eyes",
+    width_in_faces=1.24, aspect=.43,
+    shapes=(
+        Shape("rect", fill=FRAME, centre=(.5, .48), size=(.24, .09), radius=.02),
+        *tuple(Shape("polygon", fill=GOLD, stroke=FRAME, stroke_width=.018,
+                    points=tuple((x + radius * math.cos(-math.pi / 2 + index * math.pi / 5),
+                                  .5 + radius * math.sin(-math.pi / 2 + index * math.pi / 5))
+                                 for index, radius in enumerate((.2, .09) * 5)))
+               for x in (.25, .75)),
+    ),
+)
+
+_CYBER_VISOR = Overlay(
+    id="cyber_visor", label="Cyber visor", group=FEATURES, anchor="eyes",
+    width_in_faces=1.22, aspect=.34,
+    shapes=(
+        Shape("polygon", fill=GLASS, stroke=CYAN, stroke_width=.025,
+              points=((.02, .18), (.98, .18), (.86, .86), (.14, .86))),
+        Shape("line", stroke=WHITE, stroke_width=.018, points=((.12, .33), (.88, .33))),
+        Shape("ellipse", fill=RED, centre=(.82, .58), size=(.06, .14)),
+    ),
+)
+
+_DOG_NOSE = Overlay(
+    id="dog_nose", label="Dog nose", group=FEATURES, anchor="nose",
+    width_in_faces=.52, aspect=.64,
+    shapes=(
+        Shape("ellipse", fill=INK, centre=(.5, .35), size=(.54, .38)),
+        Shape("line", stroke=INK, stroke_width=.055, points=((.5, .48), (.5, .7))),
+        Shape("ellipse", stroke=INK, stroke_width=.05, centre=(.36, .68),
+              size=(.34, .28), start_angle=0, end_angle=115),
+        Shape("ellipse", stroke=INK, stroke_width=.05, centre=(.64, .68),
+              size=(.34, .28), start_angle=65, end_angle=180),
+    ),
+)
+
+_HALO = Overlay(
+    id="halo", label="Halo", group=HEADWEAR, anchor="forehead",
+    width_in_faces=1.05, aspect=.34, offset=(0, -.38), follows_roll=False,
+    shapes=(Shape("ellipse", stroke=GOLD, stroke_width=.085, size=(.9, .52)),),
+)
+
+_DEVIL_HORNS = Overlay(
+    id="devil_horns", label="Devil horns", group=HEADWEAR, anchor="forehead",
+    width_in_faces=1.2, aspect=.55, offset=(0, -.27),
+    shapes=(*_pair(Shape("polygon", fill=RED,
+                         points=((.06, .98), (.17, .08), (.44, .92)))),),
+)
+
+_GRAD_CAP = Overlay(
+    id="graduation_cap", label="Graduation cap", group=HEADWEAR, anchor="forehead",
+    width_in_faces=1.35, aspect=.64, offset=(0, -.25), follows_roll=False,
+    shapes=(
+        Shape("polygon", fill=INK, points=((.04, .35), (.5, .08), (.96, .35), (.5, .62))),
+        Shape("rect", fill=INK, centre=(.5, .68), size=(.58, .3), radius=.05),
+        Shape("line", stroke=GOLD, stroke_width=.025, points=((.5, .2), (.84, .55), (.84, .88))),
+        Shape("ellipse", fill=GOLD, centre=(.84, .9), size=(.09, .14)),
+    ),
+)
+
+_HEADPHONES = Overlay(
+    id="headphones", label="Headphones", group=HEADWEAR, anchor="forehead",
+    width_in_faces=1.36, aspect=1.05, offset=(0, .27),
+    shapes=(
+        Shape("ellipse", stroke=INK, stroke_width=.09, centre=(.5, .43), size=(.82, .82),
+              start_angle=180, end_angle=360),
+        *_pair(Shape("rect", fill=INK, centre=(.1, .64), size=(.18, .46), radius=.06)),
+        *_pair(Shape("rect", fill=BLUE, centre=(.1, .64), size=(.09, .3), radius=.03)),
+    ),
+)
+
+_HEART_BUBBLE = Overlay(
+    id="heart_bubble", label="Heart reaction", group=REACTIONS, anchor="forehead",
+    width_in_faces=.68, aspect=.86, offset=(.52, -.22), follows_roll=False,
+    shapes=(
+        Shape("ellipse", fill=WHITE, stroke=SOFT_PINK, stroke_width=.025,
+              centre=(.5, .43), size=(.9, .76)),
+        Shape("polygon", fill=WHITE, points=((.34, .72), (.45, .98), (.58, .74))),
+        Shape("ellipse", fill=SOFT_PINK, centre=(.42, .4), size=(.28, .3)),
+        Shape("ellipse", fill=SOFT_PINK, centre=(.58, .4), size=(.28, .3)),
+        Shape("polygon", fill=SOFT_PINK, points=((.3, .43), (.7, .43), (.5, .7))),
+    ),
+)
+
+_LIGHTNING = Overlay(
+    id="lightning", label="Lightning accent", group=REACTIONS, anchor="forehead",
+    width_in_faces=.55, aspect=1.25, offset=(.58, -.08), follows_roll=False,
+    shapes=(Shape("polygon", fill=YELLOW, stroke=ORANGE, stroke_width=.025,
+                  points=((.58, .02), (.15, .58), (.48, .56),
+                          (.34, .98), (.86, .36), (.53, .39))),),
+)
+
+_SPARKLES = Overlay(
+    id="sparkles", label="Sparkles", group=REACTIONS, anchor="forehead",
+    width_in_faces=1.28, aspect=.8, offset=(0, -.12), follows_roll=False,
+    shapes=(
+        *tuple(Shape("polygon", fill=colour,
+                     points=((x, y - size), (x + size * .28, y - size * .28),
+                             (x + size, y), (x + size * .28, y + size * .28),
+                             (x, y + size), (x - size * .28, y + size * .28),
+                             (x - size, y), (x - size * .28, y - size * .28)))
+               for x, y, size, colour in ((.18, .58, .16, GOLD), (.78, .28, .2, CYAN),
+                                           (.87, .72, .1, SOFT_PINK))),
+    ),
+)
+
+_LIVE_BADGE = Overlay(
+    id="live_badge", label="Live badge", group=CREATOR_UI, anchor="forehead",
+    width_in_faces=.72, aspect=.42, offset=(.58, -.28), follows_roll=False,
+    shapes=(
+        Shape("rect", fill=RED, size=(1, .78), radius=.18),
+        Shape("ellipse", fill=WHITE, centre=(.25, .5), size=(.17, .28)),
+        Shape("line", stroke=WHITE, stroke_width=.06, points=((.43, .34), (.43, .66))),
+        Shape("line", stroke=WHITE, stroke_width=.06, points=((.58, .34), (.58, .66))),
+        Shape("line", stroke=WHITE, stroke_width=.06, points=((.73, .34), (.73, .66))),
+    ),
+)
+
+_FOCUS_FRAME = Overlay(
+    id="focus_frame", label="Focus frame", group=CREATOR_UI, anchor="face",
+    width_in_faces=1.5, aspect=1.18,
+    shapes=(
+        Shape("line", stroke=WHITE, stroke_width=.028, points=((.04, .28), (.04, .04), (.28, .04))),
+        Shape("line", stroke=WHITE, stroke_width=.028, points=((.72, .04), (.96, .04), (.96, .28))),
+        Shape("line", stroke=WHITE, stroke_width=.028, points=((.96, .72), (.96, .96), (.72, .96))),
+        Shape("line", stroke=WHITE, stroke_width=.028, points=((.28, .96), (.04, .96), (.04, .72))),
+        Shape("ellipse", fill=RED, centre=(.92, .1), size=(.07, .09)),
+    ),
+)
+
+_COMMENT_BUBBLE = Overlay(
+    id="comment_bubble", label="Comment bubble", group=CREATOR_UI, anchor="forehead",
+    width_in_faces=.84, aspect=.66, offset=(.58, -.2), follows_roll=False,
+    shapes=(
+        Shape("rect", fill=WHITE, stroke=INK, stroke_width=.025,
+              centre=(.5, .42), size=(.94, .7), radius=.16),
+        Shape("polygon", fill=WHITE, stroke=INK, stroke_width=.02,
+              points=((.28, .72), (.36, .98), (.53, .73))),
+        *tuple(Shape("ellipse", fill=INK, centre=(x, .42), size=(.09, .12))
+               for x in (.3, .5, .7)),
+    ),
+)
+
+_TAP_CURSOR = Overlay(
+    id="tap_cursor", label="Tap cursor", group=CREATOR_UI, anchor="face",
+    width_in_faces=.52, aspect=1.15, offset=(.62, .22), follows_roll=False,
+    shapes=(
+        Shape("polygon", fill=WHITE, stroke=INK, stroke_width=.035,
+              points=((.14, .04), (.14, .84), (.38, .63), (.55, .98),
+                      (.72, .88), (.55, .57), (.92, .55))),
+        Shape("ellipse", stroke=BLUE, stroke_width=.035, centre=(.18, .08), size=(.32, .28)),
+    ),
+)
+
 BUILT_IN: tuple[Overlay, ...] = (
     _CENSOR_BLOCK,
     _SMILEY,
@@ -431,11 +669,30 @@ BUILT_IN: tuple[Overlay, ...] = (
     _CAT_EARS,
     _CROWN,
     _PARTY_HAT,
+    _PIXEL_MASK,
+    _ALIEN,
+    _FLOWER_FACE,
+    _CLOUD_FACE,
+    _HEART_EYES,
+    _STAR_GLASSES,
+    _CYBER_VISOR,
+    _DOG_NOSE,
+    _HALO,
+    _DEVIL_HORNS,
+    _GRAD_CAP,
+    _HEADPHONES,
+    _HEART_BUBBLE,
+    _LIGHTNING,
+    _SPARKLES,
+    _LIVE_BADGE,
+    _FOCUS_FRAME,
+    _COMMENT_BUBBLE,
+    _TAP_CURSOR,
 )
 
 #: The order groups appear in the picker: the ones that hide a face first,
 #: because hiding a face is what someone opens this to do.
-GROUP_ORDER = (COVER, FEATURES, HEADWEAR)
+GROUP_ORDER = (COVER, FEATURES, HEADWEAR, REACTIONS, CREATOR_UI)
 
 
 # --------------------------------------------------------------------------- #

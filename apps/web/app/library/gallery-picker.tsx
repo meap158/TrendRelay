@@ -148,6 +148,7 @@ export function GalleryPanel({
   const [position, setPosition] = useState<number | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");
   /** Which tile owns the group's single tab stop. */
   const [focused, setFocused] = useState("");
   const objectUrl = useRef("");
@@ -161,12 +162,15 @@ export function GalleryPanel({
 
   const grouped = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    const matching = needle
-      ? param.options.filter((option) =>
-          optionLabel(t, effect.id, option.value, option.label)
-            .toLowerCase()
-            .includes(needle))
-      : param.options;
+    const matching = param.options.filter((option) => {
+      if (category && (option.group ?? "") !== category) return false;
+      if (!needle) return true;
+      return [
+        optionLabel(t, effect.id, option.value, option.label),
+        optionGroup(t, option.group_id, option.group ?? ""),
+        option.note ?? "",
+      ].some((value) => value.toLowerCase().includes(needle));
+    });
     // Nullable, not merely optional: the API sends an explicit null for a
     // group an operator named, which is different from a group not saying.
     const sections: { group: string; groupId?: string | null; items: ParamOption[] }[] = [];
@@ -179,7 +183,21 @@ export function GalleryPanel({
       else sections.push({ group, groupId: option.group_id, items: [option] });
     }
     return sections;
-  }, [effect.id, param.options, search, t]);
+  }, [category, effect.id, param.options, search, t]);
+
+  const categories = useMemo(() => {
+    const found = new Map<string, { label: string; count: number }>();
+    for (const option of param.options) {
+      const key = option.group ?? "";
+      if (!key) continue;
+      const currentGroup = found.get(key);
+      found.set(key, {
+        label: optionGroup(t, option.group_id, option.group ?? ""),
+        count: (currentGroup?.count ?? 0) + 1,
+      });
+    }
+    return [...found.entries()];
+  }, [param.options, t]);
 
   const load = useCallback(
     async (next: PickerValues, at: number | null) => {
@@ -417,22 +435,43 @@ export function GalleryPanel({
                 value={values[item.id] ?? item.default}
                 disabled={!canEdit}
                 onChange={(next) => adjust({ [item.id]: next }, false)}
-                onCommit={() => void load(values, position)}
+                onCommit={(next) => void load({ ...values, [item.id]: next }, position)}
               />
             ))}
           </div>
         </div>
 
         <div className="overlay-choices">
-          <label className="overlay-search">
-            <span className="ui-visually-hidden">{t("overlayPicker.search")}</span>
-            <input
-              type="search"
-              value={search}
-              placeholder={t("overlayPicker.search")}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </label>
+          <div className="overlay-discovery">
+            <label className="overlay-search">
+              <span className="ui-visually-hidden">{t("overlayPicker.search")}</span>
+              <input
+                type="search"
+                value={search}
+                placeholder={t("overlayPicker.search")}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </label>
+            {categories.length > 1 && (
+              <div className="overlay-categories" role="group" aria-label="Object categories">
+                <button
+                  type="button"
+                  className={!category ? "is-active" : ""}
+                  aria-pressed={!category}
+                  onClick={() => setCategory("")}
+                >{t("common.all")} <span>{param.options.length}</span></button>
+                {categories.map(([key, item]) => (
+                  <button
+                    type="button"
+                    key={key}
+                    className={category === key ? "is-active" : ""}
+                    aria-pressed={category === key}
+                    onClick={() => setCategory(key)}
+                  >{item.label} <span>{item.count}</span></button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* One radio group across every section, because it is one choice.
               The sections are labelled subgroups of it rather than groups of

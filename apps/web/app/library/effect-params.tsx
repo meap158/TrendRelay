@@ -115,7 +115,7 @@ export function ParamControl({
    * is a decode — the caller wants the value on every frame of the drag and the
    * work only once, at the end of it.
    */
-  onCommit?: () => void;
+  onCommit?: (next: unknown) => void;
   disabled?: boolean;
 }) {
   const t = useT();
@@ -130,7 +130,7 @@ export function ParamControl({
           disabled={disabled}
           onChange={(event) => {
             onChange(event.target.value);
-            onCommit?.();
+            onCommit?.(event.target.value);
           }}
         >
           {param.options.map((option) => (
@@ -152,7 +152,7 @@ export function ParamControl({
           disabled={disabled}
           onChange={(event) => {
             onChange(event.target.checked);
-            onCommit?.();
+            onCommit?.(event.target.checked);
           }}
         />
         <span>{label}</span>
@@ -177,8 +177,8 @@ export function ParamControl({
         onChange={(event) => onChange(Number(event.target.value))}
         // On release rather than on every pixel of travel, which would be a
         // request per frame of the drag.
-        onPointerUp={onCommit}
-        onKeyUp={onCommit}
+        onPointerUp={(event) => onCommit?.(Number(event.currentTarget.value))}
+        onKeyUp={(event) => onCommit?.(Number(event.currentTarget.value))}
       />
       {help && <small>{help}</small>}
     </label>

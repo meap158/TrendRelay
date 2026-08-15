@@ -84,6 +84,26 @@ def test_every_built_in_is_addressable_and_described() -> None:
         assert overlay.shapes, f"{overlay.id} would render as nothing"
 
 
+def test_the_curated_pack_has_depth_and_clear_management_categories() -> None:
+    """A gallery should be a useful collection, not twelve miscellaneous props."""
+    assert len(overlay_catalogue.BUILT_IN) >= 30
+    assert overlay_catalogue.GROUP_ORDER == (
+        overlay_catalogue.COVER,
+        overlay_catalogue.FEATURES,
+        overlay_catalogue.HEADWEAR,
+        overlay_catalogue.REACTIONS,
+        overlay_catalogue.CREATOR_UI,
+    )
+    counts = {
+        group: sum(item.group == group for item in overlay_catalogue.BUILT_IN)
+        for group in overlay_catalogue.GROUP_ORDER
+    }
+    assert all(count >= 3 for count in counts.values())
+    assert {"live_badge", "focus_frame", "comment_bubble", "tap_cursor"} <= {
+        item.id for item in overlay_catalogue.BUILT_IN
+    }
+
+
 def test_an_object_that_hides_a_face_says_so_and_is_big_enough_to() -> None:
     # The claim drives how a render is filed, so it must not be attached to
     # something that plainly cannot cover a face.
@@ -377,6 +397,25 @@ def test_the_size_control_multiplies_what_the_catalogue_declared() -> None:
     plain = place(upright(), smiley, OverlaySettings(overlay_id="smiley"))
     bigger = place(upright(), smiley, OverlaySettings(overlay_id="smiley", scale=1.5))
     assert bigger.width == pytest.approx(plain.width * 1.5, rel=0.001)
+
+
+def test_an_object_can_be_art_directed_in_both_axes_and_rotation() -> None:
+    cursor = overlay_catalogue.get("tap_cursor")
+    assert cursor is not None
+    plain = place(upright(), cursor, OverlaySettings(overlay_id="tap_cursor"))
+    directed = place(
+        upright(),
+        cursor,
+        OverlaySettings(
+            overlay_id="tap_cursor",
+            horizontal_offset=-0.25,
+            offset=0.15,
+            rotation=-18,
+        ),
+    )
+    assert directed.centre[0] == pytest.approx(plain.centre[0] - 25, abs=0.1)
+    assert directed.centre[1] == pytest.approx(plain.centre[1] + 15, abs=0.1)
+    assert directed.angle == -18
 
 
 def test_the_two_landmark_sets_measure_a_face_differently() -> None:
@@ -833,6 +872,20 @@ def test_a_sticker_lands_on_the_frame() -> None:
     assert frame[200, 200].tolist() != [0, 0, 0]
     # And only where it was put: the corners of the frame are untouched.
     assert frame[5, 5].tolist() == [0, 0, 0]
+
+
+def test_an_asymmetric_object_can_be_mirrored() -> None:
+    cv2, numpy = _vision()
+    cursor = overlay_catalogue.get("tap_cursor")
+    assert cursor is not None
+    placement = face_overlays.Placement(centre=(150.0, 150.0), width=100.0, angle=0.0)
+    sprite = overlay_catalogue.render_sprite(cv2, numpy, cursor, placement.sprite_width())
+    regular = numpy.zeros((300, 300, 3), dtype=numpy.uint8)
+    mirrored = regular.copy()
+    face_overlays.paste(cv2, numpy, regular, sprite, placement, 1.0)
+    face_overlays.paste(cv2, numpy, mirrored, sprite, placement, 1.0, mirror=True)
+    assert not numpy.array_equal(regular, mirrored)
+    assert numpy.array_equal(regular, numpy.flip(mirrored, axis=1))
 
 
 def test_a_sticker_at_the_edge_of_shot_is_cropped_rather_than_dropped() -> None:

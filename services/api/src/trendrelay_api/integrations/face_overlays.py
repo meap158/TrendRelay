@@ -78,8 +78,16 @@ class OverlaySettings:
     target: Target = "largest"
     #: Multiplies the object's own declared size. 1 is what the catalogue says.
     scale: float = 1.0
-    #: Nudge up or down, in face widths, along the head's own axis.
+    #: Nudge left or right, in face widths, along the head's own axis.
+    horizontal_offset: float = 0.0
+    #: Nudge up or down, in face widths, along the head's own axis. Kept as
+    #: `offset` in recipes for compatibility with edits saved before horizontal
+    #: placement existed.
     offset: float = 0.0
+    #: Deliberate art direction on top of the tracked head angle.
+    rotation: float = 0.0
+    #: Turn asymmetric props around without maintaining a second asset.
+    mirror: bool = False
     #: How solid it is. Below 1 the face shows through, which is a look and not
     #: a redaction — the report says so when an occluding object is faded.
     opacity: float = 1.0
@@ -116,17 +124,30 @@ def place(anchors: FaceAnchors, overlay: Overlay, settings: OverlaySettings) -> 
     right, up = anchors.axes if tilted else ((1.0, 0.0), (0.0, -1.0))
     # Positive y in a declared offset means downwards on an upright head, which
     # is the direction someone drawing the object thinks in.
-    across = overlay.offset[0] * face_width
+    across = (overlay.offset[0] + settings.horizontal_offset) * face_width
     down = (overlay.offset[1] + settings.offset) * face_width
     centre = (
         anchor_x + right[0] * across - up[0] * down,
         anchor_y + right[1] * across - up[1] * down,
     )
     width = face_width * overlay.width_in_faces * max(0.05, settings.scale)
-    return Placement(centre=centre, width=width, angle=anchors.roll if tilted else 0.0)
+    tracked_angle = anchors.roll if tilted else 0.0
+    return Placement(
+        centre=centre,
+        width=width,
+        angle=tracked_angle + settings.rotation,
+    )
 
 
-def paste(cv2: Any, np: Any, frame: Any, sprite: Any, placement: Placement, opacity: float) -> bool:
+def paste(
+    cv2: Any,
+    np: Any,
+    frame: Any,
+    sprite: Any,
+    placement: Placement,
+    opacity: float,
+    mirror: bool = False,
+) -> bool:
     """Burn one sprite into one frame. True if any of it landed.
 
     Rotation and blending both happen in premultiplied alpha. Rotating a
@@ -135,6 +156,8 @@ def paste(cv2: Any, np: Any, frame: Any, sprite: Any, placement: Placement, opac
     that looks placed and one that looks pasted.
     """
     layer = overlay_catalogue.premultiply(np, sprite)
+    if mirror:
+        layer = cv2.flip(layer, 1)
     target = placement.sprite_width()
     if layer.shape[1] != target:
         # Only when the sprite hit its own size ceiling. Compared against the
@@ -735,7 +758,9 @@ def render_overlaid(
             for face in here:
                 placement = place(face, overlay, settings)
                 sprite = sprites.at(placement.sprite_width())
-                if paste(cv2, np, frame, sprite, placement, settings.opacity):
+                if paste(
+                    cv2, np, frame, sprite, placement, settings.opacity, settings.mirror
+                ):
                     placed += 1
                     landed = True
             covered_frames += 1 if landed else 0
@@ -859,7 +884,15 @@ def apply_to_image(
     placed = 0
     for face in drawn:
         placement = place(face, overlay, settings)
-        if paste(cv2, np, frame, sprites.at(placement.sprite_width()), placement, settings.opacity):
+        if paste(
+            cv2,
+            np,
+            frame,
+            sprites.at(placement.sprite_width()),
+            placement,
+            settings.opacity,
+            settings.mirror,
+        ):
             placed += 1
     return placed
 

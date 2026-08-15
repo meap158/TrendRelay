@@ -294,9 +294,23 @@ FACE_OVERLAY = Effect(
             help="Against the size of the face, so it holds as the subject moves.",
         ),
         EffectParam(
-            id="offset", label="Position", kind="number", default=0.0,
+            id="horizontal_offset", label="Horizontal position", kind="number", default=0.0,
+            minimum=-0.8, maximum=0.8, step=0.02,
+            help="Move left or right along the face. Negative is left.",
+        ),
+        EffectParam(
+            id="offset", label="Vertical position", kind="number", default=0.0,
             minimum=-0.6, maximum=0.6, step=0.02,
             help="Up or down the face. Negative is up.",
+        ),
+        EffectParam(
+            id="rotation", label="Rotation", kind="number", default=0.0,
+            minimum=-180, maximum=180, step=1, unit="°",
+            help="Rotate the object around its tracked anchor.",
+        ),
+        EffectParam(
+            id="mirror", label="Mirror object", kind="toggle", default=False,
+            help="Flip asymmetric props while keeping their tracked position.",
         ),
         EffectParam(
             id="opacity", label="Solidity", kind="number", default=1.0,
@@ -490,7 +504,10 @@ def _overlay_settings(values: dict[str, Any]) -> face_overlays.OverlaySettings:
         overlay_id=str(values["object"]),
         target=str(values["target"]),  # type: ignore[arg-type]
         scale=float(values["scale"]),
+        horizontal_offset=float(values["horizontal_offset"]),
         offset=float(values["offset"]),
+        rotation=float(values["rotation"]),
+        mirror=bool(values["mirror"]),
         opacity=float(values["opacity"]),
         follow_tilt=bool(values["follow_tilt"]),
         confidence=float(values["confidence"]),
