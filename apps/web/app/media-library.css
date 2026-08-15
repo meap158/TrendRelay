@@ -338,7 +338,20 @@
 /* --- effect editor ---------------------------------------------------------- */
 /* Every control in here is generated from what the API declares, so the styling
  * is by role - a step, a parameter - rather than by which effect it belongs to. */
-.effect-editor { display: grid; gap: 12px; }
+.effect-editor {
+  /* This is the dialog's body. It owns overflow so a loaded preview can grow
+     without moving the dialog footer (Close / Save / Preview / Render) out of
+     reach. `min-height: 0` is essential for a flex child to actually shrink. */
+  display: grid;
+  flex: 1 1 auto;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  padding-inline-end: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
 .effect-add { display: flex; flex-wrap: wrap; gap: 6px; }
 .effect-empty { margin: 0; max-width: 62ch; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .effect-batch-note { margin: 0; padding: 8px 10px; border-inline-start: 3px solid var(--link); background: var(--panel-raised); color: var(--muted); font-size: 11px; line-height: 1.5; }
@@ -350,6 +363,14 @@
 .effect-recipe-preview progress { width: 100%; height: 5px; accent-color: var(--link); }
 .effect-recipe-preview video,
 .effect-recipe-preview img { width: 100%; height: clamp(220px, 42vh, 460px); border-radius: var(--radius-sm); background: #111827; object-fit: contain; }
+
+/* Keep all four actions usable when the wide editor collapses onto a phone. */
+@media (max-width: 700px) {
+  .ui-dialog:has(.effect-editor) { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); padding: 12px; }
+  .ui-dialog:has(.effect-editor) .ui-dialog-foot { flex-wrap: wrap; }
+  .effect-recipe-preview video,
+  .effect-recipe-preview img { height: clamp(180px, 34dvh, 300px); }
+}
 
 .effect-stack { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: step; }
 .effect-step { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
