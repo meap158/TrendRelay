@@ -73,7 +73,7 @@ export function EffectEditor({
   const t = useT();
   // The drawer polls every few seconds; a render that has just been asked for
   // should be in it before the operator has finished reading the toast.
-  const { refresh: refreshJobs } = useJobs();
+  const { announceEffectJobs, refresh: refreshJobs } = useJobs();
   const [effects, setEffects] = useState<EffectDefinition[]>([]);
   const [steps, setSteps] = useState<Step[]>([]);
   const [busy, setBusy] = useState("");
@@ -261,6 +261,7 @@ export function EffectEditor({
     try {
       if (batch) {
         const totals = { queued: 0, skipped: 0, failed: 0, missing: 0 };
+        const queuedJobs: any[] = [];
         for (let at = 0; at < targetIds.length; at += 200) {
           const response = await apiFetch(`${base}/effects/render-batch`, {
             method: "POST",
@@ -276,7 +277,9 @@ export function EffectEditor({
           for (const key of Object.keys(totals) as Array<keyof typeof totals>) {
             totals[key] += body.counts?.[key] ?? 0;
           }
+          queuedJobs.push(...(body.jobs ?? []));
         }
+        announceEffectJobs(queuedJobs);
         const details = [`${totals.queued} queued`];
         if (totals.skipped) details.push(`${totals.skipped} skipped`);
         if (totals.failed) details.push(`${totals.failed} failed`);
@@ -294,9 +297,10 @@ export function EffectEditor({
         });
         const body = await response.json();
         if (!response.ok) throw new Error(body.detail ?? "The render could not start.");
+        announceEffectJobs(body.job ? [body.job] : []);
         onRendered(t("effectEditor.renderStarted"));
       }
-      void refreshJobs();
+      await refreshJobs();
       onClose();
     } catch (reason) {
       setFailure(reason instanceof Error ? reason.message : "The render could not start.");
@@ -330,7 +334,8 @@ export function EffectEditor({
       const body = await response.json();
       if (!response.ok) throw new Error(body.detail ?? "The preview could not start.");
       setPreviewJob(body.job);
-      void refreshJobs();
+      announceEffectJobs(body.job ? [body.job] : []);
+      await refreshJobs();
     } catch (reason) {
       setFailure(reason instanceof Error ? reason.message : "The preview could not start.");
     } finally {
@@ -348,7 +353,8 @@ export function EffectEditor({
       const body = await response.json();
       if (!response.ok) throw new Error(body.detail ?? "The preview could not be cancelled.");
       setPreviewJob(body.job);
-      void refreshJobs();
+      announceEffectJobs(body.job ? [body.job] : []);
+      await refreshJobs();
     } catch (reason) {
       setFailure(reason instanceof Error ? reason.message : "The preview could not be cancelled.");
     } finally {
@@ -587,8 +593,12 @@ export function EffectEditor({
                 >Cancel</Button>
               )}
             </div>
-            {!previewUrl && typeof previewJob?.progress === "number" && (
-              <progress max={1} value={previewJob.progress} />
+            {!previewUrl && previewJob && (
+              <progress
+                max={1}
+                value={typeof previewJob.progress === "number" ? previewJob.progress : undefined}
+                aria-label={previewJob.progress_stage || "Preparing effect preview"}
+              />
             )}
             {previewUrl && previewMediaKind === "video" && (
               <video src={previewUrl} controls preload="metadata" />

@@ -80,6 +80,7 @@ type JobsContextValue = {
   busy: boolean;
   activeWorkspaceId: string | null;
   setActiveWorkspaceId: (id: string | null) => void;
+  announceEffectJobs: (jobs: any[]) => void;
   refresh: () => Promise<void>;
 };
 
@@ -91,6 +92,36 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<BaseJob[]>([]);
   const [busy, setBusy] = useState(false);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+
+  const effectJob = useCallback((job: any): BaseJob => ({
+    id: job.id,
+    category: "edit",
+    status: job.status,
+    created_at: job.created_at,
+    title: editTitle(t, job),
+    error: job.error,
+    progress: job.progress,
+    progressStage: job.progress_stage,
+    startedAt: job.started_at,
+    href: assetHref(job),
+    raw: job,
+  }), [t]);
+
+  /**
+   * Put a job returned by a mutating request on screen immediately.
+   *
+   * Polling remains the authority for later progress, but waiting for its next
+   * four-second tick made a repeat render look as though the click did nothing:
+   * there was no notification, thumbnail overlay, or detail-card activity in
+   * the interval. Replacing by id also lets cancellation update the same row.
+   */
+  const announceEffectJobs = useCallback((incoming: any[]) => {
+    const announced = incoming.filter((job) => job?.id).map(effectJob);
+    if (!announced.length) return;
+    const ids = new Set(announced.map((job) => job.id));
+    setJobs((current) => [...announced, ...current.filter((job) => !ids.has(job.id))]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+  }, [effectJob]);
 
   const refresh = useCallback(async () => {
     if (!user) {
@@ -183,20 +214,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         // the notification drawer still groups and presents this same stream.
         const fetchEdits = apiFetch(`/api/workspaces/${activeWorkspaceId}/media/library/effects/jobs?limit=250`)
           .then(res => res.json())
-          .then(data => (data.jobs || []).map((j: any) => ({
-            id: j.id,
-            category: "edit" as JobCategory,
-            status: j.status,
-            created_at: j.created_at,
-            title: editTitle(t, j),
-            error: j.error,
-            progress: j.progress,
-            progressStage: j.progress_stage,
-            startedAt: j.started_at,
-            // The asset it produced, which it only knows once it has one.
-            href: assetHref(j),
-            raw: j,
-          })))
+          .then(data => (data.jobs || []).map(effectJob))
           .catch(() => []);
         fetchPromises.push(fetchEdits);
         // Studio renders
@@ -241,7 +259,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     } finally {
       setBusy(false);
     }
-  }, [activeWorkspaceId, apiFetch, t, user]);
+  }, [activeWorkspaceId, apiFetch, effectJob, user]);
 
   useEffect(() => {
     queueMicrotask(() => void refresh());
@@ -272,7 +290,14 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   }, [jobs]);
 
   return (
-    <JobsContext.Provider value={{ jobs, busy, activeWorkspaceId, setActiveWorkspaceId, refresh }}>
+    <JobsContext.Provider value={{
+      jobs,
+      busy,
+      activeWorkspaceId,
+      setActiveWorkspaceId,
+      announceEffectJobs,
+      refresh,
+    }}>
       {children}
     </JobsContext.Provider>
   );

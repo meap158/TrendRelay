@@ -693,7 +693,11 @@ export default function LibraryPage() {
   // them whenever an action finished. The bulk-action outcome below is not a
   // banner — it reads back inline where the run was started — so it stays put.
   const { messages: statusMessages, fail, dismiss } = useStatus();
-  const { jobs: notificationJobs, refresh: refreshJobs } = useJobs();
+  const {
+    jobs: notificationJobs,
+    refresh: refreshJobs,
+    setActiveWorkspaceId,
+  } = useJobs();
   const previousEffectJobStates = useRef<Map<string, string>>(new Map());
   const [message, setMessage] = useState("");
   const [selection, setSelection] = useState<Set<string>>(new Set());
@@ -743,6 +747,9 @@ export default function LibraryPage() {
   useEffect(() => { latestFilters.current = filters; }, [filters]);
   useEffect(() => { latestSortOrder.current = sortOrder; }, [sortOrder]);
   useEffect(() => { latestWorkspaceId.current = workspaceId; }, [workspaceId]);
+  useEffect(() => {
+    setActiveWorkspaceId(workspaceId || null);
+  }, [setActiveWorkspaceId, workspaceId]);
 
   const refresh = useCallback(async (nextWorkspace = workspaceId) => {
     if (!nextWorkspace) return;
