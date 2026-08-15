@@ -1339,3 +1339,75 @@ def test_the_status_never_raises_when_nothing_is_installed(monkeypatch) -> None:
 def test_an_overlay_carries_its_own_defaults() -> None:
     plain = Overlay(id="x", label="X", group="g")
     assert plain.follows_roll and not plain.occludes and plain.shapes == ()
+
+
+# --- the character covers ------------------------------------------------------
+#
+# The rest of the covers are archetypes - a smiley, a skull, a ghost - and one
+# archetype is much like another: choosing between them says little beyond "not
+# my face". These have a subject, so the group is worth keeping populated.
+
+CHARACTERS = ("baby_chibi", "kitsune", "panda", "boba", "crt_head")
+
+
+@pytest.mark.parametrize("overlay_id", CHARACTERS)
+def test_a_character_cover_is_a_cover(overlay_id: str) -> None:
+    overlay = overlay_catalogue.get(overlay_id)
+
+    assert overlay is not None, f"{overlay_id} is not in the catalogue"
+    assert overlay.group == overlay_catalogue.COVER
+    assert overlay.occludes is True
+    assert overlay.note.strip(), "the picker shows this while somebody decides"
+
+
+def test_the_cover_group_offers_more_than_archetypes() -> None:
+    covers = [item for item in overlay_catalogue.BUILT_IN
+              if item.group == overlay_catalogue.COVER]
+
+    assert len(covers) >= 12
+    assert set(CHARACTERS) <= {item.id for item in covers}
+
+
+# --- what a declaration actually draws -----------------------------------------
+
+
+@pytest.mark.parametrize("overlay_id", CHARACTERS)
+def test_a_declared_object_draws_something(overlay_id: str) -> None:
+    """A shape can be declared and render as nothing at all.
+
+    One of these carried a hair sprout the same colour as the hair, wholly
+    inside it - a line of description that produced no pixels. Nothing in the
+    catalogue's own checks noticed, because every field was valid.
+    """
+    cv2, numpy = _vision()
+    overlay = overlay_catalogue.get(overlay_id)
+    assert overlay is not None
+
+    sprite = overlay_catalogue.render_sprite(cv2, numpy, overlay, 128)
+    painted = float((sprite[:, :, 3] > 8).mean())
+
+    assert painted > 0.25, f"{overlay_id} covers only {painted:.0%} of its sprite"
+
+
+@pytest.mark.parametrize("overlay_id", CHARACTERS)
+def test_something_that_claims_to_hide_a_face_is_opaque_over_one(overlay_id: str) -> None:
+    """The claim is about privacy, so it is checked against the pixels.
+
+    `occludes` decides how a finished render is filed. An object that says it
+    hides a face and is transparent through the middle would file a recognisable
+    face as an anonymised one.
+    """
+    cv2, numpy = _vision()
+    overlay = overlay_catalogue.get(overlay_id)
+    assert overlay is not None and overlay.occludes
+
+    sprite = overlay_catalogue.render_sprite(cv2, numpy, overlay, 128)
+    height, width = sprite.shape[:2]
+    # The middle of the sprite, which is where a face sits under it.
+    middle = sprite[
+        int(height * 0.38):int(height * 0.62),
+        int(width * 0.30):int(width * 0.70),
+        3,
+    ]
+
+    assert float((middle > 200).mean()) > 0.9, f"{overlay_id} is see-through in the middle"

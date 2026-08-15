@@ -90,6 +90,12 @@ GREEN: RGBA = (50, 190, 132, 255)
 ORANGE: RGBA = (245, 136, 52, 255)
 SOFT_PINK: RGBA = (255, 118, 168, 235)
 GLASS: RGBA = (88, 214, 236, 175)
+#: Skin for a drawn character rather than a person: warm, light, and plainly
+#: illustrative, so nothing here is mistaken for a photograph of somebody.
+CREAM: RGBA = (252, 224, 202, 255)
+MILK_TEA: RGBA = (214, 178, 132, 255)
+PEARL: RGBA = (58, 40, 34, 255)
+SCREEN: RGBA = (108, 226, 214, 235)
 
 
 @dataclass(frozen=True)
@@ -656,6 +662,125 @@ _TAP_CURSOR = Overlay(
     ),
 )
 
+
+# --------------------------------------------------------------------------- #
+# Character covers
+# --------------------------------------------------------------------------- #
+#
+# The covers above are archetypes, and archetypes are interchangeable: choosing
+# a smiley over a ghost says little beyond "not my face". These have a subject,
+# so picking one is a decision about tone. Two are drawn from what this
+# audience actually watches - a fox mask and a boba cup are ordinary sights in
+# South-East Asian creator video, where a generic smiley reads as a placeholder.
+
+
+_BABY_CHIBI = Overlay(
+    id="baby_chibi", label="Baby chibi", group=COVER, anchor="face",
+    width_in_faces=1.55, aspect=1.05, occludes=True,
+    note="A big-eyed cartoon head. Warm rather than anonymous.",
+    shapes=(
+        # Hair first and wider than the head, so the head drawn over it leaves
+        # a cap rather than needing a clip the renderer does not have.
+        Shape("ellipse", fill=HAIR, centre=(.5, .48), size=(1.0, .96)),
+        Shape("ellipse", fill=CREAM, centre=(.5, .58), size=(.88, .84)),
+        Shape("ellipse", fill=HAIR, centre=(.5, .27), size=(.86, .38)),
+        *_pair(Shape("ellipse", fill=INK, centre=(.33, .61), size=(.23, .29))),
+        *_pair(Shape("ellipse", fill=WHITE, centre=(.28, .55), size=(.09, .11))),
+        *_pair(Shape("ellipse", fill=WHITE, centre=(.37, .67), size=(.05, .06))),
+        *_pair(Shape("ellipse", fill=SOFT_PINK, centre=(.18, .73), size=(.16, .09))),
+        Shape("ellipse", stroke=INK, stroke_width=.028, centre=(.5, .77),
+              size=(.11, .08), start_angle=20, end_angle=160),
+    ),
+)
+
+_KITSUNE = Overlay(
+    id="kitsune", label="Fox mask", group=COVER, anchor="face",
+    width_in_faces=1.42, aspect=1.16, occludes=True,
+    note="A painted fox mask. Covers the face and keeps a character.",
+    shapes=(
+        *_pair(Shape("polygon", fill=BONE,
+                     points=((.13, .36), (.05, .01), (.36, .17)))),
+        *_pair(Shape("polygon", fill=RED,
+                     points=((.17, .30), (.12, .09), (.30, .19)))),
+        Shape("ellipse", fill=BONE, centre=(.5, .58), size=(.84, .82)),
+        # The snout, which is what stops this reading as a plain white oval.
+        Shape("polygon", fill=BONE, points=((.29, .70), (.71, .70), (.5, 1.0))),
+        *_pair(Shape("ellipse", fill=INK, centre=(.33, .57), size=(.21, .12),
+                     rotation=-12)),
+        *_pair(Shape("ellipse", stroke=RED, stroke_width=.026, centre=(.33, .45),
+                     size=(.26, .12), rotation=-12,
+                     start_angle=190, end_angle=350)),
+        *_pair(Shape("polygon", fill=RED,
+                     points=((.24, .74), (.40, .78), (.24, .80)))),
+        Shape("ellipse", fill=INK, centre=(.5, .82), size=(.09, .06)),
+    ),
+)
+
+_PANDA = Overlay(
+    id="panda", label="Panda", group=COVER, anchor="face",
+    width_in_faces=1.5, aspect=1.0, occludes=True,
+    note="A round animal face that reads instantly at any size.",
+    shapes=(
+        *_pair(Shape("ellipse", fill=INK, centre=(.19, .15), size=(.31, .31))),
+        Shape("ellipse", fill=WHITE, centre=(.5, .57), size=(.94, .86)),
+        *_pair(Shape("ellipse", fill=INK, centre=(.32, .55), size=(.31, .37),
+                     rotation=-18)),
+        *_pair(Shape("ellipse", fill=WHITE, centre=(.33, .54), size=(.12, .14))),
+        *_pair(Shape("ellipse", fill=INK, centre=(.34, .55), size=(.06, .07))),
+        Shape("ellipse", fill=INK, centre=(.5, .72), size=(.13, .08)),
+        Shape("ellipse", stroke=INK, stroke_width=.03, centre=(.5, .78),
+              size=(.18, .11), start_angle=20, end_angle=160),
+    ),
+)
+
+_BOBA = Overlay(
+    id="boba", label="Bubble tea", group=COVER, anchor="face",
+    width_in_faces=1.34, aspect=1.28, occludes=True,
+    note="A boba cup with a face on it. Playful, and unmistakably itself.",
+    shapes=(
+        # A polygon rather than a rectangle: a cup tapers, and the taper is
+        # most of what makes it read as a cup at thumbnail size.
+        Shape("polygon", fill=PARTY,
+              points=((.54, .01), (.64, .01), (.70, .30), (.60, .30))),
+        Shape("polygon", fill=MILK_TEA,
+              points=((.21, .27), (.79, .27), (.71, 1.0), (.29, 1.0))),
+        Shape("rect", fill=WHITE, centre=(.5, .24), size=(.68, .11), radius=.03),
+        Shape("ellipse", fill=PEARL, centre=(.39, .88), size=(.14, .12)),
+        Shape("ellipse", fill=PEARL, centre=(.53, .90), size=(.14, .12)),
+        Shape("ellipse", fill=PEARL, centre=(.63, .84), size=(.13, .11)),
+        Shape("ellipse", fill=PEARL, centre=(.45, .78), size=(.13, .11)),
+        *_pair(Shape("ellipse", fill=INK, centre=(.40, .49), size=(.09, .13))),
+        *_pair(Shape("ellipse", fill=SOFT_PINK, centre=(.31, .60), size=(.11, .06))),
+        Shape("ellipse", stroke=INK, stroke_width=.028, centre=(.5, .57),
+              size=(.13, .09), start_angle=20, end_angle=160),
+    ),
+)
+
+_CRT_HEAD = Overlay(
+    id="crt_head", label="CRT head", group=COVER, anchor="face",
+    width_in_faces=1.46, aspect=.96, occludes=True,
+    note="A television for a head. Hides the face and looks deliberate.",
+    shapes=(
+        Shape("line", stroke=STEEL, stroke_width=.03,
+              points=((.40, .20), (.24, .01))),
+        Shape("line", stroke=STEEL, stroke_width=.03,
+              points=((.60, .20), (.76, .01))),
+        Shape("rect", fill=DARK_STEEL, centre=(.5, .61), size=(1.0, .76), radius=.09),
+        Shape("rect", fill=SCREEN, centre=(.44, .60), size=(.70, .58), radius=.05),
+        # Scanlines: what separates a television from a grey box.
+        Shape("line", stroke=INK, stroke_width=.012, points=((.11, .48), (.77, .48))),
+        Shape("line", stroke=INK, stroke_width=.012, points=((.11, .62), (.77, .62))),
+        Shape("line", stroke=INK, stroke_width=.012, points=((.11, .76), (.77, .76))),
+        # Knobs, written out rather than mirrored: they belong on one side.
+        Shape("ellipse", fill=STEEL, centre=(.89, .48), size=(.11, .11)),
+        Shape("ellipse", fill=STEEL, centre=(.89, .68), size=(.08, .08)),
+        Shape("ellipse", fill=INK, centre=(.33, .55), size=(.08, .11)),
+        Shape("ellipse", fill=INK, centre=(.55, .55), size=(.08, .11)),
+        Shape("ellipse", stroke=INK, stroke_width=.026, centre=(.44, .66),
+              size=(.16, .10), start_angle=20, end_angle=160),
+    ),
+)
+
 BUILT_IN: tuple[Overlay, ...] = (
     _CENSOR_BLOCK,
     _SMILEY,
@@ -673,6 +798,11 @@ BUILT_IN: tuple[Overlay, ...] = (
     _ALIEN,
     _FLOWER_FACE,
     _CLOUD_FACE,
+    _BABY_CHIBI,
+    _KITSUNE,
+    _PANDA,
+    _BOBA,
+    _CRT_HEAD,
     _HEART_EYES,
     _STAR_GLASSES,
     _CYBER_VISOR,
