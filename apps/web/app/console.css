@@ -33,7 +33,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 24px;
+  gap: 16px;
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
@@ -47,8 +47,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .app-brand-mark svg { width: 19px; height: 19px; overflow: visible; fill: #fff; }
 .app-brand-mark path { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .app-brand strong { font-weight: 600; }
-.app-nav { display: flex; align-items: stretch; gap: 4px; margin: 0; height: 100%; }
-.app-nav a { display: flex; align-items: center; padding: 0 16px; border-radius: var(--radius-sm); color: var(--text); font-size: 13px; font-weight: 500; text-decoration: none; border-bottom: 3px solid transparent; }
+.app-nav { display: flex; align-items: stretch; gap: 2px; margin: 0; height: 100%; }
+.app-nav a { display: flex; align-items: center; gap: 6px; padding: 0 11px; border-radius: var(--radius-sm); color: var(--text); font-size: 12px; font-weight: 500; text-decoration: none; border-bottom: 3px solid transparent; }
+.app-nav a svg { flex: 0 0 auto; width: 14px; height: 14px; }
 .app-nav a:hover { background: var(--panel-raised); }
 .app-nav a.active { border-bottom-color: var(--link); color: var(--link); background: transparent; }
 .workspace-section-nav { position: sticky; top: 52px; z-index: 90; display: flex; flex-wrap: wrap; align-items: center; gap: 0; margin: 12px 0 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: 0 1px 2px rgba(0,0,0,.04); }
@@ -199,7 +200,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .research-page, .tools-page, .publish-page, .auth-page, .workspace-page { padding-top: 24px; }
 .research-page > h1, .tools-page > h1, .publish-page header h1, .workspace-heading h1 { font-size: 24px; letter-spacing: normal; }
 .research-form { margin: 24px 0 32px; }
-.tool-card { min-height: 300px; border-radius: var(--radius); }
+.tool-card { min-height: 0; border-radius: var(--radius); }
 .publish-form, .publish-side article, .management-card, .audit-panel, .workspace-sidebar, .empty-panel { border-radius: var(--radius); }
 
 @media (max-width: 900px) {
@@ -219,6 +220,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .pipeline-steps > *:last-child { border-bottom: 0; }
   .compact-fields, .quick-actions { grid-template-columns: 1fr; }
   .operation-card { padding: 16px; }
+  .app-nav { justify-content: space-between; }
+  .app-nav a { flex: 1 1 auto; justify-content: center; min-width: 40px; padding-inline: 8px; }
+  .app-nav a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .app-nav a svg { width: 18px; height: 18px; }
 }
 
 .local-admin-badge {
@@ -796,7 +801,7 @@ html { scroll-behavior: smooth; }
 .campaign-summary h2 { margin: 2px 0; font-size: 17px; }
 .campaign-summary p { margin: 3px 0; }
 .campaign-status-actions { align-items: center; }
-.campaign-status-actions > a { display: inline-flex; align-items: center; min-height: 30px; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 0 10px; color: var(--link); background: var(--panel); font-weight: 600; text-decoration: none; }
+.campaign-status-actions > a { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 0 10px; color: var(--link); background: var(--panel); font-weight: 600; text-decoration: none; }
 .autopilot { gap: 10px; margin-top: 0; }
 .autopilot > .ui-card { box-shadow: var(--campaign-shadow); }
 .autopilot > .ui-card:first-child { gap: 8px; padding-bottom: 10px; }

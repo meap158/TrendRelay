@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
 import { useT } from "../i18n-provider";
 
 /**
@@ -100,7 +101,7 @@ export function StatusToasts({
             type="button"
             aria-label={t("ui.dismiss")}
             onClick={() => onDismiss(message.id)}
-          >×</button>
+          ><X size={15} aria-hidden="true" /></button>
         </div>
       ))}
     </div>

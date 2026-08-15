@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { clipLength, fileName, handoffPath, isBlurred } from "../../lib/media-rules";
 import { useEffect, useMemo, useState } from "react";
 
@@ -12,6 +13,7 @@ import {
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
+import { ActionIcon } from "../ui/action-icons";
 import { useT } from "../i18n-provider";
 
 export type LibraryAsset = {
@@ -668,7 +670,7 @@ export function WeekCalendar({
         <strong>{range}</strong>
         <div className="ui-choice-row">
           <Button variant="quiet" size="sm" onClick={() => setOffset(offset - 1)}>
-            ← Previous
+            <ChevronLeft size={14} aria-hidden="true" />Previous
           </Button>
           <Button
             variant="quiet"
@@ -677,7 +679,7 @@ export function WeekCalendar({
             onClick={() => setOffset(0)}
           >{t("composer.thisWeek")}</Button>
           <Button variant="quiet" size="sm" onClick={() => setOffset(offset + 1)}>
-            Next →
+            Next<ChevronRight size={14} aria-hidden="true" />
           </Button>
         </div>
       </header>
@@ -801,7 +803,7 @@ export function SlotEditor({
                   aria-label={`Remove ${slotLabel(slot)}`}
                   disabled={busy}
                   onClick={() => onSave(entries.filter((_entry, at) => at !== index))}
-                >×</button>
+                ><ActionIcon name="dismiss" /></button>
               )}
             </li>
           ))}

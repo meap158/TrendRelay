@@ -8,6 +8,7 @@ import { useAuth } from "./auth-provider";
 import { type BaseJob, useJobs } from "./jobs-provider";
 import { useT } from "./i18n-provider";
 import { Button } from "./ui/button";
+import { ActionIcon } from "./ui/action-icons";
 import { LanguagePicker } from "./ui/language-picker";
 
 const READ_NOTIFICATIONS_KEY = "trendrelay:read-notifications:";
@@ -248,13 +249,13 @@ export function GlobalNav() {
         <strong>TrendRelay</strong>
       </Link>
       <nav className="app-nav">
-        <Link className={discoverActive ? "active" : ""} href="/discover">{t("nav.discover")}</Link>
-        <Link className={pathname === "/" ? "active" : ""} href="/">{t("common.download")}</Link>
-        <Link className={libraryActive ? "active" : ""} href="/library">{t("nav.library")}</Link>
-        <Link className={attributionActive ? "active" : ""} href="/attribution">{t("nav.attribution")}</Link>
-        <Link className={publishActive ? "active" : ""} href="/publish">{t("nav.publish")}</Link>
-        <Link className={pathname === "/campaigns" ? "active" : ""} href="/campaigns">{t("nav.campaigns")}</Link>
-        <Link className={pathname === "/tools" ? "active" : ""} href="/tools">{t("nav.tools")}</Link>
+        <Link className={discoverActive ? "active" : ""} href="/discover"><ActionIcon name="search" /><span>{t("nav.discover")}</span></Link>
+        <Link className={pathname === "/" ? "active" : ""} href="/"><ActionIcon name="download" /><span>{t("common.download")}</span></Link>
+        <Link className={libraryActive ? "active" : ""} href="/library"><ActionIcon name="grid" /><span>{t("nav.library")}</span></Link>
+        <Link className={attributionActive ? "active" : ""} href="/attribution"><ActionIcon name="link" /><span>{t("nav.attribution")}</span></Link>
+        <Link className={publishActive ? "active" : ""} href="/publish"><ActionIcon name="publish" /><span>{t("nav.publish")}</span></Link>
+        <Link className={pathname === "/campaigns" ? "active" : ""} href="/campaigns"><ActionIcon name="campaign" /><span>{t("nav.campaigns")}</span></Link>
+        <Link className={pathname === "/tools" ? "active" : ""} href="/tools"><ActionIcon name="setup" /><span>{t("nav.tools")}</span></Link>
       </nav>
 
       <div className="toolbar-actions">
@@ -284,7 +285,7 @@ export function GlobalNav() {
                 </div>
                 <div className="notification-heading-actions">
                   <button type="button" className="notification-mark-all" disabled={unreadCount === 0} onClick={markAllRead}>{t("notifications.markAllRead")}</button>
-                  <button type="button" className="notification-close" aria-label={t("notifications.close")} onClick={closeDrawer}>×</button>
+                  <button type="button" className="notification-close" aria-label={t("notifications.close")} onClick={closeDrawer}><ActionIcon name="dismiss" /></button>
                 </div>
               </header>
 

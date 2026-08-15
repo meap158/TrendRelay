@@ -2,16 +2,20 @@
 
 import {
   CalendarPlus,
+  Archive,
   Check,
   Copy,
   Download,
   EyeOff,
   FolderOpen,
+  Grid2X2,
   Link2,
+  List,
   Pencil,
   Play,
   Plus,
   RefreshCw,
+  Search,
   Scissors,
   Send,
   Settings2,
@@ -37,6 +41,7 @@ import {
  */
 export const ACTION_ICONS = {
   delete: Trash2,
+  archive: Archive,
   blur: EyeOff,
   blurSettings: SlidersHorizontal,
   edit: Pencil,
@@ -48,6 +53,9 @@ export const ACTION_ICONS = {
   download: Download,
   upload: Upload,
   refresh: RefreshCw,
+  search: Search,
+  grid: Grid2X2,
+  list: List,
   link: Link2,
   copy: Copy,
   play: Play,

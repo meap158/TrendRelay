@@ -458,7 +458,7 @@ export default function AttributionPage() {
               className={buttonClass({ variant: "primary" })}
               onClick={() => setPanel("link")}
               disabled={!campaigns.length}
-            >{t("attribution.createLink")}</button>
+            ><ActionIcon name="link" /> {t("attribution.createLink")}</button>
           )}
         </div>
       </header>

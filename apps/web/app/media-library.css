@@ -6,11 +6,11 @@
 .library-heading p { margin: 0; color: var(--muted); }
 .library-heading label { display: grid; gap: 5px; min-width: 230px; color: var(--muted); font-size: 11px; font-weight: 600; }
 .library-heading select, .library-search input, .library-search select, .library-import input, .library-import textarea, .library-import select, .library-compact-form input, .library-compact-form textarea, .library-compact-form select, .library-enrichment input, .library-enrichment textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; }
-.library-status-dots { display: flex; gap: 4px; align-items: center; }
-.library-status-dot { position: relative; width: 10px; height: 10px; border-radius: 50%; cursor: help; }
-.library-status-dot.ready { background: var(--green); box-shadow: 0 0 0 2px #dff1ea; }
-.library-status-dot.setup { background: var(--amber); box-shadow: 0 0 0 2px #fdf3d8; }
-.library-status-dot.warning { background: var(--red); box-shadow: 0 0 0 2px #fde8e8; }
+.library-status-dots { display: flex; gap: 3px; align-items: center; }
+.library-status-dot { position: relative; display: grid; width: 20px; height: 20px; place-items: center; border-radius: var(--radius-sm); cursor: help; }
+.library-status-dot.ready { color: var(--green); background: var(--green-dark); }
+.library-status-dot.setup { color: #8a6302; background: #fff8e1; }
+.library-status-dot.warning { color: var(--red); background: #fde8e8; }
 .library-status-tooltip { position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: 220px; padding: 8px 10px; border-radius: var(--radius-sm); background: #1c2b33; color: #fff; font-size: 11px; font-weight: 500; line-height: 1.4; opacity: 0; visibility: hidden; transition: opacity 0.15s, visibility 0.15s; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.15); pointer-events: none; }
 .library-status-dot:hover .library-status-tooltip,
 .library-status-dot:focus .library-status-tooltip { opacity: 1; visibility: visible; }

@@ -134,6 +134,13 @@ Research integrations, ad collection, opportunity scoring, and additional produc
 - **Storage:** local SQLite and `.data/` media by default; optional public object storage only for publishing engines that fetch media by URL.
 - **Quality:** Pytest, Node's test runner, TypeScript, ESLint, Ruff, and production Next.js builds.
 
+## Interface conventions
+
+- Primary workspaces use the same compact top navigation, page heading, workspace control, status language, and action hierarchy.
+- Familiar actions use the shared Lucide icon vocabulary; icons supplement readable labels and icon-only controls retain accessible names and tooltips.
+- Dense operational screens favor short toolbars, compact cards, sticky context only where it helps, and responsive icon-first navigation on narrow screens.
+- Native browser controls remain where they provide the clearest accessible interaction; custom styling follows [DESIGN.md](DESIGN.md) rather than replacing predictable behavior for decoration alone.
+
 ## Development
 
 Run the web and API development environment:

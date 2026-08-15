@@ -1244,6 +1244,9 @@ export default function LibraryPage() {
                   tabIndex={0}
                   aria-label={`Media processing: ${status?.runtime.local_derivatives ? "ready" : "setup required"}`}
                 >
+                  {status?.runtime.local_derivatives
+                    ? <CircleCheck size={14} aria-hidden="true" />
+                    : <CircleAlert size={14} aria-hidden="true" />}
                   <span className="library-status-tooltip" aria-hidden="true">
                     Media processing: {status?.runtime.local_derivatives ? "ready" : "setup required"}
                   </span>
@@ -1254,6 +1257,7 @@ export default function LibraryPage() {
                   tabIndex={0}
                   aria-label={`Transcription: reviewed text import. ${status?.transcription.reason ?? ""}`}
                 >
+                  <CircleAlert size={14} aria-hidden="true" />
                   <span className="library-status-tooltip" aria-hidden="true">
                     Transcription: reviewed text import
                     {status?.transcription.reason
@@ -1278,7 +1282,7 @@ export default function LibraryPage() {
           <div className="library-browser-toolbar">
           <form className="library-search" onSubmit={(event) => { event.preventDefault(); void refresh(); }}>
             <input aria-label={t("library.searchLabel")} value={query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder={t("library.searchPlaceholder")} />
-            <Button type="submit">{t("common.search")}</Button>
+            <Button type="submit"><ActionIcon name="search" />{t("common.search")}</Button>
           </form>
 
           <nav className="library-category-bar" aria-label={t("library.categories")}>
@@ -1317,10 +1321,10 @@ export default function LibraryPage() {
               {loadingAssets ? "Filtering…" : `${total} ${total === 1 ? "item" : "items"}`}
             </strong>
             <div className="library-collection-actions">
-              {canImport && <Button variant="quiet" size="sm" busy={busy === "sync"} onClick={() => void syncDownloads()}>{busy === "sync" ? "Refreshing" : "Refresh downloads"}</Button>}
+              {canImport && <Button variant="quiet" size="sm" busy={busy === "sync"} onClick={() => void syncDownloads()}><ActionIcon name="refresh" />{busy === "sync" ? "Refreshing" : "Refresh downloads"}</Button>}
               <div className="library-view-switcher" role="group" aria-label={t("library.viewLabel")}>
-                <button type="button" className={viewMode === "gallery" ? "selected" : ""} aria-label={t("library.galleryView")} title={t("library.galleryView")} aria-pressed={viewMode === "gallery"} onClick={() => chooseView("gallery")}><span aria-hidden="true">▦</span></button>
-                <button type="button" className={viewMode === "list" ? "selected" : ""} aria-label={t("library.listView")} title={t("library.listView")} aria-pressed={viewMode === "list"} onClick={() => chooseView("list")}><span aria-hidden="true">☷</span></button>
+                <button type="button" className={viewMode === "gallery" ? "selected" : ""} aria-label={t("library.galleryView")} title={t("library.galleryView")} aria-pressed={viewMode === "gallery"} onClick={() => chooseView("gallery")}><ActionIcon name="grid" /></button>
+                <button type="button" className={viewMode === "list" ? "selected" : ""} aria-label={t("library.listView")} title={t("library.listView")} aria-pressed={viewMode === "list"} onClick={() => chooseView("list")}><ActionIcon name="list" /></button>
               </div>
             </div>
           </div>

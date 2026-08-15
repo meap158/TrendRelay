@@ -55,7 +55,8 @@
 .discovery-source-boards > summary > span:first-child { display: grid; gap: 2px; }
 .discovery-source-boards > summary strong { font-size: 13px; }
 .discovery-source-boards > summary small { color: var(--muted); font-size: 11px; }
-.discovery-source-boards > summary > span:last-child { color: var(--link); font-size: 20px; line-height: 1; }
+.discovery-source-boards > summary > svg { flex: 0 0 auto; color: var(--link); transition: transform 150ms ease; }
+.discovery-source-boards > summary > svg.open { transform: rotate(180deg); }
 .discovery-source-boards[open] > summary { border-bottom: 1px solid var(--line); }
 .discovery-source-boards > div { padding-inline: 14px; }
 

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
+import { ActionIcon } from "../ui/action-icons";
 import { useT } from "../i18n-provider";
 
 type Segment = { label: string; start_seconds: number; end_seconds: number };
@@ -233,7 +234,7 @@ export function ClipEditor({
                     className="slot-remove"
                     aria-label={`Remove ${segment.label}`}
                     onClick={() => setSegments(segments.filter((_item, at) => at !== index))}
-                  >×</button>
+                  ><ActionIcon name="dismiss" /></button>
                 )}
               </div>
             ))}

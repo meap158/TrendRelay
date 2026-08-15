@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth-provider";
 import { useLocale } from "../i18n-provider";
 import { buttonClass } from "../ui/button";
+import { ActionIcon } from "../ui/action-icons";
 
 type Tool = {
   id: string;
@@ -317,23 +318,23 @@ export default function ToolsPage() {
                 <span>{tool.active ? "Active" : tool.integration_status}</span>
               </div>
               <div className="tool-actions">
-                <a href={tool.repository} target="_blank" rel="noreferrer">GitHub</a>
-                {tool.service_repository && <a href={tool.service_repository} target="_blank" rel="noreferrer">{t("tools.selfHost")}</a>}
-                {tool.id === "meta-ads-kit" && <a href="#meta-access-guide">{t("tools.accessGuide")}</a>}
+                <a href={tool.repository} target="_blank" rel="noreferrer"><ActionIcon name="link" />GitHub</a>
+                {tool.service_repository && <a href={tool.service_repository} target="_blank" rel="noreferrer"><ActionIcon name="link" />{t("tools.selfHost")}</a>}
+                {tool.id === "meta-ads-kit" && <a href="#meta-access-guide"><ActionIcon name="setup" />{t("tools.accessGuide")}</a>}
                 {guidedSetup.has(tool.id) && (
-                  <button disabled={busy === `${tool.id}-setup`} onClick={() => void loadSetup(tool.id)}>{t("tools.setup")}</button>
+                  <button disabled={busy === `${tool.id}-setup`} onClick={() => void loadSetup(tool.id)}><ActionIcon name="setup" />{t("tools.setup")}</button>
                 )}
-                {tool.id === "openmontage" && tool.installed && <Link href="/library">{t("tools.openLibrary")}</Link>}
+                {tool.id === "openmontage" && tool.installed && <Link href="/library"><ActionIcon name="grid" />{t("tools.openLibrary")}</Link>}
                 {!tool.present && tool.install_allowed && (
-                  <button disabled={busy === tool.id} onClick={() => void mutate(tool, "install")}>{t("tools.install")}</button>
+                  <button disabled={busy === tool.id} onClick={() => void mutate(tool, "install")}><ActionIcon name="download" />{t("tools.install")}</button>
                 )}
                 {tool.installed && tool.activation_allowed && (
                   <button disabled={busy === tool.id} onClick={() => void mutate(tool, "activation")}>
-                    {tool.active ? "Deactivate" : "Activate"}
+                    <ActionIcon name={tool.active ? "dismiss" : "play"} />{tool.active ? "Deactivate" : "Activate"}
                   </button>
                 )}
                 {tool.present && (
-                  <button className="danger" disabled={busy === tool.id} onClick={() => void mutate(tool, "uninstall")}>{t("tools.uninstall")}</button>
+                  <button className="danger" disabled={busy === tool.id} onClick={() => void mutate(tool, "uninstall")}><ActionIcon name="delete" />{t("tools.uninstall")}</button>
                 )}
               </div>
             </div>
@@ -349,7 +350,7 @@ export default function ToolsPage() {
               <h2 id="setup-title">{setup.title}</h2>
               <p>{setup.summary}</p>
             </div>
-            <button type="button" className="setup-close" onClick={() => setSetup(null)} aria-label={t("tools.closeSetup")}>{t("common.close")}</button>
+            <button type="button" className="setup-close" onClick={() => setSetup(null)} aria-label={t("tools.closeSetup")}><ActionIcon name="dismiss" />{t("common.close")}</button>
           </div>
           <div className="setup-steps">
             {setup.requirements.map((requirement, index) => (
@@ -392,7 +393,7 @@ export default function ToolsPage() {
                 disabled={busy === `${setup.tool_id}-${action.id}` || busy === "agent-reach-diagnostics"}
                 key={action.id}
                 onClick={() => void runSetupAction(action)}
-              >{action.label}</button>
+              ><ActionIcon name={action.kind === "diagnostics" ? "search" : action.kind === "navigate" ? "link" : "play"} />{action.label}</button>
             ))}
           </div>
           <p className="privacy-note">{t("tools.localOnlyNote")}</p>

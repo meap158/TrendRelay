@@ -2573,7 +2573,7 @@ export default function PublishPage() {
                         className="slot-remove"
                         aria-label={`Remove reply ${index + 1}`}
                         onClick={() => setThread(thread.filter((_item, at) => at !== index))}
-                      >×</button>
+                      ><ActionIcon name="dismiss" /></button>
                     </div>
                   );
                 })}

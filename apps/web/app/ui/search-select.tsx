@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 
 export type SearchSelectOption = {
   value: string;
@@ -49,7 +50,9 @@ export function SearchSelect({
       <button type="button" className="search-select-trigger" aria-expanded={open}
         aria-controls={listId} disabled={disabled}
         onClick={() => setOpen((current) => !current)}>
-        <span>{selected?.label ?? placeholder}</span><span aria-hidden="true">⌄</span>
+        <span>{selected?.label ?? placeholder}</span>
+        <ChevronDown className={open ? "search-select-chevron open" : "search-select-chevron"}
+          size={15} strokeWidth={2} aria-hidden="true" />
       </button>
       {open && (
         <div className="search-select-popover">

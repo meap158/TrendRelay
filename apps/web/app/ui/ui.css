@@ -245,6 +245,8 @@ a.ui-button { text-decoration: none; }
 .search-select { position: relative; width: 100%; color: var(--text); font-weight: 400; }
 .search-select-trigger { display: flex; width: 100%; min-height: 36px; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font: inherit; text-align: start; cursor: pointer; }
 .search-select-trigger > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-select-chevron { flex: 0 0 auto; transition: transform 150ms ease; }
+.search-select-chevron.open { transform: rotate(180deg); }
 .search-select-trigger:focus-visible { outline: 2px solid color-mix(in srgb, var(--link) 38%, transparent); outline-offset: 1px; }
 .search-select-popover { position: absolute; z-index: 80; inset: calc(100% + 4px) 0 auto; display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); box-shadow: 0 14px 34px rgb(15 23 42 / 16%); }
 .search-select-popover > input { width: 100%; min-height: 36px; padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--text); font: inherit; }

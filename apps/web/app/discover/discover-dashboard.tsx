@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw, Download } from "lucide-react";
+import { ChevronDown, Crown, Download, Flame, Hash, Music2, RefreshCw, type LucideIcon } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import type { DiscoverySeed } from "../../lib/discovery-ideas";
@@ -10,6 +10,7 @@ import { searchTerm, type Topic } from "../../lib/trend-shapes";
 import { useAuth } from "../auth-provider";
 import { useLocale } from "../i18n-provider";
 import { buttonClass } from "../ui/button";
+import { ActionIcon } from "../ui/action-icons";
 import { numberIn, oneOf, usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 import { useJobs } from "../jobs-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
@@ -178,12 +179,17 @@ function readTikTokPreference(): TikTokPreference | null {
   }
 }
 
-const TIKTOK_CATEGORY_ICONS: Record<string, string> = {
-  hashtag: "#",
-  video: "🔥",
-  song: "🎵",
-  creator: "👑",
+const TIKTOK_CATEGORY_ICONS: Record<string, LucideIcon> = {
+  hashtag: Hash,
+  video: Flame,
+  song: Music2,
+  creator: Crown,
 };
+
+function TikTokCategoryIcon({ id }: { id: string }) {
+  const Icon = TIKTOK_CATEGORY_ICONS[id];
+  return Icon ? <Icon size={14} strokeWidth={2} aria-hidden="true" /> : null;
+}
 
 function compactNumber(value: number): string {
   return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
@@ -261,39 +267,41 @@ function jobDot(status: string): React.CSSProperties {
 const S: Record<string, React.CSSProperties> = {
   page: {
     fontFamily: "'Google Sans', 'Segoe UI', system-ui, -apple-system, sans-serif",
-    background: "var(--panel)",
+    background: "var(--bg)",
     color: "var(--text)",
     minHeight: "100vh",
   },
   hero: {
     display: "flex",
     flexDirection: "column",
-    alignItems: "center",
+    alignItems: "stretch",
     justifyContent: "center",
-    padding: "80px 24px 48px",
-    textAlign: "center",
+    maxWidth: "960px",
+    margin: "0 auto",
+    padding: "18px 24px 14px",
+    textAlign: "left",
   },
   logo: {
-    fontSize: "42px",
-    fontWeight: 400,
+    fontSize: "24px",
+    fontWeight: 600,
     letterSpacing: "-0.5px",
     color: "var(--text)",
-    margin: "0 0 8px",
+    margin: "0 0 3px",
   },
   tagline: {
     fontSize: "15px",
     color: "var(--muted)",
-    margin: "0 0 36px",
+    margin: "0 0 12px",
     fontWeight: 400,
   },
   searchForm: {
     display: "flex",
     alignItems: "center",
     width: "100%",
-    maxWidth: "584px",
+    maxWidth: "none",
     background: "var(--panel)",
     border: "1px solid var(--line-strong)",
-    borderRadius: "24px",
+    borderRadius: "var(--radius)",
     padding: "6px 8px 6px 16px",
     boxShadow: "0 1px 6px rgba(32,33,36,0.08)",
     transition: "box-shadow 0.2s",
@@ -484,9 +492,9 @@ const S: Record<string, React.CSSProperties> = {
   quickLinksRow: {
     display: "flex",
     gap: "8px",
-    marginTop: "24px",
+    marginTop: "8px",
     flexWrap: "wrap",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     maxWidth: "800px",
   },
   quickLinkBtn: {
@@ -495,7 +503,7 @@ const S: Record<string, React.CSSProperties> = {
     gap: "6px",
     background: "var(--panel-raised)",
     border: "1px solid var(--line-strong)",
-    borderRadius: "16px",
+    borderRadius: "var(--radius-sm)",
     padding: "6px 14px",
     fontSize: "12px",
     cursor: "pointer",
@@ -507,12 +515,12 @@ const S: Record<string, React.CSSProperties> = {
   modeRow: {
     display: "flex",
     gap: "8px",
-    marginTop: "16px",
+    marginTop: "8px",
   },
   modeBtn: {
     background: "transparent",
     border: "1px solid var(--line-strong)",
-    borderRadius: "16px",
+    borderRadius: "var(--radius-sm)",
     padding: "6px 16px",
     fontSize: "13px",
     cursor: "pointer",
@@ -530,7 +538,9 @@ const S: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: "12px 24px",
+    maxWidth: "960px",
+    margin: "0 auto",
+    padding: "10px 24px",
     borderBottom: "1px solid var(--panel-raised)",
     fontSize: "13px",
     color: "var(--muted)",
@@ -555,7 +565,7 @@ const S: Record<string, React.CSSProperties> = {
   section: {
     maxWidth: "960px",
     margin: "0 auto",
-    padding: "32px 24px",
+    padding: "16px 24px",
   },
   sectionTitle: {
     fontSize: "20px",
@@ -1402,7 +1412,7 @@ export default function ResearchDashboard() {
       {error && <p style={S.error} role="alert">{error}</p>}
 
       <div style={S.hero}>
-        <h1 style={S.logo}>TrendRelay</h1>
+        <h1 style={S.logo}>Discovery command center</h1>
         <p style={S.tagline}>{t("app.tagline")}</p>
 
         <form style={S.searchForm} onSubmit={runQuery}>
@@ -1422,10 +1432,9 @@ export default function ResearchDashboard() {
           <button
             type="submit"
             className={buttonClass({ variant: "primary" })}
-            style={{ borderRadius: "20px" }}
             disabled={!canSearch}
           >
-            {busy === queryMode ? "Searching…" : "Search"}
+            <ActionIcon name="search" />{busy === queryMode ? "Searching…" : "Search"}
           </button>
         </form>
 
@@ -1471,7 +1480,7 @@ export default function ResearchDashboard() {
                   : { ...S.quickLinkBtn, opacity: 0.45, cursor: "not-allowed" }
               }
             >
-              {TIKTOK_CATEGORY_ICONS[category.id] ?? "•"} {category.label}
+              <TikTokCategoryIcon id={category.id} />{category.label}
               {category.available ? "" : " (retired)"}
             </button>
           ))}
@@ -1519,7 +1528,7 @@ export default function ResearchDashboard() {
             <strong>Explore raw source boards</strong>
             <small>Douyin hot search and TikTok Creative Center, before consolidation</small>
           </span>
-          <span aria-hidden>{sourceBoardsOpen ? "−" : "+"}</span>
+          <ChevronDown className={sourceBoardsOpen ? "open" : ""} size={18} aria-hidden="true" />
         </summary>
 
       <div style={S.section}>
@@ -1567,7 +1576,8 @@ export default function ResearchDashboard() {
               disabled={busy === "douyin" || !workspaceId}
               onClick={() => void loadDouyinBoard()}
             >
-              {busy === "douyin" ? "Reading…" : douyinBoard ? "↻ Refresh" : "Read the board"}
+              {douyinBoard && <RefreshCw size={13} aria-hidden="true" />}
+              {busy === "douyin" ? "Reading…" : douyinBoard ? "Refresh" : "Read the board"}
             </button>
           </div>
         </div>
@@ -1781,7 +1791,8 @@ export default function ResearchDashboard() {
                   }
                 }}
               >
-                {busy === "tiktok" ? "Reading…" : "↻ Refresh"}
+                <RefreshCw size={13} aria-hidden="true" />
+                {busy === "tiktok" ? "Reading…" : "Refresh"}
               </button>
             </div>
           </div>

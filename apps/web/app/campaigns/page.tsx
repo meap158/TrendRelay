@@ -10,6 +10,7 @@ import { StatusToasts, useStatus } from "../ui/status";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { SearchSelect } from "../ui/search-select";
+import { ActionIcon } from "../ui/action-icons";
 import { clipLength, handoffPath, type AssetVersion } from "../../lib/media-rules";
 import { upcomingSlots, type Slot } from "../publish/composer";
 import {
@@ -550,7 +551,7 @@ export default function CampaignsPage() {
           </div>
           {canCreateCampaign && (
             <Button variant="primary" onClick={() => setNewCampaignOpen(true)}>
-              + {t("campaigns.create")}
+              <ActionIcon name="add" />{t("campaigns.create")}
             </Button>
           )}
         </aside>
@@ -566,12 +567,12 @@ export default function CampaignsPage() {
                   <small>Audience: {selectedCampaign.audience}</small>
                 </div>
                 <div className="campaign-status-actions">
-                  <Link href={`/attribution?campaign=${encodeURIComponent(selectedCampaign.id)}`}>{t("campaigns.measureRevenue")}</Link>
+                  <Link href={`/attribution?campaign=${encodeURIComponent(selectedCampaign.id)}`}><ActionIcon name="link" />{t("campaigns.measureRevenue")}</Link>
                   {canCreateCampaign && selectedCampaign.status !== "active" && (
-                    <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("active")}>{t("campaigns.activate")}</Button>
+                    <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("active")}><ActionIcon name="play" />{t("campaigns.activate")}</Button>
                   )}
                   {canCreateCampaign && selectedCampaign.status !== "archived" && (
-                    <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("archived")}>{t("campaigns.archive")}</Button>
+                    <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("archived")}><ActionIcon name="archive" />{t("campaigns.archive")}</Button>
                   )}
                 </div>
               </section>
@@ -647,7 +648,7 @@ export default function CampaignsPage() {
                         <strong>{planClip?.title ?? (videoPath ? "Library handoff" : "No clip selected")}</strong>
                         <Button type="button" variant="secondary" size="sm"
                           busy={busy === "plan-library"} onClick={() => void choosePlanMedia()}>
-                          Choose from Library
+                          <ActionIcon name="clip" />Choose from Library
                         </Button>
                       </div>
                       {planClip && <small>{clipLength(planClip.duration_ms) || "video"} · {planClip.versions.some((version) => ["blurred", "edited"].includes(version.kind)) ? "edited cut" : "original"}</small>}
@@ -698,7 +699,7 @@ export default function CampaignsPage() {
                     <div className="campaign-plan-actions">
                       <Button type="button" variant="quiet" size="sm"
                         busy={planSourcesLoading} onClick={() => void loadPlanSources({ force: true })}>
-                        Refresh connected sources
+                        <ActionIcon name="refresh" />Refresh connected sources
                       </Button>
                       <Button type="submit" variant="primary" busy={busy === "plan"}
                         disabled={!videoPath || !selectedPlanAccount || !planScheduledAt}>

@@ -20,6 +20,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../ui/button";
+import { ActionIcon } from "../ui/action-icons";
 import { Badge, Card, Switch } from "../ui/primitives";
 import { SearchSelect } from "../ui/search-select";
 import { useT } from "../i18n-provider";
@@ -616,7 +617,7 @@ export function AutopilotPanel({
         })}
         aside={canEdit ? (
           <Button variant="secondary" size="sm" busy={busy === "library"}
-            onClick={() => void loadLibrary()}>{t("autopilot.addFromLibrary")}</Button>
+            onClick={() => void loadLibrary()}><ActionIcon name="clip" />{t("autopilot.addFromLibrary")}</Button>
         ) : undefined}
       >
         <p className="autopilot-lede">{t("autopilot.queueHelp")}</p>
