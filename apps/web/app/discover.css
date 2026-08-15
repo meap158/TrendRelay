@@ -49,6 +49,16 @@
 .discovery-idea-created p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 .discovery-idea-created a { color: var(--link); font-size: 12px; font-weight: 700; }
 
+.discovery-source-boards { margin: 18px 0; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); }
+.discovery-source-boards > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 15px; cursor: pointer; list-style: none; }
+.discovery-source-boards > summary::-webkit-details-marker { display: none; }
+.discovery-source-boards > summary > span:first-child { display: grid; gap: 2px; }
+.discovery-source-boards > summary strong { font-size: 13px; }
+.discovery-source-boards > summary small { color: var(--muted); font-size: 11px; }
+.discovery-source-boards > summary > span:last-child { color: var(--link); font-size: 20px; line-height: 1; }
+.discovery-source-boards[open] > summary { border-bottom: 1px solid var(--line); }
+.discovery-source-boards > div { padding-inline: 14px; }
+
 @media (max-width: 760px) {
   .discovery-idea-tray { grid-template-columns: minmax(0, 1fr) auto; bottom: 8px; }
   .discovery-idea-chips { grid-column: 1 / -1; grid-row: 2; }

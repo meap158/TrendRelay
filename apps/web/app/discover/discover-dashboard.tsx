@@ -836,6 +836,7 @@ export default function ResearchDashboard() {
   const [douyinView, setDouyinView] = usePersistedState<"gallery" | "list">(
     "trendrelay.discover.douyinView", "gallery", isBoardView,
   );
+  const [sourceBoardsOpen, setSourceBoardsOpen] = useState(false);
   /** Read once per visit; the ref is what stops a re-render asking again. */
   const douyinAutoRead = useRef(false);
   /** Which term is being fetched, so only that card shows the wait. */
@@ -1460,7 +1461,10 @@ export default function ResearchDashboard() {
               type="button"
               disabled={!category.available || busy === "tiktok"}
               title={category.available ? category.description : category.unavailable_reason}
-              onClick={() => void fetchTiktokDiscovery(category.id)}
+              onClick={() => {
+                setSourceBoardsOpen(true);
+                void fetchTiktokDiscovery(category.id);
+              }}
               style={
                 category.available
                   ? S.quickLinkBtn
@@ -1504,6 +1508,19 @@ export default function ResearchDashboard() {
         onRemove={(id) => setIdeaSeeds((current) => current.filter((seed) => seed.id !== id))}
         onClear={() => setIdeaSeeds([])}
       />
+
+      <details
+        className="discovery-source-boards"
+        open={sourceBoardsOpen}
+        onToggle={(event) => setSourceBoardsOpen(event.currentTarget.open)}
+      >
+        <summary>
+          <span>
+            <strong>Explore raw source boards</strong>
+            <small>Douyin hot search and TikTok Creative Center, before consolidation</small>
+          </span>
+          <span aria-hidden>{sourceBoardsOpen ? "−" : "+"}</span>
+        </summary>
 
       <div style={S.section}>
         <div style={S.tiktokHead}>
@@ -1815,6 +1832,7 @@ export default function ResearchDashboard() {
           )}
         </div>
       )}
+      </details>
 
       {visibleInspirations.length > 0 && (
         <div style={S.section}>
