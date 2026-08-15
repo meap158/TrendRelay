@@ -12,7 +12,7 @@
  * somebody blurred on purpose.
  */
 
-/** One rendition of an asset: the original, a thumbnail, a blurred cut. */
+/** One rendition of an asset: the original, a thumbnail, or an edited cut. */
 export type AssetVersion = { kind: string; path?: string };
 export type VersionedAsset = { original_path: string; versions: AssetVersion[] };
 
@@ -49,16 +49,23 @@ export function blurredVersion(asset: VersionedAsset): AssetVersion | null {
   return blurred.length ? blurred[blurred.length - 1] : null;
 }
 
+/** The newest complete edit, including legacy blur-only renders. */
+export function renderedVersion(asset: VersionedAsset): AssetVersion | null {
+  const rendered = asset.versions.filter((version) =>
+    version.kind === "blurred" || version.kind === "edited");
+  return rendered.length ? rendered[rendered.length - 1] : null;
+}
+
 /**
  * The file to hand to Campaigns or Publish.
  *
- * The blurred cut when there is one, because that is the point of having
- * blurred it. Falls back to the original path when the blurred version carries
+ * The newest rendered cut when there is one, because that is the point of
+ * editing it. Falls back to the original path when the rendered version carries
  * no path of its own, so a malformed version record cannot silently produce a
  * handoff of nothing at all.
  */
 export function handoffPath(asset: VersionedAsset): string {
-  return blurredVersion(asset)?.path ?? asset.original_path;
+  return renderedVersion(asset)?.path ?? asset.original_path;
 }
 
 /**

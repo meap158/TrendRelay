@@ -71,6 +71,17 @@ test("re-blurring means the latest cut wins", () => {
   assert.equal(handoffPath(asset), "S:\\blur\\second.mp4");
 });
 
+test("a newer multi-effect edit wins over a legacy blur", () => {
+  const asset = {
+    original_path: "S:\\media\\clip.mp4",
+    versions: [
+      { kind: "blurred", path: "S:\\blur\\clip.mp4" },
+      { kind: "edited", path: "S:\\edits\\campaign-cut.mp4" },
+    ],
+  };
+  assert.equal(handoffPath(asset), "S:\\edits\\campaign-cut.mp4");
+});
+
 test("a blurred record with no path falls back rather than handing on nothing", () => {
   const asset = {
     original_path: "S:\\media\\clip.mp4",
