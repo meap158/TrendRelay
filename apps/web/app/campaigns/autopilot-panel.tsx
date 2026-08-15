@@ -49,6 +49,8 @@ type Account = {
   label: string;
   provider: string;
   provider_label: string;
+  available?: boolean;
+  unavailable_reason?: string | null;
 };
 
 type Destination = {
@@ -106,8 +108,25 @@ type PreviewPost = {
 type Offer = {
   id: string;
   network: string;
-  product: { name: string };
+  affiliate_url: string;
+  commission_bps?: number | null;
+  commission_flat_cents?: number | null;
+  currency?: string | null;
+  product: {
+    name: string;
+    brand?: string | null;
+    marketplace?: string | null;
+  };
 };
+
+function offerDescription(offer: Offer): string {
+  const commission = offer.commission_bps
+    ? `${(offer.commission_bps / 100).toLocaleString()}% commission`
+    : offer.commission_flat_cents
+      ? `${offer.currency ?? ""} ${(offer.commission_flat_cents / 100).toLocaleString()} commission`.trim()
+      : null;
+  return [offer.product.marketplace, offer.network, commission].filter(Boolean).join(" · ");
+}
 
 type LibraryAsset = {
   id: string;
@@ -423,10 +442,11 @@ export function AutopilotPanel({
               options={offers.map((offer) => ({
                 value: offer.id,
                 label: offer.product.name,
-                description: offer.network,
+                description: offerDescription(offer),
+                keywords: `${offer.product.brand ?? ""} ${offer.product.marketplace ?? ""} ${offer.network} ${offer.affiliate_url}`,
               }))}
             />
-            <small>{t("autopilot.offerHelp")}</small>
+            <small>{t("autopilot.offerHelp")} Source: imported offers in Attribution.</small>
           </label>
 
           <label>{t("autopilot.disclosure")}
@@ -558,6 +578,7 @@ export function AutopilotPanel({
             </div>
             <ul className="autopilot-media-picker">
               {accounts
+                .filter((account) => account.available !== false)
                 .filter((account) => !destinations.some(
                   (item) => item.integration_id === account.id
                     && item.provider === account.provider))
@@ -580,8 +601,10 @@ export function AutopilotPanel({
                     </label>
                   </li>
                 ))}
-              {!accounts.length && <li>{t("autopilot.noAccounts")}</li>}
+              {!accounts.some((account) => account.available !== false)
+                && <li>{t("autopilot.noAccounts")}</li>}
             </ul>
+            <small className="campaign-source-note">Source: available connected accounts in Publish.</small>
           </div>
         )}
       </Card>}

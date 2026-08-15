@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from trendrelay_api.auth import CurrentUser, current_user
+from trendrelay_api.autopilot_models import CampaignAutopilot
 from trendrelay_api.catalog_identifiers import identifier_from_url, parse_identifier
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, ensure_profile, membership, require_role
@@ -631,6 +632,14 @@ def campaign_from_opportunity(
     )
     session.add(campaign)
     session.flush()
+    session.add(
+        CampaignAutopilot(
+            workspace_id=workspace_id,
+            campaign_id=campaign.id,
+            offer_id=offer.id if offer else None,
+            created_by=user.id,
+        )
+    )
     session.add(
         OpportunityCampaign(
             workspace_id=workspace_id,

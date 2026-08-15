@@ -12,15 +12,17 @@ from typing import Annotated, Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import AnyHttpUrl, BaseModel, Field, field_validator
+from pydantic import AnyHttpUrl, BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
+from trendrelay_api.autopilot_models import CampaignAutopilot
 from trendrelay_api.config import get_settings
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, ensure_profile, membership, require_role
 from trendrelay_api.models import Campaign, PublicationPlan, utc_now
+from trendrelay_api.opportunity_models import ProductOffer
 from trendrelay_api.tool_registry import PROJECT_ROOT
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/campaigns", tags=["campaigns"])
@@ -95,6 +97,7 @@ class CampaignCreate(BaseModel):
     markets: list[str] = Field(default_factory=list, max_length=20)
     languages: list[str] = Field(default_factory=list, max_length=20)
     affiliate_url: AnyHttpUrl | None = None
+    offer_id: str | None = Field(default=None, max_length=64)
 
     @field_validator("name", "objective", "audience")
     @classmethod
@@ -119,6 +122,10 @@ class CampaignStatusUpdate(BaseModel):
 class PublicationPlanCreate(BaseModel):
     title: str = Field(min_length=2, max_length=200)
     platform: Platform
+    provider: str | None = Field(default=None, max_length=32)
+    integration_id: str | None = Field(default=None, max_length=200)
+    destination_label: str | None = Field(default=None, max_length=200)
+    offer_id: str | None = Field(default=None, max_length=64)
     video_path: str = Field(min_length=1, max_length=1200)
     cover_path: str | None = Field(default=None, max_length=1200)
     caption: str = Field(min_length=1, max_length=5000)
@@ -128,6 +135,15 @@ class PublicationPlanCreate(BaseModel):
     deep_link: AnyHttpUrl | None = None
     scheduled_at: datetime
     timezone: str = Field(default="UTC", min_length=1, max_length=80)
+
+    @model_validator(mode="after")
+    def complete_destination(self) -> PublicationPlanCreate:
+        fields = (self.provider, self.integration_id, self.destination_label)
+        if any(fields) and not all(fields):
+            raise ValueError(
+                "provider, integration_id, and destination_label must be selected together"
+            )
+        return self
 
     @field_validator("title", "caption", "disclosure")
     @classmethod
@@ -191,6 +207,10 @@ def _plan(item: PublicationPlan) -> dict[str, Any]:
         "campaign_id": item.campaign_id,
         "title": item.title,
         "platform": item.platform,
+        "provider": item.provider,
+        "integration_id": item.integration_id,
+        "destination_label": item.destination_label,
+        "offer_id": item.offer_id,
         "video_path": item.video_path,
         "video_sha256": item.video_sha256,
         "cover_path": item.cover_path,
@@ -264,6 +284,16 @@ def create_campaign(
 ) -> dict[str, Any]:
     require_role(membership(session, workspace_id, user.id), {"owner", "editor"})
     ensure_profile(session, user)
+    offer = None
+    if body.offer_id:
+        offer = session.scalar(
+            select(ProductOffer).where(
+                ProductOffer.id == body.offer_id,
+                ProductOffer.workspace_id == workspace_id,
+            )
+        )
+        if not offer:
+            raise HTTPException(status_code=422, detail="Affiliate offer is unavailable.")
     item = Campaign(
         workspace_id=workspace_id,
         name=body.name,
@@ -271,11 +301,23 @@ def create_campaign(
         audience=body.audience,
         markets=body.markets,
         languages=body.languages,
-        affiliate_url=str(body.affiliate_url) if body.affiliate_url else None,
+        affiliate_url=(
+            offer.affiliate_url
+            if offer
+            else str(body.affiliate_url) if body.affiliate_url else None
+        ),
         created_by=user.id,
     )
     session.add(item)
     session.flush()
+    session.add(
+        CampaignAutopilot(
+            workspace_id=workspace_id,
+            campaign_id=item.id,
+            offer_id=offer.id if offer else None,
+            created_by=user.id,
+        )
+    )
     audit(
         session,
         request,
@@ -284,7 +326,7 @@ def create_campaign(
         "campaign.created",
         "campaign",
         item.id,
-        {"status": item.status},
+        {"status": item.status, "offer_id": offer.id if offer else None},
     )
     return {"campaign": _campaign(item)}
 
@@ -376,18 +418,36 @@ def create_publication_plan(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     video_sha256 = _file_sha256(video)
+    offer = None
+    if body.offer_id:
+        offer = session.scalar(
+            select(ProductOffer).where(
+                ProductOffer.id == body.offer_id,
+                ProductOffer.workspace_id == workspace_id,
+            )
+        )
+        if not offer:
+            raise HTTPException(status_code=422, detail="Affiliate offer is unavailable.")
     item = PublicationPlan(
         workspace_id=workspace_id,
         campaign_id=campaign_id,
         title=body.title,
         platform=body.platform,
+        provider=body.provider,
+        integration_id=body.integration_id,
+        destination_label=body.destination_label,
+        offer_id=offer.id if offer else None,
         video_path=str(video),
         video_sha256=video_sha256,
         cover_path=str(cover) if cover else None,
         cover_sha256=_file_sha256(cover) if cover else None,
         caption=body.caption,
         hashtags=body.hashtags,
-        affiliate_url=(str(body.affiliate_url) if body.affiliate_url else campaign.affiliate_url),
+        affiliate_url=(
+            offer.affiliate_url
+            if offer
+            else str(body.affiliate_url) if body.affiliate_url else campaign.affiliate_url
+        ),
         disclosure=body.disclosure,
         deep_link=(
             str(body.deep_link) if body.deep_link else PLATFORM_DEEP_LINKS.get(body.platform)
@@ -407,7 +467,13 @@ def create_publication_plan(
         "publication_plan.created",
         "publication_plan",
         item.id,
-        {"campaign_id": campaign_id, "platform": item.platform},
+        {
+            "campaign_id": campaign_id,
+            "platform": item.platform,
+            "provider": item.provider,
+            "integration_id": item.integration_id,
+            "offer_id": item.offer_id,
+        },
     )
     return {"plan": _plan(item)}
 

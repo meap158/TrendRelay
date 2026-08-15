@@ -302,6 +302,11 @@ export default function PublishPage() {
   /** The last storage check, kept on screen so its stages can be read. */
   const [hostingProbe, setHostingProbe] = useState<HostingProbe | null>(null);
   const draftRestored = useRef(false);
+  const pendingCampaignDestination = useRef<{
+    provider: PublishingProvider;
+    integrationId: string;
+    label: string;
+  } | null>(null);
   // Publishing now is what most posts are for, and the choice is a habit
   // rather than a per-post decision, so it is remembered between sessions.
   const [delivery, setDelivery] = usePersistedState<Delivery>(
@@ -889,6 +894,8 @@ export default function PublishPage() {
       .then((response) => json<{ plan: {
         title: string; video_path: string; caption: string; disclosure: string;
         affiliate_url?: string | null; platform: string; scheduled_at: string;
+        provider?: PublishingProvider | null; integration_id?: string | null;
+        destination_label?: string | null;
       } }>(response))
       .then(({ plan }) => {
         if (cancelled) return;
@@ -901,13 +908,50 @@ export default function PublishPage() {
         setFirstComment(plan.affiliate_url && linkInComment ? plan.affiliate_url : "");
         setDelivery("schedule");
         setDate(localValue(new Date(plan.scheduled_at)));
-        setNotice("Campaign plan loaded. Choose the destination accounts, review link placement, then schedule it.");
+        pendingCampaignDestination.current = plan.provider && plan.integration_id
+          ? {
+              provider: plan.provider,
+              integrationId: plan.integration_id,
+              label: plan.destination_label ?? plan.integration_id,
+            }
+          : null;
+        setNotice(pendingCampaignDestination.current
+          ? "Campaign plan loaded. Its saved destination will be restored when Publish accounts are ready."
+          : "Campaign plan loaded. Choose a destination account, review link placement, then schedule it.");
       })
       .catch((reason: unknown) => {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "The campaign plan could not be loaded.");
       });
     return () => { cancelled = true; };
   }, [workspaceId, apiFetch, setDelivery]);
+
+  useEffect(() => {
+    const pending = pendingCampaignDestination.current;
+    if (!pending || !accountsLoaded) return;
+    const exact = allAccounts.find((account) => (
+      account.provider === pending.provider && account.id === pending.integrationId
+    ));
+    pendingCampaignDestination.current = null;
+    if (!exact) {
+      setNotice(`Campaign plan loaded, but ${pending.label} is no longer connected. Choose another Publish account.`);
+      return;
+    }
+    if (disabledEngines.includes(exact.provider)) {
+      setNotice(`Campaign plan loaded, but ${pending.label}'s publishing engine is switched off. Turn it on or choose another account.`);
+      return;
+    }
+    const page = pages.find((candidate) => candidate.reachable_by.some((route) => (
+      route.provider === exact.provider && route.id === exact.id
+    )));
+    if (page) {
+      setRouteFor((current) => ({
+        ...current,
+        [page.key]: `${exact.provider}:${exact.id}`,
+      }));
+    }
+    setTargets([exact.id]);
+    setNotice(`Campaign plan loaded with ${pending.label} selected. Review the post, then schedule it.`);
+  }, [accountsLoaded, allAccounts, disabledEngines, pages]);
 
   useEffect(() => {
     // Nothing is written until the restore has run. On mount these fields are

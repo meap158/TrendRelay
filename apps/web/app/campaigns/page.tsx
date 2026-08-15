@@ -9,7 +9,9 @@ import { AutopilotPanel } from "./autopilot-panel";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
+import { SearchSelect } from "../ui/search-select";
 import { clipLength, handoffPath, type AssetVersion } from "../../lib/media-rules";
+import { upcomingSlots, type Slot } from "../publish/composer";
 import {
   platformLabels,
   type PublishingPlatform,
@@ -31,6 +33,10 @@ type PublicationPlan = {
   campaign_id: string;
   title: string;
   platform: PublishingPlatform | "douyin" | "other";
+  provider?: string | null;
+  integration_id?: string | null;
+  destination_label?: string | null;
+  offer_id?: string | null;
   video_path: string;
   cover_path?: string | null;
   caption: string;
@@ -66,8 +72,32 @@ type LibraryClip = {
   versions: AssetVersion[];
 };
 type ConnectedAccount = {
+  id: string;
+  label: string;
   platform: PublishingPlatform;
+  provider: string;
+  provider_label: string;
   available?: boolean;
+  unavailable_reason?: string | null;
+};
+type CampaignDestination = {
+  provider: string;
+  integration_id: string;
+  enabled: boolean;
+};
+type CampaignOffer = {
+  id: string;
+  network: string;
+  affiliate_url: string;
+  commission_bps?: number | null;
+  commission_flat_cents?: number | null;
+  currency?: string | null;
+  availability?: string;
+  product: {
+    name: string;
+    brand?: string | null;
+    marketplace?: string | null;
+  };
 };
 
 async function json<T>(response: Response): Promise<T> {
@@ -83,10 +113,23 @@ function values(input: FormDataEntryValue | null): string[] {
     .filter(Boolean);
 }
 
-function localDateDefault(): string {
-  const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-  return date.toISOString().slice(0, 16);
+function destinationKey(account: Pick<ConnectedAccount, "provider" | "id">): string {
+  return `${account.provider}\u001f${account.id}`;
+}
+
+function offerDescription(offer: CampaignOffer): string {
+  const commission = offer.commission_bps
+    ? `${(offer.commission_bps / 100).toLocaleString()}% commission`
+    : offer.commission_flat_cents
+      ? `${offer.currency ?? ""} ${(offer.commission_flat_cents / 100).toLocaleString()} commission`.trim()
+      : null;
+  return [offer.product.marketplace, offer.network, commission].filter(Boolean).join(" · ");
+}
+
+function planPlatformLabel(platform: PublicationPlan["platform"]): string {
+  if (platform === "douyin") return "Douyin";
+  if (platform === "other") return "Other";
+  return platformLabels[platform];
 }
 
 function size(bytes: number): string {
@@ -110,9 +153,17 @@ export default function CampaignsPage() {
   const [packages, setPackages] = useState<Record<string, ManualPackage>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
-  const [planPlatforms, setPlanPlatforms] = useState<PublishingPlatform[]>([]);
-  const [planPlatformsWorkspace, setPlanPlatformsWorkspace] = useState("");
-  const [planPlatformsLoading, setPlanPlatformsLoading] = useState(false);
+  const [offers, setOffers] = useState<CampaignOffer[]>([]);
+  const [newCampaignOfferId, setNewCampaignOfferId] = useState("");
+  const [planAccounts, setPlanAccounts] = useState<ConnectedAccount[]>([]);
+  const [planAccountKey, setPlanAccountKey] = useState("");
+  const [planOfferId, setPlanOfferId] = useState("");
+  const [planSlotOptions, setPlanSlotOptions] = useState<
+    { value: string; label: string; day: string }[]
+  >([]);
+  const [planScheduledAt, setPlanScheduledAt] = useState("");
+  const [planSourcesCampaign, setPlanSourcesCampaign] = useState("");
+  const [planSourcesLoading, setPlanSourcesLoading] = useState(false);
   // Reported over the page. Rendered in flow, these shifted everything below
   // them whenever an action finished, which reads as the interface flinching.
   const { messages: statusMessages, succeed, fail, dismiss } = useStatus();
@@ -123,6 +174,9 @@ export default function CampaignsPage() {
   const canCreatePlan = ["owner", "editor", "approver"].includes(selectedWorkspace?.role ?? "");
   const canApprove = ["owner", "approver"].includes(selectedWorkspace?.role ?? "");
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const selectedPlanAccount = planAccounts.find(
+    (account) => destinationKey(account) === planAccountKey,
+  ) ?? null;
 
   const refresh = useCallback(async (nextWorkspaceId: string) => {
     if (!nextWorkspaceId) return;
@@ -204,6 +258,16 @@ export default function CampaignsPage() {
     return () => { cancelled = true; };
   }, [apiFetch, workspaceId, fail]);
 
+  useEffect(() => {
+    if (!workspaceId) return;
+    let cancelled = false;
+    apiFetch(`/api/workspaces/${workspaceId}/opportunities/offers`)
+      .then((response) => json<{ offers: CampaignOffer[] }>(response))
+      .then((body) => { if (!cancelled) setOffers(body.offers ?? []); })
+      .catch(() => { if (!cancelled) setOffers([]); });
+    return () => { cancelled = true; };
+  }, [apiFetch, workspaceId]);
+
   async function createCampaign(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy("campaign");
@@ -221,7 +285,7 @@ export default function CampaignsPage() {
             audience: form.get("audience"),
             markets: values(form.get("markets")),
             languages: values(form.get("languages")),
-            affiliate_url: form.get("affiliate_url") || null,
+            offer_id: newCampaignOfferId || null,
           }),
         }),
       );
@@ -229,6 +293,7 @@ export default function CampaignsPage() {
       await refresh(workspaceId);
       setCampaignId(body.campaign.id);
       setNewCampaignOpen(false);
+      setNewCampaignOfferId("");
       succeed("Campaign created. Add its first publication plan.");
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "Campaign creation failed.");
@@ -254,11 +319,14 @@ export default function CampaignsPage() {
             body: JSON.stringify({
               title: form.get("title"),
               platform: form.get("platform"),
+              provider: form.get("provider") || null,
+              integration_id: form.get("integration_id") || null,
+              destination_label: form.get("destination_label") || null,
               video_path: form.get("video_path"),
               cover_path: form.get("cover_path") || null,
               caption: form.get("caption"),
               hashtags: values(form.get("hashtags")),
-              affiliate_url: form.get("affiliate_url") || null,
+              offer_id: form.get("offer_id") || null,
               disclosure: form.get("disclosure"),
               scheduled_at: new Date(String(form.get("scheduled_at"))).toISOString(),
               timezone,
@@ -293,26 +361,53 @@ export default function CampaignsPage() {
     }
   }
 
-  async function loadPlanPlatforms({ force = false } = {}) {
-    if (!workspaceId || planPlatformsLoading) return;
-    if (!force && planPlatformsWorkspace === workspaceId) return;
-    setPlanPlatformsLoading(true);
+  async function loadPlanSources({ force = false } = {}) {
+    if (!workspaceId || !campaignId || planSourcesLoading) return;
+    if (!force && planSourcesCampaign === campaignId) return;
+    setPlanSourcesLoading(true);
     try {
-      const body = await json<{ accounts: ConnectedAccount[] }>(await apiFetch(
-        `/api/workspaces/${workspaceId}/publishing/integrations/all`,
-        { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
-      ));
-      const platforms = [...new Set(
-        body.accounts
-          .filter((account) => account.available !== false)
-          .map((account) => account.platform),
-      )].sort((left, right) => platformLabels[left].localeCompare(platformLabels[right]));
-      setPlanPlatforms(platforms);
-      setPlanPlatformsWorkspace(workspaceId);
+      const [accountBody, autopilotBody, slotBody, offerBody] = await Promise.all([
+        json<{ accounts: ConnectedAccount[] }>(await apiFetch(
+          `/api/workspaces/${workspaceId}/publishing/integrations/all`,
+          { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
+        )),
+        json<{
+          autopilot: { offer_id: string | null };
+          destinations: CampaignDestination[];
+        }>(await apiFetch(
+          `/api/workspaces/${workspaceId}/campaigns/${campaignId}/autopilot`,
+        )),
+        json<{ slots: Slot[] }>(await apiFetch(
+          `/api/workspaces/${workspaceId}/publishing/slots`,
+        )),
+        json<{ offers: CampaignOffer[] }>(await apiFetch(
+          `/api/workspaces/${workspaceId}/opportunities/offers`,
+        )),
+      ]);
+      const available = accountBody.accounts.filter((account) => account.available !== false);
+      const assigned = autopilotBody.destinations
+        .filter((destination) => destination.enabled)
+        .map((destination) => available.find((account) => (
+          account.provider === destination.provider
+          && account.id === destination.integration_id
+        )))
+        .filter((account): account is ConnectedAccount => Boolean(account));
+      const preferredAccount = assigned[0] ?? (available.length === 1 ? available[0] : null);
+      const slotOptions = upcomingSlots(slotBody.slots, new Date(), 12);
+      const campaignOffer = offerBody.offers.find(
+        (offer) => offer.affiliate_url === selectedCampaign?.affiliate_url,
+      );
+      setPlanAccounts(available);
+      setPlanAccountKey(preferredAccount ? destinationKey(preferredAccount) : "");
+      setOffers(offerBody.offers);
+      setPlanOfferId(autopilotBody.autopilot.offer_id ?? campaignOffer?.id ?? "");
+      setPlanSlotOptions(slotOptions);
+      setPlanScheduledAt(slotOptions[0]?.value ?? "");
+      setPlanSourcesCampaign(campaignId);
     } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "Connected platforms could not be read.");
+      fail(reason instanceof Error ? reason.message : "Prepared campaign sources could not be read.");
     } finally {
-      setPlanPlatformsLoading(false);
+      setPlanSourcesLoading(false);
     }
   }
 
@@ -496,7 +591,7 @@ export default function CampaignsPage() {
               />
 
               <details key={workspaceId} className="campaign-manual-work" onToggle={(event) => {
-                if (event.currentTarget.open) void loadPlanPlatforms();
+                if (event.currentTarget.open) void loadPlanSources();
               }}>
                 <summary>
                   <span>One-off approvals</span>
@@ -508,24 +603,43 @@ export default function CampaignsPage() {
                   <form key={selectedCampaign.id} onSubmit={createPlan}>
                     <div className="plan-form-grid">
                       <label>{t("publish.title")}<input name="title" required maxLength={200} /></label>
-                      <label>{t("library.platform")}
-                        <select name="platform" defaultValue="" required
-                          disabled={planPlatformsLoading || !planPlatforms.length}>
+                      <label>Destination account from Publish
+                        <SearchSelect
+                          value={planAccountKey}
+                          options={planAccounts.map((account) => ({
+                            value: destinationKey(account),
+                            label: account.label,
+                            description: `${platformLabels[account.platform]} · ${account.provider_label}`,
+                            keywords: `${account.platform} ${account.provider} ${account.provider_label}`,
+                          }))}
+                          onChange={setPlanAccountKey}
+                          placeholder={planSourcesLoading ? "Reading Publish accounts…" : "Choose a connected account"}
+                          searchPlaceholder="Search accounts or platforms…"
+                          emptyLabel="No connected Publish accounts"
+                          disabled={planSourcesLoading || !planAccounts.length}
+                        />
+                        <small>The exact account and publishing engine are carried into Publish.</small>
+                      </label>
+                      <label>{t("campaigns.suggestedTime")}
+                        <select name="scheduled_at" value={planScheduledAt}
+                          onChange={(event) => setPlanScheduledAt(event.target.value)}
+                          disabled={planSourcesLoading || !planSlotOptions.length} required>
                           <option value="" disabled>
-                            {planPlatformsLoading
-                              ? "Checking connected accounts…"
-                              : planPlatforms.length
-                                ? "Choose a connected platform"
-                                : "No available connected platforms"}
+                            {planSourcesLoading ? "Reading saved posting times…" : "Choose a saved posting time"}
                           </option>
-                          {planPlatforms.map((platform) => (
-                            <option key={platform} value={platform}>{platformLabels[platform]}</option>
+                          {planSlotOptions.map((slot) => (
+                            <option key={slot.value} value={slot.value}>{slot.day} · {slot.label}</option>
                           ))}
                         </select>
-                        <small>Only platforms currently available through connected Publish accounts are shown.</small>
+                        <small>{planSlotOptions.length
+                          ? `From the posting times saved in Publish · ${timezone}`
+                          : "No posting times are saved. Add one in Publish → Schedule."}</small>
                       </label>
-                      <label>{t("campaigns.suggestedTime")}<input name="scheduled_at" type="datetime-local" defaultValue={localDateDefault()} required /></label>
                     </div>
+                    <input type="hidden" name="platform" value={selectedPlanAccount?.platform ?? ""} />
+                    <input type="hidden" name="provider" value={selectedPlanAccount?.provider ?? ""} />
+                    <input type="hidden" name="integration_id" value={selectedPlanAccount?.id ?? ""} />
+                    <input type="hidden" name="destination_label" value={selectedPlanAccount?.label ?? ""} />
                     <div className="plan-media-field">
                       <span>Media from Library</span>
                       <input type="hidden" name="video_path" value={videoPath} />
@@ -558,17 +672,36 @@ export default function CampaignsPage() {
                     <label>{t("publish.caption")}<textarea name="caption" rows={5} required /></label>
                     <div className="plan-form-grid">
                       <label>{t("library.hashtags")}<input name="hashtags" placeholder="travel, espresso" /></label>
-                      <label>{t("campaigns.affiliateUrl")}<input name="affiliate_url" type="url" defaultValue={selectedCampaign.affiliate_url ?? ""} /></label>
+                      <label>Affiliate offer from Attribution
+                        <SearchSelect
+                          value={planOfferId}
+                          options={offers.map((offer) => ({
+                            value: offer.id,
+                            label: offer.product.name,
+                            description: offerDescription(offer),
+                            keywords: `${offer.product.brand ?? ""} ${offer.product.marketplace ?? ""} ${offer.network} ${offer.affiliate_url}`,
+                          }))}
+                          onChange={setPlanOfferId}
+                          placeholder="No affiliate offer"
+                          searchPlaceholder="Search Attribution offers…"
+                          emptyLabel="No offers imported in Attribution"
+                          disabled={planSourcesLoading}
+                        />
+                        <input type="hidden" name="offer_id" value={planOfferId} />
+                        <small>The tracked link is copied from the selected offer; there is no URL to retype.</small>
+                      </label>
                       <label>{t("publish.disclosure")}<input name="disclosure" defaultValue="#ad" required /></label>
                     </div>
-                    <small>Times use {timezone}. New plans require owner or approver review.</small>
+                    <p className="campaign-source-note">
+                      Library media · Publish account · saved posting time · Attribution offer. New plans require owner or approver review.
+                    </p>
                     <div className="campaign-plan-actions">
                       <Button type="button" variant="quiet" size="sm"
-                        busy={planPlatformsLoading} onClick={() => void loadPlanPlatforms({ force: true })}>
-                        Refresh connected platforms
+                        busy={planSourcesLoading} onClick={() => void loadPlanSources({ force: true })}>
+                        Refresh connected sources
                       </Button>
                       <Button type="submit" variant="primary" busy={busy === "plan"}
-                        disabled={!videoPath || !planPlatforms.length}>
+                        disabled={!videoPath || !selectedPlanAccount || !planScheduledAt}>
                         {t("publish.sendForApproval")}
                       </Button>
                     </div>
@@ -590,7 +723,11 @@ export default function CampaignsPage() {
                         <span>{new Date(plan.scheduled_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: plan.timezone })}</span>
                       </time>
                       <div className="calendar-copy">
-                        <div><span className={`plan-state ${plan.state}`}>{plan.state.replace("_", " ")}</span><span>{plan.platform}</span></div>
+                        <div>
+                          <span className={`plan-state ${plan.state}`}>{plan.state.replace("_", " ")}</span>
+                          <span>{plan.destination_label ?? planPlatformLabel(plan.platform)}</span>
+                          {plan.destination_label && <small>{planPlatformLabel(plan.platform)}{plan.provider ? ` · ${plan.provider}` : ""}</small>}
+                        </div>
                         <h3>{plan.title}</h3>
                         <p>{plan.caption}</p>
                         <small>{plan.video_path}</small>
@@ -647,7 +784,22 @@ export default function CampaignsPage() {
             <label>{t("campaigns.markets")}<input name="markets" placeholder="TH, US" /></label>
             <label>{t("campaigns.languages")}<input name="languages" placeholder="en, th" /></label>
           </div>
-          <label>{t("campaigns.affiliateUrl")}<input name="affiliate_url" type="url" placeholder="Optional default destination" /></label>
+          <label>Affiliate offer from Attribution
+            <SearchSelect
+              value={newCampaignOfferId}
+              options={offers.map((offer) => ({
+                value: offer.id,
+                label: offer.product.name,
+                description: offerDescription(offer),
+                keywords: `${offer.product.brand ?? ""} ${offer.product.marketplace ?? ""} ${offer.network} ${offer.affiliate_url}`,
+              }))}
+              onChange={setNewCampaignOfferId}
+              placeholder="No default affiliate offer"
+              searchPlaceholder="Search imported offers…"
+              emptyLabel="No offers imported in Attribution"
+            />
+            <small>Optional. Imported and managed in Attribution; the tracked link is filled automatically.</small>
+          </label>
           <div className="campaign-dialog-actions">
             <Button type="button" variant="quiet" onClick={() => setNewCampaignOpen(false)}>Cancel</Button>
             <Button type="submit" variant="primary" busy={busy === "campaign"}>{t("campaigns.createButton")}</Button>

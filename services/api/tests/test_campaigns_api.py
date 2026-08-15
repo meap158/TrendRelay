@@ -10,11 +10,12 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from trendrelay_api import campaigns_api
-from trendrelay_api.integrations import publishing
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
+from trendrelay_api.integrations import publishing
 from trendrelay_api.main import app
 from trendrelay_api.models import Base
+from trendrelay_api.opportunity_models import Product, ProductOffer
 
 engine = create_engine(
     "sqlite://",
@@ -73,7 +74,7 @@ def create_workspace() -> str:
     return response.json()["workspace"]["id"]
 
 
-def create_campaign(workspace_id: str) -> dict:
+def create_campaign(workspace_id: str, offer_id: str | None = None) -> dict:
     response = asyncio.run(
         request(
             "POST",
@@ -85,11 +86,49 @@ def create_campaign(workspace_id: str) -> dict:
                 "markets": ["TH", "US"],
                 "languages": ["en", "th"],
                 "affiliate_url": "https://example.com/espresso",
+                "offer_id": offer_id,
             },
         )
     )
     assert response.status_code == 201
     return response.json()["campaign"]
+
+
+def create_offer(workspace_id: str) -> str:
+    with TestingSession.begin() as session:
+        session.add(
+            Product(
+                id="campaign-product",
+                workspace_id=workspace_id,
+                catalog_key="campaign-product-key",
+                identifier="espresso-1",
+                name="Connected espresso maker",
+                brand="Relay Coffee",
+                category="Kitchen",
+                marketplace="shopee",
+                product_url="https://example.com/product",
+                image_url=None,
+                created_by="campaign-owner",
+            )
+        )
+        session.add(
+            ProductOffer(
+                id="campaign-offer",
+                workspace_id=workspace_id,
+                product_id="campaign-product",
+                fingerprint="campaign-offer-key",
+                network="shopee",
+                merchant="Shopee",
+                affiliate_url="https://example.com/tracked-espresso",
+                price_cents=3999,
+                currency="USD",
+                commission_bps=1000,
+                cookie_days=7,
+                availability="available",
+                created_by="campaign-owner",
+            )
+        )
+    return "campaign-offer"
 
 
 def test_campaign_plans_cover_every_publish_platform() -> None:
@@ -99,6 +138,52 @@ def test_campaign_plans_cover_every_publish_platform() -> None:
 
     assert publish_platforms <= campaign_platforms
     assert "threads" in campaign_platforms
+
+
+def test_campaign_plan_keeps_publish_destination_and_attribution_offer(
+    tmp_path: Path, monkeypatch
+) -> None:
+    video = tmp_path / "threads.mp4"
+    video.write_bytes(b"fake-mp4")
+    monkeypatch.setattr(
+        campaigns_api,
+        "_approved_media_path",
+        lambda value, suffixes: Path(value).resolve(strict=True),
+    )
+    workspace_id = create_workspace()
+    offer_id = create_offer(workspace_id)
+    campaign = create_campaign(workspace_id, offer_id)
+
+    autopilot = asyncio.run(request(
+        "GET", f"/api/workspaces/{workspace_id}/campaigns/{campaign['id']}/autopilot"
+    ))
+    assert autopilot.status_code == 200
+    assert autopilot.json()["autopilot"]["offer_id"] == offer_id
+
+    created = asyncio.run(request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/campaigns/{campaign['id']}/plans",
+        json={
+            "title": "Connected Threads plan",
+            "platform": "threads",
+            "provider": "buffer",
+            "integration_id": "threads-account-1",
+            "destination_label": "TrendRelay Threads",
+            "offer_id": offer_id,
+            "video_path": str(video),
+            "caption": "Prepared from connected sources.",
+            "scheduled_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+            "timezone": "Asia/Bangkok",
+        },
+    ))
+    assert created.status_code == 201, created.text
+    plan = created.json()["plan"]
+    assert plan["platform"] == "threads"
+    assert plan["provider"] == "buffer"
+    assert plan["integration_id"] == "threads-account-1"
+    assert plan["destination_label"] == "TrendRelay Threads"
+    assert plan["offer_id"] == offer_id
+    assert plan["affiliate_url"] == "https://example.com/tracked-espresso"
 
 
 def test_campaign_calendar_approval_and_idempotent_manual_package(

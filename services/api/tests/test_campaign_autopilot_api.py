@@ -226,11 +226,13 @@ def test_an_offer_with_a_plain_http_url_mints_no_tracking_link(workspace) -> Non
             .values(affiliate_url="http://example.test/aff")
         )
     with TestingSession() as session:
-        pilot = CampaignAutopilot(
-            workspace_id=workspace, campaign_id=campaign_id, offer_id="offer-1",
-            created_by="owner-user",
+        pilot = session.scalar(
+            select(CampaignAutopilot).where(
+                CampaignAutopilot.campaign_id == campaign_id
+            )
         )
-        session.add(pilot)
+        assert pilot is not None
+        pilot.offer_id = "offer-1"
         destination = CampaignDestination(
             workspace_id=workspace, campaign_id=campaign_id, provider="buffer",
             integration_id="acct-1", platform="youtube", label="brand",

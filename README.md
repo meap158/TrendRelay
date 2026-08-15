@@ -90,12 +90,12 @@ This supported path does not give TrendRelay a Shopee cookie and does not depend
 3. Add shared campaign copy, then edit individual captions and hashtags where a clip needs different wording.
 4. Assign one or more connected social accounts. Choose an imported affiliate offer; TrendRelay creates destination-specific tracking links and places them according to each network.
 5. Open **Schedule** in Campaigns, add posting times, preview the next day, approve the queue, and choose **Deploy campaign**. Draft delivery is the safest first live run.
-6. For a one-off governed post, create an approval plan with **Choose from Library**. Opening an approved plan in Publish restores its clip, caption, disclosure, affiliate placement, and schedule.
+6. For a one-off governed post, choose its clip from Library, its exact connected account from Publish, its posting time from the saved Schedule, and—when relevant—its imported offer from Attribution. Opening an approved plan in Publish restores the destination account together with its clip, copy, disclosure, affiliate placement, and schedule.
 7. Choose **Measure revenue** to open Attribution focused on that campaign, including its plan count, tracking links, clicks, commission, and top-link chart.
 
 Campaigns uses four compact work areas—**Media**, **Accounts**, **Schedule**, and **Settings**—with readiness shown beside them. The visual Library picker supports search plus effect, channel, source, and length filters; selection remains intact while filters change. **Measure revenue** remains the direct handoff to Attribution after deployment.
 
-Platform choices in Campaigns come from the same live connected-account inventory as Publish. One-off plans therefore offer every currently available connected platform—including Threads, Facebook, Instagram, or TikTok when present—rather than a fixed legacy list.
+Campaigns does not ask operators to retype data that already exists elsewhere in TrendRelay. Destination choices are exact available accounts from Publish (including Threads, Facebook, Instagram, or TikTok when connected), posting choices are saved workspace times, affiliate choices are imported Attribution offers, and media comes from Library. The chosen account, publishing engine, and offer identity remain attached to a one-off plan so its Publish handoff does not ask the same questions again.
 
 ## Download behavior
 

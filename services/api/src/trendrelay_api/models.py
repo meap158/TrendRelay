@@ -187,7 +187,9 @@ class PublicationPlan(Base):
             name="valid_publication_plan_state",
         ),
         CheckConstraint(
-            "platform IN ('tiktok','instagram','youtube','douyin','other')",
+            "platform IN ('tiktok','instagram','youtube','facebook','twitter',"
+            "'linkedin','threads','pinterest','reddit','bluesky','mastodon',"
+            "'telegram','googlebusiness','douyin','other')",
             name="valid_publication_plan_platform",
         ),
     )
@@ -200,6 +202,12 @@ class PublicationPlan(Base):
     )
     title: Mapped[str] = mapped_column(String(200))
     platform: Mapped[str] = mapped_column(String(24), index=True)
+    provider: Mapped[str | None] = mapped_column(String(32), index=True)
+    integration_id: Mapped[str | None] = mapped_column(String(200))
+    destination_label: Mapped[str | None] = mapped_column(String(200))
+    offer_id: Mapped[str | None] = mapped_column(
+        ForeignKey("product_offers.id", ondelete="SET NULL"), index=True
+    )
     video_path: Mapped[str] = mapped_column(String(1200))
     video_sha256: Mapped[str] = mapped_column(String(64))
     cover_path: Mapped[str | None] = mapped_column(String(1200))
