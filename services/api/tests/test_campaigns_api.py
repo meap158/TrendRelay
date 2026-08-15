@@ -137,6 +137,13 @@ def test_campaign_calendar_approval_and_idempotent_manual_package(
     assert calendar.status_code == 200
     assert calendar.json()["plans"][0]["id"] == plan["id"]
 
+    handoff = asyncio.run(request(
+        "GET",
+        f"/api/workspaces/{workspace_id}/campaigns/{campaign['id']}/plans/{plan['id']}",
+    ))
+    assert handoff.status_code == 200
+    assert handoff.json()["plan"]["caption"] == "Make espresso anywhere."
+
     too_early = asyncio.run(
         request(
             "POST",

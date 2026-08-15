@@ -321,6 +321,20 @@ def publication_calendar(
     return {"plans": [_plan(item) for item in items]}
 
 
+@router.get("/{campaign_id}/plans/{plan_id}")
+def publication_plan(
+    workspace_id: str,
+    campaign_id: str,
+    plan_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Return one approved handoff without making Publish load the calendar."""
+    membership(session, workspace_id, user.id)
+    item = _plan_record(session, workspace_id, campaign_id, plan_id)
+    return {"plan": _plan(item)}
+
+
 @router.post("/{campaign_id}/plans", status_code=201)
 def create_publication_plan(
     workspace_id: str,
