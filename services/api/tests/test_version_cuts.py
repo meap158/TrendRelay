@@ -579,6 +579,10 @@ def test_a_batch_preserves_a_stack_for_every_compatible_asset(tmp_path, monkeypa
     )
     assert response.status_code == 202
     assert response.json()["counts"]["queued"] == 2
+    jobs = response.json()["jobs"]
+    assert jobs[0]["payload"]["batch"]["id"] == jobs[1]["payload"]["batch"]["id"]
+    assert [job["payload"]["batch"]["position"] for job in jobs] == [1, 2]
+    assert all(job["payload"]["batch"]["total"] == 2 for job in jobs)
     with TestingSession() as session:
         recipes = session.query(MediaEditRecipe).order_by(MediaEditRecipe.asset_id).all()
         assert len(recipes) == 2

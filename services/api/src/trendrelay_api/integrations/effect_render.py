@@ -790,7 +790,9 @@ def render_output_path(workspace_id: str, source: Path, preview: bool) -> Path:
     return RENDER_ROOT / workspace_id / f"{stem}-{token_hex(4)}{suffix}{extension}"
 
 
-def create_render_job(request: EffectRenderRequest) -> dict[str, Any]:
+def create_render_job(
+    request: EffectRenderRequest, *, batch: dict[str, Any] | None = None
+) -> dict[str, Any]:
     if not request.confirm_external_action:
         raise PermissionError("Rendering writes a new media file and needs confirmation.")
     # Validated before anything is queued, so a bad recipe fails at the request
@@ -825,6 +827,10 @@ def create_render_job(request: EffectRenderRequest) -> dict[str, Any]:
             "output": str(output),
             "effects": [step.effect.id for step in steps],
             "asset_id": asset_id,
+            # A batch still creates independent, cancellable jobs. Keeping the
+            # shared identity and position on each one lets the Library explain
+            # that relationship without relying on transient client state.
+            "batch": batch,
         },
         max_attempts=1,
         factory=JOB_SESSION_FACTORY,

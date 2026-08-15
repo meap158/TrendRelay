@@ -1,13 +1,13 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, CircleAlert, CircleCheck, CircleX, Layers3, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { effectLabel } from "../../lib/i18n/effects";
 import { useAuth } from "../auth-provider";
-import { useJobs } from "../jobs-provider";
+import { type BaseJob, useJobs } from "../jobs-provider";
 import { useT } from "../i18n-provider";
 import { blurredVersion, handoffPath } from "../../lib/media-rules";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
@@ -105,6 +105,105 @@ function renderedCut(versions: Version[]): Version | null {
   if (!rendered.length) return null;
   return rendered.reduce((newest, version) =>
     (version.created_at ?? "") >= (newest.created_at ?? "") ? version : newest);
+}
+
+function assetIdForEffectJob(job: BaseJob): string | null {
+  return job.raw?.payload?.asset_id ?? job.raw?.result?.asset_id ?? null;
+}
+
+function isEffectPreviewJob(job: BaseJob): boolean {
+  return Boolean(job.raw?.payload?.request?.preview_seconds);
+}
+
+function EffectActivity({
+  assetId,
+  jobs,
+  cancellingJobId,
+  onCancel,
+}: {
+  assetId: string;
+  jobs: BaseJob[];
+  cancellingJobId: string;
+  onCancel: (job: BaseJob) => void;
+}) {
+  const t = useT();
+  const matching = jobs.filter((job) =>
+    job.category === "edit"
+    && !isEffectPreviewJob(job)
+    && assetIdForEffectJob(job) === assetId,
+  );
+  const active = matching.filter((job) => ["queued", "running"].includes(job.status));
+  const settled = matching.filter((job) => !["queued", "running"].includes(job.status));
+  const visible = [...active, ...settled.slice(0, 3)];
+  if (!visible.length) return null;
+
+  const statusDetails = (job: BaseJob) => {
+    if (job.status === "queued") return { label: "Waiting", icon: LoaderCircle, tone: "working" };
+    if (job.status === "running") return { label: "Applying", icon: LoaderCircle, tone: "working" };
+    if (job.status === "succeeded") return { label: "Applied", icon: CircleCheck, tone: "done" };
+    if (job.status === "cancelled") return { label: "Cancelled", icon: CircleX, tone: "muted" };
+    return { label: "Needs attention", icon: CircleAlert, tone: "failed" };
+  };
+
+  return (
+    <section className="effect-activity" aria-labelledby={`effect-activity-${assetId}`}>
+      <header>
+        <span className="effect-activity-heading">
+          <Layers3 size={15} aria-hidden="true" />
+          <strong id={`effect-activity-${assetId}`}>Effect activity</strong>
+        </span>
+        <small>{active.length ? `${active.length} active` : "Recent"}</small>
+      </header>
+      <div className="effect-activity-list" aria-live="polite">
+        {visible.map((job) => {
+          const status = statusDetails(job);
+          const StatusIcon = status.icon;
+          const effectNames = ((job.raw?.payload?.effects ?? []) as string[])
+            .map((id) => effectLabel(t, id, id));
+          const batch = job.raw?.payload?.batch;
+          const progress = typeof job.progress === "number"
+            ? Math.max(0, Math.min(1, job.progress))
+            : null;
+          return (
+            <article className={`effect-activity-item ${status.tone}`} key={job.id}>
+              <div className="effect-activity-item-main">
+                <StatusIcon className={job.status === "running" ? "is-spinning" : ""} size={16} aria-hidden="true" />
+                <div>
+                  <strong>{effectNames.join(" + ") || "Effect stack"}</strong>
+                  <small>
+                    {status.label}
+                    {job.progressStage ? ` · ${job.progressStage}` : ""}
+                    {batch?.total > 1 ? ` · Batch item ${batch.position} of ${batch.total}` : ""}
+                  </small>
+                </div>
+                {["queued", "running"].includes(job.status) && (
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    busy={cancellingJobId === job.id}
+                    onClick={() => onCancel(job)}
+                  >Cancel</Button>
+                )}
+              </div>
+              {["queued", "running"].includes(job.status) && (
+                <div
+                  className={`effect-activity-progress ${progress === null ? "indeterminate" : ""}`}
+                  role="progressbar"
+                  aria-label={`${effectNames.join(" and ") || "Effect stack"} progress`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={progress === null ? undefined : Math.round(progress * 100)}
+                >
+                  <span style={progress === null ? undefined : { width: `${Math.round(progress * 100)}%` }} />
+                </div>
+              )}
+              {job.error && <p role="alert">{job.error}</p>}
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 type Transcript = { id: string; kind: "speech" | "ocr"; language: string; text: string };
 type Analysis = {
@@ -530,7 +629,7 @@ export default function LibraryPage() {
   // them whenever an action finished. The bulk-action outcome below is not a
   // banner — it reads back inline where the run was started — so it stays put.
   const { messages: statusMessages, fail, dismiss } = useStatus();
-  const { jobs: notificationJobs } = useJobs();
+  const { jobs: notificationJobs, refresh: refreshJobs } = useJobs();
   const previousEffectJobStates = useRef<Map<string, string>>(new Map());
   const [message, setMessage] = useState("");
   const [selection, setSelection] = useState<Set<string>>(new Set());
@@ -540,6 +639,7 @@ export default function LibraryPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [effectsOpen, setEffectsOpen] = useState(false);
   const [batchEffectsOpen, setBatchEffectsOpen] = useState(false);
+  const [cancellingEffectJobId, setCancellingEffectJobId] = useState("");
 
   const selected = assets.find((asset) => asset.id === selectedId);
   const selectedSourceLinks = selected
@@ -1009,6 +1109,23 @@ export default function LibraryPage() {
     }
   }
 
+  async function cancelEffectJob(job: BaseJob) {
+    setCancellingEffectJobId(job.id);
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/media/library/effects/jobs/${job.id}/cancel`,
+        { method: "POST" },
+      );
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail ?? "The effect job could not be cancelled.");
+      await refreshJobs();
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "The effect job could not be cancelled.");
+    } finally {
+      setCancellingEffectJobId("");
+    }
+  }
+
   async function removeEffects(asset: Asset) {
     if (!window.confirm(
       `Remove every applied effect from "${asset.title}"?\n\n`
@@ -1354,7 +1471,7 @@ export default function LibraryPage() {
                   {/* Editing first, because it is the reason this panel is open,
                       and grouped so the three edits read as one set of choices
                       rather than as neighbours of Delete. */}
-                  <section className="library-action-group" aria-label={t("library.editingActions")}>
+                  <section className="library-action-group library-editing-actions" aria-label={t("library.editingActions")}>
                     <h4>{t("library.editingActions")}</h4>
                     <div className="library-action-row">
                       <Button
@@ -1380,6 +1497,12 @@ export default function LibraryPage() {
                         onClick={() => setEditorOpen(true)}
                       ><ActionIcon name="clip" />{t("library.clipPlan")}</Button>
                     </div>
+                    <EffectActivity
+                      assetId={selected.id}
+                      jobs={notificationJobs}
+                      cancellingJobId={cancellingEffectJobId}
+                      onCancel={(job) => void cancelEffectJob(job)}
+                    />
                   </section>
 
                   <section className="library-action-group" aria-label={t("library.handoffActions")}>

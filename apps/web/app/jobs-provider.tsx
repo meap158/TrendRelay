@@ -178,7 +178,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         // as long, produces the cut that Publish will send, and used to finish
         // in silence — the editor said "it will appear as a version" and left
         // the operator to keep reopening the asset to find out whether it had.
-        const fetchEdits = apiFetch(`/api/workspaces/${activeWorkspaceId}/media/library/effects/jobs`)
+        // A batch can contain 200 independently tracked items. Fetch enough
+        // history for every selected asset to keep its inline activity visible;
+        // the notification drawer still groups and presents this same stream.
+        const fetchEdits = apiFetch(`/api/workspaces/${activeWorkspaceId}/media/library/effects/jobs?limit=250`)
           .then(res => res.json())
           .then(data => (data.jobs || []).map((j: any) => ({
             id: j.id,

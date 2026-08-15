@@ -8,6 +8,7 @@ from collections import Counter
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
+from secrets import token_hex
 from typing import Annotated, Any, Literal
 from urllib.parse import quote
 
@@ -1722,7 +1723,8 @@ def submit_batch_render(
 
     results: list[dict[str, Any]] = []
     jobs: list[dict[str, Any]] = []
-    for asset_id in wanted:
+    batch_id = f"effect_batch_{token_hex(10)}"
+    for position, asset_id in enumerate(wanted, start=1):
         asset = by_id.get(asset_id)
         if asset is None:
             results.append({
@@ -1741,12 +1743,15 @@ def submit_batch_render(
             continue
         try:
             check_media_kinds(steps, asset.media_kind)
-            job = create_render_job(EffectRenderRequest(
-                workspace_id=workspace_id,
-                source_path=asset.original_path,
-                steps=normalised,
-                confirm_external_action=True,
-            ))
+            job = create_render_job(
+                EffectRenderRequest(
+                    workspace_id=workspace_id,
+                    source_path=asset.original_path,
+                    steps=normalised,
+                    confirm_external_action=True,
+                ),
+                batch={"id": batch_id, "position": position, "total": len(wanted)},
+            )
         except (EffectError, PermissionError, ValidationError, ValueError) as error:
             results.append({
                 "asset_id": asset.id,
@@ -1786,12 +1791,15 @@ def submit_batch_render(
 
 @router.get("/effects/jobs")
 def list_effect_render_jobs(
-    workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    limit: Annotated[int, Query(ge=1, le=500)] = 20,
 ) -> dict[str, Any]:
     membership(session, workspace_id, user.id)
     from trendrelay_api.integrations.effect_render import list_render_jobs
 
-    return {"jobs": list_render_jobs(workspace_id)}
+    return {"jobs": list_render_jobs(workspace_id, limit=limit)}
 
 
 @router.post("/effects/jobs/{job_id}/cancel")
