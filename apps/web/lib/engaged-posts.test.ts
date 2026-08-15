@@ -71,3 +71,17 @@ test("unlinked citations and unfinished jobs do not become posts", () => {
 
   assert.deepEqual(posts, []);
 });
+
+test("linked web results without public engagement do not pose as popular posts", () => {
+  const posts = rankEngagedPosts([{
+    ...jobs[0],
+    observations: [{
+      source: "jobs",
+      title: "A search result",
+      metrics: { relevance_score: 0.8 },
+      evidence: { source_url: "https://example.com/jobs" },
+    }],
+  }]);
+
+  assert.deepEqual(posts, []);
+});

@@ -73,7 +73,9 @@ function engagementValue(post: EngagedPost): number {
 }
 
 function compareNative(left: EngagedPost, right: EngagedPost): number {
-  return engagementValue(right) - engagementValue(left)
+  const leftStrength = engagementValue(left) || left.views || 0;
+  const rightStrength = engagementValue(right) || right.views || 0;
+  return rightStrength - leftStrength
     || (right.comments ?? 0) - (left.comments ?? 0)
     || dateValue(right.publishedAt) - dateValue(left.publishedAt);
 }
@@ -111,6 +113,7 @@ export function rankEngagedPosts(
       const comments = count(metrics, METRIC_KEYS.comments);
       const shares = count(metrics, METRIC_KEYS.shares);
       const interactions = (likes ?? 0) + (upvotes ?? 0) + (comments ?? 0) + (shares ?? 0);
+      if ([views, likes, upvotes, comments, shares].every((value) => value === null)) continue;
       const post: EngagedPost = {
         id: `${observation.source ?? "web"}:${observation.evidence?.raw_record_id ?? url}`,
         source: (observation.source || "web").toLowerCase(),
