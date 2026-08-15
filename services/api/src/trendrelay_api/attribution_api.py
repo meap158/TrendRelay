@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import csv
 import hashlib
 import hmac
@@ -37,6 +39,7 @@ from trendrelay_api.foundation import audit, ensure_profile, membership, require
 from trendrelay_api.integrations import shopee_session
 from trendrelay_api.media_models import CreativeAnalysis, MediaAsset
 from trendrelay_api.models import Campaign, PublicationPlan, utc_now
+from trendrelay_api.money import minor_unit_digits
 from trendrelay_api.opportunity_models import ProductOffer
 from trendrelay_api.tool_registry import PROJECT_ROOT
 
@@ -321,7 +324,17 @@ def _parse_datetime(value: str, row_number: int) -> datetime:
     return parsed.astimezone(UTC)
 
 
-def _cents(value: str, field: str, row_number: int, *, optional: bool = False) -> int | None:
+def _minor(
+    value: str, currency: str, field: str, row_number: int, *, optional: bool = False
+) -> int | None:
+    """An amount as the network's report wrote it, in the currency's own minor unit.
+
+    By the currency, not by a hundred. This used to multiply every amount by a
+    hundred, which is the exact failure `money.py` exists to prevent: a Shopee
+    commission of 15,000 dong became 1,500,000 stored - a hundred times wrong,
+    plausible on screen, and feeding every earnings figure computed downstream,
+    while the offers beside it stored their dong correctly.
+    """
     cleaned = value.strip()
     if optional and not cleaned:
         return None
@@ -331,7 +344,8 @@ def _cents(value: str, field: str, row_number: int, *, optional: bool = False) -
         raise ValueError(f"Row {row_number}: {field} must be a monetary amount.") from error
     if not decimal.is_finite() or decimal < 0:
         raise ValueError(f"Row {row_number}: {field} must be zero or greater.")
-    return int((decimal * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    scale = Decimal(10) ** minor_unit_digits(currency)
+    return int((decimal * scale).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 @workspace_router.get("/links")
@@ -604,9 +618,10 @@ def import_conversions(
             if not re.fullmatch(r"[A-Z]{3}", currency):
                 raise ValueError(f"Row {row_number}: currency must be a three-letter code.")
             occurred_at = _parse_datetime(row["occurred_at"], row_number)
-            commission = _cents(row["commission"], "commission", row_number)
-            order_value = _cents(
+            commission = _minor(row["commission"], currency, "commission", row_number)
+            order_value = _minor(
                 row.get("order_value", ""),
+                currency,
                 "order_value",
                 row_number,
                 optional=True,
@@ -959,6 +974,9 @@ class ShopeeImport(BaseModel):
     platform: Platform
     #: The bulk export, pasted or uploaded whole.
     csv_text: str = Field(default="", max_length=2_000_000)
+    #: A real `.xlsx` selected in the interface, encoded for this JSON API.
+    #: Kept separate from pasted text so binary data is never guessed at.
+    xlsx_base64: str = Field(default="", max_length=8_000_000)
     #: Links on their own, for when somebody copied a handful rather than
     #: exporting them. Both may be given; they are filed the same way.
     links: str = Field(default="", max_length=200_000)
@@ -981,7 +999,7 @@ def import_shopee_offers(
 
     One campaign and one platform for the whole batch: an export is a set of
     products chosen for one purpose, and asking per row would make importing
-    two hundred of them a two hundred step job.
+    one hundred of them a one-hundred-step job.
     """
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
     require_governed_assurance(user)
@@ -993,6 +1011,21 @@ def import_shopee_offers(
     ensure_profile(session, user)
 
     rows, problems = attribution_shopee_import.rows_from(body.csv_text, body.links)
+    if body.xlsx_base64:
+        try:
+            workbook_data = base64.b64decode(body.xlsx_base64, validate=True)
+            workbook_rows = xlsx.rows(workbook_data, maximum_rows=101)
+        except (binascii.Error, ValueError) as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        if not workbook_rows:
+            raise HTTPException(status_code=422, detail="That Excel workbook is empty.")
+        workbook_text = io.StringIO()
+        csv.writer(workbook_text).writerows(workbook_rows)
+        file_rows, file_problems = attribution_shopee_import.rows_from(
+            workbook_text.getvalue(), ""
+        )
+        rows.extend(file_rows)
+        problems.extend(file_problems)
     if not rows and not problems:
         raise HTTPException(
             status_code=422,
@@ -1041,8 +1074,8 @@ def import_shopee_offers(
         # an image appearing minutes after an import looks like a bug when
         # nothing announced it was coming.
         "enriching": len(enrichment),
-        # Reported rather than raised: an export of two hundred with three odd
-        # rows should file a hundred and ninety-seven and name the three.
+        # Reported rather than raised: an export of one hundred with three odd
+        # rows should file ninety-seven and name the three.
         "problems": problems + outcome.problems,
     }
 
@@ -1227,7 +1260,7 @@ class ShopeeOfferFetch(BaseModel):
 
     campaign_id: str = Field(min_length=1, max_length=64)
     platform: Platform
-    limit: int = Field(default=200, ge=1, le=1000)
+    limit: int = Field(default=100, ge=1, le=100)
     disclosure: str = Field(default="Affiliate link", min_length=2, max_length=500)
     confirm_external_action: bool = False
 
@@ -1242,7 +1275,7 @@ def fetch_shopee_offers(
 ) -> dict[str, Any]:
     """Read the offer page with the connected session, then import what it says.
 
-    The same destination as pasting the CSV export, minus the download. It
+    The same destination as importing the Excel export, minus the download. It
     reads the JSON the offer page's own front-end fetches rather than its
     markup, so a redesign that changes nothing about the data changes nothing
     here.
@@ -1278,7 +1311,7 @@ def fetch_shopee_offers(
             status_code=422,
             detail=(
                 "The offer page returned no offers. If your account has offers, "
-                "download the CSV export and import that instead."
+                "download the Excel export from Shopee and import that instead."
             ),
         )
     outcome = attribution_shopee_import.import_rows(
@@ -1346,7 +1379,7 @@ def export_shopee_offers(
 
     Deliberately separate from importing. Exporting is how somebody looks at
     what is available - to price it, to choose from it, to send it to someone -
-    and filing two hundred products as a side effect of looking would be a
+    and filing one hundred products as a side effect of looking would be a
     surprise nobody asked for.
     """
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})

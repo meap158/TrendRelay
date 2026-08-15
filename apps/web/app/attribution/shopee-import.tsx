@@ -11,10 +11,10 @@
  *
  * The campaign and the platform are asked once for the whole batch. An export
  * is a set of products chosen for one purpose, and asking per row would make
- * importing two hundred of them a two hundred step job.
+ * importing one hundred of them a one-hundred-step job.
  */
 
-import { FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useState } from "react";
 
 type Campaign = { id: string; name: string };
 type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
@@ -51,6 +51,9 @@ export function ShopeeImport({
   const [campaignId, setCampaignId] = useState("");
   const [platform, setPlatform] = useState<string>("tiktok");
   const [csvText, setCsvText] = useState("");
+  const [xlsxBase64, setXlsxBase64] = useState("");
+  const [workbookName, setWorkbookName] = useState("");
+  const [fileKey, setFileKey] = useState(0);
   const [links, setLinks] = useState("");
   const [busy, setBusy] = useState(false);
   const [fetching, setFetching] = useState(false);
@@ -74,6 +77,7 @@ export function ShopeeImport({
             campaign_id: campaignId,
             platform,
             csv_text: csvText,
+            xlsx_base64: xlsxBase64,
             links,
             // Said here rather than assumed: this mints a real tracking link
             // per product, which is not something anybody undoes quickly.
@@ -91,6 +95,9 @@ export function ShopeeImport({
       // Only the fields that were consumed. Leaving the campaign and platform
       // set is what makes importing a second export a two-field job.
       setCsvText("");
+      setXlsxBase64("");
+      setWorkbookName("");
+      setFileKey((value) => value + 1);
       setLinks("");
       onImported();
     } catch (problem) {
@@ -98,6 +105,28 @@ export function ShopeeImport({
     } finally {
       setBusy(false);
     }
+  }
+
+  function chooseWorkbook(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setXlsxBase64("");
+      setWorkbookName("");
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      fail("Choose the .xlsx file exported from Shopee's Product Offer page.");
+      event.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => fail("That Excel file could not be read.");
+    reader.onload = () => {
+      const encoded = String(reader.result ?? "").split(",", 2)[1] ?? "";
+      setXlsxBase64(encoded);
+      setWorkbookName(file.name);
+    };
+    reader.readAsDataURL(file);
   }
 
   /**
@@ -231,7 +260,7 @@ export function ShopeeImport({
         </label>
         <button
           className="ui-button ui-button-primary ui-button-md"
-          disabled={busy || !campaignId || (!links.trim() && !csvText.trim())}
+          disabled={busy || !campaignId || (!links.trim() && !csvText.trim() && !xlsxBase64)}
         >
           {busy ? "Adding…" : "Add these"}
         </button>
@@ -258,17 +287,32 @@ export function ShopeeImport({
           </button>
           <small>
             {!connected
-              ? "Sign in under the gear to read your offer page. Pasting works without a session."
-              : !campaignId
+                ? "Sign in under the gear to read your offer page. Pasting works without a session."
+                : !campaignId
                 ? "Importing needs a campaign; downloading does not."
-                : "Import files every offer with a tracking link. Download gives you up to 100 rows and saves nothing."}
+                : "Import files every offer with a tracking link. Shopee opens briefly while TrendRelay reads up to 100 products; downloading saves nothing."}
           </small>
         </div>
 
         {/* Folded: the path for a file already downloaded, which is the least
             likely of the three now that the page can be read directly. */}
         <details className="shopee-paste">
-          <summary>Paste a downloaded export instead</summary>
+          <summary>Import an Excel file from Shopee instead</summary>
+          <label>
+            Excel export from Shopee Product Offer
+            <input
+              key={fileKey}
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={chooseWorkbook}
+            />
+            <small>
+              {workbookName
+                ? `${workbookName} is ready. Up to 100 product rows will be imported.`
+                : "In Shopee Affiliate, open Hoa hồng Sản phẩm (Product Offer), select up to 100 products, then export the Excel file."}
+            </small>
+          </label>
+          <p className="attribution-note">Or paste rows copied from that Shopee file:</p>
           <label>
             Bulk export
             <textarea

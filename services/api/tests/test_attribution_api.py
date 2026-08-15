@@ -519,3 +519,12 @@ def test_two_links_sharing_a_sub_id_stop_the_import() -> None:
     detail = response.json()["detail"]
     assert links[0]["code"] in detail and links[1]["code"] in detail
     assert "cannot be told apart" in detail
+
+
+def test_an_amount_is_stored_in_the_currency_s_own_minor_unit() -> None:
+    """The dong path. Every flow test above imports in USD, where "times a
+    hundred" and "times the minor unit" agree - which is exactly how a blanket
+    x100 survived here while the offers beside it stored whole dong."""
+    assert attribution_api._minor("15000", "VND", "commission", 2) == 15_000
+    assert attribution_api._minor("12.50", "USD", "commission", 2) == 1_250
+    assert attribution_api._minor("1.234", "KWD", "commission", 2) == 1_234

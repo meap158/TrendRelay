@@ -197,12 +197,14 @@ def resolve_short_link(url: str, *, timeout: float = RESOLVE_TIMEOUT_SECONDS) ->
 #: are accepted too so an account in another language imports the same way.
 EXPORT_COLUMNS: dict[str, tuple[str, ...]] = {
     "item_id": ("mã sản phẩm", "product id", "item id"),
-    "name": ("tên sản phẩm", "product name"),
-    "price": ("giá", "price"),
+    "name": ("tên sản phẩm", "product name", "product"),
+    "price": ("giá", "price", "price (vnd)"),
     "sales": ("doanh thu", "sales", "revenue"),
-    "shop": ("tên cửa hàng", "shop name", "store name"),
-    "commission_rate": ("tỉ lệ hoa hồng", "tỷ lệ hoa hồng", "commission rate"),
-    "commission": ("hoa hồng", "commission"),
+    "shop": ("tên cửa hàng", "shop name", "store name", "shop"),
+    "commission_rate": (
+        "tỉ lệ hoa hồng", "tỷ lệ hoa hồng", "commission rate", "commission rate (%)",
+    ),
+    "commission": ("hoa hồng", "commission", "commission (vnd)"),
     "product_url": ("link sản phẩm", "product link", "product url"),
     "affiliate_url": ("link ưu đãi", "offer link", "affiliate link"),
 }
@@ -338,23 +340,49 @@ def read_export(text: str) -> tuple[list[ExportedProduct], list[str]]:
 SHOPEE_API_SCALE = 100_000
 
 
-def _api_amount(value: object) -> int | None:
-    """One money field from Shopee's own JSON, as whole dong.
+#: The smallest scaled price that could really occur: the cheapest product a
+#: listing can carry - about a thousand dong - times the scale. The threshold
+#: used to be the scale itself, which read every already-divided price from
+#: 100,000 dong up as scaled and divided it to nothing; 100,000 dong is not an
+#: exotic price, it is four dollars, the middle of the range this app imports.
+#: A whole price at or above this floor would be a hundred-million-dong
+#: product, which the offer page does not deal in.
+_SCALED_PRICE_FLOOR = 1_000 * SHOPEE_API_SCALE
 
-    Values at or above the scale are taken as scaled, below it as already whole.
-    A real product priced under one dong does not exist, and a scaled value
-    below the threshold would mean a price under 0.00001 dong - so the ambiguous
-    range is empty in practice rather than merely unlikely.
-    """
+#: The same reasoning for a commission, whose figures run smaller: the least
+#: scaled commission is about a hundred dong times the scale, and a whole
+#: commission of ten million dong does not happen. Used only when the row
+#: carries no price to answer for it.
+_SCALED_COMMISSION_FLOOR = 100 * SHOPEE_API_SCALE
+
+
+def _raw_number(value: object) -> float | None:
+    """One money field as the payload wrote it, before any scale is decided."""
     if value in (None, ""):
         return None
     try:
         number = float(value)
     except (TypeError, ValueError):
         return None
-    if number <= 0:
-        return None
-    return round(number / SHOPEE_API_SCALE) if number >= SHOPEE_API_SCALE else round(number)
+    return number if number > 0 else None
+
+
+def _row_is_scaled(price: float | None, commission: float | None) -> bool:
+    """Whether this row's money arrived multiplied by the API scale.
+
+    Decided once per row rather than once per field, because the payload's
+    serializer either divides or does not - price and commission arrive in one
+    convention together. That matters for the commission, whose plausible whole
+    and scaled ranges overlap: 2% of a small order is a few hundred dong, which
+    scaled sits below any threshold a big whole commission sits above. The
+    price answers for the row because its ranges are cleanly separable, and the
+    commission is only asked when there is no price to ask.
+    """
+    if price is not None:
+        return price >= _SCALED_PRICE_FLOOR
+    if commission is not None:
+        return commission >= _SCALED_COMMISSION_FLOOR
+    return False
 
 
 def _api_rate_bps(value: object) -> int | None:
@@ -405,13 +433,22 @@ def read_api_offers(rows: list[dict]) -> tuple[list[ExportedProduct], list[str]]
             continue
         item_id = row.get("item_id")
         shop_id = row.get("shop_id")
+        price_raw = _raw_number(row.get("price"))
+        commission_raw = _raw_number(row.get("commission"))
+        scaled = _row_is_scaled(price_raw, commission_raw)
+
+        def as_dong(raw: float | None, *, scaled: bool = scaled) -> int | None:
+            if raw is None:
+                return None
+            return round(raw / SHOPEE_API_SCALE) if scaled else round(raw)
+
         found.append(ExportedProduct(
             item_id=str(item_id) if item_id else None,
             shop_id=str(shop_id) if shop_id else None,
             name=name or "Shopee product",
             shop=(str(row.get("shop")).strip() or None) if row.get("shop") else None,
-            price_dong=_api_amount(row.get("price")),
-            commission_dong=_api_amount(row.get("commission")),
+            price_dong=as_dong(price_raw),
+            commission_dong=as_dong(commission_raw),
             commission_bps=_api_rate_bps(row.get("commission_rate")),
             product_url=product_url or None,
             # The link the account already has. Nothing here mints one: a

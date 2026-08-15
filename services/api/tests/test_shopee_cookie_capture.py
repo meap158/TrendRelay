@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -164,3 +164,43 @@ def test_a_capture_waiting_to_be_adopted_is_picked_up_by_asking(stored_here) -> 
 
     assert shopee.connection_status()["state"] == "connected"
     assert shopee.health().ready is True
+
+
+def stamp_status(folder: Path, state: str, minutes_ago: float) -> None:
+    (folder / "connect-status.json").write_text(
+        json.dumps({
+            "state": state,
+            "message": "…",
+            "updated_at": (
+                datetime.now(UTC) - timedelta(minutes=minutes_ago)
+            ).isoformat().replace("+00:00", "Z"),
+        }),
+        encoding="utf-8",
+    )
+
+
+def test_a_waiting_window_nobody_is_running_expires_rather_than_blocking(
+    stored_here, monkeypatch
+) -> None:
+    """The deadlock a hard kill used to leave behind.
+
+    An API restart drops the process handle, and a capture killed too hard
+    never writes its own ending - so the file said "waiting" forever, and
+    `start_connection` read that as a window already open and refused to ever
+    open another. Recoverable only by deleting the file by hand.
+    """
+    monkeypatch.setattr(shopee, "_CAPTURE_PROCESS", None)
+    stamp_status(stored_here, "waiting_for_login", minutes_ago=15)
+
+    assert shopee.connection_status()["state"] == "failed"
+
+
+def test_a_window_still_inside_its_own_timeout_is_left_waiting(
+    stored_here, monkeypatch
+) -> None:
+    # The script stamps the file once when the window opens, so a quiet stamp
+    # is not a dead one until the window's own timeout has passed it by.
+    monkeypatch.setattr(shopee, "_CAPTURE_PROCESS", None)
+    stamp_status(stored_here, "waiting_for_login", minutes_ago=2)
+
+    assert shopee.connection_status()["state"] == "waiting_for_login"

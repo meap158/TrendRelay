@@ -171,6 +171,42 @@ def test_a_name_somebody_chose_is_never_overwritten(session) -> None:
     assert session.scalar(select(Product)).name == "Topgia tissues (renamed)"
 
 
+def test_an_export_fills_the_price_a_pasted_link_could_not_know(session) -> None:
+    """The offer, not just the product, is backfilled.
+
+    A pasted link files an offer knowing nothing but its URL. When the export
+    arrives with the same link, the row is already present - and used to be
+    skipped whole, leaving the offer priceless for as long as it lived.
+    """
+    rows, _ = importer.rows_from(
+        "", "https://s.shopee.vn/70JJHPqb6V",
+        resolve=lambda _url: "https://shopee.vn/product/1834061111/57860887539",
+    )
+    run(session, rows)
+    assert session.scalar(select(ProductOffer)).price_cents is None
+
+    outcome = run(session, export_rows())
+
+    offer = session.scalar(select(ProductOffer))
+    assert outcome.already_present == 1
+    assert offer.price_cents == 95_000
+    assert offer.commission_bps == 200
+    assert offer.commission_flat_cents == 1_900
+    assert offer.merchant == "TOP_GIA HOME"
+    # Still one offer and one link: filling gaps is not filing again.
+    assert len(session.scalars(select(ProductOffer)).all()) == 1
+    assert len(session.scalars(select(TrackingLink)).all()) == 1
+
+
+def test_a_figure_an_earlier_export_gave_is_not_overwritten(session) -> None:
+    run(session, export_rows())
+    repriced = EXPORT.replace('"95,0k"', '"99,0k"')
+
+    run(session, export_rows(repriced))
+
+    assert session.scalar(select(ProductOffer)).price_cents == 95_000
+
+
 def test_a_link_and_its_export_row_are_one_product(session) -> None:
     """Both name the same shop and item, however they were given."""
     rows, _ = importer.rows_from(

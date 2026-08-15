@@ -1,6 +1,6 @@
 """Read the affiliate offer list as the operator's own signed-in account.
 
-The bulk CSV export from https://affiliate.shopee.vn/offer/product_offer is the
+The bulk Excel export from https://affiliate.shopee.vn/offer/product_offer is the
 same data this reads, downloaded by hand. This removes the by-hand part.
 
 It listens rather than scrapes
@@ -28,15 +28,20 @@ import json
 import re
 import sys
 from datetime import UTC, datetime
+from pathlib import Path
 from urllib.parse import urlparse
 
 OFFER_URL = "https://affiliate.shopee.vn/offer/product_offer"
 AFFILIATE_HOSTS = ("affiliate.shopee.vn",)
 READY_TIMEOUT_MS = 60_000
-#: The page fetches its first list after load, then more as it is scrolled.
+#: The page currently shows twenty products per numbered page. Scrolling is
+#: retained as a fallback because Shopee has also served this list lazily.
 SETTLE_MS = 8_000
 SCROLL_ROUNDS = 12
 SCROLL_PAUSE_MS = 1_200
+OFFERS_PER_PAGE = 20
+MAX_OFFER_PAGES = 5
+VERIFY_TIMEOUT_MS = 120_000
 
 #: Field names Shopee has used for the same value. Tried in order, because the
 #: payload is not a documented contract and renaming one field should cost that
@@ -66,6 +71,11 @@ def first(record: dict, names: tuple[str, ...]):
         if name in record and record[name] not in (None, ""):
             return record[name]
     return None
+
+
+def offer_key(record: dict) -> str:
+    """The identity a row is deduplicated on, shared by the final pass below."""
+    return str(first(record, FIELDS["item_id"]) or first(record, FIELDS["affiliate_url"]) or "")
 
 
 def looks_like_offer(record) -> bool:
@@ -127,7 +137,7 @@ def main() -> None:
     cookies = request.get("cookies")
     if not isinstance(cookies, dict) or not cookies:
         fail("bridge needs a connected Shopee session")
-    wanted = int(request.get("limit") or 200)
+    wanted = min(100, max(1, int(request.get("limit") or 100)))
 
     url = str(request.get("url") or OFFER_URL)
     host = (urlparse(url).hostname or "").casefold()
@@ -146,12 +156,17 @@ def main() -> None:
     seen_payloads = 0
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            headless=True,
+        profile = Path(__file__).resolve().parents[1] / ".data" / "shopee" / "browser-profile"
+        context = playwright.chromium.launch_persistent_context(
+            str(profile),
+            # Shopee sends headless Chromium to /verify/traffic/error before
+            # the Product Offer request is made. A normal native window is the
+            # same browser mode used for sign-in and lets the operator see what
+            # their account is reading while this read-only collection runs.
+            headless=False,
             args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
         )
         try:
-            context = browser.new_context(locale="vi-VN", viewport={"width": 1600, "height": 1000})
             context.add_cookies([
                 {"name": name, "value": value, "domain": ".shopee.vn", "path": "/"}
                 for name, value in cookies.items()
@@ -176,11 +191,25 @@ def main() -> None:
                 page.goto(url, wait_until="domcontentloaded", timeout=READY_TIMEOUT_MS)
             except PlaywrightTimeout:
                 pass
+            if "/verify/" in page.url:
+                try:
+                    page.wait_for_url(
+                        re.compile(r"https://affiliate\.shopee\.vn/offer/product_offer"),
+                        timeout=VERIFY_TIMEOUT_MS,
+                    )
+                except PlaywrightTimeout:
+                    pass
             page.wait_for_timeout(SETTLE_MS)
 
-            # Paged by scrolling, which is how the page itself asks for more.
+            # First allow the lazy-list version of this page to ask for more.
+            # Enough is measured in unique offers, by the same key the final
+            # pass deduplicates on. This used to count `id(item)` - Python's
+            # object identity, distinct for every harvested dict - so overlap
+            # between one fetch and the next counted toward the target and the
+            # scrolling stopped with fewer offers than were asked for.
             for _ in range(SCROLL_ROUNDS):
-                if len({id(item) for item in collected}) >= wanted:
+                gathered = {key for key in map(offer_key, collected) if key}
+                if len(gathered) >= wanted:
                     break
                 try:
                     page.mouse.wheel(0, 20_000)
@@ -188,18 +217,49 @@ def main() -> None:
                 except Exception:
                     break
 
+            # The Vietnamese Product Offer page currently uses five numbered
+            # pages of twenty products. Visit each page so a 100-row request
+            # does not quietly return only the first visible twenty. Selectors
+            # are scoped to pagination controls; the page contains many other
+            # bare numbers (prices, sales counts, and an animated header).
+            last_page = min(MAX_OFFER_PAGES, (wanted + OFFERS_PER_PAGE - 1) // OFFERS_PER_PAGE)
+            pagination_selector = (
+                '[class*="pagination"] a, [class*="pagination"] button, '
+                'li[class*="pagination"]'
+            )
+            for page_number in range(2, last_page + 1):
+                gathered = {key for key in map(offer_key, collected) if key}
+                if len(gathered) >= wanted:
+                    break
+                exact_number = re.compile(rf"^\s*{page_number}\s*$")
+                candidates = page.locator(pagination_selector).filter(has_text=exact_number)
+                clicked = False
+                for index in range(candidates.count()):
+                    candidate = candidates.nth(index)
+                    try:
+                        if candidate.is_visible():
+                            candidate.click()
+                            clicked = True
+                            break
+                    except Exception:
+                        continue
+                if not clicked:
+                    break
+                page.wait_for_timeout(SCROLL_PAUSE_MS * 2)
+
             body_text = ""
             try:
                 body_text = page.inner_text("body")[:4000]
             except Exception:
                 pass
             login_wall = bool(re.search(r"đăng nhập|log ?in", body_text, re.I))
+            final_url = page.url
             refreshed = {
                 cookie["name"]: cookie["value"] for cookie in context.cookies()
                 if cookie.get("name") in cookies or str(cookie.get("name", "")).startswith("SPC_")
             }
         finally:
-            browser.close()
+            context.close()
 
     # Deduplicated on the identity Shopee gives them, keeping first sight.
     unique: dict[str, dict] = {}
@@ -215,6 +275,7 @@ def main() -> None:
         # in" and from "signed in, but the payload no longer looks like this".
         "login_wall": login_wall,
         "payloads_seen": seen_payloads,
+        "final_url": final_url,
         "refreshed_cookies": refreshed,
         "collected_at": datetime.now(UTC).isoformat(),
     }, sys.stdout, ensure_ascii=False)

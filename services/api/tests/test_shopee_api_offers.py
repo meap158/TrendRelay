@@ -40,6 +40,37 @@ def test_a_price_that_arrives_already_whole_is_left_alone() -> None:
     assert one(price=95_000).price_dong == 95_000
 
 
+def test_a_whole_price_above_the_scale_is_still_whole() -> None:
+    """The band the old threshold destroyed.
+
+    150,000 dong is four dollars - the middle of the range this app imports -
+    and a threshold at the scale itself read it as scaled and divided it to
+    nothing. Only a figure no whole price could reach means scaled.
+    """
+    row = one(price=150_000, commission=3_000)
+
+    assert row.price_dong == 150_000
+    assert row.commission_dong == 3_000
+
+
+def test_the_commission_follows_the_row_s_convention() -> None:
+    """One serializer per payload: the price answers for the commission.
+
+    A small commission scaled and a large commission whole can be the same
+    number, so the commission's own magnitude cannot decide it.
+    """
+    scaled_row = one(price=95_000 * 100_000, commission=500 * 100_000)
+    whole_row = one(price=95_000, commission=1_900)
+
+    assert scaled_row.commission_dong == 500
+    assert whole_row.commission_dong == 1_900
+
+
+def test_a_row_with_no_price_reads_its_commission_by_magnitude() -> None:
+    assert one(price=None, commission=1_900 * 100_000).commission_dong == 1_900
+    assert one(price=None, commission=1_900).commission_dong == 1_900
+
+
 def test_the_commission_is_scaled_the_same_way() -> None:
     assert one().commission_dong == 1_900
 

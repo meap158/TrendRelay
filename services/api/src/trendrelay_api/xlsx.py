@@ -23,6 +23,7 @@ import zipfile
 from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any
+from xml.etree import ElementTree
 
 #: The namespace roots every part below hangs off. Named once because the
 #: strings are long, fixed by the specification, and unreadable inline.
@@ -160,3 +161,76 @@ def workbook(
             info.compress_type = zipfile.ZIP_DEFLATED
             archive.writestr(info, text)
     return buffer.getvalue()
+
+
+def rows(data: bytes, *, maximum_rows: int = 1_001) -> list[list[str]]:
+    """Read the first worksheet of a small workbook as plain cell values.
+
+    This is the value layer needed by exported tables: inline strings, shared
+    strings, numbers, booleans, and cached formula results. Formatting and
+    formulas themselves do not affect an offer import. It accepts both Excel's
+    usual shared-string files and the inline-string workbooks written above.
+    """
+    try:
+        archive = zipfile.ZipFile(BytesIO(data))
+    except (zipfile.BadZipFile, OSError) as error:
+        raise ValueError("That file is not a readable Excel workbook.") from error
+
+    namespace = {"s": _SPREADSHEET}
+    with archive:
+        sheets = sorted(
+            name for name in archive.namelist()
+            if name.startswith("xl/worksheets/sheet") and name.endswith(".xml")
+        )
+        if not sheets:
+            raise ValueError("That Excel workbook has no worksheet to import.")
+
+        shared: list[str] = []
+        if "xl/sharedStrings.xml" in archive.namelist():
+            try:
+                tree = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+            except ElementTree.ParseError as error:
+                raise ValueError("The Excel workbook has an unreadable string table.") from error
+            shared = [
+                "".join(node.text or "" for node in item.findall(".//s:t", namespace))
+                for item in tree.findall("s:si", namespace)
+            ]
+
+        try:
+            sheet = ElementTree.fromstring(archive.read(sheets[0]))
+        except ElementTree.ParseError as error:
+            raise ValueError("The first Excel worksheet is unreadable.") from error
+
+    output: list[list[str]] = []
+    for row in sheet.findall(".//s:sheetData/s:row", namespace):
+        if len(output) >= maximum_rows:
+            raise ValueError(f"The Excel workbook has more than {maximum_rows - 1} data rows.")
+        values: dict[int, str] = {}
+        for fallback, cell in enumerate(row.findall("s:c", namespace), start=1):
+            reference = cell.attrib.get("r", "")
+            letters = "".join(character for character in reference if character.isalpha())
+            column = 0
+            for character in letters.upper():
+                column = column * 26 + ord(character) - ord("A") + 1
+            column = column or fallback
+            kind = cell.attrib.get("t")
+            if kind == "inlineStr":
+                value = "".join(
+                    node.text or "" for node in cell.findall(".//s:is//s:t", namespace)
+                )
+            else:
+                value_node = cell.find("s:v", namespace)
+                value = value_node.text if value_node is not None and value_node.text else ""
+                if kind == "s" and value:
+                    try:
+                        value = shared[int(value)]
+                    except (ValueError, IndexError) as error:
+                        raise ValueError(
+                            "The Excel workbook has an invalid shared string."
+                        ) from error
+                elif kind == "b":
+                    value = "true" if value == "1" else "false"
+            values[column] = value
+        width = max(values, default=0)
+        output.append([values.get(column, "") for column in range(1, width + 1)])
+    return output

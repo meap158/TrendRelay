@@ -12,13 +12,14 @@ guards all sit above the Playwright import, so they answer without it.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
 
 import pytest
 
-from trendrelay_api.integrations.shopee_session import BRIDGE_PATH
+from trendrelay_api.integrations.shopee_session import BRIDGE_PATH, OFFERS_PATH
 
 SESSION = {"SPC_EC": "not-a-real-cookie", "SPC_U": "42"}
 
@@ -104,3 +105,36 @@ def test_nonsense_on_stdin_is_refused_rather_than_crashing() -> None:
 
     assert done.returncode != 0
     assert "invalid request" in done.stderr
+
+
+# --- the offers bridge's own reasoning -----------------------------------------
+#
+# Its Playwright import lives inside main(), so the pure parts load through the
+# ordinary interpreter the same way the guards above run.
+
+
+def load_offers_bridge():
+    spec = importlib.util.spec_from_file_location("shopee_offers_bridge", OFFERS_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_same_offer_seen_twice_is_one_offer() -> None:
+    """The scroll loop stops when it has enough *unique* offers.
+
+    It used to count `id(item)` - Python's object identity, distinct for every
+    harvested dict - so the overlap between one fetch and the next counted
+    toward the target and scrolling stopped short of what was asked for.
+    """
+    bridge = load_offers_bridge()
+    row = {"productName": "Giấy ăn rút Topgia", "itemId": "57860887539"}
+
+    assert bridge.offer_key(row) == bridge.offer_key(dict(row))
+    assert bridge.offer_key(row) != bridge.offer_key({**row, "itemId": "2"})
+
+
+def test_an_offer_with_no_identity_never_counts_toward_enough() -> None:
+    bridge = load_offers_bridge()
+
+    assert bridge.offer_key({"productName": "banner text"}) == ""

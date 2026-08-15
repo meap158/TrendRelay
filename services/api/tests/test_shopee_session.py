@@ -423,6 +423,23 @@ def test_rotated_cookies_are_kept_so_the_session_lives_its_full_term(bridge) -> 
     assert shopee.load_cookies()[0]["SPC_EC"] == "rotated"
 
 
+def test_rotation_keeps_the_expiry_the_session_was_captured_with(bridge) -> None:
+    """`save_cookies` writes the file whole, so the first rotation used to
+    erase the stamp - after which no session could ever be called tired, and
+    the early warning the capture flow exists to provide was gone by the first
+    successful read."""
+    term = datetime(2026, 9, 1, tzinfo=UTC)
+    shopee.save_cookies(LIVE, expires_at=term)
+    replies(bridge, {"name": "Anything", "refreshed_cookies": {"SPC_EC": "rotated"}})
+
+    shopee.fetch_product(PRODUCT_URL)
+
+    state = shopee.health(now=datetime(2026, 8, 30, 12, 0, tzinfo=UTC))
+    assert state.expires_at == term
+    assert state.tired is True
+    assert shopee.load_cookies()[0]["SPC_EC"] == "rotated"
+
+
 def test_nothing_rotated_leaves_the_session_alone(bridge) -> None:
     shopee.save_cookies(LIVE)
     replies(bridge, {"name": "Anything"})
@@ -443,6 +460,15 @@ def test_a_rotated_session_never_comes_back_to_the_caller(bridge) -> None:
 
 
 # --- when it does not work ----------------------------------------------------
+
+
+def test_a_banner_mentioning_sign_in_does_not_fail_a_read_that_worked(bridge) -> None:
+    """The wall flag is a text match, and product pages carry "đăng nhập" in
+    voucher banners. A page that yielded a name was plainly not a wall."""
+    shopee.save_cookies(LIVE)
+    replies(bridge, {"login_wall": True, "name": "Giấy ăn rút Topgia"})
+
+    assert shopee.fetch_product(PRODUCT_URL)["name"] == "Giấy ăn rút Topgia"
 
 
 def test_a_login_wall_reads_as_authentication(bridge) -> None:

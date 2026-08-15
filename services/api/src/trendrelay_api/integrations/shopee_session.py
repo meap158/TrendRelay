@@ -149,6 +149,21 @@ def merge_refreshed(current: dict[str, str], set_cookie_headers: list[str]) -> d
     return refreshed
 
 
+def remember_rotated(current: dict[str, str], rotated: dict[str, str]) -> None:
+    """Write back what Shopee rotated, keeping the expiry the session came with.
+
+    Saving used to drop the stamp: `save_cookies` writes the file whole, its
+    default expiry is none, and the first rotation therefore erased the one
+    fact that lets a session be called tired before it fails. The bridge's
+    rotated cookies carry values only - no attributes, so no new expiry to
+    learn - and the captured stamp stays the best statement of the term.
+    """
+    save_cookies(
+        merge_refreshed(current, [f"{key}={value}" for key, value in rotated.items()]),
+        expires_at=_stored_expiry(),
+    )
+
+
 def looks_like_auth_failure(message: str) -> bool:
     """Whether a failure was about who we are.
 
@@ -402,15 +417,21 @@ def fetch_product(url: str, *, timeout: float = BRIDGE_TIMEOUT_SECONDS) -> dict[
     except ValueError as error:
         raise RuntimeError("The Shopee bridge returned something unreadable.") from error
 
-    if found.get("login_wall"):
+    if found.get("login_wall") and not (found.get("name") or found.get("image_url")):
         # Named as what it is, in the words the auth check looks for. The probe
         # turns this into "reconnect"; a changed layout is a different problem
         # and reads differently.
+        #
+        # Only when nothing was read: the flag is a text match, and a product
+        # page can carry the words "đăng nhập" in a voucher banner while
+        # rendering the product perfectly well. A page that yielded a name or a
+        # picture was plainly not a wall, and failing it would throw away a
+        # read that worked.
         raise RuntimeError("Shopee showed a login wall: this session is no longer signed in.")
 
     rotated = found.pop("refreshed_cookies", None)
     if isinstance(rotated, dict) and rotated:
-        save_cookies(merge_refreshed(cookies, [f"{k}={v}" for k, v in rotated.items()]))
+        remember_rotated(cookies, rotated)
     return found
 
 
@@ -477,6 +498,26 @@ def _adopt_captured() -> bool:
     return True
 
 
+#: Slack past the capture's own timeout before a "waiting" status with no
+#: process behind it is declared dead. The script writes "failed" itself at its
+#: timeout, so anything still "waiting" this long after its stamp never got the
+#: chance to.
+_STATUS_STALE_MARGIN = timedelta(seconds=120)
+
+
+def _status_is_stale(payload: dict[str, Any] | None) -> bool:
+    stamp = (payload or {}).get("updated_at")
+    try:
+        written = datetime.fromisoformat(str(stamp).replace("Z", "+00:00")) if stamp else None
+    except ValueError:
+        written = None
+    if written is None:
+        # A running state with no readable stamp cannot be waited on either.
+        return True
+    stale_after = timedelta(seconds=CAPTURE_TIMEOUT_SECONDS) + _STATUS_STALE_MARGIN
+    return datetime.now(UTC) - written > stale_after
+
+
 def connection_status() -> dict[str, Any]:
     """What the sign-in window is doing, if anything.
 
@@ -501,6 +542,18 @@ def connection_status() -> dict[str, Any]:
         # at somebody indefinitely.
         return _write_capture_status(
             "failed", "The sign-in window closed before a session was captured."
+        )
+    if state in CAPTURE_RUNNING and _CAPTURE_PROCESS is None \
+            and _status_is_stale(payload):
+        # No process handle at all - this API restarted while a window was
+        # open, or the capture was killed too hard to write its own ending.
+        # The script stamps the file once when the window opens and again only
+        # when it finishes, so a "waiting" older than the window's own timeout
+        # is a window that no longer exists. Left alone, that file would say
+        # "waiting" forever - and `start_connection` reads it too, so nobody
+        # could ever open a new window without deleting the file by hand.
+        return _write_capture_status(
+            "failed", "The sign-in window is gone. Open it again to connect."
         )
     if payload is None:
         return {"state": "disconnected",
@@ -559,14 +612,14 @@ def start_connection() -> dict[str, Any]:
 
 
 OFFERS_PATH = PROJECT_ROOT / "scripts" / "shopee_offers_bridge.py"
-#: Longer than a single product read: this loads a list page and scrolls it.
+#: Longer than a single product read: this loads up to five offer-list pages.
 OFFERS_TIMEOUT_SECONDS = 240
 
 
-def fetch_offers(limit: int = 200, *, timeout: float = OFFERS_TIMEOUT_SECONDS) -> dict[str, Any]:
+def fetch_offers(limit: int = 100, *, timeout: float = OFFERS_TIMEOUT_SECONDS) -> dict[str, Any]:
     """Read the affiliate offer list as the connected account.
 
-    The same data as the bulk CSV export, without the download. Returned raw
+    The same data as the bulk Excel export, without the download. Returned raw
     for the importer to interpret, because the currency's minor units are known
     there and guessing a scale here is how a price ends up a hundred times out.
     """
@@ -614,8 +667,16 @@ def fetch_offers(limit: int = 200, *, timeout: float = OFFERS_TIMEOUT_SECONDS) -
     except ValueError as error:
         raise RuntimeError("The Shopee offers bridge returned something unreadable.") from error
 
-    if found.get("login_wall"):
+    # Only a wall with nothing behind it. The flag is a text match on the page,
+    # and a page that also yielded offers was plainly not walled - a real wall
+    # fetches no offer payloads at all.
+    if found.get("login_wall") and not found.get("offers"):
         raise RuntimeError("Shopee showed a login wall: this session is no longer signed in.")
+    if "/verify/" in str(found.get("final_url") or "") and not found.get("offers"):
+        raise RuntimeError(
+            "Shopee opened a browser verification check. Try again and complete "
+            "the check in the Shopee window; TrendRelay will continue automatically."
+        )
     if not found.get("offers") and found.get("payloads_seen"):
         # Told apart on purpose: the page answered, and nothing in it looked
         # like an offer any more. That is a changed payload, not an empty
@@ -623,12 +684,12 @@ def fetch_offers(limit: int = 200, *, timeout: float = OFFERS_TIMEOUT_SECONDS) -
         raise RuntimeError(
             "The offer page loaded but none of its data looked like offers, "
             "which usually means Shopee changed the payload. Download the CSV "
-            "export and import that instead."
+            "Excel export and import that instead."
         )
 
     rotated = found.pop("refreshed_cookies", None)
     if isinstance(rotated, dict) and rotated:
-        save_cookies(merge_refreshed(cookies, [f"{k}={v}" for k, v in rotated.items()]))
+        remember_rotated(cookies, rotated)
     return found
 
 

@@ -6,7 +6,7 @@ to ask, it is easy to copy one cookie instead of the header, and a pasted header
 carries no expiry - so nothing can warn that a session is about to run out.
 
 A captured one does. Shopee stamps its own expiry on the cookies, so the session
-that comes out of here knows when it dies, and can say so before a batch of two
+that comes out of here knows when it dies, and can say so before a batch of one
 hundred imports discovers it the hard way.
 
 Nothing here signs anybody in. The window is a real browser at Shopee's own
@@ -82,9 +82,15 @@ async def capture(output: Path, status: Path, timeout_seconds: int) -> int:
     write_status(status, "opening_browser", "Opening the Shopee sign-in window.")
     try:
         async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch(headless=False)
-            context = await browser.new_context(locale="vi-VN")
-            page = await context.new_page()
+            # Reuse a local browser profile. Injecting otherwise-valid cookies
+            # into a brand-new automated browser makes Shopee challenge the
+            # unfamiliar browser on every offer read. The profile keeps the
+            # same browser identity and any completed traffic verification.
+            profile = output.parent / "browser-profile"
+            context = await playwright.chromium.launch_persistent_context(
+                str(profile), headless=False, locale="vi-VN"
+            )
+            page = context.pages[0] if context.pages else await context.new_page()
             write_status(
                 status, "waiting_for_login",
                 "Sign in to Shopee in the window that opened. TrendRelay notices "
@@ -99,7 +105,7 @@ async def capture(output: Path, status: Path, timeout_seconds: int) -> int:
 
             deadline = monotonic() + timeout_seconds
             while monotonic() < deadline:
-                if not browser.is_connected():
+                if page.is_closed():
                     # Closed by the operator. A choice, not a failure - but
                     # nothing was captured, so say that rather than "connected".
                     write_status(status, "cancelled",
@@ -122,13 +128,11 @@ async def capture(output: Path, status: Path, timeout_seconds: int) -> int:
                     })
                     write_status(status, "connected", "Signed in to Shopee.")
                     await context.close()
-                    await browser.close()
                     return 0
                 await asyncio.sleep(POLL_SECONDS)
 
-            if browser.is_connected():
+            if not page.is_closed():
                 await context.close()
-                await browser.close()
     except Exception as error:
         # Never the cookies: this message is written to a file the API reads
         # back and shows on a screen.

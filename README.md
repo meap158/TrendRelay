@@ -69,6 +69,15 @@ npm run douyin -- connect
 
 The session is stored locally under `.data/douyin/`. Refresh it only when Douyin rejects a download or the saved session expires.
 
+### Import Shopee Product Offers
+
+Open **Attribution**, choose **Add products**, then use either path:
+
+- **Import all offers** opens Shopee briefly and reads up to 100 products (five pages of 20) with the locally connected session.
+- **Import an Excel file from Shopee** accepts the `.xlsx` exported from Shopee Affiliate's **Hoa hồng Sản phẩm / Product Offer** page. Select up to 100 products in Shopee, export the Excel file, choose it in TrendRelay, then choose the campaign and platform. The file path does not require a live Shopee session.
+
+Use **Attribution → Shopee settings → Sign in** to connect. TrendRelay opens Shopee's own login in a native browser window, stores no password, and keeps the browser profile and session only under `.data/shopee/`. Shopee may show a traffic-verification check on the first automated read; complete it in the opened window and TrendRelay continues automatically.
+
 ## Download behavior
 
 TrendRelay stores downloaded files under `.data/downloads/douyin/` and automatically registers them in the media Library. Library refresh reconciles items removed from disk. Use **Clear missing files** on Home to remove download records whose files are gone; records that still reference on-disk media are kept.

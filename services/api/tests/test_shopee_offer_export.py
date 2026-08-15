@@ -6,6 +6,7 @@ would be a surprise nobody asked for. The first test is the one that guards it.
 """
 
 import asyncio
+import base64
 import zipfile
 from io import BytesIO
 from types import SimpleNamespace
@@ -18,7 +19,8 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from trendrelay_api import attribution_api
+from trendrelay_api import attribution_api, xlsx
+from trendrelay_api.attribution_models import TrackingLink
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.integrations import shopee_session as shopee
@@ -105,6 +107,20 @@ def export(workspace_id: str, **body) -> httpx.Response:
         f"/api/workspaces/{workspace_id}/attribution/shopee/offers/export",
         json={"confirm_external_action": True, **body},
     )
+
+
+def campaign(workspace_id: str) -> str:
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/campaigns",
+        json={
+            "name": "Shopee offer batch",
+            "objective": "Test a complete product-offer import",
+            "audience": "Vietnam shoppers",
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["campaign"]["id"]
 
 
 def sheet_rows(data: bytes) -> list[list[str]]:
@@ -224,6 +240,42 @@ def test_more_offers_than_asked_for_are_still_cut_to_the_limit(workspace, offers
     rows = sheet_rows(export(workspace, limit=4).content)
 
     assert len(rows) == 5, "four offers and a header"
+
+
+def test_a_shopee_excel_file_imports_one_hundred_products_at_once(workspace) -> None:
+    """The complete fallback path: Shopee Excel file to filed tracking links."""
+    sheet = [
+        [
+            str(50_000_000_000 + index),
+            "1834061111",
+            f"Shopee product {index}",
+            "Mây Meo Sleepwear",
+            350_000,
+            10,
+            35_000,
+            f"https://shopee.vn/product/1834061111/{50_000_000_000 + index}",
+            f"https://s.shopee.vn/test-{index}",
+        ]
+        for index in range(100)
+    ]
+    data = xlsx.workbook(list(attribution_api.OFFER_COLUMNS), sheet)
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/attribution/shopee/import",
+        json={
+            "campaign_id": campaign(workspace),
+            "platform": "tiktok",
+            "xlsx_base64": base64.b64encode(data).decode("ascii"),
+            "confirm_external_action": True,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["created"] == 100
+    with TestingSession() as db:
+        assert len(db.scalars(select(Product)).all()) == 100
+        assert len(db.scalars(select(TrackingLink)).all()) == 100
 
 
 # --- when it cannot ------------------------------------------------------------

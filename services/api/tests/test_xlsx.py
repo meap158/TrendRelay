@@ -12,7 +12,9 @@ from datetime import UTC, datetime
 from io import BytesIO
 from xml.etree import ElementTree
 
-from trendrelay_api.xlsx import column_name, escape, workbook
+import pytest
+
+from trendrelay_api.xlsx import column_name, escape, rows, workbook
 
 NS = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 FIXED = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
@@ -67,6 +69,25 @@ def test_the_header_row_comes_first_then_the_rows() -> None:
         ["Giấy ăn", "95000"],
         ["Tẩy da chết", "183000"],
     ]
+
+
+def test_a_workbook_can_be_read_back_for_an_import() -> None:
+    data = workbook(["Item ID", "Product"], [["57860887539", "Giấy ăn"]])
+
+    assert rows(data) == [["Item ID", "Product"], ["57860887539", "Giấy ăn"]]
+
+
+def test_the_reader_preserves_sparse_cell_positions() -> None:
+    data = workbook(["a", "b", "c"], [["x", None, "z"]])
+
+    assert rows(data)[1] == ["x", "", "z"]
+
+
+def test_the_reader_enforces_the_import_row_limit() -> None:
+    data = workbook(["Item"], [[str(index)] for index in range(101)])
+
+    with pytest.raises(ValueError, match="more than 100 data rows"):
+        rows(data, maximum_rows=101)
 
 
 def test_vietnamese_names_survive_the_round_trip() -> None:

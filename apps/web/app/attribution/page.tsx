@@ -305,6 +305,51 @@ export default function AttributionPage() {
     setPanel("link");
   }, []);
 
+  /**
+   * Keep the table catching up with the page reads an import queued.
+   *
+   * The import returns in a second; the images arrive one browser render at a
+   * time, minutes later. The promise the outcome makes - "they will appear as
+   * each page is read" - was only true after a manual reload, because nothing
+   * ever asked again. This watches the enrichment counts and refreshes the
+   * products when they move, then stops the moment nothing is pending, so a
+   * page sitting idle is not polling for work that finished.
+   */
+  const enrichmentWatch = useRef<number | null>(null);
+  const watchEnrichment = useCallback(() => {
+    if (enrichmentWatch.current) window.clearInterval(enrichmentWatch.current);
+    let settled = -1;
+    let cycles = 0;
+    const stop = () => {
+      if (enrichmentWatch.current) window.clearInterval(enrichmentWatch.current);
+      enrichmentWatch.current = null;
+    };
+    enrichmentWatch.current = window.setInterval(async () => {
+      // Bounded: a queue that has not drained in a quarter of an hour is not
+      // one this page should keep asking about.
+      cycles += 1;
+      if (cycles > 60) return stop();
+      try {
+        const response = await apiFetch(
+          `/api/workspaces/${workspaceId}/attribution/shopee/enrichment`,
+        );
+        if (!response.ok) return stop();
+        const progress = await response.json() as { pending: number; succeeded: number; failed: number };
+        const done = (progress.succeeded ?? 0) + (progress.failed ?? 0);
+        if (done !== settled) {
+          settled = done;
+          void refresh();
+        }
+        if ((progress.pending ?? 0) === 0) stop();
+      } catch {
+        // A poll that failed says nothing about the queue; the next one will.
+      }
+    }, 15_000);
+  }, [apiFetch, workspaceId, refresh]);
+  useEffect(() => () => {
+    if (enrichmentWatch.current) window.clearInterval(enrichmentWatch.current);
+  }, []);
+
 
   if (loading) return <main className="attribution-page"><p>{t("attribution.opening")}</p></main>;
   if (!user) return <main className="attribution-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Fattribution">{t("attribution.signInPrompt")}</Link></main>;
@@ -463,7 +508,11 @@ export default function AttributionPage() {
             apiFetch={apiFetch}
             succeed={succeed}
             fail={fail}
-            onImported={() => { setPanel(""); void refresh(); }}
+            // The dialog stays open: the outcome it just rendered - which rows
+            // did not import and why, how many pages are being read for images
+            // - is the part somebody has to see, and closing here destroyed it
+            // the moment it appeared.
+            onImported={() => { void refresh(); watchEnrichment(); }}
           />
         )}
       </Dialog>

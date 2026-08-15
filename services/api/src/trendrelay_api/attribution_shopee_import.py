@@ -2,7 +2,7 @@
 
 An export is a set of products chosen for one purpose, so the campaign and the
 platform are asked once for the whole batch rather than per row - otherwise
-importing two hundred products is a two hundred step job.
+importing one hundred products is a one-hundred-step job.
 
 Re-importing is safe on purpose
 -------------------------------
@@ -130,12 +130,14 @@ def import_rows(
         if product not in outcome.products:
             outcome.products.append(product)
         fingerprint = content_key(NETWORK, row.affiliate_url)
-        if session.scalar(
-            select(ProductOffer.id).where(
+        existing = session.scalar(
+            select(ProductOffer).where(
                 ProductOffer.workspace_id == workspace_id,
                 ProductOffer.fingerprint == fingerprint,
             )
-        ):
+        )
+        if existing:
+            _backfill_offer(existing, row)
             outcome.already_present += 1
             continue
         offer = ProductOffer(
@@ -170,6 +172,28 @@ def import_rows(
             disclosure=disclosure,
         ))
     return outcome
+
+
+def _backfill_offer(offer: ProductOffer, row: Any) -> None:
+    """Fill what an earlier import did not know, touching nothing it did.
+
+    A pasted link files an offer knowing nothing but its own URL. The export
+    that arrives a week later knows the price, the commission and the shop -
+    and skipping the row entirely, as "already present" used to, left those
+    columns empty for as long as the offer lived. The picker reads them, so an
+    offer that stayed blank read as a product with no price rather than one
+    nobody had told yet. Only absent fields are written: a figure from an
+    earlier export is not overwritten by a later one, for the same reason a
+    corrected name is not.
+    """
+    if not offer.merchant and row.shop:
+        offer.merchant = row.shop
+    if offer.price_cents is None and row.price_dong is not None:
+        offer.price_cents = to_minor(row.price_dong, CURRENCY)
+    if offer.commission_bps is None and row.commission_bps is not None:
+        offer.commission_bps = row.commission_bps
+    if offer.commission_flat_cents is None and row.commission_dong is not None:
+        offer.commission_flat_cents = to_minor(row.commission_dong, CURRENCY)
 
 
 def _upsert_product(session: Session, workspace_id: str, user_id: str, row: Any) -> Product:
