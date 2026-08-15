@@ -5,6 +5,8 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { RefreshCw, Download } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
+import type { DiscoverySeed } from "../../lib/discovery-ideas";
+import { searchTerm, type Topic } from "../../lib/trend-shapes";
 import { useAuth } from "../auth-provider";
 import { useLocale } from "../i18n-provider";
 import { buttonClass } from "../ui/button";
@@ -14,7 +16,7 @@ import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { OpportunityScoring } from "./opportunity-scoring";
 import { PopularPosts } from "./popular-posts";
 import { TrendingTopics } from "./trending-topics";
-import { searchTerm, type Topic } from "../../lib/trend-shapes";
+import { CampaignIdeaComposer } from "./campaign-idea-composer";
 
 type Workspace = { id: string; name: string; role: string };
 type ReachChannel = {
@@ -844,6 +846,14 @@ export default function ResearchDashboard() {
   const [topicCount, setTopicCount] = usePersistedState<number>(
     "trendrelay.discover.topicCount", 5, numberIn(...TOPIC_COUNTS),
   );
+  const [ideaSeeds, setIdeaSeeds] = useState<DiscoverySeed[]>([]);
+  const ideaSeedIds = useMemo(() => new Set(ideaSeeds.map((seed) => seed.id)), [ideaSeeds]);
+
+  function toggleIdeaSeed(seed: DiscoverySeed) {
+    setIdeaSeeds((current) => current.some((item) => item.id === seed.id)
+      ? current.filter((item) => item.id !== seed.id)
+      : [...current, seed].slice(-12));
+  }
 
   /** Read once on arrival, then on demand. */
   async function loadDouyinBoard() {
@@ -1468,12 +1478,32 @@ export default function ResearchDashboard() {
           answers who is already winning. They are deliberately separate item
           types because a hashtag and a video are different evidence. */}
       <div style={S.section}>
-        <TrendingTopics onResearch={exploreTopic} onScore={scoreTopic} />
+        <TrendingTopics
+          onResearch={exploreTopic}
+          onScore={scoreTopic}
+          selectedIds={ideaSeedIds}
+          onToggle={toggleIdeaSeed}
+        />
       </div>
 
       <div style={S.section}>
-        <PopularPosts onResearch={exploreTopic} />
+        <PopularPosts
+          onResearch={exploreTopic}
+          selectedIds={ideaSeedIds}
+          onToggle={toggleIdeaSeed}
+        />
       </div>
+
+      <CampaignIdeaComposer
+        seeds={ideaSeeds}
+        workspaceId={workspaceId}
+        canCreate={["owner", "editor"].includes(
+          workspaces.find((workspace) => workspace.id === workspaceId)?.role ?? "",
+        )}
+        apiFetch={apiFetch}
+        onRemove={(id) => setIdeaSeeds((current) => current.filter((seed) => seed.id !== id))}
+        onClear={() => setIdeaSeeds([])}
+      />
 
       <div style={S.section}>
         <div style={S.tiktokHead}>

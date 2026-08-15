@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
+import { seedFromPost, type DiscoverySeed } from "../../lib/discovery-ideas";
 import {
   coverageNote,
   creatorSearchUrl,
@@ -134,11 +135,19 @@ const S: Record<string, React.CSSProperties> = {
     whiteSpace: "nowrap",
   },
   metrics: { fontSize: "12px", color: "var(--muted)", margin: "3px 0 0" },
-  actions: { display: "flex", gap: "6px", flexShrink: 0 },
+  actions: { display: "flex", gap: "6px", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" },
   empty: { fontSize: "13px", color: "var(--muted)", margin: "16px 0 0" },
 };
 
-export function PopularPosts({ onResearch }: { onResearch: (term: string) => void }) {
+export function PopularPosts({
+  onResearch,
+  selectedIds,
+  onToggle,
+}: {
+  onResearch: (term: string) => void;
+  selectedIds?: ReadonlySet<string>;
+  onToggle?: (seed: DiscoverySeed) => void;
+}) {
   const [region, setRegion] = usePersistedState<string>(
     "trendrelay.discover.posts.region",
     "US",
@@ -262,6 +271,8 @@ export function PopularPosts({ onResearch }: { onResearch: (term: string) => voi
               {board.posts.map((post) => {
                 const link = creatorSearchUrl(post);
                 const metrics = postMetrics(post);
+                const seed = seedFromPost(post);
+                const selected = selectedIds?.has(seed.id) ?? false;
                 return (
                   <li key={`${post.creator}:${post.rank}`} style={S.row}>
                     <span style={S.place} aria-hidden>{post.rank}</span>
@@ -280,6 +291,17 @@ export function PopularPosts({ onResearch }: { onResearch: (term: string) => voi
                       <p style={S.metrics}>{metrics.join(" · ") || "No counts given"}</p>
                     </div>
                     <div style={S.actions}>
+                      {onToggle && (
+                        <Button
+                          variant={selected ? "secondary" : "quiet"}
+                          size="sm"
+                          selected={selected}
+                          aria-pressed={selected}
+                          onClick={() => onToggle(seed)}
+                        >
+                          {selected ? "Added" : "Add to idea"}
+                        </Button>
+                      )}
                       <Button variant="quiet" size="sm" onClick={() => onResearch(post.creator)}>
                         Research
                       </Button>

@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
+import { seedFromTopic, type DiscoverySeed } from "../../lib/discovery-ideas";
 import { SHAPE_COPY, reasons, searchTerm, windowSummary, type Shape, type Topic } from "../../lib/trend-shapes";
 import { Button } from "../ui/button";
 import { usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
@@ -153,9 +154,13 @@ const S: Record<string, React.CSSProperties> = {
 export function TrendingTopics({
   onResearch,
   onScore,
+  selectedIds,
+  onToggle,
 }: {
   onResearch: (term: string) => void;
   onScore: (topic: Topic) => void;
+  selectedIds?: ReadonlySet<string>;
+  onToggle?: (seed: DiscoverySeed) => void;
 }) {
   const [region, setRegion] = usePersistedState<string>(
     "trendrelay.discover.consolidated.region",
@@ -291,7 +296,13 @@ export function TrendingTopics({
 
       {error && <p style={S.error}>{error}</p>}
 
-      {result && <Result result={result} onResearch={onResearch} onScore={onScore} />}
+      {result && <Result
+        result={result}
+        onResearch={onResearch}
+        onScore={onScore}
+        selectedIds={selectedIds}
+        onToggle={onToggle}
+      />}
     </section>
   );
 }
@@ -300,10 +311,14 @@ function Result({
   result,
   onResearch,
   onScore,
+  selectedIds,
+  onToggle,
 }: {
   result: Consolidated;
   onResearch: (term: string) => void;
   onScore: (topic: Topic) => void;
+  selectedIds?: ReadonlySet<string>;
+  onToggle?: (seed: DiscoverySeed) => void;
 }) {
   return (
     <>
@@ -340,6 +355,8 @@ function Result({
               place={index + 1}
               onResearch={onResearch}
               onScore={onScore}
+              selectedIds={selectedIds}
+              onToggle={onToggle}
             />
           ))}
         </ol>
@@ -353,14 +370,20 @@ function TopicRow({
   place,
   onResearch,
   onScore,
+  selectedIds,
+  onToggle,
 }: {
   topic: Topic;
   place: number;
   onResearch: (term: string) => void;
   onScore: (topic: Topic) => void;
+  selectedIds?: ReadonlySet<string>;
+  onToggle?: (seed: DiscoverySeed) => void;
 }) {
   const copy = SHAPE_COPY[topic.shape];
   const why = reasons(topic);
+  const seed = seedFromTopic(topic);
+  const selected = selectedIds?.has(seed.id) ?? false;
   return (
     <li style={S.row}>
       <span style={S.place} aria-hidden>
@@ -383,6 +406,17 @@ function TopicRow({
         </ul>
       </div>
       <div style={S.actions}>
+        {onToggle && (
+          <Button
+            variant={selected ? "secondary" : "quiet"}
+            size="sm"
+            selected={selected}
+            aria-pressed={selected}
+            onClick={() => onToggle(seed)}
+          >
+            {selected ? "Added" : "Add to idea"}
+          </Button>
+        )}
         <Button variant="quiet" size="sm" onClick={() => onResearch(searchTerm(topic))}>
           Research
         </Button>
