@@ -34,7 +34,7 @@ import { Dialog } from "../ui/dialog";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { useT } from "../i18n-provider";
 import { money } from "./format";
-import type { ProductRow, ProductsPayload, WorkRow } from "./types";
+import type { ProductRow, ProductsPayload } from "./types";
 
 type Workspace = { id: string; name: string; role: string };
 type Campaign = { id: string; name: string; affiliate_url?: string | null };
@@ -127,7 +127,6 @@ export default function AttributionPage() {
   const [links, setLinks] = useState<TrackingLink[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [products, setProducts] = useState<ProductRow[]>([]);
-  const [works, setWorks] = useState<WorkRow[]>([]);
   const [campaignId, setCampaignId] = useState("");
   const [busy, setBusy] = useState("");
   // Opened deliberately, closed when done. Neither is a place to be: making a
@@ -178,7 +177,6 @@ export default function AttributionPage() {
     setLinks(linkBody.links);
     setSummary(summaryBody);
     setProducts(productBody.products);
-    setWorks(productBody.works);
     setCampaignId((current) => {
       const requested = new URLSearchParams(window.location.search).get("campaign");
       if (requested && campaignBody.campaigns.some((item) => item.id === requested)) return requested;
@@ -466,7 +464,6 @@ export default function AttributionPage() {
       <section className="attribution-view">
         <ProductTable
           products={products}
-          works={works}
           canCreate={canCreate}
           canChangeStatus={canChangeStatus}
           busy={busy}

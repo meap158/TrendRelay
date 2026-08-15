@@ -16,7 +16,7 @@ import { Badge, Card } from "../ui/primitives";
 import { Button } from "../ui/button";
 import { useT } from "../i18n-provider";
 import { money } from "./format";
-import type { ProductRow, WorkRow } from "./types";
+import type { ProductRow } from "./types";
 
 function StatusBadge({ status }: { status: string }) {
   const tone = status === "active" ? "good" : status === "broken" ? "bad" : "warn";
@@ -45,7 +45,6 @@ function commission(bps: number | null): string {
 
 export function ProductTable({
   products,
-  works,
   canCreate,
   busy,
   onCreateLink,
@@ -55,7 +54,6 @@ export function ProductTable({
   onCopySelected,
 }: {
   products: ProductRow[];
-  works: WorkRow[];
   canCreate: boolean;
   canChangeStatus: boolean;
   busy: string;
@@ -86,7 +84,6 @@ export function ProductTable({
       ...product.offers.map((offer) => offer.merchant),
     ].some((field) => (field || "").toLowerCase().includes(needle)));
   }, [products, query]);
-  const workTitle = new Map(works.map((work) => [work.work_id, work.title]));
 
   /**
    * How many may be chosen at once.
@@ -186,9 +183,6 @@ export function ProductTable({
           <tbody>
             {shown.map((product) => {
               const open = expanded.has(product.id);
-              const book = product.work_ids
-                .map((id) => workTitle.get(id))
-                .filter(Boolean)[0];
               return [
                 <tr key={product.id} data-chosen={picked.has(product.id) || undefined}>
                   <td className="product-choose">
@@ -225,10 +219,6 @@ export function ProductTable({
                         <span>{product.name}</span>
                         <small>
                           {[product.brand, product.marketplace].filter(Boolean).join(" · ")}
-                          {/* Named on the row: the same book in two formats is
-                              two products here, and without this they read as
-                              duplicates of each other. */}
-                          {book && ` · ${book}`}
                           {product.product_form && ` (${product.product_form})`}
                         </small>
                       </span>
