@@ -486,7 +486,7 @@ export default function AttributionPage() {
                 and its export carries names, prices and commission, so importing
                 one is the shortest path from an offer page to a postable link. */}
             {workspaceId && canImport && (
-              <article className="attribution-panel">
+              <>
                 {/* The connection above the form that uses it, because this is
                     where somebody finds out they needed it: an import works
                     without a session and fills in images with one. */}
@@ -498,7 +498,7 @@ export default function AttributionPage() {
                   fail={fail}
                   onReady={setShopeeReady}
                 />
-              </article>
+              </>
             )}
             {workspaceId && canImport && (
               <ShopeeImport

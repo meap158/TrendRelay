@@ -194,3 +194,19 @@
 .catalog-work-toggle { display: flex; align-items: center; gap: 9px; text-align: start; }
 .product-named { display: grid; gap: 2px; min-width: 0; }
 .product-named > span { overflow: hidden; text-overflow: ellipsis; }
+
+/* The two readings of the offer page, side by side, with one line of state
+   under the pair rather than the same sentence under each. */
+.shopee-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.shopee-actions small { flex-basis: 100%; color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+/* The fallback path, folded. Open by default it made the shorter route look
+   like the longer one. */
+.shopee-paste { display: grid; gap: 10px; }
+.shopee-paste > summary { cursor: pointer; color: var(--muted); font-size: 11px; font-weight: 600; }
+.shopee-paste > summary:hover { color: var(--text); }
+
+/* Pasting a header is the rare fallback, so it is a quiet link rather than a
+   fourth button competing with the ordinary one. */
+.shopee-session-alt { justify-self: start; padding: 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 11px; text-decoration: underline; cursor: pointer; }
+.shopee-session-alt:hover { color: var(--link); }

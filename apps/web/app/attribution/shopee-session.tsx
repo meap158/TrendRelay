@@ -239,13 +239,6 @@ export function ShopeeSession({
               {watching ? "Waiting…" : connected ? "Sign in again" : "Sign in"}
             </button>
           )}
-          {/* Kept, because the window needs a browser runtime and a machine
-              with a screen, and neither is guaranteed. */}
-          {canConnect && (
-            <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}>
-              Paste header
-            </button>
-          )}
           {canConnect && connected && (
             <button type="button" onClick={() => void forget()} disabled={busy !== ""}>
               Disconnect
@@ -253,6 +246,20 @@ export function ShopeeSession({
           )}
         </span>
       </p>
+
+      {/* The fallback for a machine with no browser runtime or no screen.
+          A quiet link rather than a fourth button: it is needed rarely, and
+          four controls of equal weight made the ordinary one hard to find. */}
+      {canConnect && !connected && (
+        <button
+          type="button"
+          className="shopee-session-alt"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          {open ? "Hide the Cookie header field" : "or paste a Cookie header"}
+        </button>
+      )}
 
       {/* Said while it happens, because the window opens behind the browser
           as often as in front of it, and a button that did nothing visible is

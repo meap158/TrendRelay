@@ -179,107 +179,105 @@ export function ShopeeImport({
   }
 
   return (
-    <article className="attribution-panel">
-      <h2>Import from Shopee</h2>
-      <p>
-        Every offer gets a tracking link with sub-IDs, so importing twice adds
-        only what is new.
-      </p>
-      {/* Outside the campaign gate, because downloading files nothing and so
-          needs nowhere to file it. Kept apart from importing for the same
-          reason: importing creates a product and mints a link for every row,
-          and doing that as a side effect of wanting a spreadsheet would be a
-          surprise. */}
-      <div className="shopee-fetch">
-        <button
-          type="button"
-          className="ui-button ui-button-secondary ui-button-md"
-          onClick={() => void exportFromShopee()}
-          disabled={!connected || exporting || busy}
-        >
-          {exporting ? "Building the file…" : "Download offers as Excel"}
-        </button>
-        <small>
-          {connected
-            ? "Up to 100 offers as a spreadsheet. Nothing is saved and no links are minted."
-            : "Sign in to Shopee above to read your offer page."}
-        </small>
-      </div>
-
-      {/* A tracking link belongs to a campaign, so there is nothing to import
-          into until one exists. Said here rather than left as a select with one
-          unusable option and no explanation for why nothing happens. */}
-      {campaigns.length === 0 ? (
+    <article className="attribution-panel attribution-panel-bare">
+      {/* A tracking link belongs to a campaign, so importing has nowhere to
+          file into until one exists. Downloading does not, which is why this
+          is a note rather than a gate around everything below it. */}
+      {campaigns.length === 0 && (
         <p className="attribution-note">
-          Create a campaign first — every tracking link belongs to one, and it is
-          what the sub-IDs group this batch under in Shopee&apos;s own reports.
+          Create a campaign to import into. Downloading works without one.
         </p>
-      ) : (
+      )}
+
       <form onSubmit={submit}>
-        <div className="attribution-form-row">
-          <label>
-            Campaign
-            <select
-              value={campaignId}
-              onChange={(event) => setCampaignId(event.target.value)}
-              required
-            >
-              <option value="">Choose a campaign</option>
-              {campaigns.map((item) => (
-                <option key={item.id} value={item.id}>{item.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Platform
-            <select value={platform} onChange={(event) => setPlatform(event.target.value)}>
-              {PLATFORMS.map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        {/* Always shown, disabled when there is no session rather than hidden.
-            A capability that appears only once its prerequisite is met is one
-            nobody discovers, because nothing on screen says it exists. */}
-        <div className="shopee-fetch">
+        {campaigns.length > 0 && (
+          <div className="attribution-form-row">
+            <label>
+              Campaign
+              <select
+                value={campaignId}
+                onChange={(event) => setCampaignId(event.target.value)}
+              >
+                <option value="">Choose a campaign</option>
+                {campaigns.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Platform
+              <select value={platform} onChange={(event) => setPlatform(event.target.value)}>
+                {PLATFORMS.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
+        {/* Both readings of the same page, side by side: one files what it
+            finds, the other only hands it back. Shown disabled without a
+            session rather than hidden - a capability that appears only once its
+            prerequisite is met is one nobody discovers. One line of state under
+            the pair, because the same sentence beneath each button was the same
+            sentence twice. */}
+        <div className="shopee-actions">
           <button
             type="button"
             className="ui-button ui-button-primary ui-button-md"
             onClick={() => void fetchFromShopee()}
             disabled={!connected || fetching || busy || !campaignId}
           >
-            {fetching ? "Reading Shopee…" : "Import everything from Shopee"}
+            {fetching ? "Reading Shopee…" : "Import all offers"}
+          </button>
+          <button
+            type="button"
+            className="ui-button ui-button-secondary ui-button-md"
+            onClick={() => void exportFromShopee()}
+            disabled={!connected || exporting || busy}
+          >
+            {exporting ? "Building the file…" : "Download as Excel"}
           </button>
           <small>
-            {connected
-              ? "Reads your offer page and files every offer with its link. Takes a minute."
-              : "Sign in to Shopee above to import directly. Until then, paste the export below."}
+            {!connected
+              ? "Sign in above to read your offer page. Pasting an export works without a session."
+              : !campaignId
+                ? "Importing needs a campaign; downloading does not."
+                : "Import files every offer with a tracking link. Download gives you up to 100 rows and saves nothing."}
           </small>
         </div>
-        <label>
-          Bulk export
-          <textarea
-            rows={6}
-            value={csvText}
-            onChange={(event) => setCsvText(event.target.value)}
-            placeholder="Mã sản phẩm,Tên sản phẩm,Giá,…"
-          />
-        </label>
-        <label>
-          Or paste links
-          <textarea
-            rows={3}
-            value={links}
-            onChange={(event) => setLinks(event.target.value)}
-            placeholder="https://s.shopee.vn/…"
-          />
-        </label>
-        <button className="ui-button ui-button-primary ui-button-md" disabled={busy}>
-          {busy ? "Importing…" : "Import offers"}
-        </button>
+
+        {/* Folded, because it is the path for when the direct read is not
+            available - no session, or a file already downloaded. Two textareas
+            open by default made the shorter route look like the longer one. */}
+        <details className="shopee-paste">
+          <summary>Paste an export or links instead</summary>
+          <label>
+            Bulk export
+            <textarea
+              rows={6}
+              value={csvText}
+              onChange={(event) => setCsvText(event.target.value)}
+              placeholder="Mã sản phẩm,Tên sản phẩm,Giá,…"
+            />
+          </label>
+          <label>
+            Or paste links
+            <textarea
+              rows={3}
+              value={links}
+              onChange={(event) => setLinks(event.target.value)}
+              placeholder="https://s.shopee.vn/…"
+            />
+          </label>
+          <button
+            className="ui-button ui-button-secondary ui-button-md"
+            disabled={busy || !campaignId || (!csvText.trim() && !links.trim())}
+          >
+            {busy ? "Importing…" : "Import what is pasted"}
+          </button>
+        </details>
       </form>
-      )}
 
       {outcome && (
         <div className="attribution-import-outcome">
