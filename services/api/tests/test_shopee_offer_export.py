@@ -7,8 +7,9 @@ would be a surprise nobody asked for. The first test is the one that guards it.
 
 import asyncio
 import base64
+import csv
 import zipfile
-from io import BytesIO
+from io import BytesIO, StringIO
 from types import SimpleNamespace
 from xml.etree import ElementTree
 
@@ -302,8 +303,8 @@ def test_more_offers_than_asked_for_are_still_cut_to_the_limit(workspace, offers
     assert len(rows) == 5, "four offers and a header"
 
 
-def test_a_shopee_excel_file_imports_one_hundred_products_at_once(workspace) -> None:
-    """The complete fallback path: Shopee Excel file to filed tracking links."""
+def test_a_shopee_csv_file_imports_one_hundred_products_at_once(workspace) -> None:
+    """The actual Shopee path: its CSV export to filed tracking links."""
     sheet = [
         [
             str(50_000_000_000 + index),
@@ -318,7 +319,8 @@ def test_a_shopee_excel_file_imports_one_hundred_products_at_once(workspace) -> 
         ]
         for index in range(100)
     ]
-    data = xlsx.workbook(list(attribution_api.OFFER_COLUMNS), sheet)
+    exported = StringIO()
+    csv.writer(exported).writerows([list(attribution_api.OFFER_COLUMNS), *sheet])
 
     response = request(
         "POST",
@@ -326,7 +328,7 @@ def test_a_shopee_excel_file_imports_one_hundred_products_at_once(workspace) -> 
         json={
             "campaign_id": campaign(workspace),
             "platform": "tiktok",
-            "xlsx_base64": base64.b64encode(data).decode("ascii"),
+            "csv_text": exported.getvalue(),
             "confirm_external_action": True,
         },
     )
@@ -336,6 +338,28 @@ def test_a_shopee_excel_file_imports_one_hundred_products_at_once(workspace) -> 
     with TestingSession() as db:
         assert len(db.scalars(select(Product)).all()) == 100
         assert len(db.scalars(select(TrackingLink)).all()) == 100
+
+
+def test_preview_rejects_a_csv_file_with_more_than_one_hundred_products(workspace) -> None:
+    exported = StringIO()
+    writer = csv.writer(exported)
+    writer.writerow(attribution_api.OFFER_COLUMNS)
+    for index in range(101):
+        writer.writerow([
+            50_000_000_000 + index, "1834061111", f"Product {index}", "Shop",
+            350_000, 10, 35_000,
+            f"https://shopee.vn/product/1834061111/{50_000_000_000 + index}",
+            f"https://s.shopee.vn/test-{index}",
+        ])
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/attribution/shopee/import/preview",
+        json={"csv_text": exported.getvalue()},
+    )
+
+    assert response.status_code == 422
+    assert "at most 100" in response.json()["detail"]
 
 
 def test_preview_rejects_an_excel_file_with_more_than_one_hundred_products(workspace) -> None:

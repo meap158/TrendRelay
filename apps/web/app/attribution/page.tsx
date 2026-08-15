@@ -398,18 +398,18 @@ export default function AttributionPage() {
             </span>
           ))}
         </p>
-        {/* The supported transport, not a misleading connection light. Excel
+        {/* The supported transport, not a misleading connection light. CSV
             remains available even when Shopee challenges an automated browser. */}
         <button
           type="button"
           className="attribution-provider"
           data-connected
           onClick={() => setPanel("add")}
-          title="Import a Shopee Excel export"
+          title="Import a Shopee CSV export"
         >
           <span className="attribution-provider-dot" aria-hidden="true" />
           Shopee
-          <em>Excel import</em>
+          <em>CSV import</em>
         </button>
 
         <div className="attribution-bar-actions">

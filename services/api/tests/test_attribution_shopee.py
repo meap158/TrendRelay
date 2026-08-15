@@ -227,6 +227,15 @@ def test_the_real_export_reads_without_complaint() -> None:
     assert [p.name[:12] for p in products] == ["Giấy ăn rút ", "Tẩy Tế Bào C", "Ba lô chống "]
 
 
+def test_the_utf8_bom_in_a_shopee_csv_is_ignored() -> None:
+    from trendrelay_api.attribution_shopee import read_export
+
+    products, problems = read_export("\ufeff" + EXPORT)
+
+    assert problems == []
+    assert len(products) == 3
+
+
 def test_the_commission_column_agrees_with_price_times_rate() -> None:
     """The strongest check available: two parsers meeting on a third number.
 

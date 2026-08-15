@@ -71,13 +71,13 @@ The session is stored locally under `.data/douyin/`. Refresh it only when Douyin
 
 ### Import Shopee Product Offers
 
-Open **Attribution**, choose **Add products**, and use **Shopee Excel export**:
+Open **Attribution**, choose **Add products**, and use **Shopee CSV export**:
 
 1. Select **Open Shopee Product Offer**. Only this explicit action opens the real Shopee Affiliate page in your normal browser; background checks never open a window.
-2. Sign in directly with Shopee, select up to 100 products, and export the Excel file from **Hoa hồng Sản phẩm / Product Offer**.
-3. Choose that `.xlsx` in TrendRelay. Review the readable, new, existing, duplicate, and invalid-row counts; then choose the campaign and publishing platform and import.
+2. Sign in directly with Shopee, select up to 100 products, and export the CSV file from **Hoa hồng Sản phẩm / Product Offer**.
+3. Choose that `.csv` in TrendRelay. Review the readable, new, existing, duplicate, and invalid-row counts; then choose the campaign and publishing platform and import.
 
-This supported path does not give TrendRelay a Shopee cookie and does not depend on automated browsing or passing a CAPTCHA. Files are limited to 5 MB and 100 products, and are validated before TrendRelay creates products and first-party tracking links. For a small batch, the same dialog also accepts up to 100 HTTPS Shopee product links.
+This supported path does not give TrendRelay a Shopee cookie and does not depend on automated browsing or passing a CAPTCHA. CSV files are decoded as UTF-8 (with or without a BOM), limited to 5 MB and 100 products, and validated before TrendRelay creates products and first-party tracking links. Existing `.xlsx` exports remain accepted as a compatibility fallback. For a small batch, the same dialog also accepts up to 100 HTTPS Shopee product links.
 
 ## Download behavior
 

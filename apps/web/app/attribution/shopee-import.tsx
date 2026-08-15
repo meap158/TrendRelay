@@ -8,7 +8,7 @@ import { useT } from "../i18n-provider";
 
 type Campaign = { id: string; name: string };
 type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
-type Mode = "excel" | "links";
+type Mode = "export" | "links";
 
 type Preview = {
   readable: number;
@@ -45,11 +45,12 @@ export function ShopeeImport({
   onImported: () => void;
 }) {
   const t = useT();
-  const [mode, setMode] = useState<Mode>("excel");
+  const [mode, setMode] = useState<Mode>("export");
   const [campaignId, setCampaignId] = useState("");
   const [platform, setPlatform] = useState<string>("tiktok");
   const [disclosure, setDisclosure] = useState("Affiliate link");
   const [xlsxBase64, setXlsxBase64] = useState("");
+  const [csvText, setCsvText] = useState("");
   const [workbookName, setWorkbookName] = useState("");
   const [fileKey, setFileKey] = useState(0);
   const [links, setLinks] = useState("");
@@ -57,8 +58,8 @@ export function ShopeeImport({
   const [busy, setBusy] = useState<"" | "open" | "preview" | "import">("");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
-  const source = mode === "excel"
-    ? { xlsx_base64: xlsxBase64, csv_text: "", links: "" }
+  const source = mode === "export"
+    ? { xlsx_base64: xlsxBase64, csv_text: csvText, links: "" }
     : { xlsx_base64: "", csv_text: "", links };
 
   async function previewSource(nextSource = source) {
@@ -96,17 +97,19 @@ export function ShopeeImport({
     }
   }
 
-  function chooseWorkbook(event: ChangeEvent<HTMLInputElement>) {
+  function chooseExportFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     setPreview(null);
     setOutcome(null);
     if (!file) {
       setXlsxBase64("");
+      setCsvText("");
       setWorkbookName("");
       return;
     }
-    if (!file.name.toLowerCase().endsWith(".xlsx")) {
-      fail(t("attribution.shopee.chooseXlsx"));
+    const name = file.name.toLowerCase();
+    if (!name.endsWith(".csv") && !name.endsWith(".xlsx")) {
+      fail(t("attribution.shopee.chooseExport"));
       event.target.value = "";
       return;
     }
@@ -115,15 +118,20 @@ export function ShopeeImport({
       event.target.value = "";
       return;
     }
+    const isCsv = name.endsWith(".csv");
     const reader = new FileReader();
     reader.onerror = () => fail(t("attribution.shopee.fileUnreadable"));
     reader.onload = () => {
-      const encoded = String(reader.result ?? "").split(",", 2)[1] ?? "";
+      const result = String(reader.result ?? "");
+      const encoded = isCsv ? "" : result.split(",", 2)[1] ?? "";
+      const text = isCsv ? result.replace(/^\uFEFF/, "") : "";
       setXlsxBase64(encoded);
+      setCsvText(text);
       setWorkbookName(file.name);
-      void previewSource({ xlsx_base64: encoded, csv_text: "", links: "" });
+      void previewSource({ xlsx_base64: encoded, csv_text: text, links: "" });
     };
-    reader.readAsDataURL(file);
+    if (isCsv) reader.readAsText(file, "utf-8");
+    else reader.readAsDataURL(file);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -153,6 +161,7 @@ export function ShopeeImport({
       setOutcome(payload as Outcome);
       succeed(t("attribution.shopee.importedCount", { count: payload.created }));
       setXlsxBase64("");
+      setCsvText("");
       setWorkbookName("");
       setLinks("");
       setPreview(null);
@@ -165,7 +174,7 @@ export function ShopeeImport({
     }
   }
 
-  const hasSource = mode === "excel" ? Boolean(xlsxBase64) : Boolean(links.trim());
+  const hasSource = mode === "export" ? Boolean(xlsxBase64 || csvText) : Boolean(links.trim());
   const importCount = preview?.new_offers ?? 0;
 
   return (
@@ -177,9 +186,9 @@ export function ShopeeImport({
         onChange={(next) => { setMode(next); setPreview(null); setOutcome(null); }}
         options={[
           {
-            value: "excel",
-            label: t("attribution.shopee.excelRecommended"),
-            description: t("attribution.shopee.excelDescription"),
+            value: "export",
+            label: t("attribution.shopee.exportRecommended"),
+            description: t("attribution.shopee.exportDescription"),
           },
           {
             value: "links",
@@ -189,7 +198,7 @@ export function ShopeeImport({
         ]}
       />
 
-      {mode === "excel" ? (
+      {mode === "export" ? (
         <section className="shopee-export-path" aria-labelledby="shopee-export-heading">
           <div>
             <h3 id="shopee-export-heading">{t("attribution.shopee.exportHeading")}</h3>
@@ -206,12 +215,12 @@ export function ShopeeImport({
             disabled={busy !== ""}
           >{busy === "open" ? t("attribution.shopee.opening") : t("attribution.shopee.openOffer")}</button>
           <label>
-            {t("attribution.shopee.excelLabel")}
+            {t("attribution.shopee.fileLabel")}
             <input
               key={fileKey}
               type="file"
-              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              onChange={chooseWorkbook}
+              accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={chooseExportFile}
               disabled={busy !== ""}
             />
             <small>{workbookName || t("attribution.shopee.fileLimits")}</small>

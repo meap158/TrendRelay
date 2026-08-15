@@ -5,9 +5,9 @@ session workflow described in the historical implementation notes below.
 
 ## Current decision
 
-Shopee's own Product Offer Excel export is the supported bulk boundary. The
+Shopee's own Product Offer CSV export is the supported bulk boundary. The
 operator opens Shopee in their normal browser, signs in directly with Shopee,
-selects at most 100 products, exports the `.xlsx`, and gives that file to
+selects at most 100 products, exports the `.csv`, and gives that file to
 TrendRelay. TrendRelay previews and validates the batch before it mints any
 tracking links.
 
@@ -16,15 +16,16 @@ on passing Shopee's CAPTCHA. This is a reliability boundary: a verification
 challenge is specifically designed to stop automation and cannot be treated as
 a normal setup step. The API retains the older session bridge for compatibility
 and investigation, but its probes are headless and never open a window. A
-blocked probe reports that the Excel export is required. The product UI does
+blocked probe reports that the CSV export is required. The product UI does
 not advertise the bridge or automatically enqueue product-page reads after an
-Excel import. A browser opens only after the operator explicitly selects
+CSV import. A browser opens only after the operator explicitly selects
 **Open Shopee Product Offer**.
 
 The file path accepts at most 100 products and 5 MB over the browser API,
-rejects oversized decompressed workbooks, supports Vietnamese and English
-headings, and previews readable, new, existing, duplicate, and problematic
-rows. A few HTTPS Shopee product links remain a secondary input.
+decodes UTF-8 CSV with or without a byte-order mark, supports Vietnamese and
+English headings, and previews readable, new, existing, duplicate, and
+problematic rows. `.xlsx` remains a compatibility input and its decompressed
+size is bounded. A few HTTPS Shopee product links remain a secondary input.
 
 ## Context
 
@@ -83,14 +84,12 @@ which is why a session is worth offering - and why nothing here requires one.
   nobody asked for. A hundred rows at a time, matching what Shopee's own page
   hands out, because the reason to export is to work on the rows elsewhere and
   a file that took ten minutes to assemble is one nobody waits for.
-- **The workbook is written by hand rather than by a library.** A `.xlsx` is a
-  zip of XML and one sheet of values is small enough to write directly, which
-  is cheaper than a dependency added to the API for one export. CSV was the
-  alternative and loses twice: Excel guesses a CSV's encoding, so Vietnamese
-  product names arrive as mojibake without a byte-order mark, and it reads a
-  long digit string as a number - turning item 57860887539 into 5.78609E+10 and
-  destroying the column that says which product a row is. Ids are written as
-  text for the same reason.
+- **The legacy TrendRelay-generated export is a hand-written workbook.** A
+  `.xlsx` is a zip of XML and one sheet of values is small enough to write
+  directly. That compatibility endpoint writes IDs as text so opening the file
+  in Excel cannot turn item 57860887539 into 5.78609E+10. Shopee's own CSV is
+  different: TrendRelay reads its UTF-8 text directly rather than asking Excel
+  to guess its encoding or coerce identifiers.
 - **The CSV export needs no session, and stays the path when there is none.**
   Rows are keyed on shop and item so re-importing a re-downloaded export adds
   only what is new. Pasted share links are accepted alongside it and filed under
