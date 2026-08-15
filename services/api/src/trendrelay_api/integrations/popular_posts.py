@@ -71,6 +71,8 @@ def posts_from_tiktok(result: dict[str, Any]) -> list[dict[str, Any]]:
                 "views": _count(metrics.get("views")),
                 "followers": _count(metrics.get("followers")),
                 "likes": _count(metrics.get("likes")),
+                "comments": _count(metrics.get("comments")),
+                "shares": _count(metrics.get("shares")),
                 # Said explicitly rather than left out, so a reader is not left
                 # wondering whether the link failed to load.
                 "url": None,

@@ -95,6 +95,8 @@ def posts_from_youtube(result: dict[str, Any]) -> list[dict[str, Any]]:
                 "views": _count(statistics.get("viewCount")),
                 "followers": None,
                 "likes": _count(statistics.get("likeCount")),
+                "comments": _count(statistics.get("commentCount")),
+                "shares": None,
                 "url": f"https://www.youtube.com/watch?v={video_id}",
                 "thumbnail": _thumbnail(snippet.get("thumbnails")),
                 "published_at": str(snippet.get("publishedAt") or "") or None,

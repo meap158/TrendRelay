@@ -40,7 +40,11 @@ def resource(**overrides: Any) -> dict[str, Any]:
                 "high": {"url": "https://i.ytimg.com/vi/abc123/hqdefault.jpg"}
             },
         },
-        "statistics": {"viewCount": "1200000", "likeCount": "42000"},
+        "statistics": {
+            "viewCount": "1200000",
+            "likeCount": "42000",
+            "commentCount": "810",
+        },
     }
     value.update(overrides)
     return value
@@ -78,6 +82,7 @@ def test_a_video_keeps_its_title_url_cover_and_counts() -> None:
     assert post["thumbnail"].startswith("https://")
     assert post["views"] == 1_200_000
     assert post["likes"] == 42_000
+    assert post["comments"] == 810
     assert post["window_days"] is None
 
 

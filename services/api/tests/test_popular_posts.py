@@ -54,6 +54,19 @@ def test_a_video_list_becomes_posts_with_their_creators() -> None:
     assert post["region"] == "VN"
 
 
+def test_a_video_keeps_public_interaction_counts_when_the_source_has_them() -> None:
+    page = video_page(items=[{
+        "name": "Creator",
+        "metrics": {"views": 9_000, "likes": 800, "comments": 70, "shares": 20},
+    }])
+
+    [post] = posts_from_tiktok(page)
+
+    assert post["likes"] == 800
+    assert post["comments"] == 70
+    assert post["shares"] == 20
+
+
 def test_position_is_the_rank_because_the_page_renders_none() -> None:
     """The video tab has no numbered column.
 
