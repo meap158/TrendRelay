@@ -1,8 +1,6 @@
-"""Filing a batch of Shopee offers, and what happens on the second import."""
+"""Filing Shopee offers with the affiliate URLs Shopee exported."""
 
 from __future__ import annotations
-
-from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine, select
@@ -20,7 +18,6 @@ EXPORT = (
     "57860887539,Giấy ăn rút Topgia,\"95,0k\",TOP_GIA HOME,2%,₫1.900,"
     "https://shopee.vn/product/1834061111/57860887539,https://s.shopee.vn/70JJHPqb6V\n"
 )
-CAMPAIGN = SimpleNamespace(id="campaign-1", name="August books")
 
 
 @pytest.fixture
@@ -33,11 +30,8 @@ def session():
         yield db
 
 
-def run(session, rows, platform="tiktok"):
-    return importer.import_rows(
-        session, "workspace-1", "user-1", CAMPAIGN, rows,
-        platform=platform, disclosure="Affiliate link",
-    )
+def run(session, rows):
+    return importer.import_rows(session, "workspace-1", "user-1", rows)
 
 
 def export_rows(text: str = EXPORT):
@@ -49,19 +43,21 @@ def export_rows(text: str = EXPORT):
 # --- what one import produces -------------------------------------------------
 
 
-def test_an_export_row_becomes_a_product_an_offer_and_a_link(session) -> None:
+def test_an_export_row_becomes_a_product_and_offer_with_shopees_link(session) -> None:
     outcome = run(session, export_rows())
 
     assert outcome.created == 1
     product = session.scalar(select(Product))
     offer = session.scalar(select(ProductOffer))
-    link = session.scalar(select(TrackingLink))
 
     assert product.name == "Giấy ăn rút Topgia"
     assert product.marketplace == "shopee"
     assert offer.affiliate_url == "https://s.shopee.vn/70JJHPqb6V"
-    assert link.offer_id == offer.id and link.product_id == product.id
-    assert link.destination_url == offer.affiliate_url
+    assert outcome.affiliate_links == [{
+        "offer_id": offer.id,
+        "url": "https://s.shopee.vn/70JJHPqb6V",
+        "product": "Giấy ăn rút Topgia",
+    }]
 
 
 def test_the_price_is_stored_in_dong_rather_than_dong_times_a_hundred(session) -> None:
@@ -78,13 +74,10 @@ def test_the_price_is_stored_in_dong_rather_than_dong_times_a_hundred(session) -
     assert offer.commission_bps == 200
 
 
-def test_the_link_carries_sub_ids_worked_out_at_minting(session) -> None:
-    # The network reports these positionally, so they are settled once and kept.
+def test_import_does_not_mint_a_trendrelay_redirect(session) -> None:
     run(session, export_rows())
 
-    link = session.scalar(select(TrackingLink))
-    assert link.sub_ids, "a Shopee link should have sub ids assigned"
-    assert link.code and len(link.code) > 6
+    assert session.scalars(select(TrackingLink)).all() == []
 
 
 # --- the second import --------------------------------------------------------
@@ -101,16 +94,14 @@ def test_importing_the_same_export_twice_changes_nothing(session) -> None:
     assert len(session.scalars(select(ProductOffer)).all()) == 1
 
 
-def test_a_second_import_never_mints_a_second_link(session) -> None:
-    """The first link is already in a video somewhere.
-
-    A second one would split the product's history in two, and the first cannot
-    be recalled and reissued.
-    """
+def test_a_second_import_returns_the_same_shopee_link(session) -> None:
     run(session, export_rows())
-    run(session, export_rows())
+    outcome = run(session, export_rows())
 
-    assert len(session.scalars(select(TrackingLink)).all()) == 1
+    assert [item["url"] for item in outcome.affiliate_links] == [
+        "https://s.shopee.vn/70JJHPqb6V"
+    ]
+    assert session.scalars(select(TrackingLink)).all() == []
 
 
 def test_ten_new_rows_in_a_re_export_add_ten_offers(session) -> None:
@@ -124,7 +115,8 @@ def test_ten_new_rows_in_a_re_export_add_ten_offers(session) -> None:
 
     assert outcome.created == 1
     assert outcome.already_present == 1
-    assert len(session.scalars(select(TrackingLink)).all()) == 2
+    assert len(outcome.affiliate_links) == 2
+    assert session.scalars(select(TrackingLink)).all() == []
 
 
 # --- links pasted on their own ------------------------------------------------
@@ -193,9 +185,9 @@ def test_an_export_fills_the_price_a_pasted_link_could_not_know(session) -> None
     assert offer.commission_bps == 200
     assert offer.commission_flat_cents == 1_900
     assert offer.merchant == "TOP_GIA HOME"
-    # Still one offer and one link: filling gaps is not filing again.
+    # Still one offer and no TrendRelay redirect: filling gaps is not filing again.
     assert len(session.scalars(select(ProductOffer)).all()) == 1
-    assert len(session.scalars(select(TrackingLink)).all()) == 1
+    assert session.scalars(select(TrackingLink)).all() == []
 
 
 def test_a_figure_an_earlier_export_gave_is_not_overwritten(session) -> None:

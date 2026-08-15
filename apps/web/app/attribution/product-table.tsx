@@ -14,6 +14,7 @@ import { useMemo, useState } from "react";
 
 import { Badge, Card } from "../ui/primitives";
 import { Button } from "../ui/button";
+import { ActionIcon } from "../ui/action-icons";
 import { useT } from "../i18n-provider";
 import { money } from "./format";
 import type { ProductRow } from "./types";
@@ -48,6 +49,7 @@ export function ProductTable({
   canCreate,
   busy,
   onCreateLink,
+  onCopyAffiliateLink,
   onCopyLink,
   onSetLinkStatus,
   canChangeStatus,
@@ -58,6 +60,7 @@ export function ProductTable({
   canChangeStatus: boolean;
   busy: string;
   onCreateLink: (product: ProductRow, offerId: string) => void;
+  onCopyAffiliateLink: (url: string) => void;
   onCopyLink: (code: string) => void;
   onSetLinkStatus: (linkId: string, status: "active" | "disabled") => void;
   /** Asked to copy every tracking link on these products, in one go. */
@@ -183,6 +186,10 @@ export function ProductTable({
           <tbody>
             {shown.map((product) => {
               const open = expanded.has(product.id);
+              const isShopee = product.marketplace.toLowerCase() === "shopee";
+              const directOffers = product.offers.filter(
+                (offer) => offer.network.toLowerCase() === "shopee",
+              );
               return [
                 <tr key={product.id} data-chosen={picked.has(product.id) || undefined}>
                   <td className="product-choose">
@@ -203,15 +210,14 @@ export function ProductTable({
                       aria-expanded={open}
                       onClick={() => toggle(product.id)}
                     >
-                      {/* Leading with the picture, as the offer page does:
-                          a product is recognised by sight before its name is
-                          read, and these names are long enough to truncate.
-                          Absent until enrichment has fetched one, so the cell
-                          keeps its shape either way. */}
+                      {/* Shopee exports contain no image URL. Do not reserve a
+                          blank thumbnail for data the file cannot provide. */}
                       {product.image_url
                         // eslint-disable-next-line @next/next/no-img-element
                         ? <img className="product-thumb" src={product.image_url} alt="" loading="lazy" />
-                        : <span className="product-thumb product-thumb-empty" aria-hidden="true" />}
+                        : !isShopee
+                          ? <span className="product-thumb product-thumb-empty" aria-hidden="true" />
+                          : null}
                       {/* Name over subtitle, beside the picture rather than
                           after it - the three are a row of two things, not a
                           row of three. */}
@@ -235,7 +241,7 @@ export function ProductTable({
                     {offerRate(product) || <span className="catalog-no-data">—</span>}
                   </td>
                   <td>{product.offers.length}</td>
-                  <td>{product.links.length}</td>
+                  <td>{product.links.length + directOffers.length}</td>
                   <td className="numeric">{product.clicks}</td>
                   <td className="numeric">
                     {product.earnings.length
@@ -287,7 +293,21 @@ export function ProductTable({
                                   <Badge
                                     tone={offer.availability === "available" ? "good" : "warn"}
                                   >{offer.availability}</Badge>
-                                  {canCreate && (
+                                  {offer.network.toLowerCase() === "shopee" ? (
+                                    <>
+                                      <a
+                                        className="ui-button ui-button-secondary ui-button-sm"
+                                        href={offer.affiliate_url}
+                                        target="_blank"
+                                        rel="noreferrer noopener"
+                                      ><ActionIcon name="link" /> {t("attribution.shopee.openAffiliateLink")}</a>
+                                      <Button
+                                        variant="quiet"
+                                        size="sm"
+                                        onClick={() => onCopyAffiliateLink(offer.affiliate_url)}
+                                      ><ActionIcon name="copy" /> {t("attribution.shopee.copyAffiliateLink")}</Button>
+                                    </>
+                                  ) : canCreate && (
                                     <Button
                                       variant="secondary"
                                       size="sm"
@@ -333,7 +353,13 @@ export function ProductTable({
                                 </li>
                               ))}
                             </ul>
-                          ) : <p className="catalog-no-data">{t("attribution.noLinksHere")}</p>}
+                          ) : (
+                            <p className="catalog-no-data">
+                              {directOffers.length
+                                ? t("attribution.shopee.noTrackingLinkNeeded")
+                                : t("attribution.noLinksHere")}
+                            </p>
+                          )}
                         </section>
                       </div>
                     </td>

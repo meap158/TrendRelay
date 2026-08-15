@@ -27,7 +27,7 @@ from trendrelay_api.database import get_session
 from trendrelay_api.integrations import shopee_session as shopee
 from trendrelay_api.main import app
 from trendrelay_api.models import AuditEvent, Base
-from trendrelay_api.opportunity_models import Product
+from trendrelay_api.opportunity_models import Product, ProductOffer
 
 NS = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 engine = create_engine(
@@ -114,20 +114,6 @@ def export(workspace_id: str, **body) -> httpx.Response:
         f"/api/workspaces/{workspace_id}/attribution/shopee/offers/export",
         json={"confirm_external_action": True, **body},
     )
-
-
-def campaign(workspace_id: str) -> str:
-    response = request(
-        "POST",
-        f"/api/workspaces/{workspace_id}/campaigns",
-        json={
-            "name": "Shopee offer batch",
-            "objective": "Test a complete product-offer import",
-            "audience": "Vietnam shoppers",
-        },
-    )
-    assert response.status_code == 201, response.text
-    return response.json()["campaign"]["id"]
 
 
 def sheet_rows(data: bytes) -> list[list[str]]:
@@ -304,7 +290,7 @@ def test_more_offers_than_asked_for_are_still_cut_to_the_limit(workspace, offers
 
 
 def test_a_shopee_csv_file_imports_one_hundred_products_at_once(workspace) -> None:
-    """The actual Shopee path: its CSV export to filed tracking links."""
+    """The actual Shopee path keeps all 100 affiliate URLs without redirects."""
     sheet = [
         [
             str(50_000_000_000 + index),
@@ -326,18 +312,23 @@ def test_a_shopee_csv_file_imports_one_hundred_products_at_once(workspace) -> No
         "POST",
         f"/api/workspaces/{workspace}/attribution/shopee/import",
         json={
-            "campaign_id": campaign(workspace),
-            "platform": "tiktok",
             "csv_text": exported.getvalue(),
             "confirm_external_action": True,
         },
     )
 
     assert response.status_code == 201, response.text
-    assert response.json()["created"] == 100
+    payload = response.json()
+    assert payload["created"] == 100
+    assert len(payload["affiliate_links"]) == 100
+    assert all(
+        item["url"].startswith("https://s.shopee.vn/")
+        for item in payload["affiliate_links"]
+    )
     with TestingSession() as db:
         assert len(db.scalars(select(Product)).all()) == 100
-        assert len(db.scalars(select(TrackingLink)).all()) == 100
+        assert len(db.scalars(select(ProductOffer)).all()) == 100
+        assert db.scalars(select(TrackingLink)).all() == []
 
 
 def test_preview_rejects_a_csv_file_with_more_than_one_hundred_products(workspace) -> None:

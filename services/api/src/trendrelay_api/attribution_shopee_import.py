@@ -1,8 +1,8 @@
-"""Filing a batch of Shopee offers, and minting a tracking link for each.
+"""Filing a batch of Shopee offers with the affiliate links Shopee supplied.
 
-An export is a set of products chosen for one purpose, so the campaign and the
-platform are asked once for the whole batch rather than per row - otherwise
-importing one hundred products is a one-hundred-step job.
+The CSV is already a complete handoff: product identity, economics, product URL,
+and Shopee's commission-bearing affiliate URL. Importing it therefore needs no
+campaign or publishing-platform decision.
 
 Re-importing is safe on purpose
 -------------------------------
@@ -11,24 +11,23 @@ should add ten offers rather than duplicating the hundred already filed. So a
 product is keyed on its shop and item, and an offer on its affiliate URL, and
 anything already present is left exactly as it was.
 
-That matters most for the tracking links. Minting a second link for a product
-that already has one would split its history in two, and the first link is
-already in a video somewhere - it cannot be recalled and reissued.
+Shopee's ``Link ưu đãi`` is already the commission-bearing affiliate URL. The
+import keeps that URL directly rather than creating a TrendRelay redirect for
+every row. First-party click tracking remains an explicit action for campaigns
+that need it; importing a marketplace export is not consent to mint 100 more
+public links.
 """
 
 from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from secrets import token_urlsafe
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from trendrelay_api import attribution_shopee, attribution_subids
-from trendrelay_api.attribution_models import TrackingLink
-from trendrelay_api.models import utc_now
+from trendrelay_api import attribution_shopee
 from trendrelay_api.money import to_minor
 from trendrelay_api.opportunity_models import Product, ProductOffer
 
@@ -52,15 +51,13 @@ class ImportOutcome:
 
     created: int = 0
     already_present: int = 0
-    links: list[dict[str, Any]] = None  # type: ignore[assignment]
+    affiliate_links: list[dict[str, Any]] = None  # type: ignore[assignment]
     problems: list[str] = None  # type: ignore[assignment]
-    #: Every product the batch touched, new or already filed. Kept so the caller
-    #: can queue the page reads that fill in images without going back to the
-    #: database to work out which rows those were.
+    #: Every product the batch touched, new or already filed.
     products: list[Any] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
-        self.links = self.links or []
+        self.affiliate_links = self.affiliate_links or []
         self.problems = self.problems or []
         self.products = self.products or []
 
@@ -126,13 +123,9 @@ def import_rows(
     session: Session,
     workspace_id: str,
     user_id: str,
-    campaign: Any,
     rows: list[Any],
-    *,
-    platform: str,
-    disclosure: str,
 ) -> ImportOutcome:
-    """File each row, and mint a tracking link for every offer that is new."""
+    """File each row and return Shopee's own ready-to-publish links."""
     outcome = ImportOutcome()
     for row in rows:
         if not row.affiliate_url:
@@ -150,6 +143,11 @@ def import_rows(
         if existing:
             _backfill_offer(existing, row)
             outcome.already_present += 1
+            outcome.affiliate_links.append({
+                "offer_id": existing.id,
+                "url": existing.affiliate_url,
+                "product": product.name,
+            })
             continue
         offer = ProductOffer(
             workspace_id=workspace_id,
@@ -172,16 +170,11 @@ def import_rows(
         session.add(offer)
         session.flush()
         outcome.created += 1
-        outcome.links.append(_mint_link(
-            session,
-            workspace_id,
-            user_id,
-            campaign,
-            offer,
-            product,
-            platform=platform,
-            disclosure=disclosure,
-        ))
+        outcome.affiliate_links.append({
+            "offer_id": offer.id,
+            "url": offer.affiliate_url,
+            "product": product.name,
+        })
     return outcome
 
 
@@ -252,54 +245,3 @@ def _upsert_product(session: Session, workspace_id: str, user_id: str, row: Any)
     session.add(product)
     session.flush()
     return product
-
-
-def _mint_link(
-    session: Session,
-    workspace_id: str,
-    user_id: str,
-    campaign: Any,
-    offer: ProductOffer,
-    product: Product,
-    *,
-    platform: str,
-    disclosure: str,
-) -> dict[str, Any]:
-    """One tracking link for one offer, sub-ids and all.
-
-    Minted exactly the way a hand-made link is, so an imported link and a
-    hand-made one are the same kind of object rather than a second sort that
-    reports differently.
-    """
-    code = token_urlsafe(8)
-    link = TrackingLink(
-        code=code,
-        sub_ids=attribution_subids.assign(
-            offer.affiliate_url,
-            attribution_subids.LinkContext(
-                code=code,
-                platform=platform,
-                campaign_id=campaign.id,
-                campaign_name=campaign.name,
-                created_at=utc_now(),
-                content_sha256=None,
-                product_id=product.id,
-            ),
-        ),
-        workspace_id=workspace_id,
-        campaign_id=campaign.id,
-        offer_id=offer.id,
-        product_id=product.id,
-        destination_url=offer.affiliate_url,
-        platform=platform,
-        disclosure=disclosure.strip(),
-        created_by=user_id,
-    )
-    session.add(link)
-    session.flush()
-    return {
-        "id": link.id,
-        "code": link.code,
-        "product": product.name,
-        "offer_id": offer.id,
-    }

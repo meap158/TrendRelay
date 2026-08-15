@@ -1,12 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { ChangeEvent, FormEvent, useState } from "react";
 
 import { ChoiceGroup } from "../ui/choice-group";
 import { useT } from "../i18n-provider";
 
-type Campaign = { id: string; name: string };
 type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 type Mode = "export" | "links";
 
@@ -21,24 +19,20 @@ type Preview = {
 type Outcome = {
   created: number;
   already_present: number;
-  links: { id: string; code: string; product: string }[];
+  affiliate_links: { offer_id: string; url: string; product: string }[];
   problems: string[];
-  enriching: number;
 };
 
-const PLATFORMS = ["tiktok", "instagram", "youtube", "douyin", "other"] as const;
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 export function ShopeeImport({
   workspaceId,
-  campaigns,
   apiFetch,
   succeed,
   fail,
   onImported,
 }: {
   workspaceId: string;
-  campaigns: Campaign[];
   apiFetch: Fetcher;
   succeed: (message: string) => void;
   fail: (message: string) => void;
@@ -46,9 +40,6 @@ export function ShopeeImport({
 }) {
   const t = useT();
   const [mode, setMode] = useState<Mode>("export");
-  const [campaignId, setCampaignId] = useState("");
-  const [platform, setPlatform] = useState<string>("tiktok");
-  const [disclosure, setDisclosure] = useState("Affiliate link");
   const [xlsxBase64, setXlsxBase64] = useState("");
   const [csvText, setCsvText] = useState("");
   const [workbookName, setWorkbookName] = useState("");
@@ -136,10 +127,6 @@ export function ShopeeImport({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!campaignId) {
-      fail(t("attribution.shopee.chooseCampaignError"));
-      return;
-    }
     setBusy("import");
     setOutcome(null);
     try {
@@ -148,9 +135,6 @@ export function ShopeeImport({
         {
           method: "POST",
           body: JSON.stringify({
-            campaign_id: campaignId,
-            platform,
-            disclosure,
             ...source,
             confirm_external_action: true,
           }),
@@ -258,47 +242,21 @@ export function ShopeeImport({
         </div>
       )}
 
-      {campaigns.length === 0 ? (
-        <p className="attribution-note">
-          {t("attribution.shopee.campaignRequired")}{" "}
-          <Link href="/campaigns">{t("attribution.shopee.createCampaign")}</Link>{t("attribution.shopee.returnHere")}
-        </p>
-      ) : (
-        <form onSubmit={submit}>
-          <div className="attribution-form-row">
-            <label>
-              {t("attribution.campaign")}
-              <select value={campaignId} onChange={(event) => setCampaignId(event.target.value)}>
-                <option value="">{t("attribution.shopee.chooseCampaign")}</option>
-                {campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
-            </label>
-            <label>
-              {t("attribution.shopee.platform")}
-              <select value={platform} onChange={(event) => setPlatform(event.target.value)}>
-                {PLATFORMS.map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>
-            </label>
-          </div>
-          <label>
-            {t("attribution.shopee.disclosure")}
-            <input value={disclosure} onChange={(event) => setDisclosure(event.target.value)} />
-            <small>{t("attribution.shopee.disclosureHelp")}</small>
-          </label>
-          <button
-            className="ui-button ui-button-primary ui-button-md"
-            disabled={!campaignId || !hasSource || !preview || preview.readable === 0 || busy !== ""}
-          >
-            {busy === "import"
-              ? t("attribution.importing")
-              : t("attribution.shopee.importAction", { count: importCount || preview?.readable || 0 })}
-          </button>
-        </form>
-      )}
+      <p className="attribution-note">{t("attribution.shopee.directLinkNote")}</p>
+      <form onSubmit={submit}>
+        <button
+          className="ui-button ui-button-primary ui-button-md"
+          disabled={!hasSource || !preview || preview.readable === 0 || busy !== ""}
+        >
+          {busy === "import"
+            ? t("attribution.importing")
+            : t("attribution.shopee.importAction", { count: importCount || preview?.readable || 0 })}
+        </button>
+      </form>
 
       {outcome && (
         <div className="attribution-import-outcome" role="status">
-          <p>{t("attribution.shopee.importOutcome", { created: outcome.created, links: outcome.links.length })}</p>
+          <p>{t("attribution.shopee.importOutcome", { created: outcome.created, links: outcome.affiliate_links.length })}</p>
           {outcome.already_present > 0 && <p>{t("attribution.shopee.unchangedCount", { count: outcome.already_present })}</p>}
           {outcome.problems.length > 0 && (
             <ul className="attribution-import-problems">

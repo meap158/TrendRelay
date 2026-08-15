@@ -982,14 +982,10 @@ class ShopeeImportSource(BaseModel):
 
 
 class ShopeeImport(ShopeeImportSource):
-    """A batch of Shopee offers to file, and where their links should point."""
+    """A batch of Shopee offers carrying Shopee's own affiliate links."""
 
-    campaign_id: str = Field(min_length=1, max_length=64)
-    platform: Platform
-    disclosure: str = Field(default="Affiliate link", min_length=2, max_length=500)
-    #: Off by default, like every other outward step here. This mints a real
-    #: tracking link per product, and doing that to a two-hundred-row export by
-    #: accident is not something anybody undoes quickly.
+    #: Importing changes the catalogue, so it remains explicit even though it
+    #: no longer creates public TrendRelay redirects.
     confirm_external_action: bool = False
 
 
@@ -1055,7 +1051,7 @@ def preview_shopee_import(
     user: AuthenticatedUser,
     session: DatabaseSession,
 ) -> dict[str, Any]:
-    """Validate a batch before its button promises to create tracking links."""
+    """Validate a batch before its button promises to file Shopee offers."""
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
     rows, problems = _shopee_rows(body)
     fingerprints = [
@@ -1128,19 +1124,13 @@ def import_shopee_offers(
     user: AuthenticatedUser,
     session: DatabaseSession,
 ) -> dict[str, Any]:
-    """File a batch of Shopee offers, minting a tracking link for each new one.
-
-    One campaign and one platform for the whole batch: an export is a set of
-    products chosen for one purpose, and asking per row would make importing
-    one hundred of them a one-hundred-step job.
-    """
+    """File a batch of Shopee offers using ``Link ưu đãi`` as supplied."""
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
     require_governed_assurance(user)
     if not body.confirm_external_action:
         raise HTTPException(
             status_code=400, detail="Importing Shopee offers requires confirmation."
         )
-    campaign = _campaign_record(session, workspace_id, body.campaign_id)
     ensure_profile(session, user)
 
     rows, problems = _shopee_rows(body)
@@ -1158,13 +1148,7 @@ def import_shopee_offers(
         session,
         workspace_id,
         user.id,
-        campaign,
         rows,
-        platform=body.platform,
-        disclosure=body.disclosure,
-    )
-    missing_images = sum(
-        1 for product in outcome.products if shopee_enrichment.needs_enrichment(product)
     )
     audit(
         session,
@@ -1172,13 +1156,12 @@ def import_shopee_offers(
         workspace_id,
         user.id,
         "attribution.shopee_imported",
-        "campaign",
-        campaign.id,
+        "workspace",
+        workspace_id,
         {
             "created": outcome.created,
             "already_present": outcome.already_present,
-            "links": len(outcome.links),
-            "missing_images": missing_images,
+            "affiliate_links": len(outcome.affiliate_links),
         },
     )
     # The import and its audit are one transaction. Jobs read through another
@@ -1187,13 +1170,7 @@ def import_shopee_offers(
     return {
         "created": outcome.created,
         "already_present": outcome.already_present,
-        "links": outcome.links,
-        # How many product pages will be read in the background. Said plainly:
-        # an image appearing minutes after an import looks like a bug when
-        # nothing announced it was coming.
-        # File imports never open automated product pages. Shopee may present
-        # CAPTCHAs, and a durable bulk workflow cannot depend on defeating one.
-        "enriching": 0,
+        "affiliate_links": outcome.affiliate_links,
         # Reported rather than raised: an export of one hundred with three odd
         # rows should file ninety-seven and name the three.
         "problems": problems + outcome.problems,
@@ -1391,10 +1368,7 @@ def read_shopee_sign_in(
 class ShopeeOfferFetch(BaseModel):
     """Pull the affiliate offer list straight from Shopee and file it."""
 
-    campaign_id: str = Field(min_length=1, max_length=64)
-    platform: Platform
     limit: int = Field(default=100, ge=1, le=100)
-    disclosure: str = Field(default="Affiliate link", min_length=2, max_length=500)
     confirm_external_action: bool = False
 
 
@@ -1408,14 +1382,14 @@ def fetch_shopee_offers(
 ) -> dict[str, Any]:
     """Read the offer page with the connected session, then import what it says.
 
-    The same destination as importing the Excel export, minus the download. It
+    The same destination as importing the CSV export, minus the download. It
     reads the JSON the offer page's own front-end fetches rather than its
     markup, so a redesign that changes nothing about the data changes nothing
     here.
 
-    Nothing is generated on Shopee's side. The affiliate links returned are the
-    ones the account already has; the tracking links minted from them are ours,
-    and are minted exactly once per offer as they are for any other import.
+    Nothing is generated on either side. The affiliate links returned are the
+    commission-bearing links the account already has, and TrendRelay keeps them
+    directly without wrapping them in redirects.
     """
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
     require_governed_assurance(user)
@@ -1423,7 +1397,6 @@ def fetch_shopee_offers(
         raise HTTPException(
             status_code=400, detail="Importing Shopee offers requires confirmation."
         )
-    campaign = _campaign_record(session, workspace_id, body.campaign_id)
     ensure_profile(session, user)
 
     try:
@@ -1444,38 +1417,22 @@ def fetch_shopee_offers(
             status_code=422,
             detail=(
                 "The offer page returned no offers. If your account has offers, "
-                "download the Excel export from Shopee and import that instead."
+                "download the CSV export from Shopee and import that instead."
             ),
         )
-    outcome = attribution_shopee_import.import_rows(
-        session, workspace_id, user.id, campaign, rows,
-        platform=body.platform, disclosure=body.disclosure,
-    )
-    enrichment_candidates = sum(
-        1 for product in outcome.products if shopee_enrichment.needs_enrichment(product)
-    )
+    outcome = attribution_shopee_import.import_rows(session, workspace_id, user.id, rows)
     audit(
         session, request, workspace_id, user.id,
-        "attribution.shopee_offers_fetched", "campaign", campaign.id,
+        "attribution.shopee_offers_fetched", "workspace", workspace_id,
         {"created": outcome.created, "already_present": outcome.already_present,
-         "links": len(outcome.links), "enrichment_candidates": enrichment_candidates},
+         "affiliate_links": len(outcome.affiliate_links)},
     )
     session.commit()
-    enrichment: list[str] = []
-    enrichment_problem: str | None = None
-    try:
-        enrichment = shopee_enrichment.enqueue(workspace_id, outcome.products)
-    except Exception as error:  # noqa: BLE001 - import already committed
-        enrichment_problem = shopee_session.redact(str(error))
     return {
         "created": outcome.created,
         "already_present": outcome.already_present,
-        "links": outcome.links,
-        "enriching": len(enrichment),
-        "problems": problems + outcome.problems + (
-            [f"Product images could not be queued: {enrichment_problem}"]
-            if enrichment_problem else []
-        ),
+        "affiliate_links": outcome.affiliate_links,
+        "problems": problems + outcome.problems,
     }
 
 
