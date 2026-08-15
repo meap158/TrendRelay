@@ -4,11 +4,10 @@
 different question - "who is winning right now, and with what" - and it answers
 it with real posts rather than merged hashtags.
 
-The source is TikTok Creative Center's video tab: top-performing public videos,
-each with the creator behind it, how many people follow them, and how far the
-video travelled. That is a stronger signal than a hashtag for deciding what to
-film, because a hashtag says a subject exists while a post says somebody made
-something in it and it worked.
+TikTok Creative Center contributes windowed top videos. The official YouTube
+Data API contributes its current region-specific popular chart when configured.
+The two retain their own ranks and time bases; combining them must not imply a
+cross-platform rank that neither source published.
 
 Two limits are worth stating, because they bound what this list can claim.
 
@@ -37,6 +36,7 @@ PERIODS: tuple[int, ...] = (7, 30, 120)
 POSTS_CATEGORY = "video"
 
 TikTokReader = Callable[..., dict[str, Any]]
+YouTubeReader = Callable[..., dict[str, Any]]
 
 
 def posts_from_tiktok(result: dict[str, Any]) -> list[dict[str, Any]]:
@@ -61,11 +61,13 @@ def posts_from_tiktok(result: dict[str, Any]) -> list[dict[str, Any]]:
             {
                 "source": "tiktok",
                 "rank": position,
+                "title": None,
                 "creator": creator,
                 # The niche Creative Center filed it under, where it gave one.
                 "niche": item.get("category") or None,
                 "region": region,
                 "window_days": int(window),
+                "time_basis": f"last {int(window)} days",
                 "views": _count(metrics.get("views")),
                 "followers": _count(metrics.get("followers")),
                 "likes": _count(metrics.get("likes")),
@@ -96,6 +98,8 @@ def collect_posts(
     period: int = 7,
     limit: int = 20,
     tiktok_reader: TikTokReader,
+    youtube_reader: YouTubeReader | None = None,
+    platforms: tuple[str, ...] = ("tiktok",),
 ) -> dict[str, Any]:
     """The top posts for one country and one window, and what could not be read.
 
@@ -107,29 +111,49 @@ def collect_posts(
     failures: list[str] = []
     posts: list[dict[str, Any]] = []
 
-    try:
-        result = tiktok_reader(region=region, period=period, limit=limit)
-    except Exception as error:  # noqa: BLE001 - a provider state, not a bug
-        failures.append(f"TikTok could not answer: {error}")
-    else:
-        posts = posts_from_tiktok(result)
-        # The provider's own caveat about the rows it just handed over. Signed
-        # out, Creative Center serves a handful of a much longer board, and a
-        # list that does not say so reads as "this is the whole board".
-        for caveat in result.get("notes") or []:
-            if str(caveat) not in notes:
-                notes.append(str(caveat))
+    requested = tuple(dict.fromkeys(platforms))
+    if "tiktok" in requested:
+        try:
+            result = tiktok_reader(region=region, period=period, limit=limit)
+        except Exception as error:  # noqa: BLE001 - a provider state, not a bug
+            failures.append(f"TikTok could not answer: {error}")
+        else:
+            posts.extend(posts_from_tiktok(result))
+            _append_notes(notes, result)
+
+    if "youtube" in requested:
+        if youtube_reader is None:
+            failures.append("YouTube is not configured.")
+        else:
+            try:
+                result = youtube_reader(region=region, limit=limit)
+            except Exception as error:  # noqa: BLE001 - a provider state, not a bug
+                failures.append(f"YouTube could not answer: {error}")
+            else:
+                from .youtube_popular import posts_from_youtube
+
+                posts.extend(posts_from_youtube(result))
+                _append_notes(notes, result)
+
+    sources = [source for source in requested if any(post["source"] == source for post in posts)]
 
     return {
         "region": region.upper(),
         "period_days": period,
         "posts": posts,
         "post_count": len(posts),
-        "sources": ["tiktok"] if posts else [],
+        "sources": sources,
+        "requested_sources": list(requested),
         "notes": notes + failures,
         "complete": not failures,
         "public_data_only": True,
     }
+
+
+def _append_notes(notes: list[str], result: dict[str, Any]) -> None:
+    for caveat in result.get("notes") or []:
+        if str(caveat) not in notes:
+            notes.append(str(caveat))
 
 
 def live_reader() -> TikTokReader:
@@ -148,3 +172,13 @@ def live_reader() -> TikTokReader:
         )
 
     return tiktok
+
+
+def live_youtube_reader(api_key: str) -> YouTubeReader:
+    """Bind the optional official YouTube provider to the shared reader shape."""
+    from .youtube_popular import fetch_youtube_popular
+
+    def youtube(*, region: str, limit: int) -> dict[str, Any]:
+        return fetch_youtube_popular(api_key=api_key, region=region, limit=limit)
+
+    return youtube

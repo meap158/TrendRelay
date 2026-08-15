@@ -13,10 +13,12 @@ function post(overrides: Partial<PopularPost> = {}): PopularPost {
   return {
     source: "tiktok",
     rank: 1,
+    title: null,
     creator: "Mẹ SamSim",
     niche: "Technology & Finance",
     region: "VN",
     window_days: 7,
+    time_basis: "last 7 days",
     views: 12_000_000,
     followers: 156_100,
     likes: null,
@@ -81,4 +83,11 @@ test("the coverage line names the country and the window", () => {
 
 test("an empty board says so rather than claiming a top nothing", () => {
   assert.equal(coverageNote("VN", 30, 0), "Nothing came back for VN.");
+});
+
+test("mixed providers keep their different time bases visible", () => {
+  assert.equal(
+    coverageNote("US", 7, 12, ["tiktok", "youtube"]),
+    "12 popular posts in US. TikTok: last 7 days · YouTube: current regional chart.",
+  );
 });

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from pydantic import SecretStr
 
 from trendrelay_api.integrations.popular_posts import collect_posts, posts_from_tiktok
 
@@ -145,6 +147,44 @@ def test_the_region_is_reported_as_asked() -> None:
     assert result["sources"] == ["tiktok"]
 
 
+def test_configured_platforms_are_combined_without_inventing_a_global_rank() -> None:
+    def youtube(**_: Any) -> dict[str, Any]:
+        return {
+            "region": "VN",
+            "items": [{
+                "id": "video-1",
+                "snippet": {"title": "One", "channelTitle": "Channel"},
+                "statistics": {"viewCount": "90"},
+            }],
+        }
+
+    result = collect_posts(
+        region="VN",
+        tiktok_reader=lambda **kw: video_page(region="VN", period=kw["period"]),
+        youtube_reader=youtube,
+        platforms=("tiktok", "youtube"),
+    )
+
+    assert [post["source"] for post in result["posts"]] == ["tiktok", "youtube"]
+    assert [post["rank"] for post in result["posts"]] == [1, 1]
+    assert result["sources"] == ["tiktok", "youtube"]
+    assert result["complete"] is True
+
+
+def test_a_requested_unconfigured_provider_is_reported_as_incomplete() -> None:
+    result = collect_posts(
+        region="VN",
+        tiktok_reader=lambda **kw: video_page(period=kw["period"]),
+        youtube_reader=None,
+        platforms=("youtube",),
+    )
+
+    assert result["posts"] == []
+    assert result["complete"] is False
+    assert result["requested_sources"] == ["youtube"]
+    assert any("not configured" in note for note in result["notes"])
+
+
 # --- as a caller sees it ------------------------------------------------------
 
 
@@ -174,6 +214,54 @@ def test_an_unknown_period_is_refused_rather_than_quietly_changed(monkeypatch) -
 
 def test_the_board_is_local_machine_only() -> None:
     assert get("/api/research/posts/popular", host="192.0.2.10").status_code == 403
+
+
+def test_youtube_requires_explicit_local_configuration(monkeypatch) -> None:
+    import trendrelay_api.main as main_module
+
+    monkeypatch.setattr(
+        main_module,
+        "get_settings",
+        lambda: SimpleNamespace(youtube_data_api_key=SecretStr("")),
+    )
+
+    response = get("/api/research/posts/popular?region=US&platform=youtube")
+
+    assert response.status_code == 409
+    assert "YOUTUBE_DATA_API_KEY" in response.json()["detail"]
+
+
+def test_a_configured_youtube_board_returns_real_post_links(monkeypatch) -> None:
+    import trendrelay_api.main as main_module
+
+    monkeypatch.setattr(
+        main_module,
+        "get_settings",
+        lambda: SimpleNamespace(youtube_data_api_key=SecretStr("configured")),
+    )
+    monkeypatch.setattr(
+        main_module,
+        "live_youtube_reader",
+        lambda _key: lambda **_: {
+            "region": "US",
+            "time_basis": "current regional popular chart",
+            "items": [{
+                "id": "abc123",
+                "snippet": {"title": "A real post", "channelTitle": "Channel"},
+                "statistics": {"viewCount": "400"},
+            }],
+            "notes": ["Official chart caveat."],
+        },
+    )
+
+    response = get("/api/research/posts/popular?region=US&platform=youtube")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["sources"] == ["youtube"]
+    assert body["posts"][0]["title"] == "A real post"
+    assert body["posts"][0]["url"] == "https://www.youtube.com/watch?v=abc123"
+    assert body["posts"][0]["window_days"] is None
 
 
 # --- showing the post itself --------------------------------------------------

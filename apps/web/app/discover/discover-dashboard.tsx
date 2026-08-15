@@ -1377,7 +1377,7 @@ export default function ResearchDashboard() {
           </select>
           <span>
             <span style={statusDot(last30Ready)} />
-            {readinessCount}/3 sources ready
+            {readinessCount}/3 research tools ready
           </span>
         </div>
         {metaReady && (

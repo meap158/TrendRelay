@@ -58,9 +58,10 @@ export function seedFromPost(post: PopularPost): DiscoverySeed {
     post.likes == null ? "" : `${compactCount(post.likes)} likes`,
     post.followers == null ? "" : `${compactCount(post.followers)} followers`,
   ].filter(Boolean);
-  const label = post.niche ? `${post.niche} by ${post.creator}` : `Video by ${post.creator}`;
+  const label = post.title
+    || (post.niche ? `${post.niche} by ${post.creator}` : `Video by ${post.creator}`);
   return {
-    id: `post:${post.region}:${post.source}:${post.creator}:${post.rank}`,
+    id: `post:${post.region}:${post.source}:${post.url ?? `${post.creator}:${post.rank}`}`,
     kind: "post",
     label,
     source: post.source,

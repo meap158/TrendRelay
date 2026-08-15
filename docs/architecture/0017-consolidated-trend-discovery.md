@@ -23,6 +23,20 @@ two-letter `region` and a `period` of 7, 30 or 120 days. That is the country
 filter and the time window the goal asks for, and the comparison between those
 periods is the only durability signal available here.
 
+**Popular posts do not share one clock.** TikTok's public Creative Center video
+list uses those 7/30/120-day windows but does not publish a direct video URL or
+caption to signed-out readers. The official YouTube Data API publishes direct
+video resources and supports a two-letter regional chart, but it is a current
+snapshot rather than a selectable time window. Since July 2025, that chart is
+limited to Trending Music, Movies and Gaming. Discover keeps the native rank
+and time basis on every post rather than manufacturing a cross-platform rank.
+
+YouTube is optional and uses `YOUTUBE_DATA_API_KEY`. Provider availability is
+part of the popular-post response so the platform filter can distinguish a
+source that is not configured from a source that returned no posts. Country is
+the finest common geographic filter these providers expose; Discover does not
+offer a city selector that upstream data cannot honor.
+
 ## Decision
 
 - A topic's identity ignores spacing entirely. A hashtag has none, so
@@ -48,6 +62,10 @@ periods is the only durability signal available here.
 - The score reports its contributions rather than only a total, following the
   opportunity score already in this codebase. A ranking somebody can override
   is one they can also trust.
+- Topics and posts remain different evidence types, but both can be selected
+  into one auditable idea basket. Synthesis is deterministic and editable until
+  a general-purpose model is configured; creating the draft uses the existing
+  Campaign API and retains the exact selected evidence in the handoff UI.
 
 ## Consequences
 

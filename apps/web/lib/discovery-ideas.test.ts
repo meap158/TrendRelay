@@ -64,10 +64,12 @@ test("a popular post keeps its source facts without inventing a link", () => {
   const result = seedFromPost({
     source: "tiktok",
     rank: 2,
+    title: null,
     creator: "Maker",
     niche: "Beauty",
     region: "VN",
     window_days: 7,
+    time_basis: "last 7 days",
     views: 2_000_000,
     followers: null,
     likes: null,
@@ -78,6 +80,31 @@ test("a popular post keeps its source facts without inventing a link", () => {
   assert.equal(result.id, "post:VN:tiktok:Maker:2");
   assert.equal(result.url, null);
   assert.match(result.evidence, /2M views/);
+});
+
+test("a titled post uses its real post identity in the Campaign evidence", () => {
+  const result = seedFromPost({
+    source: "youtube",
+    rank: 1,
+    title: "A useful walkthrough",
+    creator: "Maker",
+    niche: "YouTube popular",
+    region: "US",
+    window_days: null,
+    time_basis: "current regional popular chart",
+    views: 900,
+    followers: null,
+    likes: 20,
+    url: "https://www.youtube.com/watch?v=abc123",
+    thumbnail: null,
+  });
+
+  assert.equal(result.label, "A useful walkthrough");
+  assert.equal(
+    result.id,
+    "post:US:youtube:https://www.youtube.com/watch?v=abc123",
+  );
+  assert.equal(result.url, "https://www.youtube.com/watch?v=abc123");
 });
 
 test("a ranked topic retains the platforms that corroborated it", () => {

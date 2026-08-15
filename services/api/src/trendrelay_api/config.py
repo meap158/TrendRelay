@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     zernio_api_key: str = ""
     buffer_api_key: str = ""
     buffer_organization_id: str = ""
+    youtube_data_api_key: SecretStr = SecretStr("")
 
     @property
     def cors_origin_list(self) -> list[str]:

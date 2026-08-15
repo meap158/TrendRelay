@@ -2,7 +2,7 @@ import asyncio
 import os
 import subprocess
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,7 +45,11 @@ from trendrelay_api.integrations.meta_ads_kit import (
     run_briefing as run_meta_ads_briefing,
 )
 from trendrelay_api.integrations.popular_posts import PERIODS as POST_PERIODS
-from trendrelay_api.integrations.popular_posts import collect_posts, live_reader
+from trendrelay_api.integrations.popular_posts import (
+    collect_posts,
+    live_reader,
+    live_youtube_reader,
+)
 from trendrelay_api.integrations.tiktok_creative import (
     TikTokTrendRequest,
     TikTokUnavailable,
@@ -356,12 +360,13 @@ async def popular_posts(
     region: str = Query(default="US", min_length=2, max_length=2),
     period: int = Query(default=7),
     limit: int = Query(default=20, ge=1, le=50),
+    platform: Literal["all", "tiktok", "youtube"] = Query(default="all"),
 ) -> dict[str, object]:
     """The posts doing best in one country, and who made them.
 
-    One window rather than three: a post is popular or it is not, and the
-    window comparison the topic list needs would be renders spent on a question
-    nobody asked here.
+    TikTok supplies a selected time window. YouTube supplies its current
+    regional popular chart and says so on each row rather than inheriting the
+    TikTok window. ``all`` uses every configured provider.
     """
     require_local_mutation(request)
     if period not in POST_PERIODS:
@@ -369,9 +374,37 @@ async def popular_posts(
             status_code=422,
             detail=f"Unknown period {period}. Expected one of {', '.join(map(str, POST_PERIODS))}.",
         )
-    result = await asyncio.to_thread(
-        collect_posts, region=region, period=period, limit=limit, tiktok_reader=live_reader()
+    youtube_key = get_settings().youtube_data_api_key.get_secret_value().strip()
+    providers = [
+        {"id": "tiktok", "label": "TikTok", "available": True, "reason": None},
+        {
+            "id": "youtube",
+            "label": "YouTube",
+            "available": bool(youtube_key),
+            "reason": None if youtube_key else "Add YOUTUBE_DATA_API_KEY to enable this source.",
+        },
+    ]
+    if platform == "youtube" and not youtube_key:
+        raise HTTPException(status_code=409, detail=providers[1]["reason"])
+
+    platforms = (
+        ("tiktok", "youtube")
+        if platform == "all" and youtube_key
+        else ("tiktok",)
+        if platform == "all"
+        else (platform,)
     )
+    result = await asyncio.to_thread(
+        collect_posts,
+        region=region,
+        period=period,
+        limit=limit,
+        tiktok_reader=live_reader(),
+        youtube_reader=live_youtube_reader(youtube_key) if youtube_key else None,
+        platforms=platforms,
+    )
+    result["platform"] = platform
+    result["providers"] = providers
     if not result["posts"] and not result["complete"]:
         # Nothing answered, which is a provider state rather than a quiet week.
         raise HTTPException(status_code=503, detail=" ".join(result["notes"]))

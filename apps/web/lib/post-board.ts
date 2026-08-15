@@ -9,10 +9,14 @@
 export type PopularPost = {
   source: string;
   rank: number;
+  /** The post title when the provider publishes one. TikTok's list does not. */
+  title: string | null;
   creator: string;
   niche: string | null;
   region: string;
-  window_days: number;
+  window_days: number | null;
+  /** Provider-native time basis; a current chart must not inherit a TikTok window. */
+  time_basis: string;
   views: number | null;
   followers: number | null;
   likes: number | null;
@@ -20,6 +24,7 @@ export type PopularPost = {
   url: string | null;
   /** The video's own cover, which is what shows the post rather than the name. */
   thumbnail: string | null;
+  published_at?: string | null;
 };
 
 /** `12M`, `156.1K`. Counts on this board are read at a glance, not audited. */
@@ -62,7 +67,19 @@ export function creatorSearchUrl(post: PopularPost): string | null {
 }
 
 /** What the fetch covered, said next to the list rather than assumed. */
-export function coverageNote(region: string, windowDays: number, count: number): string {
+export function coverageNote(
+  region: string,
+  windowDays: number,
+  count: number,
+  sources: string[] = [],
+): string {
   if (!count) return `Nothing came back for ${region}.`;
+  if (sources.includes("youtube")) {
+    const bases = [
+      sources.includes("tiktok") ? `TikTok: last ${windowDays} days` : "",
+      "YouTube: current regional chart",
+    ].filter(Boolean);
+    return `${count} popular posts in ${region}. ${bases.join(" · ")}.`;
+  }
   return `Top ${count} in ${region} over the last ${windowDays} days.`;
 }

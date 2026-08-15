@@ -57,4 +57,7 @@
   .discovery-idea-evidence { max-height: 180px; margin-block-end: 12px; overflow-y: auto; }
   .discovery-idea-fields { overflow: visible; }
   .discovery-idea-field-row { grid-template-columns: 1fr; }
+  .discover-post-row { align-items: flex-start !important; flex-wrap: wrap; }
+  .discover-post-row > :nth-child(3) { flex-basis: calc(100% - 88px); }
+  .discover-post-actions { flex-basis: 100%; justify-content: flex-start !important; padding-inline-start: 32px; }
 }
