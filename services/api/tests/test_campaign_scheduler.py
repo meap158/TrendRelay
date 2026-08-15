@@ -22,6 +22,7 @@ from trendrelay_api.campaign_scheduler import (
     record_scheduled,
 )
 from trendrelay_api.models import Base, Campaign, PublishingSlot, UserProfile, Workspace
+from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 
 # Imported for the side effect of registering every table on `Base.metadata`.
 # Tracking links carry a foreign key to products, so a metadata that has only
@@ -361,3 +362,26 @@ def test_a_scheduled_post_carries_the_title(session) -> None:
     posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert posts[0].title == "Three ways to pull a better espresso"
     assert posts[0].video_path.endswith("clip.mp4")
+
+
+def test_a_scheduled_post_uses_the_latest_library_edit(session) -> None:
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    session.add(MediaAsset(
+        id="asset-1", workspace_id="ws", title="Clip", media_kind="video",
+        source_type="upload", original_path=r"S:\media\original.mp4",
+        original_sha256="a" * 64, mime_type="video/mp4", size_bytes=10,
+        created_by="user-1",
+    ))
+    session.add(MediaAssetVersion(
+        id="version-1", workspace_id="ws", asset_id="asset-1",
+        version_kind="edited", path=r"S:\media\campaign-cut.mp4",
+        sha256="b" * 64, mime_type="video/mp4", size_bytes=9,
+        effect_ids=["aspect", "face_overlay"],
+    ))
+    session.commit()
+    queue_item(session, "q1", asset_id="asset-1", video_path=r"S:\media\original.mp4")
+
+    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert posts[0].video_path.endswith("campaign-cut.mp4")

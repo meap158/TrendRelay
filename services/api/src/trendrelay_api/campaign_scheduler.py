@@ -35,6 +35,7 @@ from trendrelay_api.campaign_autopilot import (
     compose,
     rank_destinations,
 )
+from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 from trendrelay_api.models import Campaign, PublishingSlot
 
 #: How far ahead a tick will fill. Long enough that an hourly worker never
@@ -45,6 +46,8 @@ HORIZON = timedelta(hours=24)
 #: minutes late should still be filled; one discovered two hours late should not
 #: fire a post at a time nobody chose.
 GRACE = timedelta(minutes=20)
+
+RENDERED_MEDIA_KINDS = ("blurred", "edited")
 
 
 @dataclass(frozen=True)
@@ -68,6 +71,38 @@ class TickResult:
     scheduled: list[ScheduledPost]
     #: Campaign id to the reason nothing was scheduled for it.
     quiet: dict[str, str]
+
+
+def queue_media_path(session: Session, item: CampaignQueueItem) -> str:
+    """Resolve the cut the Library currently considers ready for handoff.
+
+    A campaign queue stores the Library asset id as well as the path that was
+    chosen when it was added. Effects are intentionally non-destructive and may
+    finish rendering after that moment, so publishing must resolve the asset
+    again. The newest rendered cut wins; a missing or foreign asset safely
+    falls back to the approved path already stored on the queue item.
+    """
+    if not item.asset_id:
+        return item.video_path
+    asset = session.scalar(
+        select(MediaAsset).where(
+            MediaAsset.id == item.asset_id,
+            MediaAsset.workspace_id == item.workspace_id,
+        )
+    )
+    if not asset:
+        return item.video_path
+    rendered = session.scalar(
+        select(MediaAssetVersion)
+        .where(
+            MediaAssetVersion.asset_id == asset.id,
+            MediaAssetVersion.workspace_id == item.workspace_id,
+            MediaAssetVersion.version_kind.in_(RENDERED_MEDIA_KINDS),
+        )
+        .order_by(MediaAssetVersion.created_at.desc())
+        .limit(1)
+    )
+    return rendered.path if rendered else asset.original_path
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -310,7 +345,7 @@ def plan_campaign(
             destination_id=destination.id,
             queue_item_id=item.id,
             at=moment,
-            video_path=item.video_path,
+            video_path=queue_media_path(session, item),
             title=item.title,
             caption=post.caption,
             first_comment=post.first_comment,
