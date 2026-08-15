@@ -252,9 +252,12 @@ export function PopularPosts({
     () => [...new Set(rankEngagedPosts(researchJobs).map((post) => post.source))].sort(),
     [researchJobs],
   );
+  const visibleEngagementSource = researchSources.includes(engagementSource)
+    ? engagementSource
+    : "all";
   const engagedPosts = useMemo(
-    () => rankEngagedPosts(researchJobs, engagementSort, engagementSource).slice(0, 12),
-    [engagementSort, engagementSource, researchJobs],
+    () => rankEngagedPosts(researchJobs, engagementSort, visibleEngagementSource).slice(0, 12),
+    [engagementSort, researchJobs, visibleEngagementSource],
   );
 
   const load = useCallback(async () => {
@@ -307,8 +310,8 @@ export function PopularPosts({
             Popular right now
           </h2>
           <p style={S.sub}>
-            Public videos actually doing well, and the people who made them. Compare platforms,
-            choose evidence, then turn it into an editable Campaign brief.
+            Real posts and public videos actually doing well. Compare sources, choose evidence,
+            then turn it into an editable Campaign brief.
           </p>
         </div>
         <Button variant="primary" onClick={load} busy={busy}>
@@ -342,7 +345,7 @@ export function PopularPosts({
             <label style={S.control}>
               <span style={S.controlLabel}>Source</span>
               <select
-                value={researchSources.includes(engagementSource) ? engagementSource : "all"}
+                value={visibleEngagementSource}
                 onChange={(event) => setEngagementSource(event.target.value)}
                 style={{ ...S.select, minWidth: "130px" }}
               >
