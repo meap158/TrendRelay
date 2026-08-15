@@ -13,6 +13,8 @@ import { useJobs } from "../jobs-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { OpportunityScoring } from "./opportunity-scoring";
 import { PopularPosts } from "./popular-posts";
+import { TrendingTopics } from "./trending-topics";
+import { searchTerm, type Topic } from "../../lib/trend-shapes";
 
 type Workspace = { id: string; name: string; role: string };
 type ReachChannel = {
@@ -1142,6 +1144,31 @@ export default function ResearchDashboard() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  /** Carry a ranked topic and the evidence for its position into scoring.
+   *
+   * This component existed before the Discover/Opportunities merge but was no
+   * longer mounted, so its Score action had nowhere to go. Keeping the
+   * evidence in the established pipe-delimited shape restores the complete
+   * topic -> scored opportunity -> campaign path without inventing a URL the
+   * source did not provide.
+   */
+  function scoreTopic(topic: Topic) {
+    const term = searchTerm(topic);
+    const source = topic.sources.join(" + ") || "trend discovery";
+    const title = [
+      topic.label,
+      topic.shape,
+      `rank ${topic.best_rank ?? "unknown"}`,
+      `score ${topic.score}`,
+      `${topic.region} market`,
+    ].join(" · ");
+    setScorePrefill({ trend: term, evidence: `${source} | ${title} |`, job: "" });
+    requestAnimationFrame(() => {
+      document.querySelector(".opportunity-scoring")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
 
   useEffect(() => {
     let cancelled = false;
@@ -1437,8 +1464,13 @@ export default function ResearchDashboard() {
         </div>
       </div>
 
-      {/* First among the result sections. The boards below each say what one
-          source shows; this says who is already winning with it. */}
+      {/* Cross-source topics answer what is worth making; the post board below
+          answers who is already winning. They are deliberately separate item
+          types because a hashtag and a video are different evidence. */}
+      <div style={S.section}>
+        <TrendingTopics onResearch={exploreTopic} onScore={scoreTopic} />
+      </div>
+
       <div style={S.section}>
         <PopularPosts onResearch={exploreTopic} />
       </div>
