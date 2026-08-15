@@ -235,6 +235,15 @@ def test_every_stream_effect_completes_a_real_shared_render(
     assert destination.is_file() and destination.stat().st_size > 0
     assert report["video_filters"] or report["audio_filters"]
 
+    preview = tmp_path / f"{effect_id}-preview.mp4"
+    effect_render.render_recipe(
+        short_clip_with_audio,
+        preview,
+        recipe((effect_id, values)),
+        preview_seconds=0.2,
+    )
+    assert 0 < rendered_duration(preview) <= 0.3
+
 
 @pytest.mark.parametrize(
     ("effect_id", "values"),
@@ -298,9 +307,11 @@ def test_every_frame_effect_is_dispatched_by_the_shared_recipe_renderer(
     destination = tmp_path / f"{effect_id}.mp4"
     source.write_bytes(b"source")
     called: list[str] = []
+    preview_limits: list[float | None] = []
 
-    def fake_renderer(current, staged, _settings, **_kwargs):
+    def fake_renderer(current, staged, _settings, *, preview_seconds=None, **_kwargs):
         called.append(effect_id)
+        preview_limits.append(preview_seconds)
         staged.write_bytes(current.read_bytes() + b"-effect")
         return {"rendered": True}
 
@@ -309,9 +320,12 @@ def test_every_frame_effect_is_dispatched_by_the_shared_recipe_renderer(
     defaults = {param.id: param.default for param in effect.params}
     step = effects.RecipeStep(effect=effect, values=defaults)
 
-    report = effect_render.render_recipe(source, destination, [step])
+    report = effect_render.render_recipe(
+        source, destination, [step], preview_seconds=0.5,
+    )
 
     assert called == [effect_id]
+    assert preview_limits == [0.5]
     assert destination.read_bytes() == b"source-effect"
     assert report["frame_effects"] == [{
         "effect": effect_id, "rendered": True,

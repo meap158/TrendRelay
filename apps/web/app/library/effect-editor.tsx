@@ -82,6 +82,8 @@ export function EffectEditor({
   const [saved, setSaved] = useState(true);
   const [previewJob, setPreviewJob] = useState<PreviewJob | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [previewLabel, setPreviewLabel] = useState("Effect stack preview");
+  const [previewMediaKind, setPreviewMediaKind] = useState("");
   const previewUrlRef = useRef("");
   /** Which step has its gallery open, if any. */
   const [picking, setPicking] = useState<number | null>(null);
@@ -207,9 +209,12 @@ export function EffectEditor({
     targets.some((target) => effect.media_kinds.includes(target.mediaKind)),
   );
   const definitionOf = (id: string) => effects.find((effect) => effect.id === id);
-  const previewTarget = targets.find((target) => steps.every((step) =>
-    definitionOf(step.effect)?.media_kinds.includes(target.mediaKind),
-  ));
+  const previewTargetFor = (candidateSteps: Step[]) => targets.find((target) =>
+    candidateSteps.every((step) =>
+      definitionOf(step.effect)?.media_kinds.includes(target.mediaKind),
+    ),
+  );
+  const previewTarget = previewTargetFor(steps);
 
   function edit(next: Step[]) {
     setSteps(next);
@@ -300,19 +305,25 @@ export function EffectEditor({
     }
   }
 
-  async function preview() {
-    if (!previewTarget) return;
+  async function preview(
+    previewSteps: Step[] = steps,
+    label = "Effect stack preview",
+  ) {
+    const target = previewTargetFor(previewSteps);
+    if (!target) return;
     setBusy("preview");
     setFailure("");
+    setPreviewLabel(label);
+    setPreviewMediaKind(target.mediaKind);
     replacePreviewUrl("");
     try {
       const response = await apiFetch(`${base}/effects/render`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          source_path: previewTarget.path,
-          steps,
-          preview_seconds: previewTarget.mediaKind === "video" ? 5 : 1,
+          source_path: target.path,
+          steps: previewSteps,
+          preview_seconds: target.mediaKind === "video" ? 5 : 1,
           confirm_external_action: true,
         }),
       });
@@ -395,7 +406,7 @@ export function EffectEditor({
             disabled={!canEdit || !steps.length || unavailable.length > 0 || !previewTarget
               || Boolean(previewJob && ["queued", "running", "loading"].includes(previewJob.status))}
             onClick={() => void preview()}
-          >Preview</Button>
+          >Preview stack</Button>
           <Button
             variant="primary"
             busy={busy === "render"}
@@ -419,13 +430,13 @@ export function EffectEditor({
           <section className="effect-recipe-preview" aria-live="polite">
             <div className="effect-recipe-preview-head">
               <div>
-                <strong>{previewUrl ? "Effect preview" : "Preparing preview"}</strong>
+                <strong>{previewUrl ? previewLabel : `Preparing ${previewLabel.toLowerCase()}`}</strong>
                 {!previewUrl && (
                   <small>
                     {[previewJob?.progress_stage,
                       typeof previewJob?.progress === "number"
                         ? `${Math.round(previewJob.progress * 100)}%`
-                        : previewTarget?.mediaKind === "video" ? "First 5 seconds" : "Still image",
+                        : previewMediaKind === "video" ? "First 5 seconds" : "Still image",
                     ].filter(Boolean).join(" · ")}
                   </small>
                 )}
@@ -442,10 +453,10 @@ export function EffectEditor({
             {!previewUrl && typeof previewJob?.progress === "number" && (
               <progress max={1} value={previewJob.progress} />
             )}
-            {previewUrl && previewTarget?.mediaKind === "video" && (
+            {previewUrl && previewMediaKind === "video" && (
               <video src={previewUrl} controls preload="metadata" />
             )}
-            {previewUrl && previewTarget?.mediaKind === "image" && (
+            {previewUrl && previewMediaKind === "image" && (
               // Blob URLs are private, short-lived previews and cannot use Next's optimiser.
               // eslint-disable-next-line @next/next/no-img-element
               <img src={previewUrl} alt="The current effect recipe preview" />
@@ -506,6 +517,20 @@ export function EffectEditor({
                     </Badge>
                     {effect.retimes && <Badge tone="accent">{t("effectEditor.changesLength")}</Badge>}
                     <div className="effect-step-actions">
+                      <Button
+                        variant="quiet"
+                        size="sm"
+                        iconOnly
+                        aria-label={`Preview through ${effectLabel(t, effect.id, effect.label)}`}
+                        title={`Preview the result through step ${index + 1}`}
+                        disabled={!canEdit || !effect.available
+                          || !previewTargetFor(steps.slice(0, index + 1))
+                          || Boolean(previewJob && ["queued", "running", "loading"].includes(previewJob.status))}
+                        onClick={() => void preview(
+                          steps.slice(0, index + 1),
+                          `Preview through ${effectLabel(t, effect.id, effect.label)}`,
+                        )}
+                      ><ActionIcon name="play" /></Button>
                       <Button
                         variant="quiet" size="sm" iconOnly aria-label={t("effectEditor.moveEarlier")}
                         disabled={!canEdit || index === 0}
@@ -569,8 +594,8 @@ export function EffectEditor({
           /* Order is not a presentation detail here: rotating then flipping is
              not flipping then rotating, and the difference is visible. */
           <p className="effect-note">
-            Applied top to bottom. Effects that look at the picture run before the
-            ones that move it, whatever order they sit in here.
+            Applied top to bottom in exactly this order. Use the play button on
+            any step to preview the result through that point in the stack.
           </p>
         )}
       </div>}
