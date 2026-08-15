@@ -78,6 +78,7 @@ export function EffectEditor({
   const [steps, setSteps] = useState<Step[]>([]);
   const [busy, setBusy] = useState("");
   const [failure, setFailure] = useState("");
+  const [recipeRecovered, setRecipeRecovered] = useState(false);
   const [saved, setSaved] = useState(true);
   const [previewJob, setPreviewJob] = useState<PreviewJob | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -111,7 +112,10 @@ export function EffectEditor({
       ]);
       setEffects(catalogue.effects ?? []);
       setSteps(recipe.steps ?? []);
-      setSaved(true);
+      setRecipeRecovered(Boolean(recipe.recovered));
+      // A recovered historical stack has not been persisted yet. Keep Save
+      // available so accepting the shown defaults needs no artificial edit.
+      setSaved(!recipe.recovered);
     } catch {
       setFailure("The effects could not be loaded.");
     }
@@ -209,6 +213,7 @@ export function EffectEditor({
 
   function edit(next: Step[]) {
     setSteps(next);
+    setRecipeRecovered(false);
     setSaved(false);
   }
 
@@ -236,6 +241,7 @@ export function EffectEditor({
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.detail ?? "The recipe could not be saved.");
+      setRecipeRecovered(false);
       setSaved(true);
     } catch (reason) {
       setFailure(reason instanceof Error ? reason.message : "The recipe could not be saved.");
@@ -401,6 +407,13 @@ export function EffectEditor({
     >
       {!gallery && <div className="effect-editor">
         {failure && <p className="console-error" role="alert">{failure}</p>}
+        {recipeRecovered && (
+          <p className="effect-recovery-note" role="status">
+            This render predates saved effect settings. Its stack was restored in
+            the original order with current defaults; review the controls, then save
+            or render to preserve your exact settings from now on.
+          </p>
+        )}
 
         {(previewJob || previewUrl) && (
           <section className="effect-recipe-preview" aria-live="polite">

@@ -1450,7 +1450,40 @@ def get_recipe(
     membership(session, workspace_id, user.id)
     _asset_record(session, workspace_id, asset_id)
     row = _recipe_row(session, workspace_id, asset_id)
-    return {"steps": row.steps if row else [], "updated_at": row.updated_at if row else None}
+    if row:
+        return {"steps": row.steps, "updated_at": row.updated_at, "recovered": False}
+
+    # Versions created before recipe persistence know which effects made the
+    # cut, but not the values of their controls. Recover the ordered stack with
+    # declared defaults rather than presenting an empty editor or pretending
+    # guessed values are exact. The response says what happened so the editor
+    # can be equally honest; saving or rendering this stack makes it exact from
+    # that point onward.
+    rendered = _rendered_cut(session, asset_id)
+    effect_ids = rendered.effect_ids if rendered else None
+    if not effect_ids:
+        return {"steps": [], "updated_at": None, "recovered": False}
+
+    from trendrelay_api.integrations import effect_render  # noqa: F401  registers them
+    from trendrelay_api.integrations.effects import REGISTRY, coerce_params
+
+    recovered: list[dict[str, Any]] = []
+    unknown: list[str] = []
+    for effect_id in effect_ids:
+        effect = REGISTRY.get(effect_id)
+        if effect is None:
+            # Keep the step visible and removable. A retired effect must not
+            # silently disappear from a historical stack.
+            recovered.append({"effect": effect_id, "values": {}})
+            unknown.append(effect_id)
+        else:
+            recovered.append({"effect": effect.id, "values": coerce_params(effect, {})})
+    return {
+        "steps": recovered,
+        "updated_at": None,
+        "recovered": True,
+        "unknown_effects": unknown,
+    }
 
 
 @router.post("/assets/{asset_id}/recipe")
@@ -1589,20 +1622,34 @@ def submit_render(
 ) -> dict[str, Any]:
     """Render a recipe into a new version of its source."""
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    ensure_profile(session, user)
     from trendrelay_api.integrations.effect_render import (
         EffectRenderRequest,
         create_render_job,
         run_render_job,
     )
-    from trendrelay_api.integrations.effects import EffectError
+    from trendrelay_api.integrations.effects import EffectError, read_recipe
 
     try:
         request = EffectRenderRequest.model_validate({**body, "workspace_id": workspace_id})
+        steps = read_recipe(request.steps)
+        normalised = [{"effect": step.effect.id, "values": step.values} for step in steps]
+        # Queue exactly the validated recipe that is persisted below. This
+        # avoids a render and its editable stack ever disagreeing about values
+        # filled from defaults or normalised from form input.
+        request.steps = normalised
         job = create_render_job(request)
     except PermissionError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except (EffectError, ValidationError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    if not request.preview_seconds and (asset_id := job.get("payload", {}).get("asset_id")):
+        _asset_record(session, workspace_id, str(asset_id))
+        _store_recipe(session, workspace_id, str(asset_id), normalised, user.id)
+        # Background work may finish before the request dependency closes its
+        # session. Commit first so reopening Effects is correct even for a very
+        # short render or an immediate navigation.
+        session.commit()
     background_tasks.add_task(run_render_job, job["id"])
     return {"job": job}
 

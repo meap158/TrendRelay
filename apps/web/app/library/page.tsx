@@ -785,11 +785,13 @@ export default function LibraryPage() {
               a crop and a sticker on it has been edited just as much, and the
               row was the only place that said so at a glance. */}
           {renderedCut(asset.versions) && (
-            <em
-              className="blurred-tag"
-              title={cutEffects(t, renderedCut(asset.versions)!).join(" → ")
-                || t("library.blurredExists")}
-            >{cutLabel(t, renderedCut(asset.versions)!)}</em>
+            <span className="effect-tags" aria-label="Applied effects">
+              {cutEffects(t, renderedCut(asset.versions)!).length
+                ? cutEffects(t, renderedCut(asset.versions)!).map((name) => (
+                    <em className="blurred-tag" key={name}>{name}</em>
+                  ))
+                : <em className="blurred-tag">{cutLabel(t, renderedCut(asset.versions)!)}</em>}
+            </span>
           )}
         </span>
       </button>
@@ -1303,15 +1305,19 @@ export default function LibraryPage() {
                         been cropped and had an object put on a face has been
                         edited just as much, and said nothing here before. */}
                     {renderedCut(selected.versions) && (
-                      <em
-                        className="blurred-tag"
-                        title={[
-                          cutEffects(t, renderedCut(selected.versions)!).join(" → "),
-                          blurredVersion(selected)
-                            ? `Handoffs send this cut: ${handoffPath(selected)}`
-                            : "",
-                        ].filter(Boolean).join(" · ")}
-                      >{cutLabel(t, renderedCut(selected.versions)!)}</em>
+                      <span
+                        className="effect-tags"
+                        aria-label="Applied effects"
+                        title={blurredVersion(selected)
+                          ? `Handoffs send this cut: ${handoffPath(selected)}`
+                          : undefined}
+                      >
+                        {cutEffects(t, renderedCut(selected.versions)!).length
+                          ? cutEffects(t, renderedCut(selected.versions)!).map((name) => (
+                              <em className="blurred-tag" key={name}>{name}</em>
+                            ))
+                          : <em className="blurred-tag">{cutLabel(t, renderedCut(selected.versions)!)}</em>}
+                      </span>
                     )}
                   </p>
                   <h2>{selected.title}</h2>

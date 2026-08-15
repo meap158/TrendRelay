@@ -657,7 +657,7 @@ def blur_output_path(workspace_id: str, source: Path, preview: bool) -> Path:
 
 
 def _register_blurred_version(
-    workspace_id: str, source: Path, output: Path
+    workspace_id: str, source: Path, output: Path, settings: BlurSettings | None = None
 ) -> dict[str, Any]:
     """Attach a finished render to its source asset as a `blurred` version.
 
@@ -669,7 +669,7 @@ def _register_blurred_version(
     from sqlalchemy import select
 
     from trendrelay_api.media_library import file_sha256
-    from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
+    from trendrelay_api.media_models import MediaAsset, MediaAssetVersion, MediaEditRecipe
 
     with JOB_SESSION_FACTORY.begin() as session:
         asset = session.scalar(
@@ -695,36 +695,68 @@ def _register_blurred_version(
         )
         if existing:
             # Re-rendering identical content must not stack duplicate rows.
-            return {
+            existing.effect_ids = ["face_blur"]
+            result = {
                 "version_registered": True,
                 "asset_id": asset.id,
                 "version_id": existing.id,
                 "version_note": "This exact render was already attached.",
             }
-        version = MediaAssetVersion(
-            workspace_id=workspace_id,
-            asset_id=asset.id,
-            version_kind="blurred",
-            path=str(output),
-            sha256=digest,
-            mime_type="video/mp4",
-            size_bytes=output.stat().st_size,
-            duration_ms=asset.duration_ms,
-            width=asset.width,
-            height=asset.height,
-            # Recorded the same way a recipe render records its stack. This job
-            # predates the effect registry, but what it produced is a cut with
-            # one effect in it, and the Library should describe it in the same
-            # words as the same effect chosen from the editor.
-            effect_ids=["face_blur"],
+        else:
+            version = MediaAssetVersion(
+                workspace_id=workspace_id,
+                asset_id=asset.id,
+                version_kind="blurred",
+                path=str(output),
+                sha256=digest,
+                mime_type="video/mp4",
+                size_bytes=output.stat().st_size,
+                duration_ms=asset.duration_ms,
+                width=asset.width,
+                height=asset.height,
+                # Recorded the same way a recipe render records its stack. This job
+                # predates the effect registry, but what it produced is a cut with
+                # one effect in it, and the Library should describe it in the same
+                # words as the same effect chosen from the editor.
+                effect_ids=["face_blur"],
+            )
+            session.add(version)
+            session.flush()
+            result = {
+                "version_registered": True,
+                "asset_id": asset.id,
+                "version_id": version.id,
+            }
+
+        # Keep the legacy endpoint non-destructive too. Without this row its
+        # finished cut had a tag but reopening the shared Effects editor showed
+        # no editable stack. Strength was fixed by this endpoint, so recording
+        # that declared value is exact rather than a reconstruction.
+        settings = settings or BlurSettings()
+        recipe_steps = [{
+            "effect": "face_blur",
+            "values": {
+                "padding_ratio": settings.padding_ratio,
+                "kernel_ratio": settings.kernel_ratio,
+                "confidence": settings.confidence,
+            },
+        }]
+        recipe = session.scalar(
+            select(MediaEditRecipe).where(
+                MediaEditRecipe.workspace_id == workspace_id,
+                MediaEditRecipe.asset_id == asset.id,
+            )
         )
-        session.add(version)
-        session.flush()
-        return {
-            "version_registered": True,
-            "asset_id": asset.id,
-            "version_id": version.id,
-        }
+        if recipe is None:
+            session.add(MediaEditRecipe(
+                workspace_id=workspace_id,
+                asset_id=asset.id,
+                steps=recipe_steps,
+                created_by=asset.created_by,
+            ))
+        else:
+            recipe.steps = recipe_steps
+        return result
 
 
 def create_blur_job(request: FaceBlurRequest) -> dict[str, Any]:
@@ -780,6 +812,7 @@ def run_blur_job(job_id: str, worker_id: str = "face-blur-worker") -> None:
                     payload["workspace_id"],
                     Path(payload["source"]),
                     Path(payload["output"]),
+                    request.settings(),
                 ),
             }
         complete_job(

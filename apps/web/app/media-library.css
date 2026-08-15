@@ -226,6 +226,8 @@
 .library-cut-switch button:hover { background: #2b3946; }
 .library-cut-switch button.selected { border-color: var(--link); color: #fff; background: #2f4a7a; font-weight: 600; }
 .library-source-meta .blurred-tag { margin-inline-start: 2px; }
+.effect-tags { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 100%; }
+.effect-recovery-note { margin: 0; border: 1px solid #f2ce7e; border-radius: 8px; padding: 9px 11px; color: #6f4c00; background: #fff8e7; font-size: 12px; line-height: 1.45; }
 /* Names the effects in the rendered cut, so it grows with the recipe. Capped,
    because it sits in a list row next to a title that matters more. */
 .blurred-tag { justify-self: start; align-self: center; max-width: 100%; border-radius: 999px; padding: 2px 8px; color: #1a56c4; background: #e8f0fe; font-size: 10px; font-style: normal; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

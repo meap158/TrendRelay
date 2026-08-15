@@ -251,6 +251,69 @@ def test_a_recipe_render_records_its_whole_stack(tmp_path, monkeypatch) -> None:
         assert version.effect_ids == ["face_blur", "aspect"]
 
 
+def test_a_single_render_persists_its_complete_editable_stack(tmp_path, monkeypatch) -> None:
+    from trendrelay_api.integrations import effect_render
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    monkeypatch.setattr(effect_render, "approved_source", lambda path: Path(path))
+    monkeypatch.setattr(effect_render, "run_render_job", lambda _job_id: None)
+    workspace = create_workspace()
+    asset_id = make_asset(workspace, tmp_path, name="single-stack")
+    with TestingSession() as session:
+        source = session.get(MediaAsset, asset_id).original_path
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/render",
+        json={
+            "source_path": source,
+            "steps": [
+                {"effect": "flip", "values": {"axis": "vertical"}},
+                {"effect": "colour", "values": {"brightness": 0.12}},
+            ],
+            "confirm_external_action": True,
+        },
+    )
+
+    assert response.status_code == 202
+    with TestingSession() as session:
+        recipe = session.query(MediaEditRecipe).filter_by(asset_id=asset_id).one()
+        assert [step["effect"] for step in recipe.steps] == ["flip", "colour"]
+        assert recipe.steps[0]["values"] == {"axis": "vertical"}
+        # Unspecified controls are persisted with their validated defaults too,
+        # so reopening never depends on defaults changing in a later release.
+        assert recipe.steps[1]["values"]["brightness"] == 0.12
+        assert set(recipe.steps[1]["values"]) == {
+            "contrast", "brightness", "saturation", "gamma"
+        }
+
+
+def test_an_old_tagged_cut_recovers_an_editable_stack_with_an_honest_marker(
+    tmp_path,
+) -> None:
+    workspace = create_workspace()
+    asset_id = make_asset(workspace, tmp_path, name="old-stack")
+    add_version(
+        workspace,
+        asset_id,
+        tmp_path,
+        "edited",
+        ["flip", "aspect"],
+        "old-stack-edited.mp4",
+    )
+
+    response = request(
+        "GET", f"/api/workspaces/{workspace}/media/library/assets/{asset_id}/recipe"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["recovered"] is True
+    assert [step["effect"] for step in body["steps"]] == ["flip", "aspect"]
+    assert body["steps"][0]["values"] == {"axis": "horizontal"}
+    assert body["steps"][1]["values"] == {"ratio": "9:16", "anchor": "centre"}
+
+
 def test_the_standalone_blur_job_records_itself_as_an_effect() -> None:
     """It predates the registry, but what it makes is a cut with one effect in
     it, and the Library should name it the same as the same effect chosen from
@@ -259,6 +322,34 @@ def test_the_standalone_blur_job_records_itself_as_an_effect() -> None:
         "services/api/src/trendrelay_api/integrations/face_blur.py"
     ).read_text(encoding="utf-8")
     assert 'effect_ids=["face_blur"]' in source
+
+
+def test_the_standalone_blur_also_persists_its_exact_recipe(tmp_path, monkeypatch) -> None:
+    from trendrelay_api.integrations import face_blur
+
+    monkeypatch.setattr(face_blur, "JOB_SESSION_FACTORY", TestingSession)
+    workspace = create_workspace()
+    asset_id = make_asset(workspace, tmp_path, name="legacy-blur")
+    with TestingSession() as session:
+        source = Path(session.get(MediaAsset, asset_id).original_path)
+    output = tmp_path / "legacy-blurred.mp4"
+    output.write_bytes(b"blurred bytes")
+    settings = face_blur.BlurSettings(
+        padding_ratio=0.2, kernel_ratio=0.85, confidence=0.7
+    )
+
+    face_blur._register_blurred_version(workspace, source, output, settings)
+
+    with TestingSession() as session:
+        recipe = session.query(MediaEditRecipe).filter_by(asset_id=asset_id).one()
+        assert recipe.steps == [{
+            "effect": "face_blur",
+            "values": {
+                "padding_ratio": 0.2,
+                "kernel_ratio": 0.85,
+                "confidence": 0.7,
+            },
+        }]
 
 
 # --- returning to the original ----------------------------------------------------
