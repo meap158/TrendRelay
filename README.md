@@ -15,6 +15,10 @@ TrendRelay is a local-first Windows workspace for collecting reference media fro
 - **Keep source provenance** so every Library item can lead back to the Douyin URL that produced it.
 - **Avoid duplicate work** through local metadata, file checks, and incremental downloading.
 - **Review media locally** using thumbnails, filters, gallery/list views, and an in-page video player.
+- **Apply non-destructive effects** to one clip or a campaign-sized selection while keeping every original immutable.
+- **Build campaigns from the Library** by selecting clips and social accounts in batches, writing captions, attaching imported affiliate offers, and previewing scheduled posts.
+- **Hand approved plans to Publish** with media, copy, disclosure, affiliate placement, and schedule restored together.
+- **Follow campaign performance** into Attribution with plan, tracking-link, click, and commission context.
 - **Keep downloads private** in the local `.data/` directory, which is excluded from Git.
 
 ## From link to Library
@@ -79,6 +83,18 @@ Open **Attribution**, choose **Add products**, and use **Shopee CSV export**:
 
 This supported path does not give TrendRelay a Shopee cookie and does not depend on automated browsing or passing a CAPTCHA. CSV files are decoded as UTF-8 (with or without a BOM), limited to 5 MB and 100 products, and validated before TrendRelay creates products and first-party tracking links. Existing `.xlsx` exports remain accepted as a compatibility fallback. For a small batch, the same dialog also accepts up to 100 HTTPS Shopee product links.
 
+## From Library to publishing and revenue
+
+1. Open **Campaigns**, create or activate a campaign, and select one or more clips from the Library.
+2. Optionally choose **Apply effects** to render one non-destructive effect stack across the selected clips.
+3. Add shared campaign copy, then edit individual captions and hashtags where a clip needs different wording.
+4. Assign one or more connected social accounts. Choose an imported affiliate offer; TrendRelay creates destination-specific tracking links and places them according to each network.
+5. Add posting times in **Publish**, preview the campaign's next day, approve the queue, and use draft delivery for the safest first live run.
+6. For a one-off governed post, create an approval plan with **Choose from Library**. Opening an approved plan in Publish restores its clip, caption, disclosure, affiliate placement, and schedule.
+7. Choose **Measure revenue** to open Attribution focused on that campaign, including its plan count, tracking links, clicks, commission, and top-link chart.
+
+The workflow map in Campaigns links all five stages—Library, Campaign, Accounts, Schedule & Publish, and Attribution—so each incomplete stage identifies the page or action that resolves it.
+
 ## Download behavior
 
 TrendRelay stores downloaded files under `.data/downloads/douyin/` and automatically registers them in the media Library. Library refresh reconciles items removed from disk. Use **Clear missing files** on Home to remove download records whose files are gone; records that still reference on-disk media are kept.
@@ -103,9 +119,18 @@ Never commit real cookies, access tokens, downloaded media, customer data, or ge
 
 ## Project status
 
-TrendRelay is an early, Douyin-first release. The downloader, durable background jobs, provenance capture, and local media Library are the current core product.
+TrendRelay is an active local-first product. Douyin acquisition, durable jobs, the media Library and effects, campaign planning, multi-engine publishing, Shopee CSV offer import, and first-party attribution are connected and covered by automated checks. External publishing still depends on the operator connecting at least one supported engine and following that engine's account and quota requirements.
 
-Research integrations, Meta Ads collection, opportunity scoring, Studio production, campaigns, publishing, and attribution remain under active development. They are included in the repository for contributors and testing, but they are not yet the primary supported workflow.
+Research integrations, ad collection, opportunity scoring, and additional production automation remain under active development.
+
+## Tech stack
+
+- **Web interface:** Next.js 16, React 19, TypeScript, and accessible local UI primitives.
+- **API and workers:** Python 3.12+, FastAPI, SQLAlchemy, Alembic, and durable local job workers.
+- **Media:** FFmpeg/ffprobe plus isolated Python integrations for downloading, inspection, and non-destructive effects.
+- **Desktop:** Electron as an optional native window over the same local services.
+- **Storage:** local SQLite and `.data/` media by default; optional public object storage only for publishing engines that fetch media by URL.
+- **Quality:** Pytest, Node's test runner, TypeScript, ESLint, Ruff, and production Next.js builds.
 
 ## Development
 

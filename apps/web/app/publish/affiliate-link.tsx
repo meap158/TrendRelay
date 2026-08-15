@@ -23,6 +23,7 @@
 import { useMemo, useState } from "react";
 
 import { Button } from "../ui/button";
+import { SearchSelect } from "../ui/search-select";
 import { useT } from "../i18n-provider";
 import { withDisclosure } from "../../lib/publish-rules";
 
@@ -110,19 +111,20 @@ export function AffiliateLink({
   return (
     <div className="affiliate-link">
       <label>{t("publish.affiliateLink")}
-        <select
+        <SearchSelect
           value={chosen}
           disabled={disabled}
-          onChange={(event) => setChosen(event.target.value)}
-        >
-          <option value="">{t("publish.chooseTrackingLink")}</option>
-          {active.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.code} · {item.destination_host}
-              {item.clicks > 0 ? ` · ${t("publish.linkClicks", { count: item.clicks })}` : ""}
-            </option>
-          ))}
-        </select>
+          onChange={setChosen}
+          placeholder={t("publish.chooseTrackingLink")}
+          searchPlaceholder="Search links, products, or destinations…"
+          options={active.map((item) => ({
+            value: item.id,
+            label: item.code,
+            description: `${item.destination_host}${item.clicks > 0
+              ? ` · ${t("publish.linkClicks", { count: item.clicks })}` : ""}`,
+            keywords: `${item.product_id ?? ""} ${item.campaign_id}`,
+          }))}
+        />
       </label>
 
       {link && (

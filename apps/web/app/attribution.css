@@ -235,3 +235,24 @@
 .ui-dialog .shopee-paste { padding-block-start: 12px; border-block-start: 1px solid var(--line); }
 /* The primary action sits with the field it acts on rather than stretching. */
 .ui-dialog .attribution-panel-bare > form > .ui-button { justify-self: start; }
+
+/* Context carried from Campaigns: performance without losing the product table. */
+.attribution-campaign-focus { display: grid; gap: 12px; margin-bottom: 14px; padding: 14px; border: 1px solid var(--line); border-inline-start: 3px solid var(--link); border-radius: var(--radius); background: var(--panel); }
+.attribution-focus-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.attribution-focus-heading p { margin: 0 0 3px; color: var(--green); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.attribution-focus-heading h2 { margin: 0; font-size: 16px; }
+.attribution-focus-heading nav { display: flex; flex-wrap: wrap; gap: 7px; }
+.attribution-focus-heading a, .attribution-focus-heading button { padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font: inherit; font-size: 11px; text-decoration: none; cursor: pointer; }
+.attribution-focus-heading a:hover, .attribution-focus-heading button:hover { border-color: var(--link); color: var(--link); }
+.attribution-focus-metrics { display: flex; flex-wrap: wrap; gap: 8px; }
+.attribution-focus-metrics span { min-width: 110px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--muted); font-size: 11px; }
+.attribution-focus-metrics strong { display: block; margin-bottom: 2px; color: var(--text); font-size: 15px; }
+.attribution-link-chart { display: grid; gap: 6px; padding-top: 2px; }
+.attribution-link-chart > div { display: grid; grid-template-columns: minmax(90px, 150px) minmax(100px, 1fr) 32px; gap: 8px; align-items: center; font-size: 10px; }
+.attribution-link-chart > div > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attribution-link-chart i { height: 7px; overflow: hidden; border-radius: 999px; background: var(--panel-raised); }
+.attribution-link-chart b { display: block; height: 100%; border-radius: inherit; background: var(--link); }
+.attribution-focus-empty { margin: 0; padding: 8px 10px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 11px; }
+@media (max-width: 700px) {
+  .attribution-focus-heading { align-items: start; flex-direction: column; }
+}

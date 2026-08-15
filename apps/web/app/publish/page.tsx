@@ -36,6 +36,7 @@ import {
   moveImage,
   preferredRoute,
   togglePageTargets,
+  withDisclosure,
 } from "../../lib/publish-rules";
 import {
   MEDIA_DRAG_TYPE,
@@ -876,6 +877,37 @@ export default function PublishPage() {
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    const params = new URLSearchParams(window.location.search);
+    const campaignId = params.get("campaign");
+    const planId = params.get("plan");
+    if (!campaignId || !planId) return;
+    let cancelled = false;
+    apiFetch(`/api/workspaces/${workspaceId}/campaigns/${campaignId}/plans/${planId}`)
+      .then((response) => json<{ plan: {
+        title: string; video_path: string; caption: string; disclosure: string;
+        affiliate_url?: string | null; platform: string; scheduled_at: string;
+      } }>(response))
+      .then(({ plan }) => {
+        if (cancelled) return;
+        const disclosed = withDisclosure(plan.caption, plan.disclosure);
+        const linkInComment = ["instagram", "tiktok"].includes(plan.platform);
+        setTitle(plan.title);
+        setVideoPath(plan.video_path);
+        setCaption(plan.affiliate_url && !linkInComment
+          ? `${disclosed.trimEnd()}\n\n${plan.affiliate_url}` : disclosed);
+        setFirstComment(plan.affiliate_url && linkInComment ? plan.affiliate_url : "");
+        setDelivery("schedule");
+        setDate(localValue(new Date(plan.scheduled_at)));
+        setNotice("Campaign plan loaded. Choose the destination accounts, review link placement, then schedule it.");
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "The campaign plan could not be loaded.");
+      });
+    return () => { cancelled = true; };
+  }, [workspaceId, apiFetch, setDelivery]);
 
   useEffect(() => {
     // Nothing is written until the restore has run. On mount these fields are

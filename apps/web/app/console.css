@@ -366,6 +366,16 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .plan-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .plan-create form > small { color: var(--muted); }
 .plan-create form > .ui-button { justify-self: start; }
+.plan-media-field { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.plan-media-field > div { display: flex; min-height: 42px; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 8px 7px 11px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.plan-media-field strong { min-width: 0; overflow: hidden; color: var(--text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.plan-media-field small { color: var(--muted); font-weight: 400; }
+.plan-media-picker { padding: 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.plan-media-picker ul { display: grid; max-height: 300px; gap: 5px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.plan-media-picker li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 8px; border-radius: var(--radius-sm); background: var(--panel); }
+.plan-media-picker li > span { display: grid; min-width: 0; gap: 2px; }
+.plan-media-picker strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.plan-media-picker small { color: var(--muted); font-size: 10px; }
 .calendar-board { padding: 14px; }
 .calendar-entry { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 16px; padding: 16px 0; border-top: 1px solid var(--line); }
 .calendar-entry > time { display: grid; align-content: start; gap: 3px; color: var(--muted); }
@@ -698,6 +708,7 @@ html { scroll-behavior: smooth; }
 .autopilot-destinations li > div, .autopilot-queue li > div { display: grid; gap: 2px; min-width: 0; }
 .autopilot-destinations strong, .autopilot-queue strong { overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .autopilot-destinations small, .autopilot-queue small { color: var(--muted); font-size: 11px; }
+.autopilot-queue-copy { display: -webkit-box; overflow: hidden; color: var(--muted); font-size: 11px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 /* The reason spans the row rather than squeezing into a column: it is a
    sentence, and a sentence in a 90px column is unreadable. */
 .autopilot-placement-reason { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
@@ -734,6 +745,29 @@ html { scroll-behavior: smooth; }
 .autopilot-compose textarea, .autopilot-compose input { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; resize: vertical; }
 .autopilot-compose small { color: var(--muted); font-weight: 400; line-height: 1.4; }
 .autopilot-compose .ui-button { justify-self: start; }
+.autopilot-picker-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.autopilot-media-picker { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; }
+.autopilot-media-picker li { display: block; padding: 0; }
+.autopilot-media-picker label { display: flex; width: 100%; gap: 9px; align-items: center; padding: 8px; border: 1px solid transparent; border-radius: var(--radius-sm); cursor: pointer; }
+.autopilot-media-picker label:hover, .autopilot-media-picker label:has(input:checked) { border-color: var(--line-strong); background: var(--panel); }
+.autopilot-media-picker input { flex: none; accent-color: var(--link); }
+.autopilot-media-picker label > span { display: grid; gap: 2px; min-width: 0; }
+.autopilot-media-picker strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.campaign-flow-map { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 12px 0; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel); }
+.campaign-flow-map > * { position: relative; display: grid; min-width: 0; gap: 2px; padding: 10px 10px 10px 38px; border-inline-end: 1px solid var(--line); color: var(--text); text-decoration: none; }
+.campaign-flow-map > *:last-child { border-inline-end: 0; }
+.campaign-flow-map > * > span { position: absolute; inset: 11px auto auto 10px; display: grid; width: 20px; height: 20px; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--muted); font-size: 10px; }
+.campaign-flow-map strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-flow-map small { color: var(--muted); font-size: 10px; line-height: 1.3; }
+.campaign-flow-map .complete > span { border-color: var(--green); background: var(--green); color: white; }
+.campaign-flow-map .current { box-shadow: inset 0 -3px var(--link); background: var(--panel-raised); }
+.campaign-flow-map a:hover { background: var(--panel-raised); }
+@media (max-width: 900px) {
+  .campaign-flow-map { grid-template-columns: 1fr; }
+  .campaign-flow-map > * { border-inline-end: 0; border-bottom: 1px solid var(--line); }
+  .campaign-flow-map > *:last-child { border-bottom: 0; }
+}
 /* A previewed post the engine would refuse. The row is marked, not hidden:
    seeing the caption next to the reason is what makes the reason actionable. */
 .autopilot-preview li.refused { border-inline-start: 3px solid #c0392b; }

@@ -15,13 +15,15 @@
  * scheduler should feel like delegating, not gambling.
  */
 
-import { clipLength } from "../../lib/media-rules";
+import { clipLength, handoffPath, type AssetVersion } from "../../lib/media-rules";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "../ui/button";
 import { Badge, Card, Switch } from "../ui/primitives";
+import { SearchSelect } from "../ui/search-select";
 import { useT } from "../i18n-provider";
+import { EffectEditor } from "../library/effect-editor";
 
 type Account = {
   id: string;
@@ -95,6 +97,7 @@ type LibraryAsset = {
   original_path: string;
   media_kind: string;
   duration_ms: number | null;
+  versions: AssetVersion[];
 };
 
 /** Seconds, rounded, for a clip length nobody needs to the millisecond. */
@@ -133,6 +136,7 @@ export function AutopilotPanel({
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const [offers, setOffers] = useState<Offer[]>([]);
   const [slotCount, setSlotCount] = useState<number | null>(null);
   const [preview, setPreview] = useState<
@@ -141,8 +145,11 @@ export function AutopilotPanel({
   const [busy, setBusy] = useState("");
   const [adding, setAdding] = useState(false);
   const [library, setLibrary] = useState<LibraryAsset[]>([]);
-  /** The clip being written up. Null when the composer is closed. */
-  const [drafting, setDrafting] = useState<LibraryAsset | null>(null);
+  /** The clips sharing this campaign copy. Empty when the composer is closed. */
+  const [drafting, setDrafting] = useState<LibraryAsset[]>([]);
+  const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
+  const [effectOpen, setEffectOpen] = useState(false);
+  const [editing, setEditing] = useState<QueueItem | null>(null);
   const [picking, setPicking] = useState(false);
 
   const base = `/api/workspaces/${workspaceId}/campaigns/${campaignId}`;
@@ -182,6 +189,7 @@ export function AutopilotPanel({
         { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
       ));
       setAccounts(body.accounts);
+      setSelectedAccounts(new Set());
       setAdding(true);
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "Could not load accounts.");
@@ -199,7 +207,8 @@ export function AutopilotPanel({
         `/api/workspaces/${workspaceId}/media/library/assets?media_kind=video&limit=40`,
       ));
       setLibrary(body.assets ?? []);
-      setDrafting(null);
+      setDrafting([]);
+      setSelectedAssets(new Set());
       setPicking(true);
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "The library could not be read.");
@@ -279,6 +288,7 @@ export function AutopilotPanel({
   if (!autopilot) return null;
 
   const unmet = ready.rows.filter((row) => !row.met);
+  const selectedLibrary = library.filter((asset) => selectedAssets.has(asset.id));
 
   return (
     <div className="autopilot">
@@ -298,6 +308,22 @@ export function AutopilotPanel({
         }
       >
         <p className="autopilot-lede">{t("autopilot.lede")}</p>
+
+        <nav className="campaign-flow-map" aria-label="Campaign workflow">
+          <Link href="/library"><span>1</span><strong>Library</strong><small>Select and edit media</small></Link>
+          <div className={autopilot.queue_total ? "complete" : "current"}>
+            <span>2</span><strong>Campaign</strong><small>{autopilot.queue_total} queued clips</small>
+          </div>
+          <div className={destinations.length ? "complete" : "current"}>
+            <span>3</span><strong>Accounts</strong><small>{destinations.length} destinations</small>
+          </div>
+          <Link href="/publish" className={slotCount ? "complete" : "current"}>
+            <span>4</span><strong>Schedule & publish</strong><small>{slotCount ?? 0} posting times</small>
+          </Link>
+          <Link href={`/attribution?campaign=${campaignId}`}>
+            <span>5</span><strong>Attribution</strong><small>Track clicks and revenue</small>
+          </Link>
+        </nav>
 
         {/* Before the switch, not after it. An autopilot switched on with
             nothing to post is the failure this whole panel is arranged to
@@ -324,18 +350,18 @@ export function AutopilotPanel({
 
         <div className="autopilot-settings">
           <label>{t("autopilot.offer")}
-            <select
+            <SearchSelect
               value={autopilot.offer_id ?? ""}
               disabled={!canEdit}
-              onChange={(event) => void save({ offer_id: event.target.value || null })}
-            >
-              <option value="">{t("autopilot.noOffer")}</option>
-              {offers.map((offer) => (
-                <option key={offer.id} value={offer.id}>
-                  {offer.product.name} · {offer.network}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => void save({ offer_id: value || null })}
+              placeholder={t("autopilot.noOffer")}
+              searchPlaceholder="Search imported offers…"
+              options={offers.map((offer) => ({
+                value: offer.id,
+                label: offer.product.name,
+                description: offer.network,
+              }))}
+            />
             <small>{t("autopilot.offerHelp")}</small>
           </label>
 
@@ -435,35 +461,55 @@ export function AutopilotPanel({
         {adding && (
           <div className="autopilot-account-picker">
             <div className="autopilot-picker-head">
-              <strong>{t("autopilot.chooseAccounts")}</strong>
+              <strong>{selectedAccounts.size
+                ? `${selectedAccounts.size} accounts selected`
+                : t("autopilot.chooseAccounts")}</strong>
               <Button variant="quiet" size="sm" onClick={() => setAdding(false)}>
                 {t("common.close")}
               </Button>
             </div>
-            <ul>
+            <div className="autopilot-picker-tools">
+              <Button variant="primary" size="sm" disabled={!selectedAccounts.size}
+                busy={busy === "add-accounts"} onClick={() => void run("add-accounts", async () => {
+                  const chosen = accounts.filter((account) =>
+                    selectedAccounts.has(`${account.provider}:${account.id}`));
+                  await Promise.all(chosen.map(async (account) => json(await apiFetch(
+                    `${base}/destinations`, {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({
+                        provider: account.provider,
+                        integration_id: account.id,
+                        platform: account.platform,
+                        label: account.label,
+                      }),
+                    }))));
+                  setSelectedAccounts(new Set());
+                  setAdding(false);
+                  return `${chosen.length} ${chosen.length === 1 ? "account" : "accounts"} assigned.`;
+                })}>Assign selected accounts</Button>
+            </div>
+            <ul className="autopilot-media-picker">
               {accounts
                 .filter((account) => !destinations.some(
                   (item) => item.integration_id === account.id
                     && item.provider === account.provider))
                 .map((account) => (
                   <li key={`${account.provider}:${account.id}`}>
-                    <span>
+                    <label>
+                      <input type="checkbox"
+                        checked={selectedAccounts.has(`${account.provider}:${account.id}`)}
+                        onChange={() => setSelectedAccounts((current) => {
+                          const key = `${account.provider}:${account.id}`;
+                          const next = new Set(current);
+                          if (next.has(key)) next.delete(key); else next.add(key);
+                          return next;
+                        })} />
+                      <span>
                       <strong>{account.label}</strong>
                       <small>{account.platform} · {account.provider_label}</small>
-                    </span>
-                    <Button variant="quiet" size="sm" onClick={() => void run("add", async () => {
-                      await json(await apiFetch(`${base}/destinations`, {
-                        method: "POST",
-                        headers: { "content-type": "application/json" },
-                        body: JSON.stringify({
-                          provider: account.provider,
-                          integration_id: account.id,
-                          platform: account.platform,
-                          label: account.label,
-                        }),
-                      }));
-                      return t("autopilot.destinationAdded", { label: account.label });
-                    })}>{t("autopilot.add")}</Button>
+                      </span>
+                    </label>
                   </li>
                 ))}
               {!accounts.length && <li>{t("autopilot.noAccounts")}</li>}
@@ -487,24 +533,39 @@ export function AutopilotPanel({
         {/* Pick the clip, then write the copy for it. Two steps rather than one
             form with a path field: the path is not something anyone should be
             typing, and the copy is the part that deserves the room. */}
-        {picking && !drafting && (
+        {picking && drafting.length === 0 && (
           <div className="autopilot-account-picker">
             <div className="autopilot-picker-head">
-              <strong>{t("autopilot.chooseClip")}</strong>
+              <strong>{selectedAssets.size
+                ? `${selectedAssets.size} clips selected`
+                : t("autopilot.chooseClip")}</strong>
               <Button variant="quiet" size="sm" onClick={() => setPicking(false)}>
                 {t("common.close")}
               </Button>
             </div>
-            <ul>
+            <div className="autopilot-picker-tools">
+              <Button variant="secondary" size="sm" disabled={!selectedAssets.size}
+                onClick={() => setEffectOpen(true)}>Apply effects</Button>
+              <Button variant="primary" size="sm" disabled={!selectedAssets.size}
+                onClick={() => setDrafting(selectedLibrary)}>Write campaign copy</Button>
+            </div>
+            <ul className="autopilot-media-picker">
               {library.map((asset) => (
                 <li key={asset.id}>
-                  <span>
+                  <label>
+                    <input type="checkbox" checked={selectedAssets.has(asset.id)}
+                      onChange={() => setSelectedAssets((current) => {
+                        const next = new Set(current);
+                        if (next.has(asset.id)) next.delete(asset.id); else next.add(asset.id);
+                        return next;
+                      })} />
+                    <span>
                     <strong>{asset.title}</strong>
-                    <small>{clipLength(asset.duration_ms) || asset.media_kind}</small>
-                  </span>
-                  <Button variant="quiet" size="sm" onClick={() => setDrafting(asset)}>
-                    {t("autopilot.writeCopy")}
-                  </Button>
+                    <small>{clipLength(asset.duration_ms) || asset.media_kind}
+                      {asset.versions.some((version) => ["blurred", "edited"].includes(version.kind))
+                        ? " · edited cut" : " · original"}</small>
+                    </span>
+                  </label>
                 </li>
               ))}
               {!library.length && <li>{t("autopilot.noClips")}</li>}
@@ -512,7 +573,7 @@ export function AutopilotPanel({
           </div>
         )}
 
-        {drafting && (
+        {drafting.length > 0 && (
           <form
             className="autopilot-compose"
             onSubmit={(event) => {
@@ -521,27 +582,30 @@ export function AutopilotPanel({
               const body = String(form.get("body") ?? "").trim();
               if (!body) return;
               void run("queue", async () => {
-                await json(await apiFetch(`${base}/queue`, {
+                const hashtags = String(form.get("hashtags") ?? "")
+                  .split(/[\s,]+/).filter(Boolean);
+                await Promise.all(drafting.map(async (asset) => json(await apiFetch(`${base}/queue`, {
                   method: "POST",
                   headers: { "content-type": "application/json" },
                   body: JSON.stringify({
-                    asset_id: drafting.id,
-                    video_path: drafting.original_path,
-                    title: drafting.title,
+                    asset_id: asset.id,
+                    video_path: handoffPath(asset),
+                    title: asset.title,
                     body,
-                    hashtags: String(form.get("hashtags") ?? "")
-                      .split(/[\s,]+/).filter(Boolean),
+                    hashtags,
                   }),
-                }));
-                setDrafting(null);
+                }))));
+                const count = drafting.length;
+                setDrafting([]);
+                setSelectedAssets(new Set());
                 setPicking(false);
-                return t("autopilot.queued");
+                return `${count} ${count === 1 ? "clip" : "clips"} added to the campaign queue.`;
               });
             }}
           >
             <div className="autopilot-picker-head">
-              <strong>{drafting.title}</strong>
-              <Button variant="quiet" size="sm" onClick={() => setDrafting(null)}>
+              <strong>{drafting.length === 1 ? drafting[0].title : `${drafting.length} selected clips`}</strong>
+              <Button variant="quiet" size="sm" onClick={() => setDrafting([])}>
                 {t("autopilot.chooseAnother")}
               </Button>
             </div>
@@ -568,6 +632,7 @@ export function AutopilotPanel({
               <li key={item.id} className={item.state}>
                 <div>
                   <strong>{item.title ?? item.body.slice(0, 60)}</strong>
+                  <span className="autopilot-queue-copy">{item.body}</span>
                   <small>
                     {item.times_posted > 0
                       ? t("autopilot.postedTimes", { count: item.times_posted })
@@ -589,6 +654,11 @@ export function AutopilotPanel({
                     })}>{t("autopilot.approve")}</Button>
                 )}
                 {canEdit && (
+                  <Button variant="quiet" size="sm" onClick={() => setEditing(item)}>
+                    Edit copy
+                  </Button>
+                )}
+                {canEdit && (
                   <Button variant="quiet" size="sm" onClick={() => void run("drop", async () => {
                     await json(await apiFetch(`${base}/queue/${item.id}`, { method: "DELETE" }));
                     return t("autopilot.itemRemoved");
@@ -598,7 +668,55 @@ export function AutopilotPanel({
             ))}
           </ul>
         )}
+        {editing && (
+          <form className="autopilot-compose" onSubmit={(event) => {
+            event.preventDefault();
+            const form = new FormData(event.currentTarget);
+            void run("edit-copy", async () => {
+              await json(await apiFetch(`${base}/queue/${editing.id}`, {
+                method: "PATCH",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  body: String(form.get("body") ?? "").trim(),
+                  hashtags: String(form.get("hashtags") ?? "")
+                    .split(/[\s,]+/).filter(Boolean),
+                }),
+              }));
+              setEditing(null);
+              return "Campaign copy updated.";
+            });
+          }}>
+            <div className="autopilot-picker-head">
+              <strong>Edit copy for {editing.title ?? "queued clip"}</strong>
+              <Button variant="quiet" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
+            </div>
+            <label>{t("autopilot.copy")}
+              <textarea name="body" rows={4} required maxLength={4000}
+                defaultValue={editing.body} />
+            </label>
+            <label>{t("autopilot.hashtags")}
+              <input name="hashtags" defaultValue={editing.hashtags.join(" ")} />
+            </label>
+            <Button type="submit" variant="primary" busy={busy === "edit-copy"}>Save copy</Button>
+          </form>
+        )}
       </Card>
+
+      <EffectEditor
+        open={effectOpen}
+        workspaceId={workspaceId}
+        targets={selectedLibrary.map((asset) => ({
+          id: asset.id,
+          title: asset.title,
+          path: handoffPath(asset),
+          mediaKind: asset.media_kind,
+        }))}
+        assetIds={selectedLibrary.map((asset) => asset.id)}
+        canEdit={canEdit}
+        apiFetch={apiFetch}
+        onClose={() => setEffectOpen(false)}
+        onRendered={succeed}
+      />
 
       <Card
         eyebrow={t("autopilot.nextEyebrow")}

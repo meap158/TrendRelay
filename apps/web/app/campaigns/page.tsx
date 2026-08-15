@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "../auth-provider";
 import { useT } from "../i18n-provider";
 import { AutopilotPanel } from "./autopilot-panel";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Button } from "../ui/button";
+import { clipLength, handoffPath, type AssetVersion } from "../../lib/media-rules";
 
 type Workspace = { id: string; name: string; role: string };
 type Campaign = {
@@ -51,6 +52,14 @@ type ManualPackage = {
     timezone: string;
   };
 };
+type LibraryClip = {
+  id: string;
+  title: string;
+  original_path: string;
+  media_kind: string;
+  duration_ms: number | null;
+  versions: AssetVersion[];
+};
 
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
@@ -83,8 +92,12 @@ export default function CampaignsPage() {
   const [workspaceId, setWorkspaceId] = useState("");
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [campaignId, setCampaignId] = useState("");
+  const requestedCampaign = useRef("");
   const [plans, setPlans] = useState<PublicationPlan[]>([]);
   const [videoPath, setVideoPath] = useState("");
+  const [planClips, setPlanClips] = useState<LibraryClip[]>([]);
+  const [planClip, setPlanClip] = useState<LibraryClip | null>(null);
+  const [planPickerOpen, setPlanPickerOpen] = useState(false);
   const [packages, setPackages] = useState<Record<string, ManualPackage>>({});
   const [busy, setBusy] = useState<string | null>(null);
   // Reported over the page. Rendered in flow, these shifted everything below
@@ -111,7 +124,9 @@ export default function CampaignsPage() {
     setCampaigns(campaignBody.campaigns);
     setPlans(calendarBody.plans);
     setCampaignId((current) =>
-      campaignBody.campaigns.some((item) => item.id === current)
+      campaignBody.campaigns.some((item) => item.id === requestedCampaign.current)
+        ? requestedCampaign.current
+        : campaignBody.campaigns.some((item) => item.id === current)
         ? current
         : (campaignBody.campaigns[0]?.id ?? ""),
     );
@@ -121,6 +136,7 @@ export default function CampaignsPage() {
     queueMicrotask(() => {
       const params = new URLSearchParams(window.location.search);
       setVideoPath(params.get("video") ?? "");
+      requestedCampaign.current = params.get("campaign") ?? "";
     });
   }, []);
 
@@ -160,7 +176,9 @@ export default function CampaignsPage() {
         setCampaigns(campaignBody.campaigns);
         setPlans(calendarBody.plans);
         setCampaignId((current) =>
-          campaignBody.campaigns.some((item) => item.id === current)
+          campaignBody.campaigns.some((item) => item.id === requestedCampaign.current)
+            ? requestedCampaign.current
+            : campaignBody.campaigns.some((item) => item.id === current)
             ? current
             : (campaignBody.campaigns[0]?.id ?? ""),
         );
@@ -235,11 +253,27 @@ export default function CampaignsPage() {
         ),
       );
       setVideoPath("");
+      setPlanClip(null);
       formElement.reset();
       await refresh(workspaceId);
       succeed("Publication plan is ready for owner or approver review.");
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "Publication plan failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function choosePlanMedia() {
+    setBusy("plan-library");
+    try {
+      const body = await json<{ assets: LibraryClip[] }>(await apiFetch(
+        `/api/workspaces/${workspaceId}/media/library/assets?media_kind=video&limit=40`,
+      ));
+      setPlanClips(body.assets ?? []);
+      setPlanPickerOpen(true);
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "The Library could not be opened.");
     } finally {
       setBusy(null);
     }
@@ -442,8 +476,35 @@ export default function CampaignsPage() {
                       <label>{t("library.platform")}<select name="platform" defaultValue="tiktok"><option>tiktok</option><option>instagram</option><option>youtube</option><option>douyin</option><option>other</option></select></label>
                       <label>{t("campaigns.suggestedTime")}<input name="scheduled_at" type="datetime-local" defaultValue={localDateDefault()} required /></label>
                     </div>
-                    <label>{t("campaigns.approvedPath")}<input name="video_path" value={videoPath} onChange={(event) => setVideoPath(event.target.value)} required /></label>
-                    <label>{t("campaigns.coverPath")}<input name="cover_path" /></label>
+                    <div className="plan-media-field">
+                      <span>Media from Library</span>
+                      <input type="hidden" name="video_path" value={videoPath} />
+                      <div>
+                        <strong>{planClip?.title ?? (videoPath ? "Library handoff" : "No clip selected")}</strong>
+                        <Button type="button" variant="secondary" size="sm"
+                          busy={busy === "plan-library"} onClick={() => void choosePlanMedia()}>
+                          Choose from Library
+                        </Button>
+                      </div>
+                      {planClip && <small>{clipLength(planClip.duration_ms) || "video"} · {planClip.versions.some((version) => ["blurred", "edited"].includes(version.kind)) ? "edited cut" : "original"}</small>}
+                    </div>
+                    {planPickerOpen && (
+                      <div className="plan-media-picker">
+                        <div className="autopilot-picker-head"><strong>Choose an approved clip</strong><Button type="button" variant="quiet" size="sm" onClick={() => setPlanPickerOpen(false)}>Close</Button></div>
+                        <ul>
+                          {planClips.map((asset) => <li key={asset.id}>
+                            <span><strong>{asset.title}</strong><small>{clipLength(asset.duration_ms) || "video"}</small></span>
+                            <Button type="button" variant="quiet" size="sm" onClick={() => {
+                              setPlanClip(asset);
+                              setVideoPath(handoffPath(asset));
+                              setPlanPickerOpen(false);
+                            }}>Select</Button>
+                          </li>)}
+                          {!planClips.length && <li>No video clips are ready in the Library.</li>}
+                        </ul>
+                      </div>
+                    )}
+                    <input type="hidden" name="cover_path" value="" />
                     <label>{t("publish.caption")}<textarea name="caption" rows={5} required /></label>
                     <div className="plan-form-grid">
                       <label>{t("library.hashtags")}<input name="hashtags" placeholder="travel, espresso" /></label>
@@ -451,7 +512,7 @@ export default function CampaignsPage() {
                       <label>{t("publish.disclosure")}<input name="disclosure" defaultValue="#ad" required /></label>
                     </div>
                     <small>Times use {timezone}. New plans require owner or approver review.</small>
-                    <Button type="submit" variant="primary" busy={busy === "plan"}>{t("publish.sendForApproval")}</Button>
+                    <Button type="submit" variant="primary" busy={busy === "plan"} disabled={!videoPath}>{t("publish.sendForApproval")}</Button>
                   </form>
                 </details>
               )}
@@ -485,7 +546,7 @@ export default function CampaignsPage() {
                             <>
                               <Button variant="quiet" size="sm" onClick={() => void copyPostingText(plan)}>{t("campaigns.copyPost")}</Button>
                               <Button variant="quiet" size="sm" busy={busy === `package-${plan.id}`} onClick={() => void exportPackage(plan)}>{t("campaigns.exportPackage")}</Button>
-                              <Link href={`/publish?video=${encodeURIComponent(plan.video_path)}`}>{t("nav.publish")}</Link>
+                              <Link href={`/publish?campaign=${encodeURIComponent(plan.campaign_id)}&plan=${encodeURIComponent(plan.id)}`}>{t("nav.publish")}</Link>
                               {plan.deep_link && <a href={plan.deep_link} target="_blank" rel="noreferrer">Open {plan.platform}</a>}
                             </>
                           )}

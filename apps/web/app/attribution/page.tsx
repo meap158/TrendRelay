@@ -30,6 +30,7 @@ import { buttonClass } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Dialog } from "../ui/dialog";
+import { SearchSelect } from "../ui/search-select";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { useT } from "../i18n-provider";
 import { money } from "./format";
@@ -127,6 +128,7 @@ export default function AttributionPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [campaignId, setCampaignId] = useState("");
+  const [campaignFocus, setCampaignFocus] = useState("");
   const [busy, setBusy] = useState("");
   // Opened deliberately, closed when done. Neither is a place to be: making a
   // link and bringing rows in are things you do to the table, not other screens
@@ -166,9 +168,13 @@ export default function AttributionPage() {
     setLinks(linkBody.links);
     setSummary(summaryBody);
     setProducts(productBody.products);
+    const requested = new URLSearchParams(window.location.search).get("campaign");
+    const requestedExists = Boolean(requested && campaignBody.campaigns.some(
+      (item) => item.id === requested,
+    ));
+    setCampaignFocus(requestedExists ? requested! : "");
     setCampaignId((current) => {
-      const requested = new URLSearchParams(window.location.search).get("campaign");
-      if (requested && campaignBody.campaigns.some((item) => item.id === requested)) return requested;
+      if (requestedExists) return requested!;
       if (campaignBody.campaigns.some((item) => item.id === current)) return current;
       return campaignBody.campaigns[0]?.id ?? "";
     });
@@ -346,6 +352,15 @@ export default function AttributionPage() {
   if (loading) return <main className="attribution-page"><p>{t("attribution.opening")}</p></main>;
   if (!user) return <main className="attribution-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Fattribution">{t("attribution.signInPrompt")}</Link></main>;
 
+  const focusedCampaign = campaigns.find((item) => item.id === campaignFocus);
+  const focusedLinks = links.filter((item) => item.campaign_id === campaignFocus);
+  const focusedPlans = plans.filter((item) => item.campaign_id === campaignFocus);
+  const focusedPerformance = (summary?.campaigns ?? []).filter(
+    (item) => item.campaign_id === campaignFocus,
+  );
+  const chartLinks = [...focusedLinks].sort((a, b) => b.clicks - a.clicks).slice(0, 5);
+  const maxCampaignClicks = Math.max(1, ...chartLinks.map((item) => item.clicks));
+
   const linkForm = (
     <article className="attribution-panel attribution-panel-bare">
       <form onSubmit={createLink} ref={linkFormRef}>
@@ -356,10 +371,20 @@ export default function AttributionPage() {
           <option value="">{t("attribution.campaignLevelLink")}</option>
           {plans.filter((item) => item.campaign_id === campaignId).map((item) => <option key={item.id} value={item.id}>{item.title} · {item.platform}</option>)}
         </select></label>
-        <label>{t("attribution.affiliateOffer")}<select name="offer_id" value={presetOffer} onChange={(event) => setPresetOffer(event.target.value)}>
-          <option value="">{t("attribution.useCampaignDestination")}</option>
-          {offers.filter((item) => item.availability !== "unavailable").map((item) => <option key={item.id} value={item.id}>{item.product.name} · {item.network}</option>)}
-        </select></label>
+        <label>{t("attribution.affiliateOffer")}
+          <input type="hidden" name="offer_id" value={presetOffer} />
+          <SearchSelect
+            value={presetOffer}
+            onChange={setPresetOffer}
+            placeholder={t("attribution.useCampaignDestination")}
+            searchPlaceholder="Search imported offers…"
+            options={offers.filter((item) => item.availability !== "unavailable").map((item) => ({
+              value: item.id,
+              label: item.product.name,
+              description: `${item.network} · ${item.product.marketplace}`,
+            }))}
+          />
+        </label>
         <label>{t("library.platform")}<select name="platform" defaultValue="tiktok">
           {["tiktok", "instagram", "youtube", "douyin", "other"].map((item) => <option key={item} value={item}>{item}</option>)}
         </select></label>
@@ -437,6 +462,38 @@ export default function AttributionPage() {
           )}
         </div>
       </header>
+
+      {focusedCampaign && (
+        <section className="attribution-campaign-focus" aria-label={`${focusedCampaign.name} performance`}>
+          <div className="attribution-focus-heading">
+            <div><p>CAMPAIGN PERFORMANCE</p><h2>{focusedCampaign.name}</h2></div>
+            <nav>
+              <Link href={`/campaigns?campaign=${encodeURIComponent(focusedCampaign.id)}`}>Back to campaign</Link>
+              <button type="button" onClick={() => setPanel("link")}>Create campaign link</button>
+              <Link href="/publish">Open Publish</Link>
+            </nav>
+          </div>
+          <div className="attribution-focus-metrics">
+            <span><strong>{focusedPlans.length}</strong> plans</span>
+            <span><strong>{focusedLinks.length}</strong> tracking links</span>
+            <span><strong>{focusedLinks.reduce((total, item) => total + item.clicks, 0)}</strong> clicks</span>
+            {focusedPerformance.map((item) => (
+              <span key={item.currency}><strong>{money(item.net_commission_cents, item.currency)}</strong> net commission</span>
+            ))}
+          </div>
+          {chartLinks.length > 0 ? (
+            <div className="attribution-link-chart" aria-label="Clicks by campaign link">
+              {chartLinks.map((item) => (
+                <div key={item.id}>
+                  <span>{item.code}</span>
+                  <i><b style={{ width: `${Math.max(3, item.clicks / maxCampaignClicks * 100)}%` }} /></i>
+                  <strong>{item.clicks}</strong>
+                </div>
+              ))}
+            </div>
+          ) : <p className="attribution-focus-empty">Create the first campaign link to start its performance timeline.</p>}
+        </section>
+      )}
 
       <section className="attribution-view">
         <ProductTable
