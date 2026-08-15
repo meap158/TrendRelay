@@ -37,10 +37,15 @@ import {
   type Slot,
   type SlotPreset,
 } from "../publish/composer";
+import {
+  PlatformIcon,
+  platformLabels,
+  type PublishingPlatform,
+} from "../publishing-icons";
 
 type Account = {
   id: string;
-  platform: string;
+  platform: PublishingPlatform;
   label: string;
   provider: string;
   provider_label: string;
@@ -50,7 +55,7 @@ type Destination = {
   id: string;
   provider: string;
   integration_id: string;
-  platform: string;
+  platform: PublishingPlatform;
   label: string;
   enabled: boolean;
   tracking_code: string | null;
@@ -495,12 +500,10 @@ export function AutopilotPanel({
             {destinations.map((item) => (
               <li key={item.id}>
                 <div className="campaign-account-identity">
-                  <span className="campaign-account-avatar" aria-hidden="true">
-                    {item.label.slice(0, 1).toUpperCase()}
-                  </span>
+                  <PlatformIcon platform={item.platform} size={30} />
                   <span>
                     <strong>{item.label}</strong>
-                    <small>{item.platform} · {item.provider}</small>
+                    <small>{platformLabels[item.platform]} · {item.provider}</small>
                   </span>
                 </div>
                 {/* The decision, next to the account it applies to. Someone who
@@ -569,12 +572,10 @@ export function AutopilotPanel({
                           if (next.has(key)) next.delete(key); else next.add(key);
                           return next;
                         })} />
-                      <span className="campaign-account-avatar" aria-hidden="true">
-                        {account.label.slice(0, 1).toUpperCase()}
-                      </span>
+                      <PlatformIcon platform={account.platform} size={28} />
                       <span>
                         <strong>{account.label}</strong>
-                        <small>{account.platform} · {account.provider_label}</small>
+                        <small>{platformLabels[account.platform]} · {account.provider_label}</small>
                       </span>
                     </label>
                   </li>

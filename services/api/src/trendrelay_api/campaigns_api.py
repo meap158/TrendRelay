@@ -27,13 +27,26 @@ router = APIRouter(prefix="/api/workspaces/{workspace_id}/campaigns", tags=["cam
 AuthenticatedUser = Annotated[CurrentUser, Depends(current_user)]
 DatabaseSession = Annotated[Session, Depends(get_session)]
 CampaignStatus = Literal["draft", "active", "archived"]
-Platform = Literal["tiktok", "instagram", "youtube", "douyin", "other"]
+Platform = Literal[
+    "tiktok", "instagram", "youtube", "facebook", "twitter", "linkedin",
+    "threads", "pinterest", "reddit", "bluesky", "mastodon", "telegram",
+    "googlebusiness", "douyin", "other",
+]
 Decision = Literal["approve", "reject"]
 PACKAGE_ROOT = PROJECT_ROOT / ".data" / "manual-packages"
 PLATFORM_DEEP_LINKS = {
     "tiktok": "https://www.tiktok.com/upload",
     "instagram": "https://www.instagram.com/",
     "youtube": "https://studio.youtube.com/",
+    "facebook": "https://www.facebook.com/",
+    "twitter": "https://x.com/compose/post",
+    "linkedin": "https://www.linkedin.com/feed/",
+    "threads": "https://www.threads.net/",
+    "pinterest": "https://www.pinterest.com/",
+    "reddit": "https://www.reddit.com/submit",
+    "bluesky": "https://bsky.app/",
+    "telegram": "https://web.telegram.org/",
+    "googlebusiness": "https://business.google.com/",
     "douyin": "https://creator.douyin.com/",
 }
 

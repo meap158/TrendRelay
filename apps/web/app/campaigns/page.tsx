@@ -10,6 +10,10 @@ import { StatusToasts, useStatus } from "../ui/status";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { clipLength, handoffPath, type AssetVersion } from "../../lib/media-rules";
+import {
+  platformLabels,
+  type PublishingPlatform,
+} from "../publishing-icons";
 
 type Workspace = { id: string; name: string; role: string };
 type Campaign = {
@@ -26,7 +30,7 @@ type PublicationPlan = {
   id: string;
   campaign_id: string;
   title: string;
-  platform: "tiktok" | "instagram" | "youtube" | "douyin" | "other";
+  platform: PublishingPlatform | "douyin" | "other";
   video_path: string;
   cover_path?: string | null;
   caption: string;
@@ -60,6 +64,10 @@ type LibraryClip = {
   media_kind: string;
   duration_ms: number | null;
   versions: AssetVersion[];
+};
+type ConnectedAccount = {
+  platform: PublishingPlatform;
+  available?: boolean;
 };
 
 async function json<T>(response: Response): Promise<T> {
@@ -102,6 +110,9 @@ export default function CampaignsPage() {
   const [packages, setPackages] = useState<Record<string, ManualPackage>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
+  const [planPlatforms, setPlanPlatforms] = useState<PublishingPlatform[]>([]);
+  const [planPlatformsWorkspace, setPlanPlatformsWorkspace] = useState("");
+  const [planPlatformsLoading, setPlanPlatformsLoading] = useState(false);
   // Reported over the page. Rendered in flow, these shifted everything below
   // them whenever an action finished, which reads as the interface flinching.
   const { messages: statusMessages, succeed, fail, dismiss } = useStatus();
@@ -279,6 +290,29 @@ export default function CampaignsPage() {
       fail(reason instanceof Error ? reason.message : "The Library could not be opened.");
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function loadPlanPlatforms({ force = false } = {}) {
+    if (!workspaceId || planPlatformsLoading) return;
+    if (!force && planPlatformsWorkspace === workspaceId) return;
+    setPlanPlatformsLoading(true);
+    try {
+      const body = await json<{ accounts: ConnectedAccount[] }>(await apiFetch(
+        `/api/workspaces/${workspaceId}/publishing/integrations/all`,
+        { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
+      ));
+      const platforms = [...new Set(
+        body.accounts
+          .filter((account) => account.available !== false)
+          .map((account) => account.platform),
+      )].sort((left, right) => platformLabels[left].localeCompare(platformLabels[right]));
+      setPlanPlatforms(platforms);
+      setPlanPlatformsWorkspace(workspaceId);
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "Connected platforms could not be read.");
+    } finally {
+      setPlanPlatformsLoading(false);
     }
   }
 
@@ -461,7 +495,9 @@ export default function CampaignsPage() {
                 fail={fail}
               />
 
-              <details className="campaign-manual-work">
+              <details key={workspaceId} className="campaign-manual-work" onToggle={(event) => {
+                if (event.currentTarget.open) void loadPlanPlatforms();
+              }}>
                 <summary>
                   <span>One-off approvals</span>
                   <small>{visiblePlans.length} planned posts · advanced workflow</small>
@@ -472,7 +508,22 @@ export default function CampaignsPage() {
                   <form key={selectedCampaign.id} onSubmit={createPlan}>
                     <div className="plan-form-grid">
                       <label>{t("publish.title")}<input name="title" required maxLength={200} /></label>
-                      <label>{t("library.platform")}<select name="platform" defaultValue="tiktok"><option>tiktok</option><option>instagram</option><option>youtube</option><option>douyin</option><option>other</option></select></label>
+                      <label>{t("library.platform")}
+                        <select name="platform" defaultValue="" required
+                          disabled={planPlatformsLoading || !planPlatforms.length}>
+                          <option value="" disabled>
+                            {planPlatformsLoading
+                              ? "Checking connected accounts…"
+                              : planPlatforms.length
+                                ? "Choose a connected platform"
+                                : "No available connected platforms"}
+                          </option>
+                          {planPlatforms.map((platform) => (
+                            <option key={platform} value={platform}>{platformLabels[platform]}</option>
+                          ))}
+                        </select>
+                        <small>Only platforms currently available through connected Publish accounts are shown.</small>
+                      </label>
                       <label>{t("campaigns.suggestedTime")}<input name="scheduled_at" type="datetime-local" defaultValue={localDateDefault()} required /></label>
                     </div>
                     <div className="plan-media-field">
@@ -511,7 +562,16 @@ export default function CampaignsPage() {
                       <label>{t("publish.disclosure")}<input name="disclosure" defaultValue="#ad" required /></label>
                     </div>
                     <small>Times use {timezone}. New plans require owner or approver review.</small>
-                    <Button type="submit" variant="primary" busy={busy === "plan"} disabled={!videoPath}>{t("publish.sendForApproval")}</Button>
+                    <div className="campaign-plan-actions">
+                      <Button type="button" variant="quiet" size="sm"
+                        busy={planPlatformsLoading} onClick={() => void loadPlanPlatforms({ force: true })}>
+                        Refresh connected platforms
+                      </Button>
+                      <Button type="submit" variant="primary" busy={busy === "plan"}
+                        disabled={!videoPath || !planPlatforms.length}>
+                        {t("publish.sendForApproval")}
+                      </Button>
+                    </div>
                   </form>
                 </details>
               )}

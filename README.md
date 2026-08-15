@@ -95,6 +95,8 @@ This supported path does not give TrendRelay a Shopee cookie and does not depend
 
 Campaigns uses four compact work areas—**Media**, **Accounts**, **Schedule**, and **Settings**—with readiness shown beside them. The visual Library picker supports search plus effect, channel, source, and length filters; selection remains intact while filters change. **Measure revenue** remains the direct handoff to Attribution after deployment.
 
+Platform choices in Campaigns come from the same live connected-account inventory as Publish. One-off plans therefore offer every currently available connected platform—including Threads, Facebook, Instagram, or TikTok when present—rather than a fixed legacy list.
+
 ## Download behavior
 
 TrendRelay stores downloaded files under `.data/downloads/douyin/` and automatically registers them in the media Library. Library refresh reconciles items removed from disk. Use **Clear missing files** on Home to remove download records whose files are gone; records that still reference on-disk media are kept.

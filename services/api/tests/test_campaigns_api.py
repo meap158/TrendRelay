@@ -2,6 +2,7 @@ import asyncio
 import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import get_args
 
 import httpx
 from sqlalchemy import create_engine
@@ -9,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from trendrelay_api import campaigns_api
+from trendrelay_api.integrations import publishing
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
@@ -88,6 +90,15 @@ def create_campaign(workspace_id: str) -> dict:
     )
     assert response.status_code == 201
     return response.json()["campaign"]
+
+
+def test_campaign_plans_cover_every_publish_platform() -> None:
+    """A platform exposed by Publish must never be rejected by Campaigns."""
+    campaign_platforms = set(get_args(campaigns_api.Platform))
+    publish_platforms = set(get_args(publishing.Platform))
+
+    assert publish_platforms <= campaign_platforms
+    assert "threads" in campaign_platforms
 
 
 def test_campaign_calendar_approval_and_idempotent_manual_package(
