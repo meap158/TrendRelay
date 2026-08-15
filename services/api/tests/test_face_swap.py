@@ -381,3 +381,110 @@ def test_the_faces_read_line_up_with_the_labels_they_were_given() -> None:
 
     assert paired == [[("a", 0)], [], [("b", 1), ("c", 0)], [("d", 1)]]
     assert cursor == len(labels), "every label was consumed exactly once"
+
+
+# --- portraits from the library ---------------------------------------------------
+
+
+@pytest.fixture
+def portraits(tmp_path, monkeypatch):
+    """An empty portraits folder, and a picture to put in it."""
+    folder = tmp_path / "faces"
+    folder.mkdir()
+    monkeypatch.setattr(face_swap, "FACES_DIR", folder)
+    # Unavailable, so importing does not try to load a model to verify a face.
+    monkeypatch.setattr(
+        face_swap, "runtime_status", lambda: {"available": False, "reason": "no model"}
+    )
+    picture = tmp_path / "holiday.jpg"
+    picture.write_bytes(b"pretend jpeg")
+    return folder, picture
+
+
+def test_a_library_picture_becomes_a_choosable_portrait(portraits) -> None:
+    """The library is where an operator's pictures already are.
+
+    Making them copy one into a folder by hand made the swap feel like a
+    different product from the rest of the editing suite.
+    """
+    folder, picture = portraits
+    added = face_swap.import_portrait(picture, "Ada Lovelace")
+
+    assert added["value"] == "ada-lovelace"
+    assert (folder / "ada-lovelace.jpg").is_file()
+    assert added["value"] in {item["value"] for item in face_swap.available_faces()}
+
+
+def test_the_picture_is_copied_rather_than_referenced(portraits) -> None:
+    """A recipe stores a portrait by name and is re-run later.
+
+    Pointing at the library asset would break an edit the moment that asset was
+    removed, and would put a workspace-scoped id into a value that is otherwise
+    a filename.
+    """
+    folder, picture = portraits
+    face_swap.import_portrait(picture, "Kept")
+    picture.unlink()
+    assert face_swap.face_file("kept") is not None
+
+
+def test_two_pictures_with_one_name_do_not_collide(portraits) -> None:
+    _folder, picture = portraits
+    first = face_swap.import_portrait(picture, "Same Name")
+    second = face_swap.import_portrait(picture, "Same Name")
+    # Reusing the name would silently repoint an existing recipe at a different
+    # person.
+    assert first["value"] != second["value"]
+    assert {first["value"], second["value"]} == {"same-name", "same-name-2"}
+
+
+def test_a_name_cannot_escape_the_folder(portraits) -> None:
+    folder, picture = portraits
+    added = face_swap.import_portrait(picture, "../../etc/passwd")
+    assert "/" not in added["value"] and ".." not in added["value"]
+    assert face_swap.face_file(added["value"]).parent == folder
+
+
+def test_a_title_of_nothing_usable_still_gets_a_name(portraits) -> None:
+    _folder, picture = portraits
+    assert face_swap.import_portrait(picture, "!!!")["value"] == "portrait"
+
+
+def test_a_file_that_is_not_a_picture_is_refused(portraits, tmp_path) -> None:
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"not a picture")
+    with pytest.raises(face_swap.FaceSwapUnavailable, match="portrait has to be"):
+        face_swap.import_portrait(clip, "A clip")
+
+
+def test_a_portrait_can_be_taken_back_out(portraits) -> None:
+    _folder, picture = portraits
+    added = face_swap.import_portrait(picture, "Temporary")
+    assert face_swap.remove_portrait(added["value"]) is True
+    assert face_swap.face_file(added["value"]) is None
+    # And removing one that is not there is not an error, it is a False.
+    assert face_swap.remove_portrait(added["value"]) is False
+
+
+def test_a_portrait_with_no_face_in_it_is_refused_at_import(portraits, monkeypatch) -> None:
+    """Refused here where it can still be undone.
+
+    Otherwise it fails at render time, which is minutes later and reads as the
+    swap being broken rather than the picture being wrong.
+    """
+    folder, picture = portraits
+    monkeypatch.setattr(face_swap, "runtime_status", lambda: {"available": True, "reason": None})
+    monkeypatch.setattr(
+        face_swap, "reference_face",
+        lambda *_a, **_k: (_ for _ in ()).throw(ValueError("no face found")),
+    )
+    with pytest.raises(face_swap.FaceSwapUnavailable, match="No usable face"):
+        face_swap.import_portrait(picture, "Landscape")
+    # And it does not leave the rejected copy behind.
+    assert list(folder.iterdir()) == []
+
+
+def test_the_folder_says_where_a_library_picture_can_be_sent(portraits) -> None:
+    described = face_swap.faces_folder()
+    assert described["import_from_library"] == "effects/face-swap/faces"
+    assert ".jpg" in described["accepts"]

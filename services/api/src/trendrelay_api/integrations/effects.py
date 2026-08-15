@@ -46,6 +46,12 @@ Stage = Literal["stream", "frame"]
 ATEMPO_MIN = 0.5
 ATEMPO_MAX = 2.0
 
+#: Effects a photograph can take as well as a clip. Geometry and colour mean
+#: the same thing on a still; anything measured in time does not, and saying so
+#: here is what keeps a speed control off an image rather than letting it be
+#: chosen and quietly do nothing.
+STILL_AND_MOVING = frozenset({"video", "image"})
+
 
 class EffectError(ValueError):
     """A recipe that cannot be rendered as asked."""
@@ -68,6 +74,31 @@ class EffectParam:
     #: line FFmpeg is handed.
     options: tuple[tuple[str, str], ...] = ()
     unit: str = ""
+    #: Options that are not known when the effect is declared, because they come
+    #: from a catalogue an operator can add to. Called on every describe and
+    #: every validation, so a file dropped in a folder becomes selectable
+    #: without a restart — and, more to the point, so validation cannot fall
+    #: behind the list the interface was offering.
+    #:
+    #: Returns full option dicts rather than pairs: a gallery needs a group and
+    #: a thumbnail as well as a name, and those belong to the option.
+    options_from: Callable[[], tuple[dict[str, Any], ...]] | None = None
+    #: How the interface should offer the choice. A dozen picture-shaped options
+    #: are a gallery; rendering them as a dropdown of names asks someone to pick
+    #: a sticker by reading about it.
+    presentation: Literal["control", "gallery"] = "control"
+    #: Where an operator adds their own options, for a choice that is fed by a
+    #: folder. Returns the directory and any files in it that did not become
+    #: options. Declared here so the picker can name the folder and explain a
+    #: file that failed without knowing which effect it is showing — a file
+    #: that silently does not appear is the one case nobody can act on.
+    folder_from: Callable[[], dict[str, Any]] | None = None
+
+    def choices(self) -> tuple[dict[str, Any], ...]:
+        """Every option this parameter accepts right now, in one shape."""
+        if self.options_from is not None:
+            return tuple(self.options_from())
+        return tuple({"value": value, "label": label} for value, label in self.options)
 
 
 @dataclass(frozen=True)
@@ -90,6 +121,25 @@ class Effect:
     #: the length, but a trim replaces it, and a factor cannot say that.
     duration_of: Callable[[dict[str, Any], float], float] = lambda values, seconds: seconds
     availability: Callable[[], tuple[bool, str | None]] = lambda: (True, None)
+    #: Render one frame with this effect applied, for judging it before paying
+    #: for a clip. Given the source, the step's values and where in the clip to
+    #: look; returns `image` bytes, the `position` it landed on, the clip's
+    #: `duration_seconds`, and a `note` saying what was found.
+    #:
+    #: Declared here rather than reached through an endpoint per effect, so one
+    #: preview endpoint serves all of them and a new frame effect gets a
+    #: preview by supplying this and nothing else.
+    preview: Callable[[Path, dict[str, Any], float | None], dict[str, Any]] | None = None
+    #: Apply this effect to a still, writing one image. Frame effects are
+    #: already per-frame operations, so a photograph is the easy case and not a
+    #: separate feature — what a blur or a swap does to frame 400 of a clip is
+    #: exactly what it should do to a photograph of the same person.
+    render_still: Callable[[Path, Path, dict[str, Any]], dict[str, Any]] | None = None
+    #: Why a still cannot answer this effect's question, when it cannot. Said
+    #: rather than left as a missing feature: for an effect that decides
+    #: something over the whole clip, one frame is not a cheap preview, it is a
+    #: misleading one.
+    unpreviewable_reason: str = ""
 
     def param(self, param_id: str) -> EffectParam | None:
         return next((item for item in self.params if item.id == param_id), None)
@@ -135,13 +185,26 @@ def coerce_params(effect: Effect, raw: dict[str, Any] | None) -> dict[str, Any]:
         elif param.kind == "toggle":
             values[param.id] = bool(given)
         else:
-            allowed = {option for option, _ in param.options}
+            allowed = {str(option["value"]) for option in param.choices()}
             if str(given) not in allowed:
                 raise EffectError(
-                    f"{param.label} must be one of {', '.join(sorted(allowed))}."
+                    f"{param.label} must be one of {_listed(allowed)}."
                 )
             values[param.id] = str(given)
     return values
+
+
+#: A catalogue is allowed to grow; an error message naming every entry is not.
+NAMED_IN_ERRORS = 8
+
+
+def _listed(allowed: set[str]) -> str:
+    """Name the accepted values, without reciting a whole catalogue."""
+    ordered = sorted(allowed)
+    if len(ordered) <= NAMED_IN_ERRORS:
+        return ", ".join(ordered)
+    shown = ", ".join(ordered[:NAMED_IN_ERRORS])
+    return f"{shown} and {len(ordered) - NAMED_IN_ERRORS} others"
 
 
 # --------------------------------------------------------------------------- #
@@ -230,6 +293,7 @@ FLIP = Effect(
         ),
     ),
     video_filters=_flip_filters,
+    media_kinds=STILL_AND_MOVING,
 )
 
 ROTATE = Effect(
@@ -247,6 +311,7 @@ ROTATE = Effect(
         ),
     ),
     video_filters=_rotate_filters,
+    media_kinds=STILL_AND_MOVING,
 )
 
 COLOUR = Effect(
@@ -277,6 +342,7 @@ COLOUR = Effect(
         ),
     ),
     video_filters=_colour_filters,
+    media_kinds=STILL_AND_MOVING,
 )
 
 SPEED = Effect(
@@ -375,6 +441,7 @@ ASPECT = Effect(
         ),
     ),
     video_filters=_aspect_filters,
+    media_kinds=STILL_AND_MOVING,
 )
 
 TRIM = Effect(
@@ -446,6 +513,10 @@ def describe() -> list[dict[str, Any]]:
                 "media_kinds": sorted(effect.media_kinds),
                 "available": available,
                 "unavailable_reason": reason,
+                # The interface offers a preview only where one exists, and
+                # explains the gap where it does not.
+                "previewable": effect.preview is not None,
+                "unpreviewable_reason": effect.unpreviewable_reason,
                 "params": [
                     {
                         "id": param.id,
@@ -457,10 +528,9 @@ def describe() -> list[dict[str, Any]]:
                         "maximum": param.maximum,
                         "step": param.step,
                         "unit": param.unit,
-                        "options": [
-                            {"value": value, "label": label}
-                            for value, label in param.options
-                        ],
+                        "presentation": param.presentation,
+                        "options": [dict(option) for option in param.choices()],
+                        "folder": param.folder_from() if param.folder_from else None,
                     }
                     for param in effect.params
                 ],
@@ -519,6 +589,55 @@ def duration_after(steps: Sequence[RecipeStep], seconds: float) -> float:
     for step in steps:
         result = max(0.0, step.effect.duration_of(step.values, result))
     return result
+
+
+def render_stream_still(
+    source: Path,
+    destination: Path,
+    steps: Sequence[RecipeStep],
+    timeout: int = 300,
+) -> dict[str, Any]:
+    """Apply the stream effects to a photograph, in one pass.
+
+    The same filtergraph the clip path builds, minus everything about time. A
+    flip is a flip whatever it is applied to; what a still has no use for is
+    the audio chain, the encoder settings and the timestamps — and the effects
+    that only mean something over a duration are refused before they reach
+    here, rather than silently doing nothing.
+    """
+    if not FFMPEG.is_file():
+        raise EffectError("The pinned local ffmpeg runtime is missing. Run npm install.")
+    if not source.is_file():
+        raise EffectError(f"No such media file: {source}")
+
+    video, _audio = build_filtergraph(steps)
+    if not video:
+        raise EffectError("This recipe has nothing for ffmpeg to do.")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    completed = subprocess.run(
+        [
+            str(FFMPEG), "-y", "-i", str(source),
+            "-vf", ",".join(video),
+            # One picture out. Without it ffmpeg will happily treat a still as a
+            # one-frame stream and write a video container with an image suffix.
+            "-frames:v", "1",
+            str(destination),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+    )
+    if completed.returncode != 0 or not destination.is_file():
+        raise EffectError((completed.stderr or "ffmpeg failed without saying why.").strip()[-1500:])
+    return {
+        "video_filters": video,
+        "output": str(destination),
+        "size_bytes": destination.stat().st_size,
+    }
 
 
 def render_stream(

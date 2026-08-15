@@ -30,6 +30,33 @@ const OPTION_KEYS: Record<string, string> = {
   centre: "middle",
   top: "top",
   bottom: "bottom",
+  largest: "mainFace",
+  all: "everyone",
+
+  /**
+   * The objects that ship with the overlay catalogue.
+   *
+   * These are chrome after all. The first reading was that a catalogue an
+   * operator can add to is content and therefore stays as written — true of
+   * what they add, and not of the dozen objects shipped here, which are fixed
+   * strings exactly like every effect label above. Leaving them out put an
+   * English "Cover the face" directly under a translated effect title.
+   *
+   * A dropped-in object is still content: its id is not in this table, so it
+   * keeps the name its file was given.
+   */
+  censor_block: "censorBlock",
+  smiley: "smiley",
+  robot: "robot",
+  skull: "skull",
+  ghost: "ghost",
+  censor_bar: "censorBar",
+  sunglasses: "sunglasses",
+  face_mask: "faceMask",
+  moustache: "moustache",
+  cat_ears: "catEars",
+  crown: "crown",
+  party_hat: "partyHat",
 };
 
 type Translate = (path: string, values?: Record<string, string | number>) => string;
@@ -72,4 +99,18 @@ export function optionLabel(
 ): string {
   const key = OPTION_KEYS[value];
   return key ? fromDictionary(t, `fx.${effectId}.${key}`, apiLabel) : apiLabel;
+}
+
+/**
+ * The heading a gallery section sits under.
+ *
+ * Keyed on the id the API sends rather than on the English heading itself:
+ * keying on the wording would work right up until somebody improved it, at
+ * which point six locales would quietly revert to English with nothing failing.
+ * A group with no id is a folder an operator named, and keeps their name.
+ */
+export function optionGroup(
+  t: Translate, groupId: string | undefined | null, apiName: string,
+): string {
+  return groupId ? fromDictionary(t, `fx.groups.${groupId}`, apiName) : apiName;
 }

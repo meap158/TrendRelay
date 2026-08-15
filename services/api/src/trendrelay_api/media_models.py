@@ -85,6 +85,14 @@ class MediaAssetVersion(Base):
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
+    #: Which effects produced this cut, in the order they were applied.
+    #:
+    #: Ids rather than labels: a label is English that six locales translate and
+    #: that somebody may reword, and freezing one here would leave an old render
+    #: describing itself in the old wording forever. The registry resolves these
+    #: when the asset is read. Empty for a version rendered before this existed,
+    #: and for the original.
+    effect_ids: Mapped[list[str] | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
 
 

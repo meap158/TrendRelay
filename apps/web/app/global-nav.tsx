@@ -21,6 +21,36 @@ function statusLabel(status: string): string {
   return status.replaceAll("_", " ");
 }
 
+/** Progress needs a few percent behind it before an estimate means anything. */
+const ESTIMATE_AFTER = 0.04;
+
+/**
+ * Roughly how much longer, from how long it has taken to get this far.
+ *
+ * Measured rather than predicted: nothing here knows how long a clip is or how
+ * fast this machine encodes, and the one thing that does know is the work
+ * already done. Withheld until a few percent are in, because dividing by a
+ * fraction near zero produces a confident-looking number that is nonsense — and
+ * "4 hours left" on a job that finishes in thirty seconds is worse than saying
+ * nothing.
+ *
+ * The passes are weighted so the fraction tracks time rather than frames, which
+ * is what keeps this from lurching when a render moves from reading a clip to
+ * writing it.
+ */
+function timeRemaining(job: BaseJob, now: number): string {
+  if (typeof job.progress !== "number" || job.progress < ESTIMATE_AFTER) return "";
+  if (!job.startedAt || !now) return "";
+  const elapsed = now - new Date(job.startedAt).getTime();
+  if (!Number.isFinite(elapsed) || elapsed <= 0) return "";
+  const left = Math.round((elapsed * (1 - job.progress)) / job.progress / 1000);
+  if (left <= 0) return "almost done";
+  if (left < 60) return `about ${left}s left`;
+  const minutes = Math.round(left / 60);
+  if (minutes < 60) return `about ${minutes} min left`;
+  return `about ${Math.round(minutes / 60)} h left`;
+}
+
 type NotificationGroup = {
   key: string;
   latest: BaseJob;
@@ -59,13 +89,22 @@ function groupNotifications(jobs: BaseJob[]): NotificationGroup[] {
 }
 
 export function GlobalNav() {
-  const { user, signOut, localMode } = useAuth();
-  const { jobs } = useJobs();
+  const { user, signOut, localMode, apiFetch } = useAuth();
+  const { jobs, refresh: refreshJobs } = useJobs();
   const pathname = usePathname();
   const t = useT();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /**
+   * A clock, so an estimate counts down between polls rather than sitting still
+   * for four seconds at a time. Zero until the drawer is open: reading the real
+   * time during a render would differ between the server and the browser, and
+   * nothing needs it while nobody is looking.
+   */
+  const [now, setNow] = useState(0);
   const [readKeys, setReadKeys] = useState<Set<string>>(new Set());
   const [readStateReady, setReadStateReady] = useState(false);
+  const [cancellingJobId, setCancellingJobId] = useState("");
+  const [cancelError, setCancelError] = useState("");
   const notificationShellRef = useRef<HTMLDivElement>(null);
   const notificationButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -76,6 +115,39 @@ export function GlobalNav() {
   const unreadCount = readStateReady
     ? groups.filter((group) => group.jobs.some((job) => !readKeys.has(notificationKey(job)))).length
     : 0;
+
+  async function cancelEditJob(job: BaseJob) {
+    const workspaceId = job.raw?.workspace_id;
+    if (!workspaceId) return;
+    setCancellingJobId(job.id);
+    setCancelError("");
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/media/library/effects/jobs/${job.id}/cancel`,
+        { method: "POST" },
+      );
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail ?? "The effect job could not be cancelled.");
+      await refreshJobs();
+    } catch (reason) {
+      setCancelError(reason instanceof Error ? reason.message : "The effect job could not be cancelled.");
+    } finally {
+      setCancellingJobId("");
+    }
+  }
+
+  // Ticks only while the drawer is open and something is actually running, so
+  // a closed drawer costs nothing and a finished queue stops the clock.
+  const anyRunning = jobs.some((job) =>
+    ["running", "in_progress"].includes(job.status) && typeof job.progress === "number");
+  useEffect(() => {
+    if (!drawerOpen || !anyRunning) return;
+    // First reading on the next tick rather than in the effect body: setting
+    // state synchronously here would cascade a render for a clock nobody has
+    // waited a second for yet.
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [anyRunning, drawerOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -220,6 +292,7 @@ export function GlobalNav() {
                 <div className="notification-empty"><strong>{t("notifications.empty")}</strong><span>{t("notifications.emptyHelp")}</span></div>
               ) : (
                 <ol className="notification-list">
+                  {cancelError && <li className="notification-error" role="alert">{cancelError}</li>}
                   {groups.slice(0, 15).map((group) => {
                     const job = group.latest;
                     const read = group.jobs.every((item) => readKeys.has(notificationKey(item)));
@@ -250,9 +323,43 @@ export function GlobalNav() {
                         ) : (
                           <strong className="notification-title">{job.title}</strong>
                         )}
+                        {/* A render is minutes of work, and between "running"
+                            and "succeeded" there was nothing to distinguish it
+                            from a job that had hung. Only while it is running:
+                            a finished bar is a bar nobody needs. */}
+                        {typeof job.progress === "number"
+                          && ["running", "in_progress"].includes(job.status) && (
+                          <div className="notification-progress">
+                            <div
+                              className="notification-progress-track"
+                              role="progressbar"
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                              aria-valuenow={Math.round(job.progress * 100)}
+                              aria-label={job.progressStage || job.title}
+                            >
+                              <span style={{ width: `${Math.round(job.progress * 100)}%` }} />
+                            </div>
+                            <small>
+                              {[
+                                job.progressStage,
+                                `${Math.round(job.progress * 100)}%`,
+                                timeRemaining(job, now),
+                              ].filter(Boolean).join(" · ")}
+                            </small>
+                          </div>
+                        )}
                         {job.error && <p className="notification-error">{job.error}</p>}
                         <footer>
                           <time dateTime={job.created_at}>{new Date(job.created_at).toLocaleString()}</time>
+                          {job.category === "edit" && ["queued", "running"].includes(job.status) && (
+                            <Button
+                              variant="quiet"
+                              size="sm"
+                              busy={cancellingJobId === job.id}
+                              onClick={() => void cancelEditJob(job)}
+                            >{t("common.cancel")}</Button>
+                          )}
                           {read
                             ? <span className="notification-read-label">{t("notifications.read")}</span>
                             : <button type="button" className="notification-row-read" onClick={() => markRead(group)}>{t("notifications.markRead")}</button>}

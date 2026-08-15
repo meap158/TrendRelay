@@ -40,12 +40,6 @@ export const PICKER_BASE: AssetFilterValues = { mediaKind: "video" };
 /** The same dialog, looking for a carousel's frames instead of a clip. */
 export const IMAGE_PICKER_BASE: AssetFilterValues = { mediaKind: "image" };
 
-/** @deprecated Superseded by AssetFilterValues, shared with the Library page. */
-export type PickerFilters = {
-  hasVersion?: "blurred" | "none";
-  maxSeconds?: number;
-};
-
 // Re-exported so the screens importing them from here keep working, while the
 // rules themselves live somewhere they can be tested. Imported as well as
 // re-exported because this file uses them too.

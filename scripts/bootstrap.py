@@ -152,6 +152,33 @@ def write_stamp(fingerprint: str) -> None:
     temporary.replace(STAMP)
 
 
+def ensure_models() -> None:
+    """Fetch the pinned model files, if they are not already here.
+
+    Run on every setup rather than only after a dependency install: an
+    environment that was already complete before these were pinned still needs
+    them, and a machine that was offline the first time gets them the next.
+    Present-and-correct is a hash of a 227KB file, so the usual case is free.
+
+    Deliberately not fatal. Every capability that uses one of these is built to
+    run without it, so no network means a worse detector rather than a failed
+    install — and the operator is told which.
+    """
+    try:
+        from scripts.model_assets import ensure_all
+    except ImportError:  # pragma: no cover - only when run as a loose file
+        sys.path.insert(0, str(ROOT))
+        from scripts.model_assets import ensure_all
+
+    def announce(message: str) -> None:
+        print(message, flush=True)
+
+    try:
+        ensure_all(announce=announce)
+    except Exception as error:  # pragma: no cover - a fetch must not stop setup
+        print(f"[Models] Skipped after an unexpected error: {error}", flush=True)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -178,6 +205,7 @@ def main() -> int:
     fingerprint = dependency_fingerprint()
     if not missing and stamp_matches(fingerprint):
         print("[API setup] Dependencies are ready.", flush=True)
+        ensure_models()
         return 0
 
     if missing:
@@ -204,6 +232,7 @@ def main() -> int:
 
     write_stamp(fingerprint)
     print("[API setup] Dependencies are ready.", flush=True)
+    ensure_models()
     return 0
 
 

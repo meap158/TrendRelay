@@ -11,6 +11,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -136,6 +137,13 @@ class DurableJob(Base):
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, default=3)
     cancellation_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: How far a long job has got, 0 to 1, and which pass it is on.
+    #:
+    #: Null means no estimate rather than no progress: a job short enough not to
+    #: bother reporting looks the same as one that has just started, and the
+    #: interface shows a plain running state instead of a bar stuck at zero.
+    progress: Mapped[float | None] = mapped_column(Float)
+    progress_stage: Mapped[str | None] = mapped_column(String(80))
     available_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
     lease_owner: Mapped[str | None] = mapped_column(String(128), index=True)
     lease_expires_at: Mapped[datetime | None] = mapped_column(index=True)

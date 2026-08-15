@@ -152,3 +152,65 @@ def test_it_is_declared_as_a_frame_effect_like_blur() -> None:
 def test_it_contributes_no_ffmpeg_filter() -> None:
     steps = effects.read_recipe([{"effect": "garment_recolour", "values": {}}])
     assert effects.build_filtergraph(steps) == ([], [])
+
+
+# --- the preview ------------------------------------------------------------------
+
+
+def _clip_with_a_face(path):
+    """A short clip built from a photograph insightface ships, so a real
+    detector has a real face to find."""
+    import subprocess
+    from pathlib import Path
+
+    insightface = pytest.importorskip("insightface")
+    photo = Path(insightface.__file__).parent / "data" / "images" / "t1.jpg"
+    if not photo.is_file():
+        pytest.skip("no sample photograph on this machine")
+    from trendrelay_api.media_library import FFMPEG
+
+    subprocess.run(
+        [str(FFMPEG), "-y", "-loop", "1", "-i", str(photo), "-t", "0.8", "-r", "10",
+         "-pix_fmt", "yuv420p", "-vf", "scale=640:-2", str(path)],
+        check=True, capture_output=True,
+    )
+    return path
+
+
+def test_a_preview_comes_back_as_a_jpeg_with_something_to_say(tmp_path) -> None:
+    """The one effect here that cannot be set up without looking at it.
+
+    Its whole difficulty is the fabric threshold — too low and the wall changes
+    colour with the shirt, too high and nothing changes at all — and that is not
+    a number anybody picks from its description.
+    """
+    from trendrelay_api.integrations import recolour
+
+    clip = _clip_with_a_face(tmp_path / "clip.mp4")
+    result = recolour.preview_frame(clip, RecolourSettings(hue_shift=120))
+
+    assert result["image"][:3] == bytes.fromhex("ffd8ff")  # a JPEG
+    assert 0.0 <= result["position"] <= 1.0
+    assert result["note"]
+
+
+def test_the_note_names_which_way_it_went_wrong() -> None:
+    """A frame where nothing changed and one where the whole room changed look
+    equally like "the effect is broken", and the fix is opposite in each."""
+    from trendrelay_api.integrations.recolour import _recolour_note
+
+    assert "no-one was found" in _recolour_note(0, 0).lower()
+    assert "lower the fabric threshold" in _recolour_note(2, 0).lower()
+    assert "raise the fabric threshold" in _recolour_note(2, 2).lower()
+
+
+def test_the_preview_actually_changes_the_picture(tmp_path) -> None:
+    from trendrelay_api.integrations import recolour
+
+    clip = _clip_with_a_face(tmp_path / "clip.mp4")
+    plain = recolour.preview_frame(clip, RecolourSettings(hue_shift=0, saturation_scale=1.0))
+    shifted = recolour.preview_frame(clip, RecolourSettings(hue_shift=150))
+    # Same frame, same size, different pixels — or the preview is showing the
+    # source and the operator is tuning against a picture that never moves.
+    assert plain["position"] == shifted["position"]
+    assert plain["image"] != shifted["image"]

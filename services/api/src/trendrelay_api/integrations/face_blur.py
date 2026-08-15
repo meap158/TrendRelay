@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from secrets import token_hex
@@ -31,12 +32,14 @@ from pydantic import BaseModel, Field
 
 from trendrelay_api.database import SessionFactory
 from trendrelay_api.jobs import (
+    ProgressReporter,
     claim_job,
     complete_job,
     create_job_record,
     fail_job,
     get_job_record,
     list_job_records,
+    report_progress,
 )
 from trendrelay_api.tool_registry import PROJECT_ROOT
 
@@ -66,6 +69,14 @@ DETECT_WIDTH = 640
 # costs minutes; at this width it costs seconds and still shows whether a face
 # is covered.
 PREVIEW_WIDTH = 720
+#: How much of a two-pass render the reading pass is worth, for progress.
+#:
+#: Not a half. Reading a clip runs a detector on every frame; writing it back is
+#: a composite and an encode. Splitting the bar evenly would leave it sitting at
+#: 50% for most of the time it is doing anything, which is the thing a progress
+#: figure exists to avoid. Shared by every effect that works in two passes, so
+#: they all fill at the same rate.
+DETECT_SHARE = 0.6
 
 
 @dataclass(frozen=True)
@@ -289,9 +300,12 @@ FFMPEG = (
 )
 
 
-# YuNet is the better detector, but its weights are a separate ONNX file that
-# OpenCV does not ship. Drop one here and it is used automatically; without it
-# the truly bundled cascade keeps the tool working out of the box.
+# YuNet is the better detector, and its weights are a separate ONNX file that
+# OpenCV does not ship. Setup fetches it — it is 227KB and MIT-licensed, so
+# there was never a good reason for an install not to have it; see
+# `scripts/model_assets.py` for the pin. The cascade below remains the fallback
+# for a machine that was offline at setup, or one where an operator turned the
+# download off.
 YUNET_MODEL = PROJECT_ROOT / ".data" / "models" / "face_detection_yunet.onnx"
 
 
@@ -385,6 +399,35 @@ def detect_boxes(detector: Any, frame: Any) -> list[Box]:
     return boxes
 
 
+#: YuNet returns a box, five landmark points and a score on every row. The
+#: cascade fallback has no landmarks and returns a box and a score.
+YUNET_ROW_LENGTH = 15
+
+
+def detect_landmarked(detector: Any, frame: Any) -> list[tuple[Box, list[tuple[float, float]]]]:
+    """Faces in one frame, keeping the landmarks the detector already found.
+
+    ``detect_boxes`` discards these, which is right for a blur — a rectangle is
+    all it covers. Anything that *attaches* to a face needs the points, and
+    YuNet has been returning them all along at no extra cost, so reading them is
+    free where running a second model would not be.
+    """
+    _, faces = detector.detect(frame)
+    if faces is None:
+        return []
+    found: list[tuple[Box, list[tuple[float, float]]]] = []
+    for face in faces:
+        x, y, width, height = (int(round(float(value))) for value in face[:4])
+        if width <= 0 or height <= 0:
+            continue
+        points: list[tuple[float, float]] = []
+        if len(face) >= YUNET_ROW_LENGTH:
+            values = [float(value) for value in face[4:14]]
+            points = list(zip(values[0::2], values[1::2], strict=True))
+        found.append(((max(0, x), max(0, y), width, height), points))
+    return found
+
+
 def apply_blur(cv2: Any, frame: Any, box: Box, settings: BlurSettings) -> None:
     """Blur one region in place.
 
@@ -454,6 +497,7 @@ def render_blurred(
     destination: Path,
     settings: BlurSettings | None = None,
     preview_seconds: float | None = None,
+    progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
     """Blur every detected face and write a new file.
 
@@ -487,6 +531,10 @@ def render_blurred(
 
         timeline: list[list[Box]] = []
         detected_frames = 0
+        expected = limit or int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        finding = (progress or ProgressReporter(None)).stage(
+            "Finding faces", 0.0, DETECT_SHARE
+        )
         while limit is None or len(timeline) < limit:
             ok, frame = capture.read()
             if not ok:
@@ -495,6 +543,7 @@ def render_blurred(
             if boxes:
                 detected_frames += 1
             timeline.append(boxes)
+            finding.at(len(timeline) - 1, max(expected, len(timeline)))
     finally:
         capture.release()
 
@@ -523,11 +572,15 @@ def render_blurred(
     writer = cv2.VideoWriter(
         str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, out_size
     )
+    covering = (progress or ProgressReporter(None)).stage(
+        "Covering faces", DETECT_SHARE, 1.0 - DETECT_SHARE
+    )
     try:
         for index in range(len(timeline)):
             ok, frame = capture.read()
             if not ok:
                 break
+            covering.at(index, len(timeline))
             for track in tracks:
                 box = track[index]
                 if box is not None:
@@ -659,6 +712,11 @@ def _register_blurred_version(
             duration_ms=asset.duration_ms,
             width=asset.width,
             height=asset.height,
+            # Recorded the same way a recipe render records its stack. This job
+            # predates the effect registry, but what it produced is a cut with
+            # one effect in it, and the Library should describe it in the same
+            # words as the same effect chosen from the editor.
+            effect_ids=["face_blur"],
         )
         session.add(version)
         session.flush()
@@ -704,6 +762,14 @@ def run_blur_job(job_id: str, worker_id: str = "face-blur-worker") -> None:
             Path(payload["output"]),
             request.settings(),
             request.preview_seconds,
+            # The same reporting the editing suite's renders do, so this job and
+            # an identical one started from the effect stack behave alike in the
+            # notification drawer.
+            progress=ProgressReporter(
+                lambda fraction, stage: report_progress(
+                    job_id, fraction, stage, factory=JOB_SESSION_FACTORY
+                )
+            ),
         )
         if not request.preview_seconds:
             # A preview covers only the opening seconds; storing it as a
@@ -732,6 +798,150 @@ def list_blur_jobs(workspace_id: str, limit: int = 20) -> list[dict[str, Any]]:
 #: set walked past faces that clips plainly had, and a preview showing no blur
 #: reads as "the blur is broken" rather than "this frame has nobody in it".
 PREVIEW_PROBES = (0.10, 0.20, 0.30, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85)
+
+
+def render_still(
+    source: Path, destination: Path, settings: BlurSettings | None = None
+) -> dict[str, Any]:
+    """Blur every face in a photograph and write a new one.
+
+    No tracking, because there is nothing to track: the two passes and the gap
+    bridging exist to stop a blur flickering across frames, and a still has one
+    frame. What remains is detect and cover, which is what the effect is.
+
+    Irreversible in the same way the clip is. The blurred pixels replace the
+    original ones and the file written carries no recoverable face.
+    """
+    cv2 = _load_opencv()
+    settings = settings or BlurSettings()
+    frame = read_image(cv2, source)
+    height, width = frame.shape[:2]
+    boxes = detect_boxes(_detector(cv2, (width, height), settings), frame)
+    for box in boxes:
+        apply_blur(cv2, frame, box, settings)
+    write_image(cv2, frame, destination)
+    return {
+        "source": str(source),
+        "output": str(destination),
+        "faces_covered": len(boxes),
+        "detector": detector_name(),
+        "warning": (
+            "No face was found, so this picture is unchanged." if not boxes else None
+        ),
+        "reversible": False,
+        "media_kind": "image",
+    }
+
+
+def probe_frame(
+    source: Path,
+    look: Callable[[Any, Any], Any],
+    at_ratio: float | None = None,
+) -> dict[str, Any]:
+    """Find a frame worth previewing, and hand back what was found on it.
+
+    Every frame effect wants the same thing before it will show anything: a
+    frame that actually has a subject on it. A clip opening on an empty room
+    otherwise previews as "this effect does nothing", which is the wrong
+    conclusion drawn from the right picture.
+
+    ``look`` is given the runtime and the frame and returns whatever that
+    effect needs — boxes, faces, landmarks. Anything falsy means "not this
+    frame" and the search moves on.
+
+    ``at_ratio`` overrides the search and reads that point instead. Probing
+    answers "is this effect set up right"; only the operator knows which moment
+    they are worried about, and no automatic choice finds it.
+    """
+    cv2 = _load_opencv()
+    if not source.is_file():
+        raise FaceBlurUnavailable(f"No such media file: {source}")
+
+    capture = cv2.VideoCapture(str(source))
+    if not capture.isOpened():
+        raise FaceBlurUnavailable(f"OpenCV could not open {source.name}.")
+    try:
+        total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        if width <= 0 or height <= 0:
+            raise FaceBlurUnavailable("That file carries no readable video track.")
+
+        chosen = None
+        probes = PREVIEW_PROBES if at_ratio is None else (min(max(at_ratio, 0.0), 0.999),)
+        for probe in probes:
+            if total > 0:
+                capture.set(cv2.CAP_PROP_POS_FRAMES, int(total * probe))
+            ok, frame = capture.read()
+            if not ok:
+                continue
+            found = look(cv2, frame)
+            chosen = (frame, found, probe)
+            if found:
+                break
+            if total <= 0:
+                break
+        if chosen is None:
+            raise FaceBlurUnavailable("No frame could be read from that file.")
+
+        frame, found, position = chosen
+        fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
+        return {
+            "frame": frame,
+            "found": found,
+            "size": (width, height),
+            "position": round(position, 4),
+            "duration_seconds": round(total / fps, 3) if total > 0 and fps > 0 else None,
+        }
+    finally:
+        capture.release()
+
+
+def read_image(cv2: Any, source: Path) -> Any:
+    """A still from the library, decoded.
+
+    Alpha is dropped on purpose. Every effect here writes into BGR pixels, and a
+    four-channel frame would sail through the detectors and then be written back
+    as a picture whose transparency no longer lines up with what was drawn.
+    """
+    if not source.is_file():
+        raise FaceBlurUnavailable(f"No such media file: {source}")
+    image = cv2.imread(str(source), cv2.IMREAD_COLOR)
+    if image is None:
+        raise FaceBlurUnavailable(f"OpenCV could not read {source.name} as a picture.")
+    return image
+
+
+#: What a rendered still is written as. PNG rather than JPEG: an edit is a
+#: master that may be edited again, and re-encoding a photograph through JPEG on
+#: every pass is a generation of quality each time — the same reason the video
+#: path composes its filters into one encode.
+STILL_SUFFIX = ".png"
+
+
+def write_image(cv2: Any, frame: Any, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if not cv2.imwrite(str(destination), frame):
+        raise FaceBlurUnavailable(f"The render could not be written to {destination.name}.")
+
+
+def encode_preview(cv2: Any, frame: Any, size: tuple[int, int]) -> bytes:
+    """A frame as JPEG at preview width.
+
+    Sent small deliberately: this is looked at, not kept, and a 4K still is
+    megabytes for a judgement an eye makes at a fraction of that.
+    """
+    width, height = size
+    if width > PREVIEW_WIDTH:
+        frame = cv2.resize(
+            frame,
+            (PREVIEW_WIDTH, int(round(height * PREVIEW_WIDTH / width))),
+            interpolation=cv2.INTER_AREA,
+        )
+    encoded, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+    if not encoded:
+        raise FaceBlurUnavailable("The preview frame could not be encoded.")
+    return bytes(buffer)
 
 
 def preview_frame(

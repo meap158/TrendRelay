@@ -33,6 +33,16 @@ OPTION_KEYS = {
     "9:16": "vertical916", "4:5": "portrait45",
     "1:1": "square11", "16:9": "landscape169",
     "centre": "middle", "top": "top", "bottom": "bottom",
+    "largest": "mainFace", "all": "everyone",
+    # The objects that ship with the overlay catalogue. Fixed strings, exactly
+    # like the effect labels around them — leaving them out put an English
+    # "Smiley" directly under a translated effect title. A *dropped-in* object
+    # is not here and keeps the name its file was given, which no dictionary
+    # shipped in this repository could have predicted.
+    "censor_block": "censorBlock", "smiley": "smiley", "robot": "robot",
+    "skull": "skull", "ghost": "ghost", "censor_bar": "censorBar",
+    "sunglasses": "sunglasses", "face_mask": "faceMask", "moustache": "moustache",
+    "cat_ears": "catEars", "crown": "crown", "party_hat": "partyHat",
 }
 
 
@@ -89,3 +99,56 @@ def test_a_new_effect_would_be_caught() -> None:
     # passing today: no dictionary has a key for an effect that does not exist.
     block = fx_block("en")
     assert "\n    invented_effect: {" not in block
+
+
+# --- gallery group headings ---------------------------------------------------
+
+
+def groups_block(locale: str) -> str:
+    """The `fx.groups` map, shared by every gallery the registry serves."""
+    source = (MESSAGES / f"{locale}.ts").read_text(encoding="utf-8")
+    start = source.index("\n    groups: {")
+    return source[start : source.index("\n    },", start)]
+
+
+def required_groups() -> set[str]:
+    """Every group id an option actually carries."""
+    return {
+        option["group_id"]
+        for effect in effects.describe()
+        for param in effect["params"]
+        for option in param["options"] or []
+        if option.get("group_id")
+    }
+
+
+@pytest.mark.parametrize("locale", LOCALES)
+def test_every_gallery_heading_has_a_translation(locale: str) -> None:
+    """A heading sits directly under a translated effect title.
+
+    Leaving it out was the visible half of the gap: "Cover a face with an
+    object" in Japanese, and "Cover the face" in English immediately below it.
+    """
+    block = groups_block(locale)
+    gaps = [
+        group for group in sorted(required_groups())
+        if not re.search(rf"^\s*{re.escape(group)}:", block, re.M)
+    ]
+    assert not gaps, f"{locale} is missing gallery headings: {gaps}"
+
+
+def test_the_heading_check_is_looking_at_something() -> None:
+    # An assertion over an empty set passes forever.
+    found = required_groups()
+    assert {"cover", "features", "headwear"} <= found, found
+
+
+def test_a_group_an_operator_named_is_not_required_to_be_translated() -> None:
+    """The drop-in folder's own heading is content, not chrome.
+
+    It carries no id precisely so that nothing here demands a translation for a
+    word somebody chose on their own disk.
+    """
+    from trendrelay_api.integrations.overlay_catalogue import DROP_IN_GROUP, GROUP_IDS
+
+    assert DROP_IN_GROUP not in GROUP_IDS

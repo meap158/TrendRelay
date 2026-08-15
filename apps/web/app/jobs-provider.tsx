@@ -3,10 +3,45 @@
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 import { useAuth } from "./auth-provider";
 import { apiBaseUrl } from "../lib/api";
+import { effectLabel } from "../lib/i18n/effects";
 import { assetHref } from "../lib/job-links";
+import { useT } from "./i18n-provider";
 
-type JobStatus = "queued" | "running" | "succeeded" | "failed";
-type JobCategory = "fetch" | "media" | "render" | "publish" | "research" | "blur";
+type Translate = (path: string, values?: Record<string, string | number>) => string;
+type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+type JobCategory = "fetch" | "media" | "render" | "publish" | "research" | "blur" | "edit";
+
+/**
+ * What an editing-suite render is called while it runs, and once it is done.
+ *
+ * Named by what it is applying rather than by its job id, because a queue of
+ * three renders over the same clip is otherwise three identical lines. When it
+ * finishes the count of covered frames is worth surfacing: a render that found
+ * a face in half the clip succeeded and still needs looking at, and that is
+ * exactly the case somebody would otherwise publish without noticing.
+ */
+function editTitle(t: Translate, job: any): string {
+  const steps: string[] = job?.payload?.effects ?? [];
+  // The job stores effect ids; the drawer should say what the editor says. The
+  // id doubles as the dictionary key, so an unknown one falls back to itself
+  // rather than to a blank.
+  const named = steps.map((id) => effectLabel(t, id, id));
+  const applied = named.length ? named.join(" + ") : "effects";
+  if (job?.payload?.request?.preview_seconds) {
+    if (job?.status === "succeeded") return `Preview ready: ${applied}`;
+    if (job?.status === "cancelled") return `Preview cancelled: ${applied}`;
+    if (job?.status === "failed") return `Preview failed: ${applied}`;
+    return `Previewing ${applied}`;
+  }
+  if (job?.status === "cancelled") return `Cancelled: ${applied}`;
+  if (job?.status === "failed") return `Could not apply ${applied}`;
+  if (job?.status !== "succeeded") return `Applying ${applied}`;
+  const frames = job?.result?.frame_effects?.[0];
+  const coverage = typeof frames?.coverage === "number"
+    ? ` — ${Math.round(frames.coverage * 100)}% of frames`
+    : "";
+  return `Applied ${applied}${coverage}`;
+}
 
 export type BaseJob = {
   id: string;
@@ -24,6 +59,17 @@ export type BaseJob = {
    * open yet - which is correct, there is nothing there to look at.
    */
   href?: string;
+  /**
+   * How far a long job has got, 0 to 1, and which pass it is on.
+   *
+   * Undefined means no estimate rather than no progress — a job too short to
+   * bother reporting looks the same as one that has just started, and a bar
+   * stuck at zero reads as stuck.
+   */
+  progress?: number | null;
+  progressStage?: string | null;
+  /** When the worker picked it up, which is what an estimate is measured from. */
+  startedAt?: string | null;
   // Specific payloads preserved for UI needs
   raw: any;
 };
@@ -41,6 +87,7 @@ const JobsContext = createContext<JobsContextValue | null>(null);
 
 export function JobsProvider({ children }: { children: ReactNode }) {
   const { user, apiFetch } = useAuth();
+  const t = useT();
   const [jobs, setJobs] = useState<BaseJob[]>([]);
   const [busy, setBusy] = useState(false);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
@@ -117,12 +164,38 @@ export function JobsProvider({ children }: { children: ReactNode }) {
               ? `Faces blurred: ${Math.round((j.result.coverage ?? 0) * 100)}% of frames, ${j.result.faces_tracked ?? 0} face(s)`
               : "Blurring faces",
             error: j.error,
+            progress: j.progress,
+            progressStage: j.progress_stage,
+            startedAt: j.started_at,
             // The asset it produced, which it only knows once it has one.
             href: assetHref(j),
             raw: j,
           })))
           .catch(() => []);
         fetchPromises.push(fetchBlur);
+        // Everything the editing suite renders. Face blur had notifications
+        // because it was the first long render here; a recipe render takes just
+        // as long, produces the cut that Publish will send, and used to finish
+        // in silence — the editor said "it will appear as a version" and left
+        // the operator to keep reopening the asset to find out whether it had.
+        const fetchEdits = apiFetch(`/api/workspaces/${activeWorkspaceId}/media/library/effects/jobs`)
+          .then(res => res.json())
+          .then(data => (data.jobs || []).map((j: any) => ({
+            id: j.id,
+            category: "edit" as JobCategory,
+            status: j.status,
+            created_at: j.created_at,
+            title: editTitle(t, j),
+            error: j.error,
+            progress: j.progress,
+            progressStage: j.progress_stage,
+            startedAt: j.started_at,
+            // The asset it produced, which it only knows once it has one.
+            href: assetHref(j),
+            raw: j,
+          })))
+          .catch(() => []);
+        fetchPromises.push(fetchEdits);
         // Studio renders
         const fetchRenders = apiFetch(`/api/workspaces/${activeWorkspaceId}/studio/productions`)
           .then(res => res.json())
@@ -165,7 +238,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     } finally {
       setBusy(false);
     }
-  }, [activeWorkspaceId, apiFetch, user]);
+  }, [activeWorkspaceId, apiFetch, t, user]);
 
   useEffect(() => {
     queueMicrotask(() => void refresh());

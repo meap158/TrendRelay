@@ -190,11 +190,13 @@ export function BlurSettings({
             <div className="blur-detector-note">
               <Badge tone="warn">{t("blurSettings.fallbackDetector")}</Badge>
               <p>
-                The accurate face model is not installed, so TrendRelay is using
+                The accurate face model is missing, so TrendRelay is using
                 OpenCV&apos;s bundled cascade. It mistakes patterned clothing for faces
-                and misses faces at an angle. Install the YuNet model at{" "}
-                <code>.data/models/face_detection_yunet.onnx</code> to fix that — the
-                coverage setting cannot.
+                and misses faces at an angle, and the coverage setting cannot fix
+                either. Setup normally fetches the model, so this machine was
+                probably offline at the time — running setup again with a
+                connection will pick it up, or put it at{" "}
+                <code>.data/models/face_detection_yunet.onnx</code> by hand.
               </p>
             </div>
           )}

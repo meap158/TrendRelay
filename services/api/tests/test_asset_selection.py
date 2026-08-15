@@ -137,14 +137,14 @@ def test_the_count_a_select_all_reports_is_the_count_it_would_select(session) ->
 # --- filtering by a derived cut ----------------------------------------------- #
 
 
-def add_version(session, asset_id, kind="blurred"):
+def add_version(session, asset_id, kind="blurred", effects=None):
     from trendrelay_api.media_models import MediaAssetVersion
 
     session.add(
         MediaAssetVersion(
             workspace_id="w1", asset_id=asset_id, version_kind=kind,
             path=f"C:/media/{asset_id}-{kind}.mp4", sha256=f"{asset_id}{kind}".ljust(64, "0"),
-            mime_type="video/mp4", size_bytes=1,
+            mime_type="video/mp4", size_bytes=1, effect_ids=effects,
         )
     )
     session.commit()
@@ -194,16 +194,47 @@ def effects(session, filters, workspace="w1"):
     }
 
 
-def test_the_effect_facet_splits_the_library_in_two(session) -> None:
+def test_the_facet_offers_every_effect_the_library_has_used(session) -> None:
+    """One hard-coded pair, blurred or not, was the whole vocabulary.
+
+    An operator wants the same question of any effect — which clips have been
+    cropped, which have had an object put on a face — so the list is built from
+    what the workspace actually contains.
+    """
     add(session, "a1")
     add(session, "a2")
     add(session, "a3")
-    add_version(session, "a1")
+    add_version(session, "a1", effects=["face_blur"])
+    add_version(session, "a2", kind="edited", effects=["face_overlay", "aspect"])
 
     counts = effects(session, AssetFilter())
-    assert counts == {"blurred": 1, "none": 2}
-    # Every asset is on exactly one side, so the two always sum to the total.
-    assert sum(counts.values()) == 3
+    assert counts["face_blur"] == 1
+    assert counts["face_overlay"] == 1
+    assert counts["aspect"] == 1
+    assert counts["any"] == 2
+    assert counts["none"] == 1
+    # A cut that covered a face stays its own question, because Publish asks it
+    # by name and several effects can answer.
+    assert counts["blurred"] == 1
+
+
+def test_an_effect_nobody_has_used_is_not_offered(session) -> None:
+    # A filter that would return nothing is not a filter worth showing.
+    add(session, "a1")
+    add_version(session, "a1", effects=["face_blur"])
+
+    assert "garment_recolour" not in effects(session, AssetFilter())
+
+
+def test_each_effect_is_named_the_way_the_editor_names_it(session) -> None:
+    add(session, "a1")
+    add_version(session, "a1", effects=["face_blur"])
+
+    listed = {
+        item["value"]: item["label"]
+        for item in _effect_facet(session, asset_conditions("w1", AssetFilter()))
+    }
+    assert listed["face_blur"] == "Blur faces"
 
 
 def test_the_effect_facet_is_counted_within_the_rest_of_the_filter(session) -> None:
@@ -211,14 +242,45 @@ def test_the_effect_facet_is_counted_within_the_rest_of_the_filter(session) -> N
     # leave, not how much of the whole library has one.
     add(session, "a1", kind="video")
     add(session, "a2", kind="audio")
-    add_version(session, "a1")
-    add_version(session, "a2")
+    add_version(session, "a1", effects=["face_blur"])
+    add_version(session, "a2", effects=["face_blur"])
 
-    assert effects(session, AssetFilter(media_kind="video")) == {"blurred": 1, "none": 0}
+    assert effects(session, AssetFilter(media_kind="video"))["face_blur"] == 1
 
 
 def test_a_version_of_another_kind_is_not_counted_as_an_effect(session) -> None:
     add(session, "a1")
     add_version(session, "a1", kind="thumbnail")
 
-    assert effects(session, AssetFilter()) == {"blurred": 0, "none": 1}
+    assert effects(session, AssetFilter()) == {"none": 1}
+
+
+def test_a_render_from_before_recipes_were_recorded_is_still_findable(session) -> None:
+    """It cannot say which effect made it, but its kind is not in doubt."""
+    add(session, "a1")
+    add_version(session, "a1", effects=None)
+
+    counts = effects(session, AssetFilter())
+    assert counts["blurred"] == 1
+    assert counts["any"] == 1
+    assert matching(session, AssetFilter(has_version="blurred")) == {"a1"}
+
+
+def test_filtering_by_one_effect_of_a_stack_finds_the_clip(session) -> None:
+    # A render is a whole recipe in one file, so asking for any step of it
+    # should find the result.
+    add(session, "a1")
+    add_version(session, "a1", kind="edited", effects=["face_overlay", "aspect"])
+
+    assert matching(session, AssetFilter(has_version="face_overlay")) == {"a1"}
+    assert matching(session, AssetFilter(has_version="aspect")) == {"a1"}
+    assert matching(session, AssetFilter(has_version="face_blur")) == set()
+
+
+def test_any_and_none_split_the_library_between_them(session) -> None:
+    add(session, "a1")
+    add(session, "a2")
+    add_version(session, "a1", effects=["aspect"])
+
+    assert matching(session, AssetFilter(has_version="any")) == {"a1"}
+    assert matching(session, AssetFilter(has_version="none")) == {"a2"}

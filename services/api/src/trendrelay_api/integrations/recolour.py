@@ -26,6 +26,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from trendrelay_api.jobs import ProgressReporter
+
 Box = tuple[int, int, int, int]  # x, y, width, height
 
 
@@ -121,11 +123,116 @@ def apply_recolour(cv2: Any, frame: Any, box: Box, settings: RecolourSettings) -
     return True
 
 
+def render_still(
+    source: Path, destination: Path, settings: RecolourSettings | None = None
+) -> dict[str, Any]:
+    """Recolour the clothing in a photograph and write a new one."""
+    from trendrelay_api.integrations.face_blur import (
+        BlurSettings,
+        _detector,
+        _load_opencv,
+        detect_boxes,
+        read_image,
+        write_image,
+    )
+
+    cv2 = _load_opencv()
+    settings = settings or RecolourSettings()
+    frame = read_image(cv2, source)
+    height, width = frame.shape[:2]
+    faces = detect_boxes(_detector(cv2, (width, height), BlurSettings()), frame)
+    changed = sum(
+        1
+        for face in faces
+        if apply_recolour(cv2, frame, torso_box(face, (width, height)), settings)
+    )
+    write_image(cv2, frame, destination)
+    return {
+        "source": str(source),
+        "output": str(destination),
+        "faces_found": len(faces),
+        "regions_recoloured": changed,
+        "hue_shift": settings.hue_shift,
+        "warning": _recolour_note(len(faces), changed) if changed < len(faces) or not faces
+        else None,
+        "media_kind": "image",
+    }
+
+
+def preview_frame(
+    source: Path,
+    settings: RecolourSettings | None = None,
+    at_ratio: float | None = None,
+) -> dict[str, Any]:
+    """One recoloured frame, for setting the threshold before rendering a clip.
+
+    This effect needs a preview more than any of the others here. Its whole
+    difficulty is the fabric threshold: too low and the wall changes colour with
+    the shirt, too high and the shirt does not change at all. That is not a
+    number anybody can pick from its description — it depends on the lighting in
+    this clip — and the alternative to a still is finding out from a full
+    render.
+    """
+    from trendrelay_api.integrations.face_blur import (
+        BlurSettings,
+        _detector,
+        _load_opencv,
+        detect_boxes,
+        encode_preview,
+        probe_frame,
+    )
+
+    cv2 = _load_opencv()
+    settings = settings or RecolourSettings()
+    detector: list[Any] = []
+
+    def look(runtime: Any, frame: Any) -> list[Box]:
+        if not detector:
+            height, width = frame.shape[:2]
+            detector.append(_detector(runtime, (width, height), BlurSettings()))
+        return detect_boxes(detector[0], frame)
+
+    probed = probe_frame(source, look, at_ratio)
+    frame, faces, size = probed["frame"], probed["found"], probed["size"]
+    changed = sum(
+        1 for face in faces if apply_recolour(cv2, frame, torso_box(face, size), settings)
+    )
+    return {
+        "image": encode_preview(cv2, frame, size),
+        "position": probed["position"],
+        "duration_seconds": probed["duration_seconds"],
+        "note": _recolour_note(len(faces), changed),
+    }
+
+
+def _recolour_note(faces: int, changed: int) -> str:
+    """Say which of the two ways this can look wrong is happening.
+
+    A frame where nothing changed and a frame where the whole room changed look
+    equally like "the effect is broken", and the fix is opposite in each case.
+    """
+    if not faces:
+        return (
+            "No-one was found on this frame, and the garment is located from the "
+            "head — so nothing was recoloured here. Try another moment."
+        )
+    if not changed:
+        return (
+            f"{faces} found, but no pixels were colourful enough to count as fabric. "
+            "Lower the fabric threshold."
+        )
+    return (
+        f"Recoloured below {changed} of {faces} head{'' if faces == 1 else 's'}. "
+        "If the background moved too, raise the fabric threshold."
+    )
+
+
 def render_recoloured(
     source: Path,
     destination: Path,
     settings: RecolourSettings | None = None,
     preview_seconds: float | None = None,
+    progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
     """Recolour the clothing under every tracked face and write a new file.
 
@@ -136,6 +243,7 @@ def render_recoloured(
     the colour holds through a blink.
     """
     from trendrelay_api.integrations.face_blur import (
+        DETECT_SHARE,
         PREVIEW_WIDTH,
         BlurSettings,
         FaceBlurUnavailable,
@@ -167,11 +275,16 @@ def render_recoloured(
         detector = _detector(cv2, (width, height), BlurSettings())
 
         timeline: list[list[Box]] = []
+        expected = limit or int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        finding = (progress or ProgressReporter(None)).stage(
+            "Finding people", 0.0, DETECT_SHARE
+        )
         while limit is None or len(timeline) < limit:
             ok, frame = capture.read()
             if not ok:
                 break
             timeline.append(detect_boxes(detector, frame))
+            finding.at(len(timeline) - 1, max(expected, len(timeline)))
     finally:
         capture.release()
 
@@ -189,11 +302,15 @@ def render_recoloured(
     capture = _open()
     writer = cv2.VideoWriter(str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, out_size)
     changed_frames = 0
+    shifting = (progress or ProgressReporter(None)).stage(
+        "Recolouring", DETECT_SHARE, 1.0 - DETECT_SHARE
+    )
     try:
         for index in range(len(timeline)):
             ok, frame = capture.read()
             if not ok:
                 break
+            shifting.at(index, len(timeline))
             touched = False
             for track in tracks:
                 face = track[index]

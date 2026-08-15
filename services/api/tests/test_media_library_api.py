@@ -287,9 +287,9 @@ def test_ingest_deduplicates_enriches_searches_and_plans(
     ]
     # Counted against the rest of the filter like every other facet, so the
     # numbers say what narrowing by an effect would actually leave: two videos,
-    # neither of which has a blurred cut rendered yet.
+    # neither of which has been rendered yet. Nothing else is offered, because
+    # a filter that would return nothing is not worth showing.
     assert categorized.json()["facets"]["effects"] == [
-        {"value": "blurred", "label": "Faces blurred", "count": 0},
         {"value": "none", "label": "No effects", "count": 2},
     ]
 

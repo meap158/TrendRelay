@@ -5,9 +5,11 @@ from __future__ import annotations
 import base64
 import re
 from collections import Counter
+from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
@@ -175,6 +177,23 @@ def _analysis_view(item: CreativeAnalysis | None) -> dict[str, Any] | None:
     }
 
 
+def _named_effects(effect_ids: list[str] | None) -> list[dict[str, str]]:
+    """Turn the ids stored on a version into something an operator can read.
+
+    Resolved here rather than stored, so an effect renamed or translated later
+    changes what an old render calls itself. An id the registry no longer knows
+    is shown as the id: better a puzzling word than a version that claims to be
+    something it is not.
+    """
+    from trendrelay_api.integrations import effect_render  # noqa: F401  registers frame effects
+    from trendrelay_api.integrations.effects import REGISTRY
+
+    return [
+        {"id": effect_id, "label": getattr(REGISTRY.get(effect_id), "label", effect_id)}
+        for effect_id in effect_ids or []
+    ]
+
+
 def _asset_view(session: Session, item: MediaAsset) -> dict[str, Any]:
     versions = session.scalars(
         select(MediaAssetVersion)
@@ -244,6 +263,11 @@ def _asset_view(session: Session, item: MediaAsset) -> dict[str, Any]:
                 "duration_ms": version.duration_ms,
                 "width": version.width,
                 "height": version.height,
+                # What made this cut, resolved to labels as it is read rather
+                # than frozen when it was written, so a version describes itself
+                # in the current wording and can be translated.
+                "effects": _named_effects(version.effect_ids),
+                "created_at": version.created_at,
             }
             for version in versions
         ],
@@ -414,6 +438,58 @@ class AssetFilter(BaseModel):
     has_version: str | None = None
 
 
+#: Filter values that are not the id of an effect.
+ANY_EFFECT = "any"
+NO_EFFECT = "none"
+
+
+def _rendered_exists():
+    """Whether this asset has any render at all."""
+    return select(MediaAssetVersion.id).where(
+        MediaAssetVersion.asset_id == MediaAsset.id,
+        MediaAssetVersion.version_kind.in_(RENDERED_KINDS),
+    ).exists()
+
+
+def _effect_condition(wanted: str) -> Any:
+    """Narrow the Library to assets carrying a given effect.
+
+    "Blurred or not" was the whole vocabulary here, from when blurring was the
+    only effect that produced a version. An operator now wants the same question
+    of any of them — which clips have had a face covered, which have been
+    cropped — so the filter takes an effect id and the facet offers whatever the
+    workspace actually has.
+
+    Matched on the recorded recipe rather than the version kind, because several
+    effects produce the same kind and the kind cannot tell them apart.
+    """
+    if wanted == NO_EFFECT:
+        return ~_rendered_exists()
+    if wanted == ANY_EFFECT:
+        return _rendered_exists()
+    if wanted in RENDERED_KINDS:
+        # A version kind rather than an effect. `blurred` is the one that earns
+        # its place: several effects produce it and Publish asks for it by name,
+        # so "which clips have had a face covered" is a question about the kind
+        # and not about any one effect. It is also the only thing that can find
+        # a render made before recipes were recorded.
+        return select(MediaAssetVersion.id).where(
+            MediaAssetVersion.asset_id == MediaAsset.id,
+            MediaAssetVersion.version_kind == wanted,
+        ).exists()
+    # A JSON array of ids. Compared as text because the column is portable JSON
+    # rather than a Postgres array, and the ids are constrained to a shape that
+    # cannot contain the quotes this looks for.
+    escaped = wanted.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return select(MediaAssetVersion.id).where(
+        MediaAssetVersion.asset_id == MediaAsset.id,
+        MediaAssetVersion.version_kind.in_(RENDERED_KINDS),
+        cast(MediaAssetVersion.effect_ids, String).like(
+            f'%"{escaped}"%', escape="\\"
+        ),
+    ).exists()
+
+
 def asset_conditions(
     workspace_id: str, filters: AssetFilter, *, omit: str | None = None
 ) -> list[Any]:
@@ -437,13 +513,8 @@ def asset_conditions(
         values.append(MediaAsset.media_kind == filters.media_kind)
     if filters.max_duration_seconds:
         values.append(MediaAsset.duration_ms <= filters.max_duration_seconds * 1000)
-    if filters.has_version:
-        wanted = "blurred" if filters.has_version == "none" else filters.has_version
-        exists = select(MediaAssetVersion.id).where(
-            MediaAssetVersion.asset_id == MediaAsset.id,
-            MediaAssetVersion.version_kind == wanted,
-        ).exists()
-        values.append(~exists if filters.has_version == "none" else exists)
+    if omit != "has_version" and filters.has_version:
+        values.append(_effect_condition(filters.has_version))
     if filters.q and filters.q.strip():
         escaped = (
             filters.q.casefold().strip()
@@ -498,7 +569,7 @@ def list_asset_ids(
     creator_missing: Annotated[bool, Query()] = False,
     media_kind: Annotated[Literal["video", "audio", "image"] | None, Query()] = None,
     max_duration_seconds: Annotated[int | None, Query(ge=1, le=86_400)] = None,
-    has_version: Annotated[Literal["blurred", "none"] | None, Query()] = None,
+    has_version: Annotated[str | None, Query(max_length=64)] = None,
 ) -> dict[str, Any]:
     """Every asset id the current filter matches, for a true select-all.
 
@@ -543,7 +614,7 @@ def list_assets(
     creator_missing: Annotated[bool, Query()] = False,
     media_kind: Annotated[Literal["video", "audio", "image"] | None, Query()] = None,
     max_duration_seconds: Annotated[int | None, Query(ge=1, le=86_400)] = None,
-    has_version: Annotated[Literal["blurred", "none"] | None, Query()] = None,
+    has_version: Annotated[str | None, Query(max_length=64)] = None,
     sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> dict[str, Any]:
@@ -624,25 +695,78 @@ def list_assets(
 
 
 def _effect_facet(session: Session, where: list[Any]) -> list[dict[str, Any]]:
-    """How many assets carry a rendered effect, and how many do not.
+    """Which effects this workspace's assets carry, and how many of each.
+
+    Every effect that has actually been applied, rather than the one hard-coded
+    choice this used to offer. The list is built from what is in the workspace,
+    so it grows when a new effect is used and never offers a filter that would
+    return nothing.
 
     Counted against the rest of the active filter, like every other facet, so
     the numbers describe what narrowing by an effect would actually leave.
     """
-    blurred_exists = select(MediaAssetVersion.id).where(
-        MediaAssetVersion.asset_id == MediaAsset.id,
-        MediaAssetVersion.version_kind == "blurred",
-    ).exists()
-    blurred = session.scalar(
-        select(func.count(MediaAsset.id)).where(*where, blurred_exists)
-    ) or 0
-    plain = session.scalar(
-        select(func.count(MediaAsset.id)).where(*where, ~blurred_exists)
-    ) or 0
-    return [
-        {"value": "blurred", "label": "Faces blurred", "count": blurred},
-        {"value": "none", "label": "No effects", "count": plain},
+    from trendrelay_api.integrations import effect_render  # noqa: F401  registers them
+    from trendrelay_api.integrations.effects import REGISTRY
+
+    def count(condition: Any) -> int:
+        return session.scalar(select(func.count(MediaAsset.id)).where(*where, condition)) or 0
+
+    # Which ids are present at all, so the facet lists real options only. Read
+    # from the versions rather than from the registry, because an effect nobody
+    # has used is not a useful way to narrow a library.
+    #
+    # Joined to the assets the rest of the filter already allows, so this reads
+    # one workspace rather than every workspace's versions. An unscoped read
+    # came out the same, since an effect from elsewhere counts zero here and is
+    # dropped below, but it is not this endpoint's business to look.
+    used: set[str] = set()
+    for stored in session.scalars(
+        select(MediaAssetVersion.effect_ids)
+        .join(MediaAsset, MediaAsset.id == MediaAssetVersion.asset_id)
+        .where(
+            *where,
+            MediaAssetVersion.version_kind.in_(RENDERED_KINDS),
+            MediaAssetVersion.effect_ids.is_not(None),
+        )
+    ):
+        used.update(stored or [])
+
+    facet = [
+        # "Any effect applied", not "Any effect": the control's own empty option
+        # already reads "Any effect" and means *do not filter*. Two identically
+        # worded options, one of which narrows and one of which does not, is a
+        # dropdown nobody can use.
+        {
+            "value": ANY_EFFECT,
+            "label": "Any effect applied",
+            "count": count(_rendered_exists()),
+        },
+        # Deliberately overlapping the per-effect entries below. "Has a face
+        # been covered" is a different question from "was this specific effect
+        # used" — Publish asks the first one — and it is the only entry that
+        # finds a render made before recipes were recorded.
+        {
+            "value": "blurred",
+            "label": "Faces covered",
+            "count": count(_effect_condition("blurred")),
+        },
     ]
+    facet += sorted(
+        (
+            {
+                "value": effect_id,
+                "label": getattr(REGISTRY.get(effect_id), "label", effect_id),
+                "count": count(_effect_condition(effect_id)),
+            }
+            for effect_id in used
+        ),
+        key=lambda item: (-item["count"], item["label"]),
+    )
+    facet.append(
+        {"value": NO_EFFECT, "label": "No effects", "count": count(~_rendered_exists())}
+    )
+    return [item for item in facet if item["count"]]
+
 
 @router.get("/assets/{asset_id}")
 def get_asset(
@@ -697,23 +821,71 @@ PREVIEWABLE_KINDS = ("video", "image", "audio")
 PREVIEW_SIZE_LIMIT = 100 * 1024 * 1024
 
 
+#: Kinds that are a render of the asset rather than the asset. Both exist
+#: because the publish path asks for `blurred` by name to know a face was dealt
+#: with; for *watching* the result the distinction does not matter, which is why
+#: the previewer takes them together.
+RENDERED_KINDS = ("blurred", "edited")
+
+
+def _preferred_version(
+    session: Session, asset_id: str, kinds: tuple[str, ...]
+) -> MediaAssetVersion | None:
+    """The first of these kinds this asset has, in the order given."""
+    found = session.scalars(
+        select(MediaAssetVersion).where(
+            MediaAssetVersion.asset_id == asset_id,
+            MediaAssetVersion.version_kind.in_(kinds),
+        )
+    ).all()
+    for kind in kinds:
+        match = next((item for item in found if item.version_kind == kind), None)
+        if match:
+            return match
+    return None
+
+
+def _rendered_cut(session: Session, asset_id: str) -> MediaAssetVersion | None:
+    """The newest render of this asset, whatever effects made it.
+
+    Newest rather than by kind: an operator who has just re-rendered wants to
+    watch what they just made, and ranking a week-old blur above this morning's
+    edit would show them the wrong file with no way to say so.
+    """
+    return session.scalar(
+        select(MediaAssetVersion)
+        .where(
+            MediaAssetVersion.asset_id == asset_id,
+            MediaAssetVersion.version_kind.in_(RENDERED_KINDS),
+        )
+        .order_by(MediaAssetVersion.created_at.desc())
+        .limit(1)
+    )
+
+
 @router.post("/assets/{asset_id}/preview")
 def asset_preview(
     workspace_id: str,
     asset_id: str,
     user: AuthenticatedUser,
     session: DatabaseSession,
-    cut: Annotated[Literal["original", "blurred"], Query()] = "original",
+    # "blurred" is the old name for the same thing and still answers, because a
+    # bookmarked or in-flight request should not 422 over a rename.
+    cut: Annotated[Literal["original", "edited", "blurred"], Query()] = "original",
 ) -> dict[str, str]:
     """Return previewable bytes for one cut of an asset.
+
+    Two cuts, and only two: the original, and what the effects made of it. There
+    used to be a third idea here — the *blurred* cut — from when blurring was
+    the only thing that could produce one. An edit is now a stack of effects
+    rendered into a single file, and a blur is one effect that can be in it, so
+    a cut named after one effect could not describe a clip that had been blurred
+    and cropped and had a sticker put on it.
 
     Video, image and audio all come back the same way, and so do both cuts, so
     the player treats them identically. A file served as a download would leave
     the browser to decide, and it decides differently for a streamed file than
     for inline base64.
-
-    The Library already filters by video, image and audio, so previewing only
-    video meant two of its three categories opened to nothing.
     """
     membership(session, workspace_id, user.id)
     asset = _asset_record(session, workspace_id, asset_id)
@@ -722,20 +894,10 @@ def asset_preview(
             status_code=422,
             detail=f"{asset.media_kind} assets have no preview.",
         )
-    wanted = ("blurred",) if cut == "blurred" else ("proxy", "original")
-    versions = session.scalars(
-        select(MediaAssetVersion).where(
-            MediaAssetVersion.asset_id == asset_id,
-            MediaAssetVersion.version_kind.in_(wanted),
-        )
-    ).all()
-    version = next(
-        (item for item in versions if item.version_kind == wanted[0]), None
-    )
-    if version is None and len(wanted) > 1:
-        version = next(
-            (item for item in versions if item.version_kind == wanted[1]), None
-        )
+    if cut == "original":
+        version = _preferred_version(session, asset_id, ("proxy", "original"))
+    else:
+        version = _rendered_cut(session, asset_id)
     if not version:
         raise HTTPException(status_code=404, detail="Preview not found.")
     try:
@@ -874,6 +1036,283 @@ def submit_face_blur(
     return {"job": job}
 
 
+@router.get("/face-overlay/status")
+def face_overlay_status(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Whether objects can be attached to a face, and how precisely.
+
+    The placement tier is part of the answer rather than an implementation
+    detail: without landmarks an object cannot lean with a tilted head, and
+    somebody looking at a hat sitting flat deserves to be told why.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.face_overlays import runtime_status
+
+    return {"status": runtime_status()}
+
+
+@router.get("/face-overlay/objects")
+def face_overlay_objects(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """The overlay catalogue, grouped as the picker shows it.
+
+    Also served inside the effect's own declaration at `/effects`, which is what
+    validation reads. This exists so the picker can list objects — and say where
+    a new one goes — without pulling the whole effect registry down first.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.overlay_catalogue import (
+        GROUP_ORDER,
+        OVERLAY_ROOT,
+        options,
+        rejected_drop_ins,
+    )
+
+    return {
+        "objects": list(options()),
+        "groups": list(GROUP_ORDER),
+        # Named so the extension point is discoverable from the interface
+        # rather than only from the source.
+        "drop_in_directory": str(OVERLAY_ROOT),
+        # A file somebody dropped in that did not appear is the case worth
+        # reporting: the gallery cannot show it, so this is the only place its
+        # absence can be explained.
+        "skipped": rejected_drop_ins(),
+    }
+
+
+@router.get("/face-overlay/objects/{overlay_id}/sprite")
+def face_overlay_sprite(
+    workspace_id: str,
+    overlay_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    width: Annotated[int, Query(ge=32, le=512)] = 192,
+) -> Response:
+    """One object as a transparent PNG, for the gallery.
+
+    Rendered by the same code that burns it into the clip, so the thumbnail is
+    the thing itself at a smaller size rather than a separate drawing of it that
+    can quietly stop matching.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.face_blur import FaceBlurUnavailable
+    from trendrelay_api.integrations.overlay_catalogue import get, sprite_png
+
+    overlay = get(overlay_id)
+    if overlay is None:
+        raise HTTPException(status_code=404, detail="No such overlay.")
+    try:
+        image = sprite_png(overlay, width)
+    except FaceBlurUnavailable as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return Response(
+        content=image,
+        media_type="image/png",
+        headers={
+            # A built-in at a given width is the same bytes every time and the
+            # gallery asks for a dozen at once. A drop-in is a file somebody may
+            # be editing, and serving them a stale copy of their own work with
+            # no way to tell is worse than fetching it again.
+            "Cache-Control": (
+                "no-store" if overlay.image is not None else "private, max-age=3600"
+            )
+        },
+    )
+
+
+class EffectPreviewRequest(BaseModel):
+    """One step of a recipe, to be shown on one frame."""
+
+    source_path: str = Field(min_length=1, max_length=1000)
+    effect: str = Field(min_length=1, max_length=64)
+    values: dict[str, Any] = Field(default_factory=dict)
+    #: Where in the clip to look. Omitted, the clip is searched for a frame that
+    #: has something on it worth showing.
+    at: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+@router.post("/effects/frame")
+def effect_preview_frame(
+    workspace_id: str,
+    body: EffectPreviewRequest,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> Response:
+    """One frame with a single effect applied, so it can be judged before a render.
+
+    Generic on purpose. Face blur and the object overlay each grew their own
+    preview endpoint, and adding a third for recolouring and a fourth for the
+    swap would have been four copies of the same request handling differing only
+    in which settings object they built. The effect declares how to render its
+    own frame; this validates the step against the registry and serves the
+    result, and knows about none of them by name.
+
+    A POST because the settings are a step's whole values object — the same
+    shape that is stored in a recipe and sent to a render, so a preview cannot
+    drift from what it is previewing.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.effect_render import approved_source
+    from trendrelay_api.integrations.effects import REGISTRY, EffectError, coerce_params
+    from trendrelay_api.integrations.face_blur import FaceBlurUnavailable
+
+    effect = REGISTRY.get(body.effect)
+    if effect is None:
+        raise HTTPException(status_code=404, detail=f"No effect called {body.effect!r}.")
+    available, unavailable_reason = effect.availability()
+    if not available:
+        raise HTTPException(status_code=409, detail=unavailable_reason)
+    if effect.preview is None:
+        # Refused with the reason rather than silently returning nothing: for an
+        # effect that decides something across the whole clip, a single frame is
+        # not a cheap preview but a misleading one.
+        raise HTTPException(
+            status_code=422,
+            detail=effect.unpreviewable_reason
+            or f"{effect.label} cannot be shown on a single frame.",
+        )
+
+    try:
+        values = coerce_params(effect, body.values)
+        result = effect.preview(approved_source(body.source_path), values, body.at)
+    except EffectError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except FaceBlurUnavailable as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except (ValueError, PermissionError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    return Response(
+        content=result["image"],
+        media_type="image/jpeg",
+        headers={
+            # A preview reflects settings still being changed, so it is never
+            # stored anywhere.
+            "Cache-Control": "no-store",
+            "X-Frame-Position": str(result.get("position", 0.0)),
+            "X-Clip-Duration": str(result.get("duration_seconds") or ""),
+            # Percent-encoded: HTTP headers are latin-1, and a note is prose
+            # that one day will not be.
+            "X-Preview-Note": quote(str(result.get("note") or "")),
+        },
+    )
+
+
+@router.get("/effects/face-swap/faces/{name}/thumbnail")
+def face_swap_face_thumbnail(
+    workspace_id: str,
+    name: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> FileResponse:
+    """A portrait the operator dropped in, for the picker to show.
+
+    Resolved by matching the catalogue rather than by joining the name onto a
+    path, so a name carrying `..` selects nothing instead of reaching a file
+    outside the folder.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.face_swap import face_file
+
+    portrait = face_file(name)
+    if portrait is None:
+        raise HTTPException(status_code=404, detail="No such portrait.")
+    return FileResponse(
+        portrait,
+        # A photograph of somebody's face. Not cached by any shared proxy.
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+class PortraitImport(BaseModel):
+    """A library picture to make available as a face to swap in."""
+
+    asset_id: str = Field(min_length=1, max_length=128)
+
+
+@router.post("/effects/face-swap/faces", status_code=201)
+def import_face_swap_portrait(
+    workspace_id: str,
+    body: PortraitImport,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Make a picture already in the library usable as a face to swap in.
+
+    The library is where an operator's pictures already are, so requiring them
+    to also be copied into a folder by hand made the swap feel like a different
+    product. This is that copy, done from the asset they are looking at.
+
+    It stays a copy. A recipe stores a portrait by name and is re-run later:
+    pointing at an asset would break an edit the moment that asset was removed,
+    and would put a workspace-scoped id into a value that is otherwise a
+    filename.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    from trendrelay_api.integrations.face_swap import FaceSwapUnavailable, import_portrait
+
+    asset = _asset_record(session, workspace_id, body.asset_id)
+    if asset.media_kind != "image":
+        raise HTTPException(
+            status_code=422,
+            detail="Only a picture can be used as a face to swap in.",
+        )
+    try:
+        # Resolved through the same approved-root check as everything else that
+        # opens a file on this machine.
+        source = Path(asset.original_path)
+        added = import_portrait(source, asset.title)
+    except FaceSwapUnavailable as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except OSError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    # A photograph of a real person's face has been copied somewhere it will
+    # be applied to other people's footage. That is worth a record.
+    audit(
+        session, request, workspace_id, user.id,
+        "face_swap.portrait_imported", "media_asset", asset.id,
+        {"portrait": added["value"]},
+    )
+    session.commit()
+    return {"face": added}
+
+
+@router.delete("/effects/face-swap/faces/{name}")
+def remove_face_swap_portrait(
+    workspace_id: str,
+    name: str,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Take a portrait back out of the folder.
+
+    A photograph of somebody's face should be removable from the place that
+    offers it, rather than only by finding the folder on disk.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    from trendrelay_api.integrations.face_swap import remove_portrait
+
+    if not remove_portrait(name):
+        raise HTTPException(status_code=404, detail="No such portrait.")
+    audit(
+        session, request, workspace_id, user.id,
+        "face_swap.portrait_removed", "face_swap_portrait", name,
+    )
+    session.commit()
+    return {"removed": name}
+
+
 class RecipeRequest(BaseModel):
     """The edit an asset carries. Ordered, because the effects do not commute."""
 
@@ -894,7 +1333,6 @@ def list_effects(
     from trendrelay_api.integrations.effects import describe
 
     return {"effects": describe()}
-
 
 
 class SwapLicence(BaseModel):
@@ -1037,6 +1475,100 @@ def save_recipe(
     return {"steps": normalised}
 
 
+@router.post("/assets/{asset_id}/effects/discard")
+def discard_rendered_cuts(
+    workspace_id: str,
+    asset_id: str,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Remove every rendered cut and the working recipe: back to the original.
+
+    One action rather than per-version housekeeping, because that is the
+    question being asked - "undo what was done to this video" - and the
+    original is never touched by an edit, so restoring it means removing the
+    renders that stand in front of it. The recipe goes with them: a stack that
+    survived its own removal would re-render the same cut on the next save,
+    and the tags a cut carries come from its recorded effects, so deleting the
+    versions is what clears them.
+
+    A POST with a named path rather than DELETE, like every other write here:
+    this API answers GET and POST only, and a browser preflight turns anything
+    else into "failed to fetch" with nothing in the log to explain it.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    ensure_profile(session, user)
+    asset = _asset_record(session, workspace_id, asset_id)
+    from trendrelay_api.integrations.effect_render import JOB_KIND
+    from trendrelay_api.media_models import MediaEditRecipe  # noqa: F401  matches save_recipe
+    from trendrelay_api.models import DurableJob
+
+    versions = session.scalars(
+        select(MediaAssetVersion).where(
+            MediaAssetVersion.workspace_id == workspace_id,
+            MediaAssetVersion.asset_id == asset_id,
+            MediaAssetVersion.version_kind.in_(RENDERED_KINDS),
+        )
+    ).all()
+    recipe = _recipe_row(session, workspace_id, asset_id)
+    active_jobs = [
+        job
+        for job in session.scalars(
+            select(DurableJob).where(
+                DurableJob.workspace_key == workspace_id,
+                DurableJob.kind == JOB_KIND,
+                DurableJob.status.in_(("queued", "running")),
+            )
+        ).all()
+        if (
+            job.payload.get("asset_id") == asset_id
+            or job.payload.get("source") == asset.original_path
+        )
+    ]
+    if not versions and recipe is None and not active_jobs:
+        raise HTTPException(status_code=404, detail="This video has no effects to remove.")
+
+    rendered_paths = [Path(version.path) for version in versions]
+    for version in versions:
+        session.delete(version)
+    if recipe is not None:
+        session.delete(recipe)
+    timestamp = utc_now()
+    for job in active_jobs:
+        job.cancellation_requested = True
+        if job.status == "queued":
+            job.status = "cancelled"
+            job.completed_at = timestamp
+        job.updated_at = timestamp
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media.effects_discarded",
+        "media_asset",
+        asset_id,
+        {
+            "versions_removed": len(versions),
+            "recipe_removed": recipe is not None,
+            "jobs_cancelled": len(active_jobs),
+        },
+    )
+    session.commit()
+    # Files go only after the database transaction succeeds. A player may hold
+    # one open on Windows; leaving an unattached file is safer than leaving a
+    # Library version whose file vanished during a failed commit.
+    for rendered_path in rendered_paths:
+        with suppress(OSError):
+            rendered_path.unlink(missing_ok=True)
+    return {
+        "removed_versions": len(versions),
+        "cancelled_jobs": len(active_jobs),
+        "asset": _asset_view(session, _asset_record(session, workspace_id, asset_id)),
+    }
+
+
 @router.post("/effects/render", status_code=202)
 def submit_render(
     workspace_id: str,
@@ -1073,6 +1605,84 @@ def list_effect_render_jobs(
     from trendrelay_api.integrations.effect_render import list_render_jobs
 
     return {"jobs": list_render_jobs(workspace_id)}
+
+
+@router.post("/effects/jobs/{job_id}/cancel")
+def cancel_effect_render_job(
+    workspace_id: str,
+    job_id: str,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Cancel a queued render or ask a running renderer to stop safely."""
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    from trendrelay_api.integrations.effect_render import JOB_SESSION_FACTORY, get_render_job
+    from trendrelay_api.jobs import request_job_cancellation
+
+    try:
+        job = get_render_job(job_id)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Effect job not found.") from error
+    if job["workspace_id"] != workspace_id or job["kind"] != "media_effect_render":
+        raise HTTPException(status_code=404, detail="Effect job not found.")
+    cancelled = request_job_cancellation(job_id, factory=JOB_SESSION_FACTORY)
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media.effect_render_cancelled",
+        "durable_job",
+        job_id,
+        {"asset_id": job.get("payload", {}).get("asset_id")},
+    )
+    session.commit()
+    return {"job": cancelled}
+
+
+@router.post("/effects/jobs/{job_id}/preview")
+def consume_effect_preview(
+    workspace_id: str,
+    job_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, str]:
+    """Return a finished short preview as private bytes, then remove its file.
+
+    The browser creates a blob URL from this response. Serving the mp4 as a
+    normal media URL lets download managers intercept a review action, which is
+    exactly what the Library's private preview path avoids too.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.effect_render import RENDER_ROOT, _mime_of, get_render_job
+
+    try:
+        job = get_render_job(job_id)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Effect preview not found.") from error
+    request_data = job.get("payload", {}).get("request", {})
+    if (
+        job["workspace_id"] != workspace_id
+        or not request_data.get("preview_seconds")
+    ):
+        raise HTTPException(status_code=404, detail="Effect preview not found.")
+    if job["status"] != "succeeded":
+        raise HTTPException(status_code=409, detail="The effect preview is not ready.")
+    output = Path(job.get("result", {}).get("output") or "").resolve()
+    root = (RENDER_ROOT / workspace_id).resolve()
+    if not output.is_relative_to(root) or not output.is_file():
+        raise HTTPException(status_code=404, detail="The effect preview is unavailable.")
+    if output.stat().st_size > PREVIEW_SIZE_LIMIT:
+        raise HTTPException(status_code=413, detail="This preview is too large to open safely.")
+    mime_type = _mime_of(output)
+    content = output.read_bytes()
+    with suppress(OSError):
+        output.unlink(missing_ok=True)
+    return {
+        "mime_type": mime_type,
+        "content_base64": base64.b64encode(content).decode("ascii"),
+    }
 
 
 class BulkRequest(BaseModel):

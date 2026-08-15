@@ -2,6 +2,23 @@
 
 import { Button } from "./button";
 import { useT } from "../i18n-provider";
+import {
+  EMPTY_FACETS,
+  activeFilterCount,
+  assetFilterParams,
+  type AssetFacets,
+  type AssetFilterValues,
+  type Facet,
+} from "../../lib/asset-filters";
+
+export {
+  EMPTY_FACETS,
+  activeFilterCount,
+  assetFilterParams,
+  type AssetFacets,
+  type AssetFilterValues,
+  type Facet,
+} from "../../lib/asset-filters";
 
 /**
  * The one description of how the media library can be narrowed.
@@ -13,33 +30,6 @@ import { useT } from "../i18n-provider";
  * this type, this serialiser and this control, which is what keeps them from
  * disagreeing again.
  */
-export type AssetFilterValues = {
-  query?: string;
-  /** The creator. `__unassigned__` selects the assets with no creator at all. */
-  channel?: string;
-  /** The source platform. `__other__` selects the assets with no platform. */
-  platform?: string;
-  mediaKind?: "video" | "audio" | "image" | "";
-  /** A rendered effect the asset carries, or its explicit absence. */
-  effect?: "blurred" | "none" | "";
-  maxSeconds?: number;
-};
-
-export type Facet = { value: string; label: string; count: number };
-export type AssetFacets = {
-  channels: Facet[];
-  platforms: Facet[];
-  media_kinds: Facet[];
-  effects: Facet[];
-};
-
-export const EMPTY_FACETS: AssetFacets = {
-  channels: [],
-  platforms: [],
-  media_kinds: [],
-  effects: [],
-};
-
 /** Which controls a surface shows. The picker has no use for a media kind. */
 export type FilterField = "query" | "channel" | "platform" | "mediaKind" | "effect" | "length";
 
@@ -57,19 +47,6 @@ const LENGTHS: [number, string][] = [
  * the Library's select-all asked for "the same set" the list was showing, that
  * promise only holds if there is exactly one way the filters become a request.
  */
-export function assetFilterParams(values: AssetFilterValues): URLSearchParams {
-  const params = new URLSearchParams();
-  if (values.query?.trim()) params.set("q", values.query.trim());
-  if (values.channel === "__unassigned__") params.set("creator_missing", "true");
-  else if (values.channel) params.set("creator", values.channel);
-  if (values.platform === "__other__") params.set("platform_missing", "true");
-  else if (values.platform) params.set("platform", values.platform);
-  if (values.mediaKind) params.set("media_kind", values.mediaKind);
-  if (values.effect) params.set("has_version", values.effect);
-  if (values.maxSeconds) params.set("max_duration_seconds", String(values.maxSeconds));
-  return params;
-}
-
 /**
  * How many filters are narrowing beyond the surface's own baseline.
  *
@@ -77,19 +54,6 @@ export function assetFilterParams(values: AssetFilterValues): URLSearchParams {
  * pins the media kind to video — counting that would show "Clear 1" on an
  * untouched dialog and clearing it would do nothing visible.
  */
-export function activeFilterCount(
-  values: AssetFilterValues,
-  cleared: AssetFilterValues = {},
-): number {
-  const keys: (keyof AssetFilterValues)[] = [
-    "query", "channel", "platform", "mediaKind", "effect", "maxSeconds",
-  ];
-  return keys.filter((key) => {
-    const value = key === "query" ? values.query?.trim() : values[key];
-    return Boolean(value) && value !== cleared[key];
-  }).length;
-}
-
 function label(facet: Facet, fallback: string): string {
   return `${facet.label || fallback} (${facet.count})`;
 }
@@ -192,8 +156,7 @@ export function AssetFilters({
           <select
             aria-label={t("filters.byEffect")}
             value={values.effect ?? ""}
-            onChange={(event) =>
-              set({ effect: event.target.value as AssetFilterValues["effect"] })}
+            onChange={(event) => set({ effect: event.target.value })}
           >
             <option value="">{t("filters.anyEffect")}</option>
             {facets.effects.map((facet) => (

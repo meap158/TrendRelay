@@ -219,11 +219,16 @@
    is visible without opening it. */
 .library-list > button.has-versions { border-inline-start: 3px solid var(--link); }
 .library-cut-switch { display: flex; gap: 4px; padding: 8px 10px; background: #111820; border-top: 1px solid #2a3541; }
-.library-cut-switch button { flex: 1 1 0; min-height: 30px; border: 1px solid #43505e; border-radius: var(--radius-sm); color: #d9e0e7; background: #202b36; font: inherit; font-size: 11px; cursor: pointer; }
+/* The right-hand label is named after the effects in the cut, so it is as long
+   as the recipe. Clipped rather than wrapped: the switch sits under the player
+   and must keep its height, and the whole stack is one hover away. */
+.library-cut-switch button { flex: 1 1 0; min-width: 0; min-height: 30px; padding: 0 8px; border: 1px solid #43505e; border-radius: var(--radius-sm); color: #d9e0e7; background: #202b36; font: inherit; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .library-cut-switch button:hover { background: #2b3946; }
 .library-cut-switch button.selected { border-color: var(--link); color: #fff; background: #2f4a7a; font-weight: 600; }
 .library-source-meta .blurred-tag { margin-inline-start: 2px; }
-.blurred-tag { justify-self: start; align-self: center; border-radius: 999px; padding: 2px 8px; color: #1a56c4; background: #e8f0fe; font-size: 10px; font-style: normal; font-weight: 600; white-space: nowrap; }
+/* Names the effects in the rendered cut, so it grows with the recipe. Capped,
+   because it sits in a list row next to a title that matters more. */
+.blurred-tag { justify-self: start; align-self: center; max-width: 100%; border-radius: 999px; padding: 2px 8px; color: #1a56c4; background: #e8f0fe; font-size: 10px; font-style: normal; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Position sits with the heading; the action row holds only actions. */
 
 /* Metadata and the pager share one line, so browsing costs no extra height. */
@@ -295,6 +300,14 @@
 .effect-editor { display: grid; gap: 12px; }
 .effect-add { display: flex; flex-wrap: wrap; gap: 6px; }
 .effect-empty { margin: 0; max-width: 62ch; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.effect-recipe-preview { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-raised); }
+.effect-recipe-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.effect-recipe-preview-head > div { display: grid; gap: 2px; }
+.effect-recipe-preview-head strong { font-size: 12px; }
+.effect-recipe-preview-head small { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.effect-recipe-preview progress { width: 100%; height: 5px; accent-color: var(--link); }
+.effect-recipe-preview video,
+.effect-recipe-preview img { width: 100%; height: clamp(220px, 42vh, 460px); border-radius: var(--radius-sm); background: #111827; object-fit: contain; }
 
 .effect-stack { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: step; }
 .effect-step { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
@@ -315,5 +328,89 @@
 .effect-param input[type="range"] { width: 100%; }
 .effect-param small { color: var(--muted); font-size: 10px; line-height: 1.4; }
 .effect-param-toggle { grid-template-columns: auto 1fr; align-items: center; }
+/* The help text is the third child of a two-column grid, so without this it
+   lands in the first column and widens it to its own length — which pushes the
+   checkbox into the middle of the row, away from the label it belongs to. */
+.effect-param-toggle small { grid-column: 1 / -1; }
 
 .effect-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+/* --- the object picker -------------------------------------------------------
+ * A choice between pictures. Two panes because the gallery answers "what is
+ * this" and only the frame beside it answers "does it sit right on this face",
+ * and someone adjusting the size needs both in view at once. */
+/* Two columns of comparable weight: the frame and its settings on the left,
+   the grid of things to choose on the right. The grid used to share a column
+   with the settings and take whatever they left, which on a real dialog was
+   about ninety pixels — a scrollbar with two thumbnails behind it. */
+.overlay-picker { display: grid; grid-template-columns: minmax(320px, 5fr) minmax(340px, 6fr); gap: 16px; min-height: 0; }
+.overlay-preview { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); gap: 8px; min-width: 0; min-height: 0; }
+.overlay-frame { position: relative; display: grid; place-items: center; min-height: 200px; max-height: 38vh; border-radius: var(--radius); background: var(--panel-raised); overflow: hidden; }
+.overlay-frame img { max-width: 100%; max-height: 38vh; object-fit: contain; }
+.overlay-frame p { margin: 0; padding: 0 16px; color: var(--muted); text-align: center; }
+.overlay-frame-busy { position: absolute; inset-inline-end: 8px; bottom: 8px; border-radius: var(--radius-sm); padding: 2px 7px; background: rgba(20, 28, 38, .78); color: #fff; font-size: 10px; }
+.overlay-frame-note { margin: 0; min-height: 15px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.overlay-scrub { display: grid; gap: 4px; }
+.overlay-scrub > span { display: grid; gap: 1px; font-size: 12px; font-weight: 600; }
+.overlay-scrub b { color: var(--muted); font-size: 11px; font-weight: 400; }
+.overlay-scrub input[type="range"] { width: 100%; accent-color: var(--link); }
+
+/* The grid is the point of this column, so it takes the height and the folder
+   note takes what it needs. */
+.overlay-choices { display: grid; grid-template-rows: auto minmax(140px, 1fr) auto; gap: 10px; min-height: 0; }
+.overlay-search input { width: 100%; min-height: 34px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 6px 10px; background: var(--panel); color: var(--text); font: inherit; font-size: 12px; }
+.overlay-gallery { display: grid; align-content: start; gap: 12px; min-height: 0; padding-inline-end: 6px; overflow-y: auto; }
+.overlay-gallery h4 { position: sticky; top: 0; z-index: 1; margin: 0; padding: 2px 0 5px; background: var(--panel); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+/* Big enough to see what the thing is and to hit it without aiming. */
+.overlay-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 8px; }
+
+.overlay-choice { display: grid; justify-items: center; gap: 4px; padding: 10px 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font: inherit; cursor: pointer; }
+.overlay-choice:hover:not(:disabled) { border-color: var(--line-strong); background: var(--panel-raised); }
+.overlay-choice:disabled { opacity: .5; cursor: not-allowed; }
+/* The chosen tile is marked by more than colour, so it survives a screenshot in
+   greyscale and a reader who cannot separate the two. */
+.overlay-choice.is-chosen { border-color: var(--link); box-shadow: inset 0 0 0 1px var(--link); }
+.overlay-choice span { max-width: 100%; overflow: hidden; color: var(--text); font-size: 11px; line-height: 1.25; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.overlay-choice em { color: var(--muted); font-size: 9px; font-style: normal; }
+.overlay-sprite { width: 68px; height: 68px; object-fit: contain; }
+.overlay-sprite-empty { display: block; width: 68px; height: 68px; border-radius: var(--radius-sm); background: var(--panel-raised); }
+
+/* The settings here are the effect's own, rendered by the same control the
+   editor uses — so this only has to stack them and the appearance of a slider
+   stays defined in one place. It scrolls rather than pushing the frame off the
+   top: an effect with eight controls must not cost the picture they change. */
+.overlay-adjust { display: grid; align-content: start; gap: 10px; min-height: 0; border-top: 1px solid var(--line); padding: 10px 6px 0 0; overflow-y: auto; }
+.overlay-adjust input[type="range"] { accent-color: var(--link); }
+.overlay-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.overlay-warning { margin: 0; padding: 7px 9px; border-inline-start: 3px solid var(--amber); background: #fdf9ec; color: var(--text); font-size: 11px; line-height: 1.45; }
+.overlay-empty { margin: 0; color: var(--muted); font-size: 11px; }
+.overlay-folder { display: grid; gap: 6px; }
+/* Not a grid: the sentence has an inline `code` in the middle of it, and a grid
+   would break it onto a row of its own and strand the full stop after it. */
+.overlay-folder p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+/* The library first, because that is where the operator's pictures already are;
+   the folder is named underneath for the bulk case. */
+.overlay-import { display: flex; gap: 6px; align-items: center; }
+.overlay-import label { flex: 1; min-width: 0; }
+.overlay-import select { width: 100%; min-height: 30px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 5px 8px; background: var(--panel); color: var(--text); font: inherit; font-size: 12px; }
+.overlay-folder code { overflow-wrap: anywhere; font-size: 10px; }
+.overlay-skipped { display: block; margin-top: 3px; color: #8c1d26; }
+
+/* The control that stands in for a dropdown in the recipe: what is on the face
+   right now, and a way to change it. */
+.effect-param-gallery { grid-column: 1 / -1; }
+.overlay-chosen { display: flex; gap: 8px; align-items: center; width: 100%; min-height: 46px; padding: 5px 9px 5px 5px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font: inherit; text-align: start; cursor: pointer; }
+.overlay-chosen:hover:not(:disabled) { background: var(--panel-raised); }
+.overlay-chosen:disabled { opacity: .5; cursor: not-allowed; }
+.overlay-chosen .overlay-sprite, .overlay-chosen .overlay-sprite-empty { width: 34px; height: 34px; }
+.overlay-chosen-name { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; margin-inline-end: auto; font-size: 12px; }
+.overlay-chosen-action { flex: none; color: var(--link); font-size: 11px; font-weight: 600; }
+
+/* Below this the dialog itself is narrower than two usable columns, so the
+   picture goes above the grid rather than beside it. */
+@media (max-width: 900px) {
+  .overlay-picker { grid-template-columns: 1fr; overflow-y: auto; }
+  .overlay-preview { grid-template-rows: auto auto auto auto; }
+  .overlay-adjust { overflow: visible; }
+  .overlay-gallery { max-height: 40vh; }
+}

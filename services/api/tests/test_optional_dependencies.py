@@ -20,7 +20,7 @@ import pytest
 
 #: Everything the optional extras provide. `torch` belongs to the AGPL
 #: anonymiser's own environment and should never be importable from here at all.
-OPTIONAL = ("cv2", "insightface", "onnxruntime", "torch", "diffusers")
+OPTIONAL = ("cv2", "insightface", "onnxruntime", "torch", "diffusers", "mediapipe")
 
 
 @pytest.fixture

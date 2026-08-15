@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from time import monotonic
 from typing import Any
 
 from sqlalchemy import and_, or_, select
@@ -34,6 +36,8 @@ def serialize_job(item: DurableJob) -> dict[str, Any]:
         "attempt_count": item.attempt_count,
         "max_attempts": item.max_attempts,
         "cancellation_requested": item.cancellation_requested,
+        "progress": item.progress,
+        "progress_stage": item.progress_stage,
         "available_at": item.available_at,
         "lease_owner": item.lease_owner,
         "lease_expires_at": item.lease_expires_at,
@@ -303,6 +307,121 @@ def merge_running_result(
         item.updated_at = now_utc()
 
 
+def report_progress(
+    job_id: str,
+    fraction: float,
+    stage: str,
+    *,
+    factory: SessionMaker = SessionFactory,
+) -> None:
+    """Record how far a running job has got. Best effort, never fatal.
+
+    Called from inside a render loop, so it must not be able to stop one. A
+    database that is briefly unavailable costs a stale progress figure; raising
+    here would cost the render, which is minutes of work thrown away for a
+    cosmetic field.
+
+    Only a running job is updated. A cancelled or finished one keeps whatever it
+    ended on rather than being dragged back to a fraction by a worker that has
+    not noticed yet.
+    """
+    try:
+        with factory.begin() as session:
+            item = session.get(DurableJob, job_id)
+            if not item or item.status != "running":
+                return
+            item.progress = max(0.0, min(1.0, float(fraction)))
+            item.progress_stage = stage[:80]
+            item.updated_at = now_utc()
+    except Exception:  # pragma: no cover - a cosmetic field must not break work
+        return
+
+
+class ProgressReporter:
+    """Throttled progress, safe to call on every frame of a render.
+
+    A render loop runs thousands of times and a write per frame would cost more
+    than the work being reported on. This keeps the call site simple — one line
+    in the loop — and decides for itself when that is worth a round trip.
+
+    Stages are weighted rather than counted. A blur reads the whole clip before
+    it draws anything, so a reporter that treated its two passes as halves would
+    sit at 50% for as long as it sat at 0%. The caller says how much of the
+    total each pass is worth.
+    """
+
+    #: A second is finer than the interface polls for and coarse enough that the
+    #: writes disappear next to decoding a frame.
+    INTERVAL_SECONDS = 1.0
+
+    def __init__(
+        self,
+        write: Callable[[float, str], None] | None,
+        *,
+        stage: str = "",
+        start: float = 0.0,
+        span: float = 1.0,
+        clock: list[float] | None = None,
+        should_cancel: Callable[[], bool] | None = None,
+    ) -> None:
+        self._write = write
+        self._stage = stage
+        self._start = start
+        self._span = span
+        self._should_cancel = should_cancel
+        # A one-cell list rather than a float, so every stage of one render
+        # shares it. Copying the value would reset the throttle at each pass
+        # boundary, and a recipe of six effects would take six free writes for
+        # no new information.
+        self._clock = clock if clock is not None else [0.0]
+
+    def stage(self, name: str, start: float, span: float) -> ProgressReporter:
+        """A reporter for one pass, mapped onto its slice of the whole."""
+        return ProgressReporter(
+            self._write,
+            stage=name,
+            start=start,
+            span=span,
+            clock=self._clock,
+            should_cancel=self._should_cancel,
+        )
+
+    def point(self, fraction: float, *, force: bool = False) -> None:
+        """Report a pass boundary even when that pass has no frame callback.
+
+        Some effects can describe every decoded frame; ffmpeg-only effects and
+        a few model calls are opaque single operations.  Their beginning and
+        end still belong on the same progress bar, rather than leaving an
+        apparently idle job until it suddenly completes.
+        """
+        if not self._write and not self._should_cancel:
+            return
+        fraction = max(0.0, min(1.0, float(fraction)))
+        moment = monotonic()
+        if not force and fraction < 1.0 and moment - self._clock[0] < self.INTERVAL_SECONDS:
+            return
+        self._clock[0] = moment
+        if self._should_cancel and self._should_cancel():
+            raise JobCancellationRequested
+        if self._write:
+            self._write(self._start + self._span * fraction, self._stage)
+
+    def started(self) -> None:
+        self.point(0.0, force=True)
+
+    def finished(self) -> None:
+        self.point(1.0, force=True)
+
+    def at(self, done: int, total: int) -> None:
+        if total <= 0:
+            return
+        self.point((done + 1) / total, force=done + 1 >= total)
+
+
+class JobCancellationRequested(RuntimeError):
+    """A cooperative worker reached a safe point after cancellation was requested."""
+
+
 def complete_job(
     job_id: str,
     worker_id: str,
@@ -316,6 +435,9 @@ def complete_job(
         if not item or item.status != "running" or item.lease_owner != worker_id:
             raise PermissionError("Worker does not hold this job lease.")
         item.status = "cancelled" if item.cancellation_requested else "succeeded"
+        if item.status == "succeeded":
+            item.progress = 1.0
+            item.progress_stage = "Complete"
         item.result = result
         item.last_error = None
         item.lease_owner = None

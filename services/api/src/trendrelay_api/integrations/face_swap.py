@@ -31,6 +31,8 @@ the swap step and the gate, and nothing else.
 from __future__ import annotations
 
 import json
+import re
+import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -123,13 +125,117 @@ def available_faces() -> tuple[dict[str, Any], ...]:
     found = [
         {
             "value": item.stem,
+            # A portrait's name is the operator's own filename, so it stays as
+            # they wrote it. Only the heading above them is translatable.
             "label": item.stem.replace("_", " ").replace("-", " ").strip() or item.stem,
             "group": "Faces",
+            "group_id": "faces",
+            # Where the gallery gets a thumbnail, relative to the media-library
+            # base. Carried on the option so one gallery can show portraits and
+            # overlay sprites without knowing the difference.
+            "preview": f"effects/face-swap/faces/{item.stem}/thumbnail",
+            # Somebody's photograph, not something this repository ships.
+            "custom": True,
         }
         for item in sorted(FACES_DIR.iterdir())
         if item.is_file() and item.suffix.lower() in FACE_SUFFIXES
     ]
     return tuple(found)
+
+
+#: A portrait's name is its file stem, and the stem reaches a URL and a stored
+#: recipe. Derived from the asset it came from rather than accepted from a
+#: caller, and constrained to this.
+PORTRAIT_NAME = re.compile(r"[^a-z0-9]+")
+
+
+def portrait_name(title: str, taken: set[str]) -> str:
+    """A safe, readable, unused file stem for an imported portrait.
+
+    Readable because it becomes the label in the picker, and somebody choosing
+    between four faces needs to tell them apart. Unused because a recipe stores
+    the name: reusing one would silently repoint an existing edit at a different
+    person.
+    """
+    base = PORTRAIT_NAME.sub("-", (title or "").lower()).strip("-")[:40] or "portrait"
+    if base not in taken:
+        return base
+    for index in range(2, 1000):
+        candidate = f"{base}-{index}"
+        if candidate not in taken:
+            return candidate
+    raise FaceSwapUnavailable(f"Too many portraits are already named {base!r}.")
+
+
+def import_portrait(source: Path, title: str) -> dict[str, Any]:
+    """Copy a picture from the library into the portraits folder.
+
+    Copied rather than referenced. A recipe stores a portrait by name and is
+    re-run later, so pointing at a library asset would make an edit break when
+    that asset is removed — and would put a workspace-scoped id into a value
+    that is otherwise just a filename. One photograph is a cheap copy.
+
+    The face is checked here where it can still be refused. A portrait with no
+    findable face in it fails at render time otherwise, which is minutes later
+    and looks like the swap being broken rather than the picture being wrong.
+    """
+    if source.suffix.lower() not in FACE_SUFFIXES:
+        raise FaceSwapUnavailable(
+            f"A portrait has to be {', '.join(sorted(FACE_SUFFIXES))}, not {source.suffix}."
+        )
+    FACES_DIR.mkdir(parents=True, exist_ok=True)
+    taken = {item["value"] for item in available_faces()}
+    name = portrait_name(title or source.stem, taken)
+    destination = FACES_DIR / f"{name}{source.suffix.lower()}"
+    shutil.copyfile(source, destination)
+
+    if runtime_status()["available"]:
+        try:
+            reference_face(name)
+        except Exception as error:
+            destination.unlink(missing_ok=True)
+            raise FaceSwapUnavailable(
+                f"No usable face was found in that picture: {error}"
+            ) from error
+    return {"value": name, "label": name.replace("-", " "), "group": "Faces"}
+
+
+def remove_portrait(name: str) -> bool:
+    """Take a portrait out of the folder. Nothing else refers to it by path."""
+    found = face_file(name)
+    if found is None:
+        return False
+    found.unlink(missing_ok=True)
+    return True
+
+
+def faces_folder() -> dict[str, Any]:
+    """Where portraits go, and which files there were not usable as one.
+
+    Reported through the effect's own declaration, so the picker can name the
+    folder and explain a file that did not appear without knowing it is showing
+    faces. A photograph dropped in and silently ignored is the one failure
+    somebody has nothing to act on.
+    """
+    skipped = []
+    if FACES_DIR.is_dir():
+        for item in sorted(FACES_DIR.iterdir()):
+            if item.is_file() and item.suffix.lower() not in FACE_SUFFIXES:
+                skipped.append(
+                    {
+                        "file": item.name,
+                        "reason": f"Not a picture this reads. Use {', '.join(FACE_SUFFIXES)}.",
+                    }
+                )
+    return {
+        "directory": str(FACES_DIR),
+        "skipped": skipped,
+        # Where a library picture can be sent to become a portrait, relative to
+        # the media-library base. Declared so the picker can offer it without
+        # knowing which effect it is showing.
+        "import_from_library": "effects/face-swap/faces",
+        "accepts": sorted(FACE_SUFFIXES),
+    }
 
 
 def face_file(name: str) -> Path | None:
@@ -352,6 +458,106 @@ def swapper() -> Any:
             providers=[face_identity.chosen_provider(), face_identity.CPU_PROVIDER],
         )
     return _SWAPPER
+
+
+def render_still(
+    source: Path, destination: Path, settings: SwapSettings | None = None
+) -> dict[str, Any]:
+    """Replace a face in a photograph and write a new one.
+
+    Which face is decided here by size rather than by identity. That is not a
+    shortcut, it is the only thing a single picture supports: the clip path
+    groups faces across every frame to work out who the video is *about*, and
+    one photograph has nothing to group. Said in the report, because "the
+    subject" means something weaker here than it does for a clip.
+    """
+    from trendrelay_api.integrations import face_identity
+    from trendrelay_api.integrations.face_blur import _load_opencv, read_image, write_image
+
+    cv2 = _load_opencv()
+    settings = settings or SwapSettings()
+    _require_available()
+    replacement = reference_face(settings.source_face, settings.confidence)
+    engine = swapper()
+    app, provider = face_identity.analyser(settings.confidence)
+
+    frame = read_image(cv2, source)
+    faces = sorted(app.get(frame), key=lambda face: _area(face.bbox), reverse=True)
+    # `swap_subject` inverted means everyone *except* the main face, which on a
+    # picture means everyone but the largest.
+    chosen = faces[:1] if settings.swap_subject else faces[1:]
+    for face in chosen:
+        frame = engine.get(frame, face, replacement, paste_back=True)
+    write_image(cv2, frame, destination)
+    return {
+        "source": str(source),
+        "output": str(destination),
+        "source_face": settings.source_face,
+        "faces_found": len(faces),
+        "faces_swapped": len(chosen),
+        "provider": provider,
+        # Named plainly: this is a weaker notion of "the subject" than a clip
+        # gets, and somebody comparing the two results deserves to know why.
+        "subject_chosen_by": "size",
+        "warning": (
+            "No face was found, so this picture is unchanged." if not faces else None
+        ),
+        "media_kind": "image",
+    }
+
+
+def preview_frame(
+    source: Path,
+    settings: SwapSettings | None = None,
+    at_ratio: float | None = None,
+) -> dict[str, Any]:
+    """One swapped frame, for choosing a portrait before rendering a clip.
+
+    A still cannot answer which identity the render will pick — that is decided
+    by clustering the whole clip, and one frame has nothing to cluster. It can
+    answer the question somebody actually has while looking at a folder of
+    portraits, which is whether *this* face sits convincingly on *this* person,
+    and that is worth a decode rather than a render.
+
+    So the largest face on the frame is swapped and the note says plainly that
+    the real choice is made elsewhere. Showing this without saying it would be
+    the misleading kind of preview.
+    """
+    from trendrelay_api.integrations import face_identity
+    from trendrelay_api.integrations.face_blur import _load_opencv, encode_preview, probe_frame
+
+    cv2 = _load_opencv()
+    settings = settings or SwapSettings()
+    _require_available()
+    replacement = reference_face(settings.source_face, settings.confidence)
+    engine = swapper()
+    app, _provider = face_identity.analyser(settings.confidence)
+
+    def look(_runtime: Any, frame: Any) -> list[Any]:
+        return list(app.get(frame))
+
+    probed = probe_frame(source, look, at_ratio)
+    frame, faces, size = probed["frame"], probed["found"], probed["size"]
+    if faces:
+        # The largest, because on a single frame that is the only stand-in for
+        # "the subject" available — and it is named as a stand-in in the note.
+        chosen = max(faces, key=lambda face: _area(face.bbox))
+        frame = engine.get(frame, chosen, replacement, paste_back=True)
+    return {
+        "image": encode_preview(cv2, frame, size),
+        "position": probed["position"],
+        "duration_seconds": probed["duration_seconds"],
+        "note": (
+            "No face on this frame, so nothing was replaced. Try another moment."
+            if not faces
+            else (
+                f"Replaced the largest of {len(faces)} face"
+                f"{'' if len(faces) == 1 else 's'} here. The render picks who to "
+                "replace by grouping faces across the whole clip, so it may "
+                "choose someone else."
+            )
+        ),
+    }
 
 
 def render_swapped(

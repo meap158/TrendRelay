@@ -26,6 +26,17 @@ vision = [
   "opencv-python-headless>=4.10,<5",
   "numpy>=1.26,<3",
 ]
+# MediaPipe, for the 478-point face mesh that places an object precisely on a
+# face. Strictly an upgrade: without it the five landmarks YuNet already returns
+# carry the feature, and without those the detection box does. Separate from
+# `vision` because it is another ~60MB of wheels for a difference only somebody
+# sticking props on faces will see.
+#
+# The weights are a separate download, the way YuNet's are - put MediaPipe's
+# `face_landmarker.task` bundle at `.data/models/face_landmarker.task`.
+landmarks = [
+  "mediapipe>=0.10.14,<0.11",
+]
 # InsightFace, for identity-aware face work. Separate from `vision` because the
 # code is MIT but its pretrained models are non-commercial, so this is a
 # deliberate choice rather than something a plain install should pick up.

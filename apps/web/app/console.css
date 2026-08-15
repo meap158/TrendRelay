@@ -102,6 +102,14 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .notification-title, .notification-error { min-width: 0; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
 .notification-title { color: var(--text); font-size: 12px; font-weight: 600; line-height: 1.4; }
 .notification-error { max-height: 4.2em; overflow-y: auto; margin: 0; color: #9d2626; font-size: 10px; line-height: 1.4; }
+/* Shown only while a job is running, so it never lingers as a full bar next to
+   something that already finished. */
+.notification-progress { display: grid; gap: 3px; }
+/* The empty part of the track has to be visible, or an early job reads as a
+   stray dash instead of "6% of the way along". */
+.notification-progress-track { height: 4px; border-radius: 999px; background: var(--line-strong); overflow: hidden; }
+.notification-progress-track span { display: block; height: 100%; border-radius: 999px; background: var(--link); transition: width .4s ease-out; }
+.notification-progress small { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .notification-item time, .notification-read-label { color: var(--muted); font-size: 9px; }
 .notification-read-label { font-weight: 650; }
 .notification-empty { display: grid; min-height: 150px; place-content: center; gap: 5px; padding: 16px; color: var(--muted); text-align: center; }

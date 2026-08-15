@@ -5,7 +5,9 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { apiBaseUrl } from "../../lib/api";
+import { effectLabel } from "../../lib/i18n/effects";
 import { useAuth } from "../auth-provider";
+import { useJobs } from "../jobs-provider";
 import { useT } from "../i18n-provider";
 import { blurredVersion, handoffPath } from "../../lib/media-rules";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
@@ -30,7 +32,81 @@ type Workspace = { id: string; name: string; role: string };
 type ViewMode = "gallery" | "list";
 type GroupBy = "none" | "channel" | "source";
 
-type Version = { kind: "original" | "proxy" | "thumbnail" | "audio" | "blurred"; path: string; size_bytes: number };
+type VersionEffect = { id: string; label: string };
+type Version = {
+  kind: "original" | "proxy" | "thumbnail" | "audio" | "blurred" | "edited";
+  path: string;
+  size_bytes: number;
+  /** What produced this cut, in the order it was applied. */
+  effects?: VersionEffect[];
+  created_at?: string;
+};
+
+/**
+ * The kinds that are a render of the asset rather than the asset.
+ *
+ * Both exist because Publish asks for `blurred` by name to know a face was
+ * dealt with. For *watching* the result that distinction does not matter — a
+ * blur is one effect among several that can be in a single rendered cut — so
+ * the previewer takes them together and calls the result what its effects say.
+ */
+const RENDERED_KINDS = new Set(["blurred", "edited"]);
+
+/**
+ * The newest render of an asset, whatever effects made it.
+ *
+ * Newest rather than ranked by kind: somebody who has just re-rendered wants
+ * to watch what they just made, and putting last week's blur ahead of this
+ * morning's edit would show them the wrong file with no way to say so.
+ */
+type Translate = (path: string, values?: Record<string, string | number>) => string;
+
+/** Every effect in a cut, as tags, in the order applied and said once each. */
+function cutEffects(t: Translate, version: Version): string[] {
+  const names = (version.effects ?? []).map((effect) =>
+    effectLabel(t, effect.id, effect.label),
+  );
+  // Every effect keeps its own name. Privacy remains a separate filter facet,
+  // while cards describe the actual recipe rather than collapsing overlays and
+  // blur into one privileged tag.
+  return [...new Set(names)];
+}
+
+/**
+ * What to call the rendered cut on a two-option switch.
+ *
+ * Named after what is actually in it, because "Edited" tells somebody nothing
+ * about the file they are about to watch, and this used to be able to say only
+ * "Faces blurred" — which was true when blurring was the only thing that could
+ * produce a cut, and became a lie the moment a stack could hold a crop and a
+ * sticker too.
+ *
+ * Beyond two effects it counts rather than lists: the button sits under the
+ * player and a full recipe would be wider than the video. The whole stack is
+ * one hover away, and the editor shows it in order.
+ */
+function cutLabel(t: Translate, version: Version): string {
+  const names = cutEffects(t, version);
+  if (names.length) {
+    return names.length <= 2
+      ? names.join(" + ")
+      : t("library.cutEffectCount", { count: names.length });
+  }
+  // Rendered before the recipe was recorded on the version, so what made it is
+  // genuinely unknown. Its *kind* is not: everything that has ever produced a
+  // `blurred` cut covered a face, so saying that much is accurate where naming
+  // an effect would be a guess.
+  return version.kind === "blurred"
+    ? t("library.cutFacesCovered")
+    : t("library.cutEdited");
+}
+
+function renderedCut(versions: Version[]): Version | null {
+  const rendered = versions.filter((version) => RENDERED_KINDS.has(version.kind));
+  if (!rendered.length) return null;
+  return rendered.reduce((newest, version) =>
+    (version.created_at ?? "") >= (newest.created_at ?? "") ? version : newest);
+}
 type Transcript = { id: string; kind: "speech" | "ocr"; language: string; text: string };
 type Analysis = {
   version: number;
@@ -219,14 +295,14 @@ function MediaPreview({
    * different one remounts this and asks the question again.
    */
   const [requested, setRequested] = useState(autoStart || asset.media_kind === "image");
-  // A blurred cut is watched in the same player as the original, so the two are
-  // compared in place rather than in a second, smaller video somewhere else.
-  const [cut, setCut] = useState<"original" | "blurred">("original");
+  // The rendered cut is watched in the same player as the original, so the two
+  // are compared in place rather than in a second, smaller video somewhere else.
+  const [cut, setCut] = useState<"original" | "edited">("original");
   // Both <video> and <audio> are HTMLMediaElement, which is the whole
   // transport surface used here: play, pause and paused.
   const videoRef = useRef<HTMLMediaElement>(null);
   const navigatingRef = useRef(false);
-  const blurred = asset.versions.find((version) => version.kind === "blurred") ?? null;
+  const rendered = renderedCut(asset.versions);
 
   // Audio and video both have a transport; an image has nothing to play.
   const playable = asset.media_kind === "video" || asset.media_kind === "audio";
@@ -236,7 +312,7 @@ function MediaPreview({
     let active = true;
     let objectUrl = "";
     const controller = new AbortController();
-    const wanted = cut === "blurred" && blurred ? "blurred" : "original";
+    const wanted = cut === "edited" && rendered ? "edited" : "original";
     apiFetch(
       `/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/preview?cut=${wanted}`,
       { method: "POST", signal: controller.signal },
@@ -258,7 +334,7 @@ function MediaPreview({
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [apiFetch, asset.id, blurred, cut, requested, t, workspaceId]);
+  }, [apiFetch, asset.id, rendered, cut, requested, t, workspaceId]);
 
   function startPlayback() {
     setError("");
@@ -360,17 +436,28 @@ function MediaPreview({
           )
         ) : <p>{error || t("library.loadingPreview")}</p>}
       </div>
-      {blurred && (
+      {rendered && (
+        /* Two cuts, because there are two things worth comparing: what came in
+           and what the effects made of it. A render is the whole stack in one
+           file, so a third option per effect would be offering cuts that do not
+           exist. */
         <div className="library-cut-switch" role="group" aria-label={t("library.whichCut")}>
-          {(["original", "blurred"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              className={cut === option ? "selected" : ""}
-              aria-pressed={cut === option}
-              onClick={() => { setError(""); setSource(""); setCut(option); setRequested(true); }}
-            >{option === "original" ? "Original" : "Faces blurred"}</button>
-          ))}
+          <button
+            type="button"
+            className={cut === "original" ? "selected" : ""}
+            aria-pressed={cut === "original"}
+            onClick={() => { setError(""); setSource(""); setCut("original"); setRequested(true); }}
+          >{t("library.cutOriginal")}</button>
+          <button
+            type="button"
+            className={cut === "edited" ? "selected" : ""}
+            aria-pressed={cut === "edited"}
+            /* The full stack in the tooltip, the short form on the button:
+               four effects would otherwise make a control wider than the
+               player it sits under. */
+            title={cutEffects(t, rendered).join(" → ") || undefined}
+            onClick={() => { setError(""); setSource(""); setCut("edited"); setRequested(true); }}
+          >{cutLabel(t, rendered)}</button>
         </div>
       )}
       <nav className="library-preview-navigation" aria-label={t("library.browsePreviews")}>
@@ -429,6 +516,14 @@ export default function LibraryPage() {
   );
   const [facets, setFacets] = useState<AssetFacets>(EMPTY_FACETS);
   const [total, setTotal] = useState(0);
+  const [loadingAssets, setLoadingAssets] = useState(false);
+  // Background syncs, filter changes and job completion can all request a
+  // refresh. They must all read the latest selection, and an older response
+  // must never put an unfiltered list back after a newer filtered one arrived.
+  const latestFilters = useRef(filters);
+  const latestSortOrder = useRef(sortOrder);
+  const latestWorkspaceId = useRef(workspaceId);
+  const refreshSequence = useRef(0);
   const [viewMode, setViewMode] = usePersistedState<ViewMode>(
     "trendrelay.library.view", "gallery", isViewMode,
   );
@@ -450,6 +545,8 @@ export default function LibraryPage() {
   // them whenever an action finished. The bulk-action outcome below is not a
   // banner — it reads back inline where the run was started — so it stays put.
   const { messages: statusMessages, fail, dismiss } = useStatus();
+  const { jobs: notificationJobs } = useJobs();
+  const previousEffectJobStates = useRef<Map<string, string>>(new Map());
   const [message, setMessage] = useState("");
   const [selection, setSelection] = useState<Set<string>>(new Set());
   /** Anchor for shift-click range selection. */
@@ -498,34 +595,68 @@ export default function LibraryPage() {
   /** The filter the list is showing, so a select-all can ask for the same set. */
   const filterParams = useCallback(() => assetFilterParams(filters), [filters]);
 
+  useEffect(() => { latestFilters.current = filters; }, [filters]);
+  useEffect(() => { latestSortOrder.current = sortOrder; }, [sortOrder]);
+  useEffect(() => { latestWorkspaceId.current = workspaceId; }, [workspaceId]);
+
   const refresh = useCallback(async (nextWorkspace = workspaceId) => {
     if (!nextWorkspace) return;
-    const params = filterParams();
-    params.set("sort", sortOrder);
+    if (nextWorkspace !== latestWorkspaceId.current) return;
+    // A delayed auto-sync may hold a callback created before the user selected
+    // Images or an effect. Reading refs here makes even that delayed refresh
+    // use what the controls show now, rather than silently restoring "All".
+    const params = assetFilterParams(latestFilters.current);
+    params.set("sort", latestSortOrder.current);
     params.set("limit", "100");
     const suffix = `?${params}`;
-    const [assetBody, jobBody, statusBody] = await Promise.all([
-      json<{ assets: Asset[]; total?: number; facets?: AssetFacets }>(
-        await apiFetch(`/api/workspaces/${nextWorkspace}/media/library/assets${suffix}`),
-      ),
-      json<{ jobs: Job[] }>(
-        await apiFetch(`/api/workspaces/${nextWorkspace}/media/library/jobs`),
-      ),
-      json<Status>(
-        await apiFetch(`/api/workspaces/${nextWorkspace}/media/library/status`),
-      ),
-    ]);
-    setAssets(assetBody.assets);
-    setTotal(assetBody.total ?? assetBody.assets.length);
-    if (assetBody.facets) setFacets(assetBody.facets);
-    setJobs(jobBody.jobs);
-    setStatus(statusBody);
-    setSelectedId((current) =>
-      assetBody.assets.some((asset) => asset.id === current)
-        ? current
-        : (assetBody.assets[0]?.id ?? ""),
+    const sequence = ++refreshSequence.current;
+    setLoadingAssets(true);
+    try {
+      const [assetBody, jobBody, statusBody] = await Promise.all([
+        json<{ assets: Asset[]; total?: number; facets?: AssetFacets }>(
+          await apiFetch(`/api/workspaces/${nextWorkspace}/media/library/assets${suffix}`),
+        ),
+        json<{ jobs: Job[] }>(
+          await apiFetch(`/api/workspaces/${nextWorkspace}/media/library/jobs`),
+        ),
+        json<Status>(
+          await apiFetch(`/api/workspaces/${nextWorkspace}/media/library/status`),
+        ),
+      ]);
+      if (
+        sequence !== refreshSequence.current
+        || nextWorkspace !== latestWorkspaceId.current
+      ) return;
+      setAssets(assetBody.assets);
+      setTotal(assetBody.total ?? assetBody.assets.length);
+      if (assetBody.facets) setFacets(assetBody.facets);
+      setJobs(jobBody.jobs);
+      setStatus(statusBody);
+      setSelectedId((current) =>
+        assetBody.assets.some((asset) => asset.id === current)
+          ? current
+          : (assetBody.assets[0]?.id ?? ""),
+      );
+    } finally {
+      if (sequence === refreshSequence.current) setLoadingAssets(false);
+    }
+  }, [apiFetch, workspaceId]);
+
+  useEffect(() => {
+    const effectJobs = notificationJobs.filter((job) => job.category === "edit");
+    const previous = previousEffectJobStates.current;
+    const settledNow = effectJobs.some((job) =>
+      ["succeeded", "failed", "cancelled"].includes(job.status)
+      && ["queued", "running"].includes(previous.get(job.id) ?? ""),
     );
-  }, [apiFetch, filterParams, sortOrder, workspaceId]);
+    previousEffectJobStates.current = new Map(
+      effectJobs.map((job) => [job.id, job.status]),
+    );
+    // The notification announces completion; refresh the same screen at that
+    // moment so its new cut, exact tags, and effect facet appear without a
+    // manual reload. Failed and cancelled jobs refresh too, clearing stale UI.
+    if (settledNow) void refresh();
+  }, [notificationJobs, refresh]);
 
   function clearFilters() {
     setFilters({});
@@ -645,7 +776,7 @@ export default function LibraryPage() {
 
   function renderAsset(asset: Asset) {
     return (
-      <button className={`${selectedId === asset.id ? "selected" : ""}${asset.versions.some((version) => version.kind === "blurred") ? " has-versions" : ""}${selection.has(asset.id) ? " picked" : ""}`} key={asset.id} aria-label={`Open ${asset.title}`} aria-pressed={selectedId === asset.id} onClick={() => setSelectedId(asset.id)}>
+      <button className={`${selectedId === asset.id ? "selected" : ""}${renderedCut(asset.versions) ? " has-versions" : ""}${selection.has(asset.id) ? " picked" : ""}`} key={asset.id} aria-label={`Open ${asset.title}`} aria-pressed={selectedId === asset.id} onClick={() => setSelectedId(asset.id)}>
         {/* A separate control, so selecting never hijacks opening a clip. */}
         <span
           className="library-pick"
@@ -665,10 +796,15 @@ export default function LibraryPage() {
         <span>
           <strong>{asset.title}</strong>
           <small>{asset.creator ? `${asset.creator} · ` : ""}{asset.platform ?? asset.source_type} · {displayDuration(asset.duration_ms)} · {displaySize(asset.size_bytes)}</small>
-          {asset.versions.some((version) => version.kind === "blurred") && (
-            <em className="blurred-tag" title={t("library.blurredExists")}>
-              Faces blurred
-            </em>
+          {/* Marked for any rendered cut, not only a blurred one. An asset with
+              a crop and a sticker on it has been edited just as much, and the
+              row was the only place that said so at a glance. */}
+          {renderedCut(asset.versions) && (
+            <em
+              className="blurred-tag"
+              title={cutEffects(t, renderedCut(asset.versions)!).join(" → ")
+                || t("library.blurredExists")}
+            >{cutLabel(t, renderedCut(asset.versions)!)}</em>
           )}
         </span>
       </button>
@@ -728,7 +864,7 @@ export default function LibraryPage() {
         fail(reason instanceof Error ? reason.message : "Library unavailable."),
       );
     });
-  }, [refresh, workspaceId, fail]);
+  }, [filters, refresh, sortOrder, workspaceId, fail]);
 
   useEffect(() => {
     if (!workspaceId || !canImport || autoSyncedWorkspaces.current.has(workspaceId)) return;
@@ -951,6 +1087,35 @@ export default function LibraryPage() {
     }
   }
 
+  async function removeEffects(asset: Asset) {
+    if (!window.confirm(
+      `Remove every applied effect from "${asset.title}"?\n\n`
+      + "Rendered effect files and the saved recipe will be removed. The original media is preserved.",
+    )) return;
+    setBusy("discard-effects");
+    fail("");
+    try {
+      const body = await json<{ removed_versions: number; cancelled_jobs?: number }>(
+        await apiFetch(
+          `/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/effects/discard`,
+          { method: "POST" },
+        ),
+      );
+      setEffectsOpen(false);
+      await refresh();
+      const cancelled = body.cancelled_jobs
+        ? ` ${body.cancelled_jobs} active effect ${body.cancelled_jobs === 1 ? "job was" : "jobs were"} cancelled.`
+        : "";
+      setMessage(
+        `${body.removed_versions} rendered ${body.removed_versions === 1 ? "cut was" : "cuts were"} removed. The original is unchanged.${cancelled}`,
+      );
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "The applied effects could not be removed.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   if (loading) return <main className="library-page"><p>{t("library.opening")}</p></main>;
   if (!user) return <main className="library-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Flibrary">{t("library.signInPrompt")}</Link></main>;
 
@@ -1004,7 +1169,7 @@ export default function LibraryPage() {
           Blurring failed. {blurResult.error}
         </p>
       )}
-      <section className="library-layout">
+      <section className="library-layout" aria-busy={loadingAssets}>
         <aside className="library-browser">
           <div className="library-browser-toolbar">
           <form className="library-search" onSubmit={(event) => { event.preventDefault(); void refresh(); }}>
@@ -1044,7 +1209,9 @@ export default function LibraryPage() {
             </label>
           </AssetFilters>
           <div className="library-collection-toolbar">
-            <strong>{total} {total === 1 ? "item" : "items"}</strong>
+            <strong aria-live="polite">
+              {loadingAssets ? "Filtering…" : `${total} ${total === 1 ? "item" : "items"}`}
+            </strong>
             <div className="library-collection-actions">
               {canImport && <Button variant="quiet" size="sm" busy={busy === "sync"} onClick={() => void syncDownloads()}>{busy === "sync" ? "Refreshing" : "Refresh downloads"}</Button>}
               <div className="library-view-switcher" role="group" aria-label={t("library.viewLabel")}>
@@ -1206,10 +1373,20 @@ export default function LibraryPage() {
                         </a>
                       ) : <span className="library-channel-name">Channel: {selected.creator}</span>}
                     </>}
-                    {blurredVersion(selected) && (
-                      <em className="blurred-tag" title={`Handoffs send this cut: ${handoffPath(selected)}`}>
-                        Faces blurred
-                      </em>
+                    {/* Named after what is actually in the cut. Any render
+                        earns the tag, not only a blurred one — a clip that has
+                        been cropped and had an object put on a face has been
+                        edited just as much, and said nothing here before. */}
+                    {renderedCut(selected.versions) && (
+                      <em
+                        className="blurred-tag"
+                        title={[
+                          cutEffects(t, renderedCut(selected.versions)!).join(" → "),
+                          blurredVersion(selected)
+                            ? `Handoffs send this cut: ${handoffPath(selected)}`
+                            : "",
+                        ].filter(Boolean).join(" · ")}
+                      >{cutLabel(t, renderedCut(selected.versions)!)}</em>
                     )}
                   </p>
                   <h2>{selected.title}</h2>
@@ -1271,6 +1448,15 @@ export default function LibraryPage() {
                         title={t("library.effectsHelp")}
                         onClick={() => setEffectsOpen(true)}
                       ><ActionIcon name="edit" />{t("library.effects")}</Button>
+                      {renderedCut(selected.versions) && (
+                        <Button
+                          variant="secondary"
+                          busy={busy === "discard-effects"}
+                          disabled={!canImport}
+                          title="Remove rendered effects and the saved recipe; keep the original media"
+                          onClick={() => void removeEffects(selected)}
+                        ><ActionIcon name="dismiss" />Remove effects</Button>
+                      )}
                       <Button
                         variant="secondary"
                         disabled={selected.media_kind !== "video"}

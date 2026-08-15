@@ -21,6 +21,7 @@ export function Dialog({
   onClose,
   children,
   footer,
+  size = "default",
 }: {
   open: boolean;
   title: string;
@@ -28,13 +29,23 @@ export function Dialog({
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  /**
+   * `wide` for a panel whose content is the point rather than a form — a
+   * gallery of objects, a stack of effects with their own controls. At the
+   * default width those get a column each of about three hundred pixels, and a
+   * grid of pictures in one of those is a scrollbar with a few thumbnails
+   * behind it.
+   */
+  size?: "default" | "wide";
 }) {
   const t = useT();
   return (
     <RadixDialog.Root open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="ui-dialog-overlay" />
-        <RadixDialog.Content className="ui-dialog">
+        <RadixDialog.Content
+          className={size === "wide" ? "ui-dialog ui-dialog-wide" : "ui-dialog"}
+        >
           <header className="ui-dialog-head">
             <div>
               <RadixDialog.Title>{title}</RadixDialog.Title>

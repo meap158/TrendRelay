@@ -127,3 +127,46 @@ def test_a_portrait_that_is_not_there_fails_before_the_long_pass(clip, tmp_path)
         face_swap.render_swapped(clip, tmp_path / "out.mp4", face_swap.SwapSettings(
             source_face="nobody",
         ))
+
+
+@needs_a_model
+def test_a_preview_swaps_one_frame_without_rendering_a_clip(clip, tmp_path) -> None:
+    """Choosing a portrait should not cost a render to find out it was wrong.
+
+    A still cannot say which identity the clip-wide clustering will land on, and
+    it does not pretend to — but it does answer the question somebody actually
+    has while looking at a folder of faces, which is whether this one sits
+    convincingly on this person.
+    """
+    del tmp_path
+    result = face_swap.preview_frame(clip, face_swap.SwapSettings(source_face="sample"))
+
+    assert result["image"][:3] == bytes.fromhex("ffd8ff")  # a JPEG
+    assert 0.0 <= result["position"] <= 1.0
+    assert result["note"]
+
+
+@needs_a_model
+def test_the_preview_says_the_real_choice_is_made_elsewhere(clip) -> None:
+    # Showing a swap chosen one way while the render chooses another, without
+    # saying so, is the misleading kind of preview.
+    result = face_swap.preview_frame(clip, face_swap.SwapSettings(source_face="sample"))
+    assert "whole clip" in result["note"]
+
+
+@needs_a_model
+def test_the_preview_is_reached_through_the_registry_like_the_others(clip) -> None:
+    from trendrelay_api.integrations import effect_render  # noqa: F401
+    from trendrelay_api.integrations.effects import REGISTRY, coerce_params
+
+    effect = REGISTRY["face_swap"]
+    assert effect.preview is not None
+    values = coerce_params(effect, {"source_face": "sample"})
+    result = effect.preview(clip, values, None)
+    assert result["image"][:3] == bytes.fromhex("ffd8ff")
+
+
+@needs_a_model
+def test_a_portrait_that_is_not_in_the_folder_is_refused(clip) -> None:
+    with pytest.raises(face_swap.FaceSwapUnavailable):
+        face_swap.preview_frame(clip, face_swap.SwapSettings(source_face="../../etc/passwd"))
