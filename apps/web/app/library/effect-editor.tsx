@@ -416,7 +416,8 @@ export function EffectEditor({
         </>
       )}
     >
-      {!gallery && <div className="effect-editor">
+      {!gallery && <div className={`effect-editor${previewJob || previewUrl ? " effect-editor-with-preview" : ""}`}>
+        <div className="effect-editor-controls">
         {failure && <p className="console-error" role="alert">{failure}</p>}
         {recipeRecovered && (
           <p className="effect-recovery-note" role="status">
@@ -424,44 +425,6 @@ export function EffectEditor({
             the original order with current defaults; review the controls, then save
             or render to preserve your exact settings from now on.
           </p>
-        )}
-
-        {(previewJob || previewUrl) && (
-          <section className="effect-recipe-preview" aria-live="polite">
-            <div className="effect-recipe-preview-head">
-              <div>
-                <strong>{previewUrl ? previewLabel : `Preparing ${previewLabel.toLowerCase()}`}</strong>
-                {!previewUrl && (
-                  <small>
-                    {[previewJob?.progress_stage,
-                      typeof previewJob?.progress === "number"
-                        ? `${Math.round(previewJob.progress * 100)}%`
-                        : previewMediaKind === "video" ? "First 5 seconds" : "Still image",
-                    ].filter(Boolean).join(" · ")}
-                  </small>
-                )}
-              </div>
-              {previewJob && ["queued", "running"].includes(previewJob.status) && (
-                <Button
-                  variant="quiet"
-                  size="sm"
-                  busy={busy === "cancel-preview"}
-                  onClick={() => void cancelPreview()}
-                >Cancel</Button>
-              )}
-            </div>
-            {!previewUrl && typeof previewJob?.progress === "number" && (
-              <progress max={1} value={previewJob.progress} />
-            )}
-            {previewUrl && previewMediaKind === "video" && (
-              <video src={previewUrl} controls preload="metadata" />
-            )}
-            {previewUrl && previewMediaKind === "image" && (
-              // Blob URLs are private, short-lived previews and cannot use Next's optimiser.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={previewUrl} alt="The current effect recipe preview" />
-            )}
-          </section>
         )}
 
         <div className="effect-add" role="group" aria-label={t("effectEditor.heading")}>
@@ -597,6 +560,45 @@ export function EffectEditor({
             Applied top to bottom in exactly this order. Use the play button on
             any step to preview the result through that point in the stack.
           </p>
+        )}
+        </div>
+
+        {(previewJob || previewUrl) && (
+          <section className="effect-recipe-preview" aria-live="polite">
+            <div className="effect-recipe-preview-head">
+              <div>
+                <strong>{previewUrl ? previewLabel : `Preparing ${previewLabel.toLowerCase()}`}</strong>
+                {!previewUrl && (
+                  <small>
+                    {[previewJob?.progress_stage,
+                      typeof previewJob?.progress === "number"
+                        ? `${Math.round(previewJob.progress * 100)}%`
+                        : previewMediaKind === "video" ? "First 5 seconds" : "Still image",
+                    ].filter(Boolean).join(" · ")}
+                  </small>
+                )}
+              </div>
+              {previewJob && ["queued", "running"].includes(previewJob.status) && (
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  busy={busy === "cancel-preview"}
+                  onClick={() => void cancelPreview()}
+                >Cancel</Button>
+              )}
+            </div>
+            {!previewUrl && typeof previewJob?.progress === "number" && (
+              <progress max={1} value={previewJob.progress} />
+            )}
+            {previewUrl && previewMediaKind === "video" && (
+              <video src={previewUrl} controls preload="metadata" />
+            )}
+            {previewUrl && previewMediaKind === "image" && (
+              // Blob URLs are private, short-lived previews and cannot use Next's optimiser.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={previewUrl} alt="The current effect recipe preview" />
+            )}
+          </section>
         )}
       </div>}
 
