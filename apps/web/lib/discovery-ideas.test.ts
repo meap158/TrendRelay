@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildCampaignIdea,
+  seedFromEngagedPost,
   seedFromPost,
   seedFromTopic,
   type DiscoverySeed,
@@ -80,6 +81,30 @@ test("a popular post keeps its source facts without inventing a link", () => {
   assert.equal(result.id, "post:VN:tiktok:Maker:2");
   assert.equal(result.url, null);
   assert.match(result.evidence, /2M views/);
+});
+
+test("a research winner keeps its canonical link and discussion evidence", () => {
+  const seed = seedFromEngagedPost({
+    id: "reddit:post-1",
+    source: "reddit",
+    title: "The post people discussed",
+    summary: "A useful conversation.",
+    url: "https://reddit.com/r/example/1",
+    topic: "portable espresso",
+    publishedAt: "2026-08-15T00:00:00Z",
+    metrics: { score: 100, num_comments: 45 },
+    views: null,
+    likes: null,
+    upvotes: 100,
+    comments: 45,
+    shares: null,
+    interactions: 145,
+    sourceRank: 1,
+  });
+
+  assert.equal(seed.url, "https://reddit.com/r/example/1");
+  assert.match(seed.evidence, /45 comments/);
+  assert.deepEqual(seed.tags, ["portable espresso", "reddit"]);
 });
 
 test("a titled post uses its real post identity in the Campaign evidence", () => {

@@ -1,5 +1,6 @@
 import type { PopularPost } from "./post-board.ts";
 import { compactCount } from "./post-board.ts";
+import type { EngagedPost } from "./engaged-posts.ts";
 import type { Topic } from "./trend-shapes.ts";
 import { searchTerm } from "./trend-shapes.ts";
 
@@ -56,6 +57,8 @@ export function seedFromPost(post: PopularPost): DiscoverySeed {
   const metrics = [
     post.views == null ? "" : `${compactCount(post.views)} views`,
     post.likes == null ? "" : `${compactCount(post.likes)} likes`,
+    post.comments == null ? "" : `${compactCount(post.comments)} comments`,
+    post.shares == null ? "" : `${compactCount(post.shares)} shares`,
     post.followers == null ? "" : `${compactCount(post.followers)} followers`,
   ].filter(Boolean);
   const label = post.title
@@ -69,6 +72,26 @@ export function seedFromPost(post: PopularPost): DiscoverySeed {
     url: post.url,
     evidence: [`rank ${post.rank}`, ...metrics].join(" · "),
     tags: [post.niche ?? "", post.creator].filter(Boolean),
+  };
+}
+
+export function seedFromEngagedPost(post: EngagedPost): DiscoverySeed {
+  const metrics = [
+    post.views == null ? "" : `${compactCount(post.views)} views`,
+    post.likes == null ? "" : `${compactCount(post.likes)} likes`,
+    post.upvotes == null ? "" : `${compactCount(post.upvotes)} upvotes`,
+    post.comments == null ? "" : `${compactCount(post.comments)} comments`,
+    post.shares == null ? "" : `${compactCount(post.shares)} shares`,
+  ].filter(Boolean);
+  return {
+    id: `post:research:${post.id}`,
+    kind: "post",
+    label: post.title,
+    source: post.source,
+    region: "global",
+    url: post.url,
+    evidence: [`#${post.sourceRank} in ${post.source}`, ...metrics].join(" · "),
+    tags: [post.topic, post.source],
   };
 }
 

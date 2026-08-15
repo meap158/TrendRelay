@@ -10,18 +10,30 @@
  * somebody made something in it and it worked.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ExternalLink, MessageCircle, RefreshCw } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
-import { seedFromPost, type DiscoverySeed } from "../../lib/discovery-ideas";
 import {
+  seedFromEngagedPost,
+  seedFromPost,
+  type DiscoverySeed,
+} from "../../lib/discovery-ideas";
+import {
+  engagedPostMetrics,
+  rankEngagedPosts,
+  type EngagedPostSort,
+  type ResearchPostJob,
+} from "../../lib/engaged-posts";
+import {
+  compactCount,
   coverageNote,
   creatorSearchUrl,
   postMetrics,
   type PopularPost,
 } from "../../lib/post-board";
 import { Button } from "../ui/button";
+import { useJobs } from "../jobs-provider";
 import { usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 
 type Board = {
@@ -159,6 +171,30 @@ const S: Record<string, React.CSSProperties> = {
   metrics: { fontSize: "12px", color: "var(--muted)", margin: "3px 0 0" },
   actions: { display: "flex", gap: "6px", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" },
   empty: { fontSize: "13px", color: "var(--muted)", margin: "16px 0 0" },
+  researchBoard: {
+    marginTop: "16px",
+    padding: "14px",
+    border: "1px solid var(--line)",
+    borderRadius: "12px",
+    background: "var(--panel-raised)",
+  },
+  researchHead: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
+  summary: {
+    display: "-webkit-box",
+    overflow: "hidden",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: 2,
+    fontSize: "12px",
+    lineHeight: 1.45,
+    color: "var(--muted)",
+    margin: "5px 0 0",
+  },
 };
 
 export function PopularPosts({
@@ -170,6 +206,7 @@ export function PopularPosts({
   selectedIds?: ReadonlySet<string>;
   onToggle?: (seed: DiscoverySeed) => void;
 }) {
+  const { jobs } = useJobs();
   const [region, setRegion] = usePersistedState<string>(
     "trendrelay.discover.posts.region",
     "US",
@@ -194,6 +231,31 @@ export function PopularPosts({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [engagementSort, setEngagementSort] = usePersistedState<EngagedPostSort>(
+    "trendrelay.discover.research-posts.sort",
+    "balanced",
+    (value): value is EngagedPostSort =>
+      ["balanced", "comments", "interactions"].includes(String(value)),
+  );
+  const [engagementSource, setEngagementSource] = usePersistedState<string>(
+    "trendrelay.discover.research-posts.source",
+    "all",
+    (value): value is string => typeof value === "string",
+  );
+  const researchJobs = useMemo(
+    () => jobs
+      .filter((job) => job.category === "research")
+      .map((job) => job.raw as ResearchPostJob),
+    [jobs],
+  );
+  const researchSources = useMemo(
+    () => [...new Set(rankEngagedPosts(researchJobs).map((post) => post.source))].sort(),
+    [researchJobs],
+  );
+  const engagedPosts = useMemo(
+    () => rankEngagedPosts(researchJobs, engagementSort, engagementSource).slice(0, 12),
+    [engagementSort, engagementSource, researchJobs],
+  );
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -253,6 +315,105 @@ export function PopularPosts({
           <RefreshCw size={15} aria-hidden />
           {board ? "Refresh" : "Build the board"}
         </Button>
+      </div>
+
+      <div style={S.researchBoard}>
+        <div style={S.researchHead}>
+          <div>
+            <h3 style={{ ...S.heading, fontSize: "15px" }}>Top posts from your research</h3>
+            <p style={S.sub}>
+              Real linked posts ranked by native interaction data from completed searches. Add the
+              strongest examples to the idea basket to synthesize a distinct Campaign brief.
+            </p>
+          </div>
+          <div style={{ ...S.controls, margin: 0, gap: "8px" }}>
+            <label style={S.control}>
+              <span style={S.controlLabel}>Rank by</span>
+              <select
+                value={engagementSort}
+                onChange={(event) => setEngagementSort(event.target.value as EngagedPostSort)}
+                style={{ ...S.select, minWidth: "150px" }}
+              >
+                <option value="balanced">Top in each source</option>
+                <option value="comments">Most comments</option>
+                <option value="interactions">Most interactions</option>
+              </select>
+            </label>
+            <label style={S.control}>
+              <span style={S.controlLabel}>Source</span>
+              <select
+                value={researchSources.includes(engagementSource) ? engagementSource : "all"}
+                onChange={(event) => setEngagementSource(event.target.value)}
+                style={{ ...S.select, minWidth: "130px" }}
+              >
+                <option value="all">All sources</option>
+                {researchSources.map((source) => (
+                  <option key={source} value={source}>{source}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+        {engagedPosts.length ? (
+          <ol style={S.list}>
+            {engagedPosts.map((post, index) => {
+              const seed = seedFromEngagedPost(post);
+              const selected = selectedIds?.has(seed.id) ?? false;
+              const metrics = engagedPostMetrics(post);
+              return (
+                <li key={post.id} className="discover-post-row" style={S.row}>
+                  <span style={S.place} aria-label={`Board position ${index + 1}`}>
+                    {index + 1}
+                  </span>
+                  <div style={S.body}>
+                    <a href={post.url} target="_blank" rel="noopener noreferrer" style={S.title}>
+                      {post.title}
+                    </a>
+                    <span style={S.byline}>
+                      <span style={S.source}>{post.source}</span>
+                      <span style={S.niche}>#{post.sourceRank} in source</span>
+                      <span style={{ fontSize: "11px", color: "var(--muted)" }}>{post.topic}</span>
+                    </span>
+                    {post.summary && <p style={S.summary}>{post.summary}</p>}
+                    <p style={S.metrics}>
+                      {metrics.length
+                        ? metrics.map(([name, value]) => `${compactCount(value)} ${name}`).join(" · ")
+                        : "This source returned relevance but no public interaction count"}
+                    </p>
+                  </div>
+                  <div className="discover-post-actions" style={S.actions}>
+                    {onToggle && (
+                      <Button
+                        variant={selected ? "secondary" : "quiet"}
+                        size="sm"
+                        selected={selected}
+                        aria-pressed={selected}
+                        onClick={() => onToggle(seed)}
+                      >
+                        {selected ? "Added" : "Add to idea"}
+                      </Button>
+                    )}
+                    <Button variant="quiet" size="sm" onClick={() => onResearch(post.topic)}>
+                      <MessageCircle size={13} aria-hidden /> Research
+                    </Button>
+                    <a className="link-action" href={post.url} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink size={13} aria-hidden /> Open post
+                    </a>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        ) : (
+          <p style={S.empty}>
+            Run a Discover search to collect linked Reddit, YouTube, TikTok, X, Instagram, Hacker
+            News, or web evidence. Posts with public interaction counts will rank here.
+          </p>
+        )}
+        <p style={S.coverage}>
+          “Top in each source” is the fair default: it compares rank within a network. Raw comments
+          and interactions can be sorted when you explicitly want a count-based view.
+        </p>
       </div>
 
       <div style={S.controls}>

@@ -20,6 +20,8 @@ export type PopularPost = {
   views: number | null;
   followers: number | null;
   likes: number | null;
+  comments?: number | null;
+  shares?: number | null;
   /** Null on every row today: the source renders no link to the video. */
   url: string | null;
   /** The video's own cover, which is what shows the post rather than the name. */
@@ -47,6 +49,8 @@ export function postMetrics(post: PopularPost): string[] {
   const parts: string[] = [];
   if (post.views !== null) parts.push(`${compactCount(post.views)} views`);
   if (post.likes !== null) parts.push(`${compactCount(post.likes)} likes`);
+  if (post.comments != null) parts.push(`${compactCount(post.comments)} comments`);
+  if (post.shares != null) parts.push(`${compactCount(post.shares)} shares`);
   if (post.followers !== null) parts.push(`${compactCount(post.followers)} followers`);
   return parts;
 }
