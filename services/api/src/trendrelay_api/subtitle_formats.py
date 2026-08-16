@@ -1,0 +1,305 @@
+"""Writing cues out as subtitle files, styled or plain.
+
+Three formats, because they answer three different questions. SRT is what every
+editor and platform will accept and carries no styling at all. WebVTT is what a
+browser plays natively, which is what makes a preview possible without
+rendering a video. ASS is the one that carries the look - fonts, outlines,
+shadows, position, and per-word highlighting - and is what FFmpeg's libass
+filter burns into a frame.
+
+The styling lives here rather than in the cue engine on purpose: where a line
+breaks is a fact about the speech, and whether it is yellow is not.
+
+Two details worth stating because both are silent-corruption bugs otherwise.
+ASS colours are `&HAABBGGRR` - the channels run backwards from RGB, and the
+first byte is *transparency*, so `00` is opaque and `FF` is invisible. And
+braces open an override block in ASS, so a brace inside somebody's speech has
+to be escaped or the rest of the line vanishes from the screen.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+
+from trendrelay_api.subtitles import Cue, Layout
+
+#: Where a subtitle sits, on the numeric keypad layout ASS uses: 1-3 are the
+#: bottom row, 4-6 the middle, 7-9 the top.
+ALIGNMENT = {
+    "bottom-left": 1, "bottom": 2, "bottom-right": 3,
+    "left": 4, "middle": 5, "right": 6,
+    "top-left": 7, "top": 8, "top-right": 9,
+}
+
+#: 1 draws an outline and a shadow; 3 draws an opaque box behind the text.
+BORDER_OUTLINE = 1
+BORDER_BOX = 3
+
+
+@dataclass(frozen=True)
+class Style:
+    """How a subtitle looks. Everything a caller may reasonably want to change."""
+
+    name: str = "TrendRelay"
+    font: str = "Arial"
+    #: In points against `play_height`, not pixels, so a style keeps its
+    #: proportions whichever resolution it is burned into.
+    size: int = 48
+    bold: bool = True
+    italic: bool = False
+    #: `#RRGGBB`. Converted to ASS's reversed byte order on the way out.
+    colour: str = "#FFFFFF"
+    #: Draws the outline - and, with `border=BORDER_BOX`, fills the box. That
+    #: is the format's own quirk rather than a choice made here: an opaque box
+    #: is painted in the *outline* colour and sized by the *outline* width, so
+    #: a boxed style with `outline=0` draws no box at all.
+    outline_colour: str = "#000000"
+    #: 0-255 of transparency on the outline, and so on the box.
+    outline_alpha: int = 0
+    #: The shadow's colour. Not the box - see `outline_colour`.
+    back_colour: str = "#000000"
+    #: The colour a word takes while it is being spoken. Only used by the
+    #: word-highlight styles, which need `Layout.max_words` set to match.
+    highlight_colour: str = "#FFD400"
+    outline: float = 3.0
+    shadow: float = 0.0
+    border: int = BORDER_OUTLINE
+    #: 0-255 of transparency on the box or shadow behind the text.
+    back_alpha: int = 0
+    alignment: str = "bottom"
+    margin_h: int = 60
+    margin_v: int = 80
+    #: Extra space between characters, which is how most social captions get
+    #: their look as much as the font does.
+    spacing: float = 0.0
+    uppercase: bool = False
+    #: Highlight the word currently being spoken rather than showing the cue
+    #: as one static block. Needs word timings to mean anything.
+    highlight_active_word: bool = False
+
+
+#: Ready-made looks. The first is the broadcast default; the rest are the
+#: social-video shapes, which differ from it in kind and not just in colour -
+#: they show fewer words for longer and lean on the highlight to carry the
+#: timing, so each one carries the `Layout` it needs alongside the `Style`.
+PRESETS: dict[str, tuple[Style, Layout]] = {
+    "broadcast": (
+        Style(name="Broadcast", font="Arial", size=42, bold=False, outline=2.0, shadow=1.0),
+        Layout(),
+    ),
+    "word-pop": (
+        Style(
+            name="WordPop", font="Arial Black", size=64, outline=5.0,
+            alignment="middle", highlight_colour="#FFD400", highlight_active_word=True,
+        ),
+        Layout(max_words=3, break_on_sentence=False, min_duration_ms=200, max_cps=99.0),
+    ),
+    "karaoke": (
+        Style(
+            name="Karaoke", font="Arial Black", size=54, outline=4.0,
+            highlight_colour="#38E07B", highlight_active_word=True,
+        ),
+        Layout(max_words=6, min_duration_ms=300, max_cps=99.0),
+    ),
+    "boxed": (
+        Style(
+            name="Boxed", font="Arial", size=44, bold=False, border=BORDER_BOX,
+            # The box is the outline: its colour and its padding both come from
+            # the outline fields, which is why this is not simply `outline=0`.
+            outline_colour="#000000", outline_alpha=60, outline=10.0, shadow=0.0,
+        ),
+        Layout(),
+    ),
+    "bold-outline": (
+        Style(name="BoldOutline", font="Impact", size=60, outline=6.0, spacing=1.0,
+              uppercase=True),
+        Layout(max_chars_per_line=28, max_lines=2),
+    ),
+    "minimal": (
+        Style(name="Minimal", font="Helvetica", size=40, bold=False, outline=0.0,
+              shadow=2.0, margin_v=60),
+        Layout(),
+    ),
+}
+
+
+# --- timestamps ---------------------------------------------------------------
+
+
+def srt_time(ms: int) -> str:
+    hours, minutes, seconds, milli = _parts(ms)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milli:03d}"
+
+
+def vtt_time(ms: int) -> str:
+    hours, minutes, seconds, milli = _parts(ms)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}.{milli:03d}"
+
+
+def ass_time(ms: int) -> str:
+    """ASS keeps centiseconds and a single-digit hour."""
+    hours, minutes, seconds, milli = _parts(ms)
+    return f"{hours:d}:{minutes:02d}:{seconds:02d}.{milli // 10:02d}"
+
+
+def _parts(ms: int) -> tuple[int, int, int, int]:
+    ms = max(0, int(ms))
+    hours, rest = divmod(ms, 3_600_000)
+    minutes, rest = divmod(rest, 60_000)
+    seconds, milli = divmod(rest, 1000)
+    return hours, minutes, seconds, milli
+
+
+# --- colours ------------------------------------------------------------------
+
+
+def ass_colour(value: str, alpha: int = 0) -> str:
+    """`#RRGGBB` to `&HAABBGGRR&`, which reverses the channels.
+
+    `alpha` is transparency rather than opacity: 0 is solid, 255 is invisible.
+    """
+    text = value.strip().lstrip("#")
+    if len(text) == 3:
+        text = "".join(char * 2 for char in text)
+    if len(text) != 6:
+        raise ValueError(f"a colour must be #RRGGBB, not {value!r}")
+    try:
+        red, green, blue = (int(text[at:at + 2], 16) for at in (0, 2, 4))
+    except ValueError as error:
+        raise ValueError(f"a colour must be #RRGGBB, not {value!r}") from error
+    return f"&H{max(0, min(255, alpha)):02X}{blue:02X}{green:02X}{red:02X}&"
+
+
+# --- SRT and WebVTT -----------------------------------------------------------
+
+
+def to_srt(cues: Sequence[Cue]) -> str:
+    """The universal format. No styling survives here, by design."""
+    blocks = [
+        f"{position}\n{srt_time(cue.start_ms)} --> {srt_time(cue.end_ms)}\n{cue.text}"
+        for position, cue in enumerate(cues, start=1)
+    ]
+    return "\n\n".join(blocks) + ("\n" if blocks else "")
+
+
+def to_vtt(cues: Sequence[Cue]) -> str:
+    """What a browser plays without a plugin, which is what makes previewing cheap."""
+    blocks = [
+        f"{vtt_time(cue.start_ms)} --> {vtt_time(cue.end_ms)}\n{cue.text}"
+        for cue in cues
+    ]
+    return "WEBVTT\n\n" + "\n\n".join(blocks) + ("\n" if blocks else "")
+
+
+# --- ASS ----------------------------------------------------------------------
+
+
+def escape_ass(text: str) -> str:
+    """Make text safe to put in a Dialogue line.
+
+    Braces open an override block, so an unescaped one swallows everything
+    after it. Newlines become the explicit break ASS understands, and leading
+    spaces are protected because ASS discards them otherwise.
+    """
+    cleaned = text.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
+    cleaned = cleaned.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\\N")
+    return cleaned.replace("  ", " \\h")
+
+
+def to_ass(
+    cues: Sequence[Cue],
+    style: Style | None = None,
+    *,
+    play_width: int = 1080,
+    play_height: int = 1920,
+) -> str:
+    """A full ASS file: the look, then the cues.
+
+    `play_width`/`play_height` are the resolution the style was designed
+    against. libass scales everything to the real frame from these, so passing
+    the video's own dimensions keeps a 48pt caption 48pt whatever it is burned
+    into.
+    """
+    look = style or Style()
+    header = _ass_header(look, play_width, play_height)
+    events = []
+    for cue in cues:
+        if look.highlight_active_word and cue.words:
+            events.extend(_highlight_events(cue, look))
+        else:
+            events.append(_dialogue(cue.start_ms, cue.end_ms, look.name,
+                                    escape_ass(_cased(cue.text, look))))
+    return header + "\n".join(events) + "\n"
+
+
+def _ass_header(look: Style, width: int, height: int) -> str:
+    # WrapStyle 2 turns off libass's own wrapping. The lines were already
+    # broken by the cue engine, on rules libass does not know about, and
+    # letting it re-wrap would silently undo that work.
+    return f"""[Script Info]
+ScriptType: v4.00+
+WrapStyle: 2
+ScaledBorderAndShadow: yes
+YCbCr Matrix: None
+PlayResX: {width}
+PlayResY: {height}
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, \
+BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, \
+BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: {look.name},{look.font},{look.size},\
+{ass_colour(look.colour)},{ass_colour(look.highlight_colour)},\
+{ass_colour(look.outline_colour, look.outline_alpha)},\
+{ass_colour(look.back_colour, look.back_alpha)},\
+{-1 if look.bold else 0},{-1 if look.italic else 0},0,0,100,100,{look.spacing},0,\
+{look.border},{look.outline},{look.shadow},{ALIGNMENT.get(look.alignment, 2)},\
+{look.margin_h},{look.margin_h},{look.margin_v},1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+
+
+def _dialogue(start_ms: int, end_ms: int, style_name: str, text: str) -> str:
+    return (
+        f"Dialogue: 0,{ass_time(start_ms)},{ass_time(end_ms)},{style_name},,0,0,0,,{text}"
+    )
+
+
+def _highlight_events(cue: Cue, look: Style) -> list[str]:
+    """One event per word, with that word lit up.
+
+    The alternative is ASS karaoke (`\\k`), which is one event and less work -
+    but it fills a word progressively from its left edge, which is a singing
+    effect rather than the hard word-by-word switch social captions use. Doing
+    it as separate events also means the highlight lands on the word's own
+    measured timing rather than on a duration accumulated from the cue's start,
+    so it cannot drift across a long cue.
+    """
+    highlight = ass_colour(look.highlight_colour)
+    base = ass_colour(look.colour)
+    events: list[str] = []
+    for position, word in enumerate(cue.words):
+        # The word's own span, but never past where the next word begins, and
+        # never past the end of the cue it belongs to.
+        start = max(cue.start_ms, word.start_ms)
+        if position + 1 < len(cue.words):
+            end = min(cue.end_ms, max(start + 1, cue.words[position + 1].start_ms))
+        else:
+            end = cue.end_ms
+        if end <= start:
+            continue
+        rendered = " ".join(
+            f"{{\\c{highlight}}}{escape_ass(_cased(other.text, look))}{{\\c{base}}}"
+            if index == position
+            else escape_ass(_cased(other.text, look))
+            for index, other in enumerate(cue.words)
+        )
+        events.append(_dialogue(start, end, look.name, rendered))
+    return events
+
+
+def _cased(text: str, look: Style) -> str:
+    return text.upper() if look.uppercase else text
