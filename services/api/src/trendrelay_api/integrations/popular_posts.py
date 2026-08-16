@@ -102,6 +102,7 @@ def collect_posts(
     tiktok_reader: TikTokReader,
     youtube_reader: YouTubeReader | None = None,
     reddit_reader: Callable[..., dict[str, Any]] | None = None,
+    bluesky_reader: Callable[..., dict[str, Any]] | None = None,
     platforms: tuple[str, ...] = ("tiktok",),
 ) -> dict[str, Any]:
     """The top posts for one country and one window, and what could not be read.
@@ -150,6 +151,20 @@ def collect_posts(
                 from .reddit_popular import posts_from_reddit
 
                 posts.extend(posts_from_reddit(result))
+                _append_notes(notes, result)
+
+    if "bluesky" in requested:
+        if bluesky_reader is None:
+            failures.append("Bluesky is not configured.")
+        else:
+            try:
+                result = bluesky_reader(region=region, limit=limit)
+            except Exception as error:  # noqa: BLE001 - a provider state, not a bug
+                failures.append(f"Bluesky could not answer: {error}")
+            else:
+                from .bluesky_popular import posts_from_bluesky
+
+                posts.extend(posts_from_bluesky(result))
                 _append_notes(notes, result)
 
     sources = [source for source in requested if any(post["source"] == source for post in posts)]
@@ -211,5 +226,15 @@ def live_reddit_reader() -> Callable[..., dict[str, Any]]:
 
     def read(*, region: str, limit: int) -> dict[str, Any]:
         return fetch_reddit_popular(region=region, limit=limit)
+
+    return read
+
+
+def live_bluesky_reader() -> Callable[..., dict[str, Any]]:
+    """The public feed reader, bound late so importing this needs no network."""
+    from .bluesky_popular import fetch_bluesky_popular
+
+    def read(*, region: str, limit: int) -> dict[str, Any]:
+        return fetch_bluesky_popular(region=region, limit=limit)
 
     return read

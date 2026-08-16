@@ -48,6 +48,7 @@ from trendrelay_api.integrations.popular_posts import PERIODS as POST_PERIODS
 from trendrelay_api.integrations.popular_posts import (
     collect_posts,
     live_reader,
+    live_bluesky_reader,
     live_reddit_reader,
     live_youtube_reader,
 )
@@ -387,6 +388,9 @@ async def popular_posts(
         # Always available: the only post source needing neither a key nor a
         # signed-in session, and the only one that is not short-form video.
         {"id": "reddit", "label": "Reddit", "available": True, "reason": None},
+        # The nearest readable substitute for Threads, which publishes no
+        # popular feed at all. Public and unauthenticated like Reddit.
+        {"id": "bluesky", "label": "Bluesky", "available": True, "reason": None},
     ]
     if platform == "youtube" and not youtube_key:
         raise HTTPException(status_code=409, detail=providers[1]["reason"])
@@ -407,6 +411,7 @@ async def popular_posts(
         tiktok_reader=live_reader(),
         youtube_reader=live_youtube_reader(youtube_key) if youtube_key else None,
         reddit_reader=live_reddit_reader(),
+        bluesky_reader=live_bluesky_reader(),
         platforms=platforms,
     )
     result["platform"] = platform

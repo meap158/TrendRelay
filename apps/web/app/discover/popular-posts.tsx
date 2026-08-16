@@ -42,7 +42,7 @@ import { usePersistedCache, usePersistedState } from "../ui/use-persisted-state"
  * Named once because it appeared verbatim in five places, which is why adding
  * a source meant editing five of them and missing one was silent.
  */
-type PostSource = "all" | "tiktok" | "youtube" | "reddit";
+type PostSource = "all" | "tiktok" | "youtube" | "reddit" | "bluesky";
 
 type Board = {
   region: string;
@@ -66,6 +66,7 @@ const PLATFORMS: ReadonlyArray<readonly [PostSource, string]> = [
   ["tiktok", "TikTok"],
   ["youtube", "YouTube"],
   ["reddit", "Reddit"],
+  ["bluesky", "Bluesky"],
 ];
 
 /** Countries Creative Center will answer for. */
