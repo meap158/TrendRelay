@@ -41,13 +41,7 @@ export type EffectTarget = {
   path: string;
   mediaKind: string;
 };
-type PreviewJob = {
-  id: string;
-  status: string;
-  progress?: number | null;
-  progress_stage?: string | null;
-  error?: string | null;
-};
+type PreviewSpec = { steps: Step[]; label: string };
 
 export function EffectEditor({
   open,
@@ -80,11 +74,14 @@ export function EffectEditor({
   const [failure, setFailure] = useState("");
   const [recipeRecovered, setRecipeRecovered] = useState(false);
   const [saved, setSaved] = useState(true);
-  const [previewJob, setPreviewJob] = useState<PreviewJob | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewLabel, setPreviewLabel] = useState("Effect stack preview");
   const [previewMediaKind, setPreviewMediaKind] = useState("");
+  const [previewPosition, setPreviewPosition] = useState<number | null>(null);
+  const [previewDuration, setPreviewDuration] = useState<number | null>(null);
+  const [previewNote, setPreviewNote] = useState("");
   const previewUrlRef = useRef("");
+  const previewSpecRef = useRef<PreviewSpec | null>(null);
   /** Which step has its gallery open, if any. */
   const [picking, setPicking] = useState<number | null>(null);
 
@@ -142,65 +139,16 @@ export function EffectEditor({
   useEffect(() => {
     if (!open) return;
     queueMicrotask(() => {
-      setPreviewJob(null);
       replacePreviewUrl("");
+      setPreviewPosition(null);
+      setPreviewDuration(null);
+      setPreviewNote("");
+      previewSpecRef.current = null;
       void load();
     });
     // Reopened for a different asset, so the recipe is read again.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, primary?.id, replacePreviewUrl]);
-
-  useEffect(() => {
-    if (!open || !previewJob || !["queued", "running"].includes(previewJob.status)) return;
-    let active = true;
-    let polling = false;
-    const poll = async () => {
-      if (polling) return;
-      polling = true;
-      try {
-        const response = await apiFetch(`${base}/effects/jobs`);
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.detail ?? "The preview status could not be read.");
-        const current = (body.jobs ?? []).find((job: PreviewJob) => job.id === previewJob.id);
-        if (!active || !current) return;
-        if (current.status === "succeeded") {
-          const previewResponse = await apiFetch(`${base}/effects/jobs/${current.id}/preview`, {
-            method: "POST",
-          });
-          const previewBody = await previewResponse.json();
-          if (!previewResponse.ok) {
-            throw new Error(previewBody.detail ?? "The preview could not be opened.");
-          }
-          const binary = window.atob(previewBody.content_base64);
-          const bytes = new Uint8Array(binary.length);
-          for (let index = 0; index < binary.length; index += 1) {
-            bytes[index] = binary.charCodeAt(index);
-          }
-          if (!active) return;
-          replacePreviewUrl(URL.createObjectURL(new Blob([bytes], { type: previewBody.mime_type })));
-          setPreviewJob({ ...current, status: "ready" });
-        } else {
-          setPreviewJob(current);
-          if (["failed", "cancelled"].includes(current.status) && current.error) {
-            setFailure(current.error);
-          }
-        }
-      } catch (reason) {
-        if (active) {
-          setPreviewJob((current) => current ? { ...current, status: "failed" } : current);
-          setFailure(reason instanceof Error ? reason.message : "The preview could not be opened.");
-        }
-      } finally {
-        polling = false;
-      }
-    };
-    void poll();
-    const timer = window.setInterval(() => void poll(), 1000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [apiFetch, base, open, previewJob, replacePreviewUrl]);
 
   // A mixed selection sees every effect that applies to at least one loaded
   // kind. The batch endpoint then reports items incompatible with the complete
@@ -215,6 +163,10 @@ export function EffectEditor({
     ),
   );
   const previewTarget = previewTargetFor(steps);
+  const framePreviewBlockerFor = (candidateSteps: Step[]) => candidateSteps
+    .map((step) => definitionOf(step.effect))
+    .find((effect) => effect?.stage === "frame" && !effect.previewable);
+  const previewBlocker = framePreviewBlockerFor(steps);
 
   function edit(next: Step[]) {
     setSteps(next);
@@ -312,6 +264,7 @@ export function EffectEditor({
   async function preview(
     previewSteps: Step[] = steps,
     label = "Effect stack preview",
+    at?: number | null,
   ) {
     const target = previewTargetFor(previewSteps);
     if (!target) return;
@@ -319,44 +272,31 @@ export function EffectEditor({
     setFailure("");
     setPreviewLabel(label);
     setPreviewMediaKind(target.mediaKind);
-    replacePreviewUrl("");
+    setPreviewNote("");
+    previewSpecRef.current = { steps: previewSteps, label };
     try {
-      const response = await apiFetch(`${base}/effects/render`, {
+      const response = await apiFetch(`${base}/effects/frame`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           source_path: target.path,
           steps: previewSteps,
-          preview_seconds: target.mediaKind === "video" ? 5 : 1,
-          confirm_external_action: true,
+          ...(at === null || at === undefined ? {} : { at }),
         }),
       });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.detail ?? "The preview could not start.");
-      setPreviewJob(body.job);
-      announceEffectJobs(body.job ? [body.job] : []);
-      await refreshJobs();
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail ?? "The preview frame could not be rendered.");
+      }
+      const landed = Number(response.headers.get("X-Frame-Position") ?? "");
+      setPreviewPosition(Number.isFinite(landed) ? landed : null);
+      const duration = Number(response.headers.get("X-Clip-Duration") ?? "");
+      setPreviewDuration(Number.isFinite(duration) && duration > 0 ? duration : null);
+      const note = response.headers.get("X-Preview-Note") ?? "";
+      setPreviewNote(note ? decodeURIComponent(note) : "");
+      replacePreviewUrl(URL.createObjectURL(await response.blob()));
     } catch (reason) {
-      setFailure(reason instanceof Error ? reason.message : "The preview could not start.");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function cancelPreview() {
-    if (!previewJob) return;
-    setBusy("cancel-preview");
-    try {
-      const response = await apiFetch(`${base}/effects/jobs/${previewJob.id}/cancel`, {
-        method: "POST",
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.detail ?? "The preview could not be cancelled.");
-      setPreviewJob(body.job);
-      announceEffectJobs(body.job ? [body.job] : []);
-      await refreshJobs();
-    } catch (reason) {
-      setFailure(reason instanceof Error ? reason.message : "The preview could not be cancelled.");
+      setFailure(reason instanceof Error ? reason.message : "The preview frame could not be rendered.");
     } finally {
       setBusy("");
     }
@@ -410,7 +350,8 @@ export function EffectEditor({
             variant="secondary"
             busy={busy === "preview"}
             disabled={!canEdit || !steps.length || unavailable.length > 0 || !previewTarget
-              || Boolean(previewJob && ["queued", "running", "loading"].includes(previewJob.status))}
+              || Boolean(previewBlocker) || busy === "preview"}
+            title={previewBlocker?.unpreviewable_reason ?? undefined}
             onClick={() => void preview()}
           >Preview stack</Button>
           <Button
@@ -422,7 +363,7 @@ export function EffectEditor({
         </>
       )}
     >
-      {!gallery && <div className={`effect-editor${previewJob || previewUrl ? " effect-editor-with-preview" : ""}`}>
+      {!gallery && <div className={`effect-editor${previewUrl || busy === "preview" ? " effect-editor-with-preview" : ""}`}>
         <div className="effect-editor-controls">
         {failure && <p className="console-error" role="alert">{failure}</p>}
         {recipeRecovered && (
@@ -494,7 +435,8 @@ export function EffectEditor({
                         title={`Preview the result through step ${index + 1}`}
                         disabled={!canEdit || !effect.available
                           || !previewTargetFor(steps.slice(0, index + 1))
-                          || Boolean(previewJob && ["queued", "running", "loading"].includes(previewJob.status))}
+                          || Boolean(framePreviewBlockerFor(steps.slice(0, index + 1)))
+                          || busy === "preview"}
                         onClick={() => void preview(
                           steps.slice(0, index + 1),
                           `Preview through ${effectLabel(t, effect.id, effect.label)}`,
@@ -519,6 +461,9 @@ export function EffectEditor({
                   </div>
                   {!effect.available && (
                     <p className="effect-unavailable">{effect.unavailable_reason}</p>
+                  )}
+                  {effect.available && effect.stage === "frame" && !effect.previewable && (
+                    <p className="effect-unavailable">{effect.unpreviewable_reason}</p>
                   )}
                   {effect.params.length > 0 && (
                     <div className="effect-params">
@@ -569,45 +514,70 @@ export function EffectEditor({
         )}
         </div>
 
-        {(previewJob || previewUrl) && (
+        {(busy === "preview" || previewUrl) && (
           <section className="effect-recipe-preview" aria-live="polite">
             <div className="effect-recipe-preview-head">
               <div>
-                <strong>{previewUrl ? previewLabel : `Preparing ${previewLabel.toLowerCase()}`}</strong>
-                {!previewUrl && (
-                  <small>
-                    {[previewJob?.progress_stage,
-                      typeof previewJob?.progress === "number"
-                        ? `${Math.round(previewJob.progress * 100)}%`
-                        : previewMediaKind === "video" ? "First 5 seconds" : "Still image",
-                    ].filter(Boolean).join(" · ")}
-                  </small>
-                )}
+                <strong>{previewLabel}</strong>
+                <small>
+                  {previewPosition === null
+                    ? busy === "preview" ? "Rendering one frame…" : "One-frame preview"
+                    : previewDuration
+                      ? `${(previewPosition * previewDuration).toFixed(1)}s of ${previewDuration.toFixed(1)}s`
+                      : previewMediaKind === "video"
+                        ? `${Math.round(previewPosition * 100)}% through the clip`
+                        : "Still image"}
+                </small>
               </div>
-              {previewJob && ["queued", "running"].includes(previewJob.status) && (
-                <Button
-                  variant="quiet"
-                  size="sm"
-                  busy={busy === "cancel-preview"}
-                  onClick={() => void cancelPreview()}
-                >Cancel</Button>
-              )}
             </div>
-            {!previewUrl && previewJob && (
-              <progress
-                max={1}
-                value={typeof previewJob.progress === "number" ? previewJob.progress : undefined}
-                aria-label={previewJob.progress_stage || "Preparing effect preview"}
-              />
+            <div className="effect-preview-frame">
+              {previewUrl ? (
+                // Blob URLs are private, short-lived previews and cannot use Next's optimiser.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={previewUrl} alt="The current effect recipe preview frame" />
+              ) : (
+                <p>Rendering a frame…</p>
+              )}
+              {busy === "preview" && previewUrl && <span>Rendering this position…</span>}
+            </div>
+            {previewMediaKind === "video" && previewPosition !== null && (
+              <label className="effect-preview-seek">
+                <span>
+                  Position
+                  <b>{previewDuration
+                    ? `${(previewPosition * previewDuration).toFixed(1)}s`
+                    : `${Math.round(previewPosition * 100)}%`}</b>
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={1000}
+                  step={5}
+                  value={Math.round(previewPosition * 1000)}
+                  disabled={busy === "preview"}
+                  onChange={(event) => setPreviewPosition(Number(event.target.value) / 1000)}
+                  onPointerUp={(event) => {
+                    const spec = previewSpecRef.current;
+                    if (spec) void preview(
+                      spec.steps,
+                      spec.label,
+                      Number(event.currentTarget.value) / 1000,
+                    );
+                  }}
+                  onKeyUp={(event) => {
+                    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                    const spec = previewSpecRef.current;
+                    if (spec) void preview(
+                      spec.steps,
+                      spec.label,
+                      Number(event.currentTarget.value) / 1000,
+                    );
+                  }}
+                />
+                <small>Drag anywhere in the clip. A new still is rendered only when you release.</small>
+              </label>
             )}
-            {previewUrl && previewMediaKind === "video" && (
-              <video src={previewUrl} controls preload="metadata" />
-            )}
-            {previewUrl && previewMediaKind === "image" && (
-              // Blob URLs are private, short-lived previews and cannot use Next's optimiser.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={previewUrl} alt="The current effect recipe preview" />
-            )}
+            {previewNote && <p className="effect-preview-note">{previewNote}</p>}
           </section>
         )}
       </div>}
