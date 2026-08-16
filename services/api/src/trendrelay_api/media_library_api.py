@@ -15,7 +15,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, field_validator
-from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy import String, case, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from trendrelay_api import bulk_actions
@@ -1365,6 +1365,137 @@ def list_effects(
     from trendrelay_api.integrations.effects import describe
 
     return {"effects": describe()}
+
+
+class CaptionRequest(BaseModel):
+    """What a caption track is built from, and how it should look."""
+
+    #: A style id from `GET /captions/styles`. The layout travels with it.
+    style_id: str = Field(default="broadcast", max_length=64)
+    #: Changes on top of that preset. Refused rather than ignored if unknown,
+    #: because a dropped setting is indistinguishable from one that does not
+    #: work.
+    style_overrides: dict[str, Any] = Field(default_factory=dict)
+    layout_overrides: dict[str, Any] = Field(default_factory=dict)
+    #: A language code to translate into. Absent means caption the speech in
+    #: the language it was spoken.
+    translate_to: str | None = Field(default=None, max_length=16)
+    #: Which transcript to build from. Absent takes the most recently reviewed
+    #: one, then the most recent machine one - a correction somebody made by
+    #: hand should win over the draft it corrected.
+    transcript_id: str | None = Field(default=None, max_length=64)
+
+
+@router.get("/captions/styles")
+def list_caption_styles(
+    workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
+) -> dict[str, Any]:
+    """The caption class, declared the way effects are.
+
+    Captions are deliberately not effects. An effect takes frames and returns
+    frames, stacks with others, and its order matters; a caption comes from the
+    audio, may not touch the picture at all, and does not stack. Filing it under
+    effects would have meant an effect whose parameters are a language and a
+    font. So it is its own class, with its own registry - and, like effects, the
+    interface builds its form from this rather than hard-coding controls.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api import captions
+    from trendrelay_api.media_ai import provider_status
+
+    providers = provider_status()
+    return {
+        "styles": captions.styles(),
+        "deliveries": list(captions.DELIVERIES),
+        "sample": captions.SAMPLE,
+        # What can actually run right now. Offering a translation the machine
+        # cannot perform is worse than not offering it.
+        "speech": providers["speech"],
+        "translation": providers["translation"],
+    }
+
+
+@router.post("/assets/{asset_id}/captions/preview")
+def preview_captions(
+    workspace_id: str,
+    asset_id: str,
+    body: CaptionRequest,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Build the track and show its opening cues, without rendering anything.
+
+    Cheap on purpose. Choosing a style means looking at where the lines break
+    and how fast they read, and neither needs an encoder - so this answers from
+    the stored transcript in milliseconds rather than queueing a job somebody
+    then waits on to discover they wanted a different preset.
+    """
+    membership(session, workspace_id, user.id)
+    _asset_record(session, workspace_id, asset_id)
+    from trendrelay_api import captions
+
+    transcript = _caption_transcript(session, workspace_id, asset_id, body.transcript_id)
+    if transcript is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This asset has no speech transcript yet. Transcribe it, or "
+                "paste a reviewed one, before building captions."
+            ),
+        )
+    translator = None
+    if body.translate_to:
+        from trendrelay_api.subtitle_translate import live_translator
+
+        try:
+            translator = live_translator(transcript.language or "en", body.translate_to)
+        except RuntimeError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+    try:
+        built = captions.build(
+            transcript.segments or [],
+            style_id=body.style_id,
+            style_overrides=body.style_overrides,
+            layout_overrides=body.layout_overrides,
+            translate_to=body.translate_to,
+            translator=translator,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return {
+        "transcript_id": transcript.id,
+        "source_language": transcript.language,
+        "cue_count": built["cue_count"],
+        "duration_ms": built["duration_ms"],
+        "cues": captions.preview(built["cues"]),
+        # Said out loud rather than left to be discovered in the render: a cue
+        # that cannot be read in its span, or a highlight that has silently
+        # stopped applying.
+        "notes": built["notes"],
+    }
+
+
+def _caption_transcript(
+    session: Session, workspace_id: str, asset_id: str, transcript_id: str | None
+):
+    """The transcript to caption from.
+
+    A reviewed transcript beats a machine one whatever their dates, because
+    somebody corrected it on purpose and a later draft does not undo that.
+    """
+    query = select(MediaTranscript).where(
+        MediaTranscript.workspace_id == workspace_id,
+        MediaTranscript.asset_id == asset_id,
+        MediaTranscript.kind == "speech",
+    )
+    if transcript_id:
+        return session.scalar(query.where(MediaTranscript.id == transcript_id))
+    return session.scalar(
+        query.order_by(
+            case((MediaTranscript.status == "reviewed", 0), else_=1),
+            MediaTranscript.created_at.desc(),
+        ).limit(1)
+    )
 
 
 class SwapLicence(BaseModel):

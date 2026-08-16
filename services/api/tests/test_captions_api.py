@@ -1,0 +1,207 @@
+"""Captions offered from the library, as their own class rather than an effect.
+
+The endpoints matter mostly for what they refuse. Building a caption needs a
+transcript, and an asset that has none should be told so plainly rather than
+handed an empty track that looks like a transcription failure.
+"""
+
+import asyncio
+
+import httpx
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from trendrelay_api.auth import CurrentUser, current_user
+from trendrelay_api.database import get_session
+from trendrelay_api.main import app
+from trendrelay_api.media_models import MediaAsset, MediaTranscript
+from trendrelay_api.models import Base
+
+engine = create_engine(
+    "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+)
+TestingSession = sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def session_override():
+    with TestingSession() as db:
+        try:
+            yield db
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+
+def request(method: str, path: str, **kwargs) -> httpx.Response:
+    async def go():
+        transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 50000))
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            return await client.request(method, path, **kwargs)
+    return asyncio.run(go())
+
+
+@pytest.fixture(autouse=True)
+def api():
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    app.dependency_overrides[get_session] = session_override
+    app.dependency_overrides[current_user] = lambda: CurrentUser(
+        id="caption-owner", email="owner@example.com", assurance_level="aal2",
+    )
+    yield
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def workspace() -> str:
+    response = request("POST", "/api/workspaces", json={"name": "Lab", "slug": "lab"})
+    assert response.status_code == 201
+    return response.json()["workspace"]["id"]
+
+
+def add_asset(workspace_id: str, *, with_transcript: bool = True, **transcript) -> str:
+    with TestingSession() as db:
+        asset = MediaAsset(
+            workspace_id=workspace_id,
+            title="A clip",
+            media_kind="video",
+            original_path="clips/a.mp4",
+            original_sha256="0" * 64,
+            source_type="upload",
+            mime_type="video/mp4",
+            size_bytes=1024,
+            has_audio=True,
+            created_by="caption-owner",
+        )
+        db.add(asset)
+        db.flush()
+        asset_id = asset.id
+        if with_transcript:
+            words = ["hello", "there", "friend"]
+            db.add(MediaTranscript(
+                workspace_id=workspace_id,
+                asset_id=asset_id,
+                kind="speech",
+                language=transcript.get("language", "en"),
+                provider="faster-whisper",
+                status=transcript.get("status", "machine"),
+                text=" ".join(words),
+                segments=[{
+                    "text": " ".join(words),
+                    "start_ms": 0,
+                    "end_ms": 3000,
+                    "words": [
+                        {"text": word, "start_ms": index * 1000,
+                         "end_ms": (index + 1) * 1000, "probability": 0.9}
+                        for index, word in enumerate(words)
+                    ],
+                }],
+                created_by="caption-owner",
+            ))
+        db.commit()
+    return asset_id
+
+
+def styles(workspace_id: str) -> httpx.Response:
+    return request(
+        "GET", f"/api/workspaces/{workspace_id}/media/library/captions/styles"
+    )
+
+
+def preview(workspace_id: str, asset_id: str, **body) -> httpx.Response:
+    return request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/captions/preview",
+        json=body,
+    )
+
+
+# --- the class, as offered ----------------------------------------------------
+
+
+def test_the_styles_endpoint_declares_the_whole_form(workspace) -> None:
+    body = styles(workspace).json()
+
+    assert {item["id"] for item in body["styles"]} >= {"broadcast", "word-pop"}
+    assert body["deliveries"] == ["sidecar", "burned", "both"]
+    assert body["sample"]
+
+
+def test_the_form_says_whether_the_machine_can_actually_do_it(workspace) -> None:
+    """Offering a translation that will fail is worse than not offering it."""
+    body = styles(workspace).json()
+
+    assert "ready" in body["speech"]
+    assert "pairs" in body["translation"]
+
+
+# --- building a track ---------------------------------------------------------
+
+
+def test_a_preview_comes_back_without_rendering_anything(workspace) -> None:
+    asset_id = add_asset(workspace)
+
+    body = preview(workspace, asset_id, style_id="broadcast").json()
+
+    assert body["cue_count"] >= 1
+    assert body["cues"][0]["lines"]
+    assert body["source_language"] == "en"
+
+
+def test_an_asset_with_no_transcript_is_told_so(workspace) -> None:
+    """Not an empty track, which reads as transcription having failed."""
+    asset_id = add_asset(workspace, with_transcript=False)
+
+    response = preview(workspace, asset_id)
+
+    assert response.status_code == 409
+    assert "transcript" in response.json()["detail"].lower()
+
+
+def test_a_reviewed_transcript_wins_over_a_later_machine_one(workspace) -> None:
+    """Somebody corrected it on purpose; a later draft does not undo that."""
+    asset_id = add_asset(workspace, status="reviewed")
+    with TestingSession() as db:
+        db.add(MediaTranscript(
+            workspace_id=workspace, asset_id=asset_id, kind="speech",
+            language="en", provider="faster-whisper", status="machine",
+            text="later draft", segments=[{
+                "text": "later draft", "start_ms": 0, "end_ms": 2000, "words": [],
+            }],
+            created_by="caption-owner",
+        ))
+        db.commit()
+
+    body = preview(workspace, asset_id).json()
+
+    assert "hello" in " ".join(body["cues"][0]["lines"]).lower()
+
+
+def test_an_unknown_style_is_refused_with_the_real_names(workspace) -> None:
+    asset_id = add_asset(workspace)
+
+    response = preview(workspace, asset_id, style_id="veed")
+
+    assert response.status_code == 422
+    assert "broadcast" in response.json()["detail"]
+
+
+def test_a_misspelled_override_is_refused_rather_than_dropped(workspace) -> None:
+    asset_id = add_asset(workspace)
+
+    response = preview(workspace, asset_id, style_overrides={"fontsize": 90})
+
+    assert response.status_code == 422
+    assert "fontsize" in response.json()["detail"]
+
+
+def test_asking_for_a_translation_with_no_runtime_says_what_to_do(workspace) -> None:
+    asset_id = add_asset(workspace)
+
+    response = preview(workspace, asset_id, translate_to="vi")
+
+    assert response.status_code == 409
+    assert "translation runtime" in response.json()["detail"].lower()
