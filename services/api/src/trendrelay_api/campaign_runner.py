@@ -47,7 +47,9 @@ def _publish(session: Session, autopilot: CampaignAutopilot, post: Any,
         # per post is not possible unattended and would only mean "never run".
         confirm_external_action=True,
     )
-    return create_publish_job(request)
+    # Same transaction as the campaign bookkeeping above it: a second
+    # connection would wait on this one's uncommitted write.
+    return create_publish_job(request, session=session)
 
 
 def run_campaign(

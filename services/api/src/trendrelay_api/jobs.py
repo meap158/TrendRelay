@@ -78,7 +78,21 @@ def create_job_record(
     *,
     max_attempts: int = 3,
     factory: SessionMaker = SessionFactory,
+    session: Session | None = None,
 ) -> dict[str, Any]:
+    """Record a job.
+
+    Pass `session` when the caller is already inside a transaction that has
+    written something. Opening a second connection to insert this row would
+    queue behind the caller's own uncommitted write and wait there until the
+    busy timeout gave up - the API blocking on itself, reported as "database is
+    locked". Deploying a campaign did exactly that: it activates the campaign
+    on the request's session, then asks for a publishing job per destination.
+
+    Sharing the transaction also makes the job part of what rolls back. A
+    deploy that fails half way should not leave publishing jobs behind for a
+    campaign it never finished activating.
+    """
     timestamp = now_utc()
     item = DurableJob(
         id=job_id,
@@ -93,8 +107,14 @@ def create_job_record(
         created_at=timestamp,
         updated_at=timestamp,
     )
-    with factory.begin() as session:
+    if session is not None:
         session.add(item)
+        # Flushed so a collision surfaces here, where the caller can still say
+        # something about it, rather than at commit as an opaque failure.
+        session.flush()
+    else:
+        with factory.begin() as opened:
+            opened.add(item)
     return serialize_job(item)
 
 
@@ -121,6 +141,92 @@ def list_job_records(
             .limit(limit)
         ).all()
         return [serialize_job(item) for item in items]
+
+
+def record_completed_job(
+    job_id: str,
+    workspace_key: str,
+    kind: str,
+    payload: dict[str, Any],
+    *,
+    result: dict[str, Any] | None = None,
+    factory: SessionMaker = SessionFactory,
+    session: Session | None = None,
+) -> dict[str, Any]:
+    """Log work that already happened, in the list the queued work appears in.
+
+    Not everything the editing suite does is worth a worker. Removing an
+    asset's rendered cuts is a database write and a few unlinks - queueing it
+    would only put a spinner in front of something already finished. But it is
+    the same kind of event as the render it undoes, and an activity list that
+    shows every application and none of the removals cannot be read as a
+    history of what was done to a clip.
+
+    So it goes in as a settled row: no lease, no attempts, nothing for a worker
+    to claim. `session` shares the caller's transaction, for the same reason
+    `create_job_record` takes one: opening a second connection to insert this
+    while the caller holds an uncommitted write is the API blocking on itself.
+    """
+    timestamp = now_utc()
+    item = DurableJob(
+        id=job_id,
+        workspace_key=workspace_key,
+        kind=kind,
+        status="succeeded",
+        payload=payload,
+        result=result,
+        attempt_count=1,
+        max_attempts=1,
+        cancellation_requested=False,
+        progress=1.0,
+        available_at=timestamp,
+        created_at=timestamp,
+        updated_at=timestamp,
+        started_at=timestamp,
+        completed_at=timestamp,
+    )
+    if session is not None:
+        session.add(item)
+        session.flush()
+    else:
+        with factory.begin() as opened:
+            opened.add(item)
+    return serialize_job(item)
+
+
+def clear_settled_jobs(
+    workspace_key: str,
+    kind: str,
+    *,
+    keep: Callable[[DurableJob], bool] | None = None,
+    factory: SessionMaker = SessionFactory,
+) -> int:
+    """Forget finished jobs of one kind, returning how many were forgotten.
+
+    An activity list is a log, and a log nobody can empty grows until it is the
+    panel rather than something in it. What is deleted here is only the record
+    of the work: the rendered version, its recipe and the file on disk are all
+    stored elsewhere and are untouched.
+
+    Queued and running jobs are never deleted, whatever `keep` says. Removing
+    the row for work in flight would orphan a worker that is still holding a
+    lease on it, and the operator would lose the only way to cancel it.
+    """
+    removed = 0
+    with factory.begin() as session:
+        items = session.scalars(
+            select(DurableJob).where(
+                DurableJob.workspace_key == workspace_key,
+                DurableJob.kind == kind,
+                DurableJob.status.not_in(("queued", "running")),
+            )
+        ).all()
+        for item in items:
+            if keep is not None and keep(item):
+                continue
+            session.delete(item)
+            removed += 1
+    return removed
 
 
 def list_job_records_including_active(

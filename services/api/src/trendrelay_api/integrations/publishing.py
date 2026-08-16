@@ -40,7 +40,9 @@ from trendrelay_api.jobs import (
     fail_job,
     get_job_record,
     list_job_records,
+    serialize_job,
 )
+from trendrelay_api.models import DurableJob
 from trendrelay_api.tool_registry import PROJECT_ROOT
 
 JOB_KIND = "social_publish"
@@ -2599,7 +2601,17 @@ def _execute_publish(request: PublishRequest, request_id: str | None = None) -> 
     return result
 
 
-def create_publish_job(request: PublishRequest) -> dict[str, Any]:
+def create_publish_job(
+    request: PublishRequest, *, session: Any = None
+) -> dict[str, Any]:
+    """Queue one post.
+
+    `session` is passed by callers already inside a transaction that has
+    written - the campaign deploy, which activates the campaign before asking
+    for its posts. Without it this opens a second connection and waits on the
+    caller's own uncommitted write until the busy timeout expires, which is
+    reported as "database is locked".
+    """
     if not request.confirm_external_action:
         raise PermissionError("Publishing requires explicit external-action confirmation.")
     preview = preview_publish(request)
@@ -2629,7 +2641,12 @@ def create_publish_job(request: PublishRequest) -> dict[str, Any]:
         payload,
         max_attempts=1,
         factory=JOB_SESSION_FACTORY,
+        session=session,
     )
+    if session is not None:
+        # Read back through the same transaction; a separate connection cannot
+        # see a row that has not been committed yet.
+        return serialize_job(session.get(DurableJob, job_id))
     return publish_job(job_id)
 
 
