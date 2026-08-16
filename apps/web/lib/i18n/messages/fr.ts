@@ -1254,6 +1254,7 @@ export const fr: Messages = {
       confidenceHelp: "Plus bas, il trouve plus de visages — et plus de choses qui n'en sont pas.",
     },
     selective_face_blur: {
+      tag: "Passants floutés",
       label: "Flouter tout le monde sauf le sujet",
       summary: "Distingue les visages et couvre les passants, pas le créateur.",
       keep_subject: "Garder le sujet visible",
@@ -1264,6 +1265,7 @@ export const fr: Messages = {
       confidenceHelp: "Plus bas, il trouve plus de visages — et plus de choses qui n'en sont pas.",
     },
     face_overlay: {
+      tag: "Visage masqué",
       censorBlock: "Bloc de censure",
       smiley: "Smiley",
       robot: "Tête de robot",

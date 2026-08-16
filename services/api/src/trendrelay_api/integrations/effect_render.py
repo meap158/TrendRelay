@@ -271,6 +271,7 @@ register(GARMENT_RECOLOUR)
 FACE_OVERLAY = Effect(
     id="face_overlay",
     label="Cover a face with an object",
+    tag="Face covered",
     summary="Stick a mask, a sticker or a prop on a face and follow it through the clip.",
     stage="frame",
     params=(
@@ -353,6 +354,7 @@ def _identity_availability() -> tuple[bool, str | None]:
 SELECTIVE_BLUR = Effect(
     id="selective_face_blur",
     label="Blur everyone but the subject",
+    tag="Bystanders blurred",
     summary="Tell the faces apart and cover the passers-by, not the creator.",
     stage="frame",
     params=(

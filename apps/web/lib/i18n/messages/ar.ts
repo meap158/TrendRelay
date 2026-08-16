@@ -1240,6 +1240,7 @@ export const ar: Messages = {
       confidenceHelp: "كلما انخفضت، عثر على وجوه أكثر — وعلى أشياء ليست وجوهًا أكثر.",
     },
     selective_face_blur: {
+      tag: "المارّة مموّهون",
       label: "تمويه الجميع عدا الشخص الرئيسي",
       summary: "يميّز بين الوجوه فيغطي المارّة دون صاحب المحتوى.",
       keep_subject: "إبقاء الشخص الرئيسي ظاهرًا",
@@ -1250,6 +1251,7 @@ export const ar: Messages = {
       confidenceHelp: "كلما انخفضت، عثر على وجوه أكثر — وعلى أشياء ليست وجوهًا أكثر.",
     },
     face_overlay: {
+      tag: "وجه مغطّى",
       censorBlock: "مربع تغطية",
       smiley: "وجه مبتسم",
       robot: "رأس روبوت",

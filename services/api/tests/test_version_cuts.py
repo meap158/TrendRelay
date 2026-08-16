@@ -204,6 +204,49 @@ def test_labels_are_resolved_when_read_rather_than_frozen_when_written() -> None
     assert _named_effects(["face_blur"]) == [{"id": "face_blur", "label": "Blur faces"}]
 
 
+def test_a_cut_is_tagged_with_the_short_name_not_the_editors_sentence() -> None:
+    """A card has about twenty characters of room.
+
+    "Cover a face with an object" is the right way to *offer* the tool and the
+    wrong way to describe the finished file — it truncated to "Cover a face
+    wit…", which names nothing. The menu keeps the imperative label.
+    """
+    from trendrelay_api.integrations import effect_render  # noqa: F401  registers them
+    from trendrelay_api.integrations.effects import REGISTRY
+    from trendrelay_api.media_library_api import _named_effects
+
+    assert REGISTRY["face_overlay"].label == "Cover a face with an object"
+    assert _named_effects(["face_overlay"]) == [
+        {"id": "face_overlay", "label": "Face covered"}
+    ]
+
+
+def test_an_effect_short_enough_needs_no_second_name() -> None:
+    # Most labels are already one or two words, and carrying a duplicate of
+    # each would be one more thing to keep in step.
+    from trendrelay_api.integrations import effect_render  # noqa: F401  registers them
+    from trendrelay_api.integrations.effects import REGISTRY
+
+    assert REGISTRY["face_blur"].tag == ""
+    assert REGISTRY["face_blur"].chip == "Blur faces"
+
+
+def test_every_effect_has_a_chip_name_a_card_can_hold() -> None:
+    """The reason the `tag` field exists, enforced rather than remembered.
+
+    Twenty characters is what the tag fits at the library's three-up width; a
+    new effect with a sentence for a label should fail here rather than ship a
+    card reading "Cover a face wit…".
+    """
+    from trendrelay_api.integrations import effect_render  # noqa: F401  registers them
+    from trendrelay_api.integrations.effects import REGISTRY
+
+    too_long = {
+        effect.id: effect.chip for effect in REGISTRY.values() if len(effect.chip) > 20
+    }
+    assert not too_long, f"give these a shorter `tag`: {too_long}"
+
+
 def test_an_effect_the_registry_no_longer_knows_shows_its_id() -> None:
     # Better a puzzling word than a version claiming to be something it is not.
     from trendrelay_api.media_library_api import _named_effects
@@ -318,8 +361,11 @@ def test_the_standalone_blur_job_records_itself_as_an_effect() -> None:
     """It predates the registry, but what it makes is a cut with one effect in
     it, and the Library should name it the same as the same effect chosen from
     the editor."""
-    source = Path(
-        "services/api/src/trendrelay_api/integrations/face_blur.py"
+    # Anchored to this file rather than the working directory, so the test
+    # passes wherever pytest is launched from.
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "src" / "trendrelay_api" / "integrations" / "face_blur.py"
     ).read_text(encoding="utf-8")
     assert 'effect_ids=["face_blur"]' in source
 

@@ -97,6 +97,19 @@ export function effectLabel(t: Translate, id: string, apiLabel: string): string 
   return fromDictionary(t, `fx.${id}.label`, apiLabel);
 }
 
+/**
+ * The short name for a chip, where a library card has about twenty characters.
+ *
+ * Falls through to the full label before falling back to the API's text, so an
+ * effect short enough not to need a `tag` still reads in the viewer's language
+ * on a card. Only the two effects whose labels are sentences carry a `tag` key.
+ */
+export function effectTag(t: Translate, id: string, apiTag: string): string {
+  const short = t(`fx.${id}.tag`);
+  if (short !== `fx.${id}.tag`) return short;
+  return fromDictionary(t, `fx.${id}.label`, apiTag);
+}
+
 export function effectSummary(t: Translate, id: string, apiSummary: string): string {
   return fromDictionary(t, `fx.${id}.summary`, apiSummary);
 }

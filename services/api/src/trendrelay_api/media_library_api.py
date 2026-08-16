@@ -185,12 +185,17 @@ def _named_effects(effect_ids: list[str] | None) -> list[dict[str, str]]:
     changes what an old render calls itself. An id the registry no longer knows
     is shown as the id: better a puzzling word than a version that claims to be
     something it is not.
+
+    The short `chip` name rather than the label, because every caller of this is
+    a tag on a card. The editor's menu keeps the imperative label — "Cover a
+    face with an object" is the right way to offer the tool and the wrong way to
+    describe the finished file, which has about twenty characters of room.
     """
     from trendrelay_api.integrations import effect_render  # noqa: F401  registers frame effects
     from trendrelay_api.integrations.effects import REGISTRY
 
     return [
-        {"id": effect_id, "label": getattr(REGISTRY.get(effect_id), "label", effect_id)}
+        {"id": effect_id, "label": getattr(REGISTRY.get(effect_id), "chip", effect_id)}
         for effect_id in effect_ids or []
     ]
 

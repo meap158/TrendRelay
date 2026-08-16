@@ -107,6 +107,12 @@ class Effect:
     label: str
     summary: str
     stage: Stage
+    #: What to call this on a chip, where there is room for a name and not for a
+    #: sentence. The label is imperative because it sits in a menu of things to
+    #: do — "Cover a face with an object" reads correctly there and truncates to
+    #: "Cover a face wit…" on a library card, which names nothing. Most effects
+    #: are already short enough and leave this empty to reuse the label.
+    tag: str = ""
     params: tuple[EffectParam, ...] = ()
     media_kinds: frozenset[str] = frozenset({"video"})
     #: Stream effects only: the FFmpeg fragments this step contributes.
@@ -140,6 +146,11 @@ class Effect:
     #: something over the whole clip, one frame is not a cheap preview, it is a
     #: misleading one.
     unpreviewable_reason: str = ""
+
+    @property
+    def chip(self) -> str:
+        """The short name, falling back to the label when none was needed."""
+        return self.tag or self.label
 
     def param(self, param_id: str) -> EffectParam | None:
         return next((item for item in self.params if item.id == param_id), None)

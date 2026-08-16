@@ -1239,6 +1239,7 @@ export const en = {
       confidenceHelp: "Lower finds more faces and more things that are not faces.",
     },
     selective_face_blur: {
+      tag: "Bystanders blurred",
       label: "Blur everyone but the subject",
       summary: "Tell the faces apart and cover the passers-by, not the creator.",
       keep_subject: "Keep the subject visible",
@@ -1249,6 +1250,7 @@ export const en = {
       confidenceHelp: "Lower finds more faces and more things that are not faces.",
     },
     face_overlay: {
+      tag: "Face covered",
       censorBlock: "Censor block",
       smiley: "Smiley",
       robot: "Robot head",

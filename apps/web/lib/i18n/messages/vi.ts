@@ -1236,6 +1236,7 @@ export const vi: Messages = {
       confidenceHelp: "Ngưỡng thấp tìm được nhiều mặt hơn, và cũng nhiều thứ không phải mặt hơn.",
     },
     selective_face_blur: {
+      tag: "Đã làm mờ người qua đường",
       label: "Làm mờ mọi người trừ nhân vật chính",
       summary: "Phân biệt các khuôn mặt và che người qua đường, không che nhà sáng tạo.",
       keep_subject: "Giữ nhân vật chính hiện rõ",
@@ -1246,6 +1247,7 @@ export const vi: Messages = {
       confidenceHelp: "Ngưỡng thấp tìm được nhiều mặt hơn, và cũng nhiều thứ không phải mặt hơn.",
     },
     face_overlay: {
+      tag: "Đã che mặt",
       censorBlock: "Khối che",
       smiley: "Mặt cười",
       robot: "Đầu robot",

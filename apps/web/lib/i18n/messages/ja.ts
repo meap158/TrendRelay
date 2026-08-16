@@ -1230,6 +1230,7 @@ export const ja: Messages = {
       confidenceHelp: "下げるほど多くの顔が見つかり、顔でないものも多く見つかります。",
     },
     selective_face_blur: {
+      tag: "通行人をぼかし済み",
       label: "被写体以外をぼかす",
       summary: "顔を見分けて、通行人だけを覆います。投稿者はそのまま残ります。",
       keep_subject: "被写体を残す",
@@ -1240,6 +1241,7 @@ export const ja: Messages = {
       confidenceHelp: "下げるほど多くの顔が見つかり、顔でないものも多く見つかります。",
     },
     face_overlay: {
+      tag: "顔を隠し済み",
       censorBlock: "目隠しブロック",
       smiley: "スマイリー",
       robot: "ロボットの頭",

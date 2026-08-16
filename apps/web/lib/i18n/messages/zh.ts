@@ -1212,6 +1212,7 @@ export const zh: Messages = {
       confidenceHelp: "阈值越低找到的人脸越多，误判也越多。",
     },
     selective_face_blur: {
+      tag: "已模糊路人",
       label: "只保留主角，模糊其他人",
       summary: "分辨不同人脸，遮盖路人而不是创作者本人。",
       keep_subject: "保留主角可见",
@@ -1222,6 +1223,7 @@ export const zh: Messages = {
       confidenceHelp: "阈值越低找到的人脸越多，误判也越多。",
     },
     face_overlay: {
+      tag: "已遮挡人脸",
       censorBlock: "遮挡方块",
       smiley: "笑脸",
       robot: "机器人头",

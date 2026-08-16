@@ -1255,6 +1255,7 @@ export const ru: Messages = {
       confidenceHelp: "Ниже — находит больше лиц и больше того, что лицами не является.",
     },
     selective_face_blur: {
+      tag: "Прохожие размыты",
       label: "Размыть всех, кроме героя",
       summary: "Различает лица и закрывает прохожих, а не автора.",
       keep_subject: "Оставить героя видимым",
@@ -1265,6 +1266,7 @@ export const ru: Messages = {
       confidenceHelp: "Ниже — находит больше лиц и больше того, что лицами не является.",
     },
     face_overlay: {
+      tag: "Лицо закрыто",
       censorBlock: "Блок цензуры",
       smiley: "Смайлик",
       robot: "Голова робота",

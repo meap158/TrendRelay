@@ -5,7 +5,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { apiBaseUrl } from "../../lib/api";
-import { effectLabel } from "../../lib/i18n/effects";
+import { effectLabel, effectTag } from "../../lib/i18n/effects";
 import { useAuth } from "../auth-provider";
 import { type BaseJob, useJobs } from "../jobs-provider";
 import { useT } from "../i18n-provider";
@@ -63,11 +63,12 @@ type Translate = (path: string, values?: Record<string, string | number>) => str
 /** Every effect in a cut, as tags, in the order applied and said once each. */
 function cutEffects(t: Translate, version: Version): string[] {
   const names = (version.effects ?? []).map((effect) =>
-    effectLabel(t, effect.id, effect.label),
+    effectTag(t, effect.id, effect.label),
   );
   // Every effect keeps its own name. Privacy remains a separate filter facet,
   // while cards describe the actual recipe rather than collapsing overlays and
-  // blur into one privileged tag.
+  // blur into one privileged tag. The chip name rather than the editor's
+  // imperative label, because a card has about twenty characters of room.
   return [...new Set(names)];
 }
 
