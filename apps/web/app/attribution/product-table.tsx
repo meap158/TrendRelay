@@ -11,6 +11,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 
 import { Badge, Card } from "../ui/primitives";
 import { Button } from "../ui/button";
@@ -18,6 +19,11 @@ import { ActionIcon } from "../ui/action-icons";
 import { SelectionCheckbox } from "../ui/selection-checkbox";
 import { useT } from "../i18n-provider";
 import { money } from "./format";
+import {
+  sortProducts,
+  type ProductSort,
+  type ProductSortKey,
+} from "./sort";
 import type { ProductRow } from "./types";
 
 function StatusBadge({ status }: { status: string }) {
@@ -43,6 +49,39 @@ function offerRate(product: ProductRow): string {
 
 function commission(bps: number | null): string {
   return bps === null ? "—" : `${(bps / 100).toFixed(bps % 100 ? 2 : 0)}%`;
+}
+
+function SortableHeader({
+  column,
+  label,
+  sort,
+  className,
+  onSort,
+}: {
+  column: ProductSortKey;
+  label: string;
+  sort: ProductSort;
+  className?: string;
+  onSort: (column: ProductSortKey) => void;
+}) {
+  const active = sort.key === column;
+  const ariaSort = active
+    ? sort.direction === "asc" ? "ascending" : "descending"
+    : "none";
+  const Icon = !active ? ChevronsUpDown : sort.direction === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <th scope="col" className={className} aria-sort={ariaSort}>
+      <button
+        type="button"
+        className="product-sort-button"
+        onClick={() => onSort(column)}
+        title={`${label}: ${active && sort.direction === "asc" ? "ascending" : "descending"}`}
+      >
+        <span>{label}</span>
+        <Icon size={13} strokeWidth={2} aria-hidden="true" />
+      </button>
+    </th>
+  );
 }
 
 export function ProductTable({
@@ -71,6 +110,7 @@ export function ProductTable({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<ProductSort>({ key: "product", direction: "asc" });
 
   /**
    * Name, brand, shop or marketplace - whatever somebody half-remembers.
@@ -80,14 +120,20 @@ export function ProductTable({
    */
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return products;
-    return products.filter((product) => [
+    const filtered = !needle ? products : products.filter((product) => [
       product.name,
       product.brand,
       product.marketplace,
       ...product.offers.map((offer) => offer.merchant),
     ].some((field) => (field || "").toLowerCase().includes(needle)));
-  }, [products, query]);
+    return sortProducts(filtered, sort);
+  }, [products, query, sort]);
+
+  function changeSort(column: ProductSortKey) {
+    setSort((current) => current.key === column
+      ? { key: column, direction: current.direction === "asc" ? "desc" : "asc" }
+      : { key: column, direction: column === "product" ? "asc" : "desc" });
+  }
 
   /**
    * How many may be chosen at once.
@@ -192,13 +238,20 @@ export function ProductTable({
                   onChange={(event) => chooseShown(event.target.checked)}
                 />
               </th>
-              <th scope="col">{t("attribution.product")}</th>
-              <th scope="col" className="numeric">{t("attribution.price")}</th>
-              <th scope="col" className="numeric">{t("attribution.rate")}</th>
-              <th scope="col" className="product-count">{t("attribution.offers")}</th>
-              <th scope="col" className="product-count">{t("attribution.links")}</th>
-              <th scope="col" className="numeric">{t("attribution.clicks")}</th>
-              <th scope="col" className="numeric">{t("attribution.netCommission")}</th>
+              <SortableHeader column="product" label={t("attribution.product")}
+                sort={sort} onSort={changeSort} />
+              <SortableHeader column="price" label={t("attribution.price")}
+                sort={sort} onSort={changeSort} className="numeric" />
+              <SortableHeader column="rate" label={t("attribution.rate")}
+                sort={sort} onSort={changeSort} className="numeric" />
+              <SortableHeader column="offers" label={t("attribution.offers")}
+                sort={sort} onSort={changeSort} className="product-count" />
+              <SortableHeader column="links" label={t("attribution.links")}
+                sort={sort} onSort={changeSort} className="product-count" />
+              <SortableHeader column="clicks" label={t("attribution.clicks")}
+                sort={sort} onSort={changeSort} className="numeric" />
+              <SortableHeader column="commission" label={t("attribution.netCommission")}
+                sort={sort} onSort={changeSort} className="numeric" />
             </tr>
           </thead>
           <tbody>
