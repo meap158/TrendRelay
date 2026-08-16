@@ -1,6 +1,7 @@
 import asyncio
 
 import httpx
+import pytest
 
 from trendrelay_api.main import app
 
@@ -37,7 +38,9 @@ def test_development_cors_allows_private_lan_frontend() -> None:
 def test_development_cors_allows_browser_authorization_header() -> None:
     async def preflight() -> httpx.Response:
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
             return await client.options(
                 "/api/workspaces",
                 headers={
@@ -51,3 +54,26 @@ def test_development_cors_allows_browser_authorization_header() -> None:
 
     assert response.status_code == 200
     assert "Authorization" in response.headers["access-control-allow-headers"]
+
+
+@pytest.mark.parametrize("method", ["PATCH", "DELETE"])
+def test_development_cors_allows_browser_mutations(method: str) -> None:
+    """Campaign approve/edit/delete controls must survive browser preflight."""
+
+    async def preflight() -> httpx.Response:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            return await client.options(
+                "/api/workspaces/workspace/campaigns/campaign/queue/item",
+                headers={
+                    "Origin": "http://127.0.0.1:3001",
+                    "Access-Control-Request-Method": method,
+                },
+            )
+
+    response = asyncio.run(preflight())
+
+    assert response.status_code == 200
+    header = response.headers["access-control-allow-methods"]
+    allowed = {value.strip() for value in header.split(",")}
+    assert method in allowed

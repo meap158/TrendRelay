@@ -287,6 +287,22 @@ def test_approving_an_item_is_an_audited_decision(workspace) -> None:
     assert response.json()["item"]["state"] == "approved"
 
 
+def test_a_draft_queue_item_can_be_deleted(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    item = request(
+        "POST", f"{base}/queue",
+        json={"video_path": r"S:\media\remove-me.mp4", "body": "Temporary copy"},
+    ).json()["item"]
+
+    response = request("DELETE", f"{base}/queue/{item['id']}")
+
+    assert response.status_code == 200
+    assert response.json() == {"removed": item["id"]}
+    queue = request("GET", f"{base}/autopilot").json()["queue"]
+    assert all(candidate["id"] != item["id"] for candidate in queue)
+
+
 def test_the_preview_explains_a_campaign_that_would_post_nothing(workspace) -> None:
     """The reason is the point. "Nothing scheduled" explains nothing."""
     campaign_id = campaign(workspace)

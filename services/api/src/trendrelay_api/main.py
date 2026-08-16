@@ -109,7 +109,11 @@ app.add_middleware(
         if settings.environment != "production"
         else None
     ),
-    allow_methods=["GET", "POST"],
+    # The web app edits and removes records directly. Browsers preflight these
+    # cross-origin requests, so omitting PATCH/DELETE makes a healthy endpoint
+    # look like a network outage (the frontend only receives "Failed to
+    # fetch"). Keep this list aligned with the methods exposed by the API.
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     # A response header is invisible to a cross-origin reader unless it is
     # named here. Without this the blur preview read its face count as zero and
