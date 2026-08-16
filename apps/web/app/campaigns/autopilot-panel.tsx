@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
+import { Dialog } from "../ui/dialog";
 import { Badge, Card, Switch } from "../ui/primitives";
 import { SearchSelect } from "../ui/search-select";
 import { useT } from "../i18n-provider";
@@ -858,10 +859,21 @@ export function AutopilotPanel({
       >
         <p className="autopilot-lede">{t("autopilot.queueHelp")}</p>
 
-        {/* Pick the clip, then write the copy for it. Two steps rather than one
-            form with a path field: the path is not something anyone should be
-            typing, and the copy is the part that deserves the room. */}
-        {picking && drafting.length === 0 && (
+        {/* Choosing media is a temporary action, not another section in the
+            campaign workspace. Keep the full multi-select and effects tools,
+            but place them in the same modal surface as every other Library
+            picker. Copy stays in the page after the modal hands the clips
+            back, because that is campaign content rather than browsing. */}
+        <Dialog
+          open={picking && drafting.length === 0}
+          size="wide"
+          title="Add media from Library"
+          description="Choose one or more videos, optionally apply effects, then write their campaign copy."
+          onClose={() => {
+            setPicking(false);
+            setSelectedAssets({});
+          }}
+        >
           <div className="campaign-media-browser">
             <div className="campaign-media-browser-head">
               <div>
@@ -870,9 +882,6 @@ export function AutopilotPanel({
                 : t("autopilot.chooseClip")}</strong>
                 <small>{libraryTotal.toLocaleString()} matching videos · showing {library.length}</small>
               </div>
-              <Button variant="quiet" size="sm" onClick={() => setPicking(false)}>
-                {t("common.close")}
-              </Button>
             </div>
             <AssetFilters
               values={libraryFilters}
@@ -921,7 +930,7 @@ export function AutopilotPanel({
               {!library.length && <li className="campaign-media-empty">{t("autopilot.noClips")}</li>}
             </ul>
           </div>
-        )}
+        </Dialog>
 
         {drafting.length > 0 && (
           <form
