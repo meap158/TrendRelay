@@ -51,12 +51,14 @@ from trendrelay_api.jobs import (
     JobCancellationRequested,
     ProgressReporter,
     claim_job,
+    clear_settled_jobs,
     complete_job,
     create_job_record,
     fail_job,
     get_job_record,
     heartbeat_job,
     list_job_records_including_active,
+    record_completed_job,
     report_progress,
 )
 from trendrelay_api.tool_registry import PROJECT_ROOT
@@ -193,6 +195,9 @@ NO_IDENTITY_PREVIEW = (
 FACE_BLUR = Effect(
     id="face_blur",
     label="Blur faces",
+    # Shared with the overlay on purpose: however a face was hidden, the fact a
+    # card states is that it is hidden. One tag per fact was asked for by name.
+    tag="Faces covered",
     summary="Find faces across the clip and cover them, tracking through gaps.",
     stage="frame",
     params=(
@@ -271,7 +276,10 @@ register(GARMENT_RECOLOUR)
 FACE_OVERLAY = Effect(
     id="face_overlay",
     label="Cover a face with an object",
-    tag="Face covered",
+    # The same tag as the blur, deliberately: a library card answers "what is
+    # this file", and a blurred face and a masked face are the same fact about
+    # it. Which tool produced the cut is the editor's story, not the card's.
+    tag="Faces covered",
     summary="Stick a mask, a sticker or a prop on a face and follow it through the clip.",
     stage="frame",
     params=(
@@ -1193,6 +1201,45 @@ def _register_version(
 def list_render_jobs(workspace_id: str, limit: int = 20) -> list[dict[str, Any]]:
     return list_job_records_including_active(
         workspace_id, JOB_KIND, limit, factory=JOB_SESSION_FACTORY
+    )
+
+
+#: Marks a row that records a removal rather than a render. The activity list
+#: is one log of what the editing suite did to a clip, and undoing a render
+#: belongs in it as much as making one; the discriminator is what lets a single
+#: list hold both without a second kind and a second fetch.
+DISCARD_ACTION = "discard"
+
+
+def record_effect_removal(
+    workspace_id: str, asset_id: str, *, removed_versions: int, cancelled_jobs: int
+) -> dict[str, Any]:
+    """Put "the effects were removed" in the same list the renders are in."""
+    return record_completed_job(
+        f"edit_undo_{token_hex(10)}",
+        workspace_id,
+        JOB_KIND,
+        {"asset_id": asset_id, "action": DISCARD_ACTION},
+        result={"removed_versions": removed_versions, "cancelled_jobs": cancelled_jobs},
+        factory=JOB_SESSION_FACTORY,
+    )
+
+
+def clear_render_history(workspace_id: str, asset_id: str | None = None) -> int:
+    """Forget finished renders, for one asset or for the whole workspace.
+
+    Which asset a render belongs to is in its payload, so the filter is written
+    here rather than in the queue: `jobs` should not have to know what an
+    effect render is about. Anything still queued or running survives - that is
+    the queue's rule, not this one's.
+    """
+    def keep(item: Any) -> bool:
+        if asset_id is None:
+            return False
+        return str((item.payload or {}).get("asset_id") or "") != asset_id
+
+    return clear_settled_jobs(
+        workspace_id, JOB_KIND, keep=keep, factory=JOB_SESSION_FACTORY
     )
 
 

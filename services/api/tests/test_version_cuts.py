@@ -193,7 +193,9 @@ def test_a_version_reports_the_effects_that_made_it(tmp_path) -> None:
     edited = next(v for v in body["versions"] if v["kind"] == "edited")
     # Ordered, because a recipe is ordered and the order shows in the result.
     assert [e["id"] for e in edited["effects"]] == ["face_blur", "aspect"]
-    assert [e["label"] for e in edited["effects"]] == ["Blur faces", "Aspect"]
+    # The blur reports its shared tag, not its menu label: a card states what
+    # the cut is, and a blurred face and a masked one are the same fact.
+    assert [e["label"] for e in edited["effects"]] == ["Faces covered", "Aspect"]
 
 
 def test_labels_are_resolved_when_read_rather_than_frozen_when_written() -> None:
@@ -201,7 +203,7 @@ def test_labels_are_resolved_when_read_rather_than_frozen_when_written() -> None
     themselves, instead of every row keeping the wording of its render day."""
     from trendrelay_api.media_library_api import _named_effects
 
-    assert _named_effects(["face_blur"]) == [{"id": "face_blur", "label": "Blur faces"}]
+    assert _named_effects(["face_blur"]) == [{"id": "face_blur", "label": "Faces covered"}]
 
 
 def test_a_cut_is_tagged_with_the_short_name_not_the_editors_sentence() -> None:
@@ -217,7 +219,7 @@ def test_a_cut_is_tagged_with_the_short_name_not_the_editors_sentence() -> None:
 
     assert REGISTRY["face_overlay"].label == "Cover a face with an object"
     assert _named_effects(["face_overlay"]) == [
-        {"id": "face_overlay", "label": "Face covered"}
+        {"id": "face_overlay", "label": "Faces covered"}
     ]
 
 
@@ -227,8 +229,18 @@ def test_an_effect_short_enough_needs_no_second_name() -> None:
     from trendrelay_api.integrations import effect_render  # noqa: F401  registers them
     from trendrelay_api.integrations.effects import REGISTRY
 
-    assert REGISTRY["face_blur"].tag == ""
-    assert REGISTRY["face_blur"].chip == "Blur faces"
+    assert REGISTRY["colour"].tag == ""
+    assert REGISTRY["colour"].chip == "Colour"
+
+
+def test_every_way_of_covering_a_face_shares_one_tag() -> None:
+    """One label per fact, by request: a blurred face and a masked face state
+    the same thing about the file, and two wordings for it on neighbouring
+    cards was the report that led here."""
+    from trendrelay_api.integrations import effect_render  # noqa: F401  registers them
+    from trendrelay_api.integrations.effects import REGISTRY
+
+    assert REGISTRY["face_blur"].chip == REGISTRY["face_overlay"].chip == "Faces covered"
 
 
 def test_every_effect_has_a_chip_name_a_card_can_hold() -> None:
@@ -698,3 +710,137 @@ def test_the_assets_endpoint_combines_media_and_effect_filters(tmp_path) -> None
     ).json()
     assert plain_videos["total"] == 1
     assert [asset["id"] for asset in plain_videos["assets"]] == [plain_video]
+
+
+def test_removing_effects_is_recorded_in_the_activity_log(tmp_path, monkeypatch) -> None:
+    """An activity list that shows every application and no removal is not a
+    history: "the cut I rendered is gone" has an answer only if the undo left a
+    trace beside the renders it undid."""
+    from trendrelay_api.integrations import effect_render
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    workspace = create_workspace()
+    asset_id = make_asset(workspace, tmp_path)
+    add_version(workspace, asset_id, tmp_path, "edited", ["face_overlay"], "edit.mp4")
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/assets/{asset_id}/effects/discard",
+    )
+    assert response.status_code == 200
+
+    logged = effect_render.list_render_jobs(workspace)
+    assert len(logged) == 1
+    entry = logged[0]
+    assert entry["status"] == "succeeded"
+    assert entry["payload"] == {"asset_id": asset_id, "action": "discard"}
+    assert entry["result"]["removed_versions"] == 1
+    # Settled on arrival: there is nothing for a worker to pick up.
+    assert entry["lease_owner"] is None
+    assert entry["completed_at"] is not None
+    assert entry["stalled"] is False
+
+
+def test_a_removal_that_fails_is_not_logged_as_one(tmp_path, monkeypatch) -> None:
+    # Recorded after the commit, like the file deletions: an undo that did not
+    # happen must not appear in the log as though it did.
+    from trendrelay_api.integrations import effect_render
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    workspace = create_workspace()
+    asset_id = make_asset(workspace, tmp_path)
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/assets/{asset_id}/effects/discard",
+    )
+
+    assert response.status_code == 404
+    assert effect_render.list_render_jobs(workspace) == []
+
+
+def test_clearing_the_log_keeps_the_cut_it_describes(tmp_path, monkeypatch) -> None:
+    """The point of the distinction: this empties the log, not the library."""
+    from trendrelay_api.integrations import effect_render
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    workspace = create_workspace()
+    asset_id = make_asset(workspace, tmp_path)
+    add_version(workspace, asset_id, tmp_path, "edited", ["face_overlay"], "edit.mp4")
+    with TestingSession() as session:
+        session.add(DurableJob(
+            id="edit_finished",
+            workspace_key=workspace,
+            kind="media_effect_render",
+            status="succeeded",
+            payload={"asset_id": asset_id},
+            max_attempts=1,
+            cancellation_requested=False,
+        ))
+        session.commit()
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/jobs/clear",
+        json={"asset_id": asset_id},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["removed"] == 1
+    assert effect_render.list_render_jobs(workspace) == []
+    with TestingSession() as session:
+        kinds = [
+            version.version_kind
+            for version in session.query(MediaAssetVersion).filter_by(asset_id=asset_id).all()
+        ]
+    assert sorted(kinds) == ["edited", "original"]
+
+
+def test_clearing_one_asset_leaves_another_asset_alone(tmp_path, monkeypatch) -> None:
+    from trendrelay_api.integrations import effect_render
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    workspace = create_workspace()
+    mine = make_asset(workspace, tmp_path, name="mine")
+    theirs = make_asset(workspace, tmp_path, name="theirs")
+    with TestingSession() as session:
+        for job_id, asset_id in (("edit_mine", mine), ("edit_theirs", theirs)):
+            session.add(DurableJob(
+                id=job_id, workspace_key=workspace, kind="media_effect_render",
+                status="succeeded", payload={"asset_id": asset_id},
+                max_attempts=1, cancellation_requested=False,
+            ))
+        session.commit()
+
+    request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/jobs/clear",
+        json={"asset_id": mine},
+    )
+
+    assert [job["id"] for job in effect_render.list_render_jobs(workspace)] == ["edit_theirs"]
+
+
+def test_clearing_never_removes_a_render_in_flight(tmp_path, monkeypatch) -> None:
+    # The row is what a worker holds a lease on, and the only way to cancel it.
+    from trendrelay_api.integrations import effect_render
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    workspace = create_workspace()
+    asset_id = make_asset(workspace, tmp_path)
+    with TestingSession() as session:
+        session.add(DurableJob(
+            id="edit_running", workspace_key=workspace, kind="media_effect_render",
+            status="running", payload={"asset_id": asset_id},
+            max_attempts=1, cancellation_requested=False,
+        ))
+        session.commit()
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/jobs/clear",
+        json={"asset_id": asset_id},
+    )
+
+    assert response.json()["removed"] == 0
+    assert [job["id"] for job in effect_render.list_render_jobs(workspace)] == ["edit_running"]

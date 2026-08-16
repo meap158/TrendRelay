@@ -21,6 +21,14 @@ type JobCategory = "fetch" | "media" | "render" | "publish" | "research" | "blur
  * exactly the case somebody would otherwise publish without noticing.
  */
 function editTitle(t: Translate, job: any): string {
+  // Undoing a render is the same kind of event as making one, and the log is
+  // unreadable as a history if it shows every application and no removal.
+  if (job?.payload?.action === "discard") {
+    const removed = Number(job?.result?.removed_versions ?? 0);
+    return removed === 1
+      ? "Removed effects — 1 cut deleted"
+      : `Removed effects — ${removed} cuts deleted`;
+  }
   const steps: string[] = job?.payload?.effects ?? [];
   // The job stores effect ids; the drawer should say what the editor says. The
   // id doubles as the dictionary key, so an unknown one falls back to itself

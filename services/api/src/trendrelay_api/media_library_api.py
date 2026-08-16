@@ -1908,11 +1908,70 @@ def discard_rendered_cuts(
     for rendered_path in rendered_paths:
         with suppress(OSError):
             rendered_path.unlink(missing_ok=True)
+    # Logged after the commit, for the same reason the files are deleted after
+    # it: a removal that did not happen should not be recorded as one. This is
+    # the entry an operator needs most - "the cut I rendered is gone" has an
+    # answer only if the undo left a trace.
+    from trendrelay_api.integrations.effect_render import record_effect_removal
+
+    record_effect_removal(
+        workspace_id,
+        asset_id,
+        removed_versions=len(versions),
+        cancelled_jobs=len(active_jobs),
+    )
     return {
         "removed_versions": len(versions),
         "cancelled_jobs": len(active_jobs),
         "asset": _asset_view(session, _asset_record(session, workspace_id, asset_id)),
     }
+
+
+class ClearEffectHistoryRequest(BaseModel):
+    """Which finished renders to forget. No asset means the whole workspace."""
+
+    asset_id: str | None = Field(default=None, max_length=64)
+
+
+@router.post("/effects/jobs/clear")
+def clear_effect_history(
+    workspace_id: str,
+    body: ClearEffectHistoryRequest,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Empty the effect activity log, for one asset or all of them.
+
+    Only the record of the work. The rendered cut, its recipe and the file on
+    disk are separate rows and separate bytes, and stay exactly as they were -
+    which is what makes this different from discarding the effects themselves,
+    and why it does not need the same warning.
+
+    Anything queued or running is left alone by the queue itself, so a render
+    in flight keeps its progress and its Cancel button even if the log around
+    it is cleared while it works.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    from trendrelay_api.integrations.effect_render import clear_render_history
+
+    if body.asset_id:
+        # Confirms the asset is this workspace's before its id reaches a
+        # payload filter, so one workspace cannot name another's asset.
+        _asset_record(session, workspace_id, body.asset_id)
+    removed = clear_render_history(workspace_id, body.asset_id)
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media.effect_history_cleared",
+        "media_asset",
+        body.asset_id or workspace_id,
+        {"jobs_removed": removed},
+    )
+    session.commit()
+    return {"removed": removed}
 
 
 @router.post("/effects/render", status_code=202)
