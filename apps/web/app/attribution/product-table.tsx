@@ -195,8 +195,8 @@ export function ProductTable({
               <th scope="col">{t("attribution.product")}</th>
               <th scope="col" className="numeric">{t("attribution.price")}</th>
               <th scope="col" className="numeric">{t("attribution.rate")}</th>
-              <th scope="col">{t("attribution.offers")}</th>
-              <th scope="col">{t("attribution.links")}</th>
+              <th scope="col" className="product-count">{t("attribution.offers")}</th>
+              <th scope="col" className="product-count">{t("attribution.links")}</th>
               <th scope="col" className="numeric">{t("attribution.clicks")}</th>
               <th scope="col" className="numeric">{t("attribution.netCommission")}</th>
             </tr>
@@ -204,12 +204,17 @@ export function ProductTable({
           <tbody>
             {shown.map((product) => {
               const open = expanded.has(product.id);
+              const detailId = `product-detail-${product.id}`;
               const isShopee = product.marketplace.toLowerCase() === "shopee";
               const directOffers = product.offers.filter(
                 (offer) => offer.network.toLowerCase() === "shopee",
               );
               return [
-                <tr key={product.id} data-chosen={picked.has(product.id) || undefined}>
+                <tr
+                  key={product.id}
+                  data-chosen={picked.has(product.id) || undefined}
+                  data-expanded={open || undefined}
+                >
                   <td className="product-choose">
                     <SelectionCheckbox
                       aria-label={product.name}
@@ -225,6 +230,7 @@ export function ProductTable({
                       type="button"
                       className="catalog-work-toggle"
                       aria-expanded={open}
+                      aria-controls={detailId}
                       onClick={() => toggle(product.id)}
                     >
                       {/* Shopee exports contain no image URL. Do not reserve a
@@ -249,7 +255,7 @@ export function ProductTable({
                         className="product-disclosure"
                         data-open={open || undefined}
                         aria-hidden="true"
-                      >›</span>
+                      ><ActionIcon name="expand" size={16} /></span>
                     </button>
                   </th>
                   {/* Shown only when one offer answers for the product. With
@@ -262,8 +268,8 @@ export function ProductTable({
                   <td className="numeric">
                     {offerRate(product) || <span className="catalog-no-data">—</span>}
                   </td>
-                  <td>{product.offers.length}</td>
-                  <td>{product.links.length + directOffers.length}</td>
+                  <td className="product-count">{product.offers.length}</td>
+                  <td className="product-count">{product.links.length + directOffers.length}</td>
                   <td className="numeric">{product.clicks}</td>
                   <td className="numeric">
                     {product.earnings.length
@@ -283,7 +289,11 @@ export function ProductTable({
                   </td>
                 </tr>,
                 open && (
-                  <tr key={`${product.id}-detail`} className="catalog-edition-row">
+                  <tr
+                    key={`${product.id}-detail`}
+                    id={detailId}
+                    className="catalog-edition-row"
+                  >
                     <td colSpan={8}>
                       <div className="product-detail">
                         <section>
@@ -312,31 +322,33 @@ export function ProductTable({
                                         ` · ${t("attribution.cookieWindow", { days: offer.cookie_days })}`}
                                     </small>
                                   </div>
-                                  <Badge
-                                    tone={offer.availability === "available" ? "good" : "warn"}
-                                  >{offer.availability}</Badge>
-                                  {offer.network.toLowerCase() === "shopee" ? (
-                                    <>
-                                      <a
-                                        className="ui-button ui-button-secondary ui-button-sm"
-                                        href={offer.affiliate_url}
-                                        target="_blank"
-                                        rel="noreferrer noopener"
-                                      ><ActionIcon name="link" /> {t("attribution.shopee.openAffiliateLink")}</a>
+                                  <span className="product-row-actions">
+                                    <Badge
+                                      tone={offer.availability === "available" ? "good" : "warn"}
+                                    >{offer.availability}</Badge>
+                                    {offer.network.toLowerCase() === "shopee" ? (
+                                      <>
+                                        <a
+                                          className="ui-button ui-button-secondary ui-button-sm"
+                                          href={offer.affiliate_url}
+                                          target="_blank"
+                                          rel="noreferrer noopener"
+                                        ><ActionIcon name="link" /> {t("attribution.shopee.openAffiliateLink")}</a>
+                                        <Button
+                                          variant="quiet"
+                                          size="sm"
+                                          onClick={() => onCopyAffiliateLink(offer.affiliate_url)}
+                                        ><ActionIcon name="copy" /> {t("attribution.shopee.copyAffiliateLink")}</Button>
+                                      </>
+                                    ) : canCreate && (
                                       <Button
-                                        variant="quiet"
+                                        variant="secondary"
                                         size="sm"
-                                        onClick={() => onCopyAffiliateLink(offer.affiliate_url)}
-                                      ><ActionIcon name="copy" /> {t("attribution.shopee.copyAffiliateLink")}</Button>
-                                    </>
-                                  ) : canCreate && (
-                                    <Button
-                                      variant="secondary"
-                                      size="sm"
-                                      busy={busy === `link-${offer.id}`}
-                                      onClick={() => onCreateLink(product, offer.id)}
-                                    >{t("attribution.createLinkHere")}</Button>
-                                  )}
+                                        busy={busy === `link-${offer.id}`}
+                                        onClick={() => onCreateLink(product, offer.id)}
+                                      >{t("attribution.createLinkHere")}</Button>
+                                    )}
+                                  </span>
                                 </li>
                               ))}
                             </ul>
@@ -353,25 +365,27 @@ export function ProductTable({
                                     <code>{link.code}</code>
                                     <small>{link.platform}</small>
                                   </div>
-                                  <StatusBadge status={link.status} />
-                                  <Button
-                                    variant="quiet"
-                                    size="sm"
-                                    onClick={() => onCopyLink(link.code)}
-                                  >{t("attribution.copy")}</Button>
-                                  {canChangeStatus && (
+                                  <span className="product-row-actions">
+                                    <StatusBadge status={link.status} />
                                     <Button
                                       variant="quiet"
                                       size="sm"
-                                      busy={busy === link.id}
-                                      onClick={() => onSetLinkStatus(
-                                        link.id,
-                                        link.status === "active" ? "disabled" : "active",
-                                      )}
-                                    >{link.status === "active"
-                                      ? t("attribution.disable")
-                                      : t("attribution.activate")}</Button>
-                                  )}
+                                      onClick={() => onCopyLink(link.code)}
+                                    >{t("attribution.copy")}</Button>
+                                    {canChangeStatus && (
+                                      <Button
+                                        variant="quiet"
+                                        size="sm"
+                                        busy={busy === link.id}
+                                        onClick={() => onSetLinkStatus(
+                                          link.id,
+                                          link.status === "active" ? "disabled" : "active",
+                                        )}
+                                      >{link.status === "active"
+                                        ? t("attribution.disable")
+                                        : t("attribution.activate")}</Button>
+                                    )}
+                                  </span>
                                 </li>
                               ))}
                             </ul>

@@ -4,6 +4,7 @@ import {
   CalendarPlus,
   Archive,
   Check,
+  ChevronRight,
   Copy,
   Download,
   EyeOff,
@@ -61,6 +62,7 @@ export const ACTION_ICONS = {
   play: Play,
   add: Plus,
   confirm: Check,
+  expand: ChevronRight,
   dismiss: X,
 } satisfies Record<string, LucideIcon>;
 
