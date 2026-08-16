@@ -56,9 +56,9 @@ def test_development_cors_allows_browser_authorization_header() -> None:
     assert "Authorization" in response.headers["access-control-allow-headers"]
 
 
-@pytest.mark.parametrize("method", ["PATCH", "DELETE"])
+@pytest.mark.parametrize("method", ["PUT", "PATCH", "DELETE"])
 def test_development_cors_allows_browser_mutations(method: str) -> None:
-    """Campaign approve/edit/delete controls must survive browser preflight."""
+    """Campaign settings, approve/edit, and delete must survive browser preflight."""
 
     async def preflight() -> httpx.Response:
         transport = httpx.ASGITransport(app=app)
