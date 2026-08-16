@@ -135,6 +135,34 @@ def test_settings_round_trip(workspace) -> None:
     assert saved["offer_mode"] == "manual"
 
 
+def test_running_autopilot_settings_do_not_require_activation_confirmation(workspace) -> None:
+    campaign_id = campaign(workspace)
+    url = f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot"
+    enabled = request(
+        "PUT",
+        url,
+        json={"enabled": True, "confirm_external_action": True},
+    )
+    assert enabled.status_code == 200, enabled.text
+
+    no_products = request(
+        "PUT",
+        url,
+        json={"enabled": True, "offer_mode": "none"},
+    )
+    assert no_products.status_code == 200, no_products.text
+    assert no_products.json()["autopilot"]["offer_mode"] == "none"
+
+    one_product = request(
+        "PUT",
+        url,
+        json={"enabled": True, "offer_mode": "manual", "offer_id": "offer-1"},
+    )
+    assert one_product.status_code == 200, one_product.text
+    assert one_product.json()["autopilot"]["offer_mode"] == "manual"
+    assert one_product.json()["autopilot"]["offer_id"] == "offer-1"
+
+
 def test_smart_offer_settings_round_trip(workspace) -> None:
     campaign_id = campaign(workspace)
     response = request(

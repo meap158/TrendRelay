@@ -278,7 +278,12 @@ def save_autopilot(
     ensure_profile(session, user)
     autopilot = _autopilot(session, workspace_id, campaign_id, user_id=user.id)
 
-    if body.enabled and not body.confirm_external_action:
+    # Confirmation belongs to the transition that hands accounts to the
+    # scheduler. The web form sends the complete settings document, including
+    # `enabled=True`, on every later edit; treating those edits as another
+    # activation made product mode, disclosure, limits, and shortlist controls
+    # unusable while Autopilot was running.
+    if body.enabled and not autopilot.enabled and not body.confirm_external_action:
         raise HTTPException(
             status_code=400,
             detail="Switching autopilot on posts to live accounts and needs confirmation.",
