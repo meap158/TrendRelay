@@ -23,6 +23,8 @@ from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, ensure_profile, membership, require_role
 from trendrelay_api.models import Campaign, PublicationPlan, utc_now
 from trendrelay_api.opportunity_models import ProductOffer
+from trendrelay_api.signal_models import CampaignSignal, default_expiry
+from trendrelay_api.signal_models import describe as describe_signal
 from trendrelay_api.tool_registry import PROJECT_ROOT
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/campaigns", tags=["campaigns"])
@@ -90,6 +92,32 @@ def _approved_media_path(value: str, suffixes: set[str]) -> Path:
     return resolved
 
 
+class SignalInput(BaseModel):
+    """One piece of Discover evidence, as the basket holds it.
+
+    Everything but the identity is optional because the boards differ: a search
+    trend has no creator, a Reddit post has no search volume. Demanding a
+    uniform shape would mean inventing fields, and an invented field reads
+    exactly like a measured one later.
+    """
+
+    #: Stable for the same observation, which is what makes re-submitting a
+    #: basket idempotent rather than duplicating it.
+    external_id: str = Field(min_length=1, max_length=200)
+    kind: Literal["topic", "post", "creator"] = "topic"
+    label: str = Field(min_length=1, max_length=300)
+    provider: str | None = Field(default=None, max_length=80)
+    source_url: str | None = Field(default=None, max_length=2000)
+    creator: str | None = Field(default=None, max_length=200)
+    region: str | None = Field(default=None, max_length=16)
+    language: str | None = Field(default=None, max_length=16)
+    evidence: str | None = Field(default=None, max_length=2000)
+    observed: dict[str, Any] = Field(default_factory=dict)
+    trend_shape: str | None = Field(default=None, max_length=24)
+    tags: list[str] = Field(default_factory=list, max_length=20)
+    angles: list[str] = Field(default_factory=list, max_length=10)
+
+
 class CampaignCreate(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     objective: str = Field(min_length=2, max_length=1000)
@@ -98,6 +126,10 @@ class CampaignCreate(BaseModel):
     languages: list[str] = Field(default_factory=list, max_length=20)
     affiliate_url: AnyHttpUrl | None = None
     offer_id: str | None = Field(default=None, max_length=64)
+    #: What Discover was showing when somebody decided this was worth doing.
+    #: Kept whole rather than summarised into the objective, so the campaign can
+    #: still answer "why this?" a week later.
+    signals: list[SignalInput] = Field(default_factory=list, max_length=40)
 
     @field_validator("name", "objective", "audience")
     @classmethod
@@ -319,6 +351,7 @@ def create_campaign(
             created_by=user.id,
         )
     )
+    stored_signals = _store_signals(session, workspace_id, item.id, body.signals, user.id)
     audit(
         session,
         request,
@@ -327,9 +360,71 @@ def create_campaign(
         "campaign.created",
         "campaign",
         item.id,
-        {"status": item.status, "offer_id": offer.id if offer else None},
+        {
+            "status": item.status,
+            "offer_id": offer.id if offer else None,
+            # Recorded because a campaign started from evidence and one started
+            # from a blank form are different acts, and the audit is where that
+            # distinction has to survive.
+            "signals": len(stored_signals),
+        },
     )
-    return {"campaign": _campaign(item)}
+    return {"campaign": _campaign(item), "signals": stored_signals}
+
+
+def _store_signals(
+    session: Session,
+    workspace_id: str,
+    campaign_id: str,
+    inputs: list[SignalInput],
+    actor_user_id: str,
+) -> list[dict[str, Any]]:
+    """Keep the evidence, one row per observation.
+
+    Idempotent on the id Discover assigned: submitting the same basket twice
+    updates what was already kept rather than doubling it, which matters
+    because the composer is a form somebody can send again after an edit.
+    """
+    if not inputs:
+        return []
+    collected = utc_now()
+    existing = {
+        item.external_id: item
+        for item in session.scalars(
+            select(CampaignSignal).where(CampaignSignal.campaign_id == campaign_id)
+        ).all()
+    }
+    stored: list[dict[str, Any]] = []
+    for given in inputs:
+        signal = existing.get(given.external_id)
+        if signal is None:
+            signal = CampaignSignal(
+                workspace_id=workspace_id,
+                campaign_id=campaign_id,
+                external_id=given.external_id,
+                collected_at=collected,
+                # A source that knows its own shelf life should say so; until
+                # one does, evidence stops counting as current after a
+                # fortnight rather than never.
+                expires_at=default_expiry(collected),
+                created_by=actor_user_id,
+            )
+            session.add(signal)
+        signal.kind = given.kind
+        signal.label = given.label
+        signal.provider = given.provider
+        signal.source_url = given.source_url
+        signal.creator = given.creator
+        signal.region = given.region
+        signal.language = given.language
+        signal.evidence = given.evidence
+        signal.observed = dict(given.observed)
+        signal.trend_shape = given.trend_shape
+        signal.tags = list(given.tags)
+        signal.angles = list(given.angles)
+        stored.append(describe_signal(signal, at=collected))
+    session.flush()
+    return stored
 
 
 @router.post("/{campaign_id}/status")

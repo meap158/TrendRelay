@@ -55,6 +55,23 @@ export function CampaignIdeaComposer({
               .split(",").map((item) => item.trim()).filter(Boolean),
             languages: String(form.get("languages") ?? "")
               .split(",").map((item) => item.trim()).filter(Boolean),
+            // The evidence itself, not just the sentence synthesised from it.
+            // Without this the campaign cannot answer "why this?" a week later,
+            // and the signal cannot be watched, refreshed, or retired as it
+            // moves — everything the basket knew died at this click.
+            signals: seeds.map((seed) => ({
+              external_id: seed.id,
+              kind: seed.kind,
+              label: seed.label,
+              provider: seed.source,
+              source_url: seed.url,
+              region: seed.region,
+              evidence: seed.evidence,
+              tags: seed.tags,
+              // Shared across the basket: the angles were proposed from all of
+              // it together, so attributing them to one seed would be a guess.
+              angles: idea.angles,
+            })),
           }),
         }),
       );
