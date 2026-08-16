@@ -68,6 +68,27 @@ which is why a session is worth offering - and why nothing here requires one.
   versions those paths, and a hard-coded one fails silently and looks like an
   empty account. Every JSON response from the affiliate host is walked and
   anything offer-shaped is kept.
+
+  **Measured against the live site, this does not currently reach the offers,
+  and a CAPTCHA is not the only reason.** Probed on 2026-08-16 with a valid
+  session, in the browser runtime, against `/offer/product_offer`:
+
+  - Headless, the read is refused with a verification challenge, as the
+    reliability boundary above predicts.
+  - Headful, the same read passes: no challenge, no login wall, exit 0. So the
+    challenge is triggered by headlessness rather than by the session.
+  - Headful *and unblocked*, it still harvested zero offers. Seven JSON
+    responses arrived and every one was configuration or account state -
+    `config/website`, `user/status`, `user/profile`,
+    `user/check_program_permission`, `offer/checkInAmsWhiteList`,
+    `version.json`, `inbox_message/unread_num`. The product list was rendered
+    on screen throughout and never appeared among them.
+
+  The field-name mapping was therefore never reached, and correcting it would
+  fix nothing. Whatever carries the list is not a JSON response on that host
+  within the window the bridge watches. That is the open question if anyone
+  revisits this; until it is answered, the bridge cannot read offers at all and
+  the CSV export is not a fallback but the only path.
 - **"Nothing found" is told apart from "not signed in" and from "the payload
   changed".** Only the last of those means going back to the CSV, and reporting
   all three the same way would send somebody to fix the wrong thing.
