@@ -551,7 +551,8 @@ def test_a_batch_queues_the_same_stack_and_skips_incompatible_media(
         recipe = session.query(MediaEditRecipe).filter_by(asset_id=clip).one()
         assert [step["effect"] for step in recipe.steps] == ["speed"]
         assert session.query(MediaEditRecipe).filter_by(asset_id=picture).one_or_none() is None
-        assert session.query(DurableJob).filter_by(kind="media_effect_render").count() == 1
+        queued = session.query(DurableJob).filter_by(kind="media_effect_render").one()
+        assert queued.max_attempts == effect_render.RENDER_MAX_ATTEMPTS
 
 
 def test_a_batch_preserves_a_stack_for_every_compatible_asset(tmp_path, monkeypatch) -> None:

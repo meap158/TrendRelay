@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from threading import Event
 
 import pytest
 from sqlalchemy import create_engine
@@ -88,6 +89,21 @@ def test_reporting_can_never_break_the_render_it_reports_on(monkeypatch) -> None
 
     monkeypatch.setattr(TestingSession, "begin", explode)
     jobs.report_progress("job_1", 0.5, "anything", factory=TestingSession)
+
+
+def test_an_effect_render_renews_its_short_recovery_lease(monkeypatch) -> None:
+    from trendrelay_api.integrations import effect_render
+
+    pulsed = Event()
+    monkeypatch.setattr(effect_render, "RENDER_HEARTBEAT_SECONDS", 0.01)
+    monkeypatch.setattr(
+        effect_render,
+        "heartbeat_job",
+        lambda *args, **kwargs: pulsed.set(),
+    )
+
+    with effect_render._maintain_render_lease("edit_1", "worker-1"):
+        assert pulsed.wait(0.5), "a live render let its recovery lease expire"
 
 
 def test_a_job_that_does_not_exist_is_not_an_error() -> None:

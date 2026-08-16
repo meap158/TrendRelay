@@ -20,8 +20,11 @@ from __future__ import annotations
 import shutil
 import tempfile
 from collections.abc import Sequence
+from contextlib import contextmanager
+from os import getpid
 from pathlib import Path
 from secrets import token_hex
+from threading import Event, Thread
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -52,7 +55,8 @@ from trendrelay_api.jobs import (
     create_job_record,
     fail_job,
     get_job_record,
-    list_job_records,
+    heartbeat_job,
+    list_job_records_including_active,
     report_progress,
 )
 from trendrelay_api.tool_registry import PROJECT_ROOT
@@ -60,6 +64,10 @@ from trendrelay_api.tool_registry import PROJECT_ROOT
 JOB_KIND = "media_effect_render"
 JOB_SESSION_FACTORY = SessionFactory
 RENDER_ROOT = PROJECT_ROOT / ".data" / "productions" / "edits"
+RENDER_MAX_ATTEMPTS = 3
+RENDER_LEASE_SECONDS = 120
+RENDER_HEARTBEAT_SECONDS = 20
+DEFAULT_WORKER_ID = f"effect-render-{getpid()}-{token_hex(4)}"
 
 #: The recipe steps that produce a privacy-relevant cut. A render containing one
 #: is stored as a `blurred` version rather than an `edited` one, because the
@@ -991,38 +999,94 @@ def create_render_job(
             # that relationship without relying on transient client state.
             "batch": batch,
         },
-        max_attempts=1,
+        # A process restart must not turn an edit into a permanent spinner.
+        # Rendering restarts safely from the immutable source when reclaimed.
+        max_attempts=RENDER_MAX_ATTEMPTS,
         factory=JOB_SESSION_FACTORY,
     )
     return get_job_record(job_id, factory=JOB_SESSION_FACTORY)
 
 
-def run_render_job(job_id: str, worker_id: str = "effect-render-worker") -> None:
+@contextmanager
+def _maintain_render_lease(job_id: str, worker_id: str):
+    """Keep a live render leased while making crashes recover quickly."""
+    stopped = Event()
+
+    def keep_alive() -> None:
+        while not stopped.wait(RENDER_HEARTBEAT_SECONDS):
+            try:
+                heartbeat_job(
+                    job_id,
+                    worker_id,
+                    lease_seconds=RENDER_LEASE_SECONDS,
+                    factory=JOB_SESSION_FACTORY,
+                )
+            except PermissionError:
+                # The job was cancelled, completed, or reclaimed.  There is no
+                # lease left for this thread to maintain.
+                return
+            except Exception:
+                # A transient SQLite lock is retried on the next pulse.  The
+                # existing lease remains valid in the meantime.
+                continue
+
+    thread = Thread(
+        target=keep_alive,
+        name=f"lease-{job_id[:20]}",
+        daemon=True,
+    )
+    thread.start()
     try:
-        record = claim_job(job_id, worker_id, lease_seconds=3600, factory=JOB_SESSION_FACTORY)
+        yield
+    finally:
+        stopped.set()
+        thread.join(timeout=RENDER_HEARTBEAT_SECONDS + 1)
+
+
+def run_render_job(job_id: str, worker_id: str | None = None) -> None:
+    worker_id = worker_id or DEFAULT_WORKER_ID
+    try:
+        record = claim_job(
+            job_id,
+            worker_id,
+            lease_seconds=RENDER_LEASE_SECONDS,
+            factory=JOB_SESSION_FACTORY,
+        )
     except (FileNotFoundError, PermissionError):
         return
     payload = record["payload"]
     try:
-        steps = read_recipe(payload["request"]["steps"])
-        output = Path(payload["output"])
-        output.parent.mkdir(parents=True, exist_ok=True)
-        result = render_recipe(
-            Path(payload["source"]),
-            output,
-            steps,
-            preview_seconds=payload["request"].get("preview_seconds"),
-            # Minutes of work, and until now minutes of silence. The reporter
-            # throttles itself, so the render loops can call it every frame.
-            progress=ProgressReporter(
-                lambda fraction, stage: report_progress(
-                    job_id, fraction, stage, factory=JOB_SESSION_FACTORY
+        with _maintain_render_lease(job_id, worker_id):
+            if record.get("attempt_count", 1) > 1:
+                report_progress(
+                    job_id,
+                    0.0,
+                    "Restarting interrupted render",
+                    factory=JOB_SESSION_FACTORY,
+                )
+            steps = read_recipe(payload["request"]["steps"])
+            output = Path(payload["output"])
+            # A crashed encoder can leave a partial file at the durable output
+            # path. FFmpeg normally replaces it, but model-only still renders
+            # should receive the same clean restart guarantee.
+            output.unlink(missing_ok=True)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            result = render_recipe(
+                Path(payload["source"]),
+                output,
+                steps,
+                preview_seconds=payload["request"].get("preview_seconds"),
+                # Minutes of work, and until now minutes of silence. The reporter
+                # throttles itself, so the render loops can call it every frame.
+                progress=ProgressReporter(
+                    lambda fraction, stage: report_progress(
+                        job_id, fraction, stage, factory=JOB_SESSION_FACTORY
+                    ),
+                    should_cancel=lambda: bool(
+                        get_render_job(job_id).get("cancellation_requested")
+                    ),
                 ),
-                should_cancel=lambda: bool(
-                    get_render_job(job_id).get("cancellation_requested")
-                ),
-            ),
-        )
+            )
         latest = get_job_record(job_id, factory=JOB_SESSION_FACTORY)
         if latest.get("cancellation_requested"):
             # Discarding effects while a render is active must not allow the
@@ -1125,7 +1189,9 @@ def _register_version(
 
 
 def list_render_jobs(workspace_id: str, limit: int = 20) -> list[dict[str, Any]]:
-    return list_job_records(workspace_id, JOB_KIND, limit, factory=JOB_SESSION_FACTORY)
+    return list_job_records_including_active(
+        workspace_id, JOB_KIND, limit, factory=JOB_SESSION_FACTORY
+    )
 
 
 def get_render_job(job_id: str) -> dict[str, Any]:

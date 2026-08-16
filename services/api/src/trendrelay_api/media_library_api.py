@@ -1643,17 +1643,15 @@ def discard_rendered_cuts(
 def submit_render(
     workspace_id: str,
     body: dict[str, Any],
-    background_tasks: BackgroundTasks,
     user: AuthenticatedUser,
     session: DatabaseSession,
 ) -> dict[str, Any]:
-    """Render a recipe into a new version of its source."""
+    """Persist a recipe render for the durable worker to execute."""
     require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
     ensure_profile(session, user)
     from trendrelay_api.integrations.effect_render import (
         EffectRenderRequest,
         create_render_job,
-        run_render_job,
     )
     from trendrelay_api.integrations.effects import EffectError, read_recipe
 
@@ -1673,11 +1671,9 @@ def submit_render(
     if not request.preview_seconds and (asset_id := job.get("payload", {}).get("asset_id")):
         _asset_record(session, workspace_id, str(asset_id))
         _store_recipe(session, workspace_id, str(asset_id), normalised, user.id)
-        # Background work may finish before the request dependency closes its
-        # session. Commit first so reopening Effects is correct even for a very
-        # short render or an immediate navigation.
+        # Commit before the worker can claim the durable job so reopening
+        # Effects is correct even after immediate navigation or app restart.
         session.commit()
-    background_tasks.add_task(run_render_job, job["id"])
     return {"job": job}
 
 
@@ -1693,7 +1689,6 @@ class BatchEffectRenderRequest(BaseModel):
 def submit_batch_render(
     workspace_id: str,
     body: BatchEffectRenderRequest,
-    background_tasks: BackgroundTasks,
     request: Request,
     user: AuthenticatedUser,
     session: DatabaseSession,
@@ -1717,7 +1712,6 @@ def submit_batch_render(
         EffectRenderRequest,
         check_media_kinds,
         create_render_job,
-        run_render_job,
     )
     from trendrelay_api.integrations.effects import EffectError, read_recipe
     from trendrelay_api.models import DurableJob
@@ -1810,8 +1804,6 @@ def submit_batch_render(
         {"counts": counts, "effects": [step.effect.id for step in steps]},
     )
     session.commit()
-    for job in jobs:
-        background_tasks.add_task(run_render_job, job["id"])
     return {"counts": counts, "results": results, "jobs": jobs}
 
 

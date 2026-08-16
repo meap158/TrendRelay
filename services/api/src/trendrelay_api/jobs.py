@@ -101,6 +101,48 @@ def list_job_records(
         return [serialize_job(item) for item in items]
 
 
+def list_job_records_including_active(
+    workspace_key: str,
+    kind: str,
+    limit: int = 20,
+    *,
+    factory: SessionMaker = SessionFactory,
+) -> list[dict[str, Any]]:
+    """Return recent history without ever paging an unfinished job away.
+
+    Notification drawers use a bounded history, but an old slow job remains
+    operational state rather than history.  It must survive the limit so a new
+    browser session can still show, cancel, and follow it.
+    """
+    with factory() as session:
+        active = session.scalars(
+            select(DurableJob).where(
+                DurableJob.workspace_key == workspace_key,
+                DurableJob.kind == kind,
+                DurableJob.status.in_(("queued", "running")),
+            )
+        ).all()
+        active_ids = {item.id for item in active}
+        history_limit = max(0, limit - len(active))
+        settled = (
+            session.scalars(
+                select(DurableJob)
+                .where(
+                    DurableJob.workspace_key == workspace_key,
+                    DurableJob.kind == kind,
+                    DurableJob.status.not_in(("queued", "running")),
+                )
+                .order_by(DurableJob.created_at.desc())
+                .limit(history_limit)
+            ).all()
+            if history_limit
+            else []
+        )
+        items = [*active, *(item for item in settled if item.id not in active_ids)]
+        items.sort(key=lambda item: item.created_at, reverse=True)
+        return [serialize_job(item) for item in items]
+
+
 #: What an abandoned job's error says. Written once so the worker, the API and
 #: the tests all agree on the wording somebody will read on a stuck row.
 ABANDONED_ERROR = (
@@ -188,6 +230,54 @@ def recoverable_job_ids(
                 .limit(limit)
             )
         )
+
+
+def upgrade_active_job_recovery(
+    kind: str,
+    *,
+    max_attempts: int,
+    maximum_lease_seconds: int | None = None,
+    factory: SessionMaker = SessionFactory,
+) -> list[str]:
+    """Give legacy unfinished jobs the recovery policy used by new workers.
+
+    Queue policy changes must cover rows already on disk, not only jobs created
+    after an upgrade.  This is deliberately limited to non-terminal jobs of one
+    explicitly named kind.  A long lease can also be shortened during a policy
+    migration: the old effect renderer used a one-hour lease without heartbeats,
+    which made a process restart look like an hour-long render that never moved.
+    """
+    timestamp = now_utc()
+    latest_lease = (
+        timestamp + timedelta(seconds=maximum_lease_seconds)
+        if maximum_lease_seconds is not None
+        else None
+    )
+    changed: list[str] = []
+    with factory.begin() as session:
+        items = session.scalars(
+            select(DurableJob).where(
+                DurableJob.kind == kind,
+                DurableJob.status.in_(("queued", "running")),
+            )
+        ).all()
+        for item in items:
+            dirty = False
+            if item.max_attempts < max_attempts:
+                item.max_attempts = max_attempts
+                dirty = True
+            if (
+                latest_lease is not None
+                and item.status == "running"
+                and item.lease_expires_at is not None
+                and as_utc(item.lease_expires_at) > latest_lease
+            ):
+                item.lease_expires_at = latest_lease
+                dirty = True
+            if dirty:
+                item.updated_at = timestamp
+                changed.append(item.id)
+    return changed
 
 
 def claim_job(

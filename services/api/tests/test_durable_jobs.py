@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 from trendrelay_api.jobs import (
     ABANDONED_ERROR,
     abandon_expired_jobs,
+    claim_job,
     claim_next_job,
     complete_job,
     create_job_record,
@@ -14,9 +15,11 @@ from trendrelay_api.jobs import (
     get_job_record,
     heartbeat_job,
     list_job_records,
+    list_job_records_including_active,
     now_utc,
     recoverable_job_ids,
     request_job_cancellation,
+    upgrade_active_job_recovery,
 )
 from trendrelay_api.models import Base, DurableJob
 
@@ -160,3 +163,85 @@ def test_only_the_kind_asked_for_is_swept() -> None:
     stranded(sessions, kind="douyin_download")
 
     assert abandon_expired_jobs("media_face_blur", factory=sessions) == []
+
+
+def test_legacy_active_jobs_receive_the_new_retry_and_lease_policy() -> None:
+    sessions = factory()
+    job_id = "edit_legacy1234567890"
+    create_job_record(
+        job_id,
+        "workspace-1",
+        "media_effect_render",
+        {},
+        max_attempts=1,
+        factory=sessions,
+    )
+    claim_job(job_id, "old-session", lease_seconds=3600, factory=sessions)
+    before = get_job_record(job_id, factory=sessions)
+
+    assert upgrade_active_job_recovery(
+        "media_effect_render",
+        max_attempts=3,
+        maximum_lease_seconds=120,
+        factory=sessions,
+    ) == [job_id]
+
+    upgraded = get_job_record(job_id, factory=sessions)
+    assert upgraded["max_attempts"] == 3
+    assert upgraded["lease_expires_at"] < before["lease_expires_at"]
+    assert upgraded["status"] == "running"
+
+
+def test_recovery_policy_never_reopens_a_finished_job() -> None:
+    sessions = factory()
+    job_id = "edit_complete12345678"
+    create_job_record(
+        job_id,
+        "workspace-1",
+        "media_effect_render",
+        {},
+        max_attempts=1,
+        factory=sessions,
+    )
+    claim_job(job_id, "worker", factory=sessions)
+    complete_job(job_id, "worker", {}, factory=sessions)
+
+    assert upgrade_active_job_recovery(
+        "media_effect_render",
+        max_attempts=3,
+        maximum_lease_seconds=120,
+        factory=sessions,
+    ) == []
+    assert get_job_record(job_id, factory=sessions)["max_attempts"] == 1
+
+
+def test_active_jobs_are_not_paged_out_of_notification_history() -> None:
+    sessions = factory()
+    create_job_record(
+        "edit_old_active",
+        "workspace-1",
+        "media_effect_render",
+        {},
+        factory=sessions,
+    )
+    for index in range(4):
+        job_id = f"edit_new_done_{index}"
+        create_job_record(
+            job_id,
+            "workspace-1",
+            "media_effect_render",
+            {},
+            factory=sessions,
+        )
+        claim_job(job_id, "worker", factory=sessions)
+        complete_job(job_id, "worker", {}, factory=sessions)
+
+    visible = list_job_records_including_active(
+        "workspace-1",
+        "media_effect_render",
+        limit=2,
+        factory=sessions,
+    )
+
+    assert len(visible) == 2
+    assert "edit_old_active" in {job["id"] for job in visible}

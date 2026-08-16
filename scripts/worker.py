@@ -15,6 +15,12 @@ sys.path.insert(0, str(API_SOURCE))
 
 from trendrelay_api.integrations.douyin import run_download_job  # noqa: E402
 from trendrelay_api.integrations.face_blur import run_blur_job  # noqa: E402
+from trendrelay_api.integrations.effect_render import (  # noqa: E402
+    JOB_KIND as EFFECT_JOB_KIND,
+    RENDER_LEASE_SECONDS,
+    RENDER_MAX_ATTEMPTS,
+    run_render_job as run_effect_render_job,
+)
 from trendrelay_api.integrations.last30days import run_job  # noqa: E402
 from trendrelay_api.integrations.openmontage_runtime import run_render_job  # noqa: E402
 from trendrelay_api.integrations.publishing import run_publish_job  # noqa: E402
@@ -22,7 +28,11 @@ from trendrelay_api.media_library import run_ingest_job  # noqa: E402
 from trendrelay_api.shopee_enrichment import run_enrich_job  # noqa: E402
 from trendrelay_api.campaign_runner import tick as campaign_tick  # noqa: E402
 from trendrelay_api.database import SessionFactory  # noqa: E402
-from trendrelay_api.jobs import abandon_expired_jobs, recoverable_job_ids  # noqa: E402
+from trendrelay_api.jobs import (  # noqa: E402
+    abandon_expired_jobs,
+    recoverable_job_ids,
+    upgrade_active_job_recovery,
+)
 
 
 #: Campaign autopilot is time-driven rather than queue-driven, so it is asked
@@ -53,11 +63,19 @@ JOB_KINDS = (
     "openmontage_render",
     "media_ingest",
     "media_face_blur",
+    EFFECT_JOB_KIND,
     "shopee_enrich",
 )
 
 
 def process_available() -> int:
+    upgraded = upgrade_active_job_recovery(
+        EFFECT_JOB_KIND,
+        max_attempts=RENDER_MAX_ATTEMPTS,
+        maximum_lease_seconds=RENDER_LEASE_SECONDS,
+    )
+    for job_id in upgraded:
+        print(f"Prepared interrupted effect job {job_id} for recovery.", flush=True)
     # Before claiming anything: a job whose worker died with no attempts left
     # is invisible to the recovery below, and stays "running" until somebody
     # notices it never finished. Giving it a terminal state is what puts it in
@@ -72,6 +90,7 @@ def process_available() -> int:
     render_ids = recoverable_job_ids("openmontage_render")
     media_ids = recoverable_job_ids("media_ingest")
     blur_ids = recoverable_job_ids("media_face_blur")
+    effect_ids = recoverable_job_ids(EFFECT_JOB_KIND)
     enrich_ids = recoverable_job_ids("shopee_enrich")
     for job_id in download_ids:
         run_download_job(job_id)
@@ -85,6 +104,8 @@ def process_available() -> int:
         run_ingest_job(job_id)
     for job_id in blur_ids:
         run_blur_job(job_id)
+    for job_id in effect_ids:
+        run_effect_render_job(job_id)
     for job_id in enrich_ids:
         run_enrich_job(job_id)
     return (
@@ -94,6 +115,7 @@ def process_available() -> int:
         + len(render_ids)
         + len(media_ids)
         + len(blur_ids)
+        + len(effect_ids)
         + len(enrich_ids)
     )
 
@@ -101,7 +123,8 @@ def process_available() -> int:
 def worker_main() -> None:
     print(
         "Durable worker ready: douyin_download, trend_research, social_publish, "
-        "openmontage_render, media_ingest, media_face_blur, campaign_autopilot",
+        "openmontage_render, media_ingest, media_face_blur, media_effect_render, "
+        "campaign_autopilot",
         flush=True,
     )
     try:
