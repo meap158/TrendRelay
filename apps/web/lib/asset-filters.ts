@@ -4,6 +4,14 @@ export type AssetFilterValues = {
   channel?: string;
   platform?: string;
   mediaKind?: "video" | "audio" | "image" | "";
+  /**
+   * A rendered effect the asset carries: an effect id (`face_overlay`), the
+   * catch-all `any`, or `none` for the assets with no rendered cut at all.
+   *
+   * Deliberately a plain string rather than a union. The set of effects is the
+   * registry's to decide and it grows, so the facet the server sends is the
+   * list of what is selectable; naming them here would only be a staler copy.
+   */
   effect?: string;
   maxSeconds?: number;
 };
