@@ -47,9 +47,9 @@ from trendrelay_api.integrations.meta_ads_kit import (
 from trendrelay_api.integrations.popular_posts import PERIODS as POST_PERIODS
 from trendrelay_api.integrations.popular_posts import (
     collect_posts,
-    live_reader,
     live_bluesky_reader,
     live_hackernews_reader,
+    live_reader,
     live_reddit_reader,
     live_youtube_reader,
 )
@@ -64,7 +64,7 @@ from trendrelay_api.integrations.tiktok_creative import (
 from trendrelay_api.integrations.trend_consolidation import SHAPES, WINDOWS
 from trendrelay_api.integrations.trend_consolidation import rank as rank_topics
 from trendrelay_api.integrations.trend_sources import collect as collect_sightings
-from trendrelay_api.integrations.trend_sources import live_readers
+from trendrelay_api.integrations.trend_sources import live_readers, live_trends_reader
 from trendrelay_api.media_api import router as media_router
 from trendrelay_api.media_library_api import router as media_library_router
 from trendrelay_api.opportunities_api import router as opportunities_router
@@ -342,6 +342,7 @@ def _consolidated_trends(
         limit=limit,
         tiktok_reader=tiktok_reader,
         douyin_reader=douyin_reader,
+        trends_reader=live_trends_reader(),
     )
     topics = rank_topics(collected["sightings"], shapes=shapes)
     return {

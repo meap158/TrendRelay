@@ -29,11 +29,18 @@ def providers(monkeypatch: pytest.MonkeyPatch):
     A route test that reached the real providers would render Creative Center
     three times and pass or fail on whether TikTok felt like answering.
     """
-    def install(tiktok: Any, douyin: Any = None) -> None:
+    def install(tiktok: Any, douyin: Any = None, trends: Any = None) -> None:
         def readers() -> tuple[Any, Any]:
             return tiktok, douyin or (lambda **_: {"items": []})
 
         monkeypatch.setattr(main, "live_readers", readers)
+        # Stubbed by default rather than left live: Google Trends is consulted
+        # for every country, so without this a route test would reach the real
+        # feed and pass or fail on whether Google felt like answering.
+        monkeypatch.setattr(
+            main, "live_trends_reader",
+            lambda: trends or (lambda **_: {"region": "", "items": []}),
+        )
 
     return install
 
@@ -129,3 +136,26 @@ def test_no_source_answering_is_a_provider_state_not_an_empty_week(providers) ->
 def test_the_list_is_local_machine_only(providers) -> None:
     providers(lambda **kw: page(region="US", period=kw["period"], names=["#x"]))
     assert get("/api/research/trends/consolidated", host="192.0.2.10").status_code == 403
+
+
+def test_google_trends_answers_for_a_country_the_others_cannot(providers) -> None:
+    """The reason this source is here.
+
+    Creative Center needs a browser runtime, the Douyin board covers China, and
+    Reddit's country filter has no Vietnam. Search demand does.
+    """
+    providers(
+        tiktok=lambda **_: (_ for _ in ()).throw(RuntimeError("no browser runtime")),
+        trends=lambda **_: {
+            "region": "VN",
+            "items": [{"title": "giá vàng hôm nay", "approx_traffic": "50,000+"}],
+            "notes": ["Google Trends measures search demand, not posts, and covers one day."],
+        },
+    )
+
+    body = get("/api/research/trends/consolidated?region=VN").json()
+
+    assert "google-trends" in body["sources"]
+    assert any("giá vàng" in topic["label"] for topic in body["topics"])
+    # And it says it counted something else, so nobody reads searches as posts.
+    assert any("search demand" in note for note in body["notes"])

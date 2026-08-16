@@ -132,6 +132,7 @@ def collect(
     limit: int = 20,
     tiktok_reader: TikTokReader,
     douyin_reader: DouyinReader,
+    trends_reader: Callable[..., dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Ask every source that can answer for this country, and say who could not.
 
@@ -188,6 +189,23 @@ def collect(
             f"The Douyin board covers China only, so it was not consulted for {region.upper()}."
         )
 
+    if trends_reader is not None:
+        # Asked for every country, because this is the only source that answers
+        # per country rather than globally or for China.
+        try:
+            feed = trends_reader(region=region)
+        except Exception as error:  # noqa: BLE001 - a provider state, not a bug
+            failures.append(f"Google Trends could not answer: {error}")
+        else:
+            from .google_trends import sightings_from_google_trends
+
+            found = sightings_from_google_trends(feed)
+            sightings.extend(found)
+            if found:
+                consulted.append("google-trends")
+            for caveat in feed.get("notes") or []:
+                notes.append(str(caveat))
+
     for caveat, affected in caveats.items():
         span = (
             "every window"
@@ -241,3 +259,13 @@ def _and_list(values: list[int]) -> str:
     if len(values) == 1:
         return str(values[0])
     return f"{', '.join(str(value) for value in values[:-1])} and {values[-1]}"
+
+
+def live_trends_reader() -> Callable[..., dict[str, Any]]:
+    """The Google Trends reader, bound late so importing this needs no network."""
+    from .google_trends import fetch_google_trends
+
+    def read(*, region: str) -> dict[str, Any]:
+        return fetch_google_trends(region=region)
+
+    return read
