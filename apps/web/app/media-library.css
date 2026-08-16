@@ -575,3 +575,9 @@
 .caption-delivery { display: inline-flex; align-items: center; gap: 7px; margin-inline-end: auto; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .caption-delivery select { padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--ink); font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; }
 .caption-editor-queued { margin: 0 0 8px; color: var(--link); font-size: 12px; }
+.caption-file-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.caption-file-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; padding: 6px 8px; border-radius: var(--radius); }
+.caption-file-list li:nth-child(odd) { background: var(--surface-muted, rgba(127, 127, 127, .06)); }
+.caption-file-download { padding: 0; border: 0; background: none; color: var(--link); font-size: 13px; text-align: start; overflow-wrap: anywhere; cursor: pointer; }
+.caption-file-download:hover { text-decoration: underline; }
+.caption-file-list span { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }

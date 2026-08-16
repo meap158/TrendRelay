@@ -34,7 +34,7 @@ type GroupBy = "none" | "channel" | "source";
 
 type VersionEffect = { id: string; label: string };
 type Version = {
-  kind: "original" | "proxy" | "thumbnail" | "audio" | "blurred" | "edited";
+  kind: "original" | "proxy" | "thumbnail" | "audio" | "blurred" | "edited" | "captioned";
   path: string;
   size_bytes: number;
   /** What produced this cut, in the order it was applied. */
@@ -45,12 +45,13 @@ type Version = {
 /**
  * The kinds that are a render of the asset rather than the asset.
  *
- * Both exist because Publish asks for `blurred` by name to know a face was
- * dealt with. For *watching* the result that distinction does not matter — a
- * blur is one effect among several that can be in a single rendered cut — so
- * the previewer takes them together and calls the result what its effects say.
+ * They are told apart elsewhere because Publish asks for `blurred` by name to
+ * know a face was dealt with, and "Remove effects" deletes `edited` — which is
+ * exactly why a captioned cut is its own kind and not filed as that one. For
+ * *watching* the result none of that matters: each is a render of this asset,
+ * so the previewer takes them together and names the result by what made it.
  */
-const RENDERED_KINDS = new Set(["blurred", "edited"]);
+const RENDERED_KINDS = new Set(["blurred", "edited", "captioned"]);
 
 /**
  * The newest render of an asset, whatever effects made it.
@@ -97,6 +98,7 @@ function cutLabel(t: Translate, version: Version): string {
   // genuinely unknown. Its *kind* is not: everything that has ever produced a
   // `blurred` cut covered a face, so saying that much is accurate where naming
   // an effect would be a guess.
+  if (version.kind === "captioned") return "Captions burned in";
   return version.kind === "blurred"
     ? t("library.cutFacesCovered")
     : t("library.cutEdited");

@@ -58,6 +58,14 @@ type Cue = {
   cps: number;
 };
 
+type CaptionFile = {
+  name: string;
+  path: string;
+  language: string | null;
+  format: string;
+  size_bytes: number;
+};
+
 type Preview = {
   transcript_id: string;
   source_language: string | null;
@@ -98,6 +106,7 @@ export function CaptionEditor({
   const [delivery, setDelivery] = useState("sidecar");
   const [queued, setQueued] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
+  const [files, setFiles] = useState<CaptionFile[]>([]);
   // A preview asked for after a newer one must not overwrite it: the requests
   // are independent and the slower one can land last.
   const latest = useRef(0);
@@ -156,6 +165,43 @@ export function CaptionEditor({
     queueMicrotask(() => void load());
   }, [load]);
 
+  const loadFiles = useCallback(async () => {
+    if (!open || !workspaceId || !assetId) return;
+    const response = await apiFetch(
+      `/api/workspaces/${workspaceId}/media/library/assets/${assetId}/captions/files`,
+    );
+    if (!response.ok) return;
+    const body = await response.json();
+    setFiles((body.files ?? []) as CaptionFile[]);
+  }, [open, workspaceId, assetId, apiFetch]);
+
+  useEffect(() => {
+    queueMicrotask(() => void loadFiles());
+  }, [loadFiles]);
+
+  const download = useCallback(
+    async (file: CaptionFile) => {
+      // Fetched rather than linked. `apiFetch` is what knows the API's origin
+      // and carries the session, and a bare href would resolve against the web
+      // app instead - a link that looks right and 404s.
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/media/library/assets/${assetId}` +
+          `/captions/file?path=${encodeURIComponent(file.path)}`,
+      );
+      if (!response.ok) {
+        setProblem("That file could not be fetched.");
+        return;
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = file.name;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    },
+    [workspaceId, assetId, apiFetch],
+  );
+
   const render = useCallback(async () => {
     setRendering(true);
     setQueued(null);
@@ -185,12 +231,16 @@ export function CaptionEditor({
           ? "Subtitle files are being written."
           : "Queued. The captioned cut appears here when the render finishes.",
       );
+      // Sidecars are written almost immediately; a burn is not. Looking once
+      // shortly after covers the first without pretending to wait for the
+      // second, which the jobs drawer is already following.
+      window.setTimeout(() => void loadFiles(), 1500);
     } catch {
       setProblem("The render could not be queued.");
     } finally {
       setRendering(false);
     }
-  }, [workspaceId, assetId, styleId, translateTo, delivery, apiFetch]);
+  }, [workspaceId, assetId, styleId, translateTo, delivery, apiFetch, loadFiles]);
 
   const chosen = catalogue?.styles.find((item) => item.id === styleId);
   const pairs = catalogue?.translation.pairs ?? [];
@@ -337,6 +387,30 @@ export function CaptionEditor({
             </p>
           ))}
         </section>
+
+        {/* What has already been made. Listed from the directory rather than
+            from the job records, so a track outlives the job that produced it
+            and stays reachable after the queue is swept. */}
+        {files.length > 0 && (
+          <section className="caption-editor-files" aria-label="Rendered tracks">
+            <h4>Rendered</h4>
+            <ul className="caption-file-list">
+              {files.map((file) => (
+                <li key={file.path}>
+                  <button
+                    type="button"
+                    className="caption-file-download"
+                    onClick={() => void download(file)}
+                  >
+                    {file.name}
+                  </button>
+                  <span>{file.format.toUpperCase()}</span>
+                  <span>{Math.max(1, Math.round(file.size_bytes / 1024))} KB</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
       </div>
     </Dialog>
