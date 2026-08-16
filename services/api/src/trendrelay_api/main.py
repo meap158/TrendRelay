@@ -49,6 +49,7 @@ from trendrelay_api.integrations.popular_posts import (
     collect_posts,
     live_reader,
     live_bluesky_reader,
+    live_hackernews_reader,
     live_reddit_reader,
     live_youtube_reader,
 )
@@ -391,6 +392,9 @@ async def popular_posts(
         # The nearest readable substitute for Threads, which publishes no
         # popular feed at all. Public and unauthenticated like Reddit.
         {"id": "bluesky", "label": "Bluesky", "available": True, "reason": None},
+        # Narrow - a technology and startup audience - but reliably early
+        # on anything software, hardware or business-model shaped.
+        {"id": "hackernews", "label": "Hacker News", "available": True, "reason": None},
     ]
     if platform == "youtube" and not youtube_key:
         raise HTTPException(status_code=409, detail=providers[1]["reason"])
@@ -412,6 +416,7 @@ async def popular_posts(
         youtube_reader=live_youtube_reader(youtube_key) if youtube_key else None,
         reddit_reader=live_reddit_reader(),
         bluesky_reader=live_bluesky_reader(),
+        hackernews_reader=live_hackernews_reader(),
         platforms=platforms,
     )
     result["platform"] = platform

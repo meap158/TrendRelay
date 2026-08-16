@@ -103,6 +103,7 @@ def collect_posts(
     youtube_reader: YouTubeReader | None = None,
     reddit_reader: Callable[..., dict[str, Any]] | None = None,
     bluesky_reader: Callable[..., dict[str, Any]] | None = None,
+    hackernews_reader: Callable[..., dict[str, Any]] | None = None,
     platforms: tuple[str, ...] = ("tiktok",),
 ) -> dict[str, Any]:
     """The top posts for one country and one window, and what could not be read.
@@ -165,6 +166,20 @@ def collect_posts(
                 from .bluesky_popular import posts_from_bluesky
 
                 posts.extend(posts_from_bluesky(result))
+                _append_notes(notes, result)
+
+    if "hackernews" in requested:
+        if hackernews_reader is None:
+            failures.append("Hacker News is not configured.")
+        else:
+            try:
+                result = hackernews_reader(region=region, limit=limit)
+            except Exception as error:  # noqa: BLE001 - a provider state, not a bug
+                failures.append(f"Hacker News could not answer: {error}")
+            else:
+                from .hackernews_popular import posts_from_hackernews
+
+                posts.extend(posts_from_hackernews(result))
                 _append_notes(notes, result)
 
     sources = [source for source in requested if any(post["source"] == source for post in posts)]
@@ -236,5 +251,15 @@ def live_bluesky_reader() -> Callable[..., dict[str, Any]]:
 
     def read(*, region: str, limit: int) -> dict[str, Any]:
         return fetch_bluesky_popular(region=region, limit=limit)
+
+    return read
+
+
+def live_hackernews_reader() -> Callable[..., dict[str, Any]]:
+    """The front-page reader, bound late so importing this needs no network."""
+    from .hackernews_popular import fetch_hackernews_popular
+
+    def read(*, region: str, limit: int) -> dict[str, Any]:
+        return fetch_hackernews_popular(region=region, limit=limit)
 
     return read
