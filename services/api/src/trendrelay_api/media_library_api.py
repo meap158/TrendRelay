@@ -1384,6 +1384,11 @@ class CaptionRequest(BaseModel):
     #: one, then the most recent machine one - a correction somebody made by
     #: hand should win over the draft it corrected.
     transcript_id: str | None = Field(default=None, max_length=64)
+    #: `sidecar` writes the subtitle files and leaves the video alone.
+    #: `burned` re-encodes it with the captions in the picture. `both` does
+    #: both, which is the useful default once an encode is being paid for
+    #: anyway - the files cost a kilobyte beside it.
+    delivery: Literal["sidecar", "burned", "both"] = "sidecar"
 
 
 @router.get("/captions/styles")
@@ -1473,6 +1478,67 @@ def preview_captions(
         # stopped applying.
         "notes": built["notes"],
     }
+
+
+@router.post("/assets/{asset_id}/captions", status_code=201)
+def render_captions(
+    workspace_id: str,
+    asset_id: str,
+    body: CaptionRequest,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Queue the render. Everything expensive happens off this request.
+
+    Burning captions re-encodes every frame, which is minutes rather than
+    milliseconds, so this returns a job rather than a file. The preview
+    endpoint is the one that answers immediately, and it answered from the same
+    transcript this will use - so what was previewed is what gets rendered.
+    """
+    require_role(
+        membership(session, workspace_id, user.id),
+        {"owner", "editor"},
+    )
+    _asset_record(session, workspace_id, asset_id)
+    from trendrelay_api import caption_jobs, captions
+
+    # Refused here rather than inside the worker, so a misspelled style is a
+    # complaint on the button rather than a job that fails a minute later.
+    try:
+        captions.resolve(
+            body.style_id,
+            style_overrides=body.style_overrides,
+            layout_overrides=body.layout_overrides,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    transcript = _caption_transcript(session, workspace_id, asset_id, body.transcript_id)
+    if transcript is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This asset has no speech transcript yet. Transcribe it, or "
+                "paste a reviewed one, before building captions."
+            ),
+        )
+    try:
+        job = caption_jobs.queue(
+            workspace_id,
+            asset_id,
+            actor_user_id=user.id,
+            request={
+                "style_id": body.style_id,
+                "style_overrides": body.style_overrides,
+                "layout_overrides": body.layout_overrides,
+                "translate_to": body.translate_to,
+                "transcript_id": transcript.id,
+                "delivery": body.delivery,
+            },
+        )
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return {"job": job}
 
 
 def _caption_transcript(

@@ -27,6 +27,8 @@ from trendrelay_api.integrations.publishing import run_publish_job  # noqa: E402
 from trendrelay_api.media_library import run_ingest_job  # noqa: E402
 from trendrelay_api.shopee_enrichment import run_enrich_job  # noqa: E402
 from trendrelay_api.campaign_runner import tick as campaign_tick  # noqa: E402
+from trendrelay_api.caption_jobs import JOB_KIND as CAPTION_JOB_KIND  # noqa: E402
+from trendrelay_api.caption_jobs import run_caption_job  # noqa: E402
 from trendrelay_api.database import SessionFactory  # noqa: E402
 from trendrelay_api.jobs import (  # noqa: E402
     abandon_expired_jobs,
@@ -66,6 +68,7 @@ JOB_KINDS = (
     "media_face_blur",
     EFFECT_JOB_KIND,
     "shopee_enrich",
+    CAPTION_JOB_KIND,
 )
 
 
@@ -95,6 +98,7 @@ def process_available() -> int:
     blur_ids = recoverable_job_ids("media_face_blur")
     effect_ids = recoverable_job_ids(EFFECT_JOB_KIND)
     enrich_ids = recoverable_job_ids("shopee_enrich")
+    caption_ids = recoverable_job_ids(CAPTION_JOB_KIND)
     for job_id in download_ids:
         run_download_job(job_id)
     for job_id in research_ids:
@@ -111,6 +115,8 @@ def process_available() -> int:
         run_effect_render_job(job_id)
     for job_id in enrich_ids:
         run_enrich_job(job_id)
+    for job_id in caption_ids:
+        run_caption_job(job_id)
     return (
         len(download_ids)
         + len(research_ids)
@@ -120,6 +126,7 @@ def process_available() -> int:
         + len(blur_ids)
         + len(effect_ids)
         + len(enrich_ids)
+        + len(caption_ids)
     )
 
 
@@ -127,6 +134,7 @@ def worker_main() -> None:
     print(
         "Durable worker ready: douyin_download, trend_research, social_publish, "
         "openmontage_render, media_ingest, media_face_blur, media_effect_render, "
+        "caption_render, "
         "campaign_autopilot",
         flush=True,
     )
