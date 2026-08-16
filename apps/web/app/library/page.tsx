@@ -149,7 +149,9 @@ function thumbnailEffectActivity(
       ? "Stopping"
       : job.status === "queued"
         ? "Queued"
-        : "Applying",
+        : Number(job.raw?.attempt_count ?? 0) > 1
+          ? "Resuming"
+          : "Applying",
     detail: effectNames.join(" + ") || "Effect stack",
     progress,
   };
@@ -179,7 +181,11 @@ function EffectActivity({
 
   const statusDetails = (job: BaseJob) => {
     if (job.status === "queued") return { label: "Waiting", icon: LoaderCircle, tone: "working" };
-    if (job.status === "running") return { label: "Applying", icon: LoaderCircle, tone: "working" };
+    if (job.status === "running") return {
+      label: Number(job.raw?.attempt_count ?? 0) > 1 ? "Resuming" : "Applying",
+      icon: LoaderCircle,
+      tone: "working",
+    };
     if (job.status === "succeeded") return { label: "Applied", icon: CircleCheck, tone: "done" };
     if (job.status === "cancelled") return { label: "Cancelled", icon: CircleX, tone: "muted" };
     return { label: "Needs attention", icon: CircleAlert, tone: "failed" };

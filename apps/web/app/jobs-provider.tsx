@@ -35,7 +35,9 @@ function editTitle(t: Translate, job: any): string {
   }
   if (job?.status === "cancelled") return `Cancelled: ${applied}`;
   if (job?.status === "failed") return `Could not apply ${applied}`;
-  if (job?.status !== "succeeded") return `Applying ${applied}`;
+  if (job?.status !== "succeeded") {
+    return `${Number(job?.attempt_count ?? 0) > 1 ? "Resuming" : "Applying"} ${applied}`;
+  }
   const frames = job?.result?.frame_effects?.[0];
   const coverage = typeof frames?.coverage === "number"
     ? ` — ${Math.round(frames.coverage * 100)}% of frames`
