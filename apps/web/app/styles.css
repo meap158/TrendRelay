@@ -871,3 +871,78 @@ nav strong { color: #1c2b33; }
 /* The probe's own words on the waiting screen. Monospace because it carries a
    URL, and wrapped because a refusal message is longer than the panel. */
 .loading-panel-error { display: block; max-width: 60ch; margin-block-start: 4px; color: var(--muted); font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+
+/* The active campaign is an operating timeline, not a second queue. Each day
+   owns one rail, while every post keeps its time, destination, media and
+   affiliate route in the same row. */
+.campaign-pipeline-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 14px 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.campaign-pipeline-summary span { display: grid; gap: 1px; padding: 10px 12px; border-inline-start: 1px solid var(--line); }
+.campaign-pipeline-summary span:first-child { border-inline-start: 0; }
+.campaign-pipeline-summary strong { color: var(--text); font-size: 18px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.campaign-pipeline-summary small { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .035em; }
+.campaign-pipeline-summary .warn strong { color: var(--danger, #b42318); }
+.campaign-pipeline-summary .good strong { color: var(--green); }
+.campaign-pipeline { display: grid; gap: 18px; margin-block-start: 14px; }
+.campaign-pipeline-day { display: grid; grid-template-columns: 126px minmax(0, 1fr); align-items: start; }
+.campaign-pipeline-day > header { position: sticky; top: 58px; display: grid; gap: 2px; padding: 4px 18px 0 0; }
+.campaign-pipeline-day > header strong { font-size: 12px; }
+.campaign-pipeline-day > header span { color: var(--muted); font-size: 10px; }
+.campaign-pipeline-day > ol { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.campaign-pipeline-day > ol > li { display: grid; grid-template-columns: 72px 116px minmax(0, 1fr); min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); box-shadow: 0 1px 2px rgb(20 35 50 / 4%); }
+.campaign-pipeline-day > ol > li.refused { border-inline-start: 3px solid var(--danger, #b42318); }
+.campaign-pipeline-time { position: relative; display: flex; justify-content: flex-end; padding: 14px 18px 0 8px; border-inline-end: 1px solid var(--line); }
+.campaign-pipeline-time::after { position: absolute; inset-block: 0; inset-inline-end: 8px; inline-size: 1px; content: ""; background: var(--line); }
+.campaign-pipeline-time time { color: var(--text); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.campaign-pipeline-time i { position: absolute; z-index: 1; inset-block-start: 17px; inset-inline-end: 4px; inline-size: 9px; block-size: 9px; border: 2px solid var(--panel); border-radius: 50%; background: var(--link); }
+.campaign-pipeline-thumb { display: grid; place-items: center; padding: 12px; border-inline-end: 1px solid var(--line); background: var(--panel-raised); }
+.campaign-pipeline-thumb .picker-thumb, .campaign-pipeline-thumb-empty { display: grid; place-items: center; inline-size: 92px; block-size: 72px; overflow: hidden; border-radius: var(--radius-sm); background: #e8edf3; color: var(--muted); }
+.campaign-pipeline-thumb .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.campaign-pipeline-thumb .picker-thumb b { font-size: 13px; }
+.campaign-pipeline-thumb .picker-thumb i { display: none; }
+.campaign-pipeline article { display: grid; min-width: 0; gap: 8px; padding: 12px 14px; }
+.campaign-pipeline article h4 { margin: 0; overflow: hidden; color: var(--text); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-pipeline-destination { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.campaign-pipeline-destination > span { display: grid; min-width: 0; margin-inline-end: auto; }
+.campaign-pipeline-destination > span strong, .campaign-pipeline-destination > span small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-pipeline-destination > span strong { font-size: 11px; }
+.campaign-pipeline-destination > span small { color: var(--muted); font-size: 10px; text-transform: capitalize; }
+.campaign-affiliate-route { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.campaign-affiliate-route.attached { border-color: color-mix(in srgb, var(--link) 26%, var(--line)); background: color-mix(in srgb, var(--link) 5%, var(--panel)); }
+.campaign-affiliate-route > span { display: grid; gap: 2px; min-width: 0; margin-inline-end: auto; }
+.campaign-affiliate-route strong { font-size: 11px; }
+.campaign-affiliate-route small { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.campaign-pipeline-products { display: flex; flex-wrap: wrap; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.campaign-pipeline-products li { display: flex; align-items: center; min-width: 0; gap: 5px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); }
+.campaign-pipeline-products li > span { display: grid; place-items: center; inline-size: 15px; block-size: 15px; border-radius: 50%; background: var(--link); color: #fff; font-size: 9px; }
+.campaign-pipeline-products strong { max-inline-size: 260px; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-pipeline-products small { color: var(--muted); font-size: 9px; }
+.campaign-pipeline-content { border-block-start: 1px solid var(--line); padding-block-start: 7px; }
+.campaign-pipeline-content summary { width: max-content; color: var(--link); font-size: 10px; font-weight: 700; cursor: pointer; }
+.campaign-pipeline-content > div { display: grid; gap: 5px; margin-block-start: 8px; }
+.campaign-pipeline-content > div > strong, .campaign-pipeline-content > div > div > strong { display: block; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
+.campaign-pipeline-content pre { max-block-size: 150px; margin: 0; overflow: auto; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--panel-raised); font: 10px/1.45 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.campaign-pipeline-reason { color: var(--muted); font-size: 9px; line-height: 1.4; }
+
+@media (max-width: 900px) {
+  .campaign-pipeline-summary { grid-template-columns: repeat(3, 1fr); }
+  .campaign-pipeline-summary span:nth-child(4) { border-inline-start: 0; border-block-start: 1px solid var(--line); }
+  .campaign-pipeline-summary span:nth-child(5) { border-block-start: 1px solid var(--line); }
+  .campaign-pipeline-day { grid-template-columns: 1fr; gap: 7px; }
+  .campaign-pipeline-day > header { position: static; display: flex; justify-content: space-between; padding: 0; }
+  .campaign-pipeline-day > ol > li { grid-template-columns: 62px 100px minmax(0, 1fr); }
+  .campaign-pipeline-thumb .picker-thumb, .campaign-pipeline-thumb-empty { inline-size: 76px; block-size: 64px; }
+}
+
+@media (max-width: 620px) {
+  .campaign-pipeline-summary { grid-template-columns: repeat(2, 1fr); }
+  .campaign-pipeline-summary span:nth-child(odd) { border-inline-start: 0; }
+  .campaign-pipeline-summary span:nth-child(n + 3) { border-block-start: 1px solid var(--line); }
+  .campaign-pipeline-day > ol > li { grid-template-columns: 58px minmax(0, 1fr); }
+  .campaign-pipeline-time { grid-row: 1 / span 2; }
+  .campaign-pipeline-thumb { grid-column: 2; justify-content: start; border-inline-end: 0; border-block-end: 1px solid var(--line); }
+  .campaign-pipeline-thumb .picker-thumb, .campaign-pipeline-thumb-empty { inline-size: 86px; block-size: 58px; }
+  .campaign-pipeline article { grid-column: 2; }
+  .campaign-affiliate-route { align-items: flex-start; }
+  .campaign-pipeline-products li { max-inline-size: 100%; }
+  .campaign-pipeline-products strong { max-inline-size: 180px; }
+}

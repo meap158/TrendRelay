@@ -68,6 +68,7 @@ type Destination = {
 
 type QueueItem = {
   id: string;
+  asset_id?: string | null;
   video_path: string;
   title: string | null;
   body: string;
@@ -107,11 +108,20 @@ type PreviewPost = {
   destination_id: string;
   queue_item_id: string;
   at: string;
+  title: string | null;
+  asset_id: string | null;
   caption: string;
   first_comment: string | null;
   thread: string[];
   offer_ids: string[];
   products: string[];
+  product_details: { offer_id: string; name: string }[];
+  destination: {
+    label: string;
+    platform: PublishingPlatform;
+    provider: string;
+    post_type: string | null;
+  } | null;
   placement: string;
   reason: string;
   /** What the delivering engine would refuse this post for, if anything. */
@@ -204,6 +214,53 @@ function placementTone(placement: string): "good" | "neutral" | "warn" {
   return "warn";
 }
 
+function previewText(value: string): string {
+  return value.replaceAll(/https:\/\/preview\.invalid\/affiliate-link\/[^\s]+/g, "[tracked affiliate link]");
+}
+
+function placementSummary(post: PreviewPost): { label: string; detail: string } {
+  if (!post.offer_ids.length) {
+    return { label: "Organic post", detail: "No affiliate product or tracked link is attached." };
+  }
+  if (post.placement === "bio") {
+    return {
+      label: "Profile bio",
+      detail: "The caption points people to the profile bio; the clickable product link lives there.",
+    };
+  }
+  if (post.placement === "first_comment") {
+    return {
+      label: "First comment",
+      detail: "The post publishes first, then the tracked product link is added as its first comment.",
+    };
+  }
+  if (post.thread.length) {
+    return {
+      label: "Post + replies",
+      detail: `The primary product is in the post and ${post.thread.length} additional product ${post.thread.length === 1 ? "link is" : "links are"} published as replies.`,
+    };
+  }
+  return {
+    label: "Post content",
+    detail: "The tracked product link is included directly in the caption or description.",
+  };
+}
+
+function dayHeading(value: string, timeZone: string): string {
+  const date = new Date(value);
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  const dateOptions = { timeZone };
+  const key = date.toLocaleDateString("en-CA", dateOptions);
+  const prefix = key === today.toLocaleDateString("en-CA", dateOptions)
+    ? "Today"
+    : key === tomorrow.toLocaleDateString("en-CA", dateOptions)
+      ? "Tomorrow"
+      : date.toLocaleDateString(undefined, { weekday: "long", timeZone });
+  return `${prefix} · ${date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone })}`;
+}
+
 export function AutopilotPanel({
   workspaceId,
   campaignId,
@@ -235,6 +292,7 @@ export function AutopilotPanel({
   const [pinnedOffers, setPinnedOffers] = useState<Set<string>>(new Set());
   const [slots, setSlots] = useState<Slot[]>([]);
   const [slotPresets, setSlotPresets] = useState<SlotPreset[]>([]);
+  const [scheduleTimezone, setScheduleTimezone] = useState("UTC");
   const [preview, setPreview] = useState<
     { note: string; posts: PreviewPost[]; problems: number } | null
   >(null);
@@ -250,8 +308,11 @@ export function AutopilotPanel({
   const [effectOpen, setEffectOpen] = useState(false);
   const [editing, setEditing] = useState<QueueItem | null>(null);
   const [picking, setPicking] = useState(false);
-  const [section, setSection] = useState<"media" | "accounts" | "schedule" | "settings">("media");
+  const [section, setSection] = useState<"media" | "accounts" | "schedule" | "settings">(
+    campaignStatus === "active" ? "schedule" : "media",
+  );
   const searchTimer = useRef<number | null>(null);
+  const automaticPreview = useRef(false);
 
   const base = `/api/workspaces/${workspaceId}/campaigns/${campaignId}`;
 
@@ -272,8 +333,12 @@ export function AutopilotPanel({
       // different subsystem, and the point of the checklist is that it names
       // which one is missing rather than reporting a single blank "not ready".
       void apiFetch(`/api/workspaces/${workspaceId}/publishing/slots`)
-        .then((response) => json<{ slots: Slot[]; presets: SlotPreset[] }>(response))
-        .then((body) => { setSlots(body.slots); setSlotPresets(body.presets); })
+        .then((response) => json<{ slots: Slot[]; presets: SlotPreset[]; timezone: string }>(response))
+        .then((body) => {
+          setSlots(body.slots);
+          setSlotPresets(body.presets);
+          setScheduleTimezone(body.timezone || "UTC");
+        })
         .catch(() => { setSlots([]); setSlotPresets([]); });
       void apiFetch(`/api/workspaces/${workspaceId}/opportunities/offers`)
         .then((response) => json<{ offers: Offer[] }>(response))
@@ -366,17 +431,22 @@ export function AutopilotPanel({
     }
   }, [apiFetch, base, fail, succeed, t]);
 
-  async function saveSlots(entries: { weekday: number; time: string }[]) {
+  async function saveSlots(
+    entries: { weekday: number; time: string }[],
+    advanceSetup = true,
+  ) {
     await run("slots", async () => {
-      const body = await json<{ slots: Slot[]; presets: SlotPreset[] }>(await apiFetch(
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+      const body = await json<{ slots: Slot[]; presets: SlotPreset[]; timezone: string }>(await apiFetch(
         `/api/workspaces/${workspaceId}/publishing/slots`, {
           method: "POST",
-          body: JSON.stringify({ slots: entries }),
+          body: JSON.stringify({ slots: entries, timezone }),
         },
       ));
       setSlots(body.slots);
       setSlotPresets(body.presets);
-      if (body.slots.length) {
+      setScheduleTimezone(body.timezone);
+      if (body.slots.length && advanceSetup) {
         setSection("settings");
         void loadRecommendations();
         if (destinations.length && (autopilot?.queue_approved ?? 0) > 0) {
@@ -467,10 +537,31 @@ export function AutopilotPanel({
     };
   }, [campaignStatus, destinations.length, autopilot?.queue_approved, slots.length, t]);
 
+  useEffect(() => {
+    if (
+      automaticPreview.current
+      || campaignStatus !== "active"
+      || !ready.configured
+      || preview
+    ) return;
+    automaticPreview.current = true;
+    void loadPreview(false);
+  }, [campaignStatus, loadPreview, preview, ready.configured]);
+
   if (!autopilot) return null;
 
   const unmet = ready.rows.filter((row) => !row.met);
   const selectedLibrary = Object.values(selectedAssets);
+  const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const previewDays = preview ? Object.entries(
+    preview.posts.reduce<Record<string, PreviewPost[]>>((days, post) => {
+      const key = new Date(post.at).toLocaleDateString("en-CA", { timeZone: scheduleTimezone });
+      (days[key] ??= []).push(post);
+      return days;
+    }, {}),
+  ) : [];
+  const previewAccounts = new Set(preview?.posts.map((post) => post.destination_id) ?? []).size;
+  const previewProducts = new Set(preview?.posts.flatMap((post) => post.offer_ids) ?? []).size;
 
   return (
     <div className="autopilot">
@@ -532,7 +623,8 @@ export function AutopilotPanel({
               setSection("schedule");
               if (ready.configured && !preview) void loadPreview(false);
             }}>
-            <span>Schedule</span><strong>{slots.length}</strong><small>posting times</small>
+            <span>Timeline</span><strong>{preview?.posts.length ?? slots.length}</strong>
+            <small>{preview ? "upcoming posts" : "posting times"}</small>
           </button>
           <button type="button" className={section === "settings" ? "active" : ""}
             onClick={() => {
@@ -1157,79 +1249,138 @@ export function AutopilotPanel({
 
       {section === "schedule" && <>
       <Card
-        eyebrow="Campaign rhythm"
-        title="Posting times"
-      >
-        <SlotEditor
-          slots={slots}
-          presets={slotPresets}
-          timezone={Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"}
-          canEdit={canEdit}
-          busy={busy === "slots"}
-          onSave={(entries) => void saveSlots(entries)}
-        />
-      </Card>
-      <Card
-        eyebrow={t("autopilot.nextEyebrow")}
-        title={t("autopilot.next")}
+        eyebrow="Active campaign pipeline"
+        title="Upcoming posts"
         aside={
           <Button variant="secondary" size="sm" busy={busy === "preview"}
             disabled={!ready.configured}
-            onClick={() => void loadPreview()}>{t("autopilot.showNext")}</Button>
+            onClick={() => void loadPreview()}><ActionIcon name="refresh" />Refresh outlook</Button>
         }
       >
-        {/* The trust-builder. Captions, times and placement exactly as they
-            would go out, created by nothing. */}
-        <p className="autopilot-lede">{t("autopilot.nextHelp")}</p>
+        <p className="autopilot-lede">
+          A rolling seven-day outlook calculated by the same scheduler that deploys the campaign.
+          It is a preview only; nothing below is created until you deploy it.
+        </p>
+        {preview && preview.posts.length > 0 && (
+          <div className="campaign-pipeline-summary" aria-label="Upcoming campaign summary">
+            <span><strong>{preview.posts.length}</strong><small>posts</small></span>
+            <span><strong>{previewDays.length}</strong><small>active days</small></span>
+            <span><strong>{previewAccounts}</strong><small>accounts</small></span>
+            <span><strong>{previewProducts}</strong><small>products</small></span>
+            <span className={preview.problems ? "warn" : "good"}>
+              <strong>{preview.problems}</strong><small>delivery warnings</small>
+            </span>
+          </div>
+        )}
         {preview && (
           preview.posts.length === 0 ? (
             <p className="autopilot-note" role="status">{preview.note}</p>
           ) : (
-            <ol className="autopilot-preview">
-              {preview.posts.map((post, index) => {
-                const destination = destinations.find(
-                  (item) => item.id === post.destination_id);
-                return (
-                  <li
-                    key={`${post.destination_id}-${index}`}
-                    className={post.problem ? "refused" : undefined}
-                  >
-                    <div className="autopilot-preview-head">
-                      <strong>{new Date(post.at).toLocaleString()}</strong>
-                      <span>{destination?.label ?? post.destination_id}</span>
-                      <Badge tone={placementTone(post.placement)}>
-                        {t(`autopilot.placement.${post.placement}`)}
-                      </Badge>
-                    </div>
-                    {/* Above the caption, not below it. The caption is what
-                        this row is for reading; a refusal is what it is for
-                        acting on, and a reason to act belongs before the thing
-                        it acts on. */}
-                    {post.problem && (
-                      <p className="autopilot-refusal" role="status">
-                        <strong>{t("autopilot.wouldBeRefused")}</strong> {post.problem}
-                      </p>
-                    )}
-                    {post.products.length > 0 && (
-                      <div className="campaign-preview-products">
-                        <strong>Matched products</strong>
-                        {post.products.map((name) => <Badge key={name} tone="good">{name}</Badge>)}
-                      </div>
-                    )}
-                    <pre>{post.caption}</pre>
-                    {post.first_comment && (
-                      <pre className="autopilot-first-comment">{post.first_comment}</pre>
-                    )}
-                    {post.thread.map((reply, replyIndex) => (
-                      <pre className="autopilot-thread-reply" key={`${replyIndex}-${reply}`}>
-                        Reply {replyIndex + 1} · {reply}
-                      </pre>
-                    ))}
-                    <small>{post.reason}</small>
-                  </li>
-                );
-              })}
-            </ol>
+            <div className="campaign-pipeline">
+              {previewDays.map(([day, posts]) => (
+                <section className="campaign-pipeline-day" key={day}>
+                  <header>
+                    <strong>{dayHeading(posts[0].at, scheduleTimezone)}</strong>
+                    <span>{posts.length} {posts.length === 1 ? "post" : "posts"}</span>
+                  </header>
+                  <ol>
+                    {posts.map((post, index) => {
+                      const destination = post.destination ?? destinations.find(
+                        (item) => item.id === post.destination_id) ?? null;
+                      const route = placementSummary(post);
+                      const platform = destination?.platform;
+                      const thumbnailAsset: LibraryAsset | null = post.asset_id ? {
+                        id: post.asset_id,
+                        title: post.title ?? "Campaign video",
+                        original_path: "",
+                        media_kind: "video",
+                        duration_ms: null,
+                        platform: platform ?? null,
+                        creator: null,
+                        width: null,
+                        height: null,
+                        versions: [{ id: `${post.asset_id}-thumbnail`, kind: "thumbnail" }],
+                      } : null;
+                      return (
+                        <li key={`${post.destination_id}-${post.queue_item_id}-${post.at}`}
+                          className={post.problem ? "refused" : undefined}>
+                          <div className="campaign-pipeline-time">
+                            <time dateTime={post.at}>{new Date(post.at).toLocaleTimeString(undefined, {
+                              hour: "numeric", minute: "2-digit", timeZone: scheduleTimezone,
+                            })}</time>
+                            <i aria-hidden="true" />
+                          </div>
+                          <div className="campaign-pipeline-thumb">
+                            {thumbnailAsset
+                              ? <AssetThumbnail asset={thumbnailAsset} workspaceId={workspaceId} apiFetch={apiFetch} />
+                              : <span className="campaign-pipeline-thumb-empty"><ActionIcon name="play" /></span>}
+                          </div>
+                          <article>
+                            <div className="campaign-pipeline-destination">
+                              {platform && <PlatformIcon platform={platform} size={24} />}
+                              <span>
+                                <strong>{destination?.label ?? post.destination_id}</strong>
+                                <small>{platform ? platformLabels[platform] : "Social account"}
+                                  {destination?.provider ? ` · ${destination.provider}` : ""}</small>
+                              </span>
+                              <Badge tone={post.problem ? "warn" : "neutral"}>
+                                {autopilot.delivery === "draft" ? "Review draft" : autopilot.delivery === "schedule" ? "Scheduled" : "Publish now"}
+                              </Badge>
+                            </div>
+                            <h4>{post.title || "Untitled campaign video"}</h4>
+                            {post.problem && (
+                              <p className="autopilot-refusal" role="status">
+                                <strong>{t("autopilot.wouldBeRefused")}</strong> {post.problem}
+                              </p>
+                            )}
+                            <div className={`campaign-affiliate-route ${post.offer_ids.length ? "attached" : "organic"}`}>
+                              <span>
+                                <strong>{route.label}</strong>
+                                <small>{route.detail}</small>
+                              </span>
+                              <Badge tone={placementTone(post.placement)}>
+                                {post.offer_ids.length
+                                  ? `${post.offer_ids.length} ${post.offer_ids.length === 1 ? "product" : "products"}`
+                                  : "No products"}
+                              </Badge>
+                            </div>
+                            {post.product_details.length > 0 && (
+                              <ul className="campaign-pipeline-products" aria-label="Attached affiliate products">
+                                {post.product_details.map((product, productIndex) => (
+                                  <li key={`${product.offer_id}-${productIndex}`}>
+                                    <span aria-hidden="true">{productIndex + 1}</span>
+                                    <strong>{product.name}</strong>
+                                    <small>{post.placement === "bio"
+                                      ? "Profile bio"
+                                      : productIndex > 0 && post.thread.length ? `Reply ${productIndex}` : "Post content"}</small>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            <details className="campaign-pipeline-content" open={index === 0}>
+                              <summary>See exactly what will post</summary>
+                              <div>
+                                <strong>Post content</strong>
+                                <pre>{previewText(post.caption)}</pre>
+                                {post.first_comment && <>
+                                  <strong>First comment · affiliate link</strong>
+                                  <pre>{previewText(post.first_comment)}</pre>
+                                </>}
+                                {post.thread.map((reply, replyIndex) => <div key={`${replyIndex}-${reply}`}>
+                                  <strong>Reply {replyIndex + 1} · affiliate link</strong>
+                                  <pre>{previewText(reply)}</pre>
+                                </div>)}
+                              </div>
+                            </details>
+                            <small className="campaign-pipeline-reason">{post.reason}</small>
+                          </article>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </section>
+              ))}
+            </div>
           )
         )}
         {!preview && !ready.configured && (
@@ -1261,6 +1412,27 @@ export function AutopilotPanel({
               });
             }}>Deploy campaign</Button>
         </div>
+      </Card>
+      <Card eyebrow="Campaign rhythm" title="Posting times" aside={
+        scheduleTimezone !== browserTimezone ? (
+          <Button variant="secondary" size="sm" busy={busy === "slots"}
+            onClick={() => void saveSlots(
+              slots.map((slot) => ({ weekday: slot.weekday, time: slot.time })),
+              false,
+            )}>Use {browserTimezone}</Button>
+        ) : <Badge tone="neutral">{scheduleTimezone}</Badge>
+      }>
+        <p className="autopilot-lede">
+          These workspace slots feed the outlook above. Times are shown in {scheduleTimezone}.
+        </p>
+        <SlotEditor
+          slots={slots}
+          presets={slotPresets}
+          timezone={scheduleTimezone}
+          canEdit={canEdit}
+          busy={busy === "slots"}
+          onSave={(entries) => void saveSlots(entries)}
+        />
       </Card>
       </>}
     </div>

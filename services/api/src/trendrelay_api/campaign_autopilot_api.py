@@ -8,7 +8,7 @@ next day looks like before anything is created.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from secrets import token_urlsafe
 from typing import Any
 
@@ -659,7 +659,7 @@ def _would_be_accepted(
 def preview_autopilot(
     workspace_id: str, campaign_id: str, user: AuthenticatedUser, session: DatabaseSession
 ) -> dict[str, Any]:
-    """What the next day would look like, without creating any of it.
+    """What the next seven days would look like, without creating any of it.
 
     Switching this on hands over an account. Seeing the captions, the times and
     the link placement first is the difference between delegating and gambling.
@@ -691,21 +691,43 @@ def preview_autopilot(
         session, autopilot, now=datetime.now(UTC),
         link_for=lambda _destination_id, offer_id: f"{preview_link}/{offer_id}",
         allow_inactive=True,
+        horizon=timedelta(days=7),
     )
     by_id = {item.id: item for item in destinations}
+    queue_by_id = {
+        item.id: item for item in session.scalars(
+            select(CampaignQueueItem).where(
+                CampaignQueueItem.campaign_id == campaign_id,
+                CampaignQueueItem.workspace_id == workspace_id,
+            )
+        ).all()
+    }
     rendered = []
     for post in posts:
         destination = by_id.get(post.destination_id)
+        queue_item = queue_by_id.get(post.queue_item_id)
         rendered.append({
             "destination_id": post.destination_id,
             "queue_item_id": post.queue_item_id,
             "at": post.at,
+            "title": post.title,
+            "asset_id": queue_item.asset_id if queue_item else None,
             "caption": post.caption,
             "first_comment": post.first_comment,
             "thread": list(post.thread),
             "placement": post.placement,
             "offer_ids": list(post.offer_ids),
             "products": list(post.product_names),
+            "product_details": [
+                {"offer_id": offer_id, "name": name}
+                for offer_id, name in zip(post.offer_ids, post.product_names, strict=False)
+            ],
+            "destination": ({
+                "label": destination.label,
+                "platform": destination.platform,
+                "provider": destination.provider,
+                "post_type": destination.post_type,
+            } if destination else None),
             "reason": post.reason,
             # The engine's verdict, not ours. A preview that says "this is what
             # will post" without checking is a promise it has not kept.

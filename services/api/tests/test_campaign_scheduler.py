@@ -116,6 +116,22 @@ def test_a_daily_slot_lands_once_per_day_inside_the_horizon(session) -> None:
     assert [item.hour for item in found] == [18]
 
 
+def test_slots_are_materialised_in_the_workspaces_wall_clock(session) -> None:
+    slot(session, 9)
+    slots = session.query(PublishingSlot).all()
+
+    found = due_slots(
+        slots,
+        now=NOW,
+        until=NOW + timedelta(hours=24),
+        timezone="Asia/Bangkok",
+    )
+
+    # At NOW it is already 16:00 in Bangkok, so the next local 09:00 is
+    # Tuesday 02:00 UTC—not Tuesday 09:00 UTC.
+    assert found == [datetime(2026, 8, 11, 2, 0, tzinfo=UTC)]
+
+
 def test_a_slot_that_has_just_passed_is_still_filled(session) -> None:
     """A worker that wakes two minutes late should not skip the post.
 
@@ -169,6 +185,23 @@ def test_an_inactive_campaign_can_be_previewed_without_becoming_active(session) 
 
     assert len(posts) == 1
     assert campaign.status == "draft"
+
+
+def test_an_outlook_can_look_beyond_the_workers_safe_window(session) -> None:
+    """The UI can explain the week without making the worker schedule a week ahead."""
+    destination(session, "d1", "youtube")
+    slot(session, 10, weekday=2)  # Wednesday, two days after NOW.
+    queue_item(session, "q1")
+    pilot = autopilot(session)
+
+    worker_posts, _ = plan_campaign(session, pilot, now=NOW, link_for=None)
+    outlook_posts, _ = plan_campaign(
+        session, pilot, now=NOW, link_for=None, horizon=timedelta(days=7)
+    )
+
+    assert worker_posts == []
+    assert len(outlook_posts) == 1
+    assert outlook_posts[0].at.weekday() == 2
 
 
 def test_no_destinations_is_explained_rather_than_silent(session) -> None:

@@ -19,6 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -37,7 +38,7 @@ from trendrelay_api.campaign_autopilot import (
 )
 from trendrelay_api.campaign_offer_matcher import OfferMatch, chosen_matches
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
-from trendrelay_api.models import Campaign, PublishingSlot
+from trendrelay_api.models import Campaign, PublishingSlot, Workspace
 
 #: How far ahead a tick will fill. Long enough that an hourly worker never
 #: misses a slot, short enough that a queue edit reaches the schedule quickly.
@@ -116,7 +117,7 @@ def _as_utc(value: datetime | None) -> datetime | None:
 
 
 def due_slots(
-    slots: list[PublishingSlot], *, now: datetime, until: datetime
+    slots: list[PublishingSlot], *, now: datetime, until: datetime, timezone: str = "UTC"
 ) -> list[datetime]:
     """Every slot time between now and the horizon, soonest first.
 
@@ -127,15 +128,18 @@ def due_slots(
     if not slots:
         return []
     found: list[datetime] = []
-    day = (now - GRACE).date()
-    last = until.date()
+    zone = ZoneInfo(timezone)
+    local_now = now.astimezone(zone)
+    local_until = until.astimezone(zone)
+    day = (local_now - GRACE).date()
+    last = local_until.date()
     while day <= last:
         for slot in slots:
             if slot.weekday not in (-1, day.weekday()):
                 continue
             moment = datetime(
-                day.year, day.month, day.day, slot.hour, slot.minute, tzinfo=UTC
-            )
+                day.year, day.month, day.day, slot.hour, slot.minute, tzinfo=zone
+            ).astimezone(UTC)
             if now - GRACE <= moment <= until:
                 found.append(moment)
         day += timedelta(days=1)
@@ -278,6 +282,7 @@ def plan_campaign(
     now: datetime,
     link_for: Callable[..., str | None] | None = None,
     allow_inactive: bool = False,
+    horizon: timedelta = HORIZON,
 ) -> tuple[list[ScheduledPost], str]:
     """Work out what one campaign should post next, and why.
 
@@ -317,9 +322,17 @@ def plan_campaign(
             "schedule; add slots on the Publish screen."
         )
 
-    upcoming = due_slots(list(slots), now=now, until=now + HORIZON)
+    workspace = session.get(Workspace, autopilot.workspace_id)
+    upcoming = due_slots(
+        list(slots),
+        now=now,
+        until=now + horizon,
+        timezone=workspace.timezone if workspace else "UTC",
+    )
     if not upcoming:
-        return [], "No slot falls inside the next 24 hours."
+        hours = max(1, round(horizon.total_seconds() / 3600))
+        window = f"{hours // 24} days" if hours >= 48 and hours % 24 == 0 else f"{hours} hours"
+        return [], f"No slot falls inside the next {window}."
 
     # Read once for the whole horizon. Both the cap and the rest interval are
     # asked per slot, and each used to go back to the database for the same rows.
@@ -465,7 +478,7 @@ def plan_campaign(
         if notes:
             summary += " " + " ".join(dict.fromkeys(notes))
         return scheduled, summary
-    return [], " ".join(notes) or "Nothing to schedule right now."
+    return [], " ".join(dict.fromkeys(notes)) or "Nothing to schedule right now."
 
 
 def link_for(session: Session, destination: CampaignDestination) -> str | None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -339,6 +340,41 @@ def test_the_preview_explains_a_campaign_that_would_post_nothing(workspace) -> N
     ).json()
     assert body["posts"] == []
     assert "not active" in body["note"] or "No destinations" in body["note"]
+
+
+def test_preview_rows_carry_media_account_and_product_routes(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    request("POST", f"{base}/destinations", json={
+        "provider": "buffer", "integration_id": "acct-1",
+        "platform": "youtube", "label": "Coffee channel",
+    })
+    item = request("POST", f"{base}/queue", json={
+        "asset_id": "asset-preview", "video_path": r"S:\media\coffee.mp4",
+        "title": "Coffee demo", "body": "Make better espresso.",
+        "offer_ids": ["offer-1"],
+    }).json()["item"]
+    request("PATCH", f"{base}/queue/{item['id']}", json={"state": "approved"})
+    upcoming = datetime.now(UTC) + timedelta(hours=1)
+    request("POST", f"/api/workspaces/{workspace}/publishing/slots", json={
+        "timezone": "UTC",
+        "slots": [{"weekday": -1, "time": upcoming.strftime("%H:%M")}],
+    })
+
+    response = request("POST", f"{base}/autopilot/preview")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["posts"], response.json()
+    post = response.json()["posts"][0]
+    assert post["title"] == "Coffee demo"
+    assert post["asset_id"] == "asset-preview"
+    assert post["destination"] == {
+        "label": "Coffee channel", "platform": "youtube",
+        "provider": "buffer", "post_type": None,
+    }
+    assert post["product_details"] == [
+        {"offer_id": "offer-1", "name": "Coffee espresso maker"}
+    ]
 
 
 def test_deploy_preflights_then_activates_and_enables_campaign(

@@ -44,6 +44,8 @@ class Workspace(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("ws"))
     name: Mapped[str] = mapped_column(String(120))
     slug: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    #: IANA wall-clock zone used by recurring publishing slots.
+    timezone: Mapped[str] = mapped_column(String(80), default="UTC")
     created_by: Mapped[str] = mapped_column(ForeignKey("user_profiles.id"))
     created_at: Mapped[datetime] = mapped_column(default=utc_now)
 

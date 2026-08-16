@@ -6,7 +6,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
@@ -31,6 +31,7 @@ from trendrelay_api.integrations.publishing import (
     set_active_provider,
     test_provider,
 )
+from trendrelay_api.models import Workspace
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/publishing", tags=["publishing"])
 AuthenticatedUser = Annotated[CurrentUser, Depends(current_user)]
@@ -164,6 +165,18 @@ class SlotEntry(BaseModel):
 
 class SlotUpdate(BaseModel):
     slots: list[SlotEntry] = Field(default_factory=list, max_length=40)
+    timezone: str = Field(default="UTC", min_length=1, max_length=80)
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value: str) -> str:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as error:
+            raise ValueError("Use an IANA timezone such as Asia/Bangkok.") from error
+        return value
 
 
 @router.get("/slots")
@@ -174,9 +187,11 @@ def publishing_slots(
 ) -> dict[str, Any]:
     """This workspace's posting times, plus the presets it can start from."""
     membership(session, workspace_id, user.id)
+    workspace = session.get(Workspace, workspace_id)
     return {
-        "slots": posting_slots.list_slots(workspace_id),
+        "slots": posting_slots.list_slots(workspace_id, session=session),
         "presets": posting_slots.preset_payload(),
+        "timezone": workspace.timezone if workspace else "UTC",
     }
 
 
@@ -192,11 +207,19 @@ def save_publishing_slots(
     require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
     try:
         slots = posting_slots.replace_slots(
-            workspace_id, [entry.model_dump() for entry in body.slots]
+            workspace_id, [entry.model_dump() for entry in body.slots], session=session
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    return {"slots": slots, "presets": posting_slots.preset_payload()}
+    workspace = session.get(Workspace, workspace_id)
+    if workspace:
+        workspace.timezone = body.timezone
+        session.flush()
+    return {
+        "slots": slots,
+        "presets": posting_slots.preset_payload(),
+        "timezone": body.timezone,
+    }
 
 
 @router.post("/providers/test")

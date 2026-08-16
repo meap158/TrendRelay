@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import delete, select
+from sqlalchemy.orm import Session
 
 from trendrelay_api.database import SessionFactory
 from trendrelay_api.models import PublishingSlot
@@ -104,10 +105,19 @@ def _serialize(slot: PublishingSlot) -> dict[str, Any]:
     }
 
 
-def list_slots(workspace_id: str, *, factory=None) -> list[dict[str, Any]]:
-    session_factory = factory or SessionFactory
-    with session_factory() as session:
+def list_slots(
+    workspace_id: str, *, factory=None, session: Session | None = None
+) -> list[dict[str, Any]]:
+    if session is not None:
         slots = session.scalars(
+            select(PublishingSlot)
+            .where(PublishingSlot.workspace_id == workspace_id)
+            .order_by(PublishingSlot.weekday, PublishingSlot.hour, PublishingSlot.minute)
+        ).all()
+        return [_serialize(slot) for slot in slots]
+    session_factory = factory or SessionFactory
+    with session_factory() as active:
+        slots = active.scalars(
             select(PublishingSlot)
             .where(PublishingSlot.workspace_id == workspace_id)
             .order_by(PublishingSlot.weekday, PublishingSlot.hour, PublishingSlot.minute)
@@ -116,7 +126,11 @@ def list_slots(workspace_id: str, *, factory=None) -> list[dict[str, Any]]:
 
 
 def replace_slots(
-    workspace_id: str, entries: list[dict[str, Any]], *, factory=None
+    workspace_id: str,
+    entries: list[dict[str, Any]],
+    *,
+    factory=None,
+    session: Session | None = None,
 ) -> list[dict[str, Any]]:
     """Set the workspace's slots to exactly `entries`, discarding duplicates.
 
@@ -141,15 +155,21 @@ def replace_slots(
     if len(unique) > MAX_SLOTS:
         raise ValueError(f"Keep it to {MAX_SLOTS} slots or fewer.")
 
-    session_factory = factory or SessionFactory
-    with session_factory() as session, session.begin():
-        session.execute(
+    def replace(active: Session) -> list[dict[str, Any]]:
+        active.execute(
             delete(PublishingSlot).where(PublishingSlot.workspace_id == workspace_id)
         )
         for weekday, hour, minute in unique:
-            session.add(
+            active.add(
                 PublishingSlot(
                     workspace_id=workspace_id, weekday=weekday, hour=hour, minute=minute
                 )
             )
-    return list_slots(workspace_id, factory=factory)
+        active.flush()
+        return list_slots(workspace_id, session=active)
+
+    if session is not None:
+        return replace(session)
+    session_factory = factory or SessionFactory
+    with session_factory() as active, active.begin():
+        return replace(active)

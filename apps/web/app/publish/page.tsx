@@ -740,7 +740,7 @@ export default function PublishPage() {
   // hosting, so a local path is enough and no URL has to be found by hand.
   const hostsLocalMedia = needsPublicMedia && (hosting?.configured ?? false);
   const checking = !connection && !error;
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "your local time";
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const quickSlots = useMemo(() => upcomingSlots(slots, now), [slots, now]);
   // Only work that is still going to happen belongs on a calendar. A draft has
   // no time to keep, and a failed post is history rather than a commitment -
@@ -1243,7 +1243,7 @@ export default function PublishPage() {
       const body = await json<{ slots: Slot[]; presets: SlotPreset[] }>(
         await apiFetch(`/api/workspaces/${workspaceId}/publishing/slots`, {
           method: "POST",
-          body: JSON.stringify({ slots: entries }),
+          body: JSON.stringify({ slots: entries, timezone }),
         }),
       );
       setSlots(body.slots);
