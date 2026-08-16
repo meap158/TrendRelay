@@ -92,15 +92,23 @@
 .discovery-feed-chips em { color: var(--muted); font-size: 10px; font-style: normal; font-variant-numeric: tabular-nums; }
 
 .discovery-feed-rows { display: grid; gap: 6px; margin: 14px 0 0; padding: 0; list-style: none; }
-.discovery-feed-rows > li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.discovery-feed-rows > li { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 /* A topic is evidence of a subject; a post is evidence somebody made
    something. Marked rather than mixed silently. */
 .discovery-feed-rows > li[data-kind="topic"] { border-inline-start: 3px solid var(--link); }
-.discovery-feed-rank { color: var(--muted); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; }
+/* A badge, not a column of counters: "#1" six times running is six sources'
+   top picks, and it has to look deliberate rather than like a broken list. */
+.discovery-feed-rank { display: inline-flex; align-items: center; justify-content: center; padding: 3px 0; border: 1px solid var(--line); border-radius: 999px; background: var(--panel-raised); color: var(--muted); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.discovery-feed-rank[data-tone="good"] { border-color: var(--ok, #12805c); color: var(--ok, #12805c); }
+.discovery-feed-rank[data-tone="info"] { border-color: var(--link); color: var(--link); }
+.discovery-feed-rank[data-tone="warn"] { border-color: var(--warn, #b54708); color: var(--warn, #b54708); }
 .discovery-feed-body { display: grid; gap: 2px; min-width: 0; }
 .discovery-feed-body strong { overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .discovery-feed-body small { color: var(--muted); font-size: 11px; }
 .discovery-feed-body b { color: var(--link); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+/* Says the region control above did not reach this row. Quiet, because it is a
+   qualification on the row rather than a property of it. */
+.discovery-feed-body i { margin-inline-start: 5px; padding: 1px 5px; border-radius: 999px; background: var(--panel-raised); color: var(--muted); font-size: 9px; font-style: normal; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; cursor: help; }
 .discovery-feed-metric { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .discovery-feed-actions { display: flex; align-items: center; gap: 6px; }
 .discovery-feed-actions a { display: inline-flex; color: var(--muted); }
@@ -114,6 +122,6 @@
 .discovery-feed-notes ul { margin: 8px 0 0; padding-inline-start: 18px; line-height: 1.5; }
 
 @media (max-width: 640px) {
-  .discovery-feed-rows > li { grid-template-columns: 24px minmax(0, 1fr) auto; }
+  .discovery-feed-rows > li { grid-template-columns: 36px minmax(0, 1fr) auto; }
   .discovery-feed-metric { grid-column: 2 / -1; }
 }

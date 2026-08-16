@@ -14,7 +14,7 @@
  */
 
 import type { PopularPost } from "./post-board";
-import type { Topic } from "./trend-shapes";
+import { SHAPE_COPY, type Topic } from "./trend-shapes.ts";
 
 export type FeedRow = {
   key: string;
@@ -29,7 +29,23 @@ export type FeedRow = {
   url: string | null;
   /** Position in its own source's list. 1 is the top. */
   rank: number;
+  /** How a topic behaved over time, for the badge's colour. Posts have none. */
+  tone: "good" | "warn" | "muted" | "info" | null;
 };
+
+/**
+ * Sources with no regional edition at all.
+ *
+ * The region control sits above every row, so a row that ignored it has to say
+ * so. The notes under the list already admit it once; a reader scanning a
+ * Vietnam feed should not have to find that note to learn which rows were
+ * never about Vietnam.
+ */
+const REGIONLESS = new Set(["bluesky", "hackernews"]);
+
+export function isRegionless(source: string): boolean {
+  return REGIONLESS.has(source);
+}
 
 /**
  * How a source's own count is written, since none of them share a unit.
@@ -78,19 +94,24 @@ export function rowFromTopic(topic: Topic): FeedRow {
   // A consolidated topic has no single provider, so it is filtered as the
   // thing it is. Naming one of its sources would hide the others.
   const source = seen > 1 ? "topics" : topic.sources[0] ?? "topics";
+  const shape = SHAPE_COPY[topic.shape];
   return {
     key: `topic:${topic.key}`,
     kind: "topic",
     source,
     title: topic.label,
     // Only the part the source label does not already say: how many sources
-    // agree is news, which single source it was is not.
-    detail: [topic.shape, seen > 1 ? `${seen} sources agree` : ""]
+    // agree is news, which single source it was is not. The shape uses the
+    // wording the trend board already uses - "Evergreen", not "durable".
+    detail: [shape.label, seen > 1 ? `${seen} sources agree` : ""]
       .filter(Boolean)
       .join(" · "),
-    metric: topic.best_rank ? `#${topic.best_rank}` : "",
+    // No figure of its own. A topic's evidence is where it placed, and that is
+    // already shown as the rank rather than repeated here as a second number.
+    metric: "",
     url: null,
     rank: topic.best_rank ?? 99,
+    tone: shape.tone,
   };
 }
 
@@ -119,6 +140,7 @@ export function rowFromPost(post: PopularPost, index: number): FeedRow {
     metric: figure,
     url: post.url ?? null,
     rank: post.rank,
+    tone: null,
   };
 }
 

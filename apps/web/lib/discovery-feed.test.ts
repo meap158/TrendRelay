@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   compact,
+  isRegionless,
   mergeFeed,
   rowFromPost,
   rowFromTopic,
@@ -20,6 +21,7 @@ function row(source: string, rank: number, extra: Partial<FeedRow> = {}): FeedRo
     metric: "",
     url: null,
     rank,
+    tone: null,
     ...extra,
   };
 }
@@ -82,7 +84,7 @@ test("a topic several sources agree on is filtered as a topic, not as one of the
 
   assert.equal(built.source, "topics");
   assert.match(built.detail, /2 sources agree/);
-  assert.equal(built.metric, "#3");
+  assert.equal(built.rank, 3);
 });
 
 test("a topic only one source saw is filtered under that source", () => {
@@ -96,7 +98,31 @@ test("a single-source topic does not name that source twice", () => {
   // nothing the reader cannot see.
   const built = rowFromTopic({ ...topic, sources: ["douyin"] });
 
-  assert.equal(built.detail, "durable");
+  assert.equal(built.detail, "Evergreen");
+});
+
+test("a shape is described the way the trend board already describes it", () => {
+  // "durable" and "single" are the API's own keys. A reader is owed the words
+  // the rest of the app uses for them, not the enum.
+  assert.match(rowFromTopic(topic).detail, /^Evergreen/);
+  assert.match(rowFromTopic({ ...topic, shape: "single" }).detail, /^Unread/);
+  assert.equal(rowFromTopic({ ...topic, shape: "fading" }).tone, "warn");
+});
+
+test("a topic shows no invented figure beside its rank", () => {
+  // Its rank is already the badge on the row; printing "#3" again in the
+  // figure column claims a second piece of evidence that does not exist.
+  assert.equal(rowFromTopic(topic).metric, "");
+  assert.equal(rowFromTopic(topic).rank, 3);
+});
+
+test("sources with no regional edition are marked as such", () => {
+  // The region control sits above every row, so a row it never reached has to
+  // say so without the reader hunting through the notes.
+  assert.equal(isRegionless("bluesky"), true);
+  assert.equal(isRegionless("hackernews"), true);
+  assert.equal(isRegionless("tiktok"), false);
+  assert.equal(isRegionless("google-trends"), false);
 });
 
 test("a topic nothing ranked sorts last rather than first", () => {

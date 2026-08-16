@@ -24,6 +24,7 @@ import { ExternalLink, RefreshCw } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import {
+  isRegionless,
   mergeFeed,
   rowFromPost,
   rowFromTopic,
@@ -180,9 +181,10 @@ export function DiscoveryFeed({
         <div>
           <h2>What is hot right now</h2>
           <p>
-            Every source that answered, ranked together. Each row keeps the figure
-            its own source published — they are different quantities and are not
-            added up.
+            Each source&rsquo;s top pick, then each source&rsquo;s second, so a
+            talkative provider cannot bury a quiet one. Every row keeps the
+            figure its own source published — those are different quantities and
+            are not added together.
           </p>
         </div>
         <div className="discovery-feed-controls">
@@ -238,11 +240,26 @@ export function DiscoveryFeed({
           const picked = Boolean(seed && selectedIds?.has(seed.id));
           return (
             <li key={row.key} data-kind={row.kind}>
-              <span className="discovery-feed-rank">{row.rank}</span>
+              {/* The place this source gave it, not a counter down the page.
+                  Six rows reading "#1" is the point: they are six sources'
+                  top picks. A plain left column of 1 1 1 1 looks like a bug. */}
+              <span className="discovery-feed-rank" data-tone={row.tone ?? undefined}>
+                #{row.rank}
+              </span>
               <span className="discovery-feed-body">
                 <strong>{row.title}</strong>
                 <small>
                   <b>{label(row.source)}</b>
+                  {/* The space is literal: without it this reads aloud, and
+                      copies, as "BLUESKYWORLDWIDE". */}
+                  {isRegionless(row.source) && (
+                    <>
+                      {" "}
+                      <i title="This source has no regional edition, so the region above did not apply to it">
+                        worldwide
+                      </i>
+                    </>
+                  )}
                   {row.detail && <> · {row.detail}</>}
                 </small>
               </span>
