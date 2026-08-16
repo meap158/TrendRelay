@@ -27,6 +27,9 @@ function editTitle(t: Translate, job: any): string {
   // rather than to a blank.
   const named = steps.map((id) => effectLabel(t, id, id));
   const applied = named.length ? named.join(" + ") : "effects";
+  if (job?.cancellation_requested && ["queued", "running"].includes(job?.status)) {
+    return `Cancelling ${applied}`;
+  }
   if (job?.payload?.request?.preview_seconds) {
     if (job?.status === "succeeded") return `Preview ready: ${applied}`;
     if (job?.status === "cancelled") return `Preview cancelled: ${applied}`;
@@ -95,6 +98,24 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
 
+  // Notifications are global, so their workspace cannot depend on first
+  // visiting Library, Download, or Publish. Resolve a default as soon as the
+  // signed-in shell mounts; page-level selectors can still replace it later.
+  useEffect(() => {
+    if (!user || activeWorkspaceId) return;
+    let cancelled = false;
+    void apiFetch("/api/workspaces")
+      .then((response) => response.json())
+      .then((body) => {
+        const first = body.workspaces?.[0]?.id;
+        if (!cancelled && first) {
+          setActiveWorkspaceId((current) => current || first);
+        }
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [activeWorkspaceId, apiFetch, user]);
+
   const effectJob = useCallback((job: any): BaseJob => ({
     id: job.id,
     category: "edit",
@@ -103,7 +124,9 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     title: editTitle(t, job),
     error: job.error,
     progress: job.progress,
-    progressStage: job.progress_stage,
+    progressStage: job.cancellation_requested && ["queued", "running"].includes(job.status)
+      ? "Stopping safely"
+      : job.progress_stage,
     startedAt: job.started_at,
     href: assetHref(job),
     raw: job,

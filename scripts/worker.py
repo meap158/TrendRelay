@@ -31,6 +31,7 @@ from trendrelay_api.database import SessionFactory  # noqa: E402
 from trendrelay_api.jobs import (  # noqa: E402
     abandon_expired_jobs,
     recoverable_job_ids,
+    settle_expired_cancellations,
     upgrade_active_job_recovery,
 )
 
@@ -81,6 +82,8 @@ def process_available() -> int:
     # notices it never finished. Giving it a terminal state is what puts it in
     # front of them.
     for kind in JOB_KINDS:
+        for job_id in settle_expired_cancellations(kind):
+            print(f"Finished cancellation for orphaned {kind} job {job_id}.", flush=True)
         for job_id in abandon_expired_jobs(kind):
             print(f"Abandoned {kind} job {job_id}: its worker never came back.", flush=True)
 

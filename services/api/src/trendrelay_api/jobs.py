@@ -152,6 +152,52 @@ ABANDONED_ERROR = (
 )
 
 
+def settle_expired_cancellations(
+    kind: str,
+    limit: int = 50,
+    *,
+    factory: SessionMaker = SessionFactory,
+) -> list[str]:
+    """Finish cancellations whose worker disappeared before acknowledging them.
+
+    A running job is cancelled cooperatively: the request sets a flag, and the
+    worker removes partial output at its next safe point. If that worker exits,
+    recovery correctly refuses to reclaim a cancelled job, but nothing used to
+    give the row a terminal state. It therefore stayed ``running`` forever.
+
+    A live lease is left alone so an active worker can still perform its normal
+    cleanup. Only queued jobs, expired leases, and legacy running rows with no
+    lease are safe to settle here.
+    """
+    timestamp = now_utc()
+    settled: list[str] = []
+    with factory.begin() as session:
+        items = session.scalars(
+            select(DurableJob)
+            .where(
+                DurableJob.kind == kind,
+                DurableJob.cancellation_requested.is_(True),
+                DurableJob.status.in_(("queued", "running")),
+                or_(
+                    DurableJob.status == "queued",
+                    DurableJob.lease_expires_at.is_(None),
+                    DurableJob.lease_expires_at <= timestamp,
+                ),
+            )
+            .order_by(DurableJob.created_at)
+            .limit(limit)
+        ).all()
+        for item in items:
+            item.status = "cancelled"
+            item.progress_stage = "Cancelled"
+            item.lease_owner = None
+            item.lease_expires_at = None
+            item.completed_at = timestamp
+            item.updated_at = timestamp
+            settled.append(item.id)
+    return settled
+
+
 def abandon_expired_jobs(
     kind: str,
     limit: int = 50,

@@ -19,6 +19,7 @@ from trendrelay_api.jobs import (
     now_utc,
     recoverable_job_ids,
     request_job_cancellation,
+    settle_expired_cancellations,
     upgrade_active_job_recovery,
 )
 from trendrelay_api.models import Base, DurableJob
@@ -82,6 +83,47 @@ def test_queued_job_cancellation_is_terminal_and_unclaimable() -> None:
 
     assert cancelled["status"] == "cancelled"
     assert claim_next_job("production", "worker-a", factory=sessions) is None
+
+
+def test_an_expired_cancelled_job_stops_saying_it_is_running() -> None:
+    sessions = factory()
+    job_id = "edit_cancelled_worker_gone"
+    create_job_record(
+        job_id, "workspace-1", "media_effect_render", {},
+        max_attempts=3, factory=sessions,
+    )
+    claim_job(job_id, "effect-worker", factory=sessions)
+    request_job_cancellation(job_id, factory=sessions)
+    with sessions.begin() as session:
+        session.get(DurableJob, job_id).lease_expires_at = (
+            now_utc().replace(tzinfo=None) - timedelta(minutes=1)
+        )
+
+    assert recoverable_job_ids("media_effect_render", factory=sessions) == []
+    assert settle_expired_cancellations(
+        "media_effect_render", factory=sessions
+    ) == [job_id]
+
+    settled = get_job_record(job_id, factory=sessions)
+    assert settled["status"] == "cancelled"
+    assert settled["progress_stage"] == "Cancelled"
+    assert settled["lease_owner"] is None
+    assert settled["completed_at"] is not None
+
+
+def test_a_cancelled_job_with_a_live_worker_is_left_to_stop_safely() -> None:
+    sessions = factory()
+    job_id = "edit_cancelling_live"
+    create_job_record(
+        job_id, "workspace-1", "media_effect_render", {}, factory=sessions
+    )
+    claim_job(job_id, "effect-worker", lease_seconds=120, factory=sessions)
+    request_job_cancellation(job_id, factory=sessions)
+
+    assert settle_expired_cancellations(
+        "media_effect_render", factory=sessions
+    ) == []
+    assert get_job_record(job_id, factory=sessions)["status"] == "running"
 
 
 def stranded(sessions, *, max_attempts: int = 1, kind: str = "douyin_download") -> str:

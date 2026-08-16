@@ -9,6 +9,7 @@ def test_the_worker_drains_recoverable_effect_renders(monkeypatch) -> None:
     recovered: list[str] = []
 
     monkeypatch.setattr(worker, "upgrade_active_job_recovery", lambda *a, **k: [])
+    monkeypatch.setattr(worker, "settle_expired_cancellations", lambda *a, **k: [])
     monkeypatch.setattr(worker, "abandon_expired_jobs", lambda *a, **k: [])
     monkeypatch.setattr(
         worker,
@@ -46,6 +47,11 @@ def test_the_worker_upgrades_legacy_effect_jobs_before_sweeping(monkeypatch) -> 
         "abandon_expired_jobs",
         lambda kind: events.append(("abandon", kind)) or [],
     )
+    monkeypatch.setattr(
+        worker,
+        "settle_expired_cancellations",
+        lambda kind: events.append(("cancel", kind)) or [],
+    )
     monkeypatch.setattr(worker, "recoverable_job_ids", lambda _kind: [])
 
     assert worker.process_available() == 0
@@ -58,3 +64,27 @@ def test_the_worker_upgrades_legacy_effect_jobs_before_sweeping(monkeypatch) -> 
         },
     )
     assert ("abandon", worker.EFFECT_JOB_KIND) in events
+    assert ("cancel", worker.EFFECT_JOB_KIND) in events
+
+
+def test_the_worker_settles_orphaned_cancellations_before_recovery(monkeypatch) -> None:
+    events: list[tuple[str, str]] = []
+    monkeypatch.setattr(worker, "upgrade_active_job_recovery", lambda *a, **k: [])
+    monkeypatch.setattr(
+        worker,
+        "settle_expired_cancellations",
+        lambda kind: events.append(("cancel", kind)) or [],
+    )
+    monkeypatch.setattr(
+        worker,
+        "abandon_expired_jobs",
+        lambda kind: events.append(("abandon", kind)) or [],
+    )
+    monkeypatch.setattr(worker, "recoverable_job_ids", lambda _kind: [])
+
+    assert worker.process_available() == 0
+    effect_events = [event for event in events if event[1] == worker.EFFECT_JOB_KIND]
+    assert effect_events == [
+        ("cancel", worker.EFFECT_JOB_KIND),
+        ("abandon", worker.EFFECT_JOB_KIND),
+    ]
