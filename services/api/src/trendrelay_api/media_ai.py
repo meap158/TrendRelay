@@ -38,6 +38,10 @@ SPEECH_VERSION = "1.2.1"
 OCR_PACKAGE = "rapidocr"
 OCR_VERSION = "3.9.2"
 ONNX_VERSION = "1.28.0"
+#: Shares the CTranslate2 runtime faster-whisper already installs, so this is a
+#: package rather than a second stack. Language pairs arrive separately.
+TRANSLATE_PACKAGE = "argostranslate"
+TRANSLATE_VERSION = "1.11.0"
 Mode = Literal["speech", "ocr"]
 
 
@@ -50,6 +54,21 @@ def _runtime_path() -> None:
 def _module_present(name: str) -> bool:
     _runtime_path()
     return importlib.util.find_spec(name) is not None
+
+
+def _translation_pairs() -> list[dict[str, str]]:
+    """Which language directions are installed, or none if the runtime is not.
+
+    Imported lazily and failure-tolerant because this is called to build a
+    status page: a machine that never prepared the runtime should see an empty
+    list, not an error where the page should be.
+    """
+    try:
+        from trendrelay_api.subtitle_translate import installed_pairs
+
+        return installed_pairs()
+    except Exception:
+        return []
 
 
 def _active_tools() -> dict[str, bool]:
@@ -80,6 +99,22 @@ def provider_status() -> dict[str, Any]:
             "source_active": active.get("rapidocr", False),
             "runtime_ready": ocr_runtime,
             "ready": bool(active.get("rapidocr", False) and ocr_runtime),
+            "network_during_analysis": False,
+        },
+        "translation": {
+            "provider": f"Argos Translate {TRANSLATE_VERSION}",
+            "source_active": active.get("argos-translate", False),
+            "runtime_ready": _module_present("argostranslate"),
+            # Which directions can be translated right now. A language pair is
+            # a separate download, so a ready runtime with no packages can
+            # still translate nothing - and offering a target that will fail is
+            # worse than not offering it.
+            "pairs": _translation_pairs(),
+            "ready": bool(
+                active.get("argos-translate", False)
+                and _module_present("argostranslate")
+                and _translation_pairs()
+            ),
             "network_during_analysis": False,
         },
         "review_required": True,

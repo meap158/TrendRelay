@@ -202,6 +202,31 @@
       "documentation": "docs/third-party/faster-whisper.md"
     },
     {
+      "id": "argos-translate",
+      "name": "Argos Translate",
+      "repository": "https://github.com/argosopentech/argos-translate",
+      "revision": "1.11.0",
+      "version": "1.11.0",
+      "license": "MIT or CC0",
+      "license_url": "https://github.com/argosopentech/argos-translate/blob/master/LICENSE",
+      "category": "Media intelligence",
+      "summary": "Offline translation on CTranslate2, for subtitles in another language.",
+      "capabilities": [
+        "Offline machine translation",
+        "Downloadable language packages",
+        "Shares the faster-whisper runtime"
+      ],
+      "integration_status": "adapted",
+      "commercial_use": "allowed",
+      "install_strategy": "pypi",
+      "install_allowed": true,
+      "activation_allowed": true,
+      "default_active": false,
+      "root_path": ".tools/catalog/argos-translate",
+      "source_path": ".tools/catalog/argos-translate/source",
+      "documentation": "docs/third-party/argos-translate.md"
+    },
+    {
       "id": "birefnet",
       "name": "BiRefNet",
       "repository": "https://github.com/ZhengPeng7/BiRefNet",
