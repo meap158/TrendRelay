@@ -629,7 +629,19 @@ export default function CampaignsPage() {
                 <p>Autopilot handles recurring publishing. Open this workflow when a specific clip, account, and time need to be locked together. Owners approve their own plan in the same step; editors still send it for review.</p>
               </div>
               {canCreatePlan && selectedCampaign.status !== "archived" && (
-                <details className="plan-create">
+                <div className="campaign-one-off-handoff">
+                  <div>
+                    <strong>Create a one-off post in Publish</strong>
+                    <p>Publish owns one-time media, destination, post type, comments, replies, and scheduling. Campaigns keeps the recurring pipeline focused.</p>
+                  </div>
+                  <Link className="ui-button ui-button-secondary ui-button-sm"
+                    href={`/publish?campaign=${encodeURIComponent(selectedCampaign.id)}`}>
+                    Open Publish
+                  </Link>
+                </div>
+              )}
+              {canCreatePlan && selectedCampaign.status !== "archived" && (
+                <details className="plan-create" hidden>
                   <summary>Create a manual plan</summary>
                   <form key={selectedCampaign.id} onSubmit={createPlan}>
                     <div className="plan-form-grid">

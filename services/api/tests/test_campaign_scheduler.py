@@ -314,6 +314,45 @@ def test_multiple_matched_products_become_disclosed_thread_replies(session) -> N
     assert posts[0].thread[0].startswith(pilot.disclosure)
 
 
+def test_operator_comments_and_replies_stay_with_the_content_package(session) -> None:
+    destination(session, "d1", "twitter")
+    slot(session, 12)
+    queue_item(
+        session,
+        "q1",
+        first_comment="A useful follow-up note.",
+        thread=["First planned reply.", "Second planned reply."],
+    )
+
+    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert posts[0].first_comment == "A useful follow-up note."
+    assert posts[0].thread == ("First planned reply.", "Second planned reply.")
+
+
+def test_operator_replies_precede_generated_product_replies(session) -> None:
+    destination(session, "d1", "threads")
+    slot(session, 12)
+    queue_item(
+        session,
+        "q1",
+        body="Compare an espresso maker with a coffee grinder.",
+        thread=["Ask us which setup fits your kitchen."],
+    )
+    offer(session, "offer-maker", "Espresso maker")
+    offer(session, "offer-grinder", "Coffee grinder")
+
+    posts, _ = plan_campaign(
+        session,
+        autopilot(session, offer_mode="smart", max_products_per_post=2),
+        now=NOW,
+        link_for=lambda _destination, offer_id: f"https://tr.example/{offer_id}",
+    )
+
+    assert posts[0].thread[0] == "Ask us which setup fits your kitchen."
+    assert "https://tr.example/offer-" in posts[0].thread[1]
+
+
 def test_link_friendly_descriptions_can_hold_multiple_products(session) -> None:
     destination(session, "d1", "youtube")
     slot(session, 12)

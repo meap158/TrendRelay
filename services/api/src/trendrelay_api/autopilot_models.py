@@ -176,6 +176,12 @@ class CampaignQueueItem(Base):
     #: Copy a person wrote. Autopilot never generates it.
     body: Mapped[str] = mapped_column(String(4000))
     hashtags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    #: Optional operator-authored content after the primary post. Affiliate
+    #: links are still routed by the platform policy; these fields are the
+    #: campaign's own comment/reply copy and are validated against each engine
+    #: in the timeline before deployment.
+    first_comment: Mapped[str | None] = mapped_column(String(2000))
+    thread: Mapped[list[str]] = mapped_column(JSON, default=list)
     #: A human pin. Empty lets smart mode choose from current evidence.
     offer_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     #: Latest explainable matcher result, shown in Campaigns and retained so a

@@ -795,6 +795,18 @@ html { scroll-behavior: smooth; }
 .autopilot-compose textarea, .autopilot-compose input { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; resize: vertical; }
 .autopilot-compose small { color: var(--muted); font-weight: 400; line-height: 1.4; }
 .autopilot-compose .ui-button { justify-self: start; }
+.autopilot-picker-head > span { display: grid; gap: 2px; }
+.campaign-content-package { display: flex; flex-wrap: wrap; gap: 4px; margin-block-start: 5px; }
+.campaign-content-package em { border: 1px solid var(--line); border-radius: 999px; padding: 2px 6px; color: var(--muted); background: var(--panel-raised); font-size: 9px; font-style: normal; }
+.campaign-reply-editor { display: grid; gap: 8px; min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px; }
+.campaign-reply-editor legend { padding-inline: 4px; color: var(--text); font-size: 11px; font-weight: 700; }
+.campaign-reply-editor > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 6px; }
+.campaign-reply-editor > .ui-button { justify-self: start; }
+.campaign-schedule-readonly { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.campaign-schedule-readonly > span { border: 1px solid var(--line); border-radius: 999px; padding: 5px 8px; color: var(--text); background: var(--panel-raised); font-size: 10px; }
+.campaign-one-off-handoff { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-block-start: 1px solid var(--line); padding: 14px; background: var(--panel-raised); }
+.campaign-one-off-handoff > div { display: grid; gap: 3px; }
+.campaign-one-off-handoff p { margin: 0; color: var(--muted); font-size: 11px; }
 .autopilot-picker-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .autopilot-media-picker { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; }
 .autopilot-media-picker li { display: block; padding: 0; }
@@ -923,4 +935,6 @@ html { scroll-behavior: smooth; }
   .campaign-dialog-grid { grid-template-columns: 1fr; }
   .campaign-media-grid { grid-template-columns: 1fr; }
   .campaign-work-tabs button { min-height: 52px; }
+  .campaign-one-off-handoff { display: grid; }
+  .campaign-reply-editor > div { grid-template-columns: 1fr; }
 }

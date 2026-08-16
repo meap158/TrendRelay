@@ -16,6 +16,7 @@
  */
 
 import { clipLength, handoffPath } from "../../lib/media-rules";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../ui/button";
@@ -34,9 +35,7 @@ import {
 } from "../ui/asset-filters";
 import {
   AssetThumbnail,
-  SlotEditor,
   type Slot,
-  type SlotPreset,
 } from "../publish/composer";
 import {
   PlatformIcon,
@@ -73,6 +72,8 @@ type QueueItem = {
   title: string | null;
   body: string;
   hashtags: string[];
+  first_comment: string | null;
+  thread: string[];
   state: "draft" | "approved" | "paused" | "retired";
   position: number;
   times_posted: number;
@@ -140,6 +141,23 @@ type Offer = {
     brand?: string | null;
     marketplace?: string | null;
   };
+};
+
+type DeployedPost = {
+  id: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  at: string;
+  title: string | null;
+  caption: string;
+  first_comment: string | null;
+  thread: string[];
+  delivery: "draft" | "schedule" | "now";
+  queue_item_id: string | null;
+  destination_id: string | null;
+  destination: PreviewPost["destination"];
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 type OfferMatch = {
@@ -291,10 +309,9 @@ export function AutopilotPanel({
   const [productItem, setProductItem] = useState<QueueItem | null>(null);
   const [pinnedOffers, setPinnedOffers] = useState<Set<string>>(new Set());
   const [slots, setSlots] = useState<Slot[]>([]);
-  const [slotPresets, setSlotPresets] = useState<SlotPreset[]>([]);
   const [scheduleTimezone, setScheduleTimezone] = useState("UTC");
   const [preview, setPreview] = useState<
-    { note: string; posts: PreviewPost[]; problems: number } | null
+    { note: string; posts: PreviewPost[]; deployed: DeployedPost[]; problems: number } | null
   >(null);
   const [busy, setBusy] = useState("");
   const [adding, setAdding] = useState(false);
@@ -307,6 +324,7 @@ export function AutopilotPanel({
   const [selectedAssets, setSelectedAssets] = useState<Record<string, LibraryAsset>>({});
   const [effectOpen, setEffectOpen] = useState(false);
   const [editing, setEditing] = useState<QueueItem | null>(null);
+  const [editingReplies, setEditingReplies] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
   const [section, setSection] = useState<"media" | "accounts" | "schedule" | "settings">(
     campaignStatus === "active" ? "schedule" : "media",
@@ -333,13 +351,12 @@ export function AutopilotPanel({
       // different subsystem, and the point of the checklist is that it names
       // which one is missing rather than reporting a single blank "not ready".
       void apiFetch(`/api/workspaces/${workspaceId}/publishing/slots`)
-        .then((response) => json<{ slots: Slot[]; presets: SlotPreset[]; timezone: string }>(response))
+        .then((response) => json<{ slots: Slot[]; timezone: string }>(response))
         .then((body) => {
           setSlots(body.slots);
-          setSlotPresets(body.presets);
           setScheduleTimezone(body.timezone || "UTC");
         })
-        .catch(() => { setSlots([]); setSlotPresets([]); });
+        .catch(() => { setSlots([]); });
       void apiFetch(`/api/workspaces/${workspaceId}/opportunities/offers`)
         .then((response) => json<{ offers: Offer[] }>(response))
         .then((body) => setOffers(body.offers))
@@ -416,7 +433,7 @@ export function AutopilotPanel({
     setBusy("preview");
     try {
       const body = await json<{
-        note: string; posts: PreviewPost[]; problems: number;
+        note: string; posts: PreviewPost[]; deployed: DeployedPost[]; problems: number;
       }>(await apiFetch(`${base}/autopilot/preview`, { method: "POST" }));
       setPreview(body);
       if (announce) {
@@ -430,32 +447,6 @@ export function AutopilotPanel({
       setBusy("");
     }
   }, [apiFetch, base, fail, succeed, t]);
-
-  async function saveSlots(
-    entries: { weekday: number; time: string }[],
-    advanceSetup = true,
-  ) {
-    await run("slots", async () => {
-      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-      const body = await json<{ slots: Slot[]; presets: SlotPreset[]; timezone: string }>(await apiFetch(
-        `/api/workspaces/${workspaceId}/publishing/slots`, {
-          method: "POST",
-          body: JSON.stringify({ slots: entries, timezone }),
-        },
-      ));
-      setSlots(body.slots);
-      setSlotPresets(body.presets);
-      setScheduleTimezone(body.timezone);
-      if (body.slots.length && advanceSetup) {
-        setSection("settings");
-        void loadRecommendations();
-        if (destinations.length && (autopilot?.queue_approved ?? 0) > 0) {
-          void loadPreview(false);
-        }
-      }
-      return "Posting times updated for this campaign workspace.";
-    });
-  }
 
   async function save(changes: Partial<Autopilot>, { confirm = false } = {}) {
     if (!autopilot) return;
@@ -552,7 +543,6 @@ export function AutopilotPanel({
 
   const unmet = ready.rows.filter((row) => !row.met);
   const selectedLibrary = Object.values(selectedAssets);
-  const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const previewDays = preview ? Object.entries(
     preview.posts.reduce<Record<string, PreviewPost[]>>((days, post) => {
       const key = new Date(post.at).toLocaleDateString("en-CA", { timeZone: scheduleTimezone });
@@ -609,14 +599,14 @@ export function AutopilotPanel({
         <nav className="campaign-work-tabs" aria-label="Campaign workspace">
           <button type="button" className={section === "media" ? "active" : ""}
             onClick={() => setSection("media")}>
-            <span>Media</span><strong>{autopilot.queue_total}</strong><small>clips queued</small>
+            <span>Content</span><strong>{autopilot.queue_total}</strong><small>post packages</small>
           </button>
           <button type="button" className={section === "accounts" ? "active" : ""}
             onClick={() => {
               setSection("accounts");
               if (!accounts.length) void loadAccounts();
             }}>
-            <span>Accounts</span><strong>{destinations.length}</strong><small>destinations</small>
+            <span>Destinations</span><strong>{destinations.length}</strong><small>social accounts</small>
           </button>
           <button type="button" className={section === "schedule" ? "active" : ""}
             onClick={() => {
@@ -631,7 +621,7 @@ export function AutopilotPanel({
               setSection("settings");
               if (!recommendations || recommendations.item_id) void loadRecommendations();
             }}>
-            <span>Products</span>
+            <span>Monetization</span>
             <strong>{autopilot.offer_mode === "smart" ? "Smart" : autopilot.offer_mode === "manual" ? (autopilot.offer_id ? "1" : "—") : "Off"}</strong>
             <small>affiliate matching</small>
           </button>
@@ -780,6 +770,23 @@ export function AutopilotPanel({
             {/* Not a preference. Stated here so nobody spends time looking for
                 the setting that turns it off. */}
             <small>{t("autopilot.disclosureHelp")}</small>
+          </label>
+
+          <label>Profile-link wording
+            <input
+              defaultValue={autopilot.bio_hint}
+              disabled={!canEdit}
+              maxLength={120}
+              onBlur={(event) => {
+                if (event.target.value !== autopilot.bio_hint) {
+                  void save({ bio_hint: event.target.value });
+                }
+              }}
+            />
+            <small>
+              Used for Instagram, TikTok, and other destinations where post links are not clickable.
+              TrendRelay does not change the account profile automatically, so verify its bio link before deployment.
+            </small>
           </label>
 
           <div className="autopilot-numbers">
@@ -1084,6 +1091,13 @@ export function AutopilotPanel({
                 <div>
                   <strong>{item.title ?? item.body.slice(0, 60)}</strong>
                   <span className="autopilot-queue-copy">{item.body}</span>
+                  <span className="campaign-content-package" aria-label="Configured post package">
+                    <em>Post</em>
+                    {item.first_comment && <em>First comment</em>}
+                    {item.thread.length > 0 && (
+                      <em>{item.thread.length} {item.thread.length === 1 ? "reply" : "replies"}</em>
+                    )}
+                  </span>
                   <span className="campaign-queue-products">
                     {(item.offer_match?.matches ?? [])
                       .filter((match) => item.offer_ids.length
@@ -1128,7 +1142,10 @@ export function AutopilotPanel({
                           return t("autopilot.itemApproved");
                         })}>{t("autopilot.approve")}</Button>
                     )}
-                    <Button variant="quiet" size="sm" onClick={() => setEditing(item)}>Edit copy</Button>
+                    <Button variant="quiet" size="sm" onClick={() => {
+                      setEditing(item);
+                      setEditingReplies(item.thread.length ? item.thread : [""]);
+                    }}>Edit content</Button>
                     <Button variant="quiet" size="sm" busy={busy === `recommend-${item.id}`}
                       onClick={() => void loadRecommendations(item)}>
                       {item.offer_ids.length ? "Edit products" : "Review products"}
@@ -1206,9 +1223,12 @@ export function AutopilotPanel({
                 method: "PATCH",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({
+                  title: String(form.get("title") ?? "").trim() || null,
                   body: String(form.get("body") ?? "").trim(),
                   hashtags: String(form.get("hashtags") ?? "")
                     .split(/[\s,]+/).filter(Boolean),
+                  first_comment: String(form.get("first_comment") ?? "").trim() || null,
+                  thread: editingReplies.map((part) => part.trim()).filter(Boolean),
                 }),
               }));
               setEditing(null);
@@ -1216,9 +1236,16 @@ export function AutopilotPanel({
             });
           }}>
             <div className="autopilot-picker-head">
-              <strong>Edit copy for {editing.title ?? "queued clip"}</strong>
+              <span>
+                <strong>Edit post package</strong>
+                <small>Configure the primary post and optional follow-up content. Affiliate links remain routed safely per destination.</small>
+              </span>
               <Button variant="quiet" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
             </div>
+            <label>Title
+              <input name="title" defaultValue={editing.title ?? ""} maxLength={200} />
+              <small>Used by destinations that require a title and in the campaign timeline.</small>
+            </label>
             <label>{t("autopilot.copy")}
               <textarea name="body" rows={4} required maxLength={4000}
                 defaultValue={editing.body} />
@@ -1226,7 +1253,35 @@ export function AutopilotPanel({
             <label>{t("autopilot.hashtags")}
               <input name="hashtags" defaultValue={editing.hashtags.join(" ")} />
             </label>
-            <Button type="submit" variant="primary" busy={busy === "edit-copy"}>Save copy</Button>
+            <label>First comment
+              <textarea name="first_comment" rows={3} maxLength={2000}
+                defaultValue={editing.first_comment ?? ""}
+                placeholder="Optional comment published immediately after the post" />
+              <small>The timeline will warn when a selected publishing engine cannot post it.</small>
+            </label>
+            <fieldset className="campaign-reply-editor">
+              <legend>Replies / thread</legend>
+              <small>Replies publish in this order after the primary post. Product links generated by smart matching appear after these replies.</small>
+              {editingReplies.map((reply, index) => (
+                <div key={index}>
+                  <textarea rows={3} maxLength={5000} value={reply}
+                    aria-label={`Reply ${index + 1}`}
+                    placeholder={`Reply ${index + 1}`}
+                    onChange={(event) => setEditingReplies((current) => current.map(
+                      (part, partIndex) => partIndex === index ? event.target.value : part,
+                    ))} />
+                  <Button type="button" variant="quiet" size="sm"
+                    onClick={() => setEditingReplies((current) => current.filter(
+                      (_part, partIndex) => partIndex !== index,
+                    ))}>Remove</Button>
+                </div>
+              ))}
+              <Button type="button" variant="secondary" size="sm"
+                onClick={() => setEditingReplies((current) => [...current, ""])}>
+                Add reply
+              </Button>
+            </fieldset>
+            <Button type="submit" variant="primary" busy={busy === "edit-copy"}>Save post package</Button>
           </form>
         )}
       </Card>}
@@ -1259,8 +1314,50 @@ export function AutopilotPanel({
       >
         <p className="autopilot-lede">
           A rolling seven-day outlook calculated by the same scheduler that deploys the campaign.
-          It is a preview only; nothing below is created until you deploy it.
+          Preview items are calculated; committed items are durable publishing jobs that persist across sessions.
         </p>
+        {preview && preview.deployed.length > 0 && (
+          <section className="campaign-committed-pipeline" aria-label="Committed publishing jobs">
+            <header>
+              <div>
+                <strong>Committed pipeline</strong>
+                <small>Already handed to a publishing engine</small>
+              </div>
+              <Badge tone={preview.deployed.some((item) => item.status === "failed") ? "warn" : "good"}>
+                {preview.deployed.length} {preview.deployed.length === 1 ? "job" : "jobs"}
+              </Badge>
+            </header>
+            <ol>
+              {preview.deployed.map((item) => (
+                <li key={item.id} className={item.status}>
+                  <time dateTime={item.at}>{new Date(item.at).toLocaleString(undefined, {
+                    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+                    timeZone: scheduleTimezone,
+                  })}</time>
+                  <span>
+                    <strong>{item.title || "Untitled campaign post"}</strong>
+                    <small>{item.destination?.label ?? "Former destination"} · {item.delivery}</small>
+                  </span>
+                  <Badge tone={item.status === "succeeded" ? "good" : item.status === "failed" ? "warn" : "neutral"}>
+                    {item.status}
+                  </Badge>
+                  <details>
+                    <summary>Content</summary>
+                    <pre>{item.caption}</pre>
+                    {item.first_comment && <><strong>First comment</strong><pre>{item.first_comment}</pre></>}
+                    {item.thread.map((reply, index) => <div key={`${item.id}-reply-${index}`}>
+                      <strong>Reply {index + 1}</strong><pre>{reply}</pre>
+                    </div>)}
+                    {item.last_error && <p className="autopilot-refusal">{item.last_error}</p>}
+                  </details>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+        {preview && preview.deployed.length === 0 && (
+          <p className="campaign-pipeline-legend"><strong>Preview only</strong> · Nothing from this campaign has been committed to a publishing engine yet.</p>
+        )}
         {preview && preview.posts.length > 0 && (
           <div className="campaign-pipeline-summary" aria-label="Upcoming campaign summary">
             <span><strong>{preview.posts.length}</strong><small>posts</small></span>
@@ -1324,7 +1421,7 @@ export function AutopilotPanel({
                                   {destination?.provider ? ` · ${destination.provider}` : ""}</small>
                               </span>
                               <Badge tone={post.problem ? "warn" : "neutral"}>
-                                {autopilot.delivery === "draft" ? "Review draft" : autopilot.delivery === "schedule" ? "Scheduled" : "Publish now"}
+                                {autopilot.delivery === "draft" ? "Preview · review draft" : autopilot.delivery === "schedule" ? "Preview · scheduled" : "Preview · publish now"}
                               </Badge>
                             </div>
                             <h4>{post.title || "Untitled campaign video"}</h4>
@@ -1413,26 +1510,21 @@ export function AutopilotPanel({
             }}>Deploy campaign</Button>
         </div>
       </Card>
-      <Card eyebrow="Campaign rhythm" title="Posting times" aside={
-        scheduleTimezone !== browserTimezone ? (
-          <Button variant="secondary" size="sm" busy={busy === "slots"}
-            onClick={() => void saveSlots(
-              slots.map((slot) => ({ weekday: slot.weekday, time: slot.time })),
-              false,
-            )}>Use {browserTimezone}</Button>
-        ) : <Badge tone="neutral">{scheduleTimezone}</Badge>
+      <Card eyebrow="Workspace schedule" title="Posting times" aside={
+        <Link className="ui-button ui-button-secondary ui-button-sm" href="/publish">
+          Edit in Publish
+        </Link>
       }>
         <p className="autopilot-lede">
-          These workspace slots feed the outlook above. Times are shown in {scheduleTimezone}.
+          These times are shared by every campaign in this workspace. Campaigns reads them for its outlook; Publish is their single source of truth.
         </p>
-        <SlotEditor
-          slots={slots}
-          presets={slotPresets}
-          timezone={scheduleTimezone}
-          canEdit={canEdit}
-          busy={busy === "slots"}
-          onSave={(entries) => void saveSlots(entries)}
-        />
+        <div className="campaign-schedule-readonly">
+          <Badge tone="neutral">{scheduleTimezone}</Badge>
+          {slots.map((slot) => (
+            <span key={slot.id}>{slot.weekday_label} · {slot.time}</span>
+          ))}
+          {!slots.length && <span>No posting times configured.</span>}
+        </div>
       </Card>
       </>}
     </div>

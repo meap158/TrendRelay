@@ -523,6 +523,12 @@ class PublishTarget(BaseModel):
 
 class PublishRequest(BaseModel):
     workspace_id: str = Field(min_length=1, max_length=128)
+    #: Internal provenance for campaign-created jobs. Publishing providers do
+    #: not receive these values; they let Campaigns reconnect a durable job to
+    #: the timeline that created it after a reload or worker restart.
+    campaign_id: str | None = Field(default=None, max_length=64)
+    queue_item_id: str | None = Field(default=None, max_length=64)
+    destination_id: str | None = Field(default=None, max_length=64)
     #: Optional only because a photo carousel has no video. Every other post
     #: still needs one, which `media_matches_the_post_type` holds to.
     video_path: str = Field(default="", max_length=1000)
@@ -2599,8 +2605,13 @@ def create_publish_job(request: PublishRequest) -> dict[str, Any]:
     preview = preview_publish(request)
     resolved = request.model_copy(update={"provider": preview["provider"]})
     job_id = f"publish_{preview['operation_id']}"
+    payload_exclude = {"confirm_external_action"}
+    payload_exclude.update(
+        field for field in ("campaign_id", "queue_item_id", "destination_id")
+        if getattr(resolved, field) is None
+    )
     payload = {
-        "request": resolved.model_dump(mode="json", exclude={"confirm_external_action"}),
+        "request": resolved.model_dump(mode="json", exclude=payload_exclude),
         "preview": preview,
     }
     try:

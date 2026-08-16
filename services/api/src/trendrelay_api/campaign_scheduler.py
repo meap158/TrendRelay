@@ -448,6 +448,13 @@ def plan_campaign(
             )
             or f"No affiliate product attached ({match_strategy['selection']})."
         )
+        # Operator-authored comments and replies form one persistent content
+        # package with the base caption. Generated affiliate replies are added
+        # afterwards, so the timeline can show and validate the exact sequence.
+        first_comment = (item.first_comment or "").strip() or post.first_comment
+        custom_thread = tuple(
+            part.strip() for part in (item.thread or []) if part.strip()
+        )
         scheduled.append(ScheduledPost(
             campaign_id=autopilot.campaign_id,
             destination_id=destination.id,
@@ -456,13 +463,13 @@ def plan_campaign(
             video_path=queue_media_path(session, item),
             title=item.title,
             caption=post.caption,
-            first_comment=post.first_comment,
+            first_comment=first_comment,
             placement=post.placement.placement,
             reason=(
                 f"{'Ranked' if rank.ranked else 'Unranked'}: {rank.reason} "
                 f"{post.placement.reason} Product match: {match_reason}"
             ),
-            thread=post.thread,
+            thread=(*custom_thread, *post.thread),
             offer_ids=tuple(match.offer_id for match in linked_matches),
             product_names=tuple(match.product_name for match in linked_matches),
         ))

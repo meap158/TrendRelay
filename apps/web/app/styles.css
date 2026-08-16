@@ -876,6 +876,24 @@ nav strong { color: #1c2b33; }
    owns one rail, while every post keeps its time, destination, media and
    affiliate route in the same row. */
 .campaign-pipeline-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 14px 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.campaign-pipeline-legend { margin: 12px 0; border-inline-start: 3px solid var(--link); padding: 7px 10px; color: var(--muted); background: var(--panel-raised); font-size: 10px; }
+.campaign-committed-pipeline { display: grid; gap: 8px; margin-block: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px; background: var(--panel-raised); }
+.campaign-committed-pipeline > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.campaign-committed-pipeline > header > div { display: grid; }
+.campaign-committed-pipeline > header small { color: var(--muted); font-size: 9px; }
+.campaign-committed-pipeline ol { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.campaign-committed-pipeline li { display: grid; grid-template-columns: 118px minmax(0, 1fr) auto; align-items: center; gap: 8px; border: 1px solid var(--line); border-inline-start: 3px solid var(--link); border-radius: var(--radius-sm); padding: 8px 10px; background: var(--panel); }
+.campaign-committed-pipeline li.succeeded { border-inline-start-color: var(--green); }
+.campaign-committed-pipeline li.failed { border-inline-start-color: var(--danger, #b42318); }
+.campaign-committed-pipeline li > time { color: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+.campaign-committed-pipeline li > span { display: grid; min-width: 0; }
+.campaign-committed-pipeline li > span strong, .campaign-committed-pipeline li > span small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-committed-pipeline li > span strong { font-size: 11px; }
+.campaign-committed-pipeline li > span small { color: var(--muted); font-size: 9px; }
+.campaign-committed-pipeline details { grid-column: 1 / -1; border-block-start: 1px solid var(--line); padding-block-start: 6px; }
+.campaign-committed-pipeline summary { color: var(--link); font-size: 10px; font-weight: 700; cursor: pointer; }
+.campaign-committed-pipeline details pre { max-block-size: 140px; overflow: auto; padding: 8px; background: var(--panel-raised); font: 10px/1.45 ui-monospace, monospace; white-space: pre-wrap; }
+.campaign-committed-pipeline details > strong, .campaign-committed-pipeline details > div > strong { display: block; margin-block-start: 6px; color: var(--muted); font-size: 9px; text-transform: uppercase; }
 .campaign-pipeline-summary span { display: grid; gap: 1px; padding: 10px 12px; border-inline-start: 1px solid var(--line); }
 .campaign-pipeline-summary span:first-child { border-inline-start: 0; }
 .campaign-pipeline-summary strong { color: var(--text); font-size: 18px; line-height: 1.1; font-variant-numeric: tabular-nums; }
@@ -945,4 +963,6 @@ nav strong { color: #1c2b33; }
   .campaign-affiliate-route { align-items: flex-start; }
   .campaign-pipeline-products li { max-inline-size: 100%; }
   .campaign-pipeline-products strong { max-inline-size: 180px; }
+  .campaign-committed-pipeline li { grid-template-columns: 1fr auto; }
+  .campaign-committed-pipeline li > time { grid-column: 1 / -1; }
 }

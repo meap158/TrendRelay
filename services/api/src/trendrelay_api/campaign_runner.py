@@ -24,6 +24,9 @@ def _publish(session: Session, autopilot: CampaignAutopilot, post: Any,
 
     request = PublishRequest(
         workspace_id=autopilot.workspace_id,
+        campaign_id=autopilot.campaign_id,
+        queue_item_id=post.queue_item_id,
+        destination_id=destination.id,
         video_path=post.video_path,
         caption=post.caption,
         # Reddit and Pinterest refuse a post without one, and the engines take

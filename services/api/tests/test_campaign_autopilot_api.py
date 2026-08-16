@@ -316,6 +316,34 @@ def test_approving_an_item_is_an_audited_decision(workspace) -> None:
     assert response.json()["item"]["state"] == "approved"
 
 
+def test_queue_items_persist_an_editable_post_package(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    item = request("POST", f"{base}/queue", json={
+        "video_path": r"S:\media\package.mp4",
+        "title": "Original title",
+        "body": "Primary post",
+        "hashtags": ["launch"],
+        "first_comment": "Opening comment",
+        "thread": ["Reply one"],
+    }).json()["item"]
+
+    assert item["first_comment"] == "Opening comment"
+    assert item["thread"] == ["Reply one"]
+
+    updated = request("PATCH", f"{base}/queue/{item['id']}", json={
+        "title": "Updated title",
+        "first_comment": "",
+        "thread": ["Reply one", "  ", "Reply two"],
+    })
+
+    assert updated.status_code == 200, updated.text
+    package = updated.json()["item"]
+    assert package["title"] == "Updated title"
+    assert package["first_comment"] is None
+    assert package["thread"] == ["Reply one", "Reply two"]
+
+
 def test_a_draft_queue_item_can_be_deleted(workspace) -> None:
     campaign_id = campaign(workspace)
     base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
@@ -375,6 +403,50 @@ def test_preview_rows_carry_media_account_and_product_routes(workspace) -> None:
     assert post["product_details"] == [
         {"offer_id": "offer-1", "name": "Coffee espresso maker"}
     ]
+
+
+def test_preview_reconnects_committed_publish_jobs_to_the_timeline(workspace) -> None:
+    from trendrelay_api.models import DurableJob
+
+    campaign_id = campaign(workspace)
+    at = datetime.now(UTC) + timedelta(hours=2)
+    with TestingSession.begin() as session:
+        session.add(DurableJob(
+            id="publish_campaign_timeline",
+            workspace_key=workspace,
+            kind="social_publish",
+            status="queued",
+            payload={"request": {
+                "workspace_id": workspace,
+                "campaign_id": campaign_id,
+                "queue_item_id": "queued-1",
+                "destination_id": "destination-1",
+                "date": at.isoformat(),
+                "title": "Durable campaign post",
+                "caption": "Primary content",
+                "first_comment": "Follow-up",
+                "thread": ["Reply"],
+                "delivery": "schedule",
+                "targets": [{
+                    "platform": "threads", "integration_id": "threads-account",
+                    "provider": "buffer", "post_type": "post",
+                }],
+            }},
+            attempt_count=0,
+            max_attempts=1,
+            cancellation_requested=False,
+        ))
+
+    response = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/preview"
+    )
+
+    assert response.status_code == 200, response.text
+    deployed = response.json()["deployed"]
+    assert deployed[0]["id"] == "publish_campaign_timeline"
+    assert deployed[0]["caption"] == "Primary content"
+    assert deployed[0]["first_comment"] == "Follow-up"
+    assert deployed[0]["thread"] == ["Reply"]
 
 
 def test_deploy_preflights_then_activates_and_enables_campaign(

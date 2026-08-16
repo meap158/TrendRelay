@@ -37,7 +37,7 @@ from trendrelay_api.foundation import (
     require_role,
 )
 from trendrelay_api.integrations.publishing import resolve_post_type, resolve_provider
-from trendrelay_api.models import Campaign, utc_now
+from trendrelay_api.models import Campaign, DurableJob, utc_now
 from trendrelay_api.opportunity_models import ProductOffer
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/campaigns", tags=["campaigns"])
@@ -79,13 +79,18 @@ class QueueItemCreate(BaseModel):
     asset_id: str | None = Field(default=None, max_length=64)
     title: str | None = Field(default=None, max_length=200)
     hashtags: list[str] = Field(default_factory=list, max_length=30)
+    first_comment: str | None = Field(default=None, max_length=2000)
+    thread: list[str] = Field(default_factory=list, max_length=24)
     offer_ids: list[str] = Field(default_factory=list, max_length=5)
 
 
 class QueueItemUpdate(BaseModel):
     state: str | None = Field(default=None, pattern=r"^(draft|approved|paused|retired)$")
+    title: str | None = Field(default=None, max_length=200)
     body: str | None = Field(default=None, min_length=1, max_length=4000)
     hashtags: list[str] | None = Field(default=None, max_length=30)
+    first_comment: str | None = Field(default=None, max_length=2000)
+    thread: list[str] | None = Field(default=None, max_length=24)
     offer_ids: list[str] | None = Field(default=None, max_length=5)
 
 
@@ -144,6 +149,8 @@ def _queue_view(item: CampaignQueueItem) -> dict[str, Any]:
         "title": item.title,
         "body": item.body,
         "hashtags": item.hashtags,
+        "first_comment": item.first_comment,
+        "thread": item.thread,
         "offer_ids": item.offer_ids,
         "offer_match": item.offer_match,
         "state": item.state,
@@ -447,6 +454,8 @@ def add_queue_item(
         workspace_id=workspace_id, campaign_id=campaign_id, asset_id=body.asset_id,
         video_path=body.video_path, title=body.title, body=body.body,
         hashtags=[tag.strip().lstrip("#") for tag in body.hashtags if tag.strip()],
+        first_comment=(body.first_comment or "").strip() or None,
+        thread=[part.strip() for part in body.thread if part.strip()],
         offer_ids=list(dict.fromkeys(body.offer_ids)), offer_match={},
         # Added as a draft, always. Nothing enters the rotation because a form
         # was submitted.
@@ -486,10 +495,16 @@ def update_queue_item(
                 session, request, workspace_id, user.id,
                 "campaign.queue_item_approved", "campaign_queue_item", item.id, {},
             )
+    if "title" in body.model_fields_set:
+        item.title = (body.title or "").strip() or None
     if body.body is not None:
         item.body = body.body
     if body.hashtags is not None:
         item.hashtags = [tag.strip().lstrip("#") for tag in body.hashtags if tag.strip()]
+    if "first_comment" in body.model_fields_set:
+        item.first_comment = (body.first_comment or "").strip() or None
+    if body.thread is not None:
+        item.thread = [part.strip() for part in body.thread if part.strip()]
     if body.offer_ids is not None:
         _require_offer_ids(session, workspace_id, body.offer_ids)
         item.offer_ids = list(dict.fromkeys(body.offer_ids))
@@ -735,10 +750,58 @@ def preview_autopilot(
                 _would_be_accepted(autopilot, post, destination) if destination else None
             ),
         })
+    # Durable publishing jobs are the committed half of the same timeline.
+    # Keeping their campaign provenance in PublishRequest means this survives
+    # page reloads and worker restarts without a second shadow job table.
+    deployed = []
+    jobs = session.scalars(
+        select(DurableJob)
+        .where(
+            DurableJob.workspace_key == workspace_id,
+            DurableJob.kind == "social_publish",
+        )
+        .order_by(DurableJob.created_at.desc())
+        .limit(100)
+    ).all()
+    for job in jobs:
+        request_payload = (job.payload or {}).get("request") or {}
+        if request_payload.get("campaign_id") != campaign_id:
+            continue
+        target = next(iter(request_payload.get("targets") or []), {})
+        destination = by_id.get(request_payload.get("destination_id"))
+        deployed.append({
+            "id": job.id,
+            "status": job.status,
+            "at": request_payload.get("date"),
+            "title": request_payload.get("title"),
+            "caption": request_payload.get("caption", ""),
+            "first_comment": request_payload.get("first_comment"),
+            "thread": request_payload.get("thread") or [],
+            "delivery": request_payload.get("delivery") or (
+                "schedule" if request_payload.get("schedule") else "draft"
+            ),
+            "queue_item_id": request_payload.get("queue_item_id"),
+            "destination_id": request_payload.get("destination_id"),
+            "destination": ({
+                "label": destination.label,
+                "platform": destination.platform,
+                "provider": destination.provider,
+                "post_type": destination.post_type,
+            } if destination else {
+                "label": target.get("integration_id", "Former destination"),
+                "platform": target.get("platform"),
+                "provider": target.get("provider"),
+                "post_type": target.get("post_type"),
+            }),
+            "last_error": job.last_error,
+            "created_at": job.created_at,
+            "updated_at": job.updated_at,
+        })
     return {
         "note": note,
         "tracking_code": sample,
         "posts": rendered,
+        "deployed": deployed,
         "problems": sum(1 for item in rendered if item["problem"]),
     }
 
