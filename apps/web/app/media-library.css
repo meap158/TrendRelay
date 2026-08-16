@@ -95,11 +95,23 @@
 /* The one-line clamp above is right for a status line and wrong for a sentence
    explaining why nothing is moving, which is the whole point of showing it. */
 .effect-activity-item-main .effect-activity-note { overflow: visible; white-space: normal; line-height: 1.4; }
+/* Also used on its own in the history dialog, to say what Clear does and does
+   not touch. Same voice either way: a quiet aside under the thing it is about. */
+p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .effect-activity-item-main .ui-button { flex: 0 0 auto; }
+/* Never squeezed: it is the one part of the line that says *when*, and the
+   status text beside it is already allowed to ellipsise. */
+.effect-activity-when { flex: 0 0 auto; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .effect-activity-progress { height: 4px; overflow: hidden; border-radius: 999px; background: var(--line-strong); }
 .effect-activity-progress span { display: block; height: 100%; border-radius: inherit; background: var(--link); transition: width .4s ease-out; }
 .effect-activity-progress.indeterminate span { width: 28%; animation: effect-activity-progress 1.5s ease-in-out infinite; }
 .effect-activity-progress.stalled span { background: var(--paused); }
+/* The way into the full log. Right-aligned and quiet: it is a way out of the
+   panel, not one of the panel's own entries. */
+.effect-activity-foot { display: flex; justify-content: flex-end; }
+/* The dialog holds every entry an asset has, so it scrolls rather than growing
+   past the viewport on a clip that has been re-rendered thirty times. */
+.effect-activity-history { max-height: min(58vh, 460px); overflow-y: auto; padding-inline-end: 2px; }
 .effect-activity-item.muted .effect-activity-item-main > svg { color: var(--muted); }
 .effect-activity-item > p { margin: 0; color: var(--red); font-size: 10px; line-height: 1.4; }
 .effect-activity .is-spinning { animation: effect-activity-spin 1s linear infinite; }

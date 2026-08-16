@@ -9,6 +9,7 @@ from trendrelay_api.jobs import (
     abandon_expired_jobs,
     claim_job,
     claim_next_job,
+    clear_settled_jobs,
     complete_job,
     create_job_record,
     fail_job,
@@ -354,3 +355,72 @@ def test_the_stall_flag_reaches_the_list_the_drawer_reads() -> None:
     )
 
     assert [job["stalled"] for job in listed] == [True]
+
+
+def test_clearing_history_forgets_finished_jobs_only() -> None:
+    """An activity log nobody can empty becomes the panel rather than part of it.
+
+    Work in flight is never deleted: the row is what a worker holds a lease on
+    and the only way an operator can cancel it.
+    """
+    sessions = factory()
+    for job_id in ("edit_done", "edit_running", "edit_queued"):
+        create_job_record(job_id, "workspace-1", "media_effect_render", {}, factory=sessions)
+    # One attempt, so the failure is terminal rather than a requeue.
+    create_job_record(
+        "edit_failed", "workspace-1", "media_effect_render", {},
+        max_attempts=1, factory=sessions,
+    )
+    claim_job("edit_done", "worker", factory=sessions)
+    complete_job("edit_done", "worker", {}, factory=sessions)
+    claim_job("edit_failed", "worker", factory=sessions)
+    fail_job("edit_failed", "worker", "no faces", factory=sessions)
+    claim_job("edit_running", "worker", factory=sessions)
+
+    assert clear_settled_jobs("workspace-1", "media_effect_render", factory=sessions) == 2
+
+    left = list_job_records_including_active(
+        "workspace-1", "media_effect_render", factory=sessions
+    )
+    assert {job["id"] for job in left} == {"edit_running", "edit_queued"}
+
+
+def test_clearing_history_stops_at_the_workspace_and_the_kind() -> None:
+    sessions = factory()
+    for workspace, kind in (
+        ("workspace-1", "media_effect_render"),
+        ("workspace-2", "media_effect_render"),
+        ("workspace-1", "media_face_blur"),
+    ):
+        job_id = f"job_{workspace}_{kind}"
+        create_job_record(job_id, workspace, kind, {}, factory=sessions)
+        claim_job(job_id, "worker", factory=sessions)
+        complete_job(job_id, "worker", {}, factory=sessions)
+
+    assert clear_settled_jobs("workspace-1", "media_effect_render", factory=sessions) == 1
+
+    assert list_job_records("workspace-2", "media_effect_render", factory=sessions)
+    assert list_job_records("workspace-1", "media_face_blur", factory=sessions)
+
+
+def test_keep_spares_the_rows_it_names() -> None:
+    # How one asset's log is cleared without touching the rest of the workspace.
+    sessions = factory()
+    for job_id, asset in (("edit_a", "asset-1"), ("edit_b", "asset-2")):
+        create_job_record(
+            job_id, "workspace-1", "media_effect_render", {"asset_id": asset},
+            factory=sessions,
+        )
+        claim_job(job_id, "worker", factory=sessions)
+        complete_job(job_id, "worker", {}, factory=sessions)
+
+    removed = clear_settled_jobs(
+        "workspace-1",
+        "media_effect_render",
+        keep=lambda item: item.payload.get("asset_id") != "asset-1",
+        factory=sessions,
+    )
+
+    assert removed == 1
+    assert [job["id"] for job in
+            list_job_records("workspace-1", "media_effect_render", factory=sessions)] == ["edit_b"]

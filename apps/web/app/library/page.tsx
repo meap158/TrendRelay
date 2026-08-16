@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CircleAlert, CircleCheck, CirclePause, CircleX, Layers3, LoaderCircle } from "lucide-react";
+import { Check, CircleAlert, CircleCheck, CirclePause, CircleX, Layers3, LoaderCircle, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
@@ -12,6 +12,7 @@ import { useT } from "../i18n-provider";
 import { blurredVersion, handoffPath } from "../../lib/media-rules";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, buttonClass } from "../ui/button";
+import { Dialog } from "../ui/dialog";
 import { ActionIcon, bulkActionIcon } from "../ui/action-icons";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Badge } from "../ui/primitives";
@@ -119,6 +120,36 @@ function isEffectPreviewJob(job: BaseJob): boolean {
   return Boolean(job.raw?.payload?.request?.preview_seconds);
 }
 
+/** An entry that records a removal rather than a render. */
+function isEffectRemovalJob(job: BaseJob): boolean {
+  return job.raw?.payload?.action === "discard";
+}
+
+/**
+ * How long ago, in the coarsest unit that is still true.
+ *
+ * A wall-clock time answers "when" and the question here is "how recently" —
+ * three entries reading 14:02, 14:03 and 14:31 take a subtraction to tell you
+ * what "3m ago, 4m ago, 32m ago" says at a glance. Past a day it flips to a
+ * date, because "9d ago" is the point where counting stops helping.
+ */
+function timeAgo(when: string | null | undefined, now: number): string {
+  if (!when) return "";
+  const then = new Date(when).getTime();
+  if (!Number.isFinite(then)) return "";
+  const seconds = Math.round((now - then) / 1000);
+  if (seconds < 0) return "just now";
+  if (seconds < 45) return "just now";
+  if (seconds < 90) return "1m ago";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days <= 7) return `${days}d ago`;
+  return new Date(when).toLocaleDateString();
+}
+
 type ThumbnailEffectActivity = {
   label: string;
   detail: string;
@@ -169,29 +200,25 @@ function thumbnailEffectActivity(
   };
 }
 
-function EffectActivity({
-  assetId,
-  jobs,
+/** How many entries the inline panel keeps. The rest are one click away. */
+const ACTIVITY_INLINE_LIMIT = 3;
+
+function EffectActivityItem({
+  job,
+  now,
   cancellingJobId,
   onCancel,
 }: {
-  assetId: string;
-  jobs: BaseJob[];
+  job: BaseJob;
+  now: number;
   cancellingJobId: string;
   onCancel: (job: BaseJob) => void;
 }) {
   const t = useT();
-  const matching = jobs.filter((job) =>
-    job.category === "edit"
-    && !isEffectPreviewJob(job)
-    && assetIdForEffectJob(job) === assetId,
-  );
-  const active = matching.filter((job) => ["queued", "running"].includes(job.status));
-  const settled = matching.filter((job) => !["queued", "running"].includes(job.status));
-  const visible = [...active, ...settled.slice(0, 3)];
-  if (!visible.length) return null;
+  const removal = isEffectRemovalJob(job);
+  const working = ["queued", "running"].includes(job.status);
 
-  const statusDetails = (job: BaseJob) => {
+  const status = (() => {
     if (job.status === "queued") return { label: "Waiting", icon: LoaderCircle, tone: "working" };
     // Checked before "running": the row still says running because the worker
     // that would have said otherwise is the one that went away.
@@ -201,10 +228,129 @@ function EffectActivity({
       icon: LoaderCircle,
       tone: "working",
     };
+    if (removal) return { label: "Removed", icon: Undo2, tone: "muted" };
     if (job.status === "succeeded") return { label: "Applied", icon: CircleCheck, tone: "done" };
     if (job.status === "cancelled") return { label: "Cancelled", icon: CircleX, tone: "muted" };
     return { label: "Needs attention", icon: CircleAlert, tone: "failed" };
-  };
+  })();
+  const StatusIcon = status.icon;
+
+  const effectNames = ((job.raw?.payload?.effects ?? []) as string[])
+    .map((id) => effectLabel(t, id, id));
+  const cuts = Number(job.raw?.result?.removed_versions ?? 0);
+  const heading = removal
+    ? `Effects removed${cuts ? ` · ${cuts} cut${cuts === 1 ? "" : "s"}` : ""}`
+    : effectNames.join(" + ") || "Effect stack";
+  const batch = job.raw?.payload?.batch;
+  const progress = typeof job.progress === "number"
+    ? Math.max(0, Math.min(1, job.progress))
+    : null;
+  const when = timeAgo(job.raw?.completed_at ?? job.created_at, now);
+
+  return (
+    <article className={`effect-activity-item ${status.tone}`}>
+      <div className="effect-activity-item-main">
+        <StatusIcon
+          className={job.status === "running" && !job.stalled ? "is-spinning" : ""}
+          size={16}
+          aria-hidden="true"
+        />
+        <div>
+          <strong>{heading}</strong>
+          <small>
+            {status.label}
+            {!removal && job.progressStage ? ` · ${job.progressStage}` : ""}
+            {batch?.total > 1 ? ` · Batch item ${batch.position} of ${batch.total}` : ""}
+          </small>
+          {/* Where it stopped and what happens next, because "Paused" alone
+              leaves somebody watching a bar that will not move. */}
+          {job.stalled && (
+            <small className="effect-activity-note">
+              Stopped at {progress === null ? "an unknown point" : `${Math.round(progress * 100)}%`}.
+              It resumes on its own once a worker is running.
+            </small>
+          )}
+        </div>
+        {/* Its own slot rather than the end of the status line, which is
+            clamped to one line: appended there, the time was the first thing
+            an ellipsis ate. Coarse and relative, because the question a log
+            answers is how recently rather than at what o'clock — the exact
+            time stays on the element for anyone who wants it. */}
+        {when && (
+          <time
+            className="effect-activity-when"
+            dateTime={job.raw?.completed_at ?? job.created_at}
+            title={new Date(job.raw?.completed_at ?? job.created_at).toLocaleString()}
+          >{when}</time>
+        )}
+        {working && (
+          <Button
+            variant="quiet"
+            size="sm"
+            busy={cancellingJobId === job.id}
+            onClick={() => onCancel(job)}
+          >Cancel</Button>
+        )}
+      </div>
+      {working && (
+        <div
+          className={`effect-activity-progress${
+            progress === null && !job.stalled ? " indeterminate" : ""
+          }${job.stalled ? " stalled" : ""}`}
+          role="progressbar"
+          aria-label={`${heading} progress`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={progress === null ? undefined : Math.round(progress * 100)}
+        >
+          <span style={progress === null ? undefined : { width: `${Math.round(progress * 100)}%` }} />
+        </div>
+      )}
+      {job.error && <p role="alert">{job.error}</p>}
+    </article>
+  );
+}
+
+function EffectActivity({
+  assetId,
+  jobs,
+  cancellingJobId,
+  onCancel,
+  onClearHistory,
+  clearing,
+}: {
+  assetId: string;
+  jobs: BaseJob[];
+  cancellingJobId: string;
+  onCancel: (job: BaseJob) => void;
+  onClearHistory: () => void;
+  clearing: boolean;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  // Ticks only while there is a panel to update, and once a minute because
+  // that is the finest unit the wording uses.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const matching = jobs.filter((job) =>
+    job.category === "edit"
+    && !isEffectPreviewJob(job)
+    && assetIdForEffectJob(job) === assetId,
+  );
+  const active = matching.filter((job) => ["queued", "running"].includes(job.status));
+  const settled = matching.filter((job) => !["queued", "running"].includes(job.status));
+  // Everything in flight, always: that is operational state and carries the
+  // Cancel button. History fills whatever room is left, so a quiet asset shows
+  // three entries and a busy one is not truncated to hide its own renders.
+  const visible = [
+    ...active,
+    ...settled.slice(0, Math.max(0, ACTIVITY_INLINE_LIMIT - active.length)),
+  ];
+  if (!matching.length) return null;
+  const hidden = matching.length - visible.length;
 
   return (
     <section className="effect-activity" aria-labelledby={`effect-activity-${assetId}`}>
@@ -216,63 +362,61 @@ function EffectActivity({
         <small>{active.length ? `${active.length} active` : "Recent"}</small>
       </header>
       <div className="effect-activity-list" aria-live="polite">
-        {visible.map((job) => {
-          const status = statusDetails(job);
-          const StatusIcon = status.icon;
-          const effectNames = ((job.raw?.payload?.effects ?? []) as string[])
-            .map((id) => effectLabel(t, id, id));
-          const batch = job.raw?.payload?.batch;
-          const progress = typeof job.progress === "number"
-            ? Math.max(0, Math.min(1, job.progress))
-            : null;
-          return (
-            <article className={`effect-activity-item ${status.tone}`} key={job.id}>
-              <div className="effect-activity-item-main">
-                <StatusIcon className={job.status === "running" && !job.stalled ? "is-spinning" : ""} size={16} aria-hidden="true" />
-                <div>
-                  <strong>{effectNames.join(" + ") || "Effect stack"}</strong>
-                  <small>
-                    {status.label}
-                    {job.progressStage ? ` · ${job.progressStage}` : ""}
-                    {batch?.total > 1 ? ` · Batch item ${batch.position} of ${batch.total}` : ""}
-                  </small>
-                  {/* Where it stopped and what happens next, because "Paused"
-                      alone leaves somebody watching a bar that will not move. */}
-                  {job.stalled && (
-                    <small className="effect-activity-note">
-                      Stopped at {progress === null ? "an unknown point" : `${Math.round(progress * 100)}%`}.
-                      It resumes on its own once a worker is running.
-                    </small>
-                  )}
-                </div>
-                {["queued", "running"].includes(job.status) && (
-                  <Button
-                    variant="quiet"
-                    size="sm"
-                    busy={cancellingJobId === job.id}
-                    onClick={() => onCancel(job)}
-                  >Cancel</Button>
-                )}
-              </div>
-              {["queued", "running"].includes(job.status) && (
-                <div
-                  className={`effect-activity-progress${
-                    progress === null && !job.stalled ? " indeterminate" : ""
-                  }${job.stalled ? " stalled" : ""}`}
-                  role="progressbar"
-                  aria-label={`${effectNames.join(" and ") || "Effect stack"} progress`}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={progress === null ? undefined : Math.round(progress * 100)}
-                >
-                  <span style={progress === null ? undefined : { width: `${Math.round(progress * 100)}%` }} />
-                </div>
-              )}
-              {job.error && <p role="alert">{job.error}</p>}
-            </article>
-          );
-        })}
+        {visible.map((job) => (
+          <EffectActivityItem
+            key={job.id}
+            job={job}
+            now={now}
+            cancellingJobId={cancellingJobId}
+            onCancel={onCancel}
+          />
+        ))}
       </div>
+      {/* Offered whenever there is a history to act on, not only when it
+          overflows: clearing three old entries is the same wish as clearing
+          thirty, and hiding the control until the fourth is arbitrary. */}
+      {Boolean(settled.length) && (
+        <footer className="effect-activity-foot">
+          <Button variant="link" size="sm" onClick={() => setShowAll(true)}>
+            {hidden > 0 ? `View all ${matching.length}` : "View history"}
+          </Button>
+        </footer>
+      )}
+
+      <Dialog
+        open={showAll}
+        title="Effect activity"
+        description="Everything this clip's effects have done, newest first."
+        onClose={() => setShowAll(false)}
+        footer={
+          <Button
+            variant="quiet"
+            size="sm"
+            busy={clearing}
+            disabled={!settled.length}
+            onClick={onClearHistory}
+          >Clear history</Button>
+        }
+      >
+        <div className="effect-activity-list effect-activity-history">
+          {matching.map((job) => (
+            <EffectActivityItem
+              key={job.id}
+              job={job}
+              now={now}
+              cancellingJobId={cancellingJobId}
+              onCancel={onCancel}
+            />
+          ))}
+        </div>
+        {/* Said in the dialog where the button is, rather than in a confirm
+            nobody reads: the distinction that matters is that this deletes the
+            log and not the renders. */}
+        <p className="effect-activity-note">
+          Clearing removes these entries only. The rendered cuts, their recipes and
+          the files on disk are untouched, and anything still running keeps going.
+        </p>
+      </Dialog>
     </section>
   );
 }
@@ -748,6 +892,7 @@ export default function LibraryPage() {
   const [effectsOpen, setEffectsOpen] = useState(false);
   const [batchEffectsOpen, setBatchEffectsOpen] = useState(false);
   const [cancellingEffectJobId, setCancellingEffectJobId] = useState("");
+  const [clearingHistory, setClearingHistory] = useState(false);
 
   const selected = assets.find((asset) => asset.id === selectedId);
   const selectedSourceLinks = selected
@@ -1243,6 +1388,27 @@ export default function LibraryPage() {
     }
   }
 
+  async function clearEffectHistory(assetId: string) {
+    setClearingHistory(true);
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/media/library/effects/jobs/clear`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ asset_id: assetId }),
+        },
+      );
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail ?? "The activity could not be cleared.");
+      await refreshJobs();
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "The activity could not be cleared.");
+    } finally {
+      setClearingHistory(false);
+    }
+  }
+
   async function removeEffects(asset: Asset) {
     if (!window.confirm(
       `Remove every applied effect from "${asset.title}"?\n\n`
@@ -1634,6 +1800,8 @@ export default function LibraryPage() {
                       jobs={notificationJobs}
                       cancellingJobId={cancellingEffectJobId}
                       onCancel={(job) => void cancelEffectJob(job)}
+                      onClearHistory={() => void clearEffectHistory(selected.id)}
+                      clearing={clearingHistory}
                     />
                   </section>
 
