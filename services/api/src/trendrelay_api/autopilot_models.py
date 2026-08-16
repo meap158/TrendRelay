@@ -51,6 +51,13 @@ class CampaignAutopilot(Base):
         CheckConstraint(
             "delivery IN ('draft','schedule','now')", name="valid_autopilot_delivery"
         ),
+        CheckConstraint(
+            "offer_mode IN ('smart','manual','none')", name="valid_autopilot_offer_mode"
+        ),
+        CheckConstraint(
+            "max_products_per_post BETWEEN 1 AND 5",
+            name="valid_autopilot_product_count",
+        ),
     )
 
     id: Mapped[str] = mapped_column(
@@ -70,6 +77,15 @@ class CampaignAutopilot(Base):
     offer_id: Mapped[str | None] = mapped_column(
         ForeignKey("product_offers.id", ondelete="SET NULL"), index=True
     )
+    #: Smart chooses per queue item from campaign/content evidence. Manual uses
+    #: ``offer_id`` everywhere; none leaves posts non-commercial.
+    offer_mode: Mapped[str] = mapped_column(String(16), default="smart", index=True)
+    #: Optional shortlist for smart mode. Empty means every usable workspace
+    #: offer; ids are revalidated at match time, so stale imports are harmless.
+    candidate_offer_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    #: Multiple products are useful on link-friendly networks; bio-only
+    #: networks deliberately receive one primary product per post.
+    max_products_per_post: Mapped[int] = mapped_column(Integer, default=2)
     #: Leads every caption. Required before an offer can be attached; the check
     #: lives in the composer, which refuses rather than posting undisclosed.
     disclosure: Mapped[str] = mapped_column(
@@ -160,6 +176,11 @@ class CampaignQueueItem(Base):
     #: Copy a person wrote. Autopilot never generates it.
     body: Mapped[str] = mapped_column(String(4000))
     hashtags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    #: A human pin. Empty lets smart mode choose from current evidence.
+    offer_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    #: Latest explainable matcher result, shown in Campaigns and retained so a
+    #: later catalog change cannot rewrite why an approved item was promoted.
+    offer_match: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     #: Draft until approved. Autopilot only ever draws approved items and never
     #: approves one itself.
     state: Mapped[str] = mapped_column(String(16), default="draft", index=True)
@@ -176,3 +197,34 @@ class CampaignQueueItem(Base):
     created_by: Mapped[str] = mapped_column(ForeignKey("user_profiles.id"))
     created_at: Mapped[datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(default=utc_now)
+
+
+class CampaignDestinationOfferLink(Base):
+    """One measurable affiliate link for a destination/product pairing."""
+
+    __tablename__ = "campaign_destination_offer_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "destination_id", "offer_id", name="unique_destination_offer_link"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: new_id("destoffer")
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    campaign_id: Mapped[str] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), index=True
+    )
+    destination_id: Mapped[str] = mapped_column(
+        ForeignKey("campaign_destinations.id", ondelete="CASCADE"), index=True
+    )
+    offer_id: Mapped[str] = mapped_column(
+        ForeignKey("product_offers.id", ondelete="CASCADE"), index=True
+    )
+    tracking_link_id: Mapped[str] = mapped_column(
+        ForeignKey("tracking_links.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)

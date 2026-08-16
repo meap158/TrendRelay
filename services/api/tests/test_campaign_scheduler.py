@@ -21,8 +21,9 @@ from trendrelay_api.campaign_scheduler import (
     plan_campaign,
     record_scheduled,
 )
-from trendrelay_api.models import Base, Campaign, PublishingSlot, UserProfile, Workspace
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
+from trendrelay_api.models import Base, Campaign, PublishingSlot, UserProfile, Workspace
+from trendrelay_api.opportunity_models import Product, ProductOffer
 
 # Imported for the side effect of registering every table on `Base.metadata`.
 # Tracking links carry a foreign key to products, so a metadata that has only
@@ -237,6 +238,77 @@ def test_every_scheduled_post_leads_with_the_disclosure(session) -> None:
     assert posts[0].caption.startswith("Affiliate link; we may earn a commission.")
 
 
+def test_multiple_matched_products_become_disclosed_thread_replies(session) -> None:
+    destination(session, "d1", "twitter")
+    slot(session, 12)
+    queue_item(
+        session,
+        "q1",
+        body="Compare an espresso maker with a coffee grinder for better coffee.",
+        hashtags=["espresso", "grinder"],
+    )
+    first = offer(session, "offer-maker", "Espresso maker")
+    second = offer(session, "offer-grinder", "Coffee grinder")
+    pilot = autopilot(session, offer_mode="smart", max_products_per_post=2)
+
+    posts, _ = plan_campaign(
+        session,
+        pilot,
+        now=NOW,
+        link_for=lambda _destination, offer_id: f"https://tr.example/{offer_id}",
+    )
+
+    assert posts[0].offer_ids == (first, second)
+    assert f"https://tr.example/{first}" in posts[0].caption
+    assert len(posts[0].thread) == 1
+    assert f"https://tr.example/{second}" in posts[0].thread[0]
+    assert posts[0].thread[0].startswith(pilot.disclosure)
+
+
+def test_link_friendly_descriptions_can_hold_multiple_products(session) -> None:
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(session, "q1", body="Espresso maker and coffee grinder setup.")
+    first = offer(session, "offer-maker", "Espresso maker")
+    second = offer(session, "offer-grinder", "Coffee grinder")
+
+    posts, _ = plan_campaign(
+        session,
+        autopilot(session, offer_mode="smart", max_products_per_post=2),
+        now=NOW,
+        link_for=lambda _destination, offer_id: f"https://tr.example/{offer_id}",
+    )
+
+    assert posts[0].thread == ()
+    assert all(
+        f"https://tr.example/{offer_id}" in posts[0].caption
+        for offer_id in (first, second)
+    )
+
+
+def test_bio_only_posts_rotate_one_product_instead_of_claiming_many_links(session) -> None:
+    destination(session, "d1", "tiktok")
+    slot(session, 12)
+    slot(session, 18)
+    queue_item(session, "q1", body="Espresso maker and coffee grinder setup.")
+    offer(session, "offer-maker", "Espresso maker")
+    offer(session, "offer-grinder", "Coffee grinder")
+
+    posts, _ = plan_campaign(
+        session,
+        autopilot(session, offer_mode="smart", max_products_per_post=2),
+        now=NOW,
+        link_for=lambda _destination, offer_id: f"https://tr.example/{offer_id}",
+    )
+
+    assert len(posts) == 2
+    assert all(
+        len(post.offer_ids) == 1 and post.placement == "bio" for post in posts
+    )
+    assert posts[0].offer_ids != posts[1].offer_ids
+    assert all("https://tr.example" not in post.caption for post in posts)
+
+
 def test_an_item_posted_recently_to_this_account_is_held_back(session) -> None:
     """Reposting the same clip to the same account too soon is what gets flagged."""
     destination(session, "d1", "youtube")
@@ -380,6 +452,33 @@ def test_a_scheduled_post_uses_the_latest_library_edit(session) -> None:
         effect_ids=["aspect", "face_overlay"],
     ))
     session.commit()
+
+
+def offer(session, identifier: str, name: str, category: str = "Coffee") -> str:
+    product_id = f"product-{identifier}"
+    session.add(Product(
+        id=product_id,
+        workspace_id="ws",
+        catalog_key=f"key-{identifier}",
+        name=name,
+        category=category,
+        marketplace="shop",
+        created_by="user-1",
+    ))
+    session.add(ProductOffer(
+        id=identifier,
+        workspace_id="ws",
+        product_id=product_id,
+        fingerprint=f"fingerprint-{identifier}",
+        network="affiliate",
+        affiliate_url=f"https://merchant.example/{identifier}",
+        currency="USD",
+        availability="available",
+        commission_bps=500,
+        created_by="user-1",
+    ))
+    session.commit()
+    return identifier
     queue_item(session, "q1", asset_id="asset-1", video_path=r"S:\media\original.mp4")
 
     posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)

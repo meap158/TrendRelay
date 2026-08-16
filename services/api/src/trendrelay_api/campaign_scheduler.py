@@ -32,9 +32,10 @@ from trendrelay_api.autopilot_models import (
 from trendrelay_api.campaign_autopilot import (
     DisclosureMissing,
     choose_destination,
-    compose,
+    compose_products,
     rank_destinations,
 )
+from trendrelay_api.campaign_offer_matcher import OfferMatch, chosen_matches
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 from trendrelay_api.models import Campaign, PublishingSlot
 
@@ -64,6 +65,9 @@ class ScheduledPost:
     first_comment: str | None
     placement: str
     reason: str
+    thread: tuple[str, ...] = ()
+    offer_ids: tuple[str, ...] = ()
+    product_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -249,7 +253,7 @@ def plan_campaign(
     autopilot: CampaignAutopilot,
     *,
     now: datetime,
-    link_for: Callable[[str], str | None] | None = None,
+    link_for: Callable[..., str | None] | None = None,
 ) -> tuple[list[ScheduledPost], str]:
     """Work out what one campaign should post next, and why.
 
@@ -308,6 +312,10 @@ def plan_campaign(
     scheduled: list[ScheduledPost] = []
     notes: list[str] = []
     counter = autopilot.posts_scheduled
+    # The same queue item can fill several slots in one horizon. Its content,
+    # campaign context and offer catalogue do not change while this plan is
+    # being assembled, so score it once and reuse the explainable result.
+    match_cache: dict[str, tuple[list[OfferMatch], dict[str, Any]]] = {}
     for moment in upcoming:
         rank = choose_destination(ranks, posts_so_far=counter)
         if rank is None:
@@ -329,17 +337,59 @@ def plan_campaign(
             )
             continue
         item = eligible[0]
+        if item.id not in match_cache:
+            match_cache[item.id] = chosen_matches(
+                session, campaign, autopilot, item, destinations
+            )
+        cached_matches, match_strategy = match_cache[item.id]
+        matched = list(cached_matches)
+        if destination.platform in {"instagram", "tiktok"} and len(matched) > 1:
+            # A bio exposes one destination. Rotate the primary recommendation
+            # across posts rather than pretending several links are behind it.
+            matched = [matched[counter % len(matched)]]
+        product_links: list[tuple[str, str]] = []
+        linked_matches = []
+        if not matched and link_for:
+            # Compatibility for the original scheduler contract: a caller
+            # could provide one already-resolved campaign link without an
+            # offer catalogue. The production callback requires offer_id and
+            # therefore cleanly skips this branch.
+            try:
+                legacy_link = link_for(destination.id)
+            except TypeError:
+                legacy_link = None
+            if legacy_link:
+                product_links.append(("Recommended product", legacy_link))
+        for match in matched:
+            if not link_for:
+                continue
+            try:
+                link = link_for(destination.id, match.offer_id)
+            except TypeError:
+                # Backwards-compatible test/integration callback from the
+                # single-offer scheduler contract.
+                link = link_for(destination.id)
+            if link:
+                product_links.append((match.product_name, link))
+                linked_matches.append(match)
         try:
-            post = compose(
+            post = compose_products(
                 platform=destination.platform,
                 body=item.body,
                 hashtags=list(item.hashtags or []),
-                link=link_for(destination.id) if link_for else None,
-                disclosure=autopilot.disclosure,
+                products=product_links,
+                disclosure=autopilot.disclosure if product_links else "",
                 bio_hint=autopilot.bio_hint,
             )
         except DisclosureMissing as error:
             return [], str(error)
+        match_reason = (
+            "; ".join(
+                f"{match.product_name} {match.score}% ({match.confidence})"
+                for match in linked_matches
+            )
+            or f"No affiliate product attached ({match_strategy['selection']})."
+        )
         scheduled.append(ScheduledPost(
             campaign_id=autopilot.campaign_id,
             destination_id=destination.id,
@@ -352,8 +402,11 @@ def plan_campaign(
             placement=post.placement.placement,
             reason=(
                 f"{'Ranked' if rank.ranked else 'Unranked'}: {rank.reason} "
-                f"{post.placement.reason}"
+                f"{post.placement.reason} Product match: {match_reason}"
             ),
+            thread=post.thread,
+            offer_ids=tuple(match.offer_id for match in linked_matches),
+            product_names=tuple(match.product_name for match in linked_matches),
         ))
         counter += 1
 
@@ -429,6 +482,9 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
         "enabled": autopilot.enabled,
         "delivery": autopilot.delivery,
         "offer_id": autopilot.offer_id,
+        "offer_mode": autopilot.offer_mode,
+        "candidate_offer_ids": autopilot.candidate_offer_ids,
+        "max_products_per_post": autopilot.max_products_per_post,
         "disclosure": autopilot.disclosure,
         "bio_hint": autopilot.bio_hint,
         "min_recycle_days": autopilot.min_recycle_days,

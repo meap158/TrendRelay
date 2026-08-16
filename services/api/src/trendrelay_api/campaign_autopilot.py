@@ -96,6 +96,12 @@ class ComposedPost:
     #: None unless the placement actually puts the link in a comment.
     first_comment: str | None
     placement: LinkPlacement
+    #: Additional products become explicit replies only on networks whose
+    #: publishing contract supports threads. Each reply repeats disclosure.
+    thread: tuple[str, ...] = ()
+
+
+THREAD_LINK_PLATFORMS = frozenset({"twitter", "threads", "mastodon", "bluesky"})
 
 
 class DisclosureMissing(ValueError):
@@ -149,6 +155,89 @@ def compose(
     return ComposedPost(
         caption="\n\n".join(parts),
         first_comment=first_comment,
+        placement=placement,
+    )
+
+
+def compose_products(
+    *,
+    platform: str,
+    body: str,
+    products: list[tuple[str, str]],
+    hashtags: list[str] | None = None,
+    disclosure: str = "",
+    bio_hint: str = "Link in bio",
+) -> ComposedPost:
+    """Compose one post with one or more matched affiliate products.
+
+    Bio-only networks intentionally use one primary product. Thread-capable
+    networks put additional products in disclosed replies; other link-friendly
+    networks keep the small product list in the clickable caption/description.
+    """
+    if not products:
+        return compose(
+            platform=platform,
+            body=body,
+            hashtags=hashtags,
+            disclosure="",
+        )
+    if not disclosure.strip():
+        raise DisclosureMissing(
+            "Affiliate products need a disclosure in the caption and every promotional reply."
+        )
+    primary_name, primary_link = products[0]
+    placement = resolve_placement(platform, has_link=True)
+    root_body = body.strip()
+    thread: list[str] = []
+
+    if placement.placement == "bio":
+        # One profile link can represent one recommendation honestly. The
+        # scheduler rotates other matches into later posts instead of implying
+        # that several distinct product links exist behind one profile URL.
+        return compose(
+            platform=platform,
+            body=root_body,
+            hashtags=hashtags,
+            link=primary_link,
+            disclosure=disclosure,
+            bio_hint=f"{bio_hint}: {primary_name}",
+        )
+
+    if platform in THREAD_LINK_PLATFORMS and len(products) > 1:
+        composed = compose(
+            platform=platform,
+            body=root_body,
+            hashtags=hashtags,
+            link=primary_link,
+            disclosure=disclosure,
+            bio_hint=bio_hint,
+        )
+        for name, link in products[1:]:
+            thread.append(f"{disclosure.strip()}\n\n{name}\n{link}")
+        return ComposedPost(
+            caption=composed.caption,
+            first_comment=composed.first_comment,
+            placement=composed.placement,
+            thread=tuple(thread),
+        )
+
+    if placement.placement == "caption":
+        links = "\n".join(f"{name}: {link}" for name, link in products)
+        parts = [disclosure.strip(), root_body, links]
+        if hashtags:
+            parts.append(" ".join(
+                f"#{tag.lstrip('#')}" for tag in hashtags if tag.strip()
+            ))
+        return ComposedPost(
+            caption="\n\n".join(part for part in parts if part),
+            first_comment=None,
+            placement=placement,
+        )
+
+    # Kept for engines that may gain a safe first-comment placement policy.
+    return ComposedPost(
+        caption="\n\n".join(part for part in (disclosure.strip(), root_body) if part),
+        first_comment="\n".join(f"{name}: {link}" for name, link in products),
         placement=placement,
     )
 

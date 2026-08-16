@@ -55,7 +55,7 @@ def workspace():
     with TestingSession.begin() as session:
         session.add(Product(
             id="prod-1", workspace_id=workspace_id, catalog_key="k", identifier="i",
-            name="Espresso maker", brand="B", category="Kitchen", marketplace="amazon",
+            name="Coffee espresso maker", brand="B", category="Kitchen", marketplace="amazon",
             product_url="https://example.test/p", image_url=None, created_by="owner-user",
         ))
         session.add(ProductOffer(
@@ -131,6 +131,49 @@ def test_settings_round_trip(workspace) -> None:
     assert saved["enabled"] is True
     assert saved["min_recycle_days"] == 14
     assert saved["delivery"] == "schedule"
+    assert saved["offer_mode"] == "manual"
+
+
+def test_smart_offer_settings_round_trip(workspace) -> None:
+    campaign_id = campaign(workspace)
+    response = request(
+        "PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
+        json={
+            "offer_mode": "smart",
+            "candidate_offer_ids": ["offer-1"],
+            "max_products_per_post": 3,
+        },
+    )
+    assert response.status_code == 200, response.text
+    saved = response.json()["autopilot"]
+    assert saved["offer_mode"] == "smart"
+    assert saved["candidate_offer_ids"] == ["offer-1"]
+    assert saved["max_products_per_post"] == 3
+
+
+def test_campaign_recommendations_explain_content_and_delivery_signals(workspace) -> None:
+    campaign_id = campaign(workspace)
+    item = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={
+            "video_path": r"S:\media\espresso.mp4",
+            "title": "Portable coffee setup",
+            "body": "Make espresso anywhere with this compact coffee kit.",
+            "hashtags": ["coffee", "espresso"],
+        },
+    ).json()["item"]
+    response = request(
+        "GET",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/offer-recommendations",
+        params={"item_id": item["id"]},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["matches"][0]["offer_id"] == "offer-1"
+    assert body["matches"][0]["confidence"] in {"medium", "high"}
+    assert "approved post copy" in body["matches"][0]["evidence_sources"]
+    assert body["strategy"]["queue_item_times_posted"] == 0
+    assert "posting_slots" in body["strategy"]
 
 
 def test_a_destination_reports_where_its_link_will_go(workspace) -> None:
@@ -374,6 +417,49 @@ def test_an_autopilot_link_carries_sub_ids_too(workspace) -> None:
         # slots after it do not shift up to close the gap, because a network
         # reads them positionally.
         assert "sub_id2" not in link.sub_ids
+
+
+def test_each_destination_product_pair_keeps_its_own_tracking_link(workspace) -> None:
+    from trendrelay_api.autopilot_models import (
+        CampaignAutopilot,
+        CampaignDestination,
+        CampaignDestinationOfferLink,
+    )
+    from trendrelay_api.campaign_autopilot_api import link_url_for
+
+    campaign_id = campaign(workspace)
+    with TestingSession.begin() as session:
+        session.add(Product(
+            id="prod-2", workspace_id=workspace, catalog_key="k2",
+            name="Coffee grinder", marketplace="amazon", created_by="owner-user",
+        ))
+        session.add(ProductOffer(
+            id="offer-2", workspace_id=workspace, product_id="prod-2",
+            fingerprint="f2", network="amazon", merchant="Amazon",
+            affiliate_url="https://example.test/grinder", currency="USD",
+            availability="available", created_by="owner-user",
+        ))
+    request(
+        "PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
+        json={"offer_mode": "smart", "confirm_external_action": True},
+    )
+    request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/destinations",
+        json={"provider": "buffer", "integration_id": "acct-1",
+              "platform": "youtube", "label": "brand"},
+    )
+
+    with TestingSession.begin() as session:
+        pilot = session.scalars(select(CampaignAutopilot)).one()
+        destination = session.scalars(select(CampaignDestination)).one()
+        first = link_url_for(session, pilot, destination, "offer-1")
+        second = link_url_for(session, pilot, destination, "offer-2")
+        repeated = link_url_for(session, pilot, destination, "offer-1")
+        mappings = session.scalars(select(CampaignDestinationOfferLink)).all()
+
+        assert first and second and first != second
+        assert repeated == first
+        assert {mapping.offer_id for mapping in mappings} == {"offer-1", "offer-2"}
 
 
 def test_a_destination_post_type_is_checked_when_it_is_set(workspace) -> None:

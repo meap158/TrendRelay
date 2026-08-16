@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from secrets import token_urlsafe
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -23,6 +23,7 @@ from trendrelay_api.attribution_models import TrackingLink
 from trendrelay_api.autopilot_models import (
     CampaignAutopilot,
     CampaignDestination,
+    CampaignDestinationOfferLink,
     CampaignQueueItem,
 )
 from trendrelay_api.campaign_autopilot import resolve_placement
@@ -47,6 +48,9 @@ EDITORS = {"owner", "editor", "approver"}
 class AutopilotSettings(BaseModel):
     enabled: bool = False
     offer_id: str | None = Field(default=None, max_length=64)
+    offer_mode: str = Field(default="smart", pattern=r"^(smart|manual|none)$")
+    candidate_offer_ids: list[str] = Field(default_factory=list, max_length=500)
+    max_products_per_post: int = Field(default=2, ge=1, le=5)
     disclosure: str = Field(default="Affiliate link; we may earn a commission.", max_length=500)
     bio_hint: str = Field(default="Link in bio", max_length=120)
     min_recycle_days: int = Field(default=30, ge=1, le=365)
@@ -71,12 +75,14 @@ class QueueItemCreate(BaseModel):
     asset_id: str | None = Field(default=None, max_length=64)
     title: str | None = Field(default=None, max_length=200)
     hashtags: list[str] = Field(default_factory=list, max_length=30)
+    offer_ids: list[str] = Field(default_factory=list, max_length=5)
 
 
 class QueueItemUpdate(BaseModel):
     state: str | None = Field(default=None, pattern=r"^(draft|approved|paused|retired)$")
     body: str | None = Field(default=None, min_length=1, max_length=4000)
     hashtags: list[str] | None = Field(default=None, max_length=30)
+    offer_ids: list[str] | None = Field(default=None, max_length=5)
 
 
 def _campaign(session: Session, workspace_id: str, campaign_id: str) -> Campaign:
@@ -134,6 +140,8 @@ def _queue_view(item: CampaignQueueItem) -> dict[str, Any]:
         "title": item.title,
         "body": item.body,
         "hashtags": item.hashtags,
+        "offer_ids": item.offer_ids,
+        "offer_match": item.offer_match,
         "state": item.state,
         "position": item.position,
         "times_posted": item.times_posted,
@@ -141,21 +149,35 @@ def _queue_view(item: CampaignQueueItem) -> dict[str, Any]:
     }
 
 
-def link_url_for(session: Session, autopilot: CampaignAutopilot,
-                 destination: CampaignDestination) -> str | None:
+def link_url_for(
+    session: Session,
+    autopilot: CampaignAutopilot,
+    destination: CampaignDestination,
+    offer_id: str | None = None,
+) -> str | None:
     """This destination's tracking code, minting one the first time it is needed.
 
     One link per destination, reused. A fresh link per post would scatter the
     clicks for one account across dozens of codes and make the account
     unmeasurable, which is the opposite of the point.
     """
-    if not autopilot.offer_id:
+    selected_offer_id = offer_id or autopilot.offer_id
+    if not selected_offer_id:
         return None
-    if destination.tracking_link_id:
-        link = session.get(TrackingLink, destination.tracking_link_id)
+    mapped = session.scalar(select(CampaignDestinationOfferLink).where(
+        CampaignDestinationOfferLink.destination_id == destination.id,
+        CampaignDestinationOfferLink.offer_id == selected_offer_id,
+    ))
+    if mapped:
+        link = session.get(TrackingLink, mapped.tracking_link_id)
         if link:
             return link.code
-    offer = session.get(ProductOffer, autopilot.offer_id)
+    # Preserve links minted before per-product destination mappings existed.
+    if destination.tracking_link_id:
+        link = session.get(TrackingLink, destination.tracking_link_id)
+        if link and link.offer_id == selected_offer_id:
+            return link.code
+    offer = session.get(ProductOffer, selected_offer_id)
     if not offer:
         return None
     try:
@@ -202,7 +224,15 @@ def link_url_for(session: Session, autopilot: CampaignAutopilot,
     )
     session.add(link)
     session.flush()
-    destination.tracking_link_id = link.id
+    session.add(CampaignDestinationOfferLink(
+        workspace_id=autopilot.workspace_id,
+        campaign_id=autopilot.campaign_id,
+        destination_id=destination.id,
+        offer_id=offer.id,
+        tracking_link_id=link.id,
+    ))
+    if offer.id == autopilot.offer_id and not destination.tracking_link_id:
+        destination.tracking_link_id = link.id
     return link.code
 
 
@@ -249,7 +279,7 @@ def save_autopilot(
             status_code=400,
             detail="Switching autopilot on posts to live accounts and needs confirmation.",
         )
-    if body.offer_id and not body.disclosure.strip():
+    if body.offer_mode != "none" and not body.disclosure.strip():
         # Refused here as well as in the composer. A setting that cannot produce
         # a legal post should not be storable.
         raise HTTPException(
@@ -265,9 +295,28 @@ def save_autopilot(
         )
         if not offer:
             raise HTTPException(status_code=404, detail="Affiliate offer not found.")
+    candidate_ids = list(dict.fromkeys(body.candidate_offer_ids))
+    if candidate_ids:
+        found = set(session.scalars(select(ProductOffer.id).where(
+            ProductOffer.workspace_id == workspace_id,
+            ProductOffer.id.in_(candidate_ids),
+        )).all())
+        missing = [offer_id for offer_id in candidate_ids if offer_id not in found]
+        if missing:
+            raise HTTPException(
+                status_code=404,
+                detail="One or more shortlisted offers were not found.",
+            )
 
     autopilot.enabled = body.enabled
     autopilot.offer_id = body.offer_id
+    autopilot.offer_mode = (
+        "manual"
+        if body.offer_id and "offer_mode" not in body.model_fields_set
+        else body.offer_mode
+    )
+    autopilot.candidate_offer_ids = candidate_ids
+    autopilot.max_products_per_post = body.max_products_per_post
     autopilot.disclosure = body.disclosure.strip()
     autopilot.bio_hint = body.bio_hint.strip() or "Link in bio"
     autopilot.min_recycle_days = body.min_recycle_days
@@ -277,7 +326,14 @@ def save_autopilot(
     audit(
         session, request, workspace_id, user.id,
         "campaign.autopilot_saved", "campaign", campaign_id,
-        {"enabled": body.enabled, "delivery": body.delivery, "offer_id": body.offer_id},
+        {
+            "enabled": body.enabled,
+            "delivery": body.delivery,
+            "offer_id": body.offer_id,
+            "offer_mode": body.offer_mode,
+            "candidate_offers": len(candidate_ids),
+            "max_products_per_post": body.max_products_per_post,
+        },
     )
     return {"autopilot": campaign_status(session, autopilot)}
 
@@ -377,10 +433,12 @@ def add_queue_item(
             CampaignQueueItem.campaign_id == campaign_id
         )
     ) or 0
+    _require_offer_ids(session, workspace_id, body.offer_ids)
     item = CampaignQueueItem(
         workspace_id=workspace_id, campaign_id=campaign_id, asset_id=body.asset_id,
         video_path=body.video_path, title=body.title, body=body.body,
         hashtags=[tag.strip().lstrip("#") for tag in body.hashtags if tag.strip()],
+        offer_ids=list(dict.fromkeys(body.offer_ids)), offer_match={},
         # Added as a draft, always. Nothing enters the rotation because a form
         # was submitted.
         state="draft", position=last + 1, last_posted_by_destination={},
@@ -388,6 +446,7 @@ def add_queue_item(
     )
     session.add(item)
     session.flush()
+    _refresh_item_match(session, campaign_id, item)
     return {"item": _queue_view(item)}
 
 
@@ -422,8 +481,101 @@ def update_queue_item(
         item.body = body.body
     if body.hashtags is not None:
         item.hashtags = [tag.strip().lstrip("#") for tag in body.hashtags if tag.strip()]
+    if body.offer_ids is not None:
+        _require_offer_ids(session, workspace_id, body.offer_ids)
+        item.offer_ids = list(dict.fromkeys(body.offer_ids))
+    if body.body is not None or body.hashtags is not None or body.offer_ids is not None:
+        _refresh_item_match(session, campaign_id, item)
     item.updated_at = datetime.now(UTC)
     return {"item": _queue_view(item)}
+
+
+def _refresh_item_match(
+    session: Session, campaign_id: str, item: CampaignQueueItem
+) -> None:
+    """Persist the current explainable result beside an approved queue item."""
+    from trendrelay_api.campaign_offer_matcher import match_offers
+
+    campaign = session.get(Campaign, campaign_id)
+    autopilot = session.scalar(select(CampaignAutopilot).where(
+        CampaignAutopilot.campaign_id == campaign_id
+    ))
+    if not campaign or not autopilot:
+        return
+    destinations = session.scalars(select(CampaignDestination).where(
+        CampaignDestination.campaign_id == campaign_id,
+        CampaignDestination.enabled.is_(True),
+    )).all()
+    matches, strategy = match_offers(
+        session, campaign, autopilot, item=item, destinations=destinations, limit=8
+    )
+    item.offer_match = {
+        "matches": [match.view() for match in matches],
+        "strategy": strategy,
+        "selected_offer_ids": list(item.offer_ids or []),
+        "generated_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _require_offer_ids(
+    session: Session, workspace_id: str, offer_ids: list[str]
+) -> None:
+    wanted = list(dict.fromkeys(offer_ids))
+    if not wanted:
+        return
+    found = set(session.scalars(select(ProductOffer.id).where(
+        ProductOffer.workspace_id == workspace_id,
+        ProductOffer.id.in_(wanted),
+        ProductOffer.availability != "unavailable",
+    )).all())
+    if len(found) != len(wanted):
+        raise HTTPException(
+            status_code=422,
+            detail="Every pinned product must be a usable offer in this workspace.",
+        )
+
+
+@router.get("/{campaign_id}/offer-recommendations")
+def offer_recommendations(
+    workspace_id: str,
+    campaign_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    item_id: str | None = None,
+    limit: int = Query(default=12, ge=1, le=50),
+) -> dict[str, Any]:
+    """Explain which imported products fit this campaign or one queued post."""
+    membership(session, workspace_id, user.id)
+    campaign = _campaign(session, workspace_id, campaign_id)
+    autopilot = _autopilot(session, workspace_id, campaign_id, user_id=user.id)
+    item = None
+    if item_id:
+        item = session.scalar(select(CampaignQueueItem).where(
+            CampaignQueueItem.id == item_id,
+            CampaignQueueItem.campaign_id == campaign_id,
+            CampaignQueueItem.workspace_id == workspace_id,
+        ))
+        if not item:
+            raise HTTPException(status_code=404, detail="Campaign queue item not found.")
+    destinations = session.scalars(select(CampaignDestination).where(
+        CampaignDestination.campaign_id == campaign_id,
+        CampaignDestination.enabled.is_(True),
+    )).all()
+    from trendrelay_api.campaign_offer_matcher import match_offers
+
+    matches, strategy = match_offers(
+        session,
+        campaign,
+        autopilot,
+        item=item,
+        destinations=destinations,
+        limit=limit,
+    )
+    return {
+        "item_id": item.id if item else None,
+        "matches": [match.view() for match in matches],
+        "strategy": strategy,
+    }
 
 
 @router.delete("/{campaign_id}/queue/{item_id}")
@@ -514,16 +666,20 @@ def preview_autopilot(
     # A preview never mints a link: it would leave real tracking codes behind
     # for a post nobody agreed to send.
     sample = None
-    if autopilot.offer_id and destinations:
+    if destinations:
         existing = next(
             (item for item in destinations if item.tracking_link_id), None
         )
         link = session.get(TrackingLink, existing.tracking_link_id) if existing else None
         sample = link.code if link else "not yet created"
-    preview_link = _public_url(sample) if sample and sample != "not yet created" else None
+    preview_link = (
+        _public_url(sample)
+        if sample and sample != "not yet created"
+        else "https://preview.invalid/affiliate-link"
+    )
     posts, note = plan_campaign(
         session, autopilot, now=datetime.now(UTC),
-        link_for=(lambda _id: preview_link) if preview_link else None,
+        link_for=lambda _destination_id, offer_id: f"{preview_link}/{offer_id}",
     )
     by_id = {item.id: item for item in destinations}
     rendered = []
@@ -535,7 +691,10 @@ def preview_autopilot(
             "at": post.at,
             "caption": post.caption,
             "first_comment": post.first_comment,
+            "thread": list(post.thread),
             "placement": post.placement,
+            "offer_ids": list(post.offer_ids),
+            "products": list(post.product_names),
             "reason": post.reason,
             # The engine's verdict, not ours. A preview that says "this is what
             # will post" without checking is a promise it has not kept.

@@ -30,6 +30,7 @@ def _publish(session: Session, autopilot: CampaignAutopilot, post: Any,
         # it as a separate field rather than reading the first caption line.
         title=post.title,
         first_comment=post.first_comment,
+        thread=list(post.thread),
         date=post.at,
         delivery=autopilot.delivery,
         schedule=autopilot.delivery == "schedule",
@@ -63,7 +64,7 @@ def run_campaign(
         ).all()
     }
 
-    def link_for(destination_id: str) -> str | None:
+    def link_for(destination_id: str, offer_id: str) -> str | None:
         """This destination's own code, minted on first use.
 
         Asked per destination rather than once for the campaign: every account
@@ -73,7 +74,7 @@ def run_campaign(
         destination = destinations.get(destination_id)
         if not destination:
             return None
-        code = link_url_for(session, autopilot, destination)
+        code = link_url_for(session, autopilot, destination, offer_id)
         return _public_url(code) if code else None
 
     posts, note = plan_campaign(session, autopilot, now=moment, link_for=link_for)
@@ -92,6 +93,8 @@ def run_campaign(
                 "destination_id": destination.id,
                 "at": post.at,
                 "placement": post.placement,
+                "offer_ids": list(post.offer_ids),
+                "products": list(post.product_names),
                 "reason": post.reason,
             })
         except Exception as error:
