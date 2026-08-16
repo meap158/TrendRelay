@@ -1501,7 +1501,7 @@ export default function ResearchDashboard() {
       <details className="discovery-source-boards">
         <summary>
           <span>
-            <strong>Break it down by source</strong>
+            <strong>Dig into the evidence</strong>
             <small>Trend shapes over time, engagement ranking, and research jobs</small>
           </span>
           <ChevronDown size={18} aria-hidden="true" />

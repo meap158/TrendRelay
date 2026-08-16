@@ -68,7 +68,14 @@ export function CampaignIdeaComposer({
 
   return (
     <>
-      <aside className="discovery-idea-tray" aria-label="Selected campaign inspiration">
+      {/* Named so the feed above can point at it. That link is the only
+          feedback "Use" gets: this tray sits below the list and does not
+          exist at all until something is in it. */}
+      <aside
+        id="discovery-idea-composer"
+        className="discovery-idea-tray"
+        aria-label="Selected campaign inspiration"
+      >
         <span className="discovery-idea-count">
           <Lightbulb size={16} aria-hidden="true" />
           <strong>{seeds.length} selected</strong>

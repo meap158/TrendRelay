@@ -113,6 +113,10 @@
 .discovery-feed-actions { display: flex; align-items: center; gap: 6px; }
 .discovery-feed-actions a { display: inline-flex; color: var(--muted); }
 .discovery-feed-actions a:hover { color: var(--link); }
+.discovery-feed-picked { margin: 12px 0 0; padding: 8px 11px; border: 1px solid var(--link); border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--text); font-size: 12px; }
+.discovery-feed-picked a { color: var(--link); font-weight: 600; }
+.discovery-feed-more { display: block; width: 100%; margin: 8px 0 0; padding: 9px; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: none; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.discovery-feed-more:hover { border-color: var(--link); color: var(--link); }
 .discovery-feed-error { margin: 12px 0 0; color: var(--danger, #b42318); font-size: 13px; }
 .discovery-feed-empty { margin: 14px 0 0; color: var(--muted); font-size: 13px; }
 /* Under the list, not above it: these qualify what was just read, and opening

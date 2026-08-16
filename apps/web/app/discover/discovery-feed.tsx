@@ -70,6 +70,9 @@ function label(source: string): string {
   return SOURCE_LABELS[source] ?? source;
 }
 
+/** How many rows show before asking. See `visible` for why there is a limit. */
+const PREVIEW_ROWS = 18;
+
 type Loaded = {
   rows: FeedRow[];
   /** Kept beside the rows: a partial answer that looks whole is the failure. */
@@ -102,6 +105,7 @@ export function DiscoveryFeed({
       typeof value === "object" && value !== null && Array.isArray((value as Loaded).rows),
   );
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -164,6 +168,17 @@ export function DiscoveryFeed({
   const shown = useMemo(
     () => mergeFeed(rows.filter((row) => !hidden.has(row.source))),
     [rows, hidden],
+  );
+  // Deep enough to cover every source's first few, short enough that the panel
+  // below it is still on the same screen. Sixty rows unbroken is a wall, and
+  // it pushed the composer that receives these picks off the page entirely.
+  const visible = expanded ? shown : shown.slice(0, PREVIEW_ROWS);
+  const picked = useMemo(
+    () => shown.filter((row) => {
+      const seed = loaded?.seeds[row.key];
+      return Boolean(seed && selectedIds?.has(seed.id));
+    }).length,
+    [shown, loaded, selectedIds],
   );
 
   function toggleSource(source: string) {
@@ -234,8 +249,18 @@ export function DiscoveryFeed({
 
       {error && <p className="discovery-feed-error">{error}</p>}
 
+      {/* The picks land in a composer further down the page. Saying so here is
+          the only feedback a click on "Use" gets, since that panel is below the
+          fold and only exists once something is in it. */}
+      {picked > 0 && (
+        <p className="discovery-feed-picked">
+          <strong>{picked}</strong> selected from this list —{" "}
+          <a href="#discovery-idea-composer">go to the idea builder</a>
+        </p>
+      )}
+
       <ol className="discovery-feed-rows">
-        {shown.map((row) => {
+        {visible.map((row) => {
           const seed = loaded?.seeds[row.key];
           const picked = Boolean(seed && selectedIds?.has(seed.id));
           return (
@@ -282,6 +307,18 @@ export function DiscoveryFeed({
           );
         })}
       </ol>
+
+      {shown.length > PREVIEW_ROWS && (
+        <button
+          type="button"
+          className="discovery-feed-more"
+          onClick={() => setExpanded((open) => !open)}
+        >
+          {expanded
+            ? `Show the top ${PREVIEW_ROWS}`
+            : `Show all ${shown.length} rows`}
+        </button>
+      )}
 
       {!shown.length && !busy && !error && (
         <p className="discovery-feed-empty">
