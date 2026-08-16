@@ -95,6 +95,9 @@ export function CaptionEditor({
   const [preview, setPreview] = useState<Preview | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [delivery, setDelivery] = useState("sidecar");
+  const [queued, setQueued] = useState<string | null>(null);
+  const [rendering, setRendering] = useState(false);
   // A preview asked for after a newer one must not overwrite it: the requests
   // are independent and the slower one can land last.
   const latest = useRef(0);
@@ -153,6 +156,42 @@ export function CaptionEditor({
     queueMicrotask(() => void load());
   }, [load]);
 
+  const render = useCallback(async () => {
+    setRendering(true);
+    setQueued(null);
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/media/library/assets/${assetId}/captions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            style_id: styleId,
+            translate_to: translateTo || null,
+            delivery,
+          }),
+        },
+      );
+      const body = await response.json();
+      if (!response.ok) {
+        setProblem(typeof body?.detail === "string" ? body.detail : "That did not work.");
+        return;
+      }
+      setProblem(null);
+      // Burning re-encodes every frame, so the honest answer is that it has
+      // been queued rather than that it is done.
+      setQueued(
+        delivery === "sidecar"
+          ? "Subtitle files are being written."
+          : "Queued. The captioned cut appears here when the render finishes.",
+      );
+    } catch {
+      setProblem("The render could not be queued.");
+    } finally {
+      setRendering(false);
+    }
+  }, [workspaceId, assetId, styleId, translateTo, delivery, apiFetch]);
+
   const chosen = catalogue?.styles.find((item) => item.id === styleId);
   const pairs = catalogue?.translation.pairs ?? [];
   const speechReady = catalogue?.speech.ready ?? false;
@@ -169,18 +208,32 @@ export function CaptionEditor({
           <Button variant="secondary" onClick={onClose}>
             Close
           </Button>
+          {/* The delivery choice sits with the button that acts on it, because
+              it changes what that button costs: sidecars are a kilobyte,
+              burning in re-encodes every frame. */}
+          <label className="caption-delivery">
+            <span>Deliver</span>
+            <select
+              value={delivery}
+              onChange={(event) => setDelivery(event.target.value)}
+            >
+              <option value="sidecar">Subtitle files only</option>
+              <option value="burned">Burned into the video</option>
+              <option value="both">Both</option>
+            </select>
+          </label>
           <Button
             variant="primary"
             disabled={!canEdit || !preview}
-            busy={busy}
+            busy={rendering}
             title={
               canEdit
-                ? "Rebuild the track from the current transcript"
+                ? "Write the subtitle files, and encode a captioned cut if asked for"
                 : "You do not have permission to render here"
             }
-            onClick={() => void load()}
+            onClick={() => void render()}
           >
-            Refresh preview
+            Create captions
           </Button>
         </>
       }
@@ -255,6 +308,7 @@ export function CaptionEditor({
             )}
           </h4>
           {problem && <p className="caption-editor-problem">{problem}</p>}
+          {queued && <p className="caption-editor-queued">{queued}</p>}
           {busy && !preview && <p className="caption-editor-note">Building…</p>}
           {preview && (
             <ol className="caption-cue-list">

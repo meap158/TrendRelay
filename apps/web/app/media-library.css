@@ -572,3 +572,6 @@
   .caption-cue-list li { grid-template-columns: 42px minmax(0, 1fr); }
   .caption-cue-cps { display: none; }
 }
+.caption-delivery { display: inline-flex; align-items: center; gap: 7px; margin-inline-end: auto; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.caption-delivery select { padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--ink); font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.caption-editor-queued { margin: 0 0 8px; color: var(--link); font-size: 12px; }
