@@ -656,7 +656,8 @@ export const vi: Messages = {
       money: "Tiền",
       imports: "Nhập dữ liệu",
     },
-    productsEyebrow: "Tất cả trên một hàng",
+    productsEyebrow: "Danh mục tiếp thị liên kết",
+    noProductMatches: "Không có sản phẩm nào khớp với tìm kiếm này.",
     products: "Sản phẩm",
     productCount: "{count} sản phẩm",
     noProducts:
@@ -666,7 +667,7 @@ export const vi: Messages = {
     price: "Giá",
     rate: "Tỉ lệ",
     offers: "Ưu đãi",
-    links: "Liên kết",
+    links: "Liên kết đăng bài",
     whereItGoes: "Dẫn đến đâu",
     openShopeeProduct: "Mở trên Shopee ↗",
     shopee: {

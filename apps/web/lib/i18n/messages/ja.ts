@@ -656,7 +656,8 @@ export const ja: Messages = {
       money: "収益",
       imports: "インポート",
     },
-    productsEyebrow: "すべてを一行に",
+    productsEyebrow: "アフィリエイトカタログ",
+    noProductMatches: "この検索に一致する商品はありません。",
     products: "商品",
     productCount: "{count}件の商品",
     noProducts:
@@ -666,7 +667,7 @@ export const ja: Messages = {
     price: "価格",
     rate: "料率",
     offers: "案件",
-    links: "リンク",
+    links: "公開リンク",
     whereItGoes: "リンク先",
    openShopeeProduct: "Shopeeで開く ↗",
     shopee: {

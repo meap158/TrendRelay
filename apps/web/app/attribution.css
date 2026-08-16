@@ -10,10 +10,8 @@
 .attribution-import-outcome { margin-block-start: 12px; padding-block-start: 12px; border-block-start: 1px solid var(--line); font-size: 13px; }
 .attribution-import-problems { margin: 8px 0 0; padding-inline-start: 18px; color: var(--warn, #9a6700); font-size: 12px; }
 .attribution-import-problems li { margin-block: 2px; }
-/* Above the table it filters, full width, because an import brings in a batch
-   at a time and a list that can only be scrolled stops being usable at about
-   the second one. */
-.product-search { inline-size: 100%; margin-block-end: 12px; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font: inherit; font-size: 13px; }
+/* The flexible half of the stable table toolbar. */
+.product-search { min-inline-size: 220px; flex: 1 1 360px; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font: inherit; font-size: 13px; }
 /* A footnote that folds. True, occasionally decisive, and not worth a panel on
    every visit. */
 .attribution-limits { margin-block-start: 12px; color: var(--muted); font-size: 12px; }
@@ -174,16 +172,24 @@
 .attribution-provider-dot { inline-size: 7px; block-size: 7px; border-radius: 999px; background: var(--line-strong); }
 .attribution-provider[data-connected] .attribution-provider-dot { background: var(--green); }
 
-/* Selection, and the bar that counts it.
-   Shopee's offer page shows "0 / 100" beside a bulk action while you pick,
-   rather than refusing the hundred-and-first without explanation. The count
-   leads for the same reason: the limit is the thing you need to see. */
-.product-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-block-end: 10px; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); font-size: 12px; }
-.product-bulk strong { font-variant-numeric: tabular-nums; }
-.product-bulk span { color: var(--muted); margin-inline-end: auto; }
-.product-bulk button { padding: 5px 10px; font-size: 11px; }
+/* Search and bulk actions share one toolbar so selection never inserts a new
+   row or moves the table. The selection controls remain visible but disabled
+   at zero: their location and the 100-item boundary are always predictable. */
+.product-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-block-end: 12px; }
+.product-toolbar + .catalog-table-scroll { margin-top: 0; }
+.product-bulk { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; min-block-size: 34px; padding-inline-start: 12px; border-inline-start: 1px solid var(--line); font-size: 12px; }
+.product-bulk-count { display: inline-flex; align-items: baseline; gap: 3px; min-inline-size: 92px; color: var(--muted); white-space: nowrap; }
+.product-bulk-count strong { color: var(--text); font-size: 14px; font-variant-numeric: tabular-nums; }
+.product-bulk[data-active] .product-bulk-count strong { color: var(--link); }
 .product-choose { inline-size: 34px; text-align: center; }
 .product-table tr[data-chosen] { background: var(--panel-raised); }
+
+@media (max-width: 700px) {
+  .product-toolbar { align-items: stretch; }
+  .product-search { flex-basis: 100%; }
+  .product-bulk { inline-size: 100%; padding: 8px 0 0; border-inline-start: 0; border-block-start: 1px solid var(--line); }
+  .product-bulk-count { margin-inline-end: auto; }
+}
 
 /* The picture, which is what the offer page leads every card with: a product
    is recognised by sight before its name is read. The empty box keeps the
@@ -194,6 +200,10 @@
 .catalog-work-toggle { display: flex; align-items: center; gap: 9px; text-align: start; }
 .product-named { display: grid; gap: 2px; min-width: 0; }
 .product-named > span { overflow: hidden; text-overflow: ellipsis; }
+.product-disclosure { margin-inline-start: auto; color: var(--muted); font-size: 18px; font-weight: 400; line-height: 1; transition: transform 140ms ease, color 140ms ease; }
+.catalog-work-toggle:hover .product-disclosure { color: var(--link); }
+.product-disclosure[data-open] { transform: rotate(90deg); color: var(--link); }
+.product-no-results { padding-block: 36px !important; color: var(--muted); text-align: center !important; }
 
 /* The two readings of the offer page, side by side, with one line of state
    under the pair rather than the same sentence under each. */

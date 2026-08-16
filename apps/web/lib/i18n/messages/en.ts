@@ -660,7 +660,8 @@ export const en = {
       money: "Money",
       imports: "Imports",
     },
-    productsEyebrow: "Everything on one row",
+    productsEyebrow: "Affiliate catalog",
+    noProductMatches: "No products match this search.",
     products: "Products",
     productCount: "{count, plural, one {# product} other {# products}}",
     noProducts:
@@ -670,7 +671,7 @@ export const en = {
     price: "Price",
     rate: "Rate",
     offers: "Offers",
-    links: "Links",
+    links: "Publish links",
     whereItGoes: "Where it goes",
     openShopeeProduct: "Open on Shopee ↗",
     shopee: {

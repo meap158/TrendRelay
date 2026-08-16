@@ -643,7 +643,8 @@ export const zh: Messages = {
       money: "收入",
       imports: "导入",
     },
-    productsEyebrow: "一行看全",
+    productsEyebrow: "联盟商品目录",
+    noProductMatches: "没有与此搜索匹配的商品。",
     products: "商品",
     productCount: "{count} 个商品",
     noProducts:
@@ -653,7 +654,7 @@ export const zh: Messages = {
     price: "价格",
     rate: "佣金率",
     offers: "优惠",
-    links: "链接",
+    links: "发布链接",
     whereItGoes: "跳转去向",
    openShopeeProduct: "在 Shopee 打开 ↗",
     shopee: {

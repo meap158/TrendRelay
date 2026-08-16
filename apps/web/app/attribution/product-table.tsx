@@ -98,6 +98,11 @@ export function ProductTable({
    */
   const SELECTION_LIMIT = 100;
   const atLimit = picked.size >= SELECTION_LIMIT;
+  const selectableShown = shown.slice(0, SELECTION_LIMIT);
+  const shownSelectedCount = selectableShown.reduce(
+    (count, row) => count + (picked.has(row.id) ? 1 : 0),
+    0,
+  );
 
   function choose(id: string) {
     setPicked((current) => {
@@ -133,35 +138,46 @@ export function ProductTable({
   return (
     <Card
       eyebrow={t("attribution.productsEyebrow")}
-      title={t("attribution.productCount", { count: products.length })}
+      title={t("attribution.productCount", {
+        count: query.trim() ? shown.length : products.length,
+      })}
     >
-      <input
-        type="search"
-        className="product-search"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder={t("attribution.searchProducts")}
-        aria-label={t("attribution.searchProducts")}
-      />
-      {/* Present only once something is chosen. A bar that is always there
-          takes a row of the screen to say nothing, which is the opposite of
-          what it is for. */}
-      {picked.size > 0 && (
-        <div className="product-bulk">
-          <strong>{picked.size} / {SELECTION_LIMIT}</strong>
-          <span>{t("attribution.selected")}</span>
-          {/* Resolved by the page, which holds the tracking links: a product
-              row carries its codes, not the public URL those codes resolve to,
-              and building that URL here would be a second place that has to
-              agree about it. */}
-          <button type="button" onClick={() => onCopySelected?.([...picked])}>
-            {t("attribution.copyLinks")}
-          </button>
-          <button type="button" onClick={() => chooseShown(false)}>
+      {/* Search and selection are one stable toolbar. Selecting a row changes
+          state inside this slot instead of inserting another row and pushing
+          the whole table down. */}
+      <div className="product-toolbar">
+        <input
+          type="search"
+          className="product-search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={t("attribution.searchProducts")}
+          aria-label={t("attribution.searchProducts")}
+        />
+        <div className="product-bulk" data-active={picked.size > 0 || undefined}>
+          <span className="product-bulk-count" aria-live="polite">
+            <strong>{picked.size}</strong>
+            <span>/ {SELECTION_LIMIT} {t("attribution.selected")}</span>
+          </span>
+          {/* Resolved by the page, which holds the public URLs. */}
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={picked.size === 0}
+            onClick={() => onCopySelected?.([...picked])}
+          >
+            <ActionIcon name="copy" /> {t("attribution.copyLinks")}
+          </Button>
+          <Button
+            variant="quiet"
+            size="sm"
+            disabled={picked.size === 0}
+            onClick={() => chooseShown(false)}
+          >
             {t("attribution.clearSelection")}
-          </button>
+          </Button>
         </div>
-      )}
+      </div>
       <div className="catalog-table-scroll">
         <table className="catalog-table product-table">
           <thead>
@@ -170,7 +186,8 @@ export function ProductTable({
                 <input
                   type="checkbox"
                   aria-label={t("attribution.selectAll")}
-                  checked={picked.size > 0 && picked.size >= Math.min(shown.length, SELECTION_LIMIT)}
+                  checked={selectableShown.length > 0 && shownSelectedCount === selectableShown.length}
+                  disabled={selectableShown.length === 0}
                   onChange={(event) => chooseShown(event.target.checked)}
                 />
               </th>
@@ -228,6 +245,11 @@ export function ProductTable({
                           {product.product_form && ` (${product.product_form})`}
                         </small>
                       </span>
+                      <span
+                        className="product-disclosure"
+                        data-open={open || undefined}
+                        aria-hidden="true"
+                      >›</span>
                     </button>
                   </th>
                   {/* Shown only when one offer answers for the product. With
@@ -367,6 +389,13 @@ export function ProductTable({
                 ),
               ];
             })}
+            {shown.length === 0 && (
+              <tr>
+                <td className="product-no-results" colSpan={8}>
+                  {t("attribution.noProductMatches")}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

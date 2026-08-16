@@ -663,7 +663,8 @@ export const ru: Messages = {
       money: "Деньги",
       imports: "Импорт",
     },
-    productsEyebrow: "Всё в одной строке",
+    productsEyebrow: "Партнёрский каталог",
+    noProductMatches: "По этому запросу товары не найдены.",
     products: "Товары",
     productCount:
       "{count, plural, one {# товар} few {# товара} many {# товаров} other {# товара}}",
@@ -674,7 +675,7 @@ export const ru: Messages = {
     price: "Цена",
     rate: "Ставка",
     offers: "Предложения",
-    links: "Ссылки",
+    links: "Ссылки для публикации",
     whereItGoes: "Куда ведёт",
    openShopeeProduct: "Открыть в Shopee ↗",
     shopee: {

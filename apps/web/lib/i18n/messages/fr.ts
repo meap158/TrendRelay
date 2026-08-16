@@ -665,7 +665,8 @@ export const fr: Messages = {
       money: "Argent",
       imports: "Imports",
     },
-    productsEyebrow: "Tout sur une seule ligne",
+    productsEyebrow: "Catalogue d’affiliation",
+    noProductMatches: "Aucun produit ne correspond à cette recherche.",
     products: "Produits",
     productCount: "{count, plural, one {# produit} other {# produits}}",
     noProducts:
@@ -675,7 +676,7 @@ export const fr: Messages = {
     price: "Prix",
     rate: "Taux",
     offers: "Offres",
-    links: "Liens",
+    links: "Liens de publication",
     whereItGoes: "Où il mène",
    openShopeeProduct: "Ouvrir sur Shopee ↗",
     shopee: {

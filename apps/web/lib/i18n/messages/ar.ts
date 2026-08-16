@@ -654,7 +654,8 @@ export const ar: Messages = {
       money: "الأموال",
       imports: "الاستيراد",
     },
-    productsEyebrow: "كل شيء في صف واحد",
+    productsEyebrow: "كتالوج التسويق بالعمولة",
+    noProductMatches: "لا توجد منتجات تطابق هذا البحث.",
     products: "المنتجات",
     productCount:
       "{count, plural, zero {لا منتجات} one {منتج واحد} two {منتجان} few {# منتجات} many {# منتجًا} other {# منتج}}",
@@ -665,7 +666,7 @@ export const ar: Messages = {
     price: "السعر",
     rate: "النسبة",
     offers: "العروض",
-    links: "الروابط",
+    links: "روابط النشر",
     whereItGoes: "إلى أين يؤدي",
    openShopeeProduct: "فتح في Shopee ↗",
     shopee: {
