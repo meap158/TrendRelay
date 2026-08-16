@@ -36,6 +36,14 @@ import { Button } from "../ui/button";
 import { useJobs } from "../jobs-provider";
 import { usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 
+/**
+ * Where a post came from.
+ *
+ * Named once because it appeared verbatim in five places, which is why adding
+ * a source meant editing five of them and missing one was silent.
+ */
+type PostSource = "all" | "tiktok" | "youtube" | "reddit";
+
 type Board = {
   region: string;
   period_days: number;
@@ -44,19 +52,20 @@ type Board = {
   sources: string[];
   complete: boolean;
   notes: string[];
-  platform: "all" | "tiktok" | "youtube";
+  platform: PostSource;
   providers: Array<{
-    id: "tiktok" | "youtube";
+    id: Exclude<PostSource, "all">;
     label: string;
     available: boolean;
     reason: string | null;
   }>;
 };
 
-const PLATFORMS: ReadonlyArray<readonly ["all" | "tiktok" | "youtube", string]> = [
+const PLATFORMS: ReadonlyArray<readonly [PostSource, string]> = [
   ["all", "All available"],
   ["tiktok", "TikTok"],
   ["youtube", "YouTube"],
+  ["reddit", "Reddit"],
 ];
 
 /** Countries Creative Center will answer for. */
@@ -217,10 +226,10 @@ export function PopularPosts({
     7,
     (value): value is number => PERIODS.some(([days]) => days === value),
   );
-  const [platform, setPlatform] = usePersistedState<"all" | "tiktok" | "youtube">(
+  const [platform, setPlatform] = usePersistedState<PostSource>(
     "trendrelay.discover.posts.platform",
     "all",
-    (value): value is "all" | "tiktok" | "youtube" =>
+    (value): value is PostSource =>
       PLATFORMS.some(([id]) => id === value),
   );
   const [board, setBoard, , cacheReady] = usePersistedCache<Board>(

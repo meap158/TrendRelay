@@ -48,6 +48,7 @@ from trendrelay_api.integrations.popular_posts import PERIODS as POST_PERIODS
 from trendrelay_api.integrations.popular_posts import (
     collect_posts,
     live_reader,
+    live_reddit_reader,
     live_youtube_reader,
 )
 from trendrelay_api.integrations.tiktok_creative import (
@@ -383,17 +384,21 @@ async def popular_posts(
             "available": bool(youtube_key),
             "reason": None if youtube_key else "Add YOUTUBE_DATA_API_KEY to enable this source.",
         },
+        # Always available: the only post source needing neither a key nor a
+        # signed-in session, and the only one that is not short-form video.
+        {"id": "reddit", "label": "Reddit", "available": True, "reason": None},
     ]
     if platform == "youtube" and not youtube_key:
         raise HTTPException(status_code=409, detail=providers[1]["reason"])
 
-    platforms = (
-        ("tiktok", "youtube")
-        if platform == "all" and youtube_key
-        else ("tiktok",)
-        if platform == "all"
-        else (platform,)
-    )
+    if platform == "all":
+        # Everything that can answer. A source needing a key it does not have
+        # is left out rather than added and then reported as a failure.
+        platforms = tuple(
+            item["id"] for item in providers if item["available"]
+        )
+    else:
+        platforms = (platform,)
     result = await asyncio.to_thread(
         collect_posts,
         region=region,
@@ -401,6 +406,7 @@ async def popular_posts(
         limit=limit,
         tiktok_reader=live_reader(),
         youtube_reader=live_youtube_reader(youtube_key) if youtube_key else None,
+        reddit_reader=live_reddit_reader(),
         platforms=platforms,
     )
     result["platform"] = platform
