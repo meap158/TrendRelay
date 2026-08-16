@@ -663,9 +663,11 @@ export const vi: Messages = {
     noProducts:
       "Chưa có sản phẩm nào. Dùng nút Nhập ở trên để đưa ưu đãi Shopee vào; mọi liên kết, lượt nhấp và hoa hồng sẽ hiện ở đây.",
     product: "Sản phẩm",
+    creator: "Nhà sáng tạo",
     searchProducts: "Tìm sản phẩm",
     price: "Giá",
     rate: "Tỉ lệ",
+    commission: "Hoa hồng",
     offers: "Ưu đãi",
     links: "Liên kết đăng bài",
     whereItGoes: "Dẫn đến đâu",

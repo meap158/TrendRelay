@@ -14,6 +14,7 @@ function product(id: string, overrides: Partial<ProductRow> = {}): ProductRow {
     identifier: null,
     product_url: null,
     image_url: null,
+    creators: [],
     offers: [],
     links: [],
     clicks: 0,
@@ -29,12 +30,14 @@ test("numeric columns sort descending while missing values remain last", () => {
     product("missing"),
     product("low", { offers: [{
       id: "o1", network: "amazon", merchant: null, affiliate_url: "https://a.test",
-      currency: "USD", price_cents: 100, commission_bps: 100, cookie_days: null,
+      currency: "USD", price_cents: 100, commission_bps: 100,
+      commission_flat_cents: 5, cookie_days: null,
       availability: "available",
     }] }),
     product("high", { offers: [{
       id: "o2", network: "amazon", merchant: null, affiliate_url: "https://a.test",
-      currency: "USD", price_cents: 900, commission_bps: 900, cookie_days: null,
+      currency: "USD", price_cents: 900, commission_bps: 900,
+      commission_flat_cents: 90, cookie_days: null,
       availability: "available",
     }] }),
   ];
@@ -62,7 +65,7 @@ test("money sorts within currency groups instead of blending currencies", () => 
   ];
 
   assert.deepEqual(
-    sortProducts(rows, { key: "commission", direction: "asc" }).map((row) => row.id),
+    sortProducts(rows, { key: "netCommission", direction: "asc" }).map((row) => row.id),
     ["usd-low", "usd-high", "vnd"],
   );
 });
@@ -70,7 +73,8 @@ test("money sorts within currency groups instead of blending currencies", () => 
 test("link sorting includes direct Shopee affiliate links shown by the table", () => {
   const direct = product("direct", { offers: [{
     id: "o1", network: "shopee", merchant: null, affiliate_url: "https://s.test",
-    currency: "VND", price_cents: null, commission_bps: null, cookie_days: null,
+    currency: "VND", price_cents: null, commission_bps: null,
+    commission_flat_cents: null, cookie_days: null,
     availability: "available",
   }] });
   const tracked = product("tracked", { links: [{
@@ -84,5 +88,35 @@ test("link sorting includes direct Shopee affiliate links shown by the table", (
   assert.deepEqual(
     sortProducts([direct, tracked], { key: "links", direction: "desc" }).map((row) => row.id),
     ["tracked", "direct"],
+  );
+});
+
+test("creator and advertised commission have their own sort keys", () => {
+  const alpha = product("alpha", {
+    creators: ["Alpha Shop"],
+    offers: [{
+      id: "o1", network: "shopee", merchant: "Alpha Shop",
+      affiliate_url: "https://s.test/1", currency: "VND", price_cents: 100_000,
+      commission_bps: 500, commission_flat_cents: 5_000, cookie_days: null,
+      availability: "available",
+    }],
+  });
+  const zulu = product("zulu", {
+    creators: ["Zulu Shop"],
+    offers: [{
+      id: "o2", network: "shopee", merchant: "Zulu Shop",
+      affiliate_url: "https://s.test/2", currency: "VND", price_cents: 100_000,
+      commission_bps: 500, commission_flat_cents: 15_000, cookie_days: null,
+      availability: "available",
+    }],
+  });
+
+  assert.deepEqual(
+    sortProducts([zulu, alpha], { key: "creator", direction: "asc" }).map((row) => row.id),
+    ["alpha", "zulu"],
+  );
+  assert.deepEqual(
+    sortProducts([alpha, zulu], { key: "commission", direction: "desc" }).map((row) => row.id),
+    ["zulu", "alpha"],
   );
 });

@@ -667,9 +667,11 @@ export const en = {
     noProducts:
       "No products yet. Use Imports above to bring your Shopee offers in; every link, click and commission on them appears here.",
     product: "Product",
+    creator: "Creator",
     searchProducts: "Search products",
     price: "Price",
     rate: "Rate",
+    commission: "Commission",
     offers: "Offers",
     links: "Publish links",
     whereItGoes: "Where it goes",

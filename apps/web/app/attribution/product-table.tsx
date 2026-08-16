@@ -31,12 +31,21 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge tone={tone}>{status}</Badge>;
 }
 
-/** Commission as a percentage, because basis points are not a unit anyone reads. */
 function offerPrice(product: ProductRow): string {
   const priced = product.offers.filter((offer) => offer.price_cents !== null);
   if (priced.length !== 1) return "";
   const [offer] = priced;
   return money(offer.price_cents as number, offer.currency);
+}
+
+/** The advertised amount per conversion, separate from both rate and earnings. */
+function offerCommission(product: ProductRow): string {
+  const commissioned = product.offers.filter(
+    (offer) => offer.commission_flat_cents !== null,
+  );
+  if (commissioned.length !== 1) return "";
+  const [offer] = commissioned;
+  return money(offer.commission_flat_cents as number, offer.currency);
 }
 
 
@@ -124,6 +133,7 @@ export function ProductTable({
       product.name,
       product.brand,
       product.marketplace,
+      ...product.creators,
       ...product.offers.map((offer) => offer.merchant),
     ].some((field) => (field || "").toLowerCase().includes(needle)));
     return sortProducts(filtered, sort);
@@ -240,9 +250,13 @@ export function ProductTable({
               </th>
               <SortableHeader column="product" label={t("attribution.product")}
                 sort={sort} onSort={changeSort} />
+              <SortableHeader column="creator" label={t("attribution.creator")}
+                sort={sort} onSort={changeSort} className="product-creator" />
               <SortableHeader column="price" label={t("attribution.price")}
                 sort={sort} onSort={changeSort} className="numeric" />
               <SortableHeader column="rate" label={t("attribution.rate")}
+                sort={sort} onSort={changeSort} className="numeric" />
+              <SortableHeader column="commission" label={t("attribution.commission")}
                 sort={sort} onSort={changeSort} className="numeric" />
               <SortableHeader column="offers" label={t("attribution.offers")}
                 sort={sort} onSort={changeSort} className="product-count" />
@@ -250,7 +264,7 @@ export function ProductTable({
                 sort={sort} onSort={changeSort} className="product-count" />
               <SortableHeader column="clicks" label={t("attribution.clicks")}
                 sort={sort} onSort={changeSort} className="numeric" />
-              <SortableHeader column="commission" label={t("attribution.netCommission")}
+              <SortableHeader column="netCommission" label={t("attribution.netCommission")}
                 sort={sort} onSort={changeSort} className="numeric" />
             </tr>
           </thead>
@@ -311,6 +325,11 @@ export function ProductTable({
                       ><ActionIcon name="expand" size={16} /></span>
                     </button>
                   </th>
+                  <td className="product-creator" title={product.creators.join(" · ")}>
+                    {product.creators.length
+                      ? product.creators.join(" · ")
+                      : <span className="catalog-no-data">—</span>}
+                  </td>
                   {/* Shown only when one offer answers for the product. With
                       several, a single column would have to pick one, and
                       picking silently is how a wrong number gets read as the
@@ -320,6 +339,9 @@ export function ProductTable({
                   </td>
                   <td className="numeric">
                     {offerRate(product) || <span className="catalog-no-data">—</span>}
+                  </td>
+                  <td className="numeric">
+                    {offerCommission(product) || <span className="catalog-no-data">—</span>}
                   </td>
                   <td className="product-count">{product.offers.length}</td>
                   <td className="product-count">{product.links.length + directOffers.length}</td>
@@ -347,7 +369,7 @@ export function ProductTable({
                     id={detailId}
                     className="catalog-edition-row"
                   >
-                    <td colSpan={8}>
+                    <td colSpan={10}>
                       <div className="product-detail">
                         <section>
                           <h4>{t("attribution.whereItGoes")}</h4>
@@ -368,6 +390,8 @@ export function ProductTable({
                                     <small>
                                       {offer.price_cents !== null &&
                                         `${money(offer.price_cents, offer.currency)} · `}
+                                      {offer.commission_flat_cents !== null &&
+                                        `${t("attribution.commission")} ${money(offer.commission_flat_cents, offer.currency)} · `}
                                       {t("attribution.commissionRate", {
                                         rate: commission(offer.commission_bps),
                                       })}
@@ -458,7 +482,7 @@ export function ProductTable({
             })}
             {shown.length === 0 && (
               <tr>
-                <td className="product-no-results" colSpan={8}>
+                <td className="product-no-results" colSpan={10}>
                   {t("attribution.noProductMatches")}
                 </td>
               </tr>

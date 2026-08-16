@@ -67,7 +67,8 @@ def seeded():
         session.add(ProductOffer(
             id="offer-1", workspace_id=ws, product_id="prod-1", fingerprint="f1",
             network="amazon", merchant="Amazon", affiliate_url="https://example.test/aff",
-            price_cents=1299, currency="USD", commission_bps=400, cookie_days=1,
+            price_cents=1299, currency="USD", commission_bps=400,
+            commission_flat_cents=52, cookie_days=1,
             availability="available", created_by="owner-user",
         ))
         session.add(CatalogWork(
@@ -145,6 +146,8 @@ def test_one_row_carries_identity_links_clicks_and_earnings(seeded) -> None:
     assert row["name"] == "The Quiet Ledger"
     assert row["marketplace"] == "amazon"
     assert [offer["network"] for offer in row["offers"]] == ["amazon"]
+    assert row["creators"] == ["Amazon"]
+    assert row["offers"][0]["commission_flat_cents"] == 52
     assert [link["code"] for link in row["links"]] == ["abc123"]
     assert row["clicks"] == 3
     assert row["product_form"] == "paperback"

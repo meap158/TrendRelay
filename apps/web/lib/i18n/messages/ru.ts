@@ -671,9 +671,11 @@ export const ru: Messages = {
     noProducts:
       "Пока нет товаров. Нажмите «Импорт» выше, чтобы загрузить предложения Shopee — все ссылки, клики и комиссии появятся здесь.",
     product: "Товар",
+    creator: "Автор",
     searchProducts: "Поиск товаров",
     price: "Цена",
     rate: "Ставка",
+    commission: "Комиссия",
     offers: "Предложения",
     links: "Ссылки для публикации",
     whereItGoes: "Куда ведёт",

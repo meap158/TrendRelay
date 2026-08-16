@@ -663,9 +663,11 @@ export const ja: Messages = {
     noProducts:
       "商品はまだありません。上部の「インポート」から Shopee のオファーを取り込むと、リンク・クリック・報酬がここに表示されます。",
     product: "商品",
+    creator: "投稿者",
     searchProducts: "商品を検索",
     price: "価格",
     rate: "料率",
+    commission: "報酬",
     offers: "案件",
     links: "公開リンク",
     whereItGoes: "リンク先",

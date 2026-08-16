@@ -187,6 +187,12 @@ def products_payload(session: Session, workspace_id: str) -> dict[str, Any]:
 
     rows: list[dict[str, Any]] = []
     for product in products:
+        product_offers = offers_by_product.get(product.id, [])
+        creators = sorted({
+            offer.merchant.strip()
+            for offer in product_offers
+            if offer.merchant and offer.merchant.strip()
+        })
         product_links = links_by_product.get(product.id, [])
         product_clicks = clicks_by_product.get(product.id, [])
         product_conversions = conversions_by_product.get(product.id, [])
@@ -202,6 +208,11 @@ def products_payload(session: Session, workspace_id: str) -> dict[str, Any]:
             "identifier": product.identifier,
             "product_url": product.product_url,
             "image_url": product.image_url,
+            # Shopee calls this the shop; other affiliate feeds call it the
+            # merchant. It is the creator/seller identity people recognise in
+            # the product table, and several are retained when a product is
+            # carried by more than one source.
+            "creators": creators,
             "offers": [
                 {
                     "id": offer.id,
@@ -211,10 +222,11 @@ def products_payload(session: Session, workspace_id: str) -> dict[str, Any]:
                     "currency": offer.currency,
                     "price_cents": offer.price_cents,
                     "commission_bps": offer.commission_bps,
+                    "commission_flat_cents": offer.commission_flat_cents,
                     "cookie_days": offer.cookie_days,
                     "availability": offer.availability,
                 }
-                for offer in offers_by_product.get(product.id, [])
+                for offer in product_offers
             ],
             "links": [
                 {

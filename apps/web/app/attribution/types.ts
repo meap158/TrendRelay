@@ -8,6 +8,7 @@ export type ProductOffer = {
   currency: string;
   price_cents: number | null;
   commission_bps: number | null;
+  commission_flat_cents: number | null;
   cookie_days: number | null;
   availability: string;
 };
@@ -39,6 +40,7 @@ export type ProductRow = {
   identifier: string | null;
   product_url: string | null;
   image_url: string | null;
+  creators: string[];
   offers: ProductOffer[];
   links: ProductLink[];
   clicks: number;

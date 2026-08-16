@@ -662,9 +662,11 @@ export const ar: Messages = {
     noProducts:
       "لا توجد منتجات بعد. استخدم زر الاستيراد بالأعلى لجلب عروض Shopee، وستظهر هنا كل الروابط والنقرات والعمولات.",
     product: "المنتج",
+    creator: "صاحب المحتوى",
     searchProducts: "ابحث في المنتجات",
     price: "السعر",
     rate: "النسبة",
+    commission: "العمولة",
     offers: "العروض",
     links: "روابط النشر",
     whereItGoes: "إلى أين يؤدي",

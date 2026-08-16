@@ -650,9 +650,11 @@ export const zh: Messages = {
     noProducts:
       "还没有商品。用上方的“导入”把 Shopee 的优惠带进来，之后每个链接、点击和佣金都会显示在这里。",
     product: "商品",
+    creator: "创作者",
     searchProducts: "搜索商品",
     price: "价格",
     rate: "佣金率",
+    commission: "佣金",
     offers: "优惠",
     links: "发布链接",
     whereItGoes: "跳转去向",

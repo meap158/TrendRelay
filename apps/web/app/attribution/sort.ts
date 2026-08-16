@@ -2,12 +2,14 @@ import type { ProductRow } from "./types";
 
 export type ProductSortKey =
   | "product"
+  | "creator"
   | "price"
   | "rate"
+  | "commission"
   | "offers"
   | "links"
   | "clicks"
-  | "commission";
+  | "netCommission";
 
 export type ProductSort = {
   key: ProductSortKey;
@@ -20,7 +22,7 @@ const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "bas
 
 function oneOfferNumber(
   product: ProductRow,
-  field: "price_cents" | "commission_bps",
+  field: "price_cents" | "commission_bps" | "commission_flat_cents",
 ): number | null {
   const values = product.offers
     .map((offer) => offer[field])
@@ -32,6 +34,13 @@ function priceKey(product: ProductRow): [string, number] | null {
   const value = oneOfferNumber(product, "price_cents");
   if (value === null) return null;
   const offer = product.offers.find((candidate) => candidate.price_cents !== null);
+  return [offer?.currency.toUpperCase() ?? "", value];
+}
+
+function flatCommissionKey(product: ProductRow): [string, number] | null {
+  const value = oneOfferNumber(product, "commission_flat_cents");
+  if (value === null) return null;
+  const offer = product.offers.find((candidate) => candidate.commission_flat_cents !== null);
   return [offer?.currency.toUpperCase() ?? "", value];
 }
 
@@ -55,8 +64,10 @@ function valueFor(product: ProductRow, key: ProductSortKey): Comparable {
   if (key === "product") {
     return [product.name, [product.brand, product.marketplace].filter(Boolean).join(" ")].join(" ");
   }
+  if (key === "creator") return product.creators.join(" ") || null;
   if (key === "price") return priceKey(product);
   if (key === "rate") return oneOfferNumber(product, "commission_bps");
+  if (key === "commission") return flatCommissionKey(product);
   if (key === "offers") return product.offers.length;
   if (key === "links") {
     return product.links.length
