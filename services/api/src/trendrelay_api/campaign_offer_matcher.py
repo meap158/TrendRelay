@@ -344,6 +344,7 @@ def match_offers(
         key=lambda match: (match.score, match.confidence == "high", match.product_name.casefold()),
         reverse=True,
     )[:limit]
+    auto_eligible = [match for match in ranked if match.confidence != "low"]
 
     slot_count = session.scalar(select(func.count(PublishingSlot.id)).where(
         PublishingSlot.workspace_id == campaign.workspace_id
@@ -363,11 +364,16 @@ def match_offers(
         "recommended_products_per_post": min(
             autopilot.max_products_per_post,
             1 if platforms and platforms <= {"instagram", "tiktok"} else 3,
+            len(auto_eligible),
         ),
         "rotation": (
-            "Rotate strong matches across posts; keep one primary product on bio-only networks."
-            if len(ranked) > 1 else
-            "Use the strongest relevant product and continue exploring when more offers arrive."
+            "Rotate evidence-backed matches across posts; keep one primary "
+            "product on bio-only networks."
+            if len(auto_eligible) > 1 else
+            "Use the strongest evidence-backed product and keep measuring its results."
+            if len(auto_eligible) == 1 else
+            "No evidence-backed match yet. Low-confidence offers stay "
+            "review-only and are not attached automatically."
         ),
     }
     return ranked, strategy

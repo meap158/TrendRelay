@@ -176,6 +176,22 @@ def test_campaign_recommendations_explain_content_and_delivery_signals(workspace
     assert "posting_slots" in body["strategy"]
 
 
+def test_weak_matches_are_explicitly_review_only(workspace) -> None:
+    campaign_id = campaign(workspace)
+    with TestingSession.begin() as session:
+        product = session.get(Product, "prod-1")
+        product.name = "Unrelated garden hose"
+        product.category = "Outdoor plumbing"
+        product.brand = "Waterworks"
+    body = request(
+        "GET",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/offer-recommendations",
+    ).json()
+    assert body["matches"][0]["confidence"] == "low"
+    assert body["strategy"]["recommended_products_per_post"] == 0
+    assert "not attached automatically" in body["strategy"]["rotation"]
+
+
 def test_a_destination_reports_where_its_link_will_go(workspace) -> None:
     """The page can say "link in bio" before anything is posted, not after."""
     campaign_id = campaign(workspace)

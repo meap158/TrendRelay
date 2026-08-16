@@ -388,7 +388,7 @@ export function AutopilotPanel({
   async function loadRecommendations(item: QueueItem | null = null) {
     setBusy(item ? `recommend-${item.id}` : "recommendations");
     try {
-      const query = item ? `?item_id=${encodeURIComponent(item.id)}&limit=20` : "?limit=20";
+      const query = item ? `?item_id=${encodeURIComponent(item.id)}&limit=12` : "?limit=12";
       const body = await json<Recommendations>(await apiFetch(
         `${base}/offer-recommendations${query}`,
       ));
@@ -569,7 +569,7 @@ export function AutopilotPanel({
                   <div className="campaign-strategy-summary">
                     <span><strong>{recommendations.strategy.posting_slots}</strong> posting times</span>
                     <span><strong>{recommendations.strategy.platforms.length}</strong> platforms</span>
-                    <span><strong>{recommendations.strategy.recommended_products_per_post}</strong> products per post</span>
+                    <span><strong>{recommendations.strategy.recommended_products_per_post}</strong> auto products/post</span>
                     <span><strong>{recommendations.strategy.evidence_sources.length}</strong> evidence sources</span>
                   </div>
                   <p className="campaign-rotation-note">{recommendations.strategy.rotation}</p>
