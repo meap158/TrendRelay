@@ -296,7 +296,14 @@ nav strong { color: #1c2b33; }
 .engine-plan.published { color: var(--muted); box-shadow: inset 0 0 0 1px var(--line-strong); }
 .engine-channels { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; max-block-size: 58px; overflow-y: auto; list-style: none; }
 .engine-channels li { display: inline-flex; gap: 5px; align-items: center; max-inline-size: 100%; border-radius: 999px; padding: 2px 8px 2px 6px; background: var(--panel-raised); font-size: 11px; }
-.engine-channels li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.engine-channels li span, .engine-channels li a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Linked where the profile address could be derived from the handle; plain
+   text where it could not. The two have to look different, or the ones that
+   do nothing on click read as broken. */
+.engine-channels li a { color: inherit; text-decoration: none; }
+.engine-channels li:has(a) { cursor: pointer; }
+.engine-channels li:has(a):hover { background: var(--panel); box-shadow: inset 0 0 0 1px var(--link); }
+.engine-channels li a:hover, .engine-channels li a:focus-visible { color: var(--link); text-decoration: underline; }
 .engine-platforms { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .engine-platforms span { display: inline-flex; }
 .engine-platforms em { margin-inline-start: auto; border-radius: 999px; padding: 1px 7px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-style: normal; font-weight: 600; font-variant-numeric: tabular-nums; }

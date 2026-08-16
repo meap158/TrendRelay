@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl } from "../../lib/api";
+import { channelUrl, displayHandle } from "../../lib/channel-links";
 import { useAuth } from "../auth-provider";
 import { useT } from "../i18n-provider";
 import { useJobs } from "../jobs-provider";
@@ -1687,21 +1688,36 @@ export default function PublishPage() {
                   </span>
                   {channels.length ? (
                     <ul className="engine-channels">
-                      {channels.map((channel) => (
-                        <li key={channel.id} title={`${platformLabels[channel.platform]} · ${channel.label}`}>
-                          <PlatformIcon
-                            platform={channel.platform}
-                            size={14}
-                            muted={engineOff(provider.id)}
-                          />
-                          {/* An @ only where one belongs. Buffer reports a
-                              Facebook page's display name in the same field a
-                              handle arrives in, and "@Naceto Books" claims a
-                              handle that does not exist. */}
-                          <span>{channel.handle && !/\s/.test(channel.handle)
-                            ? `@${channel.handle}` : channel.label}</span>
-                        </li>
-                      ))}
+                      {channels.map((channel) => {
+                        // An @ only where one belongs. Buffer reports a Facebook
+                        // page's display name in the same field a handle arrives
+                        // in, and "@Naceto Books" claims a handle that does not
+                        // exist. The @ is also normalised, so a handle that
+                        // arrives decorated cannot render as "@@name".
+                        const shown = displayHandle(channel.handle) ?? channel.label;
+                        const href = channelUrl(channel.platform, channel.handle);
+                        return (
+                          <li key={channel.id} title={`${platformLabels[channel.platform]} · ${channel.label}`}>
+                            <PlatformIcon
+                              platform={channel.platform}
+                              size={14}
+                              muted={engineOff(provider.id)}
+                            />
+                            {/* Linked only where the address can be derived
+                                from the handle. Facebook, LinkedIn and Mastodon
+                                cannot be, and stay plain text - a link to the
+                                wrong profile is worse than none, because it
+                                looks checked. */}
+                            {href ? (
+                              <a href={href} target="_blank" rel="noopener noreferrer">
+                                {shown}
+                              </a>
+                            ) : (
+                              <span>{shown}</span>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   ) : (
                     <div className="engine-platforms">
