@@ -30,19 +30,19 @@ test("every source's best row comes before any source's second", () => {
   // Otherwise a source returning thirty rows buries one returning five, and
   // the feed reads as whichever provider was most talkative.
   const merged = mergeFeed([
-    row("reddit", 1), row("reddit", 2), row("reddit", 3),
+    row("hackernews", 1), row("hackernews", 2), row("hackernews", 3),
     row("bluesky", 1), row("bluesky", 2),
   ]);
 
-  assert.deepEqual(merged.slice(0, 2).map((item) => item.source), ["reddit", "bluesky"]);
+  assert.deepEqual(merged.slice(0, 2).map((item) => item.source), ["hackernews", "bluesky"]);
   assert.deepEqual(merged.map((item) => item.rank), [1, 1, 2, 2, 3]);
 });
 
 test("the order is stable however the fetches resolved", () => {
   // Two sources tied at rank 1 must not swap places between renders just
   // because one request came back first.
-  const first = mergeFeed([row("bluesky", 1), row("reddit", 1)]);
-  const again = mergeFeed([row("bluesky", 1), row("reddit", 1)]);
+  const first = mergeFeed([row("bluesky", 1), row("hackernews", 1)]);
+  const again = mergeFeed([row("bluesky", 1), row("hackernews", 1)]);
 
   assert.deepEqual(
     first.map((item) => item.key),
@@ -55,9 +55,9 @@ test("an empty feed merges to an empty feed rather than throwing", () => {
 });
 
 test("the sources present are listed once each, in the order they appear", () => {
-  const found = sourcesIn([row("reddit", 1), row("bluesky", 1), row("reddit", 2)]);
+  const found = sourcesIn([row("hackernews", 1), row("bluesky", 1), row("hackernews", 2)]);
 
-  assert.deepEqual(found, ["reddit", "bluesky"]);
+  assert.deepEqual(found, ["hackernews", "bluesky"]);
 });
 
 // --- rows from topics ---------------------------------------------------------
@@ -110,11 +110,11 @@ test("a topic nothing ranked sorts last rather than first", () => {
 // --- rows from posts ----------------------------------------------------------
 
 const post = {
-  source: "reddit",
+  source: "bluesky",
   rank: 2,
   title: "Something the web argued about",
-  creator: "r/AskReddit",
-  niche: "AskReddit",
+  creator: "dave.bsky.social",
+  niche: null,
   region: "",
   window_days: null,
   time_basis: "current",
@@ -123,14 +123,14 @@ const post = {
   likes: 24_500,
   comments: 1_820,
   shares: null,
-  url: "https://www.reddit.com/r/AskReddit/comments/abc/",
+  url: "https://bsky.app/profile/dave.bsky.social/post/abc",
   thumbnail: null,
   published_at: null,
 };
 
 test("a post says which quantity it counted, in that source's own word", () => {
   // A single "engagement" column would be adding views to upvotes.
-  assert.equal(rowFromPost(post, 0).metric, "24.5k upvotes");
+  assert.equal(rowFromPost(post, 0).metric, "24.5k likes");
   assert.equal(rowFromPost({ ...post, views: 1_200_000 }, 0).metric, "1.2M views");
 });
 
@@ -141,10 +141,9 @@ test("a post with no published figure shows none rather than a zero", () => {
 });
 
 test("each source's count keeps that source's own word", () => {
-  // Hacker News publishes points and Reddit publishes upvotes. Printing either
-  // as "likes" states a figure the source never published.
+  // Hacker News publishes points, not likes. Printing them as likes states a
+  // figure the source never published.
   assert.equal(rowFromPost({ ...post, source: "hackernews", likes: 238 }, 0).metric, "238 points");
-  assert.equal(rowFromPost({ ...post, source: "reddit", likes: 238 }, 0).metric, "238 upvotes");
   assert.equal(rowFromPost({ ...post, source: "bluesky", likes: 238 }, 0).metric, "238 likes");
 });
 
@@ -159,7 +158,7 @@ test("a detail that only repeats the source is dropped", () => {
 test("a creator promoted into the title is not repeated underneath it", () => {
   const built = rowFromPost({ ...post, title: null, niche: null }, 0);
 
-  assert.equal(built.title, "r/AskReddit");
+  assert.equal(built.title, "dave.bsky.social");
   assert.equal(built.detail, "");
 });
 
@@ -167,7 +166,7 @@ test("a post with no title falls back to who made it", () => {
   // TikTok's board publishes creators without titles.
   const built = rowFromPost({ ...post, title: null }, 0);
 
-  assert.equal(built.title, "r/AskReddit");
+  assert.equal(built.title, "dave.bsky.social");
 });
 
 test("two posts at the same rank from one source keep separate keys", () => {

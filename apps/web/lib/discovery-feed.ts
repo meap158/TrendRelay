@@ -55,13 +55,12 @@ function trim(value: number): string {
 /**
  * What each source calls the thing it counted.
  *
- * Hacker News publishes points and Reddit publishes upvotes; calling either
- * "likes" states a number the source never published. Anything not listed
- * genuinely counts likes.
+ * Hacker News publishes points, not likes; printing them as likes states a
+ * number the source never published. Anything not listed genuinely counts
+ * likes.
  */
 const LIKE_WORDS: Record<string, string> = {
   hackernews: "points",
-  reddit: "upvotes",
 };
 
 /**

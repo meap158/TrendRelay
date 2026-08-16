@@ -46,7 +46,6 @@ type PostSource =
   | "all"
   | "tiktok"
   | "youtube"
-  | "reddit"
   | "bluesky"
   | "hackernews";
 
@@ -71,7 +70,6 @@ const PLATFORMS: ReadonlyArray<readonly [PostSource, string]> = [
   ["all", "All available"],
   ["tiktok", "TikTok"],
   ["youtube", "YouTube"],
-  ["reddit", "Reddit"],
   ["bluesky", "Bluesky"],
   ["hackernews", "Hacker News"],
 ];

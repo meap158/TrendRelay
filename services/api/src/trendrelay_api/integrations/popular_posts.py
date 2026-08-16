@@ -101,7 +101,6 @@ def collect_posts(
     limit: int = 20,
     tiktok_reader: TikTokReader,
     youtube_reader: YouTubeReader | None = None,
-    reddit_reader: Callable[..., dict[str, Any]] | None = None,
     bluesky_reader: Callable[..., dict[str, Any]] | None = None,
     hackernews_reader: Callable[..., dict[str, Any]] | None = None,
     platforms: tuple[str, ...] = ("tiktok",),
@@ -138,20 +137,6 @@ def collect_posts(
                 from .youtube_popular import posts_from_youtube
 
                 posts.extend(posts_from_youtube(result))
-                _append_notes(notes, result)
-
-    if "reddit" in requested:
-        if reddit_reader is None:
-            failures.append("Reddit is not configured.")
-        else:
-            try:
-                result = reddit_reader(region=region, limit=limit)
-            except Exception as error:  # noqa: BLE001 - a provider state, not a bug
-                failures.append(f"Reddit could not answer: {error}")
-            else:
-                from .reddit_popular import posts_from_reddit
-
-                posts.extend(posts_from_reddit(result))
                 _append_notes(notes, result)
 
     if "bluesky" in requested:
@@ -229,20 +214,6 @@ def live_youtube_reader(api_key: str) -> YouTubeReader:
         return fetch_youtube_popular(api_key=api_key, region=region, limit=limit)
 
     return youtube
-
-
-def live_reddit_reader() -> Callable[..., dict[str, Any]]:
-    """The public listing reader, bound late so importing this needs no network.
-
-    No key and no session: this is the one post source that works on a fresh
-    install, which is why the board is no longer empty without a credential.
-    """
-    from .reddit_popular import fetch_reddit_popular
-
-    def read(*, region: str, limit: int) -> dict[str, Any]:
-        return fetch_reddit_popular(region=region, limit=limit)
-
-    return read
 
 
 def live_bluesky_reader() -> Callable[..., dict[str, Any]]:

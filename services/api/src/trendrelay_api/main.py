@@ -50,7 +50,6 @@ from trendrelay_api.integrations.popular_posts import (
     live_bluesky_reader,
     live_hackernews_reader,
     live_reader,
-    live_reddit_reader,
     live_youtube_reader,
 )
 from trendrelay_api.integrations.tiktok_creative import (
@@ -389,9 +388,8 @@ async def popular_posts(
         },
         # Always available: the only post source needing neither a key nor a
         # signed-in session, and the only one that is not short-form video.
-        {"id": "reddit", "label": "Reddit", "available": True, "reason": None},
         # The nearest readable substitute for Threads, which publishes no
-        # popular feed at all. Public and unauthenticated like Reddit.
+        # popular feed at all. Public and unauthenticated, needing no key.
         {"id": "bluesky", "label": "Bluesky", "available": True, "reason": None},
         # Narrow - a technology and startup audience - but reliably early
         # on anything software, hardware or business-model shaped.
@@ -415,7 +413,6 @@ async def popular_posts(
         limit=limit,
         tiktok_reader=live_reader(),
         youtube_reader=live_youtube_reader(youtube_key) if youtube_key else None,
-        reddit_reader=live_reddit_reader(),
         bluesky_reader=live_bluesky_reader(),
         hackernews_reader=live_hackernews_reader(),
         platforms=platforms,

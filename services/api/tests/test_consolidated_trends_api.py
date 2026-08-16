@@ -142,7 +142,7 @@ def test_google_trends_answers_for_a_country_the_others_cannot(providers) -> Non
     """The reason this source is here.
 
     Creative Center needs a browser runtime, the Douyin board covers China, and
-    Reddit's country filter has no Vietnam. Search demand does.
+    Neither social board carries Vietnam. Search demand does.
     """
     providers(
         tiktok=lambda **_: (_ for _ in ()).throw(RuntimeError("no browser runtime")),
