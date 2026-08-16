@@ -76,12 +76,21 @@ type QueueItem = {
   position: number;
   times_posted: number;
   last_posted_at: string | null;
+  offer_ids: string[];
+  offer_match: {
+    matches?: OfferMatch[];
+    strategy?: MatchStrategy;
+    selected_offer_ids?: string[];
+  };
 };
 
 type Autopilot = {
   enabled: boolean;
   delivery: "draft" | "schedule" | "now";
   offer_id: string | null;
+  offer_mode: "smart" | "manual" | "none";
+  candidate_offer_ids: string[];
+  max_products_per_post: number;
   disclosure: string;
   bio_hint: string;
   min_recycle_days: number;
@@ -100,6 +109,9 @@ type PreviewPost = {
   at: string;
   caption: string;
   first_comment: string | null;
+  thread: string[];
+  offer_ids: string[];
+  products: string[];
   placement: string;
   reason: string;
   /** What the delivering engine would refuse this post for, if anything. */
@@ -118,6 +130,42 @@ type Offer = {
     brand?: string | null;
     marketplace?: string | null;
   };
+};
+
+type OfferMatch = {
+  offer_id: string;
+  product_id: string;
+  product_name: string;
+  score: number;
+  confidence: "high" | "medium" | "low";
+  matched_terms: string[];
+  reasons: string[];
+  evidence_sources: string[];
+  network: string;
+  availability: string;
+  commission_bps?: number | null;
+  commission_flat_cents?: number | null;
+  currency: string;
+};
+
+type MatchStrategy = {
+  offer_mode: string;
+  candidate_scope: string;
+  evidence_sources: string[];
+  media?: { media_kind?: string | null; duration_ms?: number | null; creative_format?: string | null };
+  platforms: string[];
+  post_types: string[];
+  posting_slots: number;
+  posts_scheduled: number;
+  recommended_products_per_post: number;
+  rotation: string;
+  selection?: string;
+};
+
+type Recommendations = {
+  item_id: string | null;
+  matches: OfferMatch[];
+  strategy: MatchStrategy;
 };
 
 function offerDescription(offer: Offer): string {
@@ -180,6 +228,9 @@ export function AutopilotPanel({
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const [offers, setOffers] = useState<Offer[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendations | null>(null);
+  const [productItem, setProductItem] = useState<QueueItem | null>(null);
+  const [pinnedOffers, setPinnedOffers] = useState<Set<string>>(new Set());
   const [slots, setSlots] = useState<Slot[]>([]);
   const [slotPresets, setSlotPresets] = useState<SlotPreset[]>([]);
   const [preview, setPreview] = useState<
@@ -317,6 +368,9 @@ export function AutopilotPanel({
         body: JSON.stringify({
           enabled: next.enabled,
           offer_id: next.offer_id,
+          offer_mode: next.offer_mode,
+          candidate_offer_ids: next.candidate_offer_ids,
+          max_products_per_post: next.max_products_per_post,
           disclosure: next.disclosure,
           bio_hint: next.bio_hint,
           min_recycle_days: next.min_recycle_days,
@@ -329,6 +383,23 @@ export function AutopilotPanel({
         ? t("autopilot.switchedOn")
         : t("autopilot.saved");
     });
+  }
+
+  async function loadRecommendations(item: QueueItem | null = null) {
+    setBusy(item ? `recommend-${item.id}` : "recommendations");
+    try {
+      const query = item ? `?item_id=${encodeURIComponent(item.id)}&limit=20` : "?limit=20";
+      const body = await json<Recommendations>(await apiFetch(
+        `${base}/offer-recommendations${query}`,
+      ));
+      setRecommendations(body);
+      setProductItem(item);
+      setPinnedOffers(new Set(item?.offer_ids ?? []));
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "Products could not be analyzed.");
+    } finally {
+      setBusy("");
+    }
   }
 
   const ready = useMemo(() => {
@@ -404,8 +475,13 @@ export function AutopilotPanel({
             <span>Schedule</span><strong>{slots.length}</strong><small>posting times</small>
           </button>
           <button type="button" className={section === "settings" ? "active" : ""}
-            onClick={() => setSection("settings")}>
-            <span>Settings</span><strong>{autopilot.offer_id ? "1" : "—"}</strong><small>affiliate offer</small>
+            onClick={() => {
+              setSection("settings");
+              if (!recommendations || recommendations.item_id) void loadRecommendations();
+            }}>
+            <span>Products</span>
+            <strong>{autopilot.offer_mode === "smart" ? "Smart" : autopilot.offer_mode === "manual" ? (autopilot.offer_id ? "1" : "—") : "Off"}</strong>
+            <small>affiliate matching</small>
           </button>
         </nav>
 
@@ -433,7 +509,29 @@ export function AutopilotPanel({
         )}
 
         {section === "settings" && <div className="autopilot-settings">
-          <label>{t("autopilot.offer")}
+          <div className="campaign-product-mode">
+            <div>
+              <strong>Affiliate product matching</strong>
+              <small>Choose how products are assigned to each post. Smart matching is the recommended default.</small>
+            </div>
+            <div className="campaign-mode-options" role="radiogroup" aria-label="Affiliate product matching">
+              {(["smart", "manual", "none"] as const).map((mode) => (
+                <button key={mode} type="button" role="radio"
+                  aria-checked={autopilot.offer_mode === mode}
+                  className={autopilot.offer_mode === mode ? "active" : ""}
+                  disabled={!canEdit}
+                  onClick={() => void save({
+                    offer_mode: mode,
+                    offer_id: mode === "manual" ? autopilot.offer_id : null,
+                  })}>
+                  <strong>{mode === "smart" ? "Smart match" : mode === "manual" ? "One product" : "No products"}</strong>
+                  <small>{mode === "smart" ? "Fit content automatically" : mode === "manual" ? "Use one offer everywhere" : "Organic posts only"}</small>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {autopilot.offer_mode === "manual" && <label>{t("autopilot.offer")}
             <SearchSelect
               value={autopilot.offer_id ?? ""}
               disabled={!canEdit}
@@ -448,7 +546,63 @@ export function AutopilotPanel({
               }))}
             />
             <small>{t("autopilot.offerHelp")} Source: imported offers in Attribution.</small>
-          </label>
+          </label>}
+
+          {autopilot.offer_mode === "smart" && (
+            <div className="campaign-product-intelligence">
+              <div className="campaign-product-heading">
+                <div>
+                  <strong>Best-fit products</strong>
+                  <small>Ranked from campaign goals, approved copy, hashtags, media metadata, creative analysis, and transcripts.</small>
+                </div>
+                <Button variant="secondary" size="sm" busy={busy === "recommendations"}
+                  onClick={() => void loadRecommendations()}>Analyze campaign</Button>
+              </div>
+              {autopilot.candidate_offer_ids.length > 0 && (
+                <div className="campaign-shortlist-note">
+                  Matching is limited to {autopilot.candidate_offer_ids.length} shortlisted product{autopilot.candidate_offer_ids.length === 1 ? "" : "s"}.
+                  <Button variant="quiet" size="sm" onClick={() => void save({ candidate_offer_ids: [] })}>Use all offers</Button>
+                </div>
+              )}
+              {recommendations && !recommendations.item_id && (
+                <>
+                  <div className="campaign-strategy-summary">
+                    <span><strong>{recommendations.strategy.posting_slots}</strong> posting times</span>
+                    <span><strong>{recommendations.strategy.platforms.length}</strong> platforms</span>
+                    <span><strong>{recommendations.strategy.recommended_products_per_post}</strong> products per post</span>
+                    <span><strong>{recommendations.strategy.evidence_sources.length}</strong> evidence sources</span>
+                  </div>
+                  <p className="campaign-rotation-note">{recommendations.strategy.rotation}</p>
+                  <ul className="campaign-product-matches">
+                    {recommendations.matches.map((match) => {
+                      const shortlisted = autopilot.candidate_offer_ids.includes(match.offer_id);
+                      return <li key={match.offer_id}>
+                        <div className="campaign-match-score" data-confidence={match.confidence}>
+                          <strong>{match.score}</strong><small>% fit</small>
+                        </div>
+                        <div className="campaign-match-copy">
+                          <strong>{match.product_name}</strong>
+                          <small>{match.reasons[0]}</small>
+                          <span>{match.matched_terms.slice(0, 5).map((term) => <em key={term}>{term}</em>)}</span>
+                        </div>
+                        <Badge tone={match.confidence === "high" ? "good" : match.confidence === "medium" ? "warn" : "neutral"}>
+                          {match.confidence}
+                        </Badge>
+                        <Button variant={shortlisted ? "secondary" : "quiet"} size="sm" disabled={!canEdit}
+                          onClick={() => {
+                            const next = shortlisted
+                              ? autopilot.candidate_offer_ids.filter((id) => id !== match.offer_id)
+                              : [...autopilot.candidate_offer_ids, match.offer_id];
+                            void save({ candidate_offer_ids: next });
+                          }}>{shortlisted ? "Shortlisted" : "Shortlist"}</Button>
+                      </li>;
+                    })}
+                    {!recommendations.matches.length && <li className="autopilot-empty">No usable imported offers match this campaign yet.</li>}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
 
           <label>{t("autopilot.disclosure")}
             <input
@@ -467,6 +621,13 @@ export function AutopilotPanel({
           </label>
 
           <div className="autopilot-numbers">
+            {autopilot.offer_mode === "smart" && <label>Products per post
+              <input type="number" min={1} max={5}
+                defaultValue={autopilot.max_products_per_post}
+                disabled={!canEdit}
+                onBlur={(event) => void save({ max_products_per_post: Number(event.target.value) })} />
+              <small>Bio-only networks still use one and rotate products across posts.</small>
+            </label>}
             <label>{t("autopilot.rest")}
               <input
                 type="number"
@@ -747,6 +908,17 @@ export function AutopilotPanel({
                 <div>
                   <strong>{item.title ?? item.body.slice(0, 60)}</strong>
                   <span className="autopilot-queue-copy">{item.body}</span>
+                  <span className="campaign-queue-products">
+                    {(item.offer_match?.matches ?? [])
+                      .filter((match) => item.offer_ids.length
+                        ? item.offer_ids.includes(match.offer_id)
+                        : match.confidence !== "low")
+                      .slice(0, autopilot.max_products_per_post)
+                      .map((match) => (
+                        <em key={match.offer_id}>{match.product_name} · {match.score}%</em>
+                      ))}
+                    {!(item.offer_match?.matches ?? []).length && <em>Product analysis pending</em>}
+                  </span>
                   <small>
                     {item.times_posted > 0
                       ? t("autopilot.postedTimes", { count: item.times_posted })
@@ -756,31 +928,87 @@ export function AutopilotPanel({
                 <Badge tone={item.state === "approved" ? "good" : "neutral"}>
                   {t(`autopilot.state.${item.state}`)}
                 </Badge>
-                {canEdit && item.state !== "approved" && (
-                  <Button variant="secondary" size="sm"
-                    onClick={() => void run("approve", async () => {
-                      await json(await apiFetch(`${base}/queue/${item.id}`, {
-                        method: "PATCH",
-                        headers: { "content-type": "application/json" },
-                        body: JSON.stringify({ state: "approved" }),
-                      }));
-                      return t("autopilot.itemApproved");
-                    })}>{t("autopilot.approve")}</Button>
-                )}
                 {canEdit && (
-                  <Button variant="quiet" size="sm" onClick={() => setEditing(item)}>
-                    Edit copy
-                  </Button>
-                )}
-                {canEdit && (
-                  <Button variant="quiet" size="sm" onClick={() => void run("drop", async () => {
-                    await json(await apiFetch(`${base}/queue/${item.id}`, { method: "DELETE" }));
-                    return t("autopilot.itemRemoved");
-                  })}>{t("common.delete")}</Button>
+                  <div className="campaign-queue-actions">
+                    {item.state !== "approved" && (
+                      <Button variant="secondary" size="sm"
+                        onClick={() => void run("approve", async () => {
+                          await json(await apiFetch(`${base}/queue/${item.id}`, {
+                            method: "PATCH",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({ state: "approved" }),
+                          }));
+                          return t("autopilot.itemApproved");
+                        })}>{t("autopilot.approve")}</Button>
+                    )}
+                    <Button variant="quiet" size="sm" onClick={() => setEditing(item)}>Edit copy</Button>
+                    <Button variant="quiet" size="sm" busy={busy === `recommend-${item.id}`}
+                      onClick={() => void loadRecommendations(item)}>
+                      {item.offer_ids.length ? "Edit products" : "Review products"}
+                    </Button>
+                    <Button variant="quiet" size="sm" onClick={() => void run("drop", async () => {
+                      await json(await apiFetch(`${base}/queue/${item.id}`, { method: "DELETE" }));
+                      return t("autopilot.itemRemoved");
+                    })}>{t("common.delete")}</Button>
+                  </div>
                 )}
               </li>
             ))}
           </ul>
+        )}
+        {productItem && recommendations?.item_id === productItem.id && (
+          <div className="campaign-item-products">
+            <div className="campaign-product-heading">
+              <div>
+                <strong>Products for {productItem.title ?? "this queued post"}</strong>
+                <small>Leave every box clear for smart matching, or pin specific products to this post.</small>
+              </div>
+              <Button variant="quiet" size="sm" onClick={() => {
+                setProductItem(null); setRecommendations(null); setPinnedOffers(new Set());
+              }}>Close</Button>
+            </div>
+            <ul className="campaign-product-matches selectable">
+              {recommendations.matches.map((match) => (
+                <li key={match.offer_id}>
+                  <label>
+                    <input type="checkbox" checked={pinnedOffers.has(match.offer_id)}
+                      onChange={() => setPinnedOffers((current) => {
+                        const next = new Set(current);
+                        if (next.has(match.offer_id)) next.delete(match.offer_id);
+                        else next.add(match.offer_id);
+                        return next;
+                      })} />
+                    <span className="campaign-match-score" data-confidence={match.confidence}>
+                      <strong>{match.score}</strong><small>% fit</small>
+                    </span>
+                    <span className="campaign-match-copy">
+                      <strong>{match.product_name}</strong>
+                      <small>{match.reasons.join(" ")}</small>
+                      <span>{match.matched_terms.slice(0, 6).map((term) => <em key={term}>{term}</em>)}</span>
+                    </span>
+                    <Badge tone={match.confidence === "high" ? "good" : match.confidence === "medium" ? "warn" : "neutral"}>
+                      {match.confidence}
+                    </Badge>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <div className="campaign-product-actions">
+              <small>{pinnedOffers.size
+                ? `${pinnedOffers.size} pinned product${pinnedOffers.size === 1 ? "" : "s"}; these override smart matching for this post.`
+                : "Smart matching will choose the strongest evidence-backed products when each post is planned."}</small>
+              <Button variant="primary" size="sm" busy={busy === "pin-products"}
+                onClick={() => void run("pin-products", async () => {
+                  await json(await apiFetch(`${base}/queue/${productItem.id}`, {
+                    method: "PATCH",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ offer_ids: [...pinnedOffers] }),
+                  }));
+                  setProductItem(null); setRecommendations(null);
+                  return pinnedOffers.size ? "Products pinned to this post." : "This post now uses smart product matching.";
+                })}>Save product choice</Button>
+            </div>
+          </div>
         )}
         {editing && (
           <form className="autopilot-compose" onSubmit={(event) => {
@@ -894,10 +1122,21 @@ export function AutopilotPanel({
                         <strong>{t("autopilot.wouldBeRefused")}</strong> {post.problem}
                       </p>
                     )}
+                    {post.products.length > 0 && (
+                      <div className="campaign-preview-products">
+                        <strong>Matched products</strong>
+                        {post.products.map((name) => <Badge key={name} tone="good">{name}</Badge>)}
+                      </div>
+                    )}
                     <pre>{post.caption}</pre>
                     {post.first_comment && (
                       <pre className="autopilot-first-comment">{post.first_comment}</pre>
                     )}
+                    {post.thread.map((reply, replyIndex) => (
+                      <pre className="autopilot-thread-reply" key={`${replyIndex}-${reply}`}>
+                        Reply {replyIndex + 1} · {reply}
+                      </pre>
+                    ))}
                     <small>{post.reason}</small>
                   </li>
                 );
@@ -928,6 +1167,9 @@ export function AutopilotPanel({
                     body: JSON.stringify({
                       enabled: true,
                       offer_id: autopilot.offer_id,
+                      offer_mode: autopilot.offer_mode,
+                      candidate_offer_ids: autopilot.candidate_offer_ids,
+                      max_products_per_post: autopilot.max_products_per_post,
                       disclosure: autopilot.disclosure,
                       bio_hint: autopilot.bio_hint,
                       min_recycle_days: autopilot.min_recycle_days,

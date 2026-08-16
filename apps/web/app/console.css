@@ -710,9 +710,41 @@ html { scroll-behavior: smooth; }
 .autopilot-settings input, .autopilot-settings select, .autopilot-numbers input, .autopilot-numbers select { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; }
 .autopilot-settings small, .autopilot-numbers small { color: var(--muted); font-weight: 400; line-height: 1.4; }
 .autopilot-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.campaign-product-mode, .campaign-product-intelligence, .campaign-item-products { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; background: var(--panel-raised); }
+.campaign-product-mode > div:first-child, .campaign-product-heading > div { display: grid; gap: 3px; }
+.campaign-product-mode small, .campaign-product-heading small, .campaign-rotation-note, .campaign-product-actions small { color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.45; }
+.campaign-mode-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.campaign-mode-options button { display: grid; gap: 2px; border: 1px solid var(--line); border-radius: var(--radius); padding: 9px 10px; color: var(--text); background: var(--panel); text-align: start; cursor: pointer; }
+.campaign-mode-options button:hover { border-color: var(--line-strong); }
+.campaign-mode-options button.active { border-color: var(--link); box-shadow: inset 0 -2px var(--link); background: color-mix(in srgb, var(--link) 6%, var(--panel)); }
+.campaign-mode-options button:disabled { cursor: default; opacity: .7; }
+.campaign-product-heading, .campaign-product-actions, .campaign-shortlist-note { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.campaign-shortlist-note { border-radius: var(--radius-sm); padding: 7px 9px; color: var(--muted); background: var(--panel); font-size: 11px; }
+.campaign-strategy-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.campaign-strategy-summary span { display: grid; gap: 1px; border-inline-end: 1px solid var(--line); padding: 8px; color: var(--muted); font-size: 10px; }
+.campaign-strategy-summary span:last-child { border-inline-end: 0; }
+.campaign-strategy-summary strong { color: var(--text); font-size: 14px; }
+.campaign-rotation-note { margin: 0; }
+.campaign-product-matches { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.campaign-product-matches > li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 9px; align-items: center; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px; background: var(--panel); }
+.campaign-match-score { display: grid; width: 46px; min-height: 42px; place-content: center; border-radius: var(--radius-sm); color: var(--link); background: color-mix(in srgb, var(--link) 8%, var(--panel)); text-align: center; }
+.campaign-match-score strong { font-size: 15px; line-height: 1; }
+.campaign-match-score small { font-size: 9px; }
+.campaign-match-score[data-confidence="high"] { color: var(--green); background: color-mix(in srgb, var(--green) 10%, var(--panel)); }
+.campaign-match-copy { display: grid; min-width: 0; gap: 3px; }
+.campaign-match-copy > strong, .campaign-match-copy > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-match-copy > small { color: var(--muted); font-size: 10px; }
+.campaign-match-copy > span, .campaign-queue-products { display: flex; flex-wrap: wrap; gap: 4px; }
+.campaign-match-copy em, .campaign-queue-products em { border-radius: 999px; padding: 2px 6px; color: var(--muted); background: var(--panel-raised); font-size: 9px; font-style: normal; }
+.campaign-product-matches.selectable > li { display: block; padding: 0; }
+.campaign-product-matches.selectable label { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 9px; align-items: center; padding: 8px; cursor: pointer; }
+.campaign-product-matches.selectable input { accent-color: var(--link); }
+.campaign-item-products { margin-top: 10px; border-color: var(--line-strong); }
+.campaign-product-actions { border-top: 1px solid var(--line); padding-top: 10px; }
 
 .autopilot-destinations, .autopilot-queue { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.autopilot-destinations li, .autopilot-queue li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.autopilot-destinations li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.autopilot-queue li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
 .autopilot-destinations li > div, .autopilot-queue li > div { display: grid; gap: 2px; min-width: 0; }
 .autopilot-destinations strong, .autopilot-queue strong { overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .autopilot-destinations small, .autopilot-queue small { color: var(--muted); font-size: 11px; }
@@ -722,6 +754,7 @@ html { scroll-behavior: smooth; }
 .autopilot-placement-reason { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .autopilot-queue li.draft { border-inline-start: 3px solid var(--amber); }
 .autopilot-queue li.approved { border-inline-start: 3px solid var(--green); }
+.campaign-queue-actions { display: flex !important; flex-wrap: wrap; justify-content: flex-end; gap: 4px !important; }
 
 .autopilot-account-picker { margin-top: 10px; padding: 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); }
 .autopilot-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 12px; }
@@ -741,10 +774,19 @@ html { scroll-behavior: smooth; }
 .autopilot-preview-head span { color: var(--muted); margin-inline-end: auto; }
 .autopilot-preview pre { margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--panel-raised); font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .autopilot-first-comment { border-inline-start: 3px solid var(--line-strong); }
+.autopilot-thread-reply { border-inline-start: 3px solid var(--link); }
+.campaign-preview-products { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 11px; }
+.campaign-preview-products > strong { margin-inline-end: 2px; }
 .autopilot-preview small { color: var(--muted); font-size: 11px; line-height: 1.4; }
 
 @media (max-width: 700px) {
   .autopilot-destinations li, .autopilot-queue li { grid-template-columns: minmax(0, 1fr) auto; }
+  .campaign-mode-options, .campaign-strategy-summary { grid-template-columns: 1fr; }
+  .campaign-strategy-summary span { border-inline-end: 0; border-bottom: 1px solid var(--line); }
+  .campaign-strategy-summary span:last-child { border-bottom: 0; }
+  .campaign-product-matches > li { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .campaign-product-matches > li > .ui-button { grid-column: 2 / -1; justify-self: start; }
+  .campaign-product-heading, .campaign-product-actions { align-items: stretch; flex-direction: column; }
 }
 /* Pick the clip, then write for it. The copy field gets the room because it is
    the part that is actually being authored; the path never appears. */
