@@ -40,6 +40,9 @@ const ESTIMATE_AFTER = 0.04;
  * writing it.
  */
 function timeRemaining(job: BaseJob, now: number): string {
+  // Nothing is working on it, so elapsed keeps growing while progress does not:
+  // the estimate would climb for as long as the drawer stayed open.
+  if (job.stalled) return "";
   if (typeof job.progress !== "number" || job.progress < ESTIMATE_AFTER) return "";
   if (!job.startedAt || !now) return "";
   const elapsed = now - new Date(job.startedAt).getTime();
@@ -307,7 +310,11 @@ export function GlobalNav() {
                           {group.jobs.length > 1 && (
                             <span className="notification-repeat">×{group.jobs.length}</span>
                           )}
-                          <span className={`notification-status status-${job.status.replace(/[^a-z0-9_-]/gi, "-")}`}>{statusLabel(job.status)}</span>
+                          {/* "running" is what the row says; "paused" is what
+                              is true when no worker holds its lease. */}
+                          {job.stalled
+                            ? <span className="notification-status status-paused">paused</span>
+                            : <span className={`notification-status status-${job.status.replace(/[^a-z0-9_-]/gi, "-")}`}>{statusLabel(job.status)}</span>}
                         </div>
                         {/* Opened rather than merely read. A notification says
                             something finished, and the next thing anyone wants
@@ -330,7 +337,7 @@ export function GlobalNav() {
                             a finished bar is a bar nobody needs. */}
                         {typeof job.progress === "number"
                           && ["running", "in_progress"].includes(job.status) && (
-                          <div className="notification-progress">
+                          <div className={`notification-progress${job.stalled ? " stalled" : ""}`}>
                             <div
                               className="notification-progress-track"
                               role="progressbar"
@@ -348,6 +355,14 @@ export function GlobalNav() {
                                 timeRemaining(job, now),
                               ].filter(Boolean).join(" · ")}
                             </small>
+                            {/* The percentage above is where it stopped, not
+                                where it is. Say so, or it reads as progress. */}
+                            {job.stalled && (
+                              <small className="notification-stalled">
+                                Nothing is working on this. It resumes on its own once a
+                                worker is running.
+                              </small>
+                            )}
                           </div>
                         )}
                         {job.error && <p className="notification-error">{job.error}</p>}

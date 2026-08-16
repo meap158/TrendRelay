@@ -287,3 +287,70 @@ def test_active_jobs_are_not_paged_out_of_notification_history() -> None:
 
     assert len(visible) == 2
     assert "edit_old_active" in {job["id"] for job in visible}
+
+
+def test_a_running_job_whose_worker_vanished_reads_as_stalled() -> None:
+    """The row keeps saying "running" because only a worker writes a status.
+
+    Every sweep that would correct it - retry, abandon - also runs inside the
+    worker, so while that process is down the record stays frozen mid-render.
+    One face-overlay job in this workspace showed "Applying 63%" for ten hours.
+    Readers derive it from the lease instead of waiting to be told.
+    """
+    sessions = factory()
+    create_job_record("edit_stalled", "workspace-1", "media_effect_render", {}, factory=sessions)
+    claim_job("edit_stalled", "worker-gone", lease_seconds=120, factory=sessions)
+
+    assert get_job_record("edit_stalled", factory=sessions)["stalled"] is False
+
+    with sessions.begin() as session:
+        item = session.get(DurableJob, "edit_stalled")
+        item.lease_expires_at = now_utc() - timedelta(seconds=1)
+
+    record = get_job_record("edit_stalled", factory=sessions)
+    assert record["status"] == "running"
+    assert record["stalled"] is True
+
+
+def test_a_worker_coming_back_makes_the_job_read_as_running_again() -> None:
+    # Derived on read rather than written, so recovery needs no second sweep:
+    # the next heartbeat is enough.
+    sessions = factory()
+    create_job_record("edit_back", "workspace-1", "media_effect_render", {}, factory=sessions)
+    claim_job("edit_back", "worker-a", lease_seconds=120, factory=sessions)
+    with sessions.begin() as session:
+        session.get(DurableJob, "edit_back").lease_expires_at = now_utc() - timedelta(seconds=1)
+    assert get_job_record("edit_back", factory=sessions)["stalled"] is True
+
+    heartbeat_job("edit_back", "worker-a", lease_seconds=120, factory=sessions)
+
+    assert get_job_record("edit_back", factory=sessions)["stalled"] is False
+
+
+def test_a_settled_job_is_never_stalled() -> None:
+    # Only a job claiming to be running can be lying about it. A finished one
+    # keeps its lease columns cleared, and a queued one holds no lease at all.
+    sessions = factory()
+    create_job_record("edit_done", "workspace-1", "media_effect_render", {}, factory=sessions)
+    assert get_job_record("edit_done", factory=sessions)["stalled"] is False
+
+    claim_job("edit_done", "worker", factory=sessions)
+    complete_job("edit_done", "worker", {}, factory=sessions)
+
+    assert get_job_record("edit_done", factory=sessions)["stalled"] is False
+
+
+def test_the_stall_flag_reaches_the_list_the_drawer_reads() -> None:
+    # Notifications, the thumbnail overlay and the detail panel all read this
+    # one list; a flag only `get_job_record` carried would fix none of them.
+    sessions = factory()
+    create_job_record("edit_listed", "workspace-1", "media_effect_render", {}, factory=sessions)
+    claim_job("edit_listed", "worker-gone", lease_seconds=120, factory=sessions)
+    with sessions.begin() as session:
+        session.get(DurableJob, "edit_listed").lease_expires_at = now_utc() - timedelta(seconds=1)
+
+    listed = list_job_records_including_active(
+        "workspace-1", "media_effect_render", factory=sessions
+    )
+
+    assert [job["stalled"] for job in listed] == [True]

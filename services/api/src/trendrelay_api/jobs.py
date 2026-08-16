@@ -24,12 +24,34 @@ def as_utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value
 
 
+def lease_has_lapsed(item: DurableJob, *, at: datetime | None = None) -> bool:
+    """Whether a job says it is running while no worker holds its lease.
+
+    The row still reads `running` because only a worker writes status, and the
+    worker is the thing that vanished. Every sweep that corrects this - retry,
+    abandon - also lives in the worker process, so while it is down the record
+    stays frozen mid-render: one face-overlay job in this workspace showed
+    "Applying 63% - Drawing the object" for ten hours before anything said
+    otherwise.
+
+    Read from the lease rather than written to the row, so a reader never
+    depends on a writer to tell the truth, and a worker that comes back simply
+    starts reading as running again on its next heartbeat. The lease already
+    allows six missed heartbeats, so an expired one is not a slow pulse.
+    """
+    if item.status != "running" or item.lease_expires_at is None:
+        return False
+    return as_utc(item.lease_expires_at) <= (at or now_utc())
+
+
 def serialize_job(item: DurableJob) -> dict[str, Any]:
     return {
         "id": item.id,
         "workspace_id": item.workspace_key,
         "kind": item.kind,
         "status": item.status,
+        #: Derived, never stored. See `lease_has_lapsed`.
+        "stalled": lease_has_lapsed(item),
         "payload": item.payload,
         "result": item.result,
         "error": item.last_error,

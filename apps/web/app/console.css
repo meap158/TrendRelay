@@ -11,6 +11,10 @@
   --amber: #f5c33b;
   --red: #e13333;
   --link: #385898;
+  /* A filled bar that is not advancing: a job whose worker went away. Lighter
+   * than --muted, which at four pixels was indistinguishable from --link and
+   * left a paused render looking exactly like a running one. */
+  --paused: #9aa4ae;
   /* One shape language: chips and dense controls, everyday controls,
    * and panels. A pill stays 999px. */
   --radius-sm: 4px;
@@ -111,6 +115,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .notification-progress-track { height: 4px; border-radius: 999px; background: var(--line-strong); overflow: hidden; }
 .notification-progress-track span { display: block; height: 100%; border-radius: 999px; background: var(--link); transition: width .4s ease-out; }
 .notification-progress small { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+/* A job whose worker vanished. The bar is where it stopped, not where it is, so
+   it is drawn in the muted grey of a settled row rather than the live blue. */
+.notification-status.status-paused { color: #6b5a2e; background: #f2ece0; }
+.notification-progress.stalled .notification-progress-track span { background: var(--paused); }
+.notification-stalled { color: var(--muted); font-size: 10px; line-height: 1.4; }
 .notification-item time, .notification-read-label { color: var(--muted); font-size: 9px; }
 .notification-read-label { font-weight: 650; }
 .notification-empty { display: grid; min-height: 150px; place-content: center; gap: 5px; padding: 16px; color: var(--muted); text-align: center; }

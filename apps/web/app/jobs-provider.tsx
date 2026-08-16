@@ -75,6 +75,15 @@ export type BaseJob = {
   progressStage?: string | null;
   /** When the worker picked it up, which is what an estimate is measured from. */
   startedAt?: string | null;
+  /**
+   * Says `running` but no worker holds its lease, so nothing is happening.
+   *
+   * The server derives this from the lease rather than storing it, because the
+   * process that would have written a status is the one that disappeared.
+   * Treat it as paused, not as progressing: the last percentage is where it got
+   * to, not where it is. It resumes on its own once a worker is back.
+   */
+  stalled?: boolean;
   // Specific payloads preserved for UI needs
   raw: any;
 };
@@ -128,6 +137,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       ? "Stopping safely"
       : job.progress_stage,
     startedAt: job.started_at,
+    stalled: Boolean(job.stalled),
     href: assetHref(job),
     raw: job,
   }), [t]);
@@ -223,6 +233,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
             progress: j.progress,
             progressStage: j.progress_stage,
             startedAt: j.started_at,
+            stalled: Boolean(j.stalled),
             // The asset it produced, which it only knows once it has one.
             href: assetHref(j),
             raw: j,
