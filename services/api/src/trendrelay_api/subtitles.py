@@ -313,6 +313,14 @@ def _cue_from_words(index: int, words: Sequence[Word], rules: Layout) -> Cue:
 def wrap_lines(text: str, rules: Layout) -> list[str]:
     """Break a cue's text into lines, at the least bad place available.
 
+    `max_lines` is the target rather than a hard ceiling, and the width is the
+    ceiling. Cues built here never test the difference - the grouping refuses a
+    word that would overflow two lines, so the text always fits - but a
+    translated cue inherits a span it did not choose and can be longer than its
+    source. Given the choice, an extra line is visible and text past the edge of
+    the frame is not, so width wins. `to_ass` turns libass's own wrapping off,
+    which means nothing downstream will rescue an over-wide line.
+
     Preference order, which is the order every subtitle guideline gives: after
     punctuation, then before a word that binds onto the one after it, then
     simply nearest the middle. Balanced lines are the goal rather than full
@@ -327,10 +335,7 @@ def wrap_lines(text: str, rules: Layout) -> list[str]:
 
     lines: list[str] = []
     remaining = words
-    while remaining and len(lines) < rules.max_lines:
-        if len(lines) == rules.max_lines - 1:
-            lines.append(" ".join(remaining))
-            break
+    while remaining:
         cut = _best_break(remaining, rules)
         lines.append(" ".join(remaining[:cut]))
         remaining = remaining[cut:]
