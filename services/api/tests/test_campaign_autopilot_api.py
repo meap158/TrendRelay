@@ -13,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
+from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.models import Base
 from trendrelay_api.opportunity_models import Product, ProductOffer
 
@@ -190,6 +191,45 @@ def test_weak_matches_are_explicitly_review_only(workspace) -> None:
     assert body["matches"][0]["confidence"] == "low"
     assert body["strategy"]["recommended_products_per_post"] == 0
     assert "not attached automatically" in body["strategy"]["rotation"]
+
+
+def test_campaign_recommendations_roll_up_queued_image_evidence(workspace) -> None:
+    campaign_id = campaign(workspace)
+    with TestingSession.begin() as session:
+        session.add(Product(
+            id="prod-dress", workspace_id=workspace, catalog_key="dress-key",
+            name="Red silk dress", brand="Atelier", category="Fashion",
+            marketplace="shop", created_by="owner-user",
+        ))
+        session.add(ProductOffer(
+            id="offer-dress", workspace_id=workspace, product_id="prod-dress",
+            fingerprint="dress-offer", network="affiliate", merchant="Atelier",
+            affiliate_url="https://example.test/red-dress", currency="USD",
+            availability="available", created_by="owner-user",
+        ))
+        session.add(MediaAsset(
+            id="asset-image", workspace_id=workspace, title="Red silk dress outfit",
+            media_kind="image", source_type="upload", caption="Styling a red silk dress",
+            hashtags=["dress", "fashion"], original_path=r"S:\media\dress.jpg",
+            original_sha256="d" * 64, mime_type="image/jpeg", size_bytes=20,
+            width=1080, height=1350, created_by="owner-user",
+        ))
+    queued = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={
+            "asset_id": "asset-image", "video_path": r"S:\media\dress.jpg",
+            "body": "A timeless outfit for evening events.",
+            "hashtags": ["fashion"],
+        },
+    )
+    assert queued.status_code == 201, queued.text
+    body = request(
+        "GET", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/offer-recommendations",
+    ).json()
+    assert body["matches"][0]["offer_id"] == "offer-dress"
+    assert "queued post 1 media title" in body["matches"][0]["evidence_sources"]
+    assert body["strategy"]["media"]["media_kinds"] == ["image"]
+    assert body["strategy"]["media"]["assets_analyzed"] == 1
 
 
 def test_a_destination_reports_where_its_link_will_go(workspace) -> None:
