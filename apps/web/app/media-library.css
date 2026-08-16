@@ -92,10 +92,15 @@
 .effect-activity-item-main strong, .effect-activity-item-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .effect-activity-item-main strong { font-size: 11px; }
 .effect-activity-item-main small { color: var(--muted); font-size: 10px; }
+/* The one-line clamp above is right for a status line and wrong for a sentence
+   explaining why nothing is moving, which is the whole point of showing it. */
+.effect-activity-item-main .effect-activity-note { overflow: visible; white-space: normal; line-height: 1.4; }
 .effect-activity-item-main .ui-button { flex: 0 0 auto; }
 .effect-activity-progress { height: 4px; overflow: hidden; border-radius: 999px; background: var(--line-strong); }
 .effect-activity-progress span { display: block; height: 100%; border-radius: inherit; background: var(--link); transition: width .4s ease-out; }
 .effect-activity-progress.indeterminate span { width: 28%; animation: effect-activity-progress 1.5s ease-in-out infinite; }
+.effect-activity-progress.stalled span { background: var(--paused); }
+.effect-activity-item.muted .effect-activity-item-main > svg { color: var(--muted); }
 .effect-activity-item > p { margin: 0; color: var(--red); font-size: 10px; line-height: 1.4; }
 .effect-activity .is-spinning { animation: effect-activity-spin 1s linear infinite; }
 @keyframes effect-activity-progress { from { transform: translateX(-120%); } to { transform: translateX(460%); } }
@@ -171,6 +176,11 @@
 .library-effect-processing-progress { display: block; width: min(100%, 128px); height: 3px; justify-self: center; overflow: hidden; border-radius: 999px; background: rgba(255, 255, 255, .28); }
 .library-effect-processing-progress > span { display: block; height: 100%; border-radius: inherit; background: #fff; transition: width .4s ease-out; }
 .library-effect-processing-progress.indeterminate > span { width: 28%; animation: library-thumbnail-progress 1.5s ease-in-out infinite; }
+/* No worker holds this job's lease. The blue of an active render claimed the
+   thumbnail for something that had not moved in hours, so a paused one is grey
+   and its bar sits still at whatever it reached. */
+.library-effect-processing.stalled { background: linear-gradient(180deg, rgba(28, 43, 51, .68), rgba(28, 43, 51, .86)); }
+.library-effect-processing.stalled .library-effect-processing-progress > span { background: rgba(255, 255, 255, .6); }
 @keyframes library-thumbnail-progress { from { transform: translateX(-120%); } to { transform: translateX(460%); } }
 .library-list .library-effect-processing-label small { display: none; }
 .library-collection > button { color: var(--text); background: var(--panel); text-align: start; cursor: pointer; }
@@ -525,4 +535,40 @@
   .overlay-discovery, .overlay-gallery { margin-block-end: 10px; }
   .overlay-gallery { max-height: none; overflow: visible; }
   .overlay-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* --- Captions -------------------------------------------------------------
+   Their own class of work, so their own panel rather than a row in the effect
+   stack. The layout follows the shape of the decision: pick a look, pick a
+   language, then read the track that comes out of both. */
+.caption-editor { display: grid; gap: 18px; }
+.caption-editor h4 { margin: 0 0 8px; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.caption-editor-setup { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-muted, var(--panel)); color: var(--muted); font-size: 12px; }
+.caption-editor-setup code, .caption-editor-note code { font-size: 11px; }
+
+/* Auto-fit rather than a fixed count: the number of styles is whatever the
+   registry declares, and this file should not need editing when it grows. */
+.caption-style-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+.caption-style-choice { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); text-align: start; cursor: pointer; }
+.caption-style-choice:hover { border-color: var(--line-strong); }
+.caption-style-choice[data-on] { border-color: var(--link); box-shadow: inset 0 0 0 1px var(--link); }
+.caption-style-choice strong { font-size: 13px; }
+.caption-style-choice small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+
+.caption-editor-language select { width: 100%; max-width: 420px; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); font-size: 13px; }
+.caption-editor-note { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.caption-editor-problem { margin: 0 0 8px; color: var(--danger, #b4232a); font-size: 12px; }
+
+/* The cue list is the preview. Times and reading speed are fixed columns so
+   they line up down the list and can be scanned as one thing each. */
+.caption-cue-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; max-height: 320px; overflow-y: auto; }
+.caption-cue-list li { display: grid; grid-template-columns: 46px minmax(0, 1fr) 44px; gap: 10px; align-items: baseline; padding: 6px 8px; border-radius: var(--radius); }
+.caption-cue-list li:nth-child(odd) { background: var(--surface-muted, rgba(127, 127, 127, .06)); }
+.caption-cue-time { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.caption-cue-text { display: grid; gap: 1px; font-size: 13px; line-height: 1.35; }
+.caption-cue-cps { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; text-align: end; }
+
+@media (max-width: 640px) {
+  .caption-cue-list li { grid-template-columns: 42px minmax(0, 1fr); }
+  .caption-cue-cps { display: none; }
 }

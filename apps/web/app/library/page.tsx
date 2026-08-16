@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CircleAlert, CircleCheck, CircleX, Layers3, LoaderCircle } from "lucide-react";
+import { Check, CircleAlert, CircleCheck, CirclePause, CircleX, Layers3, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
@@ -15,6 +15,7 @@ import { Button, buttonClass } from "../ui/button";
 import { ActionIcon, bulkActionIcon } from "../ui/action-icons";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Badge } from "../ui/primitives";
+import { CaptionEditor } from "./caption-editor";
 import { ClipEditor } from "./clip-editor";
 import { EffectEditor } from "./effect-editor";
 import {
@@ -120,6 +121,8 @@ type ThumbnailEffectActivity = {
   label: string;
   detail: string;
   progress: number | null;
+  /** Nothing is working on it: hold the bar still rather than animating it. */
+  stalled: boolean;
 };
 
 /** The single most useful active render state to show on an asset card. */
@@ -150,11 +153,17 @@ function thumbnailEffectActivity(
       ? "Stopping"
       : job.status === "queued"
         ? "Queued"
-        : Number(job.raw?.attempt_count ?? 0) > 1
-          ? "Resuming"
-          : "Applying",
+        // Before the attempt count, because a stalled second attempt is paused
+        // rather than resuming — "Resuming" on a job nobody is working on is
+        // the exact reading that had an operator waiting on a frozen bar.
+        : job.stalled
+          ? "Paused"
+          : Number(job.raw?.attempt_count ?? 0) > 1
+            ? "Resuming"
+            : "Applying",
     detail: effectNames.join(" + ") || "Effect stack",
     progress,
+    stalled: Boolean(job.stalled),
   };
 }
 
@@ -182,6 +191,9 @@ function EffectActivity({
 
   const statusDetails = (job: BaseJob) => {
     if (job.status === "queued") return { label: "Waiting", icon: LoaderCircle, tone: "working" };
+    // Checked before "running": the row still says running because the worker
+    // that would have said otherwise is the one that went away.
+    if (job.stalled) return { label: "Paused", icon: CirclePause, tone: "muted" };
     if (job.status === "running") return {
       label: Number(job.raw?.attempt_count ?? 0) > 1 ? "Resuming" : "Applying",
       icon: LoaderCircle,
@@ -214,7 +226,7 @@ function EffectActivity({
           return (
             <article className={`effect-activity-item ${status.tone}`} key={job.id}>
               <div className="effect-activity-item-main">
-                <StatusIcon className={job.status === "running" ? "is-spinning" : ""} size={16} aria-hidden="true" />
+                <StatusIcon className={job.status === "running" && !job.stalled ? "is-spinning" : ""} size={16} aria-hidden="true" />
                 <div>
                   <strong>{effectNames.join(" + ") || "Effect stack"}</strong>
                   <small>
@@ -222,6 +234,14 @@ function EffectActivity({
                     {job.progressStage ? ` · ${job.progressStage}` : ""}
                     {batch?.total > 1 ? ` · Batch item ${batch.position} of ${batch.total}` : ""}
                   </small>
+                  {/* Where it stopped and what happens next, because "Paused"
+                      alone leaves somebody watching a bar that will not move. */}
+                  {job.stalled && (
+                    <small className="effect-activity-note">
+                      Stopped at {progress === null ? "an unknown point" : `${Math.round(progress * 100)}%`}.
+                      It resumes on its own once a worker is running.
+                    </small>
+                  )}
                 </div>
                 {["queued", "running"].includes(job.status) && (
                   <Button
@@ -234,7 +254,9 @@ function EffectActivity({
               </div>
               {["queued", "running"].includes(job.status) && (
                 <div
-                  className={`effect-activity-progress ${progress === null ? "indeterminate" : ""}`}
+                  className={`effect-activity-progress${
+                    progress === null && !job.stalled ? " indeterminate" : ""
+                  }${job.stalled ? " stalled" : ""}`}
                   role="progressbar"
                   aria-label={`${effectNames.join(" and ") || "Effect stack"} progress`}
                   aria-valuemin={0}
@@ -387,17 +409,25 @@ function Thumbnail({
       ) : <div className="library-thumbnail library-thumbnail-empty">{asset.media_kind}</div>}
       {effectActivity ? (
         <span
-          className="library-effect-processing"
+          className={`library-effect-processing${effectActivity.stalled ? " stalled" : ""}`}
           aria-label={`${effectActivity.label}: ${effectActivity.detail}`}
-          title={`${effectActivity.label}: ${effectActivity.detail}`}
+          title={effectActivity.stalled
+            ? `${effectActivity.detail} — paused. Nothing is working on this; it resumes when the worker is back.`
+            : `${effectActivity.label}: ${effectActivity.detail}`}
         >
           <span className="library-effect-processing-label">
-            <LoaderCircle className="is-spinning" size={15} aria-hidden="true" />
+            {/* A spinner on a job nobody is working on is the animation that
+                made a ten-hour-dead render look alive. */}
+            {effectActivity.stalled
+              ? <CirclePause size={15} aria-hidden="true" />
+              : <LoaderCircle className="is-spinning" size={15} aria-hidden="true" />}
             <strong>{effectActivity.label}</strong>
             {effectActivity.progress !== null && <small>{Math.round(effectActivity.progress * 100)}%</small>}
           </span>
           <span
-            className={`library-effect-processing-progress ${effectActivity.progress === null ? "indeterminate" : ""}`}
+            className={`library-effect-processing-progress ${
+              effectActivity.progress === null && !effectActivity.stalled ? "indeterminate" : ""
+            }`}
             aria-hidden="true"
           >
             <span style={effectActivity.progress === null ? undefined : { width: `${Math.round(effectActivity.progress * 100)}%` }} />
@@ -712,6 +742,7 @@ export default function LibraryPage() {
   const [lastPicked, setLastPicked] = useState<string | null>(null);
   const [bulkActions, setBulkActions] = useState<BulkAction[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [captionsOpen, setCaptionsOpen] = useState(false);
   const [effectsOpen, setEffectsOpen] = useState(false);
   const [batchEffectsOpen, setBatchEffectsOpen] = useState(false);
   const [cancellingEffectJobId, setCancellingEffectJobId] = useState("");
@@ -1584,6 +1615,17 @@ export default function LibraryPage() {
                           : t("library.videoOnlyClip")}
                         onClick={() => setEditorOpen(true)}
                       ><ActionIcon name="clip" />{t("library.clipPlan")}</Button>
+                      {/* Captions are not an effect: they come from the audio,
+                          need not touch the picture, and do not stack. So they
+                          get their own button rather than a row in the stack. */}
+                      <Button
+                        variant="secondary"
+                        disabled={!["video", "audio"].includes(selected.media_kind)}
+                        title={["video", "audio"].includes(selected.media_kind)
+                          ? "Build subtitles from this asset's transcript, styled and timed to the speech"
+                          : "Captions need an asset with audio"}
+                        onClick={() => setCaptionsOpen(true)}
+                      ><ActionIcon name="edit" />Captions</Button>
                     </div>
                     <EffectActivity
                       assetId={selected.id}
@@ -1720,6 +1762,17 @@ export default function LibraryPage() {
             setSelection(new Set());
             setMessage(text);
           }}
+        />
+      )}
+      {workspaceId && selected && (
+        <CaptionEditor
+          open={captionsOpen}
+          workspaceId={workspaceId}
+          assetId={selected.id}
+          assetTitle={selected.title}
+          canEdit={canImport}
+          apiFetch={apiFetch}
+          onClose={() => setCaptionsOpen(false)}
         />
       )}
       {workspaceId && selected && (
