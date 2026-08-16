@@ -532,6 +532,24 @@ nav strong { color: #1c2b33; }
 .checkbox-row { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
 .checkbox-row small { grid-column: 2; color: var(--muted); font-size: 11px; }
 
+/* Selection controls are slightly larger than the browser default without
+   becoming form-sized. The native input retains semantics and keyboard input;
+   these rules only give every dense list the same modern drawing. */
+.ui-selection-checkbox { appearance: none; display: inline-grid; place-content: center; inline-size: 18px; block-size: 18px; margin: 0; border: 1.5px solid var(--line-strong); border-radius: 5px; background: var(--panel); color: #fff; vertical-align: middle; cursor: pointer; transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease; }
+.ui-selection-checkbox::before { content: ""; inline-size: 10px; block-size: 8px; background: currentColor; clip-path: polygon(14% 44%, 0 59%, 40% 100%, 100% 20%, 83% 4%, 39% 70%); transform: scale(0); transform-origin: center; transition: transform 120ms ease; }
+.ui-selection-checkbox:hover:not(:disabled) { border-color: var(--link); }
+.ui-selection-checkbox:checked { border-color: var(--link); background: var(--link); }
+.ui-selection-checkbox:checked::before { transform: scale(1); }
+.ui-selection-checkbox:indeterminate { border-color: var(--link); background: var(--link); }
+.ui-selection-checkbox:indeterminate::before { inline-size: 9px; block-size: 2px; border-radius: 999px; clip-path: none; transform: scale(1); }
+.ui-selection-checkbox:focus-visible { outline: 2px solid var(--panel); outline-offset: 1px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--link) 30%, transparent); }
+.ui-selection-checkbox:disabled { opacity: .45; cursor: not-allowed; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-selection-checkbox,
+  .ui-selection-checkbox::before { transition: none; }
+}
+
 /* A segmented control: one bordered group rather than three floating cards. */
 .delivery-mode { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); }
 .delivery-option { display: grid; gap: 2px; padding: 9px 12px; border: 0; border-inline-start: 1px solid var(--line); background: var(--panel); text-align: start; cursor: pointer; }

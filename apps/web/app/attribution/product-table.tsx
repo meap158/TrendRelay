@@ -15,6 +15,7 @@ import { useMemo, useState } from "react";
 import { Badge, Card } from "../ui/primitives";
 import { Button } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
+import { SelectionCheckbox } from "../ui/selection-checkbox";
 import { useT } from "../i18n-provider";
 import { money } from "./format";
 import type { ProductRow } from "./types";
@@ -183,10 +184,10 @@ export function ProductTable({
           <thead>
             <tr>
               <th scope="col" className="product-choose">
-                <input
-                  type="checkbox"
+                <SelectionCheckbox
                   aria-label={t("attribution.selectAll")}
                   checked={selectableShown.length > 0 && shownSelectedCount === selectableShown.length}
+                  indeterminate={shownSelectedCount > 0 && shownSelectedCount < selectableShown.length}
                   disabled={selectableShown.length === 0}
                   onChange={(event) => chooseShown(event.target.checked)}
                 />
@@ -210,8 +211,7 @@ export function ProductTable({
               return [
                 <tr key={product.id} data-chosen={picked.has(product.id) || undefined}>
                   <td className="product-choose">
-                    <input
-                      type="checkbox"
+                    <SelectionCheckbox
                       aria-label={product.name}
                       checked={picked.has(product.id)}
                       // Disabled rather than silently ignored at the cap, so
