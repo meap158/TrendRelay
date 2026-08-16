@@ -297,6 +297,56 @@ def test_the_preview_explains_a_campaign_that_would_post_nothing(workspace) -> N
     assert "not active" in body["note"] or "No destinations" in body["note"]
 
 
+def test_deploy_preflights_then_activates_and_enables_campaign(
+    workspace, monkeypatch
+) -> None:
+    from types import SimpleNamespace
+
+    from trendrelay_api import campaign_autopilot_api, campaign_runner
+
+    campaign_id = campaign(workspace)
+    destination_body = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/destinations",
+        json={
+            "provider": "buffer", "integration_id": "acct-1",
+            "platform": "youtube", "label": "brand",
+        },
+    ).json()["destination"]
+    planned = SimpleNamespace(destination_id=destination_body["id"])
+    monkeypatch.setattr(
+        campaign_autopilot_api,
+        "plan_campaign",
+        lambda session, autopilot, **kwargs: ([planned], "Ready."),
+    )
+    monkeypatch.setattr(
+        campaign_autopilot_api, "_would_be_accepted", lambda *args: None
+    )
+    monkeypatch.setattr(
+        campaign_runner,
+        "run_campaign",
+        lambda session, autopilot, **kwargs: {
+            "posts": [{"id": "publish-1"}], "failures": [], "note": "Deployed."
+        },
+    )
+
+    unconfirmed = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/deploy",
+        json={"confirm_external_action": False},
+    )
+    assert unconfirmed.status_code == 400
+
+    deployed = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/deploy",
+        json={"confirm_external_action": True},
+    )
+
+    assert deployed.status_code == 200, deployed.text
+    assert deployed.json()["campaign_status"] == "active"
+    assert deployed.json()["autopilot"]["enabled"] is True
+    campaigns = request("GET", f"/api/workspaces/{workspace}/campaigns").json()
+    assert campaigns["campaigns"][0]["status"] == "active"
+
+
 def test_running_a_switched_off_autopilot_is_refused(workspace) -> None:
     campaign_id = campaign(workspace)
     response = request(

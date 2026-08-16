@@ -315,6 +315,7 @@ def create_campaign(
             workspace_id=workspace_id,
             campaign_id=item.id,
             offer_id=offer.id if offer else None,
+            offer_mode="manual" if offer else "smart",
             created_by=user.id,
         )
     )
@@ -345,6 +346,15 @@ def update_campaign_status(
     previous = item.status
     item.status = body.status
     item.updated_at = utc_now()
+    autopilot = session.scalar(
+        select(CampaignAutopilot).where(CampaignAutopilot.campaign_id == campaign_id)
+    )
+    if body.status == "archived" and autopilot:
+        # An archived campaign is intentionally inert. Keeping its switch on
+        # makes the UI claim it is running while the scheduler silently skips
+        # it, and restoring it later could restart publishing unexpectedly.
+        autopilot.enabled = False
+        autopilot.updated_at = utc_now()
     audit(
         session,
         request,
@@ -353,7 +363,11 @@ def update_campaign_status(
         "campaign.status_changed",
         "campaign",
         item.id,
-        {"from": previous, "to": item.status},
+        {
+            "from": previous,
+            "to": item.status,
+            "autopilot_disabled": bool(body.status == "archived" and autopilot),
+        },
     )
     return {"campaign": _campaign(item)}
 

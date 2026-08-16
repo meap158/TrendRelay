@@ -156,6 +156,21 @@ def test_an_inactive_campaign_posts_nothing_and_says_why(session) -> None:
     assert "not active" in note
 
 
+def test_an_inactive_campaign_can_be_previewed_without_becoming_active(session) -> None:
+    campaign = session.get(Campaign, "camp")
+    campaign.status = "draft"
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(session, "q1")
+
+    posts, _ = plan_campaign(
+        session, autopilot(session), now=NOW, link_for=None, allow_inactive=True
+    )
+
+    assert len(posts) == 1
+    assert campaign.status == "draft"
+
+
 def test_no_destinations_is_explained_rather_than_silent(session) -> None:
     posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert posts == []
@@ -201,6 +216,7 @@ def test_it_schedules_one_post_per_due_slot(session) -> None:
     slot(session, 12)
     slot(session, 18)
     queue_item(session, "q1")
+    queue_item(session, "q2", position=1)
     posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert len(posts) == 2
     assert [post.at.hour for post in posts] == [12, 18]
@@ -291,6 +307,10 @@ def test_bio_only_posts_rotate_one_product_instead_of_claiming_many_links(sessio
     slot(session, 12)
     slot(session, 18)
     queue_item(session, "q1", body="Espresso maker and coffee grinder setup.")
+    queue_item(
+        session, "q2", position=1,
+        body="Coffee grinder and espresso maker setup.",
+    )
     offer(session, "offer-maker", "Espresso maker")
     offer(session, "offer-grinder", "Coffee grinder")
 
@@ -397,6 +417,39 @@ def test_a_posted_item_goes_to_the_back_rather_than_being_consumed(session) -> N
     assert first.last_posted_by_destination["d1"]
     assert pilot.posts_scheduled == len(posts)
     assert pilot.last_note == note
+
+
+def test_repeated_planning_does_not_fill_the_same_future_slots_twice(session) -> None:
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    slot(session, 18)
+    queue_item(session, "q1")
+    queue_item(session, "q2", position=1)
+    pilot = autopilot(session)
+    first, note = plan_campaign(session, pilot, now=NOW, link_for=None)
+    record_scheduled(session, pilot, first, note=note, now=NOW)
+    session.commit()
+
+    repeated, repeated_note = plan_campaign(session, pilot, now=NOW, link_for=None)
+
+    assert len(first) == 2
+    assert repeated == []
+    assert "already has a post" in repeated_note or "daily cap" in repeated_note
+
+
+def test_new_posts_in_the_same_plan_count_toward_the_daily_cap(session) -> None:
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    slot(session, 18)
+    queue_item(session, "q1")
+    queue_item(session, "q2", position=1)
+
+    posts, note = plan_campaign(
+        session, autopilot(session, daily_cap_per_account=1), now=NOW, link_for=None
+    )
+
+    assert len(posts) == 1
+    assert "daily cap" in note
 
 
 # --- the cap is per account ---------------------------------------------------

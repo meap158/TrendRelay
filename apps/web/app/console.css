@@ -861,7 +861,9 @@ html { scroll-behavior: smooth; }
 .autopilot-checklist { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0 0; padding: 0; border: 0; background: transparent; }
 .autopilot-checklist li { min-height: 26px; gap: 5px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; background: var(--panel-raised); font-size: 10px; }
 .autopilot-checklist li > span:first-child { width: auto; font-size: 11px; }
-.autopilot-checklist a { margin-inline-start: 2px; }
+.autopilot-checklist :is(a, .autopilot-fix) { margin-inline-start: 2px; color: var(--link); font: inherit; font-weight: 600; text-decoration: underline; }
+.autopilot-fix { border: 0; padding: 0; background: transparent; cursor: pointer; }
+.autopilot-checklist li > small { color: var(--muted); font-size: 9px; }
 .campaign-media-browser { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); }
 .campaign-media-browser-head, .campaign-media-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; }
 .campaign-media-browser-head > div { display: grid; gap: 2px; }
@@ -906,6 +908,9 @@ html { scroll-behavior: smooth; }
 @media (max-width: 1100px) { .campaign-media-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 900px) {
   .campaign-page { width: min(100% - 20px, 1480px); }
+  .campaign-layout { grid-template-columns: minmax(0, 1fr); }
+  .campaign-sidebar { position: static; }
+  .campaign-workspace { min-width: 0; }
   .campaign-work-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .campaign-work-tabs button:nth-child(2) { border-inline-end: 0; }
   .campaign-media-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: none; }

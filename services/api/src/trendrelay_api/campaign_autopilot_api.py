@@ -61,6 +61,10 @@ class AutopilotSettings(BaseModel):
     confirm_external_action: bool = False
 
 
+class AutopilotDeploy(BaseModel):
+    confirm_external_action: bool = False
+
+
 class DestinationCreate(BaseModel):
     provider: str = Field(min_length=1, max_length=32)
     integration_id: str = Field(min_length=1, max_length=200)
@@ -629,6 +633,7 @@ def _would_be_accepted(
             caption=post.caption,
             title=post.title,
             first_comment=post.first_comment,
+            thread=list(post.thread),
             date=post.at,
             delivery=autopilot.delivery,
             schedule=autopilot.delivery == "schedule",
@@ -680,6 +685,7 @@ def preview_autopilot(
     posts, note = plan_campaign(
         session, autopilot, now=datetime.now(UTC),
         link_for=lambda _destination_id, offer_id: f"{preview_link}/{offer_id}",
+        allow_inactive=True,
     )
     by_id = {item.id: item for item in destinations}
     rendered = []
@@ -707,6 +713,105 @@ def preview_autopilot(
         "tracking_code": sample,
         "posts": rendered,
         "problems": sum(1 for item in rendered if item["problem"]),
+    }
+
+
+@router.post("/{campaign_id}/autopilot/deploy")
+def deploy_autopilot(
+    workspace_id: str,
+    campaign_id: str,
+    body: AutopilotDeploy,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Preflight, activate, enable, and enqueue the next campaign posts.
+
+    These used to be three UI requests with an impossible ordering: preview
+    required an active campaign, while activation happened before the operator
+    could see the preview. One confirmed operation now validates the exact
+    posts first and changes no campaign state when that validation fails.
+    """
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400,
+            detail="Deploying creates publishing jobs and needs confirmation.",
+        )
+    campaign = _campaign(session, workspace_id, campaign_id)
+    if campaign.status == "archived":
+        raise HTTPException(
+            status_code=409,
+            detail="Archived campaigns cannot be deployed. Restore this campaign first.",
+        )
+    autopilot = _autopilot(session, workspace_id, campaign_id, user_id=user.id)
+    destinations = session.scalars(
+        select(CampaignDestination).where(
+            CampaignDestination.campaign_id == campaign_id,
+            CampaignDestination.enabled.is_(True),
+        )
+    ).all()
+    by_id = {item.id: item for item in destinations}
+    moment = datetime.now(UTC)
+    preview_posts, note = plan_campaign(
+        session,
+        autopilot,
+        now=moment,
+        link_for=lambda _destination_id, offer_id: (
+            f"https://preview.invalid/affiliate-link/{offer_id}"
+        ),
+        allow_inactive=True,
+    )
+    if not preview_posts:
+        raise HTTPException(status_code=409, detail=note)
+    problems: list[str] = []
+    for post in preview_posts:
+        destination = by_id.get(post.destination_id)
+        if not destination:
+            problems.append("The assigned destination is no longer available.")
+            continue
+        problem = _would_be_accepted(autopilot, post, destination)
+        if problem:
+            problems.append(problem)
+    if problems:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Preflight refused {len(problems)} post(s). "
+                + " ".join(dict.fromkeys(problems))
+            ),
+        )
+
+    from trendrelay_api.campaign_runner import run_campaign
+
+    was_active = campaign.status == "active"
+    campaign.status = "active"
+    campaign.updated_at = utc_now()
+    autopilot.enabled = True
+    autopilot.updated_at = utc_now()
+    result = run_campaign(session, autopilot, now=moment)
+    if not result["posts"] and result["failures"]:
+        # Raising rolls the transaction back, including activation, link
+        # minting and any partial campaign bookkeeping.
+        raise HTTPException(status_code=502, detail=" ".join(result["failures"]))
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "campaign.autopilot_deployed",
+        "campaign",
+        campaign_id,
+        {
+            "activated": not was_active,
+            "delivery": autopilot.delivery,
+            "scheduled": len(result["posts"]),
+        },
+    )
+    return {
+        **result,
+        "campaign_status": campaign.status,
+        "autopilot": campaign_status(session, autopilot),
     }
 
 

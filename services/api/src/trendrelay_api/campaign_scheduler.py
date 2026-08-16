@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -234,6 +234,7 @@ def _posted_today(
     says, and silently so once a campaign feeds more than one account.
     """
     start = datetime(now.year, now.month, now.day, tzinfo=UTC)
+    end = start + timedelta(days=1)
     posted = 0
     for item in items:
         stamp = (item.last_posted_by_destination or {}).get(destination.id)
@@ -243,9 +244,31 @@ def _posted_today(
             when = _as_utc(datetime.fromisoformat(str(stamp)))
         except ValueError:
             continue
-        if when and when >= start:
+        if when and start <= when < end:
             posted += 1
     return posted
+
+
+def _already_planned_for_slot(
+    items: list[CampaignQueueItem], destination_id: str, moment: datetime
+) -> bool:
+    """Whether this campaign already owns this destination's exact slot.
+
+    The worker plans a rolling 24-hour horizon. Without this guard, its next
+    tick could fill the same future time again with another queue item.
+    """
+    target = _as_utc(moment)
+    for item in items:
+        stamp = (item.last_posted_by_destination or {}).get(destination_id)
+        if not stamp:
+            continue
+        try:
+            planned = _as_utc(datetime.fromisoformat(str(stamp)))
+        except ValueError:
+            continue
+        if planned == target:
+            return True
+    return False
 
 
 def plan_campaign(
@@ -254,6 +277,7 @@ def plan_campaign(
     *,
     now: datetime,
     link_for: Callable[..., str | None] | None = None,
+    allow_inactive: bool = False,
 ) -> tuple[list[ScheduledPost], str]:
     """Work out what one campaign should post next, and why.
 
@@ -268,7 +292,11 @@ def plan_campaign(
     network anyway.
     """
     campaign = session.get(Campaign, autopilot.campaign_id)
-    if not campaign or campaign.status != "active":
+    if not campaign:
+        return [], "The campaign no longer exists."
+    if campaign.status == "archived":
+        return [], "The campaign is archived. Restore it before planning new posts."
+    if campaign.status != "active" and not allow_inactive:
         return [], "The campaign is not active. Autopilot only posts for active campaigns."
 
     destinations = session.scalars(
@@ -312,6 +340,8 @@ def plan_campaign(
     scheduled: list[ScheduledPost] = []
     notes: list[str] = []
     counter = autopilot.posts_scheduled
+    reserved: dict[tuple[str, str], datetime] = {}
+    planned_per_day: dict[tuple[str, date], int] = {}
     # The same queue item can fill several slots in one horizon. Its content,
     # campaign context and offer catalogue do not change while this plan is
     # being assembled, so score it once and reuse the explainable result.
@@ -321,8 +351,16 @@ def plan_campaign(
         if rank is None:
             break
         destination = by_id[rank.destination_id]
-        if _posted_today(queue, destination, moment) >= autopilot.daily_cap_per_account:
+        day_key = (destination.id, moment.date())
+        already_planned = planned_per_day.get(day_key, 0)
+        if (
+            _posted_today(queue, destination, moment) + already_planned
+            >= autopilot.daily_cap_per_account
+        ):
             notes.append(f"{destination.label} is at its daily cap.")
+            continue
+        if _already_planned_for_slot(queue, destination.id, moment):
+            notes.append(f"{destination.label} already has a post at this time.")
             continue
         eligible = _eligible_items(
             approved,
@@ -330,6 +368,13 @@ def plan_campaign(
             now=moment,
             min_recycle_days=autopilot.min_recycle_days,
         )
+        eligible = [
+            item
+            for item in eligible
+            if (item.id, destination.id) not in reserved
+            or moment - reserved[(item.id, destination.id)]
+            >= timedelta(days=autopilot.min_recycle_days)
+        ]
         if not eligible:
             notes.append(
                 f"Nothing approved has rested {autopilot.min_recycle_days} days "
@@ -408,13 +453,18 @@ def plan_campaign(
             offer_ids=tuple(match.offer_id for match in linked_matches),
             product_names=tuple(match.product_name for match in linked_matches),
         ))
+        reserved[(item.id, destination.id)] = moment
+        planned_per_day[day_key] = already_planned + 1
         counter += 1
 
     if scheduled:
-        return scheduled, (
+        summary = (
             f"{len(scheduled)} post(s) scheduled across "
             f"{len({item.destination_id for item in scheduled})} destination(s)."
         )
+        if notes:
+            summary += " " + " ".join(dict.fromkeys(notes))
+        return scheduled, summary
     return [], " ".join(notes) or "Nothing to schedule right now."
 
 

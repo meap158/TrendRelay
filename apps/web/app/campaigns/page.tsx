@@ -295,7 +295,7 @@ export default function CampaignsPage() {
       setCampaignId(body.campaign.id);
       setNewCampaignOpen(false);
       setNewCampaignOfferId("");
-      succeed("Campaign created. Add its first publication plan.");
+      succeed("Campaign created. Add approved media to its campaign queue.");
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "Campaign creation failed.");
     } finally {
@@ -568,8 +568,8 @@ export default function CampaignsPage() {
                 </div>
                 <div className="campaign-status-actions">
                   <Link href={`/attribution?campaign=${encodeURIComponent(selectedCampaign.id)}`}><ActionIcon name="link" />{t("campaigns.measureRevenue")}</Link>
-                  {canCreateCampaign && selectedCampaign.status !== "active" && (
-                    <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("active")}><ActionIcon name="play" />{t("campaigns.activate")}</Button>
+                  {canCreateCampaign && selectedCampaign.status === "archived" && (
+                    <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("draft")}><ActionIcon name="play" />Restore</Button>
                   )}
                   {canCreateCampaign && selectedCampaign.status !== "archived" && (
                     <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("archived")}><ActionIcon name="archive" />{t("campaigns.archive")}</Button>
@@ -589,6 +589,7 @@ export default function CampaignsPage() {
                 apiFetch={apiFetch}
                 succeed={succeed}
                 fail={fail}
+                onCampaignChanged={() => refresh(workspaceId)}
               />
 
               <details key={workspaceId} className="campaign-manual-work" onToggle={(event) => {
@@ -795,11 +796,11 @@ export default function CampaignsPage() {
                 keywords: `${offer.product.brand ?? ""} ${offer.product.marketplace ?? ""} ${offer.network} ${offer.affiliate_url}`,
               }))}
               onChange={setNewCampaignOfferId}
-              placeholder="No default affiliate offer"
+              placeholder="Let smart matching choose"
               searchPlaceholder="Search imported offers…"
               emptyLabel="No offers imported in Attribution"
             />
-            <small>Optional. Imported and managed in Attribution; the tracked link is filled automatically.</small>
+            <small>Optional. Pin one product to every post, or leave this clear for automatic matching from Attribution.</small>
           </label>
           <div className="campaign-dialog-actions">
             <Button type="button" variant="quiet" onClick={() => setNewCampaignOpen(false)}>Cancel</Button>

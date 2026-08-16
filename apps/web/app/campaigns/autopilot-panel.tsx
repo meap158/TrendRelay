@@ -16,7 +16,6 @@
  */
 
 import { clipLength, handoffPath } from "../../lib/media-rules";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../ui/button";
@@ -212,6 +211,7 @@ export function AutopilotPanel({
   apiFetch,
   succeed,
   fail,
+  onCampaignChanged,
 }: {
   workspaceId: string;
   campaignId: string;
@@ -220,6 +220,7 @@ export function AutopilotPanel({
   apiFetch: (input: string, init?: RequestInit) => Promise<Response>;
   succeed: (message: string) => void;
   fail: (message: string) => void;
+  onCampaignChanged: () => Promise<void>;
 }) {
   const t = useT();
   const [autopilot, setAutopilot] = useState<Autopilot | null>(null);
@@ -335,6 +336,7 @@ export function AutopilotPanel({
   const run = useCallback(async (label: string, work: () => Promise<string>) => {
     setBusy(label);
     try {
+      if (label !== "preview") setPreview(null);
       succeed(await work());
       await refresh();
     } catch (reason) {
@@ -343,6 +345,25 @@ export function AutopilotPanel({
       setBusy("");
     }
   }, [refresh, succeed, fail]);
+
+  const loadPreview = useCallback(async (announce = true) => {
+    setBusy("preview");
+    try {
+      const body = await json<{
+        note: string; posts: PreviewPost[]; problems: number;
+      }>(await apiFetch(`${base}/autopilot/preview`, { method: "POST" }));
+      setPreview(body);
+      if (announce) {
+        succeed(body.problems
+          ? t("autopilot.previewProblems", { count: body.problems })
+          : body.note);
+      }
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "The next posts could not be previewed.");
+    } finally {
+      setBusy("");
+    }
+  }, [apiFetch, base, fail, succeed, t]);
 
   async function saveSlots(entries: { weekday: number; time: string }[]) {
     await run("slots", async () => {
@@ -354,6 +375,13 @@ export function AutopilotPanel({
       ));
       setSlots(body.slots);
       setSlotPresets(body.presets);
+      if (body.slots.length) {
+        setSection("settings");
+        void loadRecommendations();
+        if (destinations.length && (autopilot?.queue_approved ?? 0) > 0) {
+          void loadPreview(false);
+        }
+      }
       return "Posting times updated for this campaign workspace.";
     });
   }
@@ -410,28 +438,32 @@ export function AutopilotPanel({
         id: "active",
         met: campaignStatus === "active",
         label: t("autopilot.needActive"),
-        href: null as string | null,
+        section: null as typeof section | null,
       },
       {
         id: "destinations",
         met: destinations.length > 0,
         label: t("autopilot.needDestinations"),
-        href: null,
+        section: "accounts" as const,
       },
       {
         id: "queue",
         met: (autopilot?.queue_approved ?? 0) > 0,
         label: t("autopilot.needApproved"),
-        href: null,
+        section: "media" as const,
       },
       {
         id: "slots",
         met: slots.length > 0,
         label: t("autopilot.needSlots"),
-        href: null,
+        section: "schedule" as const,
       },
     ];
-    return { rows, all: rows.every((row) => row.met) };
+    return {
+      rows,
+      all: rows.every((row) => row.met),
+      configured: rows.filter((row) => row.id !== "active").every((row) => row.met),
+    };
   }, [campaignStatus, destinations.length, autopilot?.queue_approved, slots.length, t]);
 
   if (!autopilot) return null;
@@ -447,9 +479,33 @@ export function AutopilotPanel({
         aside={
           <Switch
             checked={autopilot.enabled}
-            disabled={!canEdit || (!ready.all && !autopilot.enabled)}
+            disabled={!canEdit || campaignStatus === "archived"}
             label={t("autopilot.switch")}
+            description={campaignStatus === "archived"
+              ? "Restore this campaign to use automation."
+              : !ready.configured
+                ? "Click to finish the missing setup."
+                : campaignStatus !== "active"
+                  ? "Preview and deploy to activate."
+                  : undefined}
             onChange={(next) => {
+              if (next && !ready.configured) {
+                const nextStep = unmet.find((row) => row.section);
+                if (nextStep?.section) {
+                  setSection(nextStep.section);
+                  if (nextStep.section === "accounts" && !accounts.length) {
+                    void loadAccounts();
+                  }
+                }
+                fail(`Finish setup first: ${nextStep?.label ?? "complete the checklist"}.`);
+                return;
+              }
+              if (next && campaignStatus !== "active") {
+                setSection("schedule");
+                if (!preview) void loadPreview(false);
+                fail("Review the next posts, then deploy to activate this campaign safely.");
+                return;
+              }
               if (next && !window.confirm(t("autopilot.confirmOn"))) return;
               void save({ enabled: next }, { confirm: true });
             }}
@@ -471,7 +527,10 @@ export function AutopilotPanel({
             <span>Accounts</span><strong>{destinations.length}</strong><small>destinations</small>
           </button>
           <button type="button" className={section === "schedule" ? "active" : ""}
-            onClick={() => setSection("schedule")}>
+            onClick={() => {
+              setSection("schedule");
+              if (ready.configured && !preview) void loadPreview(false);
+            }}>
             <span>Schedule</span><strong>{slots.length}</strong><small>posting times</small>
           </button>
           <button type="button" className={section === "settings" ? "active" : ""}
@@ -496,7 +555,17 @@ export function AutopilotPanel({
                     is left to do is the reason this list is on screen. */}
                 <span aria-hidden="true">{row.met ? "✓" : "•"}</span>
                 <span>{row.label}</span>
-                {!row.met && row.href && <Link href={row.href}>{t("autopilot.fixIt")}</Link>}
+                {!row.met && row.section && (
+                  <button type="button" className="autopilot-fix" onClick={() => {
+                    const target = row.section;
+                    if (!target) return;
+                    setSection(target);
+                    if (target === "accounts" && !accounts.length) void loadAccounts();
+                  }}>{t("autopilot.fixIt")}</button>
+                )}
+                {!row.met && row.id === "active" && (
+                  <small>Activates automatically when you deploy.</small>
+                )}
               </li>
             ))}
           </ul>
@@ -735,6 +804,12 @@ export function AutopilotPanel({
                     }))));
                   setSelectedAccounts(new Set());
                   setAdding(false);
+                  if (slots.length) {
+                    setSection("settings");
+                    void loadRecommendations();
+                  } else {
+                    setSection("schedule");
+                  }
                   return `${chosen.length} ${chosen.length === 1 ? "account" : "accounts"} assigned.`;
                 })}>Assign selected accounts</Button>
             </div>
@@ -938,6 +1013,17 @@ export function AutopilotPanel({
                             headers: { "content-type": "application/json" },
                             body: JSON.stringify({ state: "approved" }),
                           }));
+                          if ((autopilot.queue_approved ?? 0) === 0) {
+                            if (!destinations.length) {
+                              setSection("accounts");
+                              if (!accounts.length) void loadAccounts();
+                            } else if (!slots.length) {
+                              setSection("schedule");
+                            } else {
+                              setSection("settings");
+                              void loadRecommendations();
+                            }
+                          }
                           return t("autopilot.itemApproved");
                         })}>{t("autopilot.approve")}</Button>
                     )}
@@ -1079,15 +1165,8 @@ export function AutopilotPanel({
         title={t("autopilot.next")}
         aside={
           <Button variant="secondary" size="sm" busy={busy === "preview"}
-            onClick={() => void run("preview", async () => {
-              const body = await json<{
-                note: string; posts: PreviewPost[]; problems: number;
-              }>(await apiFetch(`${base}/autopilot/preview`, { method: "POST" }));
-              setPreview(body);
-              return body.problems
-                ? t("autopilot.previewProblems", { count: body.problems })
-                : body.note;
-            })}>{t("autopilot.showNext")}</Button>
+            disabled={!ready.configured}
+            onClick={() => void loadPreview()}>{t("autopilot.showNext")}</Button>
         }
       >
         {/* The trust-builder. Captions, times and placement exactly as they
@@ -1144,44 +1223,31 @@ export function AutopilotPanel({
             </ol>
           )
         )}
-        {!preview && unmet.length > 0 && (
+        {!preview && !ready.configured && (
           <p className="autopilot-empty">{t("autopilot.previewBlocked")}</p>
         )}
         <div className="campaign-deploy-bar">
           <div>
-            <strong>{ready.all ? "Ready to deploy" : `${unmet.length} setup items remaining`}</strong>
+            <strong>{ready.configured
+              ? campaignStatus === "active" ? "Ready to deploy" : "Ready to preview and activate"
+              : `${unmet.filter((row) => row.id !== "active").length} setup items remaining`}</strong>
             <small>{autopilot.delivery === "draft"
               ? "Creates reviewable drafts in the assigned social accounts."
               : "Schedules the next posts at the posting times above."}</small>
           </div>
-          <Button variant="primary" disabled={!canEdit || !ready.all}
+          <Button variant="primary" disabled={!canEdit || !ready.configured || Boolean(preview?.problems)}
             busy={busy === "deploy"} onClick={() => {
               if (!window.confirm(
-                `Deploy this campaign now using ${autopilot.delivery} delivery?`,
+                `Previewed posts will be deployed using ${autopilot.delivery} delivery. ${campaignStatus === "active" ? "" : "This also activates the campaign. "}Continue?`,
               )) return;
               void run("deploy", async () => {
-                if (!autopilot.enabled) {
-                  await json(await apiFetch(`${base}/autopilot`, {
-                    method: "PUT",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({
-                      enabled: true,
-                      offer_id: autopilot.offer_id,
-                      offer_mode: autopilot.offer_mode,
-                      candidate_offer_ids: autopilot.candidate_offer_ids,
-                      max_products_per_post: autopilot.max_products_per_post,
-                      disclosure: autopilot.disclosure,
-                      bio_hint: autopilot.bio_hint,
-                      min_recycle_days: autopilot.min_recycle_days,
-                      daily_cap_per_account: autopilot.daily_cap_per_account,
-                      delivery: autopilot.delivery,
-                      confirm_external_action: true,
-                    }),
-                  }));
-                }
                 const body = await json<{ note: string; posts: unknown[] }>(await apiFetch(
-                  `${base}/autopilot/run`, { method: "POST" },
+                  `${base}/autopilot/deploy`, {
+                    method: "POST",
+                    body: JSON.stringify({ confirm_external_action: true }),
+                  },
                 ));
+                await onCampaignChanged();
                 return body.note || `${body.posts.length} posts deployed.`;
               });
             }}>Deploy campaign</Button>

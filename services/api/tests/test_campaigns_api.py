@@ -159,6 +159,7 @@ def test_campaign_plan_keeps_publish_destination_and_attribution_offer(
     ))
     assert autopilot.status_code == 200
     assert autopilot.json()["autopilot"]["offer_id"] == offer_id
+    assert autopilot.json()["autopilot"]["offer_mode"] == "manual"
 
     created = asyncio.run(request(
         "POST",
@@ -345,6 +346,13 @@ def test_archived_campaign_is_locked(tmp_path: Path, monkeypatch) -> None:
     )
     workspace_id = create_workspace()
     campaign = create_campaign(workspace_id)
+    with TestingSession.begin() as session:
+        from trendrelay_api.autopilot_models import CampaignAutopilot
+
+        pilot = session.query(CampaignAutopilot).filter_by(
+            campaign_id=campaign["id"]
+        ).one()
+        pilot.enabled = True
     archived = asyncio.run(
         request(
             "POST",
@@ -353,6 +361,10 @@ def test_archived_campaign_is_locked(tmp_path: Path, monkeypatch) -> None:
         )
     )
     assert archived.status_code == 200
+    pilot = asyncio.run(request(
+        "GET", f"/api/workspaces/{workspace_id}/campaigns/{campaign['id']}/autopilot"
+    )).json()["autopilot"]
+    assert pilot["enabled"] is False
 
     plan = asyncio.run(
         request(
