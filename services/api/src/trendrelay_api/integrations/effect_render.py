@@ -648,6 +648,137 @@ def render_still_recipe(
     return report
 
 
+def _source_preview_frame(source: Path, at_ratio: float | None) -> dict[str, Any]:
+    """Decode one small frame without applying an effect.
+
+    The editing UI asks for another moment repeatedly while scrubbing. Keeping
+    this to one seek, one decode and a preview-width JPEG is the difference
+    between an interactive check and a short video render disguised as one.
+    """
+    kind = media_kind_of(source)
+    if kind == "image":
+        cv2 = face_blur._load_opencv()
+        frame = face_blur.read_image(cv2, source)
+        height, width = frame.shape[:2]
+        return {
+            "image": face_blur.encode_preview(cv2, frame, (width, height)),
+            "position": 0.0,
+            "duration_seconds": None,
+        }
+
+    found = face_blur.probe_frame(
+        source,
+        # There is no subject to search for in a stream-only stack. The first
+        # readable probe is the honest default; an explicit seek is honoured.
+        lambda _cv2, _frame: True,
+        at_ratio=at_ratio,
+    )
+    return {
+        "image": face_blur.encode_preview(
+            face_blur._load_opencv(), found["frame"], found["size"]
+        ),
+        "position": found["position"],
+        "duration_seconds": found["duration_seconds"],
+    }
+
+
+def preview_recipe_frame(
+    source: Path,
+    steps: Sequence[RecipeStep],
+    at_ratio: float | None = None,
+) -> dict[str, Any]:
+    """Apply a recipe to one decoded frame, in the same order as a render.
+
+    A frame effect may first choose a useful moment (for example one containing
+    a face). Once chosen, the original frame at that position is decoded and
+    the visual steps run through the ordinary still renderer. This avoids a
+    five-second video encode while keeping crop-before-detection different from
+    crop-after-detection, exactly as the full renderer does.
+
+    Audio and timing steps have no visible pixels on a still. They are retained
+    in the recipe and named in the response note rather than being presented as
+    if a frame could demonstrate them.
+    """
+    if not steps:
+        raise EffectError("This recipe has no effects to preview.")
+    if not source.is_file():
+        raise EffectError(f"No such media file: {source}")
+    check_media_kinds(steps, media_kind_of(source))
+
+    unpreviewable = [
+        step.effect for step in steps
+        if step.effect.stage == "frame"
+        and (step.effect.preview is None or step.effect.render_still is None)
+    ]
+    if unpreviewable:
+        effect = unpreviewable[0]
+        raise EffectError(
+            effect.unpreviewable_reason
+            or f"{effect.label} cannot be shown accurately on one frame."
+        )
+
+    position = at_ratio
+    duration: float | None = None
+    notes: list[str] = []
+    # Without an explicit seek, let the first model effect find a frame where
+    # its subject exists. Its rendered bytes are discarded: the recipe must be
+    # replayed from the original frame so earlier steps keep their meaning.
+    selector = next(
+        (step for step in steps if step.effect.stage == "frame"), None
+    )
+    if selector is not None and at_ratio is None:
+        selected = selector.effect.preview(source, selector.values, None)  # type: ignore[misc]
+        position = float(selected.get("position") or 0.0)
+        duration = selected.get("duration_seconds")
+        if selected.get("note"):
+            notes.append(str(selected["note"]))
+
+    base = _source_preview_frame(source, position)
+    duration = duration or base.get("duration_seconds")
+    position = float(base.get("position") or 0.0)
+
+    visual: list[RecipeStep] = []
+    invisible: list[str] = []
+    for step in steps:
+        if step.effect.stage == "frame" or "image" in step.effect.media_kinds:
+            visual.append(step)
+        else:
+            invisible.append(step.effect.label)
+
+    scratch = Path(tempfile.mkdtemp(prefix="frame-preview-"))
+    try:
+        source_frame = scratch / "source.jpg"
+        destination = scratch / f"preview{face_blur.STILL_SUFFIX}"
+        source_frame.write_bytes(base["image"])
+        if visual:
+            render_still_recipe(source_frame, destination, visual)
+            cv2 = face_blur._load_opencv()
+            rendered = face_blur.read_image(cv2, destination)
+            height, width = rendered.shape[:2]
+            image = face_blur.encode_preview(cv2, rendered, (width, height))
+        else:
+            image = base["image"]
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+    if invisible:
+        notes.append(
+            f"{', '.join(invisible)} cannot be judged on a still frame; "
+            "its timing or audio remains unchanged in this preview."
+        )
+    if not notes:
+        notes.append(
+            f"{len(visual)} visual effect{'s' if len(visual) != 1 else ''} "
+            "shown on this frame."
+        )
+    return {
+        "image": image,
+        "position": round(position, 4),
+        "duration_seconds": duration,
+        "note": " ".join(notes),
+    }
+
+
 def render_recipe(
     source: Path,
     destination: Path,

@@ -1131,11 +1131,15 @@ def face_overlay_sprite(
 
 
 class EffectPreviewRequest(BaseModel):
-    """One step of a recipe, to be shown on one frame."""
+    """One step or a complete recipe, to be shown on one frame."""
 
     source_path: str = Field(min_length=1, max_length=1000)
-    effect: str = Field(min_length=1, max_length=64)
+    # ``effect`` and ``values`` retain the original single-effect contract.
+    # New callers send ``steps`` so the same fast endpoint can show any prefix
+    # or the complete stack without starting a durable video render.
+    effect: str | None = Field(default=None, min_length=1, max_length=64)
     values: dict[str, Any] = Field(default_factory=dict)
+    steps: list[dict[str, Any]] = Field(default_factory=list, max_length=24)
     #: Where in the clip to look. Omitted, the clip is searched for a frame that
     #: has something on it worth showing.
     at: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -1162,29 +1166,51 @@ def effect_preview_frame(
     drift from what it is previewing.
     """
     membership(session, workspace_id, user.id)
-    from trendrelay_api.integrations.effect_render import approved_source
-    from trendrelay_api.integrations.effects import REGISTRY, EffectError, coerce_params
+    from trendrelay_api.integrations.effect_render import (
+        approved_source,
+        preview_recipe_frame,
+    )
+    from trendrelay_api.integrations.effects import (
+        REGISTRY,
+        EffectError,
+        coerce_params,
+        read_recipe,
+    )
     from trendrelay_api.integrations.face_blur import FaceBlurUnavailable
 
-    effect = REGISTRY.get(body.effect)
-    if effect is None:
-        raise HTTPException(status_code=404, detail=f"No effect called {body.effect!r}.")
-    available, unavailable_reason = effect.availability()
-    if not available:
-        raise HTTPException(status_code=409, detail=unavailable_reason)
-    if effect.preview is None:
-        # Refused with the reason rather than silently returning nothing: for an
-        # effect that decides something across the whole clip, a single frame is
-        # not a cheap preview but a misleading one.
-        raise HTTPException(
-            status_code=422,
-            detail=effect.unpreviewable_reason
-            or f"{effect.label} cannot be shown on a single frame.",
-        )
-
     try:
-        values = coerce_params(effect, body.values)
-        result = effect.preview(approved_source(body.source_path), values, body.at)
+        if body.steps:
+            if body.effect is not None:
+                raise EffectError("Send either effect or steps, not both.")
+            recipe = read_recipe(body.steps)
+            for step in recipe:
+                available, reason = step.effect.availability()
+                if not available:
+                    raise HTTPException(status_code=409, detail=reason)
+            result = preview_recipe_frame(
+                approved_source(body.source_path), recipe, body.at
+            )
+        else:
+            if body.effect is None:
+                raise EffectError("An effect or at least one recipe step is required.")
+            effect = REGISTRY.get(body.effect)
+            if effect is None:
+                raise HTTPException(
+                    status_code=404, detail=f"No effect called {body.effect!r}."
+                )
+            available, unavailable_reason = effect.availability()
+            if not available:
+                raise HTTPException(status_code=409, detail=unavailable_reason)
+            if effect.preview is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail=effect.unpreviewable_reason
+                    or f"{effect.label} cannot be shown on a single frame.",
+                )
+            values = coerce_params(effect, body.values)
+            result = effect.preview(
+                approved_source(body.source_path), values, body.at
+            )
     except EffectError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except FaceBlurUnavailable as error:

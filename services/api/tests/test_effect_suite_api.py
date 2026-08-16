@@ -187,6 +187,14 @@ def preview(workspace: str, effect: str, values: dict, **extra) -> httpx.Respons
     )
 
 
+def preview_stack(workspace: str, steps: list[dict], **extra) -> httpx.Response:
+    return request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/frame",
+        json={"source_path": "/x.mp4", "steps": steps, **extra},
+    )
+
+
 def test_an_unknown_effect_is_a_404() -> None:
     workspace = create_workspace()
     assert preview(workspace, "not_an_effect", {}).status_code == 404
@@ -212,6 +220,59 @@ def test_a_stream_effect_has_no_frame_preview() -> None:
     response = preview(workspace, "flip", {"axis": "horizontal"})
     assert response.status_code == 422
     assert "single frame" in response.json()["detail"]
+
+
+def test_a_whole_stack_uses_the_fast_frame_renderer(monkeypatch) -> None:
+    workspace = create_workspace()
+    seen = {}
+
+    def render(source, steps, at):
+        seen.update(source=source, effects=[step.effect.id for step in steps], at=at)
+        return {
+            "image": b"one-frame",
+            "position": 0.7,
+            "duration_seconds": 20.0,
+            "note": "Two visual effects shown.",
+        }
+
+    monkeypatch.setattr(
+        "trendrelay_api.integrations.effect_render.approved_source", lambda path: Path(path)
+    )
+    monkeypatch.setattr(
+        "trendrelay_api.integrations.effect_render.preview_recipe_frame", render
+    )
+    response = preview_stack(workspace, [
+        {"effect": "flip", "values": {"axis": "horizontal"}},
+        {"effect": "colour", "values": {}},
+    ], at=0.7)
+
+    assert response.status_code == 200
+    assert response.content == b"one-frame"
+    assert seen["effects"] == ["flip", "colour"]
+    assert seen["at"] == 0.7
+    assert response.headers["x-frame-position"] == "0.7"
+    assert response.headers["x-clip-duration"] == "20.0"
+
+
+def test_a_frame_preview_requires_exactly_one_request_shape() -> None:
+    workspace = create_workspace()
+    missing = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/frame",
+        json={"source_path": "/x.mp4"},
+    )
+    both = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/frame",
+        json={
+            "source_path": "/x.mp4",
+            "effect": "flip",
+            "steps": [{"effect": "flip", "values": {"axis": "horizontal"}}],
+        },
+    )
+
+    assert missing.status_code == 422
+    assert both.status_code == 422
 
 
 def test_a_preview_of_an_unknown_object_is_refused() -> None:
