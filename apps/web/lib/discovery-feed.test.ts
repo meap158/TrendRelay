@@ -91,6 +91,14 @@ test("a topic only one source saw is filtered under that source", () => {
   assert.equal(built.source, "douyin");
 });
 
+test("a single-source topic does not name that source twice", () => {
+  // The row is already labelled "Douyin"; "Douyin · douyin" spends a line on
+  // nothing the reader cannot see.
+  const built = rowFromTopic({ ...topic, sources: ["douyin"] });
+
+  assert.equal(built.detail, "durable");
+});
+
 test("a topic nothing ranked sorts last rather than first", () => {
   // A null rank read as zero would put the least-evidenced topic at the top.
   const built = rowFromTopic({ ...topic, best_rank: null });
@@ -122,7 +130,7 @@ const post = {
 
 test("a post says which quantity it counted, in that source's own word", () => {
   // A single "engagement" column would be adding views to upvotes.
-  assert.equal(rowFromPost(post, 0).metric, "24.5k likes");
+  assert.equal(rowFromPost(post, 0).metric, "24.5k upvotes");
   assert.equal(rowFromPost({ ...post, views: 1_200_000 }, 0).metric, "1.2M views");
 });
 
@@ -130,6 +138,29 @@ test("a post with no published figure shows none rather than a zero", () => {
   const built = rowFromPost({ ...post, likes: null, views: null }, 0);
 
   assert.equal(built.metric, "");
+});
+
+test("each source's count keeps that source's own word", () => {
+  // Hacker News publishes points and Reddit publishes upvotes. Printing either
+  // as "likes" states a figure the source never published.
+  assert.equal(rowFromPost({ ...post, source: "hackernews", likes: 238 }, 0).metric, "238 points");
+  assert.equal(rowFromPost({ ...post, source: "reddit", likes: 238 }, 0).metric, "238 upvotes");
+  assert.equal(rowFromPost({ ...post, source: "bluesky", likes: 238 }, 0).metric, "238 likes");
+});
+
+test("a detail that only repeats the source is dropped", () => {
+  // Bluesky labels its niche "Bluesky popular", which the row's own source
+  // label already said.
+  const built = rowFromPost({ ...post, source: "bluesky", creator: "Dave", niche: "Bluesky popular" }, 0);
+
+  assert.equal(built.detail, "Dave");
+});
+
+test("a creator promoted into the title is not repeated underneath it", () => {
+  const built = rowFromPost({ ...post, title: null, niche: null }, 0);
+
+  assert.equal(built.title, "r/AskReddit");
+  assert.equal(built.detail, "");
 });
 
 test("a post with no title falls back to who made it", () => {

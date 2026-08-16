@@ -52,19 +52,43 @@ function trim(value: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
+/**
+ * What each source calls the thing it counted.
+ *
+ * Hacker News publishes points and Reddit publishes upvotes; calling either
+ * "likes" states a number the source never published. Anything not listed
+ * genuinely counts likes.
+ */
+const LIKE_WORDS: Record<string, string> = {
+  hackernews: "points",
+  reddit: "upvotes",
+};
+
+/**
+ * Whether a detail line just repeats the source the row is already labelled
+ * with. Every row shows its source, so "Hacker News · Hacker News" spends a
+ * line on nothing.
+ */
+function echoesSource(detail: string, source: string): boolean {
+  const flat = detail.toLowerCase().replace(/[^a-z]/g, "");
+  return flat.includes(source.toLowerCase().replace(/[^a-z]/g, ""));
+}
+
 export function rowFromTopic(topic: Topic): FeedRow {
   const seen = topic.sources.length;
+  // A consolidated topic has no single provider, so it is filtered as the
+  // thing it is. Naming one of its sources would hide the others.
+  const source = seen > 1 ? "topics" : topic.sources[0] ?? "topics";
   return {
     key: `topic:${topic.key}`,
     kind: "topic",
-    // A consolidated topic has no single provider, so it is filtered as the
-    // thing it is. Naming one of its sources would hide the others.
-    source: seen > 1 ? "topics" : topic.sources[0] ?? "topics",
+    source,
     title: topic.label,
-    detail: [
-      topic.shape,
-      seen > 1 ? `${seen} sources agree` : topic.sources[0],
-    ].filter(Boolean).join(" · "),
+    // Only the part the source label does not already say: how many sources
+    // agree is news, which single source it was is not.
+    detail: [topic.shape, seen > 1 ? `${seen} sources agree` : ""]
+      .filter(Boolean)
+      .join(" · "),
     metric: topic.best_rank ? `#${topic.best_rank}` : "",
     url: null,
     rank: topic.best_rank ?? 99,
@@ -78,14 +102,21 @@ export function rowFromPost(post: PopularPost, index: number): FeedRow {
     post.views !== null && post.views !== undefined
       ? `${compact(post.views)} views`
       : post.likes !== null && post.likes !== undefined
-        ? `${compact(post.likes)} likes`
+        ? `${compact(post.likes)} ${LIKE_WORDS[post.source] ?? "likes"}`
         : "";
   return {
     key: `post:${post.source}:${post.rank}:${index}`,
     kind: "post",
     source: post.source,
     title: (post.title || post.creator || "").trim(),
-    detail: [post.creator, post.niche].filter(Boolean).join(" · "),
+    detail: [
+      // A creator promoted into the title is not repeated straight underneath.
+      post.title ? post.creator : null,
+      post.niche,
+    ]
+      .filter((part): part is string => Boolean(part))
+      .filter((part) => !echoesSource(part, post.source))
+      .join(" · "),
     metric: figure,
     url: post.url ?? null,
     rank: post.rank,
