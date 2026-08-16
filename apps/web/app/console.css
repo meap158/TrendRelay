@@ -899,6 +899,9 @@ html { scroll-behavior: smooth; }
 .campaign-manual-work > summary:hover { background: var(--panel-raised); }
 .campaign-manual-work > summary span { font-weight: 600; }
 .campaign-manual-work > summary small { margin-inline-start: auto; color: var(--muted); }
+.campaign-manual-intro { display: grid; gap: 3px; border-top: 1px solid var(--line); padding: 12px 14px; background: var(--panel-raised); }
+.campaign-manual-intro strong { font-size: 12px; }
+.campaign-manual-intro p { max-width: 760px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .campaign-manual-work > .plan-create, .campaign-manual-work > .calendar-board { border-width: 1px 0 0; border-radius: 0; }
 .campaign-dialog-form { display: grid; gap: 12px; }
 .campaign-dialog-form label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }

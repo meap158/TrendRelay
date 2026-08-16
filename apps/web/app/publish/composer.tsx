@@ -140,6 +140,7 @@ export function MediaPicker({
   return (
     <Dialog
       open={open}
+      size="wide"
       title={images ? t("composer.chooseImages") : t("composer.chooseClip")}
       description={images
         ? "Images in this workspace's library. Pick them in the order they are swiped."

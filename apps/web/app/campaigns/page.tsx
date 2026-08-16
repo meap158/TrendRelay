@@ -11,8 +11,20 @@ import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { SearchSelect } from "../ui/search-select";
 import { ActionIcon } from "../ui/action-icons";
-import { clipLength, handoffPath, type AssetVersion } from "../../lib/media-rules";
-import { upcomingSlots, type Slot } from "../publish/composer";
+import { clipLength, handoffPath } from "../../lib/media-rules";
+import {
+  MediaPicker,
+  PICKER_BASE,
+  upcomingSlots,
+  type LibraryAsset,
+  type Slot,
+} from "../publish/composer";
+import {
+  EMPTY_FACETS,
+  assetFilterParams,
+  type AssetFacets,
+  type AssetFilterValues,
+} from "../ui/asset-filters";
 import {
   platformLabels,
   type PublishingPlatform,
@@ -63,14 +75,6 @@ type ManualPackage = {
     scheduled_at: string;
     timezone: string;
   };
-};
-type LibraryClip = {
-  id: string;
-  title: string;
-  original_path: string;
-  media_kind: string;
-  duration_ms: number | null;
-  versions: AssetVersion[];
 };
 type ConnectedAccount = {
   id: string;
@@ -148,9 +152,11 @@ export default function CampaignsPage() {
   const requestedCampaign = useRef("");
   const [plans, setPlans] = useState<PublicationPlan[]>([]);
   const [videoPath, setVideoPath] = useState("");
-  const [planClips, setPlanClips] = useState<LibraryClip[]>([]);
-  const [planClip, setPlanClip] = useState<LibraryClip | null>(null);
+  const [planClips, setPlanClips] = useState<LibraryAsset[]>([]);
+  const [planClip, setPlanClip] = useState<LibraryAsset | null>(null);
   const [planPickerOpen, setPlanPickerOpen] = useState(false);
+  const [planPickerFacets, setPlanPickerFacets] = useState<AssetFacets>(EMPTY_FACETS);
+  const [planPickerFailure, setPlanPickerFailure] = useState<string | null>(null);
   const [packages, setPackages] = useState<Record<string, ManualPackage>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
@@ -312,7 +318,7 @@ export default function CampaignsPage() {
     try {
       const formElement = event.currentTarget;
       const form = new FormData(formElement);
-      await json(
+      const created = await json<{ plan: PublicationPlan }>(
         await apiFetch(
           `/api/workspaces/${workspaceId}/campaigns/${campaignId}/plans`,
           {
@@ -335,11 +341,22 @@ export default function CampaignsPage() {
           },
         ),
       );
+      if (canApprove) {
+        await json(await apiFetch(
+          `/api/workspaces/${workspaceId}/campaigns/${campaignId}/plans/${created.plan.id}/decision`,
+          {
+            method: "POST",
+            body: JSON.stringify({ decision: "approve" }),
+          },
+        ));
+      }
       setVideoPath("");
       setPlanClip(null);
       formElement.reset();
       await refresh(workspaceId);
-      succeed("Publication plan is ready for owner or approver review.");
+      succeed(canApprove
+        ? "Publication plan created and approved."
+        : "Publication plan is ready for owner or approver review.");
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "Publication plan failed.");
     } finally {
@@ -347,16 +364,24 @@ export default function CampaignsPage() {
     }
   }
 
-  async function choosePlanMedia() {
+  async function choosePlanMedia(filters: AssetFilterValues = PICKER_BASE) {
+    setPlanPickerOpen(true);
+    setPlanPickerFailure(null);
     setBusy("plan-library");
     try {
-      const body = await json<{ assets: LibraryClip[] }>(await apiFetch(
-        `/api/workspaces/${workspaceId}/media/library/assets?media_kind=video&limit=40`,
-      ));
+      const params = assetFilterParams({ ...filters, mediaKind: "video" });
+      params.set("limit", "100");
+      const body = await json<{ assets: LibraryAsset[]; facets?: AssetFacets }>(
+        await apiFetch(
+          `/api/workspaces/${workspaceId}/media/library/assets?${params.toString()}`,
+        ),
+      );
       setPlanClips(body.assets ?? []);
-      setPlanPickerOpen(true);
+      if (body.facets) setPlanPickerFacets(body.facets);
     } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "The Library could not be opened.");
+      const message = reason instanceof Error ? reason.message : "The Library could not be opened.";
+      setPlanPickerFailure(message);
+      fail(message);
     } finally {
       setBusy(null);
     }
@@ -596,12 +621,16 @@ export default function CampaignsPage() {
                 if (event.currentTarget.open) void loadPlanSources();
               }}>
                 <summary>
-                  <span>One-off approvals</span>
-                  <small>{visiblePlans.length} planned posts · advanced workflow</small>
+                  <span>Manual publication plans</span>
+                  <small>{visiblePlans.length} planned · optional advanced workflow</small>
                 </summary>
+              <div className="campaign-manual-intro">
+                <strong>Only for exact, one-time posts</strong>
+                <p>Autopilot handles recurring publishing. Open this workflow when a specific clip, account, and time need to be locked together. Owners approve their own plan in the same step; editors still send it for review.</p>
+              </div>
               {canCreatePlan && selectedCampaign.status !== "archived" && (
-                <details className="plan-create" open={visiblePlans.length === 0}>
-                  <summary>{t("campaigns.addPlan")}</summary>
+                <details className="plan-create">
+                  <summary>Create a manual plan</summary>
                   <form key={selectedCampaign.id} onSubmit={createPlan}>
                     <div className="plan-form-grid">
                       <label>{t("publish.title")}<input name="title" required maxLength={200} /></label>
@@ -654,22 +683,22 @@ export default function CampaignsPage() {
                       </div>
                       {planClip && <small>{clipLength(planClip.duration_ms) || "video"} · {planClip.versions.some((version) => ["blurred", "edited"].includes(version.kind)) ? "edited cut" : "original"}</small>}
                     </div>
-                    {planPickerOpen && (
-                      <div className="plan-media-picker">
-                        <div className="autopilot-picker-head"><strong>Choose an approved clip</strong><Button type="button" variant="quiet" size="sm" onClick={() => setPlanPickerOpen(false)}>Close</Button></div>
-                        <ul>
-                          {planClips.map((asset) => <li key={asset.id}>
-                            <span><strong>{asset.title}</strong><small>{clipLength(asset.duration_ms) || "video"}</small></span>
-                            <Button type="button" variant="quiet" size="sm" onClick={() => {
-                              setPlanClip(asset);
-                              setVideoPath(handoffPath(asset));
-                              setPlanPickerOpen(false);
-                            }}>Select</Button>
-                          </li>)}
-                          {!planClips.length && <li>No video clips are ready in the Library.</li>}
-                        </ul>
-                      </div>
-                    )}
+                    <MediaPicker
+                      open={planPickerOpen}
+                      assets={planClips}
+                      workspaceId={workspaceId}
+                      apiFetch={apiFetch}
+                      loading={busy === "plan-library"}
+                      failure={planPickerFailure}
+                      facets={planPickerFacets}
+                      onSearch={(filters) => void choosePlanMedia(filters)}
+                      onPick={(asset) => {
+                        setPlanClip(asset);
+                        setVideoPath(handoffPath(asset));
+                        setPlanPickerOpen(false);
+                      }}
+                      onClose={() => setPlanPickerOpen(false)}
+                    />
                     <input type="hidden" name="cover_path" value="" />
                     <label>{t("publish.caption")}<textarea name="caption" rows={5} required /></label>
                     <div className="plan-form-grid">
@@ -695,7 +724,9 @@ export default function CampaignsPage() {
                       <label>{t("publish.disclosure")}<input name="disclosure" defaultValue="#ad" required /></label>
                     </div>
                     <p className="campaign-source-note">
-                      Library media · Publish account · saved posting time · Attribution offer. New plans require owner or approver review.
+                      Library media · Publish account · saved posting time · Attribution offer. {canApprove
+                        ? "This plan will be approved as you create it."
+                        : "An owner or approver will review this plan."}
                     </p>
                     <div className="campaign-plan-actions">
                       <Button type="button" variant="quiet" size="sm"
@@ -704,7 +735,7 @@ export default function CampaignsPage() {
                       </Button>
                       <Button type="submit" variant="primary" busy={busy === "plan"}
                         disabled={!videoPath || !selectedPlanAccount || !planScheduledAt}>
-                        {t("publish.sendForApproval")}
+                        {canApprove ? "Create approved plan" : t("publish.sendForApproval")}
                       </Button>
                     </div>
                   </form>
