@@ -64,7 +64,8 @@ class MediaAssetVersion(Base):
             name="unique_asset_version_hash",
         ),
         CheckConstraint(
-            "version_kind IN ('original','proxy','thumbnail','audio','blurred','edited')",
+            "version_kind IN "
+            "('original','proxy','thumbnail','audio','blurred','edited','captioned')",
             name="valid_media_version_kind",
         ),
     )
