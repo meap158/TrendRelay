@@ -183,6 +183,16 @@
 .product-bulk[data-active] .product-bulk-count strong { color: var(--link); }
 .product-choose { inline-size: 34px; text-align: center; }
 .product-table tr[data-chosen] { background: var(--panel-raised); }
+/* A product row is one compact reading unit. Catalog's shared table defaults
+   to top alignment for long book metadata, but here that left checkboxes,
+   titles, and single-value metrics sitting on different vertical baselines. */
+.product-table > thead > tr > th,
+.product-table > tbody > tr:not(.catalog-edition-row) > th,
+.product-table > tbody > tr:not(.catalog-edition-row) > td { vertical-align: middle; }
+.product-table > tbody > tr:not(.catalog-edition-row) > th,
+.product-table > tbody > tr:not(.catalog-edition-row) > td { block-size: 52px; }
+.product-table .product-choose { vertical-align: middle; }
+.product-table .ui-selection-checkbox { display: grid; margin-inline: auto; }
 
 @media (max-width: 700px) {
   .product-toolbar { align-items: stretch; }
