@@ -43,6 +43,7 @@ Visual design is part of the deliverable on every task that touches the interfac
 5. **Always use CSS logical properties** (`inset-inline-start`, `margin-inline-end`, `padding-block`) rather than physical ones. The app ships Arabic; a physical property is a second rule waiting to be forgotten.
 6. **Always add every new user-facing string to all seven dictionaries** in `apps/web/lib/i18n/messages/`, with the plural categories that language uses. `scripts/i18n_scan.py` must still report 100%.
 7. Motion should honour `prefers-reduced-motion`. Focus indicators must remain visible.
+8. **Always preserve layout stability across interaction states.** Selecting rows, starting work, completing work, or revealing contextual actions must not insert a new toolbar or status row that pushes the primary content. Search, selection counts, and bulk actions belong in one reserved toolbar slot; keep controls in a predictable position and disable them when unavailable. Use an intentional disclosure, dialog, or overlay only when the user explicitly asks to reveal additional content, and verify the content's document position before and after ordinary state changes at desktop and narrow widths.
 
 ## Definition of done
 
