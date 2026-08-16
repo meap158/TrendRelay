@@ -6,6 +6,7 @@ handed an empty track that looks like a transcription failure.
 """
 
 import asyncio
+from pathlib import Path
 
 import httpx
 import pytest
@@ -205,3 +206,105 @@ def test_asking_for_a_translation_with_no_runtime_says_what_to_do(workspace) -> 
 
     assert response.status_code == 409
     assert "translation runtime" in response.json()["detail"].lower()
+
+
+# --- getting the files back out -----------------------------------------------
+
+
+def caption_file(tmp_path, workspace_id: str, asset_id: str, name: str) -> Path:
+    """Put a rendered caption where the endpoints will look for it."""
+    from trendrelay_api import caption_jobs
+
+    folder = caption_jobs.CAPTION_ROOT / workspace_id
+    folder.mkdir(parents=True, exist_ok=True)
+    written = folder / name
+    written.write_text("1\n00:00:00,000 --> 00:00:02,000\nhello\n", encoding="utf-8")
+    return written
+
+
+def test_rendered_tracks_are_listed_with_their_language(tmp_path, monkeypatch, workspace) -> None:
+    from trendrelay_api import caption_jobs
+
+    monkeypatch.setattr(caption_jobs, "CAPTION_ROOT", tmp_path / "captions")
+    asset_id = add_asset(workspace)
+    caption_file(tmp_path, workspace, asset_id, f"{asset_id}.vi.srt")
+
+    body = request(
+        "GET",
+        f"/api/workspaces/{workspace}/media/library/assets/{asset_id}/captions/files",
+    ).json()
+
+    assert [item["language"] for item in body["files"]] == ["vi"]
+    assert body["files"][0]["format"] == "srt"
+
+
+def test_a_track_can_be_downloaded(tmp_path, monkeypatch, workspace) -> None:
+    from trendrelay_api import caption_jobs
+
+    monkeypatch.setattr(caption_jobs, "CAPTION_ROOT", tmp_path / "captions")
+    asset_id = add_asset(workspace)
+    written = caption_file(tmp_path, workspace, asset_id, f"{asset_id}.en.srt")
+
+    response = request(
+        "GET",
+        f"/api/workspaces/{workspace}/media/library/assets/{asset_id}/captions/file",
+        params={"path": str(written)},
+    )
+
+    assert response.status_code == 200
+    # Line endings are whatever the platform wrote; both are valid SRT.
+    assert response.text.splitlines()[0] == "1"
+
+
+def test_a_path_outside_the_caption_folder_is_refused(tmp_path, monkeypatch, workspace) -> None:
+    """A download endpoint that takes a path is a way to read the machine."""
+    from trendrelay_api import caption_jobs
+
+    monkeypatch.setattr(caption_jobs, "CAPTION_ROOT", tmp_path / "captions")
+    asset_id = add_asset(workspace)
+    secret = tmp_path / "secrets.srt"
+    secret.write_text("not yours", encoding="utf-8")
+
+    response = request(
+        "GET",
+        f"/api/workspaces/{workspace}/media/library/assets/{asset_id}/captions/file",
+        params={"path": str(secret)},
+    )
+
+    assert response.status_code == 403
+
+
+def test_another_assets_track_is_refused(tmp_path, monkeypatch, workspace) -> None:
+    """Otherwise one asset id is a key to every caption in the workspace."""
+    from trendrelay_api import caption_jobs
+
+    monkeypatch.setattr(caption_jobs, "CAPTION_ROOT", tmp_path / "captions")
+    asset_id = add_asset(workspace)
+    theirs = caption_file(tmp_path, workspace, asset_id, "asset_someoneelse.en.srt")
+
+    response = request(
+        "GET",
+        f"/api/workspaces/{workspace}/media/library/assets/{asset_id}/captions/file",
+        params={"path": str(theirs)},
+    )
+
+    assert response.status_code == 403
+
+
+def test_a_non_caption_suffix_is_refused(tmp_path, monkeypatch, workspace) -> None:
+    from trendrelay_api import caption_jobs
+
+    monkeypatch.setattr(caption_jobs, "CAPTION_ROOT", tmp_path / "captions")
+    asset_id = add_asset(workspace)
+    folder = caption_jobs.CAPTION_ROOT / workspace
+    folder.mkdir(parents=True, exist_ok=True)
+    sneaky = folder / f"{asset_id}.en.env"
+    sneaky.write_text("SECRET=1", encoding="utf-8")
+
+    response = request(
+        "GET",
+        f"/api/workspaces/{workspace}/media/library/assets/{asset_id}/captions/file",
+        params={"path": str(sneaky)},
+    )
+
+    assert response.status_code == 403

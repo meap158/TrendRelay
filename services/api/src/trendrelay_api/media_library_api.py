@@ -1480,6 +1480,80 @@ def preview_captions(
     }
 
 
+@router.get("/assets/{asset_id}/captions/files")
+def list_caption_files(
+    workspace_id: str,
+    asset_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Every caption track already written for this asset.
+
+    Read from the directory rather than from the job records, because the files
+    are what somebody actually wants and a job that has been swept away does not
+    make its output disappear.
+    """
+    membership(session, workspace_id, user.id)
+    _asset_record(session, workspace_id, asset_id)
+    from trendrelay_api.caption_jobs import CAPTION_ROOT
+
+    folder = CAPTION_ROOT / workspace_id
+    if not folder.is_dir():
+        return {"files": []}
+    found = []
+    for item in sorted(folder.glob(f"{asset_id}.*")):
+        if not item.is_file():
+            continue
+        found.append({
+            "name": item.name,
+            "path": str(item),
+            # The language is in the name because that is how the job files
+            # them - one track per language, side by side.
+            "language": item.name.split(".")[1] if item.name.count(".") >= 2 else None,
+            "format": item.suffix.lstrip("."),
+            "size_bytes": item.stat().st_size,
+        })
+    return {"files": found}
+
+
+@router.get("/assets/{asset_id}/captions/file")
+def download_caption_file(
+    workspace_id: str,
+    asset_id: str,
+    path: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> FileResponse:
+    """Hand back one caption file.
+
+    Confined to this workspace's caption directory and to the three suffixes
+    the renderer produces. A download endpoint that takes a path is a way to
+    read the machine unless it refuses everything outside the folder it owns.
+    """
+    membership(session, workspace_id, user.id)
+    _asset_record(session, workspace_id, asset_id)
+    from trendrelay_api.caption_jobs import CAPTION_ROOT
+
+    root = (CAPTION_ROOT / workspace_id).resolve()
+    resolved = Path(path).resolve()
+    suffix = resolved.suffix.lower()
+    if not resolved.is_relative_to(root) or suffix not in {".srt", ".vtt", ".mp4"}:
+        raise HTTPException(
+            status_code=403, detail="Only caption files from this workspace can be fetched."
+        )
+    # Its own asset's files only, or one asset id becomes a key to every other.
+    if not resolved.name.startswith(f"{asset_id}."):
+        raise HTTPException(status_code=403, detail="That file belongs to another asset.")
+    if not resolved.is_file():
+        raise HTTPException(status_code=404, detail="That caption file is no longer on disk.")
+    media_type = {
+        ".srt": "application/x-subrip",
+        ".vtt": "text/vtt",
+        ".mp4": "video/mp4",
+    }[suffix]
+    return FileResponse(resolved, media_type=media_type, filename=resolved.name)
+
+
 @router.post("/assets/{asset_id}/captions", status_code=201)
 def render_captions(
     workspace_id: str,
