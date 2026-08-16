@@ -72,3 +72,48 @@
   .discover-post-row > :nth-child(3) { flex-basis: calc(100% - 88px); }
   .discover-post-actions { flex-basis: 100%; justify-content: flex-start !important; padding-inline-start: 32px; }
 }
+
+/* The merged feed: the page's first screen.
+   One list across every source that answered, because seven sources on seven
+   boards is fourteen answers to read before knowing anything. */
+.discovery-feed { margin: 0 0 20px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); }
+.discovery-feed-head { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 14px 20px; }
+.discovery-feed-head h2 { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
+.discovery-feed-head p { margin: 0; max-width: 62ch; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.discovery-feed-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.discovery-feed-controls label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.discovery-feed-controls select { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 10px; background: var(--panel); color: var(--text); font: inherit; font-size: 13px; }
+
+/* One chip per source that answered. Switched on by default and dimmed when
+   off, so the filter reads as "these are included" rather than as a menu. */
+.discovery-feed-chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 14px 0 0; }
+.discovery-feed-chips button { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel); color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.discovery-feed-chips button[data-on] { border-color: var(--link); background: var(--panel-raised); color: var(--text); }
+.discovery-feed-chips em { color: var(--muted); font-size: 10px; font-style: normal; font-variant-numeric: tabular-nums; }
+
+.discovery-feed-rows { display: grid; gap: 6px; margin: 14px 0 0; padding: 0; list-style: none; }
+.discovery-feed-rows > li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+/* A topic is evidence of a subject; a post is evidence somebody made
+   something. Marked rather than mixed silently. */
+.discovery-feed-rows > li[data-kind="topic"] { border-inline-start: 3px solid var(--link); }
+.discovery-feed-rank { color: var(--muted); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; }
+.discovery-feed-body { display: grid; gap: 2px; min-width: 0; }
+.discovery-feed-body strong { overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.discovery-feed-body small { color: var(--muted); font-size: 11px; }
+.discovery-feed-body b { color: var(--link); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.discovery-feed-metric { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.discovery-feed-actions { display: flex; align-items: center; gap: 6px; }
+.discovery-feed-actions a { display: inline-flex; color: var(--muted); }
+.discovery-feed-actions a:hover { color: var(--link); }
+.discovery-feed-error { margin: 12px 0 0; color: var(--danger, #b42318); font-size: 13px; }
+.discovery-feed-empty { margin: 14px 0 0; color: var(--muted); font-size: 13px; }
+/* Under the list, not above it: these qualify what was just read, and opening
+   with the caveats buries the thing they qualify. */
+.discovery-feed-notes { margin: 14px 0 0; color: var(--muted); font-size: 12px; }
+.discovery-feed-notes > summary { cursor: pointer; font-weight: 600; }
+.discovery-feed-notes ul { margin: 8px 0 0; padding-inline-start: 18px; line-height: 1.5; }
+
+@media (max-width: 640px) {
+  .discovery-feed-rows > li { grid-template-columns: 24px minmax(0, 1fr) auto; }
+  .discovery-feed-metric { grid-column: 2 / -1; }
+}

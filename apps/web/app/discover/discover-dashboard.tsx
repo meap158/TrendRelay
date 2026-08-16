@@ -15,6 +15,7 @@ import { numberIn, oneOf, usePersistedCache, usePersistedState } from "../ui/use
 import { useJobs } from "../jobs-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { OpportunityScoring } from "./opportunity-scoring";
+import { DiscoveryFeed } from "./discovery-feed";
 import { PopularPosts } from "./popular-posts";
 import { TrendingTopics } from "./trending-topics";
 import { CampaignIdeaComposer } from "./campaign-idea-composer";
@@ -1487,25 +1488,42 @@ export default function ResearchDashboard() {
         </div>
       </div>
 
-      {/* Cross-source topics answer what is worth making; the post board below
-          answers who is already winning. They are deliberately separate item
-          types because a hashtag and a video are different evidence. */}
-      <div style={S.section}>
-        <TrendingTopics
-          onResearch={exploreTopic}
-          onScore={scoreTopic}
-          selectedIds={ideaSeedIds}
-          onToggle={toggleIdeaSeed}
-        />
-      </div>
+      {/* One list first, because the question anyone opens this page with is
+          "what is hot", not "what did TikTok say". Seven sources on seven
+          boards is fourteen answers to read before knowing anything. */}
+      <DiscoveryFeed selectedIds={ideaSeedIds} onToggle={toggleIdeaSeed} />
 
-      <div style={S.section}>
-        <PopularPosts
-          onResearch={exploreTopic}
-          selectedIds={ideaSeedIds}
-          onToggle={toggleIdeaSeed}
-        />
-      </div>
+      {/* Folded, not deleted. A hashtag and a video are different evidence,
+          and these two boards answer what the merged list cannot: what shape a
+          topic has over time, which posts earn their engagement, and what the
+          research jobs found. A summary that replaces its own detail is one
+          nobody can check. */}
+      <details className="discovery-source-boards">
+        <summary>
+          <span>
+            <strong>Break it down by source</strong>
+            <small>Trend shapes over time, engagement ranking, and research jobs</small>
+          </span>
+          <ChevronDown size={18} aria-hidden="true" />
+        </summary>
+
+        <div style={S.section}>
+          <TrendingTopics
+            onResearch={exploreTopic}
+            onScore={scoreTopic}
+            selectedIds={ideaSeedIds}
+            onToggle={toggleIdeaSeed}
+          />
+        </div>
+
+        <div style={S.section}>
+          <PopularPosts
+            onResearch={exploreTopic}
+            selectedIds={ideaSeedIds}
+            onToggle={toggleIdeaSeed}
+          />
+        </div>
+      </details>
 
       <CampaignIdeaComposer
         seeds={ideaSeeds}
