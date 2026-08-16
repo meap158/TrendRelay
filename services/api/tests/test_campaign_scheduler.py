@@ -19,11 +19,13 @@ from trendrelay_api.campaign_scheduler import (
     GRACE,
     due_slots,
     plan_campaign,
+    record_published,
     record_scheduled,
 )
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 from trendrelay_api.models import Base, Campaign, PublishingSlot, UserProfile, Workspace
 from trendrelay_api.opportunity_models import Product, ProductOffer
+from trendrelay_api.publication_models import PublicationExecution
 
 # Imported for the side effect of registering every table on `Base.metadata`.
 # Tracking links carry a foreign key to products, so a metadata that has only
@@ -472,8 +474,32 @@ def test_a_destination_with_evidence_is_ranked_and_says_so(session) -> None:
 # --- recording ----------------------------------------------------------------
 
 
-def test_a_posted_item_goes_to_the_back_rather_than_being_consumed(session) -> None:
-    """What makes a campaign keep running without being hand-fed."""
+def _reserve(session, pilot, posts) -> list[PublicationExecution]:
+    """What the runner does with a plan: one queued execution per post."""
+    reserved = []
+    for post in posts:
+        execution = PublicationExecution(
+            workspace_id=pilot.workspace_id,
+            campaign_id=pilot.campaign_id,
+            queue_item_id=post.queue_item_id,
+            destination_id=post.destination_id,
+            state="queued",
+            scheduled_at=post.at,
+            media_path=post.video_path,
+        )
+        session.add(execution)
+        reserved.append(execution)
+    session.flush()
+    return reserved
+
+
+def test_a_published_item_goes_to_the_back_rather_than_being_consumed(session) -> None:
+    """What makes a campaign keep running without being hand-fed.
+
+    The rotation used to advance the moment a job was created; now it waits
+    for the provider-confirmed execution, which is what `record_published`
+    receives. A reservation alone moves nothing.
+    """
     destination(session, "d1", "youtube")
     slot(session, 12)
     queue_item(session, "q1")
@@ -481,14 +507,23 @@ def test_a_posted_item_goes_to_the_back_rather_than_being_consumed(session) -> N
     pilot = autopilot(session)
     posts, note = plan_campaign(session, pilot, now=NOW, link_for=None)
     record_scheduled(session, pilot, posts, note=note, now=NOW)
+    executions = _reserve(session, pilot, posts)
+    session.commit()
+
+    first = session.get(CampaignQueueItem, posts[0].queue_item_id)
+    # Reserved is not posted: nothing is counted until reconciliation.
+    assert first.times_posted == 0
+    assert first.last_posted_by_destination == {}
+    assert pilot.posts_scheduled == len(posts)
+    assert pilot.last_note == note
+
+    record_published(session, executions[0], now=NOW)
     session.commit()
 
     first = session.get(CampaignQueueItem, posts[0].queue_item_id)
     assert first.times_posted == 1
     assert first.position > 1
     assert first.last_posted_by_destination["d1"]
-    assert pilot.posts_scheduled == len(posts)
-    assert pilot.last_note == note
 
 
 def test_repeated_planning_does_not_fill_the_same_future_slots_twice(session) -> None:
@@ -500,6 +535,9 @@ def test_repeated_planning_does_not_fill_the_same_future_slots_twice(session) ->
     pilot = autopilot(session)
     first, note = plan_campaign(session, pilot, now=NOW, link_for=None)
     record_scheduled(session, pilot, first, note=note, now=NOW)
+    # The slots are held by the pending executions the runner creates, not by
+    # optimistic posted stamps: a reservation is what occupies a future slot.
+    _reserve(session, pilot, first)
     session.commit()
 
     repeated, repeated_note = plan_campaign(session, pilot, now=NOW, link_for=None)

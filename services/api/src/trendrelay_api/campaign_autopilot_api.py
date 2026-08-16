@@ -39,6 +39,7 @@ from trendrelay_api.foundation import (
 from trendrelay_api.integrations.publishing import resolve_post_type, resolve_provider
 from trendrelay_api.models import Campaign, DurableJob, utc_now
 from trendrelay_api.opportunity_models import ProductOffer
+from trendrelay_api.publication_models import PublicationExecution
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/campaigns", tags=["campaigns"])
 
@@ -245,6 +246,64 @@ def link_url_for(
     if offer.id == autopilot.offer_id and not destination.tracking_link_id:
         destination.tracking_link_id = link.id
     return link.code
+
+
+def mint_post_link(
+    session: Session,
+    autopilot: CampaignAutopilot,
+    destination: CampaignDestination,
+    offer_id: str,
+    *,
+    content_sha256: str | None = None,
+) -> TrackingLink | None:
+    """A fresh link for one post, carrying the content dimension a shared link cannot.
+
+    `link_url_for` keeps one link per destination and offer, which is right for
+    a bio: the profile holds a single URL, and rotating it per post would
+    orphan the profile link and scatter nothing but confusion. For a caption or
+    a comment the link lives inside the post, and one link per *post* is what
+    lets clicks answer "which video sells" - the content slot in the sub IDs is
+    the video's own hash, which a destination-lifetime link has to leave empty.
+    Account-level measurement is preserved because the scheduler's ranking
+    aggregates every link a destination has ever posted through.
+    """
+    offer = session.get(ProductOffer, offer_id)
+    if not offer:
+        return None
+    try:
+        destination_url = _https_url(offer.affiliate_url)
+    except ValueError:
+        return None
+    code = token_urlsafe(8)
+    campaign = session.get(Campaign, autopilot.campaign_id)
+    minted_at = utc_now()
+    sub_ids = attribution_subids.assign(destination_url, attribution_subids.LinkContext(
+        code=code,
+        platform=destination.platform,
+        campaign_id=autopilot.campaign_id,
+        campaign_name=campaign.name if campaign else None,
+        created_at=minted_at,
+        content_sha256=content_sha256,
+        product_id=offer.product_id,
+    ))
+    link = TrackingLink(
+        code=code,
+        sub_ids=sub_ids,
+        workspace_id=autopilot.workspace_id,
+        campaign_id=autopilot.campaign_id,
+        offer_id=offer.id,
+        product_id=offer.product_id,
+        destination_url=destination_url,
+        country_destinations={},
+        platform=destination.platform,
+        campaign_parameter="tr_campaign",
+        platform_parameter="tr_platform",
+        disclosure=autopilot.disclosure[:500],
+        created_by=autopilot.created_by,
+    )
+    session.add(link)
+    session.flush()
+    return link
 
 
 @router.get("/{campaign_id}/autopilot")
@@ -928,3 +987,66 @@ def run_autopilot_now(
         {"scheduled": len(result["posts"]), "note": result["note"]},
     )
     return result
+
+
+def _execution_view(item: PublicationExecution) -> dict[str, Any]:
+    return {
+        "id": item.id,
+        "state": item.state,
+        "delivery": item.delivery,
+        "scheduled_at": item.scheduled_at,
+        "queue_item_id": item.queue_item_id,
+        "destination_id": item.destination_id,
+        "destination_label": item.destination_label,
+        "platform": item.platform,
+        "provider": item.provider,
+        "asset_id": item.asset_id,
+        "asset_version_id": item.asset_version_id,
+        "media_sha256": item.media_sha256,
+        "effect_ids": list(item.effect_ids or []),
+        "title": item.title,
+        "caption": item.caption,
+        "first_comment": item.first_comment,
+        "thread": list(item.thread or []),
+        "placement": item.placement,
+        "reason": item.reason,
+        "offer_ids": list(item.offer_ids or []),
+        "tracking_links": list(item.tracking_links or []),
+        "remote_post_ids": list(item.remote_post_ids or []),
+        "permalinks": list(item.permalinks or []),
+        "failure_class": item.failure_class,
+        "error": item.error,
+        "queued_at": item.queued_at,
+        "published_at": item.published_at,
+        "reconciled_at": item.reconciled_at,
+        "created_at": item.created_at,
+    }
+
+
+@router.get("/{campaign_id}/autopilot/executions")
+def list_autopilot_executions(
+    workspace_id: str,
+    campaign_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict[str, Any]:
+    """The campaign's publication timeline, newest first.
+
+    One row per publication attempt, in the reconciled states the runner
+    recorded - which is what lets the page show "queued", "published" and
+    "the provider refused this" as three different facts instead of one
+    optimistic counter.
+    """
+    membership(session, workspace_id, user.id)
+    _campaign(session, workspace_id, campaign_id)
+    rows = session.scalars(
+        select(PublicationExecution)
+        .where(
+            PublicationExecution.workspace_id == workspace_id,
+            PublicationExecution.campaign_id == campaign_id,
+        )
+        .order_by(PublicationExecution.created_at.desc())
+        .limit(limit)
+    ).all()
+    return {"executions": [_execution_view(item) for item in rows]}

@@ -28,6 +28,7 @@ from trendrelay_api.attribution_models import ClickEvent, Conversion, TrackingLi
 from trendrelay_api.autopilot_models import (
     CampaignAutopilot,
     CampaignDestination,
+    CampaignDestinationOfferLink,
     CampaignQueueItem,
 )
 from trendrelay_api.campaign_autopilot import (
@@ -39,6 +40,7 @@ from trendrelay_api.campaign_autopilot import (
 from trendrelay_api.campaign_offer_matcher import OfferMatch, chosen_matches
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 from trendrelay_api.models import Campaign, PublishingSlot, Workspace
+from trendrelay_api.publication_models import HOLDING_STATES, PublicationExecution
 
 #: How far ahead a tick will fill. Long enough that an hourly worker never
 #: misses a slot, short enough that a queue edit reaches the schedule quickly.
@@ -69,6 +71,24 @@ class ScheduledPost:
     thread: tuple[str, ...] = ()
     offer_ids: tuple[str, ...] = ()
     product_names: tuple[str, ...] = ()
+    #: The exact Library version this post was composed against, frozen here so
+    #: the execution record and the delivery use what the preview showed. None
+    #: for a queue item that carries a raw path with no Library identity.
+    asset_id: str | None = None
+    asset_version_id: str | None = None
+    media_sha256: str | None = None
+    effect_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class FrozenMedia:
+    """The cut a post is committed to, by identity rather than by path alone."""
+
+    path: str
+    asset_id: str | None = None
+    version_id: str | None = None
+    sha256: str | None = None
+    effect_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -78,17 +98,23 @@ class TickResult:
     quiet: dict[str, str]
 
 
-def queue_media_path(session: Session, item: CampaignQueueItem) -> str:
-    """Resolve the cut the Library currently considers ready for handoff.
+def resolve_frozen_media(session: Session, item: CampaignQueueItem) -> FrozenMedia:
+    """The cut this post commits to, resolved now and then never again.
 
     A campaign queue stores the Library asset id as well as the path that was
     chosen when it was added. Effects are intentionally non-destructive and may
-    finish rendering after that moment, so publishing must resolve the asset
-    again. The newest rendered cut wins; a missing or foreign asset safely
-    falls back to the approved path already stored on the queue item.
+    finish rendering after that moment, so *planning* resolves the asset again
+    and the newest rendered cut wins. What changed with executions is when the
+    resolution stops: the chosen version's id and stored hash are frozen onto
+    the post, so a render finishing later cannot swap the file under a plan
+    that was already previewed, and a file that goes missing fails delivery by
+    name instead of quietly reverting to the unedited original.
+
+    An item with no Library identity keeps its stored path - that path is the
+    approved input, not a fallback.
     """
     if not item.asset_id:
-        return item.video_path
+        return FrozenMedia(path=item.video_path)
     asset = session.scalar(
         select(MediaAsset).where(
             MediaAsset.id == item.asset_id,
@@ -96,7 +122,7 @@ def queue_media_path(session: Session, item: CampaignQueueItem) -> str:
         )
     )
     if not asset:
-        return item.video_path
+        return FrozenMedia(path=item.video_path)
     rendered = session.scalar(
         select(MediaAssetVersion)
         .where(
@@ -107,7 +133,35 @@ def queue_media_path(session: Session, item: CampaignQueueItem) -> str:
         .order_by(MediaAssetVersion.created_at.desc())
         .limit(1)
     )
-    return rendered.path if rendered else asset.original_path
+    if rendered:
+        return FrozenMedia(
+            path=rendered.path,
+            asset_id=asset.id,
+            version_id=rendered.id,
+            sha256=rendered.sha256,
+            effect_ids=tuple(rendered.effect_ids or []),
+        )
+    original = session.scalar(
+        select(MediaAssetVersion)
+        .where(
+            MediaAssetVersion.asset_id == asset.id,
+            MediaAssetVersion.workspace_id == item.workspace_id,
+            MediaAssetVersion.version_kind == "original",
+        )
+        .order_by(MediaAssetVersion.created_at.desc())
+        .limit(1)
+    )
+    return FrozenMedia(
+        path=asset.original_path,
+        asset_id=asset.id,
+        version_id=original.id if original else None,
+        sha256=original.sha256 if original else asset.original_sha256,
+    )
+
+
+def queue_media_path(session: Session, item: CampaignQueueItem) -> str:
+    """The path `resolve_frozen_media` would freeze, for callers that only look."""
+    return resolve_frozen_media(session, item).path
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -146,14 +200,54 @@ def due_slots(
     return sorted(set(found))
 
 
+def _destination_link_ids(
+    session: Session, destinations: list[CampaignDestination]
+) -> dict[str, set[str]]:
+    """Every tracking link a destination has ever carried, by destination.
+
+    Three generations of link live side by side: the original one-per-
+    destination link, the per-offer destination links, and the per-post
+    execution links. Ranking an account means adding all of them up - which
+    is what keeps per-post links from scattering the account's measurement,
+    the objection that kept links coarse in the first place.
+    """
+    ids = [item.id for item in destinations]
+    found: dict[str, set[str]] = {item.id: set() for item in destinations}
+    for destination in destinations:
+        if destination.tracking_link_id:
+            found[destination.id].add(destination.tracking_link_id)
+    for row in session.scalars(
+        select(CampaignDestinationOfferLink).where(
+            CampaignDestinationOfferLink.destination_id.in_(ids)
+        )
+    ).all():
+        found[row.destination_id].add(row.tracking_link_id)
+    for execution in session.scalars(
+        select(PublicationExecution).where(
+            PublicationExecution.destination_id.in_(ids)
+        )
+    ).all():
+        for entry in execution.tracking_links or []:
+            link_id = entry.get("tracking_link_id")
+            if link_id and execution.destination_id:
+                found[execution.destination_id].add(link_id)
+    return found
+
+
 def _performance(session: Session, workspace_id: str, destinations: list[CampaignDestination]
                  ) -> dict[str, dict[str, float]]:
-    """Clicks and settled commission per destination, from its own link.
+    """Clicks and settled commission per destination, across all its links.
 
-    Only destinations that have a tracking link can be measured, which is the
-    point of giving each one its own rather than sharing the campaign's.
+    Only destinations that have carried a tracking link can be measured, which
+    is the point of giving each one its own rather than sharing the campaign's.
     """
-    link_ids = [item.tracking_link_id for item in destinations if item.tracking_link_id]
+    per_destination = _destination_link_ids(session, list(destinations))
+    owner_by_link = {
+        link_id: destination_id
+        for destination_id, links in per_destination.items()
+        for link_id in links
+    }
+    link_ids = list(owner_by_link)
     if not link_ids:
         return {}
 
@@ -170,15 +264,13 @@ def _performance(session: Session, workspace_id: str, destinations: list[Campaig
     conversions = session.scalars(
         select(Conversion).where(Conversion.tracking_link_id.in_(link_ids))
     ).all()
-    by_link: dict[str, list[Conversion]] = {}
-    for item in conversions:
-        by_link.setdefault(item.tracking_link_id, []).append(item)
 
     found: dict[str, dict[str, float]] = {}
     for destination in destinations:
-        if not destination.tracking_link_id:
+        links = per_destination.get(destination.id) or set()
+        if not links:
             continue
-        mine = by_link.get(destination.tracking_link_id, [])
+        mine = [item for item in conversions if item.tracking_link_id in links]
         settled = [item for item in mine if item.status == "approved"]
         reversed_out = sum(
             item.commission_cents
@@ -186,7 +278,9 @@ def _performance(session: Session, workspace_id: str, destinations: list[Campaig
             if item.status in {"reversed", "refunded"}
         )
         found[destination.id] = {
-            "clicks": float(click_counts.get(destination.tracking_link_id, 0)),
+            "clicks": float(
+                sum(click_counts.get(link_id, 0) for link_id in links)
+            ),
             "conversions": float(len(settled)),
             "net_commission_cents": float(
                 sum(item.commission_cents for item in settled) - reversed_out
@@ -343,6 +437,32 @@ def plan_campaign(
     ).all())
     approved = [item for item in queue if item.state == "approved"]
 
+    # What is already committed but not yet settled. A reservation holds its
+    # slot and its queue item without counting as posted - only reconciliation
+    # writes the posted stamps - so everything the planner must not double-book
+    # is read from the pending executions rather than from optimistic stamps.
+    # An `uncertain` execution holds too: the post may exist, and re-planning
+    # its slot is how an ambiguous timeout becomes a duplicate post.
+    pending = session.scalars(
+        select(PublicationExecution).where(
+            PublicationExecution.campaign_id == autopilot.campaign_id,
+            PublicationExecution.state.in_(sorted(HOLDING_STATES)),
+        )
+    ).all()
+    held_slots = {
+        (execution.destination_id, _as_utc(execution.scheduled_at))
+        for execution in pending
+    }
+    held_items = {
+        (execution.queue_item_id, execution.destination_id) for execution in pending
+    }
+    pending_per_day: dict[tuple[str, date], int] = {}
+    for execution in pending:
+        when = _as_utc(execution.scheduled_at)
+        if execution.destination_id and when:
+            day = (execution.destination_id, when.date())
+            pending_per_day[day] = pending_per_day.get(day, 0) + 1
+
     performance = _performance(session, autopilot.workspace_id, list(destinations))
     ranks = rank_destinations(
         [{"id": item.id, "platform": item.platform} for item in destinations],
@@ -359,6 +479,7 @@ def plan_campaign(
     # campaign context and offer catalogue do not change while this plan is
     # being assembled, so score it once and reuse the explainable result.
     match_cache: dict[str, tuple[list[OfferMatch], dict[str, Any]]] = {}
+    frozen_cache: dict[str, FrozenMedia] = {}
     for moment in upcoming:
         rank = choose_destination(ranks, posts_so_far=counter)
         if rank is None:
@@ -367,12 +488,16 @@ def plan_campaign(
         day_key = (destination.id, moment.date())
         already_planned = planned_per_day.get(day_key, 0)
         if (
-            _posted_today(queue, destination, moment) + already_planned
+            _posted_today(queue, destination, moment)
+            + pending_per_day.get(day_key, 0)
+            + already_planned
             >= autopilot.daily_cap_per_account
         ):
             notes.append(f"{destination.label} is at its daily cap.")
             continue
-        if _already_planned_for_slot(queue, destination.id, moment):
+        if (destination.id, moment) in held_slots or _already_planned_for_slot(
+            queue, destination.id, moment
+        ):
             notes.append(f"{destination.label} already has a post at this time.")
             continue
         eligible = _eligible_items(
@@ -381,6 +506,13 @@ def plan_campaign(
             now=moment,
             min_recycle_days=autopilot.min_recycle_days,
         )
+        eligible = [
+            item
+            for item in eligible
+            # An item already riding an unsettled execution on this account is
+            # spoken for until that execution settles, however long it rested.
+            if (item.id, destination.id) not in held_items
+        ]
         eligible = [
             item
             for item in eligible
@@ -395,6 +527,13 @@ def plan_campaign(
             )
             continue
         item = eligible[0]
+        # Frozen before composing, because the links minted below carry the
+        # content hash in their sub IDs and the hash comes from the version
+        # being frozen. Once per item per plan: the resolution cannot change
+        # while this plan is being assembled.
+        if item.id not in frozen_cache:
+            frozen_cache[item.id] = resolve_frozen_media(session, item)
+        frozen = frozen_cache[item.id]
         if item.id not in match_cache:
             match_cache[item.id] = chosen_matches(
                 session, campaign, autopilot, item, destinations
@@ -422,11 +561,19 @@ def plan_campaign(
             if not link_for:
                 continue
             try:
-                link = link_for(destination.id, match.offer_id)
+                # The full contract carries the frozen content hash, so a
+                # per-post link can fill the sub-ID slot that answers "which
+                # video sells". Older callbacks simply take fewer arguments.
+                link = link_for(
+                    destination.id, match.offer_id, content_sha256=frozen.sha256
+                )
             except TypeError:
-                # Backwards-compatible test/integration callback from the
-                # single-offer scheduler contract.
-                link = link_for(destination.id)
+                try:
+                    link = link_for(destination.id, match.offer_id)
+                except TypeError:
+                    # Backwards-compatible test/integration callback from the
+                    # single-offer scheduler contract.
+                    link = link_for(destination.id)
             if link:
                 product_links.append((match.product_name, link))
                 linked_matches.append(match)
@@ -460,7 +607,11 @@ def plan_campaign(
             destination_id=destination.id,
             queue_item_id=item.id,
             at=moment,
-            video_path=queue_media_path(session, item),
+            video_path=frozen.path,
+            asset_id=frozen.asset_id,
+            asset_version_id=frozen.version_id,
+            media_sha256=frozen.sha256,
+            effect_ids=frozen.effect_ids,
             title=item.title,
             caption=post.caption,
             first_comment=first_comment,
@@ -504,30 +655,61 @@ def record_scheduled(
     note: str,
     now: datetime,
 ) -> None:
-    """Mark what went out, so rest intervals and exploration survive a restart."""
-    for post in posts:
-        item = session.get(CampaignQueueItem, post.queue_item_id)
-        destination = session.get(CampaignDestination, post.destination_id)
-        if item:
-            stamps = dict(item.last_posted_by_destination or {})
-            stamps[post.destination_id] = post.at.isoformat()
-            item.last_posted_by_destination = stamps
-            item.last_posted_at = post.at
-            item.times_posted += 1
-            # To the back of the rotation rather than consumed, which is what
-            # keeps the campaign running without being hand-fed.
-            item.position = (
-                session.scalar(
-                    select(func.max(CampaignQueueItem.position)).where(
-                        CampaignQueueItem.campaign_id == autopilot.campaign_id
-                    )
-                ) or 0
-            ) + 1
-        if destination:
-            destination.last_posted_at = post.at
+    """Record that a run happened and what it reserved.
+
+    Reservation-level bookkeeping only. This used to stamp every post as
+    posted the moment its job was *created* - before any provider had said
+    yes - so a refused post rested its clip for a month and a failed one
+    counted toward history that never happened. The posted stamps, the
+    rotation and `times_posted` now move in `record_published`, on the
+    provider-confirmed execution.
+
+    `posts_scheduled` still advances here because it drives the exploration
+    cadence, which is about decisions made, not posts confirmed.
+    """
     autopilot.posts_scheduled += len(posts)
     autopilot.last_run_at = now
     autopilot.last_note = note
+
+
+def record_published(
+    session: Session, execution: PublicationExecution, *, now: datetime
+) -> None:
+    """The provider confirmed this post exists; count it everywhere it counts.
+
+    The one place rest intervals start, rotation advances and `times_posted`
+    grows - called from reconciliation with a settled execution, never from
+    the moment a job was created.
+    """
+    posted_at = _as_utc(execution.scheduled_at) or now
+    item = (
+        session.get(CampaignQueueItem, execution.queue_item_id)
+        if execution.queue_item_id
+        else None
+    )
+    if item:
+        stamps = dict(item.last_posted_by_destination or {})
+        if execution.destination_id:
+            stamps[execution.destination_id] = posted_at.isoformat()
+        item.last_posted_by_destination = stamps
+        item.last_posted_at = posted_at
+        item.times_posted += 1
+        # To the back of the rotation rather than consumed, which is what
+        # keeps the campaign running without being hand-fed.
+        item.position = (
+            session.scalar(
+                select(func.max(CampaignQueueItem.position)).where(
+                    CampaignQueueItem.campaign_id == item.campaign_id
+                )
+            ) or 0
+        ) + 1
+    destination = (
+        session.get(CampaignDestination, execution.destination_id)
+        if execution.destination_id
+        else None
+    )
+    if destination:
+        destination.last_posted_at = posted_at
 
 
 def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str, Any]:
