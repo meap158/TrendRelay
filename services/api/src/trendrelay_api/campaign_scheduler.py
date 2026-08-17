@@ -466,6 +466,27 @@ def plan_campaign(
             day = (execution.destination_id, when.date())
             pending_per_day[day] = pending_per_day.get(day, 0) + 1
 
+    # The campaign-wide weekly ceiling, where one is set. Counted from every
+    # execution that is committed or confirmed - failed and cancelled ones gave
+    # their slot back and are not spend.
+    weekly_cap = autopilot.weekly_post_cap
+    week_used = 0
+    if weekly_cap:
+        week_used = session.scalar(
+            select(func.count(PublicationExecution.id)).where(
+                PublicationExecution.campaign_id == autopilot.campaign_id,
+                PublicationExecution.state.in_(
+                    sorted(HOLDING_STATES | {"published", "measured"})
+                ),
+                PublicationExecution.created_at >= now - timedelta(days=7),
+            )
+        ) or 0
+        if week_used >= weekly_cap:
+            return [], (
+                f"The weekly cap of {weekly_cap} post(s) is reached: "
+                f"{week_used} committed in the last seven days."
+            )
+
     performance = _performance(session, autopilot.workspace_id, list(destinations))
     from trendrelay_api.campaign_measurement import destination_engagement
 
@@ -490,6 +511,9 @@ def plan_campaign(
     match_cache: dict[str, tuple[list[OfferMatch], dict[str, Any]]] = {}
     frozen_cache: dict[str, FrozenMedia] = {}
     for moment in upcoming:
+        if weekly_cap and week_used + len(scheduled) >= weekly_cap:
+            notes.append(f"The weekly cap of {weekly_cap} post(s) is reached.")
+            break
         rank = choose_destination(ranks, posts_so_far=counter)
         if rank is None:
             break
@@ -762,6 +786,7 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
         "bio_hint": autopilot.bio_hint,
         "min_recycle_days": autopilot.min_recycle_days,
         "daily_cap_per_account": autopilot.daily_cap_per_account,
+        "weekly_post_cap": autopilot.weekly_post_cap,
         "posts_scheduled": autopilot.posts_scheduled,
         "last_run_at": autopilot.last_run_at,
         "last_note": autopilot.last_note,

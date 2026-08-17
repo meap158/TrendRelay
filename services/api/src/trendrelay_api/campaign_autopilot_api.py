@@ -46,6 +46,41 @@ router = APIRouter(prefix="/api/workspaces/{workspace_id}/campaigns", tags=["cam
 
 EDITORS = {"owner", "editor", "approver"}
 
+#: Provider-confirmed posts a campaign must have on record before autonomous
+#: authority can be chosen. Ten is a learning period an operator can actually
+#: watch, not a statistical claim.
+GRADUATION_PUBLISHED_POSTS = 10
+
+
+def graduation_block(session: Session, campaign_id: str) -> str | None:
+    """Why this campaign cannot go autonomous yet, or None when it can.
+
+    Graduation is earned, not clicked. The learning period is visible in the
+    executions themselves: enough provider-confirmed posts to have been
+    watched, and nothing sitting unresolved that could be a duplicate waiting
+    to happen.
+    """
+    published = session.scalar(
+        select(func.count(PublicationExecution.id)).where(
+            PublicationExecution.campaign_id == campaign_id,
+            PublicationExecution.state.in_(("published", "measured")),
+        )
+    ) or 0
+    unresolved = session.scalar(
+        select(func.count(PublicationExecution.id)).where(
+            PublicationExecution.campaign_id == campaign_id,
+            PublicationExecution.state == "uncertain",
+        )
+    ) or 0
+    if published < GRADUATION_PUBLISHED_POSTS or unresolved:
+        return (
+            f"Autonomous authority is earned: {published} of "
+            f"{GRADUATION_PUBLISHED_POSTS} provider-confirmed posts so far, and "
+            f"{unresolved} uncertain delivery(ies) unresolved. Run by exception "
+            "until the record supports it."
+        )
+    return None
+
 
 class AutopilotSettings(BaseModel):
     enabled: bool = False
@@ -69,6 +104,9 @@ class AutopilotSettings(BaseModel):
     priority: str = Field(
         default="balanced", pattern=r"^(reach|discussion|revenue|balanced)$"
     )
+    #: The whole campaign's rolling-week ceiling, across every destination.
+    #: None leaves the per-account caps as the only limit.
+    weekly_post_cap: int | None = Field(default=None, ge=1, le=200)
     #: Switching an autopilot on hands over an account. It is an external action
     #: like any other here, and it is confirmed like one.
     confirm_external_action: bool = False
@@ -408,9 +446,14 @@ def save_autopilot(
     autopilot.bio_hint = body.bio_hint.strip() or "Link in bio"
     autopilot.min_recycle_days = body.min_recycle_days
     autopilot.daily_cap_per_account = body.daily_cap_per_account
+    if body.authority == "autonomous" and autopilot.authority != "autonomous":
+        blocked = graduation_block(session, campaign_id)
+        if blocked:
+            raise HTTPException(status_code=409, detail=blocked)
     autopilot.delivery = body.delivery
     autopilot.authority = body.authority
     autopilot.priority = body.priority
+    autopilot.weekly_post_cap = body.weekly_post_cap
     autopilot.updated_at = datetime.now(UTC)
     audit(
         session, request, workspace_id, user.id,
@@ -1122,6 +1165,137 @@ def account_recommendations(
     return recommend_accounts(
         session, autopilot, inventory=discover_all_integrations()
     )
+
+
+@router.post("/autopilot/kill-switch")
+def workspace_kill_switch(
+    workspace_id: str,
+    body: ExceptionDecision,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Stop every campaign in the workspace, at once, with the reason on each.
+
+    The one control that must exist before any campaign runs unattended.
+    Owner-only and confirmed; switching campaigns back on is per campaign,
+    deliberately - a mass stop has one cause, mass resumption rarely does.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400, detail="The kill switch requires confirmation."
+        )
+    pilots = session.scalars(
+        select(CampaignAutopilot).where(
+            CampaignAutopilot.workspace_id == workspace_id,
+            CampaignAutopilot.enabled.is_(True),
+        )
+    ).all()
+    moment = utc_now()
+    for autopilot in pilots:
+        autopilot.enabled = False
+        autopilot.last_note = "Stopped by the workspace kill switch."
+        autopilot.updated_at = moment
+    audit(
+        session, request, workspace_id, user.id,
+        "campaign.kill_switch", "workspace", workspace_id,
+        {"stopped": len(pilots)},
+    )
+    return {"stopped": len(pilots)}
+
+
+class ConversationStateChange(BaseModel):
+    state: str = Field(pattern=r"^(answered|dismissed)$")
+
+
+@router.get("/{campaign_id}/conversation")
+def campaign_conversation(
+    workspace_id: str,
+    campaign_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, Any]:
+    """The audience's side of the campaign, escalations first.
+
+    Read-only in the strongest sense: there is no reply endpoint anywhere in
+    this API. A person answers on the platform, then records that they did.
+    """
+    from trendrelay_api.campaign_conversation import reader_status
+    from trendrelay_api.conversation_models import ConversationMessage
+
+    membership(session, workspace_id, user.id)
+    _campaign(session, workspace_id, campaign_id)
+    rows = session.scalars(
+        select(ConversationMessage)
+        .where(
+            ConversationMessage.workspace_id == workspace_id,
+            ConversationMessage.campaign_id == campaign_id,
+        )
+        .order_by(
+            (ConversationMessage.state != "escalated"),
+            ConversationMessage.collected_at.desc(),
+        )
+        .limit(limit)
+    ).all()
+    return {
+        "messages": [
+            {
+                "id": item.id,
+                "state": item.state,
+                "escalation_class": item.escalation_class,
+                "escalation_reason": item.escalation_reason,
+                "platform": item.platform,
+                "provider": item.provider,
+                "author_handle": item.author_handle,
+                "text": item.text,
+                "posted_at": item.posted_at,
+                "suggested_reply": item.suggested_reply,
+                "execution_id": item.execution_id,
+                "collected_at": item.collected_at,
+            }
+            for item in rows
+        ],
+        "readers": reader_status(),
+    }
+
+
+@router.post("/{campaign_id}/conversation/{message_id}/state")
+def set_conversation_state(
+    workspace_id: str,
+    campaign_id: str,
+    message_id: str,
+    body: ConversationStateChange,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Record what a person did about a message - answered on the platform, or
+    let go. The only two transitions a hand can make; escalation is set by the
+    rules at ingestion and cleared the same way, by a person, through these."""
+    from trendrelay_api.conversation_models import ConversationMessage
+
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    _campaign(session, workspace_id, campaign_id)
+    message = session.scalar(
+        select(ConversationMessage).where(
+            ConversationMessage.id == message_id,
+            ConversationMessage.workspace_id == workspace_id,
+            ConversationMessage.campaign_id == campaign_id,
+        )
+    )
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    message.state = body.state
+    message.updated_at = utc_now()
+    audit(
+        session, request, workspace_id, user.id,
+        "campaign.conversation_triaged", "conversation_message", message.id,
+        {"state": body.state, "escalation_class": message.escalation_class},
+    )
+    return {"id": message.id, "state": message.state}
 
 
 @router.get("/{campaign_id}/autopilot/exceptions")

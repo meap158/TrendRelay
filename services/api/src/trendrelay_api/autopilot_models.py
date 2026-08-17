@@ -116,6 +116,10 @@ class CampaignAutopilot(Base):
     #: Reposting identical media too soon is what gets an account flagged.
     min_recycle_days: Mapped[int] = mapped_column(Integer, default=30)
     daily_cap_per_account: Mapped[int] = mapped_column(Integer, default=2)
+    #: The whole campaign's ceiling for a rolling week, counted across every
+    #: destination. None means the per-account caps are the only limit. This is
+    #: the budget shape organic posting actually has - posts, not money.
+    weekly_post_cap: Mapped[int | None] = mapped_column(Integer)
     #: Draft by default: the first thing a new autopilot does is fill a queue in
     #: the engine for someone to look at, not publish to a live audience.
     delivery: Mapped[str] = mapped_column(String(16), default="draft")
