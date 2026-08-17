@@ -678,7 +678,7 @@ export const en = {
     products: "Products",
     productCount: "{count, plural, one {# product} other {# products}}",
     noProducts:
-      "No products yet. Use Imports above to bring your Shopee offers in; every link, click and commission on them appears here.",
+      "No products yet. Use Add products to bring your Shopee offers in; their affiliate links and any commission appear here.",
     product: "Product",
     creator: "Creator",
     searchProducts: "Search products",

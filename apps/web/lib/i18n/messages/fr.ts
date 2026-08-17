@@ -683,7 +683,7 @@ export const fr: Messages = {
     products: "Produits",
     productCount: "{count, plural, one {# produit} other {# produits}}",
     noProducts:
-      "Aucun produit pour l'instant. Utilisez Imports ci-dessus pour importer vos offres Shopee ; chaque lien, clic et commission apparaîtra ici.",
+      "Aucun produit pour l'instant. Utilisez Ajouter des produits pour importer vos offres Shopee ; leurs liens d'affiliation et les commissions éventuelles apparaîtront ici.",
     product: "Produit",
     creator: "Créateur",
     searchProducts: "Rechercher un produit",

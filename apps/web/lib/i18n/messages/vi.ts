@@ -674,7 +674,7 @@ export const vi: Messages = {
     products: "Sản phẩm",
     productCount: "{count} sản phẩm",
     noProducts:
-      "Chưa có sản phẩm nào. Dùng nút Nhập ở trên để đưa ưu đãi Shopee vào; mọi liên kết, lượt nhấp và hoa hồng sẽ hiện ở đây.",
+      "Chưa có sản phẩm nào. Dùng Thêm sản phẩm để đưa ưu đãi Shopee vào; liên kết tiếp thị của chúng và hoa hồng (nếu có) sẽ hiện ở đây.",
     product: "Sản phẩm",
     creator: "Nhà sáng tạo",
     searchProducts: "Tìm sản phẩm",
