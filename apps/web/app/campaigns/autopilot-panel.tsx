@@ -326,7 +326,10 @@ export function AutopilotPanel({
   const [editing, setEditing] = useState<QueueItem | null>(null);
   const [editingReplies, setEditingReplies] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
-  const [section, setSection] = useState<"media" | "accounts" | "schedule" | "settings">(
+  // `revenue` is the merged Destinations + Monetization area. The old
+  // `accounts` and `settings` names survive in the readiness rows, which is why
+  // `jumpTo` translates them rather than every caller being rewritten.
+  const [section, setSection] = useState<"media" | "revenue" | "schedule">(
     campaignStatus === "active" ? "schedule" : "media",
   );
   const searchTimer = useRef<number | null>(null);
@@ -542,6 +545,28 @@ export function AutopilotPanel({
   if (!autopilot) return null;
 
   const unmet = ready.rows.filter((row) => !row.met);
+
+  /**
+   * Open a work area, fetching whatever that area needs to be worth looking at.
+   *
+   * One door, because every caller used to do this itself and they had drifted:
+   * the readiness "Fix it" button loaded accounts, the switch loaded accounts
+   * and the preview, and the Monetization tab loaded recommendations - so which
+   * data you got depended on how you arrived. It also absorbs the merge:
+   * readiness rows still say `accounts` and `settings` because that is what
+   * they are about, and both now open the one area that answers them.
+   */
+  function jumpTo(target: string) {
+    const area = target === "accounts" || target === "settings" ? "revenue" : target;
+    if (area !== "media" && area !== "revenue" && area !== "schedule") return;
+    setSection(area);
+    if (area === "revenue") {
+      if (!accounts.length) void loadAccounts();
+      if (!recommendations || recommendations.item_id) void loadRecommendations();
+    }
+    if (area === "schedule" && ready.configured && !preview) void loadPreview(false);
+  }
+
   const selectedLibrary = Object.values(selectedAssets);
   const previewDays = preview ? Object.entries(
     preview.posts.reduce<Record<string, PreviewPost[]>>((days, post) => {
@@ -573,17 +598,12 @@ export function AutopilotPanel({
             onChange={(next) => {
               if (next && !ready.configured) {
                 const nextStep = unmet.find((row) => row.section);
-                if (nextStep?.section) {
-                  setSection(nextStep.section);
-                  if (nextStep.section === "accounts" && !accounts.length) {
-                    void loadAccounts();
-                  }
-                }
+                if (nextStep?.section) jumpTo(nextStep.section);
                 fail(`Finish setup first: ${nextStep?.label ?? "complete the checklist"}.`);
                 return;
               }
               if (next && campaignStatus !== "active") {
-                setSection("schedule");
+                jumpTo("schedule");
                 if (!preview) void loadPreview(false);
                 fail("Review the next posts, then deploy to activate this campaign safely.");
                 return;
@@ -596,34 +616,30 @@ export function AutopilotPanel({
       >
         <p className="autopilot-lede">{t("autopilot.lede")}</p>
 
+        {/* Readiness rows still name the areas they came from. Translating
+            here keeps that vocabulary working without every row knowing the
+            tabs were merged. */}
         <nav className="campaign-work-tabs" aria-label="Campaign workspace">
           <button type="button" className={section === "media" ? "active" : ""}
-            onClick={() => setSection("media")}>
+            onClick={() => jumpTo("media")}>
             <span>Content</span><strong>{autopilot.queue_total}</strong><small>post packages</small>
           </button>
-          <button type="button" className={section === "accounts" ? "active" : ""}
-            onClick={() => {
-              setSection("accounts");
-              if (!accounts.length) void loadAccounts();
-            }}>
-            <span>Destinations</span><strong>{destinations.length}</strong><small>social accounts</small>
+          <button type="button" className={section === "revenue" ? "active" : ""}
+            onClick={() => jumpTo("revenue")}>
+            <span>Distribution &amp; revenue</span>
+            <strong>{destinations.length}</strong>
+            <small>{autopilot.offer_mode === "smart"
+              ? "accounts · smart offers"
+              : autopilot.offer_mode === "manual"
+                ? (autopilot.offer_id ? "accounts · 1 offer" : "accounts · no offer")
+                : "accounts · offers off"}</small>
           </button>
+          {/* Last, because it is what the two choices above produce rather than
+              a third choice of its own. */}
           <button type="button" className={section === "schedule" ? "active" : ""}
-            onClick={() => {
-              setSection("schedule");
-              if (ready.configured && !preview) void loadPreview(false);
-            }}>
+            onClick={() => jumpTo("schedule")}>
             <span>Timeline</span><strong>{preview?.posts.length ?? slots.length}</strong>
             <small>{preview ? "upcoming posts" : "posting times"}</small>
-          </button>
-          <button type="button" className={section === "settings" ? "active" : ""}
-            onClick={() => {
-              setSection("settings");
-              if (!recommendations || recommendations.item_id) void loadRecommendations();
-            }}>
-            <span>Monetization</span>
-            <strong>{autopilot.offer_mode === "smart" ? "Smart" : autopilot.offer_mode === "manual" ? (autopilot.offer_id ? "1" : "—") : "Off"}</strong>
-            <small>affiliate matching</small>
           </button>
         </nav>
 
@@ -640,10 +656,7 @@ export function AutopilotPanel({
                 <span>{row.label}</span>
                 {!row.met && row.section && (
                   <button type="button" className="autopilot-fix" onClick={() => {
-                    const target = row.section;
-                    if (!target) return;
-                    setSection(target);
-                    if (target === "accounts" && !accounts.length) void loadAccounts();
+                    if (row.section) jumpTo(row.section);
                   }}>{t("autopilot.fixIt")}</button>
                 )}
                 {!row.met && row.id === "active" && (
@@ -660,7 +673,7 @@ export function AutopilotPanel({
           </p>
         )}
 
-        {section === "settings" && <div className="autopilot-settings">
+        {section === "revenue" && <div className="autopilot-settings">
           <div className="campaign-product-mode">
             <div>
               <strong>Affiliate product matching</strong>
@@ -836,7 +849,7 @@ export function AutopilotPanel({
         </div>}
       </Card>
 
-      {section === "accounts" && <Card
+      {section === "revenue" && <Card
         eyebrow={t("autopilot.whereEyebrow")}
         title={t("autopilot.destinations", { count: destinations.length })}
         aside={canEdit ? (
@@ -904,12 +917,10 @@ export function AutopilotPanel({
                     }))));
                   setSelectedAccounts(new Set());
                   setAdding(false);
-                  if (slots.length) {
-                    setSection("settings");
-                    void loadRecommendations();
-                  } else {
-                    setSection("schedule");
-                  }
+                  // The product decision is in this same area now, so the
+                  // only move left is on to the schedule.
+                  if (slots.length) void loadRecommendations();
+                  else jumpTo("schedule");
                   return `${chosen.length} ${chosen.length === 1 ? "account" : "accounts"} assigned.`;
                 })}>Assign selected accounts</Button>
             </div>
@@ -1129,15 +1140,9 @@ export function AutopilotPanel({
                             body: JSON.stringify({ state: "approved" }),
                           }));
                           if ((autopilot.queue_approved ?? 0) === 0) {
-                            if (!destinations.length) {
-                              setSection("accounts");
-                              if (!accounts.length) void loadAccounts();
-                            } else if (!slots.length) {
-                              setSection("schedule");
-                            } else {
-                              setSection("settings");
-                              void loadRecommendations();
-                            }
+                            if (!destinations.length) jumpTo("revenue");
+                            else if (!slots.length) jumpTo("schedule");
+                            else jumpTo("revenue");
                           }
                           return t("autopilot.itemApproved");
                         })}>{t("autopilot.approve")}</Button>
