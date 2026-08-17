@@ -24,18 +24,24 @@ def env(tmp_path, monkeypatch):
     path = tmp_path / ".env"
     path.write_text("", encoding="utf-8")
     monkeypatch.setattr(env_store, "ENV_PATH", path)
-    # Saving a value also puts it in this process's environment, where it
-    # outlives the temporary file it was written to. Clearing only the keys
-    # named here would miss the suffixed ones a connection invents, and a key
-    # left behind is read by the next test as though it had been configured -
-    # which is the same way a stale key would fool a real installation.
+    # Saving a value also puts it in this process's environment, and that
+    # outlives the temporary file it was written to. `monkeypatch.delenv` does
+    # not help: on a key that was absent it records nothing, so a key these
+    # tests go on to create survives teardown and the next test reads it as a
+    # login somebody configured. So the environment is restored by hand.
     import os
 
-    for key in list(os.environ):
-        if key.startswith(("BUFFER_", "ZERNIO_", "BUNDLE_SOCIAL_", "WOOPSOCIAL_")):
-            monkeypatch.delenv(key, raising=False)
-    monkeypatch.delenv(connections.REGISTRY_KEY, raising=False)
-    return path
+    prefixes = ("BUFFER_", "ZERNIO_", "BUNDLE_SOCIAL_", "WOOPSOCIAL_",
+                connections.REGISTRY_KEY)
+    before = {key: value for key, value in os.environ.items() if key.startswith(prefixes)}
+    for key in before:
+        del os.environ[key]
+
+    yield path
+
+    for key in [k for k in os.environ if k.startswith(prefixes)]:
+        del os.environ[key]
+    os.environ.update(before)
 
 
 @pytest.fixture
@@ -277,3 +283,58 @@ def test_a_connection_id_fits_the_column_campaigns_stores_it_in(two_logins) -> N
     width = CampaignDestination.__table__.columns["provider"].type.length
 
     assert len(two_logins.id) <= width
+
+
+# --- what the page is told about each login -----------------------------------
+
+
+def test_a_new_login_does_not_report_the_first_one_s_key_as_its_own(two_logins) -> None:
+    """Otherwise a second Buffer card reads as configured before anything is typed."""
+    fresh = connections.add(publishing.PROVIDERS, "buffer", "Third")
+
+    status = publishing.provider_status(fresh.id, probe=False)
+
+    assert not status["configured"]
+    assert all(not field["configured"] for field in status["credential_fields"])
+
+
+def test_each_login_reports_its_own_key_state(two_logins) -> None:
+    first = publishing.provider_status("buffer", probe=False)
+    second = publishing.provider_status(two_logins.id, probe=False)
+
+    assert first["configured"] and second["configured"]
+    assert first["id"] == "buffer" and second["id"] == two_logins.id
+    assert second["engine"] == "buffer"
+
+
+def test_the_hint_names_the_variable_this_login_would_set(two_logins) -> None:
+    # An empty field says "or set X in .env", and X differs per login.
+    status = publishing.provider_status(two_logins.id, probe=False)
+
+    keys = {field["key"] for field in status["credential_fields"]}
+    assert "BUFFER_API_KEY" not in keys
+    assert any(key.startswith("BUFFER_API_KEY") for key in keys)
+
+
+def test_every_login_gets_a_card(two_logins) -> None:
+    found = publishing.connection_status(probe=False)
+
+    ids = [row["id"] for row in found["providers"]]
+    assert "buffer" in ids and two_logins.id in ids
+
+
+# --- reveal reaches a login's key, and no further -----------------------------
+
+
+def test_a_second_login_s_key_can_be_revealed(two_logins) -> None:
+    # Without this the button works on the first login and silently not on the
+    # second, which reads as the key having failed to save.
+    assert two_logins.key_for("BUFFER_API_KEY") in publishing.revealable_keys()
+
+
+def test_reveal_still_reaches_nothing_it_should_not(two_logins) -> None:
+    """The guard this list exists for: not "read any environment variable"."""
+    revealable = publishing.revealable_keys()
+
+    for forbidden in ("DATABASE_URL", "SUPABASE_SERVICE_KEY", "PUBLISHING_CONNECTIONS"):
+        assert forbidden not in revealable

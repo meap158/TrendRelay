@@ -1107,21 +1107,27 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
 
 
 def carries_tracking_link(request: PublishRequest) -> bool:
-    """Whether anything this post says contains one of our tracking links.
+    """Whether anything this post says contains a link some report attributes.
 
-    Attribution is won or lost at this moment and cannot be recovered later: a
-    click is only ever recorded because somebody followed a `/c/` link, so a
-    post published without one is unattributable for as long as it exists. No
-    later import can repair that, because there is nothing on the other side to
-    join to.
+    Two kinds count. The network's own affiliate short link
+    (``https://s.shopee.vn/...``) is the normal case: its clicks and
+    commissions are counted in the network's report, which is where tracking
+    lives now (ADR 0022). TrendRelay's own ``/c/`` redirect links still count,
+    for anything composed while internal attribution minted them.
+
+    Attribution is still won or lost at this moment: a post published with
+    neither earns whatever it earns with nothing anywhere to join it to.
 
     Read from the text rather than from a field, because the link is inserted
     into the caption or the first comment and there is no separate place it is
     declared.
     """
-    marker = f"{get_settings().attribution_public_url.rstrip('/')}/c/"
+    from trendrelay_api.attribution_shopee import SHORT_HOSTS
+
+    internal = f"{get_settings().attribution_public_url.rstrip('/')}/c/"
+    markers = [internal, *(f"://{host}/" for host in SHORT_HOSTS)]
     written = [request.caption, request.first_comment or "", *(request.thread or [])]
-    return any(marker in (part or "") for part in written)
+    return any(marker in (part or "") for marker in markers for part in written)
 
 
 def _is_photo_post(request: PublishRequest) -> bool:
@@ -2253,11 +2259,20 @@ def _authenticate(provider: ProviderDefinition) -> None:
 
 
 def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
+    """What one login can do right now.
+
+    Keyed by connection rather than engine: "is the key saved" has a different
+    answer for each login, and reading the engine's own key for all of them
+    would show a second Buffer account as configured before anything had been
+    typed into it.
+    """
     provider = resolve_provider(provider_id)
-    configured_map = configured_keys(tuple(field.key for field in provider.credentials))
+    connection = resolve_connection(provider_id)
+    keys = {field.id: connection.key_for(field.key) for field in provider.credentials}
+    configured_map = configured_keys(tuple(keys.values()))
     missing = [
         field.label for field in provider.credentials
-        if field.required and not configured_map[field.key]
+        if field.required and not configured_map[keys[field.id]]
     ]
     configured = not missing
     authenticated = False
@@ -2271,8 +2286,17 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
         except RuntimeError as error:
             authorization_error = str(error)
     return {
-        "id": provider.id,
-        "label": provider.label,
+        # The connection's id, which for an engine's first login is the engine
+        # id - so every existing caller reads exactly what it read before.
+        "id": connection.id,
+        "label": (
+            provider.label if connection.is_default
+            else f"{provider.label} · {connection.label}"
+        ),
+        "engine": provider.id,
+        "engine_label": provider.label,
+        "connection_label": connection.label,
+        "is_default": connection.is_default,
         "tagline": provider.tagline,
         "summary": provider.summary,
         "homepage": provider.homepage,
@@ -2342,16 +2366,18 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
         "credential_fields": [
             {
                 "id": field.id,
-                "key": field.key,
+                # The key this login actually writes to, so the hint under an
+                # empty field names the variable somebody would set by hand.
+                "key": keys[field.id],
                 "label": field.label,
                 "secret": field.secret,
                 "required": field.required,
                 "help": field.help,
-                "configured": configured_map[field.key],
+                "configured": configured_map[keys[field.id]],
                 # Enough to recognise which key is saved, never enough to use
                 # it. The field used to render empty, which reads as "nothing
                 # saved" and invites re-pasting a key that was already right.
-                "preview": masked_value(field.key),
+                "preview": masked_value(keys[field.id]),
             }
             for field in provider.credentials
         ],
@@ -2361,8 +2387,8 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
 def connection_status(probe: bool = True) -> dict[str, Any]:
     active = active_provider_id()
     providers = [
-        provider_status(identifier, probe=probe and identifier == active)
-        for identifier in PROVIDERS
+        provider_status(row.id, probe=probe and row.id == active)
+        for row in publishing_connections.connections(PROVIDERS)
     ]
     current = next(item for item in providers if item["id"] == active)
     hosting = media_hosting.status()
@@ -2412,7 +2438,11 @@ def revealable_keys() -> set[str]:
     database URL, the Supabase service key - behind a button meant for an
     engine's API key.
     """
-    keys = {field.key for provider in PROVIDERS.values() for field in provider.credentials}
+    keys = {
+        connection.key_for(field.key)
+        for connection in publishing_connections.connections(PROVIDERS)
+        for field in PROVIDERS[connection.provider].credentials
+    }
     return keys | set(media_hosting.CREDENTIAL_KEYS)
 
 
@@ -2631,8 +2661,6 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
         # above says which engines could be asked at all.
         "engine_problems": engine_problems,
         # Said before the post goes out, because afterwards is too late. A post
-        # without a tracking link earns whatever it earns under somebody else's
-        # report, with nothing on our side to join it to.
         "attribution": {
             "tracked": carries_tracking_link(request),
             "note": (

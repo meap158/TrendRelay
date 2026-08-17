@@ -55,10 +55,14 @@ def api(tmp_path, monkeypatch):
     path = tmp_path / ".env"
     path.write_text("", encoding="utf-8")
     monkeypatch.setattr(env_store, "ENV_PATH", path)
-    for key in list(os.environ):
-        if key.startswith(("BUFFER_", "ZERNIO_", "BUNDLE_SOCIAL_", "WOOPSOCIAL_")):
-            monkeypatch.delenv(key, raising=False)
-    monkeypatch.delenv(connections.REGISTRY_KEY, raising=False)
+    # Restored by hand: `delenv` on an absent key records nothing, so a key
+    # these tests create would survive teardown and be read by the next test as
+    # a login somebody had configured.
+    prefixes = ("BUFFER_", "ZERNIO_", "BUNDLE_SOCIAL_", "WOOPSOCIAL_",
+                connections.REGISTRY_KEY)
+    before = {key: value for key, value in os.environ.items() if key.startswith(prefixes)}
+    for key in before:
+        del os.environ[key]
 
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
@@ -68,6 +72,9 @@ def api(tmp_path, monkeypatch):
     )
     yield
     app.dependency_overrides.clear()
+    for key in [k for k in os.environ if k.startswith(prefixes)]:
+        del os.environ[key]
+    os.environ.update(before)
 
 
 @pytest.fixture

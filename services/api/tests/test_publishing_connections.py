@@ -31,8 +31,25 @@ def env(tmp_path, monkeypatch):
     path = tmp_path / ".env"
     path.write_text("", encoding="utf-8")
     monkeypatch.setattr(env_store, "ENV_PATH", path)
-    monkeypatch.delenv(connections.REGISTRY_KEY, raising=False)
-    return path
+    # Saving a value also puts it in this process's environment, and that
+    # outlives the temporary file it was written to. `monkeypatch.delenv` does
+    # not help: on a key that was absent it records nothing, so a key these
+    # tests go on to create survives teardown and the next test reads it as a
+    # login somebody configured. So the environment is restored by hand.
+    import os
+
+    prefixes = ("BUFFER_", "ZERNIO_", "BUNDLE_SOCIAL_", "WOOPSOCIAL_",
+                connections.REGISTRY_KEY)
+    before = {key: value for key, value in os.environ.items() if key.startswith(prefixes)}
+    for key in before:
+        del os.environ[key]
+
+    yield path
+
+    for key in [k for k in os.environ if k.startswith(prefixes)]:
+        del os.environ[key]
+    os.environ.update(before)
+
 
 
 # --- what must not change -----------------------------------------------------
