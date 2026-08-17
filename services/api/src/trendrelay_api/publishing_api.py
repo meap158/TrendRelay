@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import mimetypes
 from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -422,9 +423,12 @@ def preview_publishing_media(
         raise HTTPException(status_code=403, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    suffix = resolved.suffix.lower()
-    kind = "video/mp4" if suffix == ".mp4" else f"image/{suffix.lstrip('.')}"
-    return FileResponse(resolved, media_type=kind)
+    # Looked up rather than assembled from the suffix. Spelling the type by
+    # hand turned `.jpg` into `image/jpg`, which is not a registered type - so
+    # a browser handed one stops trying to display it and downloads the file
+    # instead, which is what a preview must never do.
+    kind, _encoding = mimetypes.guess_type(resolved.name)
+    return FileResponse(resolved, media_type=kind or "application/octet-stream")
 
 
 @router.post("/credentials/{key}/reveal")
