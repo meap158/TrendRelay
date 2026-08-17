@@ -1007,9 +1007,21 @@ html { scroll-behavior: smooth; }
 
 /* Sized to itself, not to the grid column it happens to land in, and matched
    to the height of the placement select beside it. */
+/* This destination's own two controls, on one row: which placement, and
+   remove. As separate grid children the button was dealt the far-right column
+   and sat under the badge, half a row from the select it belongs beside. */
+/* Out-specifies `.autopilot-destinations li > div`, which lays out the
+   identity block as a grid and caught this wrapper by being a div too. */
+.autopilot-destinations li > .autopilot-destination-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+/* Shrink to the label and its select. Left to grow it filled the row and
+   pushed the remove button onto a line of its own. */
+.autopilot-destinations li > .autopilot-destination-controls > .autopilot-placement-choice { flex: 0 0 auto; }
 .ui-button[data-destination-remove] {
-  justify-self: start;
-  align-self: center;
   min-height: 30px;
   padding-inline: 8px;
 }

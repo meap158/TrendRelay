@@ -1192,6 +1192,7 @@ export function AutopilotPanel({
                 </Badge>
                 <p className="autopilot-placement-reason">{item.link_reason}</p>
                 {canEdit && (
+                  <div className="autopilot-destination-controls">
                   <label className="autopilot-placement-choice">
                     Link placement
                     <select
@@ -1217,12 +1218,10 @@ export function AutopilotPanel({
                       <option value="bio">Always via bio link</option>
                     </select>
                   </label>
-                )}
-                {canEdit && (
-                  // The icon, like every other removal in the app. As a word it
-                  // was stretching to a grid column's width - 106px of button
-                  // beside a 250px select, two pixels shorter than it - which
-                  // is what made the row look assembled from spare parts.
+                  {/* The icon, like every other removal in the app. As a word
+                      it stretched to a grid column: 106px of button beside a
+                      250px select, two pixels shorter than it, which is what
+                      made the row look assembled from spare parts. */}
                   <Button
                     data-destination-remove=""
                     variant="quiet"
@@ -1235,6 +1234,7 @@ export function AutopilotPanel({
                       return t("autopilot.destinationRemoved", { label: item.label });
                     })}
                   ><ActionIcon name="delete" /></Button>
+                  </div>
                 )}
               </li>
             ))}
