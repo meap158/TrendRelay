@@ -617,143 +617,10 @@ export default function CampaignsPage() {
                 onCampaignChanged={() => refresh(workspaceId)}
               />
 
-              <details key={workspaceId} className="campaign-manual-work" onToggle={(event) => {
-                if (event.currentTarget.open) void loadPlanSources();
-              }}>
-                <summary>
-                  <span>Manual publication plans</span>
-                  <small>{visiblePlans.length} planned · optional advanced workflow</small>
-                </summary>
-              <div className="campaign-manual-intro">
-                <strong>Only for exact, one-time posts</strong>
-                <p>Autopilot handles recurring publishing. Open this workflow when a specific clip, account, and time need to be locked together. Owners approve their own plan in the same step; editors still send it for review.</p>
-              </div>
-              {canCreatePlan && selectedCampaign.status !== "archived" && (
-                <div className="campaign-one-off-handoff">
-                  <div>
-                    <strong>Create a one-off post in Publish</strong>
-                    <p>Publish owns one-time media, destination, post type, comments, replies, and scheduling. Campaigns keeps the recurring pipeline focused.</p>
-                  </div>
-                  <Link className="ui-button ui-button-secondary ui-button-sm"
-                    href={`/publish?campaign=${encodeURIComponent(selectedCampaign.id)}`}>
-                    Open Publish
-                  </Link>
-                </div>
-              )}
-              {canCreatePlan && selectedCampaign.status !== "archived" && (
-                <details className="plan-create" hidden>
-                  <summary>Create a manual plan</summary>
-                  <form key={selectedCampaign.id} onSubmit={createPlan}>
-                    <div className="plan-form-grid">
-                      <label>{t("publish.title")}<input name="title" required maxLength={200} /></label>
-                      <label>Destination account from Publish
-                        <SearchSelect
-                          value={planAccountKey}
-                          options={planAccounts.map((account) => ({
-                            value: destinationKey(account),
-                            label: account.label,
-                            description: `${platformLabels[account.platform]} · ${account.provider_label}`,
-                            keywords: `${account.platform} ${account.provider} ${account.provider_label}`,
-                          }))}
-                          onChange={setPlanAccountKey}
-                          placeholder={planSourcesLoading ? "Reading Publish accounts…" : "Choose a connected account"}
-                          searchPlaceholder="Search accounts or platforms…"
-                          emptyLabel="No connected Publish accounts"
-                          disabled={planSourcesLoading || !planAccounts.length}
-                        />
-                        <small>The exact account and publishing engine are carried into Publish.</small>
-                      </label>
-                      <label>{t("campaigns.suggestedTime")}
-                        <select name="scheduled_at" value={planScheduledAt}
-                          onChange={(event) => setPlanScheduledAt(event.target.value)}
-                          disabled={planSourcesLoading || !planSlotOptions.length} required>
-                          <option value="" disabled>
-                            {planSourcesLoading ? "Reading saved posting times…" : "Choose a saved posting time"}
-                          </option>
-                          {planSlotOptions.map((slot) => (
-                            <option key={slot.value} value={slot.value}>{slot.day} · {slot.label}</option>
-                          ))}
-                        </select>
-                        <small>{planSlotOptions.length
-                          ? `From the posting times saved in Publish · ${timezone}`
-                          : "No posting times are saved. Add one in Publish → Schedule."}</small>
-                      </label>
-                    </div>
-                    <input type="hidden" name="platform" value={selectedPlanAccount?.platform ?? ""} />
-                    <input type="hidden" name="provider" value={selectedPlanAccount?.provider ?? ""} />
-                    <input type="hidden" name="integration_id" value={selectedPlanAccount?.id ?? ""} />
-                    <input type="hidden" name="destination_label" value={selectedPlanAccount?.label ?? ""} />
-                    <div className="plan-media-field">
-                      <span>Media from Library</span>
-                      <input type="hidden" name="video_path" value={videoPath} />
-                      <div>
-                        <strong>{planClip?.title ?? (videoPath ? "Library handoff" : "No clip selected")}</strong>
-                        <Button type="button" variant="secondary" size="sm"
-                          busy={busy === "plan-library"} onClick={() => void choosePlanMedia()}>
-                          <ActionIcon name="clip" />Choose from Library
-                        </Button>
-                      </div>
-                      {planClip && <small>{clipLength(planClip.duration_ms) || "video"} · {planClip.versions.some((version) => ["blurred", "edited"].includes(version.kind)) ? "edited cut" : "original"}</small>}
-                    </div>
-                    <MediaPicker
-                      open={planPickerOpen}
-                      assets={planClips}
-                      workspaceId={workspaceId}
-                      apiFetch={apiFetch}
-                      loading={busy === "plan-library"}
-                      failure={planPickerFailure}
-                      facets={planPickerFacets}
-                      onSearch={(filters) => void choosePlanMedia(filters)}
-                      onPick={(asset) => {
-                        setPlanClip(asset);
-                        setVideoPath(handoffPath(asset));
-                        setPlanPickerOpen(false);
-                      }}
-                      onClose={() => setPlanPickerOpen(false)}
-                    />
-                    <input type="hidden" name="cover_path" value="" />
-                    <label>{t("publish.caption")}<textarea name="caption" rows={5} required /></label>
-                    <div className="plan-form-grid">
-                      <label>{t("library.hashtags")}<input name="hashtags" placeholder="travel, espresso" /></label>
-                      <label>Affiliate offer from Attribution
-                        <SearchSelect
-                          value={planOfferId}
-                          options={offers.map((offer) => ({
-                            value: offer.id,
-                            label: offer.product.name,
-                            description: offerDescription(offer),
-                            keywords: `${offer.product.brand ?? ""} ${offer.product.marketplace ?? ""} ${offer.network} ${offer.affiliate_url}`,
-                          }))}
-                          onChange={setPlanOfferId}
-                          placeholder="No affiliate offer"
-                          searchPlaceholder="Search Attribution offers…"
-                          emptyLabel="No offers imported in Attribution"
-                          disabled={planSourcesLoading}
-                        />
-                        <input type="hidden" name="offer_id" value={planOfferId} />
-                        <small>The tracked link is copied from the selected offer; there is no URL to retype.</small>
-                      </label>
-                      <label>{t("publish.disclosure")}<input name="disclosure" defaultValue="#ad" required /></label>
-                    </div>
-                    <p className="campaign-source-note">
-                      Library media · Publish account · saved posting time · Attribution offer. {canApprove
-                        ? "This plan will be approved as you create it."
-                        : "An owner or approver will review this plan."}
-                    </p>
-                    <div className="campaign-plan-actions">
-                      <Button type="button" variant="quiet" size="sm"
-                        busy={planSourcesLoading} onClick={() => void loadPlanSources({ force: true })}>
-                        <ActionIcon name="refresh" />Refresh connected sources
-                      </Button>
-                      <Button type="submit" variant="primary" busy={busy === "plan"}
-                        disabled={!videoPath || !selectedPlanAccount || !planScheduledAt}>
-                        {canApprove ? "Create approved plan" : t("publish.sendForApproval")}
-                      </Button>
-                    </div>
-                  </form>
-                </details>
-              )}
-
+              {/* The planned posts are the reason this page is open, so they are not
+                  behind a disclosure. They sat inside one labelled "optional
+                  advanced workflow", which described the form beside them
+                  rather than them. */}
               <section className="calendar-board">
                 <div className="card-heading">
                   <div><p className="section-kicker">{t("campaigns.calendar")}</p><h2>{visiblePlans.length} planned posts</h2></div>
@@ -803,7 +670,23 @@ export default function CampaignsPage() {
                   );
                 })}
               </section>
-              </details>
+
+              {/* All that survives of the manual workflow: a way to reach the
+                  thing that owns it. Publish is the one-off composer and the
+                  single source of truth for connections and posting times, so a
+                  second form here could only drift from it. The one that was
+                  here was already `hidden` - unreachable markup still carrying
+                  its own state, handlers and media picker. */}
+              <div className="campaign-one-off-handoff">
+                  <div>
+                    <strong>Create a one-off post in Publish</strong>
+                    <p>Publish owns one-time media, destination, post type, comments, replies, and scheduling. Campaigns keeps the recurring pipeline focused.</p>
+                  </div>
+                  <Link className="ui-button ui-button-secondary ui-button-sm"
+                    href={`/publish?campaign=${encodeURIComponent(selectedCampaign.id)}`}>
+                    Open Publish
+                  </Link>
+                </div>
             </>
           ) : (
             <section className="empty-console">
