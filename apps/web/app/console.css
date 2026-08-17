@@ -974,3 +974,18 @@ html { scroll-behavior: smooth; }
   .campaign-one-off-handoff { display: grid; }
   .campaign-reply-editor > div { grid-template-columns: 1fr; }
 }
+
+/* What the campaign's settings add up to, said before the switch is thrown.
+   Sits between the lede and the checklist, so the sentence reads as a
+   consequence of the settings rather than as another instruction. */
+.autopilot-expansion {
+  margin: 0 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-raised);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.autopilot-expansion strong { color: var(--fg); font-weight: 600; }

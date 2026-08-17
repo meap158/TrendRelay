@@ -391,10 +391,27 @@ export function AutopilotPanel({
   const [adding, setAdding] = useState(false);
   const [library, setLibrary] = useState<LibraryAsset[]>([]);
   const [libraryFacets, setLibraryFacets] = useState<AssetFacets>(EMPTY_FACETS);
-  const [libraryFilters, setLibraryFilters] = useState<AssetFilterValues>({ mediaKind: "video" });
+  // No media-kind filter to begin with: a campaign can post a clip or a
+  // carousel, so the picker opens on everything and the filter row above it is
+  // there for narrowing down. Starting on "video" was what made pictures
+  // invisible even after the queue learned to hold them.
+  const [libraryFilters, setLibraryFilters] = useState<AssetFilterValues>({});
   const [libraryTotal, setLibraryTotal] = useState(0);
   /** The clips sharing this campaign copy. Empty when the composer is closed. */
   const [drafting, setDrafting] = useState<LibraryAsset[]>([]);
+  /**
+   * What the current selection will become, in the words used to describe it.
+   *
+   * The rule is one sentence long on purpose: a video is a post, and pictures
+   * chosen together are one carousel. Anything cleverer - per-picture posts,
+   * mixed packages - is a rule somebody has to be told rather than one they
+   * can see, and this is the screen where a wrong guess becomes real posts.
+   */
+  const draftingSplit = {
+    videos: drafting.filter((asset) => asset.media_kind !== "image"),
+    images: drafting.filter((asset) => asset.media_kind === "image"),
+  };
+  const draftingPackages = draftingSplit.videos.length + (draftingSplit.images.length ? 1 : 0);
   const [selectedAssets, setSelectedAssets] = useState<Record<string, LibraryAsset>>({});
   const [effectOpen, setEffectOpen] = useState(false);
   const [editing, setEditing] = useState<QueueItem | null>(null);
@@ -513,9 +530,11 @@ export function AutopilotPanel({
   async function loadLibrary(filters: AssetFilterValues = libraryFilters) {
     setBusy("library");
     try {
-      // Video only, and only what the library considers ready. The queue posts
-      // unattended, so an asset still being processed has no business in it.
-      const params = assetFilterParams({ ...filters, mediaKind: "video" });
+      // Videos and pictures both: a campaign can post a carousel now, and a
+      // picker that only offers clips cannot express one. Still only what the
+      // library considers ready - the queue posts unattended, so an asset mid
+      // processing has no business in it.
+      const params = assetFilterParams(filters);
       params.set("limit", "100");
       const body = await json<{
         assets: LibraryAsset[]; facets?: AssetFacets; total?: number;
@@ -803,6 +822,42 @@ export function AutopilotPanel({
         }
       >
         <p className="autopilot-lede">{t("autopilot.lede")}</p>
+
+        {/* What the settings add up to, in one sentence.
+         *
+         * Everything needed to work this out was already on the screen -
+         * packages here, accounts there, posting times in a third place - and
+         * nobody should have to multiply three tiles together to find out how
+         * often their accounts are about to post. Said before the switch,
+         * because after it the answer arrives as posts.
+         *
+         * "Up to", not "will": the rest interval, the daily cap and how many
+         * packages are approved all pull the real number down, and a promise
+         * that overshoots is worse than a bound that holds. */}
+        {destinations.length > 0 && slots.length > 0 && (
+          <p className="autopilot-expansion" role="status">
+            {(() => {
+              const perAccount = Math.min(slots.length, autopilot.daily_cap_per_account);
+              const perDay = perAccount * destinations.length;
+              const packages = autopilot.queue_approved;
+              return (
+                <>
+                  <strong>{packages} {packages === 1 ? "package" : "packages"}</strong>
+                  {packages === 1 ? " goes to " : " go to "}
+                  <strong>{destinations.length} {destinations.length === 1 ? "account" : "accounts"}</strong>
+                  {", up to "}
+                  <strong>{perDay} {perDay === 1 ? "post" : "posts"} a day</strong>
+                  {perAccount < slots.length
+                    ? ` (${perAccount} per account, your daily cap).`
+                    : ` (one per posting time, per account).`}
+                  {autopilot.offer_mode === "none"
+                    ? " No affiliate link is attached."
+                    : " Each post carries its affiliate link where that link can be clicked."}
+                </>
+              );
+            })()}
+          </p>
+        )}
 
         {/* Readiness rows still name the areas they came from. Translating
             here keeps that vocabulary working without every row knowing the
@@ -1329,38 +1384,55 @@ export function AutopilotPanel({
             onSubmit={(event) => {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
+              // Copy is optional now. A package can be picked today and
+              // written later; the API stands a placeholder in and marks it,
+              // which is what the badge on the queue reads from.
               const body = String(form.get("body") ?? "").trim();
-              if (!body) return;
               void run("queue", async () => {
                 const hashtags = String(form.get("hashtags") ?? "")
                   .split(/[\s,]+/).filter(Boolean);
-                await Promise.all(drafting.map(async (asset) => json(await apiFetch(`${base}/queue`, {
-                  method: "POST",
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify({
+                const post = async (payload: Record<string, unknown>) =>
+                  json(await apiFetch(`${base}/queue`, {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ ...payload, body, hashtags }),
+                  }));
+                // One package per clip, and one package for all the pictures.
+                await Promise.all([
+                  ...draftingSplit.videos.map((asset) => post({
                     asset_id: asset.id,
                     video_path: handoffPath(asset),
                     title: asset.title,
-                    body,
-                    hashtags,
-                  }),
-                }))));
-                const count = drafting.length;
+                  })),
+                  ...(draftingSplit.images.length ? [post({
+                    asset_id: draftingSplit.images[0].id,
+                    image_paths: draftingSplit.images.map(handoffPath),
+                    title: draftingSplit.images[0].title,
+                  })] : []),
+                ]);
+                const count = draftingPackages;
                 setDrafting([]);
                 setSelectedAssets({});
                 setPicking(false);
-                return `${count} ${count === 1 ? "clip" : "clips"} added to the campaign queue.`;
+                return `${count} ${count === 1 ? "package" : "packages"} added to the campaign queue.`;
               });
             }}
           >
             <div className="autopilot-picker-head">
-              <strong>{drafting.length === 1 ? drafting[0].title : `${drafting.length} selected clips`}</strong>
+              <strong>{drafting.length === 1
+                ? drafting[0].title
+                : draftingSplit.images.length && !draftingSplit.videos.length
+                  ? `Carousel of ${draftingSplit.images.length} pictures`
+                  : `${draftingPackages} ${draftingPackages === 1 ? "package" : "packages"}`}</strong>
               <Button variant="quiet" size="sm" onClick={() => setDrafting([])}>
                 {t("autopilot.chooseAnother")}
               </Button>
             </div>
             <label>{t("autopilot.copy")}
-              <textarea name="body" rows={4} required maxLength={4000}
+              {/* Not required. Media is often chosen before anybody has
+                  written for it, and forcing both into one sitting is what
+                  made people paste something they did not mean. */}
+              <textarea name="body" rows={4} maxLength={4000}
                 placeholder={t("autopilot.copyPlaceholder")} />
               {/* The disclosure and the link are added per network at post
                   time, so writing either here would duplicate them. */}
