@@ -588,7 +588,10 @@ def plan_campaign(
         # being frozen. Once per item per plan: the resolution cannot change
         # while this plan is being assembled.
         from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
-        from trendrelay_api.integrations.publishing import video_fits_platform
+        from trendrelay_api.integrations.publishing import (
+            carousel_fits_destination,
+            video_fits_platform,
+        )
 
         item = None
         for candidate in eligible:
@@ -603,8 +606,20 @@ def plan_campaign(
             if candidate.id not in frozen_cache:
                 frozen_cache[candidate.id] = resolve_frozen_media(session, candidate)
             if candidate.image_paths:
-                item = candidate
-                break
+                # Asked the same question a video is asked, and for the same
+                # reason. A carousel used to be taken by any destination at all:
+                # only Zernio and WoopSocial post one, only to TikTok, so a
+                # workspace whose networks run through Buffer had its pictures
+                # paired with a destination that could never carry them and
+                # found out from the engine after the post was built.
+                fits, why = carousel_fits_destination(
+                    destination.provider, destination.platform, len(candidate.image_paths),
+                )
+                if fits:
+                    item = candidate
+                    break
+                notes.append(f"Skipped on {destination.label}: {why}")
+                continue
             fits, why = video_fits_platform(
                 destination.platform, frozen_cache[candidate.id].path
             )

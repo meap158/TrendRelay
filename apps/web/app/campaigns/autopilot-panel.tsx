@@ -66,6 +66,8 @@ type Destination = {
   /** The login in words - "Buffer", or "Buffer · Client B" - not its stored id. */
   provider_label?: string;
   connection_account?: EngineAccount;
+  /** Whether this login can post a gallery of pictures to this network. */
+  accepts_carousel?: boolean;
   integration_id: string;
   platform: PublishingPlatform;
   label: string;
@@ -789,6 +791,19 @@ export function AutopilotPanel({
   const selectedKind = libraryFilters.mediaKind ?? "";
   /** What the head reports: the chosen kind's count, or both kinds together. */
   const matchingCount = selectedKind ? kindCount(selectedKind) : postableMatching;
+  /**
+   * Which of this campaign's destinations could carry a carousel.
+   *
+   * Read off the destinations rather than worked out here: whether a login
+   * posts galleries is the engine's property, and the API is where the engine
+   * definitions live. Only enabled destinations count - a switched-off one is
+   * not somewhere the package was going anyway.
+   */
+  const carouselReach = {
+    total: destinations.filter((item) => item.enabled).length,
+    accepting: destinations.filter((item) => item.enabled && item.accepts_carousel),
+    refusing: destinations.filter((item) => item.enabled && item.accepts_carousel === false),
+  };
   const postableKinds: Array<{ value: "" | "video" | "image"; label: string }> = [
     { value: "", label: t("common.all") },
     { value: "video", label: t("library.videos") },
@@ -1278,7 +1293,11 @@ export function AutopilotPanel({
                     <small>{platformLabels[item.platform]} · {item.provider_label ?? item.provider}
                       {accountIdentity({ account: item.connection_account })
                         ? ` · ${accountIdentity({ account: item.connection_account })}`
-                        : ""}</small>
+                        : ""}
+                      {/* Only worth saying where it is true: every destination
+                          takes video, so "video only" is the exception and
+                          "carousels too" is the news. */}
+                      {item.accepts_carousel ? " · carousels too" : ""}</small>
                   </span>
                 </div>
                 {/* The decision, next to the account it applies to. Someone who
@@ -1576,6 +1595,35 @@ export function AutopilotPanel({
                 {t("autopilot.chooseAnother")}
               </Button>
             </div>
+            {/* Said here, where the carousel is being made, rather than left
+                for the engine to say after the post is built. Carousel support
+                is narrow and belongs to the engine as much as the network: a
+                workspace whose Instagram and Threads run through Buffer has
+                nowhere to send pictures, even though both networks have
+                galleries of their own. */}
+            {draftingSplit.images.length > 0 && carouselReach.total > 0 && (
+              <p
+                className={carouselReach.accepting.length ? "autopilot-note" : "autopilot-refusal"}
+                role="status"
+              >
+                {carouselReach.accepting.length ? <>
+                  <strong>This carousel can go to {carouselReach.accepting.length} of {carouselReach.total} destinations.</strong>
+                  {" "}
+                  {carouselReach.accepting.map((item) => item.label).join(", ")}
+                  {carouselReach.refusing.length > 0 && <>
+                    {" "}The rest take video only, and this package will be
+                    skipped on them: {carouselReach.refusing.map((item) => item.label).join(", ")}.
+                  </>}
+                </> : <>
+                  <strong>No destination on this campaign can post a photo carousel.</strong>
+                  {" "}
+                  {carouselReach.refusing.map((item) => item.label).join(", ")} take
+                  video only, so this package would never be posted. Add a
+                  destination on an engine that carries carousels, or choose a
+                  video instead.
+                </>}
+              </p>
+            )}
             <label>{t("autopilot.copy")}
               {/* Not required. Media is often chosen before anybody has
                   written for it, and forcing both into one sitting is what

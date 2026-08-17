@@ -41,6 +41,7 @@ from trendrelay_api.foundation import (
 from trendrelay_api.integrations.publishing import (
     PROVIDERS,
     cached_identity,
+    carousel_fits_destination,
     resolve_post_type,
     resolve_provider,
 )
@@ -249,6 +250,11 @@ def _destination_view(session: Session, item: CampaignDestination) -> dict[str, 
             else item.provider
         ),
         "connection_account": cached_identity(item.provider) if connection else {},
+        # Whether pictures can go here at all, so the screen where media is
+        # chosen can say so rather than the engine saying it after the fact.
+        # Carousel support is narrow: only Zernio and WoopSocial post one, and
+        # only to TikTok.
+        "accepts_carousel": carousel_fits_destination(item.provider, item.platform, 1)[0],
         "integration_id": item.integration_id,
         "platform": item.platform,
         "label": item.label,
@@ -1124,6 +1130,11 @@ def _execution_view(item: PublicationExecution) -> dict[str, Any]:
         "asset_version_id": item.asset_version_id,
         "media_sha256": item.media_sha256,
         "effect_ids": list(item.effect_ids or []),
+        # The frozen media itself, so an approval can show the post as it
+        # will look rather than describe it.
+        "media_path": item.media_path,
+        "image_paths": list(item.image_paths or []),
+        "post_type": item.post_type,
         "title": item.title,
         "caption": item.caption,
         "first_comment": item.first_comment,

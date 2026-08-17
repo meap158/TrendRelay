@@ -73,8 +73,11 @@ def autopilot(session, **overrides) -> CampaignAutopilot:
 
 
 def destination(session, identifier: str, platform: str, **overrides) -> CampaignDestination:
+    # Overridable: which engine carries a destination decides what it can post,
+    # so a test about carousels has to be able to say.
+    overrides.setdefault("provider", "buffer")
     item = CampaignDestination(
-        id=identifier, workspace_id="ws", campaign_id="camp", provider="buffer",
+        id=identifier, workspace_id="ws", campaign_id="camp",
         integration_id=f"acct-{identifier}", platform=platform,
         label=f"{platform} account", enabled=True, **overrides,
     )
@@ -720,3 +723,58 @@ def test_previewing_a_draft_campaign_still_works_when_it_is_switched_on(session)
     )
 
     assert "switched off" not in note
+
+
+# --- pictures only go where pictures can go -----------------------------------
+
+
+def test_a_carousel_is_not_paired_with_a_destination_that_cannot_take_one(session) -> None:
+    """The pairing that used to be made and then refused by the engine.
+
+    Buffer posts no photo carousel to anything, so a package of pictures aimed
+    at a Buffer destination could never be delivered. It was scheduled anyway,
+    built, sent, and refused - on a campaign that runs unattended.
+    """
+    slot(session, 9)
+    destination(session, "d1", "threads", provider="buffer")
+    queue_item(session, "q1", video_path="", image_paths=[r"S:\media\a.jpg", r"S:\media\b.jpg"])
+
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert posts == []
+    assert "carousel" in note.lower(), note
+
+
+def test_a_carousel_is_scheduled_where_the_engine_carries_one(session) -> None:
+    slot(session, 9)
+    destination(session, "d1", "tiktok", provider="zernio")
+    queue_item(session, "q1", video_path="", image_paths=[r"S:\media\a.jpg", r"S:\media\b.jpg"])
+
+    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert len(posts) == 1
+    assert posts[0].image_paths == (r"S:\media\a.jpg", r"S:\media\b.jpg")
+    assert not posts[0].video_path
+
+
+def test_a_carousel_goes_to_the_destination_that_can_carry_it(session) -> None:
+    """A mixed campaign, which is the ordinary case.
+
+    One TikTok account on Zernio, one Threads account on Buffer. The pictures
+    belong on the first and are refused by the second, and the plan reflects
+    that rather than manufacturing a post the engine would throw back.
+
+    Note what this does not claim: that a slot whose turn falls to the Buffer
+    destination is handed to the TikTok one instead. It is not - a slot picks
+    one destination, and a destination that skips wastes it. That starves the
+    capable destination whenever the incapable one ranks first, and it is true
+    of over-wide videos today as much as of carousels.
+    """
+    slot(session, 9)
+    destination(session, "d1", "tiktok", provider="zernio")
+    destination(session, "d2", "threads", provider="buffer")
+    queue_item(session, "q1", video_path="", image_paths=[r"S:\media\a.jpg"])
+
+    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert [post.destination_id for post in posts] == ["d1"]

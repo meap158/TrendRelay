@@ -1176,6 +1176,54 @@ def video_fits_platform(platform: str, video_path: str | None) -> tuple[bool, st
     )
 
 
+def carousel_fits_destination(
+    provider_id: str, platform: str, image_count: int,
+) -> tuple[bool, str | None]:
+    """Whether this login can post a gallery of pictures here, and why not.
+
+    The counterpart to `video_fits_platform`, and asked the same way, so a
+    campaign can decline a pairing before it makes a post out of it rather than
+    finding out from the engine afterwards.
+
+    Carousel support is narrow and it is a property of the engine as much as the
+    network: only Zernio and WoopSocial declare one, and only for TikTok. Buffer
+    and Bundle.social post no carousel at all, so a workspace whose Instagram
+    and Threads run through Buffer has nowhere to send pictures even though both
+    networks support galleries perfectly well themselves.
+
+    (True, None) for an unknown engine: not recognising a login is not evidence
+    the post is wrong, and the delivery guard refuses what this cannot judge.
+    """
+    try:
+        # Takes a connection id as readily as an engine id, which is what a
+        # destination stores.
+        provider = resolve_provider(provider_id)
+    except ValueError:
+        return True, None
+    label = PLATFORM_LABELS.get(platform, platform)
+    if platform not in provider.photo_carousel_platforms:
+        carries = sorted(provider.photo_carousel_platforms)
+        instead = (
+            f"{provider.label} posts photo carousels to "
+            f"{', '.join(PLATFORM_LABELS.get(item, item) for item in carries)} only."
+            if carries else f"{provider.label} posts no photo carousels at all."
+        )
+        return False, (
+            f"{provider.label} cannot post a photo carousel to {label}. {instead} "
+            "Send this destination a video, or deliver it through an engine that can."
+        )
+    allowed = carousel_limit(platform)
+    if image_count > allowed:
+        return False, (
+            f"{label} takes at most {allowed} images in a carousel, and this "
+            f"package has {image_count}. Remove some, or send the rest as a "
+            "second package."
+        )
+    if not image_count:
+        return False, f"A {label} photo carousel needs at least one image."
+    return True, None
+
+
 def carries_tracking_link(request: PublishRequest) -> bool:
     """Whether anything this post says contains a link some report attributes.
 

@@ -157,6 +157,7 @@ def finalization_problems(
     from trendrelay_api.integrations.publishing import (
         PublishRequest,
         _validate_request,
+        carousel_fits_destination,
         resolve_provider,
     )
 
@@ -190,6 +191,20 @@ def finalization_problems(
                 "Products are attached but their affiliate link is not in the "
                 "post's own text."
             )
+    # Asked on both paths, unlike the full engine check below it.
+    #
+    # Whether a login can post a gallery here is a fact about what was composed,
+    # the same kind of thing as an empty caption - not an environment condition
+    # like media hosting, which is what `engine_check` exists to skip. Skipping
+    # it unattended meant the one path that posts without anybody watching was
+    # the one that did not ask, so a carousel aimed at a network that cannot
+    # take one was found out by the engine.
+    if execution.image_paths:
+        fits, why = carousel_fits_destination(
+            execution.provider, execution.platform, len(execution.image_paths),
+        )
+        if not fits and why:
+            problems.append(why)
     if engine_check:
         try:
             _validate_request(resolve_provider(execution.provider), PublishRequest(
