@@ -800,6 +800,11 @@ export function AutopilotPanel({
   const deliveredCount = timeline.filter((entry) => entry.kind === "delivered").length;
   const plannedCount = timeline.length - deliveredCount;
   const timelineAccounts = new Set(timeline.map((entry) => entry.destination_id)).size;
+  // A failed delivery is a delivery warning as much as a preflight refusal
+  // is: a zero above a red row would call the list a liar.
+  const deliveryWarnings = (preview?.problems ?? 0) + timeline.filter(
+    (entry) => entry.kind === "delivered" && entry.status === "failed",
+  ).length;
 
   return (
     <div className="autopilot">
@@ -1800,8 +1805,8 @@ export function AutopilotPanel({
             <span><strong>{plannedCount}</strong><small>planned</small></span>
             <span><strong>{timelineDays.length}</strong><small>active days</small></span>
             <span><strong>{timelineAccounts}</strong><small>accounts</small></span>
-            <span className={preview?.problems ? "warn" : "good"}>
-              <strong>{preview?.problems ?? 0}</strong><small>delivery warnings</small>
+            <span className={deliveryWarnings ? "warn" : "good"}>
+              <strong>{deliveryWarnings}</strong><small>delivery warnings</small>
             </span>
           </div>
         )}
