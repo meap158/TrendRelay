@@ -18,7 +18,6 @@ from trendrelay_api.campaign_autopilot import (
 from trendrelay_api.integrations import publishing
 from trendrelay_api.integrations.publishing import first_comment_deliverable
 
-
 # --- who can actually post a comment after the post -----------------------------
 
 
