@@ -549,7 +549,13 @@ def test_preparing_translations_runs_under_the_deadline(monkeypatch) -> None:
     # The guard is worth nothing if the install does not actually sit inside it.
     seen: list[float | None] = []
     monkeypatch.setattr(media_ai, "_runtime_path", lambda: None)
-    monkeypatch.setitem(sys.modules, "argostranslate", type(sys)("argostranslate"))
+    # The submodule too, not just the package: `from argostranslate import
+    # package` reaches for it, and an empty stand-in only passed while some
+    # other test had left the real runtime on sys.path.
+    argostranslate = type(sys)("argostranslate")
+    argostranslate.package = type(sys)("argostranslate.package")
+    monkeypatch.setitem(sys.modules, "argostranslate", argostranslate)
+    monkeypatch.setitem(sys.modules, "argostranslate.package", argostranslate.package)
     monkeypatch.setattr(
         media_ai,
         "_install_translation_packages",
