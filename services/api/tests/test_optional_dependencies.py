@@ -46,12 +46,21 @@ def test_the_api_imports_with_no_model_runtime_installed(bare_install) -> None:
     assert module.app is not None
 
 
-def test_importing_the_api_does_not_load_a_model_runtime() -> None:
+def test_importing_the_api_does_not_load_a_model_runtime(monkeypatch) -> None:
     # The cost this guards is startup time and memory on every machine that
     # never edits a video, which is most of them. Measured at import: 1.4s and
     # none of these loaded.
+    #
+    # Removed through monkeypatch so they come back, the way `bare_install`
+    # above does it. Popping them outright left them gone for the rest of the
+    # session: a later test importing insightface got a fresh import that then
+    # failed on "Unable to import dependency onnxruntime", because the module
+    # it wanted had been taken out from under a partly-initialised extension.
+    # That surfaced as recolour previews and still-effects failing in a full
+    # run and passing on their own - the shape of a pollution bug, which is
+    # exactly what it was.
     for name in OPTIONAL:
-        sys.modules.pop(name, None)
+        monkeypatch.delitem(sys.modules, name, raising=False)
     importlib.reload(importlib.import_module("trendrelay_api.main"))
     assert [name for name in OPTIONAL if name in sys.modules] == []
 
