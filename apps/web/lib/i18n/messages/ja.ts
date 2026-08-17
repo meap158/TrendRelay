@@ -423,6 +423,8 @@ export const ja: Messages = {
     accountName: "アカウント名",
     accountNamePlaceholder: "クライアントB、第2ブランド、個人…",
     removeAccountDetail: "保存されているキーも削除されます。すでに公開された投稿はそのまま残ります。",
+    addAnotherAccountHint: "任意のエンジンに2つ目のログインを接続して、アカウントを増やします。",
+    whichEngine: "エンジン",
     openDashboard: "ダッシュボード",
     openKeys: "{label} のキーを管理",
     openChannels: "{label} でチャンネルを接続",

@@ -413,6 +413,8 @@ export const zh: Messages = {
     accountName: "账号名称",
     accountNamePlaceholder: "客户 B、第二个品牌、个人…",
     removeAccountDetail: "保存的密钥也会被删除。已发布的内容保持不变。",
+    addAnotherAccountHint: "为任意引擎连接第二个登录，以添加更多账号。",
+    whichEngine: "引擎",
     openDashboard: "控制台",
     openKeys: "管理 {label} 密钥",
     openChannels: "在 {label} 中连接渠道",

@@ -1402,21 +1402,28 @@ export default function PublishPage() {
    * styled, ignores the page's language, and on a page assembled out of a
    * shared UI layer it reads as a fault rather than as a step.
    */
-  const [namingLogin, setNamingLogin] = useState<Provider | null>(null);
+  /**
+   * The engine a new login is being added to, while the dialog is open.
+   *
+   * An engine id rather than a card, because this is now reachable from a tile
+   * that belongs to no engine - so the dialog has to ask, and the card version
+   * simply answers the question in advance.
+   */
+  const [addingToEngine, setAddingToEngine] = useState<PublishingEngine | null>(null);
   const [newLoginLabel, setNewLoginLabel] = useState("");
   /** The login a removal is waiting to be confirmed for. */
   const [removingLogin, setRemovingLogin] = useState<Provider | null>(null);
 
-  async function addConnection(provider: Provider, label: string) {
-    setNamingLogin(null);
-    setBusy(`${provider.id}-add`);
+  async function addConnection(engine: PublishingEngine, label: string) {
+    setAddingToEngine(null);
+    setBusy(`${engine}-add`);
     setError(null);
     setNotice(null);
     try {
       const body = await json<{ connection: { id: string; label: string } }>(
         await apiFetch(`/api/workspaces/${workspaceId}/publishing/connections`, {
           method: "POST",
-          body: JSON.stringify({ provider: provider.engine, label }),
+          body: JSON.stringify({ provider: engine, label }),
         }),
       );
       await loadConnection();
@@ -1960,18 +1967,11 @@ export default function PublishPage() {
                    * that already exists. The engine's first login has no remove
                    * button: it is what every destination written before logins
                    * existed still resolves to. */}
-                  {provider.is_default ? (
-                    <Button
-                      variant="quiet"
-                      size="sm"
-                      disabled={busy !== null || !canExecute}
-                      busy={busy === `${provider.id}-add`}
-                      onClick={() => {
-                        setNewLoginLabel("");
-                        setNamingLogin(provider);
-                      }}
-                    >{t("publish.addAnotherAccount")}</Button>
-                  ) : (
+                  {/* Only the removal. Adding is the tile at the end of the
+                      grid, which makes a card of exactly this kind and says so
+                      by being one - offering it here as well would be the same
+                      thing twice, in the smaller of the two places. */}
+                  {!provider.is_default && (
                     <Button
                       variant="quiet"
                       size="sm"
@@ -2021,6 +2021,29 @@ export default function PublishPage() {
               </article>
             );
           })}
+          {/* One more of something already here.
+           *
+           * A tile rather than a button in the toolbar, and inside the grid
+           * rather than under it, because what it makes is another card of
+           * exactly this kind - and the shape says so before the label is
+           * read. Somebody who has not yet realised they could have two Buffer
+           * accounts is not looking at the Buffer card for a way to get one. */}
+          {canExecute && (
+            <button
+              type="button"
+              className="engine-add-tile"
+              onClick={() => {
+                setNewLoginLabel("");
+                setAddingToEngine(
+                  (connection?.providers[0]?.engine ?? "buffer") as PublishingEngine,
+                );
+              }}
+            >
+              <span className="engine-add-plus" aria-hidden="true">+</span>
+              <strong>{t("publish.addAnotherAccount")}</strong>
+              <span>{t("publish.addAnotherAccountHint")}</span>
+            </button>
+          )}
         </div>
         {hosting && (
           <article className={`hosting-card${hosting.configured ? " ready" : hosting.required ? " needed" : ""}`}>
@@ -2141,28 +2164,44 @@ export default function PublishPage() {
             opened it, and speaks the page's language. `window.prompt` does none
             of that. */}
         <Dialog
-          open={namingLogin !== null}
+          open={addingToEngine !== null}
           title={t("publish.addAnotherAccount")}
-          description={namingLogin
-            ? t("publish.nameThisAccount", { label: namingLogin.engine_label })
-            : undefined}
-          onClose={() => setNamingLogin(null)}
+          description={t("publish.addAnotherAccountHint")}
+          onClose={() => setAddingToEngine(null)}
           footer={
             <>
-              <Button variant="quiet" onClick={() => setNamingLogin(null)}>
+              <Button variant="quiet" onClick={() => setAddingToEngine(null)}>
                 {t("common.cancel")}
               </Button>
               <Button
                 variant="primary"
-                busy={busy === `${namingLogin?.id}-add`}
+                busy={busy === `${addingToEngine}-add`}
                 disabled={!newLoginLabel.trim()}
                 onClick={() => {
-                  if (namingLogin) void addConnection(namingLogin, newLoginLabel.trim());
+                  if (addingToEngine) void addConnection(addingToEngine, newLoginLabel.trim());
                 }}
               >{t("publish.addAccount")}</Button>
             </>
           }
         >
+          {/* Which engine. Pre-answered when the dialog was opened from an
+              engine's own card, and still shown rather than hidden - so the
+              two ways in lead to the same form and one of them is not a
+              shortcut with different rules. */}
+          <label className="engine-login-name">
+            <span>{t("publish.whichEngine")}</span>
+            <select
+              value={addingToEngine ?? ""}
+              onChange={(event) =>
+                setAddingToEngine(event.target.value as PublishingEngine)}
+            >
+              {(connection?.providers ?? [])
+                .filter((item) => item.is_default)
+                .map((item) => (
+                  <option key={item.engine} value={item.engine}>{item.engine_label}</option>
+                ))}
+            </select>
+          </label>
           <label className="engine-login-name">
             <span>{t("publish.accountName")}</span>
             <input
@@ -2174,9 +2213,9 @@ export default function PublishPage() {
               onKeyDown={(event) => {
                 // Enter submits, because a one-field form where it does not is
                 // a form that feels broken.
-                if (event.key === "Enter" && newLoginLabel.trim() && namingLogin) {
+                if (event.key === "Enter" && newLoginLabel.trim() && addingToEngine) {
                   event.preventDefault();
-                  void addConnection(namingLogin, newLoginLabel.trim());
+                  void addConnection(addingToEngine, newLoginLabel.trim());
                 }
               }}
             />

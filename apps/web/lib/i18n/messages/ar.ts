@@ -421,6 +421,8 @@ export const ar: Messages = {
     accountName: "اسم الحساب",
     accountNamePlaceholder: "العميل ب، علامة ثانية، شخصي…",
     removeAccountDetail: "يُحذف المفتاح المحفوظ له أيضًا. المنشورات المنشورة بالفعل تبقى كما هي.",
+    addAnotherAccountHint: "اربط تسجيل دخول ثانٍ بأي محرك للحصول على حسابات إضافية.",
+    whichEngine: "المحرك",
     openDashboard: "لوحة التحكم",
     openKeys: "إدارة مفاتيح {label}",
     openChannels: "اربط القنوات في {label}",

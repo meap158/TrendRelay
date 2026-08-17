@@ -423,6 +423,8 @@ export const vi: Messages = {
     accountName: "Tên tài khoản",
     accountNamePlaceholder: "Khách B, thương hiệu thứ hai, cá nhân…",
     removeAccountDetail: "Khoá đã lưu cũng bị xoá. Các bài đã đăng vẫn giữ nguyên.",
+    addAnotherAccountHint: "Kết nối thêm một tài khoản đăng nhập cho bất kỳ engine nào, để có thêm tài khoản.",
+    whichEngine: "Engine",
     openDashboard: "Bảng điều khiển",
     openKeys: "Quản lý khóa {label}",
     openChannels: "Kết nối kênh trong {label}",

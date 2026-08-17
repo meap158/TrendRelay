@@ -431,6 +431,8 @@ export const fr: Messages = {
     accountName: "Nom du compte",
     accountNamePlaceholder: "Client B, deuxième marque, personnel…",
     removeAccountDetail: "Sa clé enregistrée est également supprimée. Les publications déjà faites restent en place.",
+    addAnotherAccountHint: "Connectez un second identifiant à n'importe quel moteur, pour plus de comptes.",
+    whichEngine: "Moteur",
     openDashboard: "Tableau de bord",
     openKeys: "Gérer les clés {label}",
     openChannels: "Connecter des canaux dans {label}",

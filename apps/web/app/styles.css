@@ -998,3 +998,57 @@ nav strong { color: #1c2b33; }
 }
 .engine-login-name input:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
 .engine-login-warning { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+/* One more engine instance. Sized and shaped like the cards it sits among,
+   because what it makes is another one of them - the shape says so before the
+   label is read. */
+.engine-add-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  /* `align-items: start` on the grid means a tile would otherwise sit at its
+     own content height - a short dashed box beside cards three times taller.
+     Stretching it to the row makes the grid read as a row of engines with a
+     space at the end, which is what it is. */
+  align-self: stretch;
+  min-height: 220px;
+  padding: 20px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.engine-add-tile:hover, .engine-add-tile:focus-visible {
+  border-color: var(--link);
+  background: var(--panel-raised);
+  color: var(--fg);
+}
+.engine-add-tile strong { font-size: 14px; font-weight: 600; }
+.engine-add-tile span:last-child { max-width: 26ch; font-size: 12px; line-height: 1.45; }
+.engine-add-plus {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--panel-raised);
+  font-size: 26px;
+  font-weight: 300;
+  line-height: 1;
+}
+.engine-add-tile:hover .engine-add-plus { background: var(--link); color: #fff; }
+.engine-login-name select {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+}

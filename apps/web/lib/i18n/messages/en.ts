@@ -427,6 +427,8 @@ export const en = {
     accountName: "Account name",
     accountNamePlaceholder: "Client B, second brand, personal…",
     removeAccountDetail: "Its saved key is deleted too. Posts already published stay where they are.",
+    addAnotherAccountHint: "Connect a second login to any engine, for more accounts.",
+    whichEngine: "Engine",
     openDashboard: "Dashboard",
     openKeys: "Manage {label} keys",
     openChannels: "Connect channels in {label}",
