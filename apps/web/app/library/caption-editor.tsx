@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
+import { ProviderSwitch, providerOf, useMediaAi } from "./transcription-setup";
 
 /**
  * Captions: their own class of work, not an effect.
@@ -110,6 +111,9 @@ export function CaptionEditor({
   // A preview asked for after a newer one must not overwrite it: the requests
   // are independent and the slower one can land last.
   const latest = useRef(0);
+  // Only polled while this dialog is open; a closed one has no reason to keep
+  // asking whether a runtime appeared.
+  const mediaAi = useMediaAi(apiFetch, open);
 
   useEffect(() => {
     if (!open || !workspaceId) return;
@@ -243,8 +247,14 @@ export function CaptionEditor({
   }, [workspaceId, assetId, styleId, translateTo, delivery, apiFetch, loadFiles]);
 
   const chosen = catalogue?.styles.find((item) => item.id === styleId);
-  const pairs = catalogue?.translation.pairs ?? [];
-  const speechReady = catalogue?.speech.ready ?? false;
+  // The catalogue is fetched once when the dialog opens; the provider hook keeps
+  // watching. So the fresher of the two answers wins, and a runtime that
+  // finished downloading while this dialog was open lights the controls up
+  // without asking the operator to close it and come back.
+  const liveSpeech = providerOf(mediaAi.state, "speech");
+  const liveTranslate = providerOf(mediaAi.state, "translate");
+  const pairs = liveTranslate?.ready ? liveTranslate.pairs ?? [] : catalogue?.translation.pairs ?? [];
+  const speechReady = liveSpeech?.ready ?? catalogue?.speech.ready ?? false;
 
   return (
     <Dialog
@@ -255,8 +265,8 @@ export function CaptionEditor({
       size="wide"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Close
+          <Button variant="quiet" onClick={onClose}>
+            Cancel
           </Button>
           {/* The delivery choice sits with the button that acts on it, because
               it changes what that button costs: sidecars are a kilobyte,
@@ -293,11 +303,21 @@ export function CaptionEditor({
             depends on it and an empty style list would otherwise read as a
             missing feature rather than a missing install. */}
         {catalogue && !speechReady && (
-          <p className="caption-editor-setup">
-            Automatic transcription is not prepared yet, so captions can only be
-            built from a transcript entered by hand. Run{" "}
-            <code>python scripts/media_ai.py install-speech</code> to enable it.
-          </p>
+          <div className="caption-editor-setup">
+            <p>
+              Automatic transcription is off, so captions can only be built from
+              a transcript entered by hand.
+            </p>
+            <ProviderSwitch
+              label="Transcribe speech"
+              provider="speech"
+              state={mediaAi.state}
+              busy={mediaAi.busy}
+              onPrepare={(provider) => void mediaAi.prepare(provider)}
+              onToggle={(provider, on) => void mediaAi.setActive(provider, on)}
+            />
+            {mediaAi.failure && <p className="caption-editor-problem" role="alert">{mediaAi.failure}</p>}
+          </div>
         )}
 
         <section className="caption-editor-styles" aria-label="Caption style">
@@ -322,10 +342,17 @@ export function CaptionEditor({
         <section className="caption-editor-language" aria-label="Language">
           <h4>Language</h4>
           {pairs.length === 0 ? (
-            <p className="caption-editor-note">
-              Captions will be in the language spoken. To translate them, run{" "}
-              <code>python scripts/media_ai.py install-translate</code>.
-            </p>
+            <div className="caption-editor-setup">
+              <p>Captions will be in the language spoken.</p>
+              <ProviderSwitch
+                label="Translate captions"
+                provider="translate"
+                state={mediaAi.state}
+                busy={mediaAi.busy}
+                onPrepare={(provider) => void mediaAi.prepare(provider)}
+                onToggle={(provider, on) => void mediaAi.setActive(provider, on)}
+              />
+            </div>
           ) : (
             <select
               value={translateTo}

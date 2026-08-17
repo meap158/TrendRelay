@@ -1,6 +1,7 @@
 "use client";
 
 import * as RadixDialog from "@radix-ui/react-dialog";
+import { X } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Button } from "./button";
@@ -13,6 +14,19 @@ import { useT } from "../i18n-provider";
  * forget entirely: the focus trap, restoring focus to whatever opened it,
  * marking the rest of the page inert for screen readers, and closing on Escape
  * or an outside click. The hand-rolled version this replaced only had Escape.
+ *
+ * Two ways out, and they are not the same thing:
+ *
+ * The × in the corner is chrome. It is always there, it never scrolls away, and
+ * it means "put this back". A `footer` is for a decision - "Cancel" beside
+ * "Create campaign" means *abandon what I typed*, which is worth a word.
+ *
+ * The corner used to be a button reading "Close", so a form dialog offered
+ * "Close" in the header and "Cancel" in the footer: two text buttons, two verbs
+ * for one outcome, and nothing to tell you which was which. An icon does not
+ * compete with a verb. It also means a dialog that decides nothing needs no
+ * footer at all - the × is the way out, and a lone "Close" down there was only
+ * the same button written twice.
  */
 export function Dialog({
   open,
@@ -54,7 +68,11 @@ export function Dialog({
               )}
             </div>
             <RadixDialog.Close asChild>
-              <Button variant="quiet" size="sm">{t("common.close")}</Button>
+              {/* Labelled rather than lettered: the glyph is for the eye and
+                  the name is for everything else. */}
+              <Button variant="quiet" size="sm" iconOnly aria-label={t("common.close")}>
+                <X size={16} aria-hidden="true" />
+              </Button>
             </RadixDialog.Close>
           </header>
           {children}

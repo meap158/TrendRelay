@@ -544,7 +544,7 @@ export default function CampaignsPage() {
             <small>Optional. Pin one product to every post, or leave this clear for automatic matching from Attribution.</small>
           </label>
           <div className="campaign-dialog-actions">
-            <Button type="button" variant="quiet" onClick={() => setNewCampaignOpen(false)}>Cancel</Button>
+            <Button type="button" variant="quiet" onClick={() => setNewCampaignOpen(false)}>{t("common.cancel")}</Button>
             <Button type="submit" variant="primary" busy={busy === "campaign"}>{t("campaigns.createButton")}</Button>
           </div>
         </form>
@@ -582,7 +582,7 @@ export default function CampaignsPage() {
               <small>Changes the disclosure and bio hint too, unless you have written your own.</small>
             </label>
             <div className="campaign-dialog-actions">
-              <Button type="button" variant="quiet" onClick={() => setSettingsFor(null)}>Cancel</Button>
+              <Button type="button" variant="quiet" onClick={() => setSettingsFor(null)}>{t("common.cancel")}</Button>
               <Button type="submit" variant="primary" busy={busy === "settings"}>{t("common.save")}</Button>
             </div>
           </form>

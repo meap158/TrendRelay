@@ -215,6 +215,9 @@ a.ui-button { text-decoration: none; }
    thumbnails behind it. */
 .ui-dialog-wide { width: min(1120px, calc(100vw - 48px)); max-height: min(88vh, 920px); }
 .ui-dialog-head { display: flex; flex: none; align-items: start; justify-content: space-between; gap: 12px; }
+/* Pulled up level with the title rather than sitting on its baseline, and out
+   to the panel's edge, which is where a dismiss is looked for. */
+.ui-dialog-head > .ui-button-icon { margin: -2px -4px 0 0; }
 .ui-dialog-head h2 { margin: 0 0 2px; font-size: 15px; font-weight: 500; }
 .ui-dialog-head p { margin: 0; color: var(--muted); }
 .ui-dialog-foot { display: flex; flex: none; justify-content: flex-end; gap: 8px; }

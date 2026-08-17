@@ -339,7 +339,7 @@ export function EffectEditor({
         </Button>
       ) : (
         <>
-          <Button variant="quiet" onClick={onClose}>{t("common.close")}</Button>
+          <Button variant="quiet" onClick={onClose}>{t("common.cancel")}</Button>
           {!batch && <Button
               variant="secondary"
               busy={busy === "save"}

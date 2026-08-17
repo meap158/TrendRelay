@@ -110,7 +110,10 @@ export function BlurSettings({
       onClose={onClose}
       footer={
         <>
-          <Button variant="quiet" onClick={onClose}>{t("common.close")}</Button>
+          {/* "Cancel", not "Close": beside a button that renders a clip, this
+              one means *do not blur*, and the × in the corner is already the
+              way to simply put the panel back. */}
+          <Button variant="quiet" onClick={onClose}>{t("common.cancel")}</Button>
           <Button variant="primary" busy={busy} onClick={onBlur}>{t("blurSettings.blurFaces")}</Button>
         </>
       }
