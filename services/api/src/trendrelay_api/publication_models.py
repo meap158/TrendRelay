@@ -126,6 +126,10 @@ class PublicationExecution(Base):
     #: and fails by name when it does not - never substituting another cut.
     asset_version_id: Mapped[str | None] = mapped_column(String(64))
     media_path: Mapped[str] = mapped_column(String(1200))
+    #: A carousel's pictures, in order. Empty for a video post, and
+    #: `media_path` is empty for a carousel - the same shape the queue uses, so
+    #: the two rows describe one post the same way.
+    image_paths: Mapped[list[str]] = mapped_column(JSON, default=list)
     media_sha256: Mapped[str | None] = mapped_column(String(64))
     effect_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
 

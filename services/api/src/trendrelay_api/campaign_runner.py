@@ -111,6 +111,7 @@ def _publish_execution(
         queue_item_id=execution.queue_item_id,
         destination_id=execution.destination_id,
         video_path=execution.media_path,
+        image_paths=list(execution.image_paths or []),
         caption=execution.caption,
         # Reddit and Pinterest refuse a post without one, and the engines take
         # it as a separate field rather than reading the first caption line.
@@ -179,6 +180,7 @@ def _freeze_execution(
         asset_id=post.asset_id,
         asset_version_id=post.asset_version_id,
         media_path=post.video_path,
+        image_paths=list(post.image_paths or ()),
         media_sha256=post.media_sha256,
         effect_ids=list(post.effect_ids),
         title=post.title,

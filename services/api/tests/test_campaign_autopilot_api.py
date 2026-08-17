@@ -829,3 +829,86 @@ def test_a_destination_pairs_a_network_its_engine_can_reach(workspace) -> None:
         json={"provider": "zernio", "integration_id": "a2",
               "platform": "reddit", "label": "brand"},
     ).status_code == 201
+
+
+# --- a package can be pictures, and can arrive before its copy ----------------
+
+
+def test_a_package_can_be_a_photo_carousel(workspace) -> None:
+    """The one shape a campaign could not hold. Publish has sent them for a
+    while; the queue had nowhere to put the second picture."""
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+
+    response = request("POST", f"{base}/queue", json={
+        "image_paths": [r"S:\media\one.jpg", r"S:\media\two.jpg"],
+        "body": "Three ways to fold a shirt.",
+    })
+
+    assert response.status_code == 201, response.text
+    item = response.json()["item"]
+    assert item["image_paths"] == [r"S:\media\one.jpg", r"S:\media\two.jpg"]
+    assert item["video_path"] == ""
+
+
+def test_the_picture_order_is_the_order_it_posts(workspace) -> None:
+    # A carousel is ordered - the first picture is the cover - so this is a
+    # list, and the order chosen in the picker is the order stored.
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    paths = [rf"S:\media\{n}.jpg" for n in range(5)]
+
+    item = request("POST", f"{base}/queue",
+                   json={"image_paths": paths, "body": "Ordered"}).json()["item"]
+
+    assert item["image_paths"] == paths
+
+
+def test_a_package_is_a_video_or_pictures_but_not_both(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+
+    response = request("POST", f"{base}/queue", json={
+        "video_path": r"S:\media\clip.mp4",
+        "image_paths": [r"S:\media\one.jpg"],
+        "body": "Both at once",
+    })
+
+    assert response.status_code == 422
+
+
+def test_a_package_needs_some_media(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+
+    response = request("POST", f"{base}/queue", json={"body": "Words only"})
+
+    assert response.status_code == 422
+
+
+def test_media_can_be_picked_before_the_copy_is_written(workspace) -> None:
+    """Picking and writing no longer have to happen in one sitting.
+
+    A network refuses a post with no caption at all, so the package carries a
+    stand-in rather than an empty string - and says it is one.
+    """
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+
+    item = request("POST", f"{base}/queue",
+                   json={"video_path": r"S:\media\clip.mp4"}).json()["item"]
+
+    assert item["needs_copy"] is True
+    assert item["body"]
+
+
+def test_copy_somebody_wrote_is_not_marked_as_needing_writing(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+
+    item = request("POST", f"{base}/queue", json={
+        "video_path": r"S:\media\clip.mp4", "body": "Real copy.",
+    }).json()["item"]
+
+    assert item["needs_copy"] is False
+    assert item["body"] == "Real copy."

@@ -207,7 +207,14 @@ class CampaignQueueItem(Base):
     #: The approved cut. Resolved through the library at post time so a blurred
     #: version replaces the original without the queue knowing about it.
     asset_id: Mapped[str | None] = mapped_column(String(64), index=True)
-    video_path: Mapped[str] = mapped_column(String(1200))
+    #: The video, where this package is a video. Empty for a photo carousel,
+    #: which is the one shape a campaign could not hold: a queue item was one
+    #: file, so a network that takes several pictures could only be given one.
+    video_path: Mapped[str] = mapped_column(String(1200), default="")
+    #: The pictures, in the order they should appear. A carousel is ordered -
+    #: the first is the cover - so this is a list rather than a set, and the
+    #: order somebody chose in the picker is the order that posts.
+    image_paths: Mapped[list[str]] = mapped_column(JSON, default=list)
     title: Mapped[str | None] = mapped_column(String(200))
     #: Copy a person wrote. Autopilot never generates it.
     body: Mapped[str] = mapped_column(String(4000))

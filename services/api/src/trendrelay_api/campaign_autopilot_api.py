@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -131,9 +131,39 @@ class DestinationPlacement(BaseModel):
     link_placement: str = Field(pattern=r"^(auto|caption|first_comment|bio)$")
 
 
+#: What a package says when nobody has written it yet.
+#:
+#: A caption is required by every network, so a package with none cannot post -
+#: and refusing to accept one at all would mean picking media and writing copy
+#: had to happen in the same sitting. This lets the picking happen now and the
+#: writing happen later, and says plainly on the post which it is.
+PLACEHOLDER_BODY = "Draft copy - write this before the campaign posts it."
+
+
 class QueueItemCreate(BaseModel):
-    video_path: str = Field(min_length=1, max_length=1200)
-    body: str = Field(min_length=1, max_length=4000)
+    """One package: the media, the copy, and what it links to.
+
+    Either a video or pictures, not both and not neither. A carousel is the one
+    shape a campaign could not hold before, and the two are kept as separate
+    fields rather than one list because a network that takes a video and one
+    that takes five pictures want different things from the composer.
+    """
+
+    video_path: str = Field(default="", max_length=1200)
+    image_paths: list[str] = Field(default_factory=list, max_length=20)
+    #: Optional, unlike Publish's. Media chosen from the library often arrives
+    #: before anybody has written its copy; `PLACEHOLDER_BODY` stands in.
+    body: str = Field(default="", max_length=4000)
+
+    @model_validator(mode="after")
+    def one_kind_of_media(self) -> QueueItemCreate:
+        video = self.video_path.strip()
+        images = [path for path in self.image_paths if path.strip()]
+        if video and images:
+            raise ValueError("A package is either a video or pictures, not both.")
+        if not video and not images:
+            raise ValueError("A package needs a video or at least one picture.")
+        return self
     asset_id: str | None = Field(default=None, max_length=64)
     title: str | None = Field(default=None, max_length=200)
     hashtags: list[str] = Field(default_factory=list, max_length=30)
@@ -220,6 +250,10 @@ def _queue_view(item: CampaignQueueItem) -> dict[str, Any]:
         "id": item.id,
         "asset_id": item.asset_id,
         "video_path": item.video_path,
+        "image_paths": list(item.image_paths or []),
+        # So the interface can mark a package that still needs writing rather
+        # than showing the placeholder as though somebody meant it.
+        "needs_copy": item.body == PLACEHOLDER_BODY,
         "title": item.title,
         "body": item.body,
         "hashtags": item.hashtags,
@@ -547,7 +581,12 @@ def add_queue_item(
     _require_offer_ids(session, workspace_id, body.offer_ids)
     item = CampaignQueueItem(
         workspace_id=workspace_id, campaign_id=campaign_id, asset_id=body.asset_id,
-        video_path=body.video_path, title=body.title, body=body.body,
+        video_path=body.video_path.strip(),
+        image_paths=[path.strip() for path in body.image_paths if path.strip()],
+        title=body.title,
+        # Written later, or by something else, but never empty on the way out:
+        # a network refuses a post with no caption at all.
+        body=body.body.strip() or PLACEHOLDER_BODY,
         hashtags=[tag.strip().lstrip("#") for tag in body.hashtags if tag.strip()],
         first_comment=(body.first_comment or "").strip() or None,
         thread=[part.strip() for part in body.thread if part.strip()],

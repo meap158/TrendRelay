@@ -70,6 +70,11 @@ class ScheduledPost:
     reason: str
     thread: tuple[str, ...] = ()
     offer_ids: tuple[str, ...] = ()
+    #: A carousel's pictures, in order. Empty for a video post; `video_path` is
+    #: empty for a carousel. Carried for the same reason as the video: what was
+    #: composed and what is published must not drift apart. Defaulted, because
+    #: every post that existed before carousels is a video.
+    image_paths: tuple[str, ...] = ()
     product_names: tuple[str, ...] = ()
     #: The matcher's confidence per attached offer, in the same order. What the
     #: authority rules read: a low-confidence product never posts unattended.
@@ -116,6 +121,11 @@ def resolve_frozen_media(session: Session, item: CampaignQueueItem) -> FrozenMed
     An item with no Library identity keeps its stored path - that path is the
     approved input, not a fallback.
     """
+    if item.image_paths:
+        # A carousel has no rendered-version story yet: the library renders
+        # cuts of a video, and these are stills chosen as they are. Frozen by
+        # path, which is what freezing meant before versions existed.
+        return FrozenMedia(path="")
     if not item.asset_id:
         return FrozenMedia(path=item.video_path)
     asset = session.scalar(
@@ -678,6 +688,7 @@ def plan_campaign(
             queue_item_id=item.id,
             at=moment,
             video_path=frozen.path,
+            image_paths=tuple(item.image_paths or ()),
             asset_id=frozen.asset_id,
             asset_version_id=frozen.version_id,
             media_sha256=frozen.sha256,
