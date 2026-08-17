@@ -31,6 +31,16 @@ import { LOCALES } from "../../lib/i18n/locales";
 import { EffectEditor } from "../library/effect-editor";
 import { TimelinePlayer } from "./timeline-player";
 import { accountIdentity, type EngineAccount } from "../publishing-account";
+import { commissionLabel, type CommissionBearing } from "../commission";
+
+/**
+ * One affiliate product attached to a post, as the post carries it.
+ *
+ * The rate travels with the name: it is why this offer was attached rather than
+ * another, and a list of product names alone cannot answer "is this post worth
+ * it" without going to another screen.
+ */
+type AttachedProduct = CommissionBearing & { offer_id: string; name: string };
 import {
   AssetFilters,
   EMPTY_FACETS,
@@ -40,6 +50,7 @@ import {
 } from "../ui/asset-filters";
 import {
   AssetThumbnail,
+  PostPreview,
   type Slot,
 } from "../publish/composer";
 import {
@@ -138,6 +149,13 @@ type HeldExecution = {
   title: string | null;
   held_reason: string | null;
   reason: string;
+  /** The frozen post itself, so approval judges the post, not a summary. */
+  first_comment: string | null;
+  thread: string[];
+  media_path: string | null;
+  image_paths: string[];
+  post_type: string | null;
+  placement: string | null;
 };
 
 type PreviewPost = {
@@ -151,7 +169,7 @@ type PreviewPost = {
   thread: string[];
   offer_ids: string[];
   products: string[];
-  product_details: { offer_id: string; name: string }[];
+  product_details: AttachedProduct[];
   destination: {
     label: string;
     platform: PublishingPlatform;
@@ -208,7 +226,7 @@ type TimelineEntry = {
   /** Planned rows only: what it will carry and why it was chosen. */
   problem: string | null;
   offer_ids: string[];
-  product_details: { offer_id: string; name: string }[];
+  product_details: AttachedProduct[];
   placement: string | null;
   reason: string | null;
   route: { label: string; detail: string } | null;
@@ -276,12 +294,17 @@ type Recommendations = {
 };
 
 function offerDescription(offer: Offer): string {
-  const commission = offer.commission_bps
-    ? `${(offer.commission_bps / 100).toLocaleString()}% commission`
-    : offer.commission_flat_cents
-      ? `${offer.currency ?? ""} ${(offer.commission_flat_cents / 100).toLocaleString()} commission`.trim()
-      : null;
-  return [offer.product.marketplace, offer.network, commission].filter(Boolean).join(" · ");
+  // Through the shared formatter, which knows what a minor unit is worth. This
+  // divided flat commission by a hundred whatever the currency was - the same
+  // slip already found and fixed in Attribution's own formatter, where a 95,000
+  // dong commission showed as ₫950. A hundred times too small and plausible
+  // enough on screen to go unquestioned.
+  const paid = commissionLabel(offer);
+  return [
+    offer.product.marketplace,
+    offer.network,
+    paid ? `${paid} commission` : null,
+  ].filter(Boolean).join(" · ");
 }
 
 type LibraryAsset = {
@@ -448,16 +471,18 @@ export function AutopilotPanel({
   const [editing, setEditing] = useState<QueueItem | null>(null);
   const [editingReplies, setEditingReplies] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
-  // `revenue` is the merged Destinations + Monetization area. The old
-  // `accounts` and `settings` names survive in the readiness rows, which is why
-  // `jumpTo` translates them rather than every caller being rewritten.
-  const [section, setSection] = useState<"media" | "revenue" | "schedule">(
-    campaignStatus === "active" ? "schedule" : "media",
-  );
+  // One page, no panes: every area renders, and "navigation" is scrolling.
+  // The old `accounts` and `settings` names survive in the readiness rows,
+  // which is why `jumpTo` translates them rather than every caller being
+  // rewritten.
   const searchTimer = useRef<number | null>(null);
   const automaticPreview = useRef(false);
 
   const base = `/api/workspaces/${workspaceId}/campaigns/${campaignId}`;
+  /** The same media the Publish composer plays, streamed from the same roots. */
+  const previewMediaUrl = (path: string) =>
+    `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview`
+    + `?path=${encodeURIComponent(path)}`;
 
   const refresh = useCallback(async () => {
     const body = await json<{
@@ -505,15 +530,14 @@ export function AutopilotPanel({
     if (searchTimer.current) window.clearTimeout(searchTimer.current);
   }, []);
 
-  // The inbox belongs to the Timeline: held posts are timeline entries that
-  // have not earned their place yet, so they load when the timeline shows.
-  // Deferred out of the effect body, the same way the initial refresh is.
+  // The inbox is the panel's front door now - approving held posts is the
+  // operator's recurring job - so it loads with the page rather than behind
+  // a pane. Deferred out of the effect body, like the initial refresh.
   useEffect(() => {
-    if (section !== "schedule") return;
     queueMicrotask(() => {
       void loadExceptions();
     });
-  }, [section, loadExceptions]);
+  }, [loadExceptions]);
 
   async function decideException(executionId: string, action: "approve" | "dismiss") {
     setBusy(`${action}-${executionId}`);
@@ -711,7 +735,7 @@ export function AutopilotPanel({
         id: "active",
         met: campaignStatus === "active",
         label: t("autopilot.needActive"),
-        section: null as typeof section | null,
+        section: null as string | null,
       },
       {
         id: "destinations",
@@ -767,12 +791,13 @@ export function AutopilotPanel({
   function jumpTo(target: string) {
     const area = target === "accounts" || target === "settings" ? "revenue" : target;
     if (area !== "media" && area !== "revenue" && area !== "schedule") return;
-    setSection(area);
     if (area === "revenue") {
       if (!accounts.length) void loadAccounts();
       if (!recommendations || recommendations.item_id) void loadRecommendations();
     }
     if (area === "schedule" && ready.configured && !preview) void loadPreview(false);
+    document.getElementById(`campaign-area-${area}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   const selectedLibrary = Object.values(selectedAssets);
@@ -980,15 +1005,17 @@ export function AutopilotPanel({
           </p>
         )}
 
-        {/* Readiness rows still name the areas they came from. Translating
-            here keeps that vocabulary working without every row knowing the
-            tabs were merged. */}
-        <nav className="campaign-work-tabs" aria-label="Campaign workspace">
-          <button type="button" className={section === "media" ? "active" : ""}
+        {/* Not tabs any more: every area is on the page, in one flow, and
+            these are the at-a-glance numbers that also scroll to their
+            section. One page is what maximised autonomy needs - the panel's
+            recurring job is approving what is held, and nothing should hide
+            behind a pane for that. */}
+        <nav className="campaign-work-tabs" aria-label="Campaign overview">
+          <button type="button"
             onClick={() => jumpTo("media")}>
             <span>Content</span><strong>{autopilot.queue_total}</strong><small>post packages</small>
           </button>
-          <button type="button" className={section === "revenue" ? "active" : ""}
+          <button type="button"
             onClick={() => jumpTo("revenue")}>
             <span>Distribution &amp; revenue</span>
             <strong>{destinations.length}</strong>
@@ -1000,7 +1027,7 @@ export function AutopilotPanel({
           </button>
           {/* Last, because it is what the two choices above produce rather than
               a third choice of its own. */}
-          <button type="button" className={section === "schedule" ? "active" : ""}
+          <button type="button"
             onClick={() => jumpTo("schedule")}>
             {/* Committed jobs still waiting to go out are upcoming posts too;
                 only what has already delivered or failed leaves the count. */}
@@ -1042,7 +1069,7 @@ export function AutopilotPanel({
           </p>
         )}
 
-        {section === "revenue" && <div className="autopilot-settings">
+        <div id="campaign-area-revenue" className="autopilot-settings">
           <div className="campaign-product-mode">
             <div>
               <strong>Affiliate product matching</strong>
@@ -1269,10 +1296,78 @@ export function AutopilotPanel({
                 leaves the per-account caps as the only limit.</small>
             </label>
           </div>
-        </div>}
+        </div>
       </Card>
 
-      {section === "revenue" && <Card
+      {/* The operator's recurring job, front and centre: every post below
+          earned autonomy waits here, shown as it will look - the same
+          preview Publish rehearses with - and Approve sends exactly this
+          frozen record. */}
+      {exceptions.length > 0 && (
+        <Card
+          eyebrow="Approval"
+          title="Needs your approval"
+          aside={<Badge tone="warn">{exceptions.length} held</Badge>}
+        >
+          <p className="autopilot-lede">Nothing reaches an engine before it is
+            approved here, exactly as frozen — and a post that is not finished
+            refuses with the list of what to fix.</p>
+          <ul className="campaign-approval-list">
+            {exceptions.map((item) => (
+              <li key={item.id}>
+                <PostPreview
+                  platform={(item.platform ?? "tiktok") as PublishingPlatform}
+                  postTypeLabel={item.post_type ?? "Post"}
+                  handle={item.destination_label ?? ""}
+                  caption={item.caption}
+                  title={item.title ?? ""}
+                  thumbnail=""
+                  source={item.media_path
+                    ? previewMediaUrl(item.media_path)
+                    : undefined}
+                  carousel={item.image_paths.length
+                    ? item.image_paths.map(previewMediaUrl)
+                    : undefined}
+                  sourceIsImage={!item.media_path && item.image_paths.length > 0}
+                />
+                <div className="campaign-approval-facts">
+                  <small>
+                    {item.destination_label ?? item.platform ?? "destination"}
+                    {item.scheduled_at
+                      ? ` · ${new Date(item.scheduled_at).toLocaleString()}`
+                      : ""}
+                  </small>
+                  {item.first_comment && <>
+                    <strong>First comment</strong>
+                    <pre>{item.first_comment}</pre>
+                  </>}
+                  {item.thread.map((reply, index) => (
+                    <div key={`${item.id}-reply-${index}`}>
+                      <strong>Reply {index + 1}</strong>
+                      <pre>{reply}</pre>
+                    </div>
+                  ))}
+                  <p className="autopilot-note" role="status">{item.held_reason}</p>
+                  {canEdit && (
+                    <span className="campaign-exception-actions">
+                      <Button variant="primary" size="sm"
+                        busy={busy === `approve-${item.id}`}
+                        onClick={() => void decideException(item.id, "approve")}
+                      >Approve</Button>
+                      <Button variant="quiet" size="sm"
+                        busy={busy === `dismiss-${item.id}`}
+                        onClick={() => void decideException(item.id, "dismiss")}
+                      >Dismiss</Button>
+                    </span>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <Card
         eyebrow={t("autopilot.whereEyebrow")}
         title={t("autopilot.destinations", { count: destinations.length })}
         aside={canEdit ? (
@@ -1430,9 +1525,9 @@ export function AutopilotPanel({
             <small className="campaign-source-note">Source: available connected accounts in Publish.</small>
           </div>
         )}
-      </Card>}
+      </Card>
 
-      {section === "media" && <Card
+      <div id="campaign-area-media"><Card
         eyebrow={t("autopilot.queueEyebrow")}
         title={t("autopilot.queue", {
           approved: autopilot.queue_approved, total: autopilot.queue_total,
@@ -1936,7 +2031,7 @@ export function AutopilotPanel({
             <Button type="submit" variant="primary" busy={busy === "edit-copy"}>Save post package</Button>
           </form>
         )}
-      </Card>}
+      </Card></div>
 
       <EffectEditor
         open={effectOpen}
@@ -1954,7 +2049,7 @@ export function AutopilotPanel({
         onRendered={succeed}
       />
 
-      {section === "schedule" && <>
+      <div id="campaign-area-schedule">
       {/* "Posting timeline", not "Upcoming posts": the committed section below
           keeps recently delivered jobs on screen, and a delivered job under an
           "upcoming" heading reads like a contradiction. */}
@@ -1973,46 +2068,9 @@ export function AutopilotPanel({
         </p>
         {/* Grouped at the top, per the run-by-exception contract: everything
             the autopilot deferred to a person, with the reason on it. */}
-        {exceptions.length > 0 && (
-          <section className="campaign-committed-pipeline" aria-label="Posts waiting for approval">
-            <header>
-              <div>
-                <strong>Waiting for approval</strong>
-                <small>Nothing reaches an engine before it is approved here,
-                  exactly as frozen</small>
-              </div>
-              <Badge tone="warn">{exceptions.length} held</Badge>
-            </header>
-            <ul className="campaign-exception-list">
-              {exceptions.map((item) => (
-                <li key={item.id}>
-                  <div>
-                    <strong>{item.title || item.caption.slice(0, 80)}</strong>
-                    <small>
-                      {item.destination_label ?? item.platform ?? "destination"}
-                      {item.scheduled_at
-                        ? ` · ${new Date(item.scheduled_at).toLocaleString()}`
-                        : ""}
-                    </small>
-                    <small>{item.held_reason}</small>
-                  </div>
-                  {canEdit && (
-                    <span className="campaign-exception-actions">
-                      <Button variant="primary" size="sm"
-                        busy={busy === `approve-${item.id}`}
-                        onClick={() => void decideException(item.id, "approve")}
-                      >Approve</Button>
-                      <Button variant="quiet" size="sm"
-                        busy={busy === `dismiss-${item.id}`}
-                        onClick={() => void decideException(item.id, "dismiss")}
-                      >Dismiss</Button>
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        {/* Held posts live in the approval card at the top of the panel,
+            previewed as they will look; the timeline keeps to what has
+            posted and what will. */}
         {/* One timeline, past to future.
          *
          * What has posted and what will post is one story. It used to be two:
@@ -2150,7 +2208,12 @@ export function AutopilotPanel({
                                   <strong>{product.name}</strong>
                                   <small>{entry.placement === "bio"
                                     ? "Profile bio"
-                                    : productIndex > 0 && entry.thread.length ? `Reply ${productIndex}` : "Post content"}</small>
+                                    : productIndex > 0 && entry.thread.length ? `Reply ${productIndex}` : "Post content"}
+                                    {/* What it pays, beside what it is. The rate
+                                        is the reason this offer was attached
+                                        rather than another, and the row named
+                                        the product without ever saying it. */}
+                                    {commissionLabel(product) ? ` · ${commissionLabel(product)}` : ""}</small>
                                 </li>
                               ))}
                             </ul>
@@ -2229,7 +2292,7 @@ export function AutopilotPanel({
           {!slots.length && <span>No posting times configured.</span>}
         </div>
       </Card>
-      </>}
+      </div>
     </div>
   );
 }

@@ -868,6 +868,19 @@ def preview_autopilot(
             )
         ).all()
     }
+    # What each attached product actually pays. A name on its own says which
+    # product is in the post and nothing about why it is worth posting, and the
+    # rate is the whole reason one offer was chosen over another.
+    offers_by_id = {
+        offer.id: offer for offer in session.scalars(
+            select(ProductOffer).where(
+                ProductOffer.workspace_id == workspace_id,
+                ProductOffer.id.in_({
+                    offer_id for post in posts for offer_id in post.offer_ids
+                } or {""}),
+            )
+        ).all()
+    }
     rendered = []
     for post in posts:
         destination = by_id.get(post.destination_id)
@@ -885,7 +898,22 @@ def preview_autopilot(
             "offer_ids": list(post.offer_ids),
             "products": list(post.product_names),
             "product_details": [
-                {"offer_id": offer_id, "name": name}
+                {
+                    "offer_id": offer_id,
+                    "name": name,
+                    "commission_bps": (
+                        offers_by_id[offer_id].commission_bps
+                        if offer_id in offers_by_id else None
+                    ),
+                    "commission_flat_cents": (
+                        offers_by_id[offer_id].commission_flat_cents
+                        if offer_id in offers_by_id else None
+                    ),
+                    "currency": (
+                        offers_by_id[offer_id].currency
+                        if offer_id in offers_by_id else None
+                    ),
+                }
                 for offer_id, name in zip(post.offer_ids, post.product_names, strict=False)
             ],
             "destination": ({

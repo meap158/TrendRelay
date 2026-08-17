@@ -18,6 +18,7 @@ import { Button } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
 import { SelectionCheckbox } from "../ui/selection-checkbox";
 import { useT } from "../i18n-provider";
+import { commissionRate } from "../commission";
 import { money } from "./format";
 import {
   sortProducts,
@@ -52,7 +53,10 @@ function offerRate(product: ProductRow): string {
 
 
 function commission(bps: number | null): string {
-  return bps === null ? "—" : `${(bps / 100).toFixed(bps % 100 ? 2 : 0)}%`;
+  // The shared spelling, so a rate reads the same here as on a campaign's
+  // attached products. The dash is this table's own: a column needs something
+  // in the cell, where a line of prose can simply omit the clause.
+  return commissionRate({ commission_bps: bps }) || "—";
 }
 
 function SortableHeader({
@@ -170,7 +174,7 @@ export function ProductTable({
   if (!products.length) {
     return (
       <Card eyebrow={t("attribution.productsEyebrow")} title={t("attribution.products")}>
-        <p className="catalog-empty">{t("attribution.noProducts")}</p>
+        <p className="product-empty">{t("attribution.noProducts")}</p>
       </Card>
     );
   }
@@ -218,8 +222,8 @@ export function ProductTable({
           </Button>
         </div>
       </div>
-      <div className="catalog-table-scroll">
-        <table className="catalog-table product-table">
+      <div className="product-table-scroll">
+        <table className="product-table">
           <thead>
             <tr>
               <th scope="col" className="product-choose">
@@ -274,7 +278,7 @@ export function ProductTable({
                   <th scope="row">
                     <button
                       type="button"
-                      className="catalog-work-toggle"
+                      className="product-toggle"
                       aria-expanded={open}
                       aria-controls={detailId}
                       onClick={() => toggle(product.id)}
@@ -307,20 +311,20 @@ export function ProductTable({
                   <td className="product-creator" title={product.creators.join(" · ")}>
                     {product.creators.length
                       ? product.creators.join(" · ")
-                      : <span className="catalog-no-data">—</span>}
+                      : <span className="product-no-data">—</span>}
                   </td>
                   {/* Shown only when one offer answers for the product. With
                       several, a single column would have to pick one, and
                       picking silently is how a wrong number gets read as the
                       product's price. */}
                   <td className="numeric">
-                    {offerPrice(product) || <span className="catalog-no-data">—</span>}
+                    {offerPrice(product) || <span className="product-no-data">—</span>}
                   </td>
                   <td className="numeric">
-                    {offerRate(product) || <span className="catalog-no-data">—</span>}
+                    {offerRate(product) || <span className="product-no-data">—</span>}
                   </td>
                   <td className="numeric">
-                    {offerCommission(product) || <span className="catalog-no-data">—</span>}
+                    {offerCommission(product) || <span className="product-no-data">—</span>}
                   </td>
                   <td className="product-count">{product.offers.length}</td>
                   <td className="product-count">{product.links.length + directOffers.length}</td>
@@ -329,11 +333,18 @@ export function ProductTable({
                   <tr
                     key={`${product.id}-detail`}
                     id={detailId}
-                    className="catalog-edition-row"
+                    className="product-detail-row"
                   >
                     <td colSpan={8}>
+                      {/* No section wrapper: there was a second one here once,
+                          and the last of them held nothing the panel itself
+                          does not. */}
                       <div className="product-detail">
-                        <section>
+                        {/* Label and source link share a line. Neither is long
+                            enough to be worth one of its own, and this panel
+                            opens inside a table where every line it takes
+                            pushes the next product further down. */}
+                        <div className="product-detail-head">
                           <h4>{t("attribution.whereItGoes")}</h4>
                           {product.product_url && (
                             <a
@@ -343,45 +354,44 @@ export function ProductTable({
                               rel="noreferrer noopener"
                             >{t("attribution.openShopeeProduct")}</a>
                           )}
-                          {product.offers.length ? (
-                            <ul className="product-offers">
-                              {product.offers.map((offer) => (
-                                <li key={offer.id}>
-                                  <div>
-                                    <strong>{offer.merchant ?? offer.network}</strong>
-                                    {/* Price, rate and commission are three
-                                        columns of the row this expands from,
-                                        so only the cookie window is left -
-                                        the one thing the row cannot show. */}
-                                    {offer.cookie_days !== null && (
-                                      <small>
-                                        {t("attribution.cookieWindow", { days: offer.cookie_days })}
-                                      </small>
-                                    )}
-                                  </div>
-                                  <span className="product-row-actions">
-                                    {offer.affiliate_url ? (
-                                      <>
-                                        <a
-                                          className="ui-button ui-button-secondary ui-button-sm"
-                                          href={offer.affiliate_url}
-                                          target="_blank"
-                                          rel="noreferrer noopener"
-                                        ><ActionIcon name="link" /> {t("attribution.shopee.openAffiliateLink")}</a>
-                                        <Button
-                                          variant="quiet"
-                                          size="sm"
-                                          onClick={() => onCopyAffiliateLink(offer.affiliate_url)}
-                                        ><ActionIcon name="copy" /> {t("attribution.shopee.copyAffiliateLink")}</Button>
-                                      </>
-                                    ) : null}
-                                  </span>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : <p className="catalog-no-data">{t("attribution.noOffers")}</p>}
-                        </section>
-
+                        </div>
+                        {product.offers.length ? (
+                          <ul className="product-offers">
+                            {product.offers.map((offer) => (
+                              <li key={offer.id}>
+                                <div>
+                                  <strong>{offer.merchant ?? offer.network}</strong>
+                                  {/* Price, rate and commission are three
+                                      columns of the row this expands from, so
+                                      only the cookie window is left - the one
+                                      thing the row cannot show. */}
+                                  {offer.cookie_days !== null && (
+                                    <small>
+                                      {t("attribution.cookieWindow", { days: offer.cookie_days })}
+                                    </small>
+                                  )}
+                                </div>
+                                <span className="product-row-actions">
+                                  {offer.affiliate_url ? (
+                                    <>
+                                      <a
+                                        className="ui-button ui-button-secondary ui-button-sm"
+                                        href={offer.affiliate_url}
+                                        target="_blank"
+                                        rel="noreferrer noopener"
+                                      ><ActionIcon name="link" /> {t("attribution.shopee.openAffiliateLink")}</a>
+                                      <Button
+                                        variant="quiet"
+                                        size="sm"
+                                        onClick={() => onCopyAffiliateLink(offer.affiliate_url)}
+                                      ><ActionIcon name="copy" /> {t("attribution.shopee.copyAffiliateLink")}</Button>
+                                    </>
+                                  ) : null}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : <p className="product-no-data">{t("attribution.noOffers")}</p>}
                       </div>
                     </td>
                   </tr>

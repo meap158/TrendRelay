@@ -443,8 +443,17 @@ def test_preview_rows_carry_media_account_and_product_routes(workspace) -> None:
         "label": "Coffee channel", "platform": "youtube",
         "provider": "buffer", "post_type": None,
     }
+    # The rate travels with the name. A row that lists which products are
+    # attached without saying what any of them pays cannot answer the question
+    # the row exists for, and the offer's own commission is already to hand.
     assert post["product_details"] == [
-        {"offer_id": "offer-1", "name": "Coffee espresso maker"}
+        {
+            "offer_id": "offer-1",
+            "name": "Coffee espresso maker",
+            "commission_bps": 400,
+            "commission_flat_cents": None,
+            "currency": "USD",
+        }
     ]
 
 
