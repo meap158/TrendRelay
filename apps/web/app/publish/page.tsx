@@ -13,6 +13,7 @@ import {
   ProviderMark,
   platformLabels,
   type PublishingPlatform,
+  type PublishingEngine,
   type PublishingProvider,
 } from "../publishing-icons";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
@@ -152,7 +153,16 @@ type Provider = {
   thread_platforms: string[];
   max_thread_parts: number;
   supports_approval: boolean;
+  /** The connection: one login. A destination stores this. */
   id: PublishingProvider;
+  /** The engine behind it, which is what the mark and the tint are drawn from. */
+  engine: PublishingEngine;
+  engine_label: string;
+  /** What the operator called this login. The engine's own name, for the first. */
+  connection_label: string;
+  /** True for the login an engine starts with, which cannot be removed. */
+  is_default: boolean;
+  /** The engine's name, or "Buffer · Client B" where an engine has several. */
   label: string;
   tagline: string;
   summary: string;
@@ -1376,6 +1386,67 @@ export default function PublishPage() {
     }
   }
 
+  /**
+   * Make room for a second login on an engine.
+   *
+   * Two steps, not one: this creates somewhere for the key to go, and the key
+   * is typed into the card that appears. Asking for both at once would mean a
+   * form that fails halfway leaves a login with no key and no card explaining
+   * why.
+   */
+  async function addConnection(provider: Provider) {
+    const label = window.prompt(
+      t("publish.nameThisAccount", { label: provider.engine_label }),
+      "",
+    );
+    if (label === null) return;
+    setBusy(`${provider.id}-add`);
+    setError(null);
+    setNotice(null);
+    try {
+      const body = await json<{ connection: { id: string; label: string } }>(
+        await apiFetch(`/api/workspaces/${workspaceId}/publishing/connections`, {
+          method: "POST",
+          body: JSON.stringify({ provider: provider.engine, label }),
+        }),
+      );
+      await loadConnection();
+      // Opened straight away: the card is empty and the next thing to do is
+      // put a key in it.
+      setOpenProvider(body.connection.id);
+      setNotice(t("publish.accountAdded", { label: body.connection.label }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The account could not be added.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Forget a login and the key that was only for it. */
+  async function removeConnection(provider: Provider) {
+    // Destinations pointing at it stop resolving, so this is asked plainly
+    // rather than undone later.
+    if (!window.confirm(t("publish.confirmRemoveAccount", { label: provider.label }))) return;
+    setBusy(`${provider.id}-remove`);
+    setError(null);
+    setNotice(null);
+    try {
+      await json(
+        await apiFetch(
+          `/api/workspaces/${workspaceId}/publishing/connections/${provider.id}/remove`,
+          { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
+        ),
+      );
+      if (openProvider === provider.id) setOpenProvider(null);
+      await loadConnection();
+      setNotice(t("publish.accountRemoved", { label: provider.label }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The account could not be removed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function testProvider(provider: Provider) {
     setBusy(`${provider.id}-test`);
     setError(null);
@@ -1575,7 +1646,7 @@ export default function PublishPage() {
         <div className="engine-summary">
           <span className="engine-summary-marks">
             {(switchedOnEngines.length ? switchedOnEngines : usableEngines).map((provider) => (
-              <ProviderMark key={provider.id} provider={provider.id} size={22} />
+              <ProviderMark key={provider.id} provider={provider.engine} size={22} />
             ))}
           </span>
           <div>
@@ -1649,7 +1720,7 @@ export default function PublishPage() {
                 style={{ "--engine-accent": provider.accent } as React.CSSProperties}
               >
                 <div className="engine-card-head">
-                  <ProviderMark provider={provider.id} />
+                  <ProviderMark provider={provider.engine} />
                   <div>
                     <strong>{provider.label}</strong>
                     <span>{provider.tagline}</span>
@@ -1874,6 +1945,31 @@ export default function PublishPage() {
                     rel="noopener noreferrer"
                   >{t("publish.openDashboard")}</a>
                   <a className={buttonClass({ variant: "quiet" })} href={provider.docs_url} target="_blank" rel="noopener noreferrer">{t("publish.docs")}</a>
+                  {/* One more login for this engine, or one fewer.
+                   *
+                   * Offered on the engine's own card rather than as a separate
+                   * "add an account" screen, because the question it answers -
+                   * "another one of these" - is asked while looking at the one
+                   * that already exists. The engine's first login has no remove
+                   * button: it is what every destination written before logins
+                   * existed still resolves to. */}
+                  {provider.is_default ? (
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      disabled={busy !== null || !canExecute}
+                      busy={busy === `${provider.id}-add`}
+                      onClick={() => void addConnection(provider)}
+                    >{t("publish.addAnotherAccount")}</Button>
+                  ) : (
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      disabled={busy !== null || !canExecute}
+                      busy={busy === `${provider.id}-remove`}
+                      onClick={() => void removeConnection(provider)}
+                    >{t("publish.removeAccount")}</Button>
+                  )}
                 </div>
                 {open && (
                   <div className="engine-credentials">

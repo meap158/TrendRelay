@@ -221,3 +221,34 @@ def test_a_truncated_id_still_does_not_collide_with_the_default() -> None:
 
     assert added.id != "bundle_social"
     assert connections.find(PROVIDERS, "bundle_social").is_default
+
+
+def test_removing_leaves_no_line_behind_for_a_login_that_is_gone() -> None:
+    """Blanking the value would read correctly and still clutter the file."""
+    from trendrelay_api import env_store
+
+    added = connections.add(PROVIDERS, "zernio", "Temporary")
+    key = added.key_for("ZERNIO_API_KEY")
+    env_store.write_env_values({key: "value"})
+    assert key in env_store.ENV_PATH.read_text(encoding="utf-8")
+
+    connections.remove(PROVIDERS, added.id, ("ZERNIO_API_KEY",))
+
+    assert key not in env_store.ENV_PATH.read_text(encoding="utf-8")
+
+
+def test_removing_one_login_does_not_disturb_another_s_line() -> None:
+    from trendrelay_api import env_store
+
+    keep = connections.add(PROVIDERS, "zernio", "Keep")
+    drop = connections.add(PROVIDERS, "zernio", "Drop")
+    env_store.write_env_values({
+        keep.key_for("ZERNIO_API_KEY"): "still-here",
+        drop.key_for("ZERNIO_API_KEY"): "going",
+    })
+
+    connections.remove(PROVIDERS, drop.id, ("ZERNIO_API_KEY",))
+
+    text = env_store.ENV_PATH.read_text(encoding="utf-8")
+    assert keep.key_for("ZERNIO_API_KEY") in text
+    assert drop.key_for("ZERNIO_API_KEY") not in text

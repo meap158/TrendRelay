@@ -143,5 +143,42 @@ def write_env_values(values: dict[str, str]) -> list[str]:
     return sorted(values)
 
 
+def remove_env_values(keys: tuple[str, ...]) -> list[str]:
+    """Delete keys from the local .env file outright.
+
+    Writing an empty value would do for reading - an empty key is not
+    configured - but it leaves a line behind for a thing that no longer exists.
+    This file is meant to be read by hand, and a login that was removed a month
+    ago should not still have a row in it.
+
+    Only whole lines are removed, so surrounding comments and ordering survive.
+    """
+    invalid = [key for key in keys if not KEY_PATTERN.fullmatch(key)]
+    if invalid:
+        names = ", ".join(sorted(invalid))
+        raise EnvWriteError(f"Refusing to touch unsupported .env keys: {names}")
+    if not ENV_PATH.is_file():
+        return []
+
+    wanted = set(keys)
+    lines = ENV_PATH.read_text(encoding="utf-8-sig").splitlines()
+    kept, removed = [], []
+    for raw_line in lines:
+        pair = _split_line(raw_line)
+        if pair and pair[0] in wanted:
+            removed.append(pair[0])
+            continue
+        kept.append(raw_line)
+
+    if removed:
+        temporary = ENV_PATH.with_suffix(".env.tmp")
+        temporary.write_text("\n".join(kept) + "\n", encoding="utf-8")
+        temporary.replace(ENV_PATH)
+    for key in wanted:
+        os.environ.pop(key, None)
+    refresh_settings()
+    return sorted(removed)
+
+
 def env_file_path() -> Path:
     return ENV_PATH

@@ -40,7 +40,11 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from trendrelay_api.env_store import effective_value, write_env_values
+from trendrelay_api.env_store import (
+    effective_value,
+    remove_env_values,
+    write_env_values,
+)
 
 #: The one key holding the registry. Its value is a JSON list of objects with
 #: `id`, `provider` and `label`; the default connection of each engine is not
@@ -248,10 +252,11 @@ def remove(providers: dict[str, Any], connection_id: str, credential_keys: tuple
             "An engine's first connection cannot be removed. Clear its key instead."
         )
     stored = [item for item in _stored() if item.get("id") != connection_id]
-    write_env_values({
-        REGISTRY_KEY: json.dumps(stored, ensure_ascii=False),
-        **{row.key_for(key): "" for key in credential_keys},
-    })
+    write_env_values({REGISTRY_KEY: json.dumps(stored, ensure_ascii=False)})
+    # Deleted, not blanked. An empty line for a login that no longer exists is
+    # clutter in a file somebody reads by hand - and the next connection given
+    # this id must not inherit anything, which deleting guarantees outright.
+    remove_env_values(tuple(row.key_for(key) for key in credential_keys))
 
 
 def payload(row: Connection, *, provider_label: str) -> dict[str, Any]:

@@ -11,7 +11,23 @@ export type PublishingPlatform =
   | "threads" | "pinterest" | "reddit" | "bluesky" | "mastodon" | "telegram"
   | "googlebusiness";
 
-export type PublishingProvider = "bundle_social" | "zernio" | "buffer" | "woopsocial";
+/**
+ * A publishing engine. Closed, because what is keyed off it here - the mark and
+ * the tint - is drawn per engine and there are four of them.
+ */
+export type PublishingEngine = "bundle_social" | "zernio" | "buffer" | "woopsocial";
+
+/**
+ * A publishing connection: one login to an engine, and what a destination
+ * actually stores.
+ *
+ * An engine may have several, so this cannot be the union above. For an
+ * engine's first login the two are the same string, which is why everything
+ * written down before connections existed still reads correctly. The closed set
+ * still exists - the API refuses an id that resolves to no connection - it is
+ * just not knowable at compile time, because it depends on what somebody added.
+ */
+export type PublishingProvider = string;
 
 const platformTint: Record<PublishingPlatform, string> = {
   tiktok: "#111418",
@@ -149,14 +165,14 @@ export function PlatformIcon({
   );
 }
 
-const providerTint: Record<PublishingProvider, string> = {
+const providerTint: Record<PublishingEngine, string> = {
   bundle_social: "#5b5bd6",
   zernio: "#0f9d8f",
   buffer: "#168eea",
   woopsocial: "#f2564b",
 };
 
-function providerGlyph(provider: PublishingProvider) {
+function providerGlyph(provider: PublishingEngine) {
   if (provider === "bundle_social") {
     return (
       <g fill="#fff">
@@ -201,7 +217,8 @@ export function ProviderMark({
   provider,
   size = 32,
 }: {
-  provider: PublishingProvider;
+  /** The engine, not the login: two Buffer logins share Buffer's mark. */
+  provider: PublishingEngine;
   size?: number;
 }) {
   return (
