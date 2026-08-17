@@ -797,6 +797,18 @@ html { scroll-behavior: smooth; }
 .autopilot-placement-choice select:focus-visible { outline: 2px solid color-mix(in srgb, var(--link) 38%, transparent); outline-offset: 1px; border-color: var(--link); }
 [dir="rtl"] .autopilot-placement-choice select { padding: 5px 10px 5px 28px; background-position: left 10px center; }
 
+/* One approval row: the post as it will look beside the facts and the
+   decision. The preview column is the width Publish rehearses at. */
+.campaign-approval-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.campaign-approval-list > li { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: 14px; align-items: start; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.campaign-approval-facts { display: grid; gap: 8px; align-content: start; }
+.campaign-approval-facts pre { margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); font-size: 11px; white-space: pre-wrap; word-break: break-word; }
+.campaign-approval-facts > small { color: var(--muted); font-size: 11px; }
+/* Without a poster the frame has no intrinsic width and collapses to
+   nothing; here the column is its width, and the aspect ratio its height. */
+.campaign-approval-list .post-preview-frame { inline-size: 100%; }
+@media (max-width: 900px) { .campaign-approval-list > li { grid-template-columns: 1fr; } }
+
 /* The post's own media in the timeline, sized as a preview rather than a
    player: enough to recognise the clip, small enough to keep the list a list. */
 .timeline-media { max-width: 240px; max-height: 180px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #000; }
