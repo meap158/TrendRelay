@@ -88,26 +88,10 @@ type Summary = {
   limitations: string[];
 };
 
-const csvTemplate = [
-  "tracking_code,network,conversion_id,occurred_at,status,currency,order_value,commission",
-  "PASTE_CODE,impact,ORDER_REFERENCE,2026-07-26T12:00:00+07:00,approved,USD,89.99,12.50",
-].join("\n");
-
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
   if (!response.ok) throw new Error(body.detail ?? "Attribution request failed.");
   return body;
-}
-
-function countryDestinations(value: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const raw of value.split(/\r?\n/)) {
-    const [country, ...destination] = raw.split("=");
-    if (country?.trim() && destination.length) {
-      result[country.trim().toUpperCase()] = destination.join("=").trim();
-    }
-  }
-  return result;
 }
 
 export default function AttributionPage() {
@@ -120,13 +104,10 @@ export default function AttributionPage() {
   const [links, setLinks] = useState<TrackingLink[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [products, setProducts] = useState<ProductRow[]>([]);
-  const [campaignId, setCampaignId] = useState("");
   const [campaignFocus, setCampaignFocus] = useState("");
-  const [busy, setBusy] = useState("");
-  // Opened deliberately, closed when done. Neither is a place to be: making a
-  // link and bringing rows in are things you do to the table, not other screens
-  // to read.
-  const [panel, setPanel] = useState<"" | "import" | "add">("");
+  // Opened deliberately, closed when done: bringing rows in is something you do
+  // to the table, not another screen to read.
+  const [panel, setPanel] = useState<"" | "add">("");
   // Whether Shopee can be read directly. Asked here rather than inside the
   // import form so the two Shopee panels agree about it.
   // Reported over the page. Rendered in flow, these shifted everything below
@@ -134,7 +115,6 @@ export default function AttributionPage() {
   const { messages: statusMessages, succeed, fail, dismiss } = useStatus();
 
   const workspace = workspaces.find((item) => item.id === workspaceId);
-  const canCreate = ["owner", "editor", "approver"].includes(workspace?.role ?? "");
   const canImport = ["owner", "editor", "approver"].includes(workspace?.role ?? "");
 
   const refresh = useCallback(async (nextWorkspace = workspaceId) => {
@@ -159,11 +139,6 @@ export default function AttributionPage() {
       (item) => item.id === requested,
     ));
     setCampaignFocus(requestedExists ? requested! : "");
-    setCampaignId((current) => {
-      if (requestedExists) return requested!;
-      if (campaignBody.campaigns.some((item) => item.id === current)) return current;
-      return campaignBody.campaigns[0]?.id ?? "";
-    });
   }, [apiFetch, workspaceId]);
 
   useEffect(() => {
@@ -191,14 +166,6 @@ export default function AttributionPage() {
 
 
 
-  /**
-   * Every tracking link on the chosen products, one per line.
-   *
-   * The reason to choose several at once: a batch of links goes into a
-   * scheduling sheet or a message, and copying them a row at a time is the
-   * work selecting removes. Resolved here because this is where the public
-   * URLs live; a product row carries only the codes.
-   */
   /**
    * Every chosen product's affiliate link, one per line.
    *
