@@ -1502,6 +1502,38 @@ export default function PublishPage() {
     }
   }
 
+  /**
+   * Forget an engine's key, and the standing error that came with it.
+   *
+   * Confirmed in the browser rather than only by the flag the API wants,
+   * because it edits the `.env` on this machine and there is nothing to undo it
+   * with once the key is gone.
+   */
+  async function clearProviderKey(provider: Provider) {
+    if (!window.confirm(
+      `Forget the ${provider.label} key stored in this machine's .env file?`
+      + " Destinations on this engine stop publishing until a key is added again.",
+    )) return;
+    setBusy(`${provider.id}-clear`);
+    setError(null);
+    setNotice(null);
+    try {
+      const body = await json<{ connection: Connection }>(
+        await apiFetch(`/api/workspaces/${workspaceId}/publishing/providers/credentials/clear`, {
+          method: "POST",
+          body: JSON.stringify({ provider: provider.id, confirm_external_action: true }),
+        }),
+      );
+      setConnection(body.connection);
+      setPreview(null);
+      setNotice(`${provider.label} no longer has a key on this machine.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : `${provider.label} key could not be cleared.`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function activateProvider(provider: Provider) {
     setBusy(`${provider.id}-activate`);
     setError(null);
@@ -1963,6 +1995,22 @@ export default function PublishPage() {
                     aria-expanded={open}
                     onClick={() => setOpenProvider(open ? null : provider.id)}
                   >{open ? "Close" : provider.configured ? "Replace key" : "Add key"}</Button>
+                  {/* The way out of a key the engine keeps refusing. Replacing
+                      one only helps somebody who has another to type; a login
+                      that has been revoked, or an engine no longer used, could
+                      otherwise report an authorization failure on every probe
+                      for ever. Clearing returns the card to "no key", which is
+                      a state it already knows how to show. */}
+                  {provider.configured && (
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      disabled={busy !== null || !canExecute}
+                      busy={busy === `${provider.id}-clear`}
+                      title="Forget this key. The engine's own account is untouched."
+                      onClick={() => void clearProviderKey(provider)}
+                    >{busy === `${provider.id}-clear` ? "Clearing" : "Clear key"}</Button>
+                  )}
                   {/* Always available, not only when something is wrong: the
                       engine's own dashboard is where channels are connected and
                       posts are reviewed, which are ordinary errands. */}

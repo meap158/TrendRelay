@@ -21,6 +21,7 @@ from trendrelay_api.integrations.publishing import (
     PublishRequest,
     approved_media_path,
     board_options,
+    clear_provider_credentials,
     connection_status,
     create_publish_job,
     discover_all_integrations,
@@ -99,6 +100,48 @@ def save_credentials(
         result = save_provider_credentials(body.provider, body.values)
         if body.activate:
             result |= set_active_provider(body.provider)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except EnvWriteError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {"result": result, "connection": connection_status()}
+
+
+class CredentialClear(BaseModel):
+    """Which login's keys to forget."""
+
+    provider: str = Field(min_length=1, max_length=40)
+    confirm_external_action: bool = False
+
+
+@router.post("/providers/credentials/clear")
+def clear_credentials(
+    workspace_id: str,
+    body: CredentialClear,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Forget a login's keys, so an engine stops reporting a refused one.
+
+    A revoked key reports an authorization failure on every probe, and until now
+    the only answer offered was to replace it - which is no answer for somebody
+    who has stopped using the engine and has no new key to type. Clearing
+    returns the card to unconfigured, which is a state it already knows how to
+    show, and the error goes with the key that caused it.
+
+    Confirmed like the save it undoes, and POST for the same reason the other
+    destructive calls here are: the browser sends the app's own method list.
+    """
+    require_local_request(request)
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400, detail="Clearing a key requires confirmation."
+        )
+    try:
+        result = clear_provider_credentials(body.provider)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except EnvWriteError as error:
@@ -401,12 +444,28 @@ def publishing_integrations(
         raise HTTPException(status_code=409, detail=str(error)) from error
 
 
+#: A type no download manager has a rule for.
+#:
+#: Grabber extensions decide what to capture from the response's content type,
+#: and they watch `video/*` - which is why serving a clip honestly meant IDM
+#: took it the moment a timeline row was expanded, cancelling the browser's own
+#: request in the process so the player got "Failed to fetch" and showed
+#: nothing. Reading the bytes with `fetch` did not help: the response on the
+#: wire is what is watched, not what the page does with it afterwards.
+#:
+#: The caller asks for this deliberately and puts the real type back on the blob
+#: it builds, so the player still gets a `video/mp4` to play - it just never
+#: travels as one.
+OPAQUE_MEDIA_TYPE = "application/x-trendrelay-preview"
+
+
 @router.get("/media/preview")
 def preview_publishing_media(
     workspace_id: str,
     path: str,
     user: AuthenticatedUser,
     session: DatabaseSession,
+    opaque: bool = False,
 ) -> FileResponse:
     """Stream a file this workspace could publish, so it can be seen first.
 
@@ -415,6 +474,10 @@ def preview_publishing_media(
     nothing else is readable. The existing player borrowed the face-blur route
     for this, and that one is confined to blurred renders - so an ordinary clip
     answered 403 and the preview showed a black frame.
+
+    `opaque` hands back the same bytes under a type nothing recognises, for
+    callers that read the response themselves rather than pointing an element at
+    it. See `OPAQUE_MEDIA_TYPE`.
     """
     membership(session, workspace_id, user.id)
     try:
@@ -428,6 +491,8 @@ def preview_publishing_media(
     # a browser handed one stops trying to display it and downloads the file
     # instead, which is what a preview must never do.
     kind, _encoding = mimetypes.guess_type(resolved.name)
+    if opaque:
+        kind = OPAQUE_MEDIA_TYPE
     return FileResponse(resolved, media_type=kind or "application/octet-stream")
 
 

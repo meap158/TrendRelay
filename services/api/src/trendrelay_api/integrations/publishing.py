@@ -32,6 +32,7 @@ from trendrelay_api.env_store import (
     configured_keys,
     effective_value,
     masked_value,
+    remove_env_values,
     write_env_values,
 )
 from trendrelay_api.integrations import engine_limits, media_hosting
@@ -2528,6 +2529,30 @@ def reveal_credential(key: str) -> str:
     if not value:
         raise ValueError(f"{key} has no saved value.")
     return value
+
+
+def clear_provider_credentials(provider_id: str) -> dict[str, Any]:
+    """Forget one login's keys, leaving the login itself in place.
+
+    The counterpart `publishing_connections.remove` already points at: an
+    engine's first connection cannot be removed, because every destination
+    written before connections existed resolves through it, and the advice it
+    gives instead - clear its key - had nowhere to be carried out.
+
+    What this is for is a key the engine refuses. A revoked or wrong-workspace
+    key leaves the card reporting an authorization failure on every probe, and
+    replacing it is only a fix when there is a new key to hand; somebody who has
+    stopped using an engine had no way to say so and no way to quiet it.
+
+    Deleted rather than blanked, as everywhere else in this file: the engine is
+    then simply unconfigured, which is a state the card already knows how to
+    show, rather than configured-with-nothing.
+    """
+    provider = resolve_provider(provider_id)
+    connection = resolve_connection(provider_id)
+    keys = tuple(connection.key_for(field.key) for field in provider.credentials)
+    removed = remove_env_values(keys)
+    return {"provider": connection.id, "removed_keys": removed}
 
 
 def save_provider_credentials(provider_id: str, values: dict[str, str]) -> dict[str, Any]:
