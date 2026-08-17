@@ -2145,3 +2145,90 @@ def test_the_plan_names_the_follow_up_the_way_each_network_shows_it() -> None:
 
     assert any("reply in the thread" in note for note in plan["threads"])
     assert any("First comment posted after" in note for note in plan["instagram"])
+
+
+# --- what YouTube will actually make of the clip -------------------------------
+#
+# The Short/Video choice reaches no API. Buffer's YouTube input declares a
+# title, a category and an AI disclosure and nothing else, because YouTube
+# reads the file. So the plan says what the file will become.
+
+
+def _shaped(monkeypatch, tmp_path: Path, *, width, height, duration_ms) -> str:
+    """A clip whose probe answers whatever the case needs."""
+    clip = tmp_path / f"{width}x{height}-{duration_ms}.mp4"
+    clip.write_bytes(b"test-video")
+    monkeypatch.setattr(
+        publishing,
+        "_video_shape",
+        lambda path_text: publishing.VideoShape(width, height, duration_ms),
+    )
+    return str(clip)
+
+
+def test_a_long_landscape_clip_is_not_going_to_be_a_short(monkeypatch, tmp_path) -> None:
+    """The preview promised "Delivered as a Short" for a seven-minute landscape
+    clip, which was the operator's selection read back rather than anything
+    YouTube would do."""
+    clip = _shaped(monkeypatch, tmp_path, width=1280, height=720, duration_ms=438_000)
+
+    surface, why = publishing.youtube_surface(clip)
+
+    assert surface == "video"
+    assert "438s is over the 60s Shorts limit" in why
+    assert "1280x720 is not vertical" in why
+
+
+def test_a_short_vertical_clip_is_a_short(monkeypatch, tmp_path) -> None:
+    clip = _shaped(monkeypatch, tmp_path, width=1072, height=1920, duration_ms=4_400)
+
+    surface, why = publishing.youtube_surface(clip)
+
+    assert surface == "short"
+    assert "under a minute and vertical" in why
+
+
+def test_vertical_is_not_enough_on_its_own(monkeypatch, tmp_path) -> None:
+    # Both halves of YouTube's rule, not whichever one is easier to check.
+    clip = _shaped(monkeypatch, tmp_path, width=720, height=1270, duration_ms=316_000)
+
+    surface, why = publishing.youtube_surface(clip)
+
+    assert surface == "video"
+    assert "not vertical" not in why
+
+
+def test_a_clip_that_cannot_be_probed_makes_no_claim() -> None:
+    # An unreadable file is not evidence of anything, and delivery already
+    # fails it by name. Guessing here would refuse twice for one fault.
+    assert publishing.youtube_surface(None) == ("", None)
+    assert publishing.youtube_surface("S:/nowhere/missing.mp4") == ("", None)
+
+
+def test_the_plan_says_so_only_when_it_disagrees_with_the_choice(
+    monkeypatch, tmp_path
+) -> None:
+    """Agreeing with the operator is not news."""
+    def plan_for(post_type, *, width, height, duration_ms):
+        clip = _shaped(
+            monkeypatch, tmp_path, width=width, height=height, duration_ms=duration_ms
+        )
+        body = publishing.PublishRequest(
+            workspace_id="ws", video_path=clip, caption="hello",
+            date=datetime(2026, 8, 18, 12, 0),
+            targets=[publishing.PublishTarget(
+                platform="youtube", integration_id="a1", post_type=post_type,
+            )],
+            confirm_external_action=True,
+        )
+        return publishing._delivery_plan(publishing.PROVIDERS["buffer"], body)[0]["notes"]
+
+    asked_short_got_video = plan_for(
+        "short", width=1280, height=720, duration_ms=438_000
+    )
+    assert any("normal video" in note for note in asked_short_got_video)
+
+    asked_short_got_short = plan_for(
+        "short", width=1072, height=1920, duration_ms=4_400
+    )
+    assert not any("YouTube will publish" in note for note in asked_short_got_short)

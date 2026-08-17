@@ -1044,33 +1044,94 @@ PLATFORM_MAX_VIDEO_WIDTH: dict[str, int] = {"threads": 1920}
 #: One probe per file per process: a preview asks about the same clip for
 #: every destination and every engine, and the answer does not change while
 #: the file does not.
-_dimension_cache: dict[tuple[str, float], tuple[int, int] | None] = {}
+_shape_cache: dict[tuple[str, float], VideoShape | None] = {}
 
 
-def _video_dimensions(path_text: str) -> tuple[int, int] | None:
-    """The clip's width and height, or None when they cannot be known.
+@dataclass(frozen=True)
+class VideoShape:
+    """What a clip is, as far as a network cares."""
+
+    width: int
+    height: int
+    duration_ms: int | None
+
+    @property
+    def vertical(self) -> bool:
+        return self.height > self.width
+
+
+def _video_shape(path_text: str) -> VideoShape | None:
+    """The clip's dimensions and running time, or None when unknowable.
 
     None is deliberate. A missing file or a broken probe is not evidence the
     media is wrong, and an unreadable file already fails by name at delivery
     time - refusing here on top of that would refuse twice for one fault.
+
+    Duration comes along because the probe already returns it and the surface a
+    clip lands on depends on it as much as on the shape.
     """
     try:
         path = Path(path_text)
         key = (str(path), path.stat().st_mtime)
     except OSError:
         return None
-    if key in _dimension_cache:
-        return _dimension_cache[key]
+    if key in _shape_cache:
+        return _shape_cache[key]
     try:
         from trendrelay_api.media_library import probe_media
 
         probed = probe_media(path)
         width, height = probed.get("width"), probed.get("height")
-        result = (width, height) if width and height else None
+        result = (
+            VideoShape(int(width), int(height), probed.get("duration_ms"))
+            if width and height
+            else None
+        )
     except Exception:
         result = None
-    _dimension_cache[key] = result
+    _shape_cache[key] = result
     return result
+
+
+def _video_dimensions(path_text: str) -> tuple[int, int] | None:
+    """The clip's width and height, for callers that need only those."""
+    shape = _video_shape(path_text)
+    return (shape.width, shape.height) if shape else None
+
+
+#: What YouTube treats as a Short: a minute or less, and taller than it is wide.
+#: Both are YouTube's own rule rather than an engine's, which is why they are
+#: checked against the file instead of sent as a field - there is no field.
+SHORTS_MAX_SECONDS = 60
+
+
+def youtube_surface(video_path: str | None) -> tuple[str, str | None]:
+    """Which YouTube surface this clip will land on, and why.
+
+    The Short/Video choice in the composer reaches no API. Buffer's YouTube
+    input declares a title, a category and an AI disclosure and nothing else,
+    because YouTube decides Shorts from the file: a minute or less, and
+    vertical. So the preview saying "Delivered as a Short" for a six-minute
+    landscape clip was describing the operator's selection rather than what
+    YouTube would do with it.
+
+    ("", None) when the file cannot be probed - an unreadable clip is not
+    evidence of anything, and the delivery guard already fails it by name.
+    """
+    shape = _video_shape(video_path) if video_path else None
+    if not shape:
+        return "", None
+    seconds = (shape.duration_ms or 0) / 1000
+    if not seconds:
+        return "", None
+    reasons = []
+    if seconds > SHORTS_MAX_SECONDS:
+        reasons.append(f"{seconds:.0f}s is over the {SHORTS_MAX_SECONDS}s Shorts limit")
+    if not shape.vertical:
+        reasons.append(f"{shape.width}x{shape.height} is not vertical")
+    if reasons:
+        return "video", f"Published as a normal video - {' and '.join(reasons)}"
+    return "short", "Published as a Short - under a minute and vertical"
 
 
 def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> None:
@@ -2870,6 +2931,14 @@ def _delivery_plan(
     for target in request.targets:
         kind = target.kind
         notes: list[str] = [f"Delivered as a {kind.label}"]
+        # YouTube is the one network whose post type is not a field anybody
+        # sends: it reads the file. So the plan says what the file will become
+        # rather than repeating the choice back, and says so only when the two
+        # disagree - agreeing with the operator is not news.
+        if target.platform == "youtube":
+            surface, why = youtube_surface(request.video_path)
+            if surface and surface != kind.id and why:
+                notes.append(why)
         if provider.id == "buffer":
             notes.append(
                 "Published immediately" if request.mode == "now"
