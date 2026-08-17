@@ -155,6 +155,9 @@ export default function CampaignsPage() {
   // The chosen preset, or "" for the one that opens a box to type in.
   const [objectiveChoice, setObjectiveChoice] = useState(CAMPAIGN_GOALS[0]);
   const [audienceChoice, setAudienceChoice] = useState(CAMPAIGN_AUDIENCES[0]);
+  // The campaign being edited, held as its own copy so an abandoned edit
+  // changes nothing and the list keeps showing what is actually saved.
+  const [settingsFor, setSettingsFor] = useState<Campaign | null>(null);
   const [offers, setOffers] = useState<CampaignOffer[]>([]);
   const [newCampaignOfferId, setNewCampaignOfferId] = useState("");
   // Reported over the page. Rendered in flow, these shifted everything below
@@ -294,6 +297,39 @@ export default function CampaignsPage() {
   }
 
 
+  function openCampaignSettings(campaign: Campaign) {
+    setSettingsFor(campaign);
+  }
+
+  async function saveCampaignSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!settingsFor) return;
+    setBusy("settings");
+    fail(null);
+    succeed(null);
+    try {
+      const form = new FormData(event.currentTarget);
+      await json<{ campaign: Campaign }>(
+        await apiFetch(`/api/workspaces/${workspaceId}/campaigns/${settingsFor.id}`, {
+          method: "POST",
+          body: JSON.stringify({
+            name: form.get("name"),
+            objective: form.get("objective"),
+            audience: form.get("audience"),
+            languages: [form.get("language")].filter(Boolean),
+          }),
+        }),
+      );
+      await refresh(workspaceId);
+      setSettingsFor(null);
+      succeed("Campaign settings saved.");
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "Could not save campaign settings.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function setCampaignStatus(status: Campaign["status"]) {
     if (!campaignId) return;
     setBusy(`campaign-${status}`);
@@ -384,6 +420,18 @@ export default function CampaignsPage() {
                   {canCreateCampaign && selectedCampaign.status !== "archived" && (
                     <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("archived")}><ActionIcon name="archive" />{t("campaigns.archive")}</Button>
                   )}
+                  {/* Icon-only: the two beside it are the ones you reach for,
+                      and this is the one you reach for rarely. Its name is on
+                      the label rather than beside it for the same reason. */}
+                  {canCreateCampaign && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      aria-label={t("campaigns.settings")}
+                      title={t("campaigns.settings")}
+                      onClick={() => openCampaignSettings(selectedCampaign)}
+                    ><ActionIcon name="setup" /></Button>
+                  )}
                 </div>
               </section>
 
@@ -471,7 +519,7 @@ export default function CampaignsPage() {
               )}
             </label>
           </div>
-          <label>Post language
+          <label>{t("campaigns.postLanguage")}
             <select name="language" defaultValue={POST_LANGUAGES.some((item) => item.value === locale) ? locale : "en"}>
               {POST_LANGUAGES.map((item) => (
                 <option key={item.value} value={item.value}>{item.label}</option>
@@ -500,6 +548,45 @@ export default function CampaignsPage() {
             <Button type="submit" variant="primary" busy={busy === "campaign"}>{t("campaigns.createButton")}</Button>
           </div>
         </form>
+      </Dialog>
+      {/* The same questions the campaign was created with, answerable again.
+          Free text rather than the creation form's lists: by the time somebody
+          opens this they have a particular correction in mind, and a list would
+          only be in the way of it. The pinned offer is not here - destinations
+          own that once a campaign is running. */}
+      <Dialog
+        open={Boolean(settingsFor)}
+        title={t("campaigns.settings")}
+        description="What this campaign is for, and the language it posts in. Product matching reads the goal and the audience, so keeping them accurate is what keeps its picks sensible."
+        onClose={() => setSettingsFor(null)}
+      >
+        {settingsFor && (
+          <form className="campaign-dialog-form" onSubmit={saveCampaignSettings}>
+            <label>{t("campaigns.name")}
+              <input name="name" required maxLength={160} defaultValue={settingsFor.name} />
+            </label>
+            <label>{t("campaigns.objective")}
+              <textarea name="objective" rows={2} required maxLength={1000}
+                defaultValue={settingsFor.objective} />
+            </label>
+            <label>{t("campaigns.audience")}
+              <textarea name="audience" rows={2} required maxLength={1000}
+                defaultValue={settingsFor.audience} />
+            </label>
+            <label>{t("campaigns.postLanguage")}
+              <select name="language" defaultValue={settingsFor.languages[0] ?? "en"}>
+                {POST_LANGUAGES.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
+                ))}
+              </select>
+              <small>Changes the disclosure and bio hint too, unless you have written your own.</small>
+            </label>
+            <div className="campaign-dialog-actions">
+              <Button type="button" variant="quiet" onClick={() => setSettingsFor(null)}>Cancel</Button>
+              <Button type="submit" variant="primary" busy={busy === "settings"}>{t("common.save")}</Button>
+            </div>
+          </form>
+        )}
       </Dialog>
       <StatusToasts messages={statusMessages} onDismiss={dismiss} />
     </main>

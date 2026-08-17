@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import get_args
 
 import httpx
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -16,6 +16,8 @@ from trendrelay_api.integrations import publishing
 from trendrelay_api.main import app
 from trendrelay_api.models import Base
 from trendrelay_api.opportunity_models import Product, ProductOffer
+from trendrelay_api.campaign_autopilot import localised_text
+from trendrelay_api.autopilot_models import CampaignAutopilot
 
 engine = create_engine(
     "sqlite://",
@@ -426,3 +428,102 @@ def test_manual_package_export_is_local_only(tmp_path: Path, monkeypatch) -> Non
         )
     )
     assert response.status_code == 403
+
+
+# --- correcting a campaign after it exists --------------------------------------
+
+
+def update_campaign(workspace_id: str, campaign_id: str, **body) -> httpx.Response:
+    return asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/campaigns/{campaign_id}",
+            json={
+                "name": "Portable espresso launch",
+                "objective": "Validate purchase intent",
+                "audience": "Frequent travelers",
+                "languages": ["en"],
+                **body,
+            },
+        )
+    )
+
+
+def autopilot_of(campaign_id: str) -> CampaignAutopilot:
+    with TestingSession() as session:
+        found = session.scalar(
+            select(CampaignAutopilot).where(CampaignAutopilot.campaign_id == campaign_id)
+        )
+        assert found is not None
+        return found
+
+
+def test_the_goal_and_the_audience_can_be_corrected() -> None:
+    """They steer product matching, so a hurried first answer must be fixable."""
+    workspace_id = create_workspace()
+    campaign = create_campaign(workspace_id)
+
+    response = update_campaign(
+        workspace_id,
+        campaign["id"],
+        objective="Move seasonal and promotional stock",
+        audience="Students and young professionals",
+    )
+
+    assert response.status_code == 200
+    updated = response.json()["campaign"]
+    assert updated["objective"] == "Move seasonal and promotional stock"
+    assert updated["audience"] == "Students and young professionals"
+
+
+def test_changing_the_language_retranslates_scaffolding_nobody_edited() -> None:
+    workspace_id = create_workspace()
+    campaign = create_campaign(workspace_id)
+    assert autopilot_of(campaign["id"]).post_language == "en"
+
+    assert update_campaign(workspace_id, campaign["id"], languages=["vi"]).status_code == 200
+
+    autopilot = autopilot_of(campaign["id"])
+    assert autopilot.post_language == "vi"
+    assert autopilot.disclosure == localised_text("vi", "disclosure")
+    assert autopilot.bio_hint == localised_text("vi", "bio_hint")
+
+
+def test_a_disclosure_somebody_wrote_survives_a_language_change() -> None:
+    """Overwriting it would be the app discarding the operator's own words.
+
+    A disclosure is a legal statement in their voice; it is worth leaving in the
+    wrong language rather than silently replacing.
+    """
+    workspace_id = create_workspace()
+    campaign = create_campaign(workspace_id)
+    with TestingSession.begin() as session:
+        autopilot = session.scalar(
+            select(CampaignAutopilot).where(CampaignAutopilot.campaign_id == campaign["id"])
+        )
+        autopilot.disclosure = "Paid partnership. Our own wording."
+
+    assert update_campaign(workspace_id, campaign["id"], languages=["vi"]).status_code == 200
+
+    autopilot = autopilot_of(campaign["id"])
+    assert autopilot.post_language == "vi"
+    assert autopilot.disclosure == "Paid partnership. Our own wording."
+    # The one nobody touched still follows the language.
+    assert autopilot.bio_hint == localised_text("vi", "bio_hint")
+
+
+def test_an_unusable_name_is_refused() -> None:
+    workspace_id = create_workspace()
+    campaign = create_campaign(workspace_id)
+
+    assert update_campaign(workspace_id, campaign["id"], name="x").status_code == 422
+
+
+def test_updating_a_campaign_in_another_workspace_is_refused() -> None:
+    workspace_id = create_workspace()
+    campaign = create_campaign(workspace_id)
+    other = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Other", "slug": "other-lab"})
+    ).json()["workspace"]["id"]
+
+    assert update_campaign(other, campaign["id"], name="Renamed").status_code == 404

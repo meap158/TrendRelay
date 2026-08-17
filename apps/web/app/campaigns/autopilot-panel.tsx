@@ -1183,7 +1183,7 @@ export function AutopilotPanel({
               <small>Ranking only uses an axis once it has enough evidence;
                 until then destinations rotate.</small>
             </label>
-            <label>Post language
+            <label>{t("campaigns.postLanguage")}
               <select
                 value={autopilot.post_language}
                 disabled={!canEdit}

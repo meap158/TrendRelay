@@ -147,6 +147,31 @@ class CampaignCreate(BaseModel):
         return _unique_words(values, limit=20, max_length=80)
 
 
+class CampaignUpdate(BaseModel):
+    """What a campaign can be corrected to after it exists.
+
+    The same fields the create form asks for, minus the pinned offer and the
+    signals: an offer is a decision the destination rows own once a campaign is
+    running, and the signals record what Discover was showing at the time, which
+    editing later would falsify.
+    """
+
+    name: str = Field(min_length=2, max_length=160)
+    objective: str = Field(min_length=2, max_length=1000)
+    audience: str = Field(min_length=2, max_length=1000)
+    languages: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("name", "objective", "audience")
+    @classmethod
+    def normalize_text(cls, value: str) -> str:
+        return " ".join(value.strip().split())
+
+    @field_validator("languages")
+    @classmethod
+    def normalize_languages(cls, values: list[str]) -> list[str]:
+        return _unique_words(values, limit=20, max_length=80)
+
+
 class CampaignStatusUpdate(BaseModel):
     status: CampaignStatus
 
@@ -433,6 +458,78 @@ def _store_signals(
         stored.append(describe_signal(signal, at=collected))
     session.flush()
     return stored
+
+
+@router.post("/{campaign_id}")
+def update_campaign(
+    workspace_id: str,
+    campaign_id: str,
+    body: CampaignUpdate,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Correct what a campaign says about itself.
+
+    Until this existed the goal and the audience were whatever was typed in the
+    dialog that created the campaign, permanently - and they are the two
+    heaviest pieces of evidence product matching reads, so a hurried first
+    answer kept steering the matching for the life of the campaign.
+
+    Changing the language re-points the composed scaffolding, but only where the
+    operator has not written their own. A disclosure somebody has edited is
+    theirs and is left alone even when it is now in the wrong language, because
+    overwriting it would be this endpoint quietly discarding their words.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor"})
+    item = _campaign_record(session, workspace_id, campaign_id)
+    from trendrelay_api.campaign_autopilot import language_code, localised_text
+
+    before = {
+        "name": item.name,
+        "objective": item.objective,
+        "audience": item.audience,
+        "languages": list(item.languages or []),
+    }
+    item.name = body.name
+    item.objective = body.objective
+    item.audience = body.audience
+    item.languages = body.languages
+    item.updated_at = utc_now()
+
+    language = language_code(body.languages)
+    autopilot = session.scalar(
+        select(CampaignAutopilot).where(CampaignAutopilot.campaign_id == campaign_id)
+    )
+    retranslated = False
+    if autopilot and autopilot.post_language != language:
+        previous = autopilot.post_language
+        autopilot.post_language = language
+        for field in ("disclosure", "bio_hint"):
+            # Only what this wrote itself, recognised by it still matching the
+            # old language's text.
+            if getattr(autopilot, field) == localised_text(previous, field):
+                setattr(autopilot, field, localised_text(language, field))
+        autopilot.updated_at = utc_now()
+        retranslated = True
+
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "campaign.updated",
+        "campaign",
+        item.id,
+        {
+            "changed": sorted(
+                field for field, was in before.items()
+                if was != getattr(item, field)
+            ),
+            "post_language": language if retranslated else None,
+        },
+    )
+    return {"campaign": _campaign(item)}
 
 
 @router.post("/{campaign_id}/status")
