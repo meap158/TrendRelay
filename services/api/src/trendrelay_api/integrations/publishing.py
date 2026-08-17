@@ -2190,6 +2190,7 @@ def discover_all_integrations() -> dict[str, Any]:
             "engine_label": provider.label,
             "connection_label": connection.label,
             "is_default": connection.is_default,
+            "account": {},
         }
         with using_connection(connection):
             if not provider_status(provider_id, probe=False)["configured"]:
@@ -2201,6 +2202,11 @@ def discover_all_integrations() -> dict[str, Any]:
                     "quota": {"blocked": False, "reason": None, "allowance_id": None},
                 })
                 continue
+            # Read once per key and reused. Carried on the account rows as well
+            # as the engine card because the places that choose a destination -
+            # the campaign account picker among them - show accounts, not
+            # engines, and "Buffer" on two rows does not say which login.
+            identity = cached_identity(provider_id)
             try:
                 found = [
                     {
@@ -2209,12 +2215,14 @@ def discover_all_integrations() -> dict[str, Any]:
                         "provider_label": shown,
                         "engine": engine_id,
                         "connection_label": connection.label,
+                        "connection_account": identity,
                     }
                     for account in ACCOUNT_READERS[engine_id]()
                 ]
             except Exception as error:
                 engines.append({
                     **card,
+                    "account": identity,
                     "reachable": False, "reason": str(error), "account_count": 0,
                     # No channels rather than none known: an engine that would
                     # not answer has told us nothing about what is connected.
@@ -2276,6 +2284,7 @@ def discover_all_integrations() -> dict[str, Any]:
         accounts.extend(found)
         engines.append({
             **card,
+            "account": identity,
             "reachable": True, "reason": None, "account_count": len(found),
             # What is actually connected, not what the engine supports. The card
             # showed the platform list off the provider definition, which is the
@@ -2313,19 +2322,114 @@ def discover_all_integrations() -> dict[str, Any]:
     }
 
 
-def _authenticate(provider: ProviderDefinition) -> None:
+def _authenticate(provider: ProviderDefinition) -> dict[str, str]:
+    """Prove the key works, and say whose account it is.
+
+    Both from one request. The probe already had to call each engine to answer
+    "is this key good", and the answer to "whose login is this" is sitting in
+    the same response - so a second Buffer connection can be told from the first
+    without a second round trip.
+
+    What comes back differs by engine, because what they publish about
+    themselves differs. Only Buffer names an email. The others are asked for the
+    most identifying thing they will give, and an engine that gives nothing
+    returns an empty mapping rather than a placeholder: a blank is honest, and
+    "Unknown account" beside two identical cards helps nobody.
+    """
     if provider.id == "bundle_social":
         # The documented entry point: no team ID needed, and a bad key answers 403.
-        _bundle_request("GET", "/organization/", timeout=10)
-    elif provider.id == "zernio":
+        organization = _bundle_request("GET", "/organization/", timeout=10)
+        return _identity(name=organization.get("name"), scope="organisation")
+    if provider.id == "zernio":
         # Zernio rejects a limit without a page, so the probe sends both.
         _zernio_request("GET", "/accounts?page=1&limit=1", timeout=10)
-    elif provider.id == "woopsocial":
+        return _zernio_identity()
+    if provider.id == "woopsocial":
         # Projects rather than accounts: it answers for a key with nothing
         # connected yet, which is the state a new account is in.
-        _woopsocial_request("GET", "/projects", timeout=10)
-    else:
-        _buffer_graphql("query { account { id } }", timeout=10)
+        projects = _woopsocial_request("GET", "/projects", timeout=10)
+        rows = projects if isinstance(projects, list) else (projects or {}).get("projects") or []
+        first = rows[0] if rows and isinstance(rows[0], dict) else {}
+        return _identity(name=first.get("name"), scope="project")
+    account = (_buffer_graphql(
+        "query { account { id email name } }", timeout=10,
+    ) or {}).get("account") or {}
+    return _identity(email=account.get("email"), name=account.get("name"), scope="account")
+
+
+#: One login's identity, kept against the key that produced it.
+#:
+#: Whose account a key belongs to does not change while the key does not, so
+#: this is keyed by the key itself: replacing a credential misses the cache and
+#: re-reads, and a key left alone is never asked about twice. Without it the
+#: accounts list would pay an extra call per connection every time it loads -
+#: two for Zernio, which publishes no email and has to be asked twice.
+_IDENTITIES: dict[tuple[str, str], dict[str, str]] = {}
+
+
+def _identity_fingerprint(provider: ProviderDefinition, connection: Any) -> str:
+    """What the cache is keyed on: the stored key, never shown or logged."""
+    return "|".join(
+        effective_value(connection.key_for(field.key)) for field in provider.credentials
+    )
+
+
+def cached_identity(provider_id: str) -> dict[str, str]:
+    """One login's identity, read once per key.
+
+    Best-effort throughout: an engine that will not say who it is has told us
+    nothing about whether its key works, so a failure here is an empty answer
+    rather than an error anybody sees.
+    """
+    provider = resolve_provider(provider_id)
+    connection = resolve_connection(provider_id)
+    fingerprint = _identity_fingerprint(provider, connection)
+    if not fingerprint.strip("|"):
+        return {}
+    cache_key = (connection.id, fingerprint)
+    if cache_key in _IDENTITIES:
+        return _IDENTITIES[cache_key]
+    try:
+        # Bound here rather than relying on the caller's context. Callers that
+        # already hold the connection get the same answer, and one that does not
+        # would otherwise ask a second Buffer login's question with the first
+        # login's key - and cache the wrong name against it.
+        with using_connection(connection):
+            found = _authenticate(provider)
+    except (RuntimeError, ValueError, KeyError, TypeError):
+        found = {}
+    _IDENTITIES[cache_key] = found
+    return found
+
+
+def _identity(
+    *, email: str | None = None, name: str | None = None, scope: str,
+) -> dict[str, str]:
+    """One login's identity, with blanks left out rather than filled in."""
+    found = {"email": (email or "").strip(), "name": (name or "").strip()}
+    if not found["email"] and not found["name"]:
+        return {}
+    return {key: value for key, value in found.items() if value} | {"scope": scope}
+
+
+def _zernio_identity() -> dict[str, str]:
+    """Zernio's owner, which takes two hops and publishes no email.
+
+    `/profiles` carries the `userId`, and the user record carries the name. Both
+    are best-effort on top of a probe that has already succeeded: a failure here
+    means the key works and the account is nameless, which must not be reported
+    as the key being bad.
+    """
+    try:
+        profiles = (_zernio_request("GET", "/profiles", timeout=10) or {}).get("profiles") or []
+        user_id = next((row.get("userId") for row in profiles if row.get("userId")), "")
+        if not user_id:
+            return {}
+        user = _zernio_request("GET", f"/users/{user_id}", timeout=10) or {}
+        record = user.get("user") if isinstance(user.get("user"), dict) else user
+        return _identity(email=record.get("email"), name=record.get("name"), scope="account")
+    except (RuntimeError, ValueError, KeyError, TypeError):
+        return {}
 
 
 def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
@@ -2347,11 +2451,12 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
     configured = not missing
     authenticated = False
     authorization_error: str | None = None
+    account: dict[str, str] = {}
     if not configured:
         authorization_error = f"Add the {provider.label} {', '.join(missing)} to finish setup."
     elif probe:
         try:
-            _authenticate(provider)
+            account = _authenticate(provider)
             authenticated = True
         except RuntimeError as error:
             authorization_error = str(error)
@@ -2367,6 +2472,13 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
         "engine_label": provider.label,
         "connection_label": connection.label,
         "is_default": connection.is_default,
+        # Whose login this is, as the engine itself reports it. The point of it
+        # is two connections to the same engine: "Buffer" and "Buffer · second"
+        # say nothing about which account each one posts from, and a label
+        # somebody typed is only as accurate as their memory of typing it.
+        # Empty when the engine names nobody, or when the key was refused - in
+        # which case there is no account to name.
+        "account": account,
         "tagline": provider.tagline,
         "summary": provider.summary,
         "homepage": provider.homepage,

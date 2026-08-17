@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from trendrelay_api import publishing_connections
 from trendrelay_api.attribution_api import _https_url
 from trendrelay_api.auth import require_governed_assurance
 from trendrelay_api.autopilot_models import (
@@ -37,7 +38,12 @@ from trendrelay_api.foundation import (
     membership,
     require_role,
 )
-from trendrelay_api.integrations.publishing import resolve_post_type, resolve_provider
+from trendrelay_api.integrations.publishing import (
+    PROVIDERS,
+    cached_identity,
+    resolve_post_type,
+    resolve_provider,
+)
 from trendrelay_api.models import Campaign, DurableJob, utc_now
 from trendrelay_api.opportunity_models import ProductOffer
 from trendrelay_api.publication_models import PublicationExecution
@@ -229,9 +235,20 @@ def _destination_view(session: Session, item: CampaignDestination) -> dict[str, 
         override=item.link_placement,
         comment_deliverable=first_comment_deliverable(item.provider, item.platform),
     )
+    # Which login carries this destination, in words rather than as the stored
+    # id. The row showed `item.provider` - "buffer", or "buffer-2" once somebody
+    # had two - which names the connection without saying whose account it is.
+    connection = publishing_connections.find(PROVIDERS, item.provider)
+    engine = PROVIDERS.get(connection.provider) if connection else None
     return {
         "id": item.id,
         "provider": item.provider,
+        "provider_label": (
+            engine.label if connection and connection.is_default and engine
+            else f"{engine.label} · {connection.label}" if connection and engine
+            else item.provider
+        ),
+        "connection_account": cached_identity(item.provider) if connection else {},
         "integration_id": item.integration_id,
         "platform": item.platform,
         "label": item.label,

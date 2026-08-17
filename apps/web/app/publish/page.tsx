@@ -16,6 +16,7 @@ import {
   type PublishingEngine,
   type PublishingProvider,
 } from "../publishing-icons";
+import { accountIdentity } from "../publishing-account";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 import {
@@ -180,6 +181,14 @@ type Provider = {
   authorization_error: string | null;
   credential_fields: CredentialField[];
   account_count?: number;
+  /**
+   * Whose login this is, as the engine reports it.
+   *
+   * Only Buffer names an email; the rest give a name, an organisation or a
+   * project, and some give nothing. Absent entirely when the key was refused,
+   * because then there is no account to have.
+   */
+  account?: { email?: string; name?: string; scope?: string };
 };
 type MediaHosting = {
   label: string;
@@ -1783,7 +1792,15 @@ export default function PublishPage() {
                   <ProviderMark provider={provider.engine} />
                   <div>
                     <strong>{provider.label}</strong>
-                    <span>{provider.tagline}</span>
+                    {/* Whose login it is, in place of the tagline once there is
+                        an answer. Two connections to one engine are otherwise
+                        told apart only by a name somebody typed, and the engine
+                        itself knows which account each key belongs to. The
+                        tagline stays where nothing is known, so the line never
+                        empties. */}
+                    <span title={provider.tagline}>
+                      {accountIdentity(provider) ?? provider.tagline}
+                    </span>
                   </div>
                   {/* One word for the state, and the switch beside it, so
                       "can this engine publish?" and "should it?" are answered

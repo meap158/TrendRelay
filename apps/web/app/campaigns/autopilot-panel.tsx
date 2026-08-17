@@ -30,6 +30,7 @@ import { useT } from "../i18n-provider";
 import { LOCALES } from "../../lib/i18n/locales";
 import { EffectEditor } from "../library/effect-editor";
 import { TimelinePlayer } from "./timeline-player";
+import { accountIdentity, type EngineAccount } from "../publishing-account";
 import {
   AssetFilters,
   EMPTY_FACETS,
@@ -53,6 +54,8 @@ type Account = {
   label: string;
   provider: string;
   provider_label: string;
+  /** Whose login this account is reached through, as the engine reports it. */
+  connection_account?: EngineAccount;
   available?: boolean;
   unavailable_reason?: string | null;
 };
@@ -60,6 +63,9 @@ type Account = {
 type Destination = {
   id: string;
   provider: string;
+  /** The login in words - "Buffer", or "Buffer · Client B" - not its stored id. */
+  provider_label?: string;
+  connection_account?: EngineAccount;
   integration_id: string;
   platform: PublishingPlatform;
   label: string;
@@ -1240,7 +1246,10 @@ export function AutopilotPanel({
                   <PlatformIcon platform={item.platform} size={30} />
                   <span>
                     <strong>{item.label}</strong>
-                    <small>{platformLabels[item.platform]} · {item.provider}</small>
+                    <small>{platformLabels[item.platform]} · {item.provider_label ?? item.provider}
+                      {accountIdentity({ account: item.connection_account })
+                        ? ` · ${accountIdentity({ account: item.connection_account })}`
+                        : ""}</small>
                   </span>
                 </div>
                 {/* The decision, next to the account it applies to. Someone who
@@ -1355,7 +1364,14 @@ export function AutopilotPanel({
                       <PlatformIcon platform={account.platform} size={28} />
                       <span>
                         <strong>{account.label}</strong>
-                        <small>{platformLabels[account.platform]} · {account.provider_label}</small>
+                        {/* Which login carries it, not just which engine. Two
+                            Buffer connections put the same engine name on every
+                            row; the account the engine reports is the thing
+                            that tells them apart. */}
+                        <small>{platformLabels[account.platform]} · {account.provider_label}
+                          {accountIdentity({ account: account.connection_account })
+                            ? ` · ${accountIdentity({ account: account.connection_account })}`
+                            : ""}</small>
                       </span>
                     </label>
                   </li>
