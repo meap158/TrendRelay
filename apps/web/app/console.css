@@ -761,8 +761,27 @@ html { scroll-behavior: smooth; }
 /* The reason spans the row rather than squeezing into a column: it is a
    sentence, and a sentence in a 90px column is unreadable. */
 .autopilot-placement-reason { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
-.autopilot-placement-choice { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 11px; white-space: nowrap; }
-.autopilot-placement-choice select { max-width: 240px; font-size: 12px; }
+.autopilot-placement-choice { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 11px; white-space: nowrap; }
+/* Styled like the search-select trigger, so every dropdown in the app is the
+   same object: flat field, soft border, its own chevron instead of the
+   platform's. */
+.autopilot-placement-choice select {
+  max-width: 250px;
+  min-height: 30px;
+  padding: 5px 28px 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  background: var(--panel) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23667085' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>") no-repeat right 10px center;
+  font: inherit;
+  font-size: 12px;
+  appearance: none;
+  cursor: pointer;
+  transition: border-color 120ms ease;
+}
+.autopilot-placement-choice select:hover { border-color: color-mix(in srgb, var(--link) 45%, var(--line-strong)); }
+.autopilot-placement-choice select:focus-visible { outline: 2px solid color-mix(in srgb, var(--link) 38%, transparent); outline-offset: 1px; border-color: var(--link); }
+[dir="rtl"] .autopilot-placement-choice select { padding: 5px 10px 5px 28px; background-position: left 10px center; }
 .autopilot-queue li.draft { border-inline-start: 3px solid var(--amber); }
 .autopilot-queue li.approved { border-inline-start: 3px solid var(--green); }
 .campaign-queue-actions { display: flex !important; flex-wrap: wrap; justify-content: flex-end; gap: 4px !important; }

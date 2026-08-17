@@ -178,6 +178,10 @@ type DeployedPost = {
   last_error: string | null;
   created_at: string;
   updated_at: string;
+  /** The live post, when the engine reported a permalink. */
+  post_url: string | null;
+  /** The account's own page, when its label is handle-shaped. */
+  page_url: string | null;
 };
 
 type OfferMatch = {
@@ -1557,8 +1561,21 @@ export function AutopilotPanel({
                     timeZone: scheduleTimezone,
                   })}</time>
                   <span>
-                    <strong>{item.title || "Untitled campaign post"}</strong>
-                    <small>{item.destination?.label ?? "Former destination"} · {item.delivery}</small>
+                    {/* The title opens the post itself when the engine told us
+                        where it lives; the account line opens the page. */}
+                    <strong>{item.post_url ? (
+                      <a href={item.post_url} target="_blank" rel="noreferrer">
+                        {item.title || "Untitled campaign post"}
+                      </a>
+                    ) : (item.title || "Untitled campaign post")}</strong>
+                    <small>
+                      {item.page_url ? (
+                        <a href={item.page_url} target="_blank" rel="noreferrer">
+                          {item.destination?.label ?? "Former destination"}
+                        </a>
+                      ) : (item.destination?.label ?? "Former destination")}
+                      {" · "}{item.delivery}
+                    </small>
                   </span>
                   <Badge tone={item.status === "succeeded" ? "good" : item.status === "failed" ? "warn" : "neutral"}>
                     {item.status}
@@ -1593,7 +1610,11 @@ export function AutopilotPanel({
         )}
         {preview && (
           preview.posts.length === 0 ? (
-            <p className="autopilot-note" role="status">{preview.note}</p>
+            // The last-run banner above often carries this exact sentence;
+            // saying it once is information, twice is noise.
+            preview.note !== autopilot.last_note && (
+              <p className="autopilot-note" role="status">{preview.note}</p>
+            )
           ) : (
             <div className="campaign-pipeline">
               {previewDays.map(([day, posts]) => (

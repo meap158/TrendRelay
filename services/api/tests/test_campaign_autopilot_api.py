@@ -449,6 +449,62 @@ def test_preview_reconnects_committed_publish_jobs_to_the_timeline(workspace) ->
     assert deployed[0]["thread"] == ["Reply"]
 
 
+def test_committed_jobs_link_to_the_post_or_the_page(workspace) -> None:
+    """A succeeded row needs somewhere to point.
+
+    The post itself when the engine reported where it lives, the account's
+    own page otherwise - and a retry's second job for the same post does not
+    double the list; the newest one tells its story.
+    """
+    from trendrelay_api.models import DurableJob
+
+    campaign_id = campaign(workspace)
+    at = datetime.now(UTC) - timedelta(hours=2)
+
+    def job(id_: str, created: datetime, result: dict | None = None) -> DurableJob:
+        return DurableJob(
+            id=id_, workspace_key=workspace, kind="social_publish",
+            status="succeeded",
+            payload={"request": {
+                "workspace_id": workspace, "campaign_id": campaign_id,
+                "destination_id": "destination-1", "date": at.isoformat(),
+                "title": "Same post", "caption": "Same content",
+                "delivery": "schedule",
+                "targets": [{
+                    "platform": "threads",
+                    "integration_id": "halcyonbooks.official",
+                    "provider": "buffer", "post_type": "post",
+                }],
+            }},
+            result=result, attempt_count=1, max_attempts=3,
+            cancellation_requested=False, created_at=created,
+        )
+
+    with TestingSession.begin() as session:
+        session.add(job("job-older", at))
+        session.add(job(
+            "job-newer", at + timedelta(minutes=5),
+            result={"deliveries": [{
+                "post_ids": ["123"],
+                "permalink": "https://www.threads.net/@halcyonbooks.official/post/abc",
+            }]},
+        ))
+
+    response = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/preview"
+    )
+
+    assert response.status_code == 200, response.text
+    deployed = response.json()["deployed"]
+    assert [item["id"] for item in deployed] == ["job-newer"], (
+        "one entry per post, told by the newest job"
+    )
+    assert deployed[0]["post_url"] == (
+        "https://www.threads.net/@halcyonbooks.official/post/abc"
+    )
+    assert deployed[0]["page_url"] == "https://www.threads.net/@halcyonbooks.official"
+
+
 def test_deploy_preflights_then_activates_and_enables_campaign(
     workspace, monkeypatch
 ) -> None:

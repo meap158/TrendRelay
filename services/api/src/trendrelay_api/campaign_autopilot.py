@@ -20,6 +20,7 @@ profile link points at, so the clicks are still attributed.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Literal
 
@@ -100,6 +101,38 @@ def localised_text(language: str, key: str) -> str:
     """One scaffolding string in the campaign's language, English as fallback."""
     table = LOCALISED_TEXTS.get(language) or LOCALISED_TEXTS["en"]
     return table.get(key) or LOCALISED_TEXTS["en"][key]
+
+
+#: Where a profile lives on each network, for a handle-shaped account label.
+#: Networks absent here have no address this can vouch for.
+PROFILE_URLS: dict[str, str] = {
+    "instagram": "https://www.instagram.com/{handle}",
+    "tiktok": "https://www.tiktok.com/@{handle}",
+    "threads": "https://www.threads.net/@{handle}",
+    "youtube": "https://www.youtube.com/@{handle}",
+    "twitter": "https://x.com/{handle}",
+    "facebook": "https://www.facebook.com/{handle}",
+    "pinterest": "https://www.pinterest.com/{handle}",
+    "telegram": "https://t.me/{handle}",
+    "bluesky": "https://bsky.app/profile/{handle}",
+    "mastodon": "https://mastodon.social/@{handle}",
+}
+
+_HANDLE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$")
+
+
+def profile_url(platform: str | None, label: str | None) -> str | None:
+    """The account's public page, when its label is handle-shaped.
+
+    A display label with spaces or punctuation is a name, not an address, and
+    linking it would be a guess. Returning nothing is the honest answer: the
+    page simply is not known.
+    """
+    template = PROFILE_URLS.get(platform or "")
+    handle = (label or "").strip().lstrip("@")
+    if not template or not _HANDLE.match(handle):
+        return None
+    return template.format(handle=handle)
 
 
 def resolve_placement(

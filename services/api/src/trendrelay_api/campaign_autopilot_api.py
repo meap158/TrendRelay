@@ -23,7 +23,7 @@ from trendrelay_api.autopilot_models import (
     CampaignDestination,
     CampaignQueueItem,
 )
-from trendrelay_api.campaign_autopilot import resolve_placement
+from trendrelay_api.campaign_autopilot import profile_url, resolve_placement
 from trendrelay_api.campaign_scheduler import campaign_status, plan_campaign
 from trendrelay_api.foundation import (
     AuthenticatedUser,
@@ -828,12 +828,33 @@ def preview_autopilot(
         .order_by(DurableJob.created_at.desc())
         .limit(100)
     ).all()
+    # Deferred: campaign_runner imports this module lazily for its links, and
+    # a top-level import back at it would close that circle.
+    from trendrelay_api.campaign_runner import _outcome_of
+
+    seen_posts: set[tuple[Any, ...]] = set()
     for job in jobs:
         request_payload = (job.payload or {}).get("request") or {}
         if request_payload.get("campaign_id") != campaign_id:
             continue
+        # A retry or a redeploy files a second job for the same post; the
+        # newest tells the truth about it, and the list is ordered newest
+        # first, so later duplicates are older ones.
+        post_key = (
+            request_payload.get("destination_id"),
+            request_payload.get("date"),
+            request_payload.get("caption", ""),
+        )
+        if post_key in seen_posts:
+            continue
+        seen_posts.add(post_key)
         target = next(iter(request_payload.get("targets") or []), {})
         destination = by_id.get(request_payload.get("destination_id"))
+        # The published fact when the engine reported one, the account's own
+        # page as the fallback: somewhere for "succeeded" to point.
+        _post_ids, permalinks = _outcome_of(job)
+        platform = destination.platform if destination else target.get("platform")
+        label = destination.label if destination else target.get("integration_id")
         deployed.append({
             "id": job.id,
             "status": job.status,
@@ -861,6 +882,8 @@ def preview_autopilot(
             "last_error": job.last_error,
             "created_at": job.created_at,
             "updated_at": job.updated_at,
+            "post_url": next(iter(permalinks), None),
+            "page_url": profile_url(platform, label),
         })
     return {
         "note": note,

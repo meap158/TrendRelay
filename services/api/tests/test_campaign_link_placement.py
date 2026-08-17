@@ -138,6 +138,23 @@ def test_the_campaign_s_own_language_wins_and_unknowns_stay_english(
     assert language_code(languages) == expected
 
 
+@pytest.mark.parametrize(("platform", "label", "expected"), [
+    ("threads", "halcyonbooks.official", "https://www.threads.net/@halcyonbooks.official"),
+    ("tiktok", "@handle", "https://www.tiktok.com/@handle"),
+    ("instagram", "handle", "https://www.instagram.com/handle"),
+    ("tiktok", "Tiêu Dùng Thông Minh 24h", None),  # a name, not an address
+    ("linkedin", "handle", None),  # no address this can vouch for
+    ("threads", "", None),
+    (None, "handle", None),
+])
+def test_a_page_link_exists_only_when_the_label_is_an_address(
+    platform, label, expected
+) -> None:
+    from trendrelay_api.campaign_autopilot import profile_url
+
+    assert profile_url(platform, label) == expected
+
+
 def test_a_shopee_short_link_counts_as_tracked_in_publish() -> None:
     """The network's own link is the tracking link now (ADR 0022).
 
