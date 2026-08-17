@@ -57,6 +57,22 @@ export function renderedVersion(asset: VersionedAsset): AssetVersion | null {
 }
 
 /**
+ * Which cut the player opens on.
+ *
+ * The render when there is one. Somebody who applied an effect wants to see
+ * the effect, and opening on the source made watching your own work a second
+ * click - on exactly the clip where a spare click was least likely. The
+ * original stays one press away as the comparison.
+ *
+ * The same rule as `handoffPath`, which is the point: what Publish sends and
+ * what the player shows should not be able to disagree about which cut of a
+ * clip is the current one.
+ */
+export function openingCut(asset: VersionedAsset): "original" | "edited" {
+  return renderedVersion(asset) ? "edited" : "original";
+}
+
+/**
  * The file to hand to Campaigns or Publish.
  *
  * The newest rendered cut when there is one, because that is the point of

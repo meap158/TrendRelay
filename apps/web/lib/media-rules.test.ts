@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { blurredVersion, clipLength, fileName, handoffPath, isBlurred } from "./media-rules.ts";
+import {
+  blurredVersion,
+  clipLength,
+  fileName,
+  handoffPath,
+  isBlurred,
+  openingCut,
+} from "./media-rules.ts";
 
 const original = { original_path: "S:\\media\\clip.mp4", versions: [{ kind: "original" }] };
 
@@ -114,4 +121,49 @@ test("a bare name is already the answer", () => {
 
 test("a trailing separator does not produce an empty name", () => {
   assert.equal(fileName("S:\\media\\folder\\"), "folder");
+});
+
+// --- which cut the player opens on ---------------------------------------------
+
+test("a clip with a render opens on the render", () => {
+  // Somebody who applied an effect wants to see the effect. Opening on the
+  // source made watching your own work a second click.
+  const asset = {
+    original_path: "S:\media\clip.mp4",
+    versions: [{ kind: "original" }, { kind: "edited" }],
+  };
+  assert.equal(openingCut(asset), "edited");
+});
+
+test("a legacy blur-only render counts as the render", () => {
+  const asset = {
+    original_path: "S:\media\clip.mp4",
+    versions: [{ kind: "original" }, { kind: "blurred" }],
+  };
+  assert.equal(openingCut(asset), "edited");
+});
+
+test("a clip with nothing rendered opens on the original", () => {
+  assert.equal(openingCut(original), "original");
+});
+
+test("a thumbnail is not a cut worth opening on", () => {
+  // Every asset has one, so treating it as a render would send the player
+  // asking for an "edited" cut that the API would answer with a 404.
+  const asset = {
+    original_path: "S:\media\clip.mp4",
+    versions: [{ kind: "original" }, { kind: "thumbnail" }, { kind: "proxy" }],
+  };
+  assert.equal(openingCut(asset), "original");
+});
+
+test("the player and the handoff agree on which cut is current", () => {
+  // They are the same question asked by two screens, and the day they answer
+  // it differently is the day somebody publishes a cut they never watched.
+  const asset = {
+    original_path: "S:\media\clip.mp4",
+    versions: [{ kind: "original" }, { kind: "edited", path: "S:\media\edit.mp4" }],
+  };
+  assert.equal(openingCut(asset), "edited");
+  assert.equal(handoffPath(asset), "S:\media\edit.mp4");
 });

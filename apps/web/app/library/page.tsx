@@ -9,7 +9,7 @@ import { effectLabel, effectTag } from "../../lib/i18n/effects";
 import { useAuth } from "../auth-provider";
 import { type BaseJob, useJobs } from "../jobs-provider";
 import { useT } from "../i18n-provider";
-import { blurredVersion, handoffPath } from "../../lib/media-rules";
+import { blurredVersion, handoffPath, openingCut } from "../../lib/media-rules";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, buttonClass } from "../ui/button";
 import { Dialog } from "../ui/dialog";
@@ -19,6 +19,7 @@ import { Badge } from "../ui/primitives";
 import { CaptionEditor } from "./caption-editor";
 import { ClipEditor } from "./clip-editor";
 import { EffectEditor } from "./effect-editor";
+import { TranscriptionSwitch } from "./transcription-setup";
 import {
   AssetFilters,
   EMPTY_FACETS,
@@ -467,7 +468,13 @@ type Job = {
 };
 type Status = {
   runtime: { ffmpeg: boolean; ffprobe: boolean; local_derivatives: boolean };
-  transcription: { reviewed_import: boolean; automatic_provider: string | null; reason: string };
+  transcription: {
+    reviewed_import: boolean;
+    automatic_provider: string | null;
+    prepared: boolean;
+    active: boolean;
+    reason: string;
+  };
 };
 
 async function json<T>(response: Response): Promise<T> {
@@ -642,7 +649,12 @@ function MediaPreview({
   const [requested, setRequested] = useState(autoStart || asset.media_kind === "image");
   // The rendered cut is watched in the same player as the original, so the two
   // are compared in place rather than in a second, smaller video somewhere else.
-  const [cut, setCut] = useState<"original" | "edited">("original");
+  //
+  // It also opens on the rendered cut when there is one - see `openingCut`,
+  // which is the same rule Publish uses to pick the file it sends. Safe at
+  // mount for the same reason `requested` is: the preview is keyed by asset,
+  // so selecting another one asks the question again.
+  const [cut, setCut] = useState<"original" | "edited">(() => openingCut(asset));
   // Both <video> and <audio> are HTMLMediaElement, which is the whole
   // transport surface used here: play, pause and paused.
   const videoRef = useRef<HTMLMediaElement>(null);
@@ -787,12 +799,9 @@ function MediaPreview({
            file, so a third option per effect would be offering cuts that do not
            exist. */
         <div className="library-cut-switch" role="group" aria-label={t("library.whichCut")}>
-          <button
-            type="button"
-            className={cut === "original" ? "selected" : ""}
-            aria-pressed={cut === "original"}
-            onClick={() => { setError(""); setSource(""); setCut("original"); setRequested(true); }}
-          >{t("library.cutOriginal")}</button>
+          {/* The render leads, because it is what the player opens on and what
+              the operator came to look at. The original is the comparison, and
+              a comparison reads better as the thing you switch back to. */}
           <button
             type="button"
             className={cut === "edited" ? "selected" : ""}
@@ -803,6 +812,12 @@ function MediaPreview({
             title={cutEffects(t, rendered).join(" → ") || undefined}
             onClick={() => { setError(""); setSource(""); setCut("edited"); setRequested(true); }}
           >{cutLabel(t, rendered)}</button>
+          <button
+            type="button"
+            className={cut === "original" ? "selected" : ""}
+            aria-pressed={cut === "original"}
+            onClick={() => { setError(""); setSource(""); setCut("original"); setRequested(true); }}
+          >{t("library.cutOriginal")}</button>
         </div>
       )}
       <nav className="library-preview-navigation" aria-label={t("library.browsePreviews")}>
@@ -1464,20 +1479,11 @@ export default function LibraryPage() {
                     Media processing: {status?.runtime.local_derivatives ? "ready" : "setup required"}
                   </span>
                 </span>
-                <span
-                  className="library-status-dot setup"
-                  role="img"
-                  tabIndex={0}
-                  aria-label={`Transcription: reviewed text import. ${status?.transcription.reason ?? ""}`}
-                >
-                  <CircleAlert size={14} aria-hidden="true" />
-                  <span className="library-status-tooltip" aria-hidden="true">
-                    Transcription: reviewed text import
-                    {status?.transcription.reason
-                      ? <span className="library-status-reason">{status.transcription.reason}</span>
-                      : null}
-                  </span>
-                </span>
+                {/* Not a tooltip. This one has an answer the operator can act
+                    on — download it, or switch it on — so it opens rather than
+                    explaining why they cannot. Compact by design: a popover off
+                    the heading, not a row of its own. */}
+                <TranscriptionSwitch apiFetch={apiFetch} />
               </span>
             </h1>
             <p>{t("library.intro")}</p>
