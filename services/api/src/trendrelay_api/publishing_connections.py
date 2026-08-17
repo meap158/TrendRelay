@@ -57,6 +57,15 @@ KEY_SEPARATOR = "__"
 #: hit something before it fills the file.
 MAX_CONNECTIONS_PER_ENGINE = 25
 
+#: The widest a connection id may be.
+#:
+#: Not a style choice. A destination stores this string, and the columns that
+#: hold it - on campaign destinations, publishing slots, publication executions
+#: and conversation messages - are all `String(32)`. SQLite would not complain
+#: and Postgres would, so an id is kept inside the narrowest column that has to
+#: carry it rather than widening four tables to hold a longer name.
+MAX_ID_LENGTH = 32
+
 _SLUG = re.compile(r"[^a-z0-9]+")
 
 
@@ -169,8 +178,8 @@ def next_id(providers: dict[str, Any], provider_id: str, label: str) -> str:
     taken = {row.id for row in connections(providers)}
     slug = slugify(label)
     if slug and slug != provider_id:
-        candidate = f"{provider_id}-{slug}"[:60]
-        if candidate not in taken:
+        candidate = f"{provider_id}-{slug}"[:MAX_ID_LENGTH].rstrip("-")
+        if candidate not in taken and candidate != provider_id:
             return candidate
     index = 2
     while f"{provider_id}-{index}" in taken:

@@ -235,3 +235,45 @@ def test_a_destination_may_still_name_a_bare_engine(two_logins) -> None:
     )
 
     assert target.provider == "buffer"
+
+
+# --- what Campaigns inherits --------------------------------------------------
+
+
+def test_a_campaign_destination_on_a_second_login_is_a_valid_target(two_logins) -> None:
+    """Campaigns stores `provider` on a destination and hands it to a target.
+
+    It needs no concept of its own: the accounts it offers come from Publish's
+    discovery, which now tags each with the login that found it, and the value
+    it stores travels unchanged into the post. This asserts the join holds - a
+    destination carrying a connection id builds a target that names that login.
+    """
+    found = publishing.discover_all_integrations()
+    second = next(a for a in found["accounts"] if a["handle"] == "second")
+
+    target = publishing.PublishTarget(
+        platform=second["platform"],
+        integration_id=second["id"],
+        provider=second["provider"],
+    )
+
+    assert target.provider == two_logins.id
+    # And the engine's capabilities still come from the engine, not the login.
+    assert publishing.resolve_provider(target.provider).id == "buffer"
+
+
+def test_a_destination_stored_before_connections_still_builds_a_target(two_logins) -> None:
+    # `provider="buffer"` is what every row written before today carries.
+    target = publishing.PublishTarget(
+        platform="instagram", integration_id="first-account", provider="buffer"
+    )
+
+    assert publishing.resolve_connection(target.provider).is_default
+
+
+def test_a_connection_id_fits_the_column_campaigns_stores_it_in(two_logins) -> None:
+    from trendrelay_api.autopilot_models import CampaignDestination
+
+    width = CampaignDestination.__table__.columns["provider"].type.length
+
+    assert len(two_logins.id) <= width

@@ -185,3 +185,22 @@ def test_a_row_that_would_shadow_a_default_is_ignored() -> None:
 
     assert row.provider == "zernio"
     assert row.is_default
+
+
+def test_an_id_fits_the_column_a_destination_stores_it_in() -> None:
+    """`String(32)`, on four tables. Postgres would refuse a longer one."""
+    added = connections.add(
+        PROVIDERS, "bundle_social",
+        "A rather long account name somebody typed in full",
+    )
+
+    assert len(added.id) <= connections.MAX_ID_LENGTH
+    assert added.id.startswith("bundle_social-")
+
+
+def test_a_truncated_id_still_does_not_collide_with_the_default() -> None:
+    # Trimming to fit must not trim away everything that made it distinct.
+    added = connections.add(PROVIDERS, "bundle_social", "!!!")
+
+    assert added.id != "bundle_social"
+    assert connections.find(PROVIDERS, "bundle_social").is_default
