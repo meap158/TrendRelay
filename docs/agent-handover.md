@@ -120,11 +120,18 @@ side was verified correct first - `FileResponse` sends no `content-disposition`
 faststart with `moov` before `mdat`, `controlsList="nodownload"` is in both the
 source and the running dev bundle, and nothing anywhere calls `a.download`.
 
-The fix is in IDM - exclude `127.0.0.1` and `localhost`, or drop MP4 from its
-automatic file types. Do not try to fix it in the app: the player needs a real
-`video/mp4` with ranges, which is precisely what IDM triggers on, and routing the
-bytes through a `blob:` URL to hide them would pull all 54 MB before the first
-frame and lose seeking.
+Fixed in the app, in `campaigns/timeline-player.tsx`: the clip is read with
+`fetch` and played from a blob, so there is no request in the browser's download
+path for a grabber to see. The objection to this was that it pulls the whole file
+before the first frame - true, but against an API on loopback that is a disk read
+rather than a transfer, and the blob arrives complete so seeking still works. An
+`IntersectionObserver` on the wrapper holds the fetch until the row is open,
+since the content of a closed `details` has no layout box; without that a long
+timeline would read every clip off disk at once.
+
+`controlsList="nodownload"` is kept but was never sufficient. It governs the
+controls Chrome draws, not what an extension does with the request underneath
+them.
 
 **The full test suite is not a reliable signal on its own** while another agent
 is editing. Failures have appeared and vanished between consecutive runs,
