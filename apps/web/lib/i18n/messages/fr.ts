@@ -492,6 +492,7 @@ export const fr: Messages = {
     noAccounts: "Aucun compte connecté. Configurez d’abord un moteur sur l’écran Publier.",
     add: "Ajouter",
     destinationAdded: "{label} ajouté.",
+    removeDestination: "Supprimer {label}",
     destinationRemoved: "{label} retiré.",
     queueEyebrow: "Ce qu’il publie",
     queue: "{approved} approuvés sur {total}",

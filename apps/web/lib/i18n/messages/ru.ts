@@ -491,6 +491,7 @@ export const ru: Messages = {
     noAccounts: "Подключённых аккаунтов нет. Сначала настройте движок на экране публикации.",
     add: "Добавить",
     destinationAdded: "{label} добавлен.",
+    removeDestination: "Удалить {label}",
     destinationRemoved: "{label} удалён.",
     queueEyebrow: "Что публикует",
     queue: "подтверждено {approved} из {total}",

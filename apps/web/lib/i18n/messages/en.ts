@@ -488,6 +488,7 @@ export const en = {
     noAccounts: "No connected accounts. Set up an engine on the Publish screen first.",
     add: "Add",
     destinationAdded: "{label} added.",
+    removeDestination: "Remove {label}",
     destinationRemoved: "{label} removed.",
     queueEyebrow: "What it posts",
     queue: "{approved} of {total} approved",

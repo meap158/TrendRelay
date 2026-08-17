@@ -484,6 +484,7 @@ export const ja: Messages = {
     noAccounts: "接続済みアカウントがありません。まず公開画面でエンジンを設定してください。",
     add: "追加",
     destinationAdded: "{label} を追加しました。",
+    removeDestination: "{label} を削除",
     destinationRemoved: "{label} を削除しました。",
     queueEyebrow: "投稿内容",
     queue: "{total}件中{approved}件承認済み",

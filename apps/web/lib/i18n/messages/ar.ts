@@ -482,6 +482,7 @@ export const ar: Messages = {
     noAccounts: "لا حسابات متصلة. أعدّ محرّكاً من شاشة النشر أولاً.",
     add: "إضافة",
     destinationAdded: "أُضيف {label}.",
+    removeDestination: "إزالة {label}",
     destinationRemoved: "أُزيل {label}.",
     queueEyebrow: "ماذا ينشر",
     queue: "معتمد {approved} من {total}",

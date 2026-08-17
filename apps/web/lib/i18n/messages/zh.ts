@@ -474,6 +474,7 @@ export const zh: Messages = {
     noAccounts: "没有已连接的账号。请先在发布页面设置引擎。",
     add: "添加",
     destinationAdded: "已添加 {label}。",
+    removeDestination: "删除 {label}",
     destinationRemoved: "已移除 {label}。",
     queueEyebrow: "发布什么",
     queue: "已审批 {approved}/{total}",

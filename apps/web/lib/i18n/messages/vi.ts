@@ -484,6 +484,7 @@ export const vi: Messages = {
     noAccounts: "Chưa có tài khoản nào. Hãy thiết lập một công cụ ở màn hình Đăng bài trước.",
     add: "Thêm",
     destinationAdded: "Đã thêm {label}.",
+    removeDestination: "Xoá {label}",
     destinationRemoved: "Đã xoá {label}.",
     queueEyebrow: "Đăng gì",
     queue: "Đã duyệt {approved}/{total}",

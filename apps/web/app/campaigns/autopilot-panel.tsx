@@ -1219,11 +1219,22 @@ export function AutopilotPanel({
                   </label>
                 )}
                 {canEdit && (
-                  <Button variant="quiet" size="sm" onClick={() => void run("remove", async () => {
-                    await json(await apiFetch(`${base}/destinations/${item.id}`,
-                      { method: "DELETE" }));
-                    return t("autopilot.destinationRemoved", { label: item.label });
-                  })}>{t("common.delete")}</Button>
+                  // The icon, like every other removal in the app. As a word it
+                  // was stretching to a grid column's width - 106px of button
+                  // beside a 250px select, two pixels shorter than it - which
+                  // is what made the row look assembled from spare parts.
+                  <Button
+                    data-destination-remove=""
+                    variant="quiet"
+                    size="sm"
+                    title={t("common.delete")}
+                    aria-label={t("autopilot.removeDestination", { label: item.label })}
+                    onClick={() => void run("remove", async () => {
+                      await json(await apiFetch(`${base}/destinations/${item.id}`,
+                        { method: "DELETE" }));
+                      return t("autopilot.destinationRemoved", { label: item.label });
+                    })}
+                  ><ActionIcon name="delete" /></Button>
                 )}
               </li>
             ))}
