@@ -91,7 +91,10 @@ def test_a_campaign_starts_with_autopilot_off(workspace) -> None:
         "GET", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot"
     ).json()
     assert body["autopilot"]["enabled"] is False
-    assert body["autopilot"]["delivery"] == "draft"
+    # Scheduled, not drafted: the switch is off, so nothing posts either way,
+    # and when it is switched on an approved package should go out rather than
+    # wait for a second approval nobody asked for.
+    assert body["autopilot"]["delivery"] == "schedule"
     assert body["destinations"] == []
     assert body["queue"] == []
 

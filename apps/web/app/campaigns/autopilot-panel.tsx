@@ -795,6 +795,22 @@ export function AutopilotPanel({
         eyebrow={t("autopilot.eyebrow")}
         title={t("autopilot.heading")}
         aside={
+          <div className="autopilot-run-row">
+            {/* Beside the switch, not behind a tab named for revenue. The
+                switch says whether the campaign runs; this says what running
+                does, and reading one without the other explains nothing. */}
+            <label className="autopilot-delivery">
+              <span>{t("autopilot.delivery")}</span>
+              <select
+                value={autopilot.delivery}
+                disabled={!canEdit}
+                onChange={(event) =>
+                  void save({ delivery: event.target.value as Autopilot["delivery"] })}
+              >
+                <option value="draft">{t("autopilot.deliveryDraft")}</option>
+                <option value="schedule">{t("autopilot.deliverySchedule")}</option>
+              </select>
+            </label>
           <Switch
             checked={autopilot.enabled}
             disabled={!canEdit || campaignStatus === "archived"}
@@ -819,6 +835,7 @@ export function AutopilotPanel({
               void save({ enabled: next }, { confirm: true });
             }}
           />
+          </div>
         }
       >
         <p className="autopilot-lede">{t("autopilot.lede")}</p>
@@ -1080,18 +1097,6 @@ export function AutopilotPanel({
                   void save({ daily_cap_per_account: Number(event.target.value) })}
               />
               <small>{t("autopilot.capHelp")}</small>
-            </label>
-            <label>{t("autopilot.delivery")}
-              <select
-                value={autopilot.delivery}
-                disabled={!canEdit}
-                onChange={(event) =>
-                  void save({ delivery: event.target.value as Autopilot["delivery"] })}
-              >
-                <option value="draft">{t("autopilot.deliveryDraft")}</option>
-                <option value="schedule">{t("autopilot.deliverySchedule")}</option>
-              </select>
-              <small>{t("autopilot.deliveryHelp")}</small>
             </label>
             <label>Authority
               <select

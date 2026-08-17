@@ -989,3 +989,18 @@ html { scroll-behavior: smooth; }
   line-height: 1.55;
 }
 .autopilot-expansion strong { color: var(--fg); font-weight: 600; }
+
+/* The delivery choice, beside the sentence that says how many posts there will
+   be. Laid out as a row rather than a stacked field: it is one decision with
+   two answers, not a form. */
+.autopilot-run-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+.autopilot-delivery { display: flex; align-items: center; gap: 8px; margin: 0; }
+.autopilot-delivery > span { color: var(--muted); font-size: 13px; font-weight: 600; }
+.autopilot-delivery select {
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+}

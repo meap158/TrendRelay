@@ -88,7 +88,7 @@ class AutopilotSettings(BaseModel):
     bio_hint: str = Field(default="Link in bio", max_length=120)
     min_recycle_days: int = Field(default=30, ge=1, le=365)
     daily_cap_per_account: int = Field(default=2, ge=1, le=24)
-    delivery: str = Field(default="draft", pattern=r"^(draft|schedule|now)$")
+    delivery: str = Field(default="schedule", pattern=r"^(draft|schedule|now)$")
     #: How much the campaign may do alone. Run by exception is the recommended
     #: default: proceed, and hold only what trips a rule.
     authority: str = Field(

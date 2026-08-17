@@ -126,7 +126,16 @@ class CampaignAutopilot(Base):
     weekly_post_cap: Mapped[int | None] = mapped_column(Integer)
     #: Draft by default: the first thing a new autopilot does is fill a queue in
     #: the engine for someone to look at, not publish to a live audience.
-    delivery: Mapped[str] = mapped_column(String(16), default="draft")
+    #: Scheduled, not drafted.
+    #:
+    #: Drafting was the cautious default and it made the campaign look broken:
+    #: a package is approved, the switch is on, the posting time passes - and
+    #: the post sits in the engine waiting for a second approval nobody
+    #: mentioned. The confirmation on switching the campaign on already says it
+    #: will post to live accounts on its own, so this makes the setting match
+    #: the promise. Drafting stays available for anybody who wants a review
+    #: step, chosen rather than assumed.
+    delivery: Mapped[str] = mapped_column(String(16), default="schedule")
     #: Counted, not derived, because it drives the exploration cadence and has to
     #: survive a restart.
     posts_scheduled: Mapped[int] = mapped_column(Integer, default=0)
@@ -167,6 +176,12 @@ class CampaignDestination(Base):
     provider: Mapped[str] = mapped_column(String(32), index=True)
     integration_id: Mapped[str] = mapped_column(String(200))
     platform: Mapped[str] = mapped_column(String(24), index=True)
+    #: Where the post lands within the account, for the two networks that ask.
+    #: Per destination rather than per package: the same copy goes to different
+    #: subreddits on different accounts, and a board belongs to one profile.
+    subreddit: Mapped[str | None] = mapped_column(String(80))
+    board: Mapped[str | None] = mapped_column(String(120))
+    board_name: Mapped[str | None] = mapped_column(String(200))
     label: Mapped[str] = mapped_column(String(200))
     post_type: Mapped[str | None] = mapped_column(String(24))
     #: Where this destination's affiliate link lives. 'auto' - the default,
@@ -219,6 +234,15 @@ class CampaignQueueItem(Base):
     #: Copy a person wrote. Autopilot never generates it.
     body: Mapped[str] = mapped_column(String(4000))
     hashtags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    #: Declared, never inferred. Several networks require the disclosure and
+    #: penalise a missing one, but saying media is AI-made is the operator's
+    #: statement to make - defaulting it on would make it for them.
+    made_with_ai: Mapped[bool] = mapped_column(Boolean, default=False)
+    visibility: Mapped[str] = mapped_column(String(16), default="public")
+    #: Threads is the only network with a topic, and Buffer refuses a field a
+    #: network does not declare - so None means "not set", never "empty".
+    topic: Mapped[str | None] = mapped_column(String(80))
+    youtube_category_id: Mapped[str | None] = mapped_column(String(8))
     #: Optional operator-authored content after the primary post. Affiliate
     #: links are still routed by the platform policy; these fields are the
     #: campaign's own comment/reply copy and are validated against each engine
