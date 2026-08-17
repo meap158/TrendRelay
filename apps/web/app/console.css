@@ -752,7 +752,14 @@ html { scroll-behavior: smooth; }
 
 .autopilot-destinations, .autopilot-queue { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .autopilot-destinations li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
-.autopilot-queue li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.autopilot-queue li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.autopilot-queue-thumb { display: grid; place-items: center; }
+.autopilot-queue-thumb .picker-thumb, .autopilot-queue-thumb .campaign-pipeline-thumb-empty { display: grid; place-items: center; inline-size: 84px; block-size: 64px; overflow: hidden; border-radius: var(--radius-sm); background: #e8edf3; color: var(--muted); }
+.autopilot-queue-thumb .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.autopilot-queue-thumb .picker-thumb b { font-size: 12px; }
+.autopilot-queue-thumb .picker-thumb i { display: none; }
+/* A placeholder that will post as-is is a warning, not body copy. */
+.autopilot-needs-copy { color: #7a5c00; }
 .autopilot-destinations li > div, .autopilot-queue li > div { display: grid; gap: 2px; min-width: 0; }
 .autopilot-destinations strong, .autopilot-queue strong { overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .autopilot-destinations small, .autopilot-queue small { color: var(--muted); font-size: 11px; }

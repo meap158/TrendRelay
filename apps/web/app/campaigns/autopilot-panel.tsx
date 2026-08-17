@@ -73,6 +73,9 @@ type QueueItem = {
   id: string;
   asset_id?: string | null;
   video_path: string;
+  image_paths: string[];
+  /** The body is still the placeholder nobody wrote; the card says so. */
+  needs_copy: boolean;
   title: string | null;
   body: string;
   hashtags: string[];
@@ -191,8 +194,8 @@ type TimelineEntry = {
   video_path: string | null;
   image_paths: string[];
   last_error: string | null;
-  /** Planned rows only: what it will carry and why it was chosen. */
   asset_id: string | null;
+  /** Planned rows only: what it will carry and why it was chosen. */
   problem: string | null;
   offer_ids: string[];
   product_details: { offer_id: string; name: string }[];
@@ -211,6 +214,8 @@ type DeployedPost = {
   thread: string[];
   delivery: "draft" | "schedule" | "now";
   queue_item_id: string | null;
+  /** Resolved through the queue item, for the row's thumbnail. */
+  asset_id: string | null;
   destination_id: string | null;
   destination: PreviewPost["destination"];
   last_error: string | null;
@@ -294,6 +299,13 @@ function placementTone(placement: string): "good" | "neutral" | "warn" {
   if (placement === "caption") return "good";
   if (placement === "none") return "neutral";
   return "warn";
+}
+
+/** A media title without its file extension: ".mp4" tells a reader nothing
+    the thumbnail beside it does not, and reads like a path rather than a
+    post. Only the display is trimmed; the stored title keeps its name. */
+function displayTitle(value: string | null): string | null {
+  return value ? value.replace(/\.(mp4|mov|webm|mkv|avi|jpg|jpeg|png|webp)$/i, "") : value;
 }
 
 /* The browser reports a dead connection as the subjectless "Failed to
@@ -744,7 +756,7 @@ export function AutopilotPanel({
       video_path: item.video_path,
       image_paths: item.image_paths,
       last_error: item.last_error,
-      asset_id: null,
+      asset_id: item.asset_id,
       problem: null,
       offer_ids: [],
       product_details: [],
@@ -1475,9 +1487,40 @@ export function AutopilotPanel({
           <ul className="autopilot-queue">
             {queue.map((item) => (
               <li key={item.id} className={item.state}>
+                {/* The clip itself, not just its name: this list is where
+                    content is curated, and a thumbnail answers "which video
+                    is this" faster than any filename. */}
+                <div className="autopilot-queue-thumb">
+                  {item.asset_id ? (
+                    <AssetThumbnail
+                      asset={{
+                        id: item.asset_id,
+                        title: item.title ?? "Queued media",
+                        original_path: "",
+                        media_kind: item.video_path ? "video" : "image",
+                        duration_ms: null,
+                        platform: null,
+                        creator: null,
+                        width: null,
+                        height: null,
+                        versions: [{ id: `${item.asset_id}-thumbnail`, kind: "thumbnail" }],
+                      }}
+                      workspaceId={workspaceId}
+                      apiFetch={apiFetch}
+                    />
+                  ) : (
+                    <span className="campaign-pipeline-thumb-empty"><ActionIcon name="play" /></span>
+                  )}
+                </div>
                 <div>
-                  <strong>{item.title ?? item.body.slice(0, 60)}</strong>
-                  <span className="autopilot-queue-copy">{item.body}</span>
+                  <strong>{displayTitle(item.title) ?? item.body.slice(0, 60)}</strong>
+                  {item.needs_copy ? (
+                    <span className="autopilot-queue-copy autopilot-needs-copy">
+                      No copy yet — this placeholder posts unless somebody writes it.
+                    </span>
+                  ) : (
+                    <span className="autopilot-queue-copy">{item.body}</span>
+                  )}
                   <span className="campaign-content-package" aria-label="Configured post package">
                     <em>Post</em>
                     {item.first_comment && <em>First comment</em>}
@@ -1848,9 +1891,9 @@ export function AutopilotPanel({
                           </div>
                           <h4>{entry.post_url ? (
                             <a href={entry.post_url} target="_blank" rel="noreferrer">
-                              {entry.title || "Untitled campaign post"}
+                              {displayTitle(entry.title) || "Untitled campaign post"}
                             </a>
-                          ) : (entry.title || "Untitled campaign video")}</h4>
+                          ) : (displayTitle(entry.title) || "Untitled campaign video")}</h4>
                           {entry.problem && (
                             <p className="autopilot-refusal" role="status">
                               <strong>{t("autopilot.wouldBeRefused")}</strong> {entry.problem}

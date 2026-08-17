@@ -927,6 +927,13 @@ def preview_autopilot(
                 "schedule" if request_payload.get("schedule") else "draft"
             ),
             "queue_item_id": request_payload.get("queue_item_id"),
+            # Resolved through the queue item so a delivered row can show its
+            # thumbnail instead of an empty play placeholder.
+            "asset_id": (
+                queue_by_id[request_payload["queue_item_id"]].asset_id
+                if request_payload.get("queue_item_id") in queue_by_id
+                else None
+            ),
             "destination_id": request_payload.get("destination_id"),
             "destination": ({
                 "label": destination.label,
