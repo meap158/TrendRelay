@@ -109,6 +109,23 @@ configured. Three unrelated suites failed only when run together because of
 this. Fixtures that write environment values must restore the environment by
 hand.
 
+**A download manager on the operator's machine looks exactly like an app bug.**
+Expanding "See exactly what posted" on the campaign timeline was reported as
+triggering a download of the clip. It is Internet Download Manager's Chrome
+extension capturing the stream: it grabs any progressive `video/*` response, and
+expanding the row is simply when the player starts fetching. Everything on our
+side was verified correct first - `FileResponse` sends no `content-disposition`
+(no `filename` is passed, checked against the Starlette source), the type is
+`video/mp4`, range requests answer `206` with exact byte counts, the file is
+faststart with `moov` before `mdat`, `controlsList="nodownload"` is in both the
+source and the running dev bundle, and nothing anywhere calls `a.download`.
+
+The fix is in IDM - exclude `127.0.0.1` and `localhost`, or drop MP4 from its
+automatic file types. Do not try to fix it in the app: the player needs a real
+`video/mp4` with ranges, which is precisely what IDM triggers on, and routing the
+bytes through a `blob:` URL to hide them would pull all 54 MB before the first
+frame and lose seeking.
+
 **The full test suite is not a reliable signal on its own** while another agent
 is editing. Failures have appeared and vanished between consecutive runs,
 including a syntax error in a file being saved mid-run. Re-run before believing
