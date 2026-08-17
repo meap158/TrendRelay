@@ -334,6 +334,109 @@ function placementTone(placement: string): "good" | "neutral" | "warn" {
   return "warn";
 }
 
+/**
+ * The timeline as a month, the way Buffer and Zernio show the same posts.
+ *
+ * The list answers "what exactly went out"; the calendar answers "how does
+ * the month look" - cadence, gaps, and pile-ups - which no list can show.
+ * Same entries, same statuses, different question.
+ */
+function TimelineCalendar({
+  entries,
+  timezone,
+  month,
+  onMonthChange,
+}: {
+  entries: TimelineEntry[];
+  timezone: string;
+  /** The month on display, as YYYY-MM in the schedule's own timezone. */
+  month: string;
+  onMonthChange: (next: string) => void;
+}) {
+  const byDay = entries.reduce<Record<string, TimelineEntry[]>>((days, entry) => {
+    const key = new Date(entry.at).toLocaleDateString("en-CA", { timeZone: timezone });
+    (days[key] ??= []).push(entry);
+    return days;
+  }, {});
+  const [year, monthNumber] = month.split("-").map(Number);
+  const first = new Date(Date.UTC(year, monthNumber - 1, 1));
+  const daysInMonth = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  const cells: (string | null)[] = [
+    ...Array.from({ length: first.getUTCDay() }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, index) =>
+      `${year}-${String(monthNumber).padStart(2, "0")}-${String(index + 1).padStart(2, "0")}`),
+  ];
+  while (cells.length % 7) cells.push(null);
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: timezone });
+  const monthLabel = first.toLocaleDateString(undefined, {
+    month: "long", year: "numeric", timeZone: "UTC",
+  });
+  const step = (delta: number) => {
+    const moved = new Date(Date.UTC(year, monthNumber - 1 + delta, 1));
+    onMonthChange(
+      `${moved.getUTCFullYear()}-${String(moved.getUTCMonth() + 1).padStart(2, "0")}`,
+    );
+  };
+  const chipTone = (entry: TimelineEntry) =>
+    entry.kind === "delivered"
+      ? `delivered ${entry.status ?? ""}`.trim()
+      : entry.problem ? "refused" : "planned";
+
+  return (
+    <div className="campaign-calendar" role="grid" aria-label={`Posts in ${monthLabel}`}>
+      <header className="campaign-calendar-head">
+        <strong>{monthLabel}</strong>
+        <span>
+          <Button variant="quiet" size="sm" onClick={() => step(-1)}
+            aria-label="Earlier month">&#8249;</Button>
+          <Button variant="quiet" size="sm"
+            onClick={() => onMonthChange(today.slice(0, 7))}>Today</Button>
+          <Button variant="quiet" size="sm" onClick={() => step(1)}
+            aria-label="Later month">&#8250;</Button>
+        </span>
+      </header>
+      <div className="campaign-calendar-weekdays" aria-hidden="true">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((name) => (
+          <span key={name}>{name}</span>
+        ))}
+      </div>
+      <div className="campaign-calendar-grid">
+        {cells.map((key, index) => {
+          const dayEntries = key ? byDay[key] ?? [] : [];
+          return (
+            <div
+              key={key ?? `blank-${index}`}
+              className={[
+                "campaign-calendar-cell",
+                key ? "" : "blank",
+                key === today ? "today" : "",
+              ].filter(Boolean).join(" ")}
+            >
+              {key && <em>{Number(key.slice(8))}</em>}
+              {dayEntries.slice(0, 3).map((entry) => (
+                <span key={entry.key} className={`campaign-calendar-chip ${chipTone(entry)}`}
+                  title={displayTitle(entry.title) ?? entry.caption.slice(0, 80)}>
+                  <b>{new Date(entry.at).toLocaleTimeString(undefined, {
+                    hour: "2-digit", minute: "2-digit", hour12: false,
+                    timeZone: timezone,
+                  })}</b>
+                  {entry.destination?.platform && (
+                    <PlatformIcon platform={entry.destination.platform} size={12} />
+                  )}
+                  <span>{displayTitle(entry.title) || entry.caption.slice(0, 40) || "Post"}</span>
+                </span>
+              ))}
+              {dayEntries.length > 3 && (
+                <small className="campaign-calendar-more">+{dayEntries.length - 3} more</small>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** A media title without its file extension: ".mp4" tells a reader nothing
     the thumbnail beside it does not, and reads like a path rather than a
     post. Only the display is trimmed; the stored title keeps its name. */
@@ -477,6 +580,11 @@ export function AutopilotPanel({
   // rewritten.
   const searchTimer = useRef<number | null>(null);
   const automaticPreview = useRef(false);
+  // The references this mirrors (Buffer, Zernio) offer the same posts as a
+  // list and as a calendar; the list answers "what went out", the calendar
+  // answers "how does the month look". Null month means the current one.
+  const [timelineView, setTimelineView] = useState<"list" | "calendar">("list");
+  const [calendarMonth, setCalendarMonth] = useState<string | null>(null);
 
   const base = `/api/workspaces/${workspaceId}/campaigns/${campaignId}`;
   /** The same media the Publish composer plays, streamed from the same roots. */
@@ -2057,9 +2165,19 @@ export function AutopilotPanel({
         eyebrow="Active campaign pipeline"
         title="Posting timeline"
         aside={
-          <Button variant="secondary" size="sm" busy={busy === "preview"}
-            disabled={!ready.configured}
-            onClick={() => void loadPreview()}><ActionIcon name="refresh" />Refresh outlook</Button>
+          <span className="campaign-timeline-tools">
+            <span className="campaign-view-switch" role="group" aria-label="Timeline view">
+              <Button variant={timelineView === "list" ? "secondary" : "quiet"} size="sm"
+                aria-pressed={timelineView === "list"}
+                onClick={() => setTimelineView("list")}>List</Button>
+              <Button variant={timelineView === "calendar" ? "secondary" : "quiet"} size="sm"
+                aria-pressed={timelineView === "calendar"}
+                onClick={() => setTimelineView("calendar")}>Calendar</Button>
+            </span>
+            <Button variant="secondary" size="sm" busy={busy === "preview"}
+              disabled={!ready.configured}
+              onClick={() => void loadPreview()}><ActionIcon name="refresh" />Refresh outlook</Button>
+          </span>
         }
       >
         <p className="autopilot-lede">
@@ -2099,7 +2217,18 @@ export function AutopilotPanel({
             <p className="autopilot-note" role="status">{preview.note}</p>
           )
         )}
-        {timeline.length > 0 && (
+        {timeline.length > 0 && timelineView === "calendar" && (
+          <TimelineCalendar
+            entries={timeline}
+            timezone={scheduleTimezone}
+            month={calendarMonth
+              ?? new Date().toLocaleDateString("en-CA", {
+                timeZone: scheduleTimezone,
+              }).slice(0, 7)}
+            onMonthChange={setCalendarMonth}
+          />
+        )}
+        {timeline.length > 0 && timelineView === "list" && (
           <div className="campaign-pipeline">
             {timelineDays.map(([day, entries]) => (
               <section className="campaign-pipeline-day" key={day}>

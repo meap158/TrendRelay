@@ -797,6 +797,30 @@ html { scroll-behavior: smooth; }
 .autopilot-placement-choice select:focus-visible { outline: 2px solid color-mix(in srgb, var(--link) 38%, transparent); outline-offset: 1px; border-color: var(--link); }
 [dir="rtl"] .autopilot-placement-choice select { padding: 5px 10px 5px 28px; background-position: left 10px center; }
 
+/* The timeline as a month. Quiet grid, day chips coloured by outcome, the
+   current day outlined - the shape Buffer and Zernio both use for the same
+   question. */
+.campaign-timeline-tools { display: flex; gap: 8px; align-items: center; }
+.campaign-view-switch { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.campaign-calendar { display: grid; gap: 6px; }
+.campaign-calendar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.campaign-calendar-head strong { font-size: 14px; font-weight: 600; }
+.campaign-calendar-head span { display: inline-flex; gap: 2px; }
+.campaign-calendar-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; color: var(--muted); font-size: 10px; letter-spacing: 0.06em; text-align: center; text-transform: uppercase; }
+.campaign-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--line); }
+.campaign-calendar-cell { display: grid; gap: 3px; align-content: start; min-block-size: 84px; padding: 4px; background: var(--panel); }
+.campaign-calendar-cell.blank { background: var(--panel-raised); }
+.campaign-calendar-cell.today { box-shadow: inset 0 0 0 2px var(--green); }
+.campaign-calendar-cell > em { justify-self: end; color: var(--muted); font-size: 10px; font-style: normal; }
+.campaign-calendar-chip { display: flex; gap: 4px; align-items: center; overflow: hidden; padding: 2px 5px; border-inline-start: 3px solid var(--line-strong); border-radius: 3px; background: var(--panel-raised); font-size: 10px; line-height: 1.35; white-space: nowrap; }
+.campaign-calendar-chip > b { flex: 0 0 auto; font-weight: 600; }
+.campaign-calendar-chip > span { overflow: hidden; text-overflow: ellipsis; }
+.campaign-calendar-chip.delivered.succeeded { border-inline-start-color: var(--green); }
+.campaign-calendar-chip.delivered.failed { border-inline-start-color: #a3162a; background: #f8d7da; }
+.campaign-calendar-chip.planned { border-inline-start-color: var(--link); }
+.campaign-calendar-chip.refused { border-inline-start-color: #7a5c00; background: #fdf5db; }
+.campaign-calendar-more { color: var(--muted); font-size: 10px; }
+
 /* One approval row: the post as it will look beside the facts and the
    decision. The preview column is the width Publish rehearses at. */
 .campaign-approval-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
