@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "../auth-provider";
 import { useLocale } from "../i18n-provider";
+import { LOCALES } from "../../lib/i18n/locales";
 import { apiBaseUrl } from "../../lib/api";
 import { AutopilotPanel } from "./autopilot-panel";
 import { StatusToasts, useStatus } from "../ui/status";
@@ -107,18 +108,16 @@ const CAMPAIGN_AUDIENCES = [
 ];
 
 /**
- * The languages the composer can actually write in.
+ * The languages a campaign can post in: the ones TrendRelay itself speaks.
  *
- * This seeds the campaign's post language, along with its disclosure and bio
- * hint, so the scaffolding speaks the right language from the first post. The
- * field used to be free text suggesting "en, th"; anything outside this pair is
- * silently ignored and the campaign falls back to English, so a Thai campaign
- * looked accepted and was not.
+ * Taken from the interface's own list rather than a copy, so the picker here
+ * cannot drift from the language switcher. Each has scaffolding written for it
+ * on the API side - disclosure, bio hint, product label - which a test holds
+ * level with this list. The field used to be free text suggesting "en, th",
+ * and anything unrecognised was quietly dropped, so a Thai campaign looked
+ * accepted and then posted in English.
  */
-const POST_LANGUAGES = [
-  { value: "vi", label: "Tiếng Việt" },
-  { value: "en", label: "English" },
-];
+const POST_LANGUAGES = LOCALES.map((item) => ({ value: item.code, label: item.label }));
 
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };

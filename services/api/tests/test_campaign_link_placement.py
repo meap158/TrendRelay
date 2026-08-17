@@ -7,9 +7,13 @@ than defaulting to English.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from trendrelay_api.campaign_autopilot import (
+    LOCALISED_TEXTS,
     compose_products,
     language_code,
     localised_text,
@@ -17,6 +21,21 @@ from trendrelay_api.campaign_autopilot import (
 )
 from trendrelay_api.integrations import publishing
 from trendrelay_api.integrations.publishing import first_comment_deliverable
+
+#: The interface's own list of languages, read from the file that defines it
+#: rather than copied here, so adding a locale to the picker without teaching
+#: the composer to write it fails a test instead of shipping.
+LOCALES_TS = (
+    Path(__file__).resolve().parents[3] / "apps" / "web" / "lib" / "i18n" / "locales.ts"
+)
+
+
+def _interface_locales() -> list[dict[str, str]]:
+    source = LOCALES_TS.read_text(encoding="utf-8")
+    block = source[source.index("export const LOCALES"):source.index("] as const;")]
+    found = re.findall(r'code:\s*"([a-z-]+)"\s*,\s*label:\s*"([^"]+)"', block)
+    assert found, f"no locales parsed from {LOCALES_TS}"
+    return [{"code": code, "label": label} for code, label in found]
 
 # --- who can actually post a comment after the post -----------------------------
 
@@ -131,11 +150,48 @@ def test_a_bio_override_keeps_the_caption_pointing_at_the_profile() -> None:
     (["Klingon"], "en"),
     ([], "en"),
     (None, "en"),
+    # The rest of what the interface offers, by code, by English name, and by
+    # the name the language calls itself - which is what the picker shows.
+    (["ja"], "ja"),
+    (["Japanese"], "ja"),
+    (["日本語"], "ja"),
+    (["fr"], "fr"),
+    (["Français"], "fr"),
+    (["zh"], "zh"),
+    (["Mandarin Chinese"], "zh"),
+    (["中文"], "zh"),
+    (["ru"], "ru"),
+    (["Русский"], "ru"),
+    (["ar"], "ar"),
+    (["العربية"], "ar"),
 ])
 def test_the_campaign_s_own_language_wins_and_unknowns_stay_english(
     languages, expected
 ) -> None:
     assert language_code(languages) == expected
+
+
+def test_every_language_the_interface_offers_can_actually_be_written() -> None:
+    """The picker and the scaffolding have to name the same set.
+
+    A language offered in the campaign form but missing from `LOCALISED_TEXTS`
+    falls back to English, so the campaign reads as though it accepted the
+    choice and then posts the disclosure in the wrong language. That is what the
+    old free-text field did with "th".
+    """
+    offered = {item["code"] for item in _interface_locales()}
+    assert offered <= set(LOCALISED_TEXTS), (
+        "these languages are offered but have no scaffolding: "
+        f"{sorted(offered - set(LOCALISED_TEXTS))}"
+    )
+    for code in offered:
+        for key in LOCALISED_TEXTS["en"]:
+            written = localised_text(code, key)
+            assert written, f"{code}.{key} is empty"
+            if code != "en":
+                assert written != LOCALISED_TEXTS["en"][key], (
+                    f"{code}.{key} is still the English string"
+                )
 
 
 @pytest.mark.parametrize(("platform", "label", "expected"), [

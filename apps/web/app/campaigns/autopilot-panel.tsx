@@ -27,6 +27,7 @@ import { Dialog } from "../ui/dialog";
 import { Badge, Card, Switch } from "../ui/primitives";
 import { SearchSelect } from "../ui/search-select";
 import { useT } from "../i18n-provider";
+import { LOCALES } from "../../lib/i18n/locales";
 import { EffectEditor } from "../library/effect-editor";
 import { TimelinePlayer } from "./timeline-player";
 import {
@@ -1161,8 +1162,12 @@ export function AutopilotPanel({
                 onChange={(event) =>
                   void save({ post_language: event.target.value })}
               >
-                <option value="en">English</option>
-                <option value="vi">Tiếng Việt</option>
+                {/* The languages TrendRelay speaks, from the list that defines
+                    them. Spelled out here, this offered two while the campaign
+                    form offered a different set. */}
+                {LOCALES.map((item) => (
+                  <option key={item.code} value={item.code}>{item.label}</option>
+                ))}
               </select>
               <small>The language of composed scaffolding — the disclosure
                 default, the bio hint, product labels. Your own copy is always

@@ -82,14 +82,49 @@ LOCALISED_TEXTS: dict[str, dict[str, str]] = {
         "bio_hint": "Link ở tiểu sử",
         "recommended": "Sản phẩm gợi ý",
     },
+    "ja": {
+        "disclosure": "アフィリエイトリンクです。報酬を得る場合があります。",
+        "bio_hint": "プロフィールのリンク",
+        "recommended": "おすすめ商品",
+    },
+    "fr": {
+        "disclosure": "Lien affilié ; nous pouvons percevoir une commission.",
+        "bio_hint": "Lien en bio",
+        "recommended": "Produit recommandé",
+    },
+    "zh": {
+        "disclosure": "推广链接，我们可能会获得佣金。",
+        "bio_hint": "链接在简介",
+        "recommended": "推荐商品",
+    },
+    "ru": {
+        "disclosure": "Партнёрская ссылка; мы можем получить комиссию.",
+        "bio_hint": "Ссылка в профиле",
+        "recommended": "Рекомендуемый товар",
+    },
+    "ar": {
+        "disclosure": "رابط تسويق بالعمولة؛ قد نحصل على عمولة.",
+        "bio_hint": "الرابط في الملف الشخصي",
+        "recommended": "منتج موصى به",
+    },
 }
 
-#: How a campaign's free-text language list maps to a code. The list is words
-#: a person typed; only what is recognised changes the default, and anything
-#: else stays English rather than guessing.
+#: How a campaign's language maps to a code. Campaigns made in the interface
+#: now send a code chosen from a list, but older ones hold whatever somebody
+#: typed, so the English name and the language's own name are both recognised.
+#: Anything unrecognised stays English rather than guessing.
+#:
+#: These are the languages TrendRelay itself speaks - see `lib/i18n/locales.ts`.
+#: The two lists are meant to stay level: a language the interface offers but
+#: the scaffolding cannot write is one that silently posts in English.
 LANGUAGE_ALIASES: dict[str, str] = {
     "en": "en", "english": "en",
     "vi": "vi", "vietnamese": "vi", "tiếng việt": "vi", "tieng viet": "vi",
+    "ja": "ja", "japanese": "ja", "日本語": "ja",
+    "fr": "fr", "french": "fr", "français": "fr", "francais": "fr",
+    "zh": "zh", "chinese": "zh", "mandarin chinese": "zh", "中文": "zh",
+    "ru": "ru", "russian": "ru", "русский": "ru",
+    "ar": "ar", "arabic": "ar", "standard arabic": "ar", "العربية": "ar",
 }
 
 
