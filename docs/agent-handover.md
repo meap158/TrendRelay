@@ -124,6 +124,18 @@ is retired. Nothing mints tracking links any more; captions carry Shopee's own
 tracking link is describing machinery that no longer runs, and click counts are
 structurally zero.
 
+Attribution has since been swept for exactly that: the header's Active links,
+Clicks and visitor tiles, the campaign panel's link and click metrics and its
+per-link clicks chart are gone, and the page no longer requests
+`/attribution/links` at all. What remains is deliberate. The backend still has
+`POST .../attribution/links` (`attribution_api.py:365`), the conversions CSV
+import (`:515`) and the `/c/{code}` redirector itself (`:910`), none of them
+reachable from the interface - links already published still resolve, and old
+executions still reconcile. Do not treat those endpoints as dead code to remove;
+do not wire them back into the interface either. Note that the conversions
+import requires a pre-existing `TrackingLink`, so commission figures can only
+move by way of an out-of-band call.
+
 **Publishing connections.** An *engine* is capabilities (Buffer, Zernio,
 Bundle.social, WoopSocial). A *connection* is one login to an engine, and there
 may be many. The trick that made this cheap: a connection's id defaults to its
@@ -198,8 +210,6 @@ would change nothing. The `.xlsx` export is the only path that works. This is
 recorded in ADR 0020.
 
 ### Smaller, known
-- The Attribution header still shows "Active links" and "Clicks" tiles that are
-  structurally zero, for the ADR 0022 reason.
 - The Library's own video player still offers a download; that is intentional
   there, unlike the campaign timeline's.
 - `campaign_destinations.provider` and friends are `String(32)`; anything
