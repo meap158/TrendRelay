@@ -292,9 +292,10 @@ def save_autopilot(
     session: DatabaseSession,
 ) -> dict[str, Any]:
     require_role(membership(session, workspace_id, user.id), EDITORS)
-    _campaign(session, workspace_id, campaign_id)
+    campaign = _campaign(session, workspace_id, campaign_id)
     ensure_profile(session, user)
     autopilot = _autopilot(session, workspace_id, campaign_id, user_id=user.id)
+    was_enabled = autopilot.enabled
 
     # Confirmation belongs to the transition that hands accounts to the
     # scheduler. The web form sends the complete settings document, including
@@ -305,6 +306,11 @@ def save_autopilot(
         raise HTTPException(
             status_code=400,
             detail="Switching autopilot on posts to live accounts and needs confirmation.",
+        )
+    if body.enabled and not was_enabled and campaign.status == "archived":
+        raise HTTPException(
+            status_code=409,
+            detail="Archived campaigns cannot post. Restore this campaign first.",
         )
     if body.offer_mode != "none" and not body.disclosure.strip():
         # Refused here as well as in the composer. A setting that cannot produce
@@ -377,6 +383,19 @@ def save_autopilot(
     autopilot.priority = body.priority
     autopilot.weekly_post_cap = body.weekly_post_cap
     autopilot.updated_at = datetime.now(UTC)
+    if body.enabled and not was_enabled:
+        # Switching on IS deploying: the campaign activates and the first run
+        # happens now, with holds and failures reported per post in the
+        # timeline rather than a preflight refusing the switch. An empty
+        # queue arms instead of erroring - content added later posts on the
+        # next tick. The separate deploy ceremony was a second confirmation
+        # of the same decision.
+        from trendrelay_api.campaign_runner import run_campaign
+
+        if campaign.status != "active":
+            campaign.status = "active"
+            campaign.updated_at = utc_now()
+        run_campaign(session, autopilot, now=datetime.now(UTC))
     audit(
         session, request, workspace_id, user.id,
         "campaign.autopilot_saved", "campaign", campaign_id,
@@ -533,9 +552,11 @@ def add_queue_item(
         first_comment=(body.first_comment or "").strip() or None,
         thread=[part.strip() for part in body.thread if part.strip()],
         offer_ids=list(dict.fromkeys(body.offer_ids)), offer_match={},
-        # Added as a draft, always. Nothing enters the rotation because a form
-        # was submitted.
-        state="draft", position=last + 1, last_posted_by_destination={},
+        # Ready on arrival. Approval lives where it belongs - the authority
+        # dial and its exception inbox, where a frozen execution is what gets
+        # approved rather than a form. 'draft' remains as the operator's
+        # parking brake for content deliberately kept out of the rotation.
+        state="approved", position=last + 1, last_posted_by_destination={},
         created_by=user.id,
     )
     session.add(item)
@@ -884,6 +905,10 @@ def preview_autopilot(
             "updated_at": job.updated_at,
             "post_url": next(iter(permalinks), None),
             "page_url": profile_url(platform, label),
+            # For the same media preview the Publish composer plays, so the
+            # timeline can show the post rather than name a file path.
+            "video_path": request_payload.get("video_path"),
+            "image_paths": request_payload.get("image_paths") or [],
         })
     return {
         "note": note,

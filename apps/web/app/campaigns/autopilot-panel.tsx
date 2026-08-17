@@ -17,7 +17,9 @@
 
 import { clipLength, handoffPath } from "../../lib/media-rules";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+
+import { apiBaseUrl } from "../../lib/api";
 
 import { Button } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
@@ -182,6 +184,8 @@ type DeployedPost = {
   post_url: string | null;
   /** The account's own page, when its label is handle-shaped. */
   page_url: string | null;
+  video_path: string | null;
+  image_paths: string[];
 };
 
 type OfferMatch = {
@@ -318,6 +322,7 @@ export function AutopilotPanel({
   succeed,
   fail,
   onCampaignChanged,
+  plansSlot,
 }: {
   workspaceId: string;
   campaignId: string;
@@ -327,6 +332,9 @@ export function AutopilotPanel({
   succeed: (message: string) => void;
   fail: (message: string) => void;
   onCampaignChanged: () => Promise<void>;
+  /** Hand-planned posts, rendered inside the posting timeline so what will
+      post and what has posted is one story in one place. */
+  plansSlot?: ReactNode;
 }) {
   const t = useT();
   const [autopilot, setAutopilot] = useState<Autopilot | null>(null);
@@ -534,6 +542,7 @@ export function AutopilotPanel({
   async function save(changes: Partial<Autopilot>, { confirm = false } = {}) {
     if (!autopilot) return;
     const next = { ...autopilot, ...changes };
+    const turningOn = Boolean(next.enabled && !autopilot.enabled);
     await run("settings", async () => {
       await json(await apiFetch(`${base}/autopilot`, {
         method: "PUT",
@@ -560,6 +569,9 @@ export function AutopilotPanel({
         ? t("autopilot.switchedOn")
         : t("autopilot.saved");
     });
+    // Switching on activates the campaign server-side; the parent's status
+    // chip and list need to hear about it.
+    if (turningOn) await onCampaignChanged();
   }
 
   async function loadRecommendations(item: QueueItem | null = null) {
@@ -677,7 +689,7 @@ export function AutopilotPanel({
               : !ready.configured
                 ? "Click to finish the missing setup."
                 : campaignStatus !== "active"
-                  ? "Preview and deploy to activate."
+                  ? "Switching on activates the campaign and starts posting."
                   : undefined}
             onChange={(next) => {
               if (next && !ready.configured) {
@@ -686,12 +698,8 @@ export function AutopilotPanel({
                 fail(`Finish setup first: ${nextStep?.label ?? "complete the checklist"}.`);
                 return;
               }
-              if (next && campaignStatus !== "active") {
-                jumpTo("schedule");
-                if (!preview) void loadPreview(false);
-                fail("Review the next posts, then deploy to activate this campaign safely.");
-                return;
-              }
+              // One confirmed action. Switching on activates the campaign and
+              // runs it now; there is no separate deploy step to find.
               if (next && !window.confirm(t("autopilot.confirmOn"))) return;
               void save({ enabled: next }, { confirm: true });
             }}
@@ -749,7 +757,7 @@ export function AutopilotPanel({
                   }}>{t("autopilot.fixIt")}</button>
                 )}
                 {!row.met && row.id === "active" && (
-                  <small>Activates automatically when you deploy.</small>
+                  <small>Activates when you switch posting on.</small>
                 )}
               </li>
             ))}
@@ -1582,6 +1590,30 @@ export function AutopilotPanel({
                   </Badge>
                   <details>
                     <summary>Content</summary>
+                    {/* The media exactly as it went out, played the way the
+                        Publish composer plays it. */}
+                    {item.video_path && (
+                      <video
+                        className="timeline-media"
+                        controls
+                        preload="metadata"
+                        src={`${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview?path=${encodeURIComponent(item.video_path)}`}
+                        title={item.video_path}
+                      />
+                    )}
+                    {!item.video_path && item.image_paths.length > 0 && (
+                      <div className="timeline-media-strip">
+                        {item.image_paths.map((path) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={path}
+                            className="timeline-media"
+                            src={`${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview?path=${encodeURIComponent(path)}`}
+                            alt={path}
+                          />
+                        ))}
+                      </div>
+                    )}
                     <pre>{item.caption}</pre>
                     {item.first_comment && <><strong>First comment</strong><pre>{item.first_comment}</pre></>}
                     {item.thread.map((reply, index) => <div key={`${item.id}-reply-${index}`}>
@@ -1594,6 +1626,9 @@ export function AutopilotPanel({
             </ol>
           </section>
         )}
+        {/* Hand-planned posts, in the same timeline: what will post and what
+            has posted is one story, told in one place. */}
+        {plansSlot}
         {preview && preview.deployed.length === 0 && (
           <p className="campaign-pipeline-legend"><strong>Preview only</strong> · Nothing from this campaign has been committed to a publishing engine yet.</p>
         )}
@@ -1726,32 +1761,9 @@ export function AutopilotPanel({
         {!preview && !ready.configured && (
           <p className="autopilot-empty">{t("autopilot.previewBlocked")}</p>
         )}
-        <div className="campaign-deploy-bar">
-          <div>
-            <strong>{ready.configured
-              ? campaignStatus === "active" ? "Ready to deploy" : "Ready to preview and activate"
-              : `${unmet.filter((row) => row.id !== "active").length} setup items remaining`}</strong>
-            <small>{autopilot.delivery === "draft"
-              ? "Creates reviewable drafts in the assigned social accounts."
-              : "Schedules the next posts at the posting times above."}</small>
-          </div>
-          <Button variant="primary" disabled={!canEdit || !ready.configured || Boolean(preview?.problems)}
-            busy={busy === "deploy"} onClick={() => {
-              if (!window.confirm(
-                `Previewed posts will be deployed using ${autopilot.delivery} delivery. ${campaignStatus === "active" ? "" : "This also activates the campaign. "}Continue?`,
-              )) return;
-              void run("deploy", async () => {
-                const body = await json<{ note: string; posts: unknown[] }>(await apiFetch(
-                  `${base}/autopilot/deploy`, {
-                    method: "POST",
-                    body: JSON.stringify({ confirm_external_action: true }),
-                  },
-                ));
-                await onCampaignChanged();
-                return body.note || `${body.posts.length} posts deployed.`;
-              });
-            }}>Deploy campaign</Button>
-        </div>
+        {/* No deploy bar. The Post automatically switch is the one lever:
+            switching on activates the campaign and runs it, and this timeline
+            is where what it did shows up. */}
       </Card>
       <Card eyebrow="Workspace schedule" title="Posting times" aside={
         <Link className="ui-button ui-button-secondary ui-button-sm" href="/publish">

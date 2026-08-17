@@ -12,10 +12,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from trendrelay_api.auth import CurrentUser, current_user
+from trendrelay_api.autopilot_models import CampaignAutopilot
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
 from trendrelay_api.media_models import MediaAsset
-from trendrelay_api.models import Base
+from trendrelay_api.models import Base, Campaign
 from trendrelay_api.opportunity_models import Product, ProductOffer
 
 engine = create_engine(
@@ -289,31 +290,62 @@ def test_the_same_account_cannot_be_added_twice(workspace) -> None:
     assert request("POST", base, json=payload).status_code == 409
 
 
-def test_a_queued_item_arrives_as_a_draft(workspace) -> None:
-    # Nothing enters the rotation because a form was submitted.
+def test_a_queued_item_arrives_ready(workspace) -> None:
+    # Approval lives at the execution layer - the authority dial and its
+    # exception inbox - not on a second per-item gate in front of it.
     campaign_id = campaign(workspace)
     item = request(
         "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
         json={"video_path": r"S:\media\clip.mp4", "body": "Copy", "hashtags": ["#coffee"]},
     ).json()["item"]
-    assert item["state"] == "draft"
+    assert item["state"] == "approved"
     # Hashtags are stored bare and rendered with one hash, however they were typed.
     assert item["hashtags"] == ["coffee"]
 
 
-def test_approving_an_item_is_an_audited_decision(workspace) -> None:
+def test_an_item_can_be_parked_and_resumed(workspace) -> None:
+    # 'draft' remains as the operator's parking brake.
     campaign_id = campaign(workspace)
     item = request(
         "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
         json={"video_path": r"S:\media\clip.mp4", "body": "Copy"},
     ).json()["item"]
-    response = request(
+    parked = request(
+        "PATCH",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/{item['id']}",
+        json={"state": "draft"},
+    )
+    assert parked.status_code == 200
+    assert parked.json()["item"]["state"] == "draft"
+    resumed = request(
         "PATCH",
         f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/{item['id']}",
         json={"state": "approved"},
     )
-    assert response.status_code == 200
-    assert response.json()["item"]["state"] == "approved"
+    assert resumed.status_code == 200
+    assert resumed.json()["item"]["state"] == "approved"
+
+
+def test_switching_on_activates_the_campaign_and_runs_it(workspace) -> None:
+    """The switch is the deploy: no second ceremony to find.
+
+    An empty queue arms rather than errors - the run records its note and
+    content added later posts on the next tick.
+    """
+    campaign_id = campaign(workspace)
+    response = request(
+        "PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
+        json={"enabled": True, "confirm_external_action": True},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["autopilot"]["enabled"] is True
+    with TestingSession() as session:
+        row = session.get(Campaign, campaign_id)
+        assert row is not None and row.status == "active"
+        pilot = session.scalars(select(CampaignAutopilot).where(
+            CampaignAutopilot.campaign_id == campaign_id
+        )).one()
+        assert pilot.last_run_at is not None, "the first run happened at the switch"
 
 
 def test_queue_items_persist_an_editable_post_package(workspace) -> None:

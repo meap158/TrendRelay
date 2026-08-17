@@ -356,9 +356,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .campaign-heading p:last-child { margin: 0; color: var(--muted); font-size: 13px; }
 .campaign-message { padding: 11px 14px; border: 1px solid #b7d9cd; border-radius: var(--radius-sm); color: var(--green); background: #eef8f4; }
 .campaign-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start; }
-.campaign-sidebar, .campaign-summary, .plan-create, .calendar-board { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.campaign-sidebar, .campaign-summary, .plan-create { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .campaign-sidebar { position: sticky; top: 76px; padding: 16px; }
-.campaign-sidebar h2, .campaign-summary h2, .calendar-board h2 { margin: 4px 0; font-size: 16px; font-weight: 500; }
+.campaign-sidebar h2, .campaign-summary h2 { margin: 4px 0; font-size: 16px; font-weight: 500; }
 .campaign-list { display: grid; gap: 6px; }
 .campaign-list > button { display: grid; gap: 4px; width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 10px; color: var(--text); background: var(--panel); text-align: start; cursor: pointer; }
 .campaign-list > button.selected { border-color: var(--link); background: #f0f3f8; }
@@ -393,7 +393,6 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .plan-media-picker li > span { display: grid; min-width: 0; gap: 2px; }
 .plan-media-picker strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .plan-media-picker small { color: var(--muted); font-size: 10px; }
-.calendar-board { padding: 14px; }
 .calendar-entry { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 16px; padding: 16px 0; border-top: 1px solid var(--line); }
 .calendar-entry > time { display: grid; align-content: start; gap: 3px; color: var(--muted); }
 .calendar-entry > time strong { color: var(--text); font-size: 15px; }
@@ -782,6 +781,12 @@ html { scroll-behavior: smooth; }
 .autopilot-placement-choice select:hover { border-color: color-mix(in srgb, var(--link) 45%, var(--line-strong)); }
 .autopilot-placement-choice select:focus-visible { outline: 2px solid color-mix(in srgb, var(--link) 38%, transparent); outline-offset: 1px; border-color: var(--link); }
 [dir="rtl"] .autopilot-placement-choice select { padding: 5px 10px 5px 28px; background-position: left 10px center; }
+
+/* The post's own media in the timeline, sized as a preview rather than a
+   player: enough to recognise the clip, small enough to keep the list a list. */
+.timeline-media { max-width: 240px; max-height: 180px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #000; }
+.timeline-media-strip { display: flex; flex-wrap: wrap; gap: 6px; }
+.timeline-media-strip .timeline-media { max-width: 110px; max-height: 110px; object-fit: cover; }
 .autopilot-queue li.draft { border-inline-start: 3px solid var(--amber); }
 .autopilot-queue li.approved { border-inline-start: 3px solid var(--green); }
 .campaign-queue-actions { display: flex !important; flex-wrap: wrap; justify-content: flex-end; gap: 4px !important; }
@@ -936,9 +941,6 @@ html { scroll-behavior: smooth; }
 .campaign-account-identity .platform-icon, .autopilot-account-picker .platform-icon { flex: none; }
 .autopilot .slot-editor { margin: 0; padding: 0; border-top: 0; }
 .autopilot .slot-add :is(input, select) { width: auto; min-height: 32px; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 4px 8px; color: var(--text); background: var(--panel); }
-.campaign-deploy-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 12px -14px -14px; border-top: 1px solid var(--line); padding: 12px 14px; background: var(--panel-raised); }
-.campaign-deploy-bar > div { display: grid; gap: 2px; }
-.campaign-deploy-bar small { color: var(--muted); font-size: 10px; }
 .campaign-manual-work { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); box-shadow: var(--campaign-shadow); }
 .campaign-manual-work > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; padding: 9px 14px; color: var(--text); cursor: pointer; list-style-position: inside; }
 .campaign-manual-work > summary:hover { background: var(--panel-raised); }
@@ -947,7 +949,7 @@ html { scroll-behavior: smooth; }
 .campaign-manual-intro { display: grid; gap: 3px; border-top: 1px solid var(--line); padding: 12px 14px; background: var(--panel-raised); }
 .campaign-manual-intro strong { font-size: 12px; }
 .campaign-manual-intro p { max-width: 760px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
-.campaign-manual-work > .plan-create, .campaign-manual-work > .calendar-board { border-width: 1px 0 0; border-radius: 0; }
+.campaign-manual-work > .plan-create { border-width: 1px 0 0; border-radius: 0; }
 .campaign-dialog-form { display: grid; gap: 12px; }
 .campaign-dialog-form label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
 .campaign-dialog-form :is(input, textarea) { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; }
@@ -965,7 +967,7 @@ html { scroll-behavior: smooth; }
   .campaign-media-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: none; }
 }
 @media (max-width: 600px) {
-  .campaign-heading, .campaign-summary, .campaign-deploy-bar { display: grid; }
+  .campaign-heading, .campaign-summary { display: grid; }
   .campaign-dialog-grid { grid-template-columns: 1fr; }
   .campaign-media-grid { grid-template-columns: 1fr; }
   .campaign-work-tabs button { min-height: 52px; }

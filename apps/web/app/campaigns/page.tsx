@@ -5,8 +5,10 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "../auth-provider";
 import { useT } from "../i18n-provider";
+import { apiBaseUrl } from "../../lib/api";
 import { AutopilotPanel } from "./autopilot-panel";
 import { StatusToasts, useStatus } from "../ui/status";
+import { Badge } from "../ui/primitives";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { SearchSelect } from "../ui/search-select";
@@ -444,9 +446,10 @@ export default function CampaignsPage() {
                 </div>
               </section>
 
-              {/* Between the campaign and its one-off plans: this is how the
-                  campaign actually runs, and the plans below it are the manual
-                  exception rather than the norm. */}
+              {/* One timeline. The hand-planned posts render inside the
+                  autopilot's posting timeline rather than as a second calendar
+                  below it: what will post and what has posted is one story,
+                  told in one place. */}
               <AutopilotPanel
                 key={selectedCampaign.id}
                 workspaceId={workspaceId}
@@ -457,61 +460,71 @@ export default function CampaignsPage() {
                 succeed={succeed}
                 fail={fail}
                 onCampaignChanged={() => refresh(workspaceId)}
-              />
-
-              {/* The planned posts are the reason this page is open, so they are not
-                  behind a disclosure. They sat inside one labelled "optional
-                  advanced workflow", which described the form beside them
-                  rather than them. */}
-              <section className="calendar-board">
-                <div className="card-heading">
-                  <div><p className="section-kicker">{t("campaigns.calendar")}</p><h2>{visiblePlans.length} planned {visiblePlans.length === 1 ? "post" : "posts"}</h2></div>
-                </div>
-                {!visiblePlans.length && <div className="quiet-empty"><strong>{t("campaigns.noPlans")}</strong><span>{t("campaigns.addApprovedMedia")}</span></div>}
-                {visiblePlans.map((plan) => {
-                  const manualPackage = packages[plan.id];
-                  return (
-                    <article className="calendar-entry" key={plan.id}>
-                      <time>
-                        <strong>{new Date(plan.scheduled_at).toLocaleDateString([], { month: "short", day: "numeric" })}</strong>
-                        <span>{new Date(plan.scheduled_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: plan.timezone })}</span>
-                      </time>
-                      <div className="calendar-copy">
-                        <div>
-                          <span className={`plan-state ${plan.state}`}>{plan.state.replace("_", " ")}</span>
-                          <span>{plan.destination_label ?? planPlatformLabel(plan.platform)}</span>
-                          {plan.destination_label && <small>{planPlatformLabel(plan.platform)}{plan.provider ? ` · ${plan.provider}` : ""}</small>}
-                        </div>
-                        <h3>{plan.title}</h3>
-                        <p>{plan.caption}</p>
-                        <small>{plan.video_path}</small>
-                        <div className="calendar-actions">
-                          {plan.state === "needs_approval" && canApprove && (
-                            <>
-                              <Button variant="primary" size="sm" busy={busy === plan.id} onClick={() => void decide(plan, "approve")}>{t("campaigns.approve")}</Button>
-                              <Button variant="danger" size="sm" busy={busy === plan.id} onClick={() => void decide(plan, "reject")}>{t("campaigns.reject")}</Button>
-                            </>
-                          )}
-                          {plan.state === "approved" && (
-                            <>
-                              <Button variant="quiet" size="sm" onClick={() => void copyPostingText(plan)}>{t("campaigns.copyPost")}</Button>
-                              <Button variant="quiet" size="sm" busy={busy === `package-${plan.id}`} onClick={() => void exportPackage(plan)}>{t("campaigns.exportPackage")}</Button>
-                              <Link href={`/publish?campaign=${encodeURIComponent(plan.campaign_id)}&plan=${encodeURIComponent(plan.id)}`}>{t("nav.publish")}</Link>
-                              {plan.deep_link && <a href={plan.deep_link} target="_blank" rel="noreferrer">Open {plan.platform}</a>}
-                            </>
-                          )}
-                        </div>
-                        {manualPackage && (
-                          <div className="package-result">
-                            <div><strong>{manualPackage.path}</strong><small>{size(manualPackage.bytes)} · SHA-256 {manualPackage.sha256.slice(0, 12)}</small></div>
-                            <Button variant="quiet" size="sm" onClick={() => void openFolder(manualPackage.folder)}>{t("downloads.openFolder")}</Button>
-                          </div>
-                        )}
+                plansSlot={visiblePlans.length === 0 ? null : (
+                  <section className="campaign-committed-pipeline" aria-label="Planned posts">
+                    <header>
+                      <div>
+                        <strong>{t("campaigns.calendar")}</strong>
+                        <small>Planned by hand; Publish delivers them</small>
                       </div>
-                    </article>
-                  );
-                })}
-              </section>
+                      <Badge tone="neutral">{visiblePlans.length} planned</Badge>
+                    </header>
+                    {visiblePlans.map((plan) => {
+                      const manualPackage = packages[plan.id];
+                      return (
+                        <article className="calendar-entry" key={plan.id}>
+                          <time>
+                            <strong>{new Date(plan.scheduled_at).toLocaleDateString([], { month: "short", day: "numeric" })}</strong>
+                            <span>{new Date(plan.scheduled_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: plan.timezone })}</span>
+                          </time>
+                          <div className="calendar-copy">
+                            <div>
+                              <span className={`plan-state ${plan.state}`}>{plan.state.replace("_", " ")}</span>
+                              <span>{plan.destination_label ?? planPlatformLabel(plan.platform)}</span>
+                              {plan.destination_label && <small>{planPlatformLabel(plan.platform)}{plan.provider ? ` · ${plan.provider}` : ""}</small>}
+                            </div>
+                            <h3>{plan.title}</h3>
+                            <p>{plan.caption}</p>
+                            {/* The post itself, played the way Publish plays it,
+                                instead of a file path to squint at. */}
+                            {plan.video_path && workspaceId && (
+                              <video
+                                className="timeline-media"
+                                controls
+                                preload="metadata"
+                                src={`${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview?path=${encodeURIComponent(plan.video_path)}`}
+                                title={plan.video_path}
+                              />
+                            )}
+                            <div className="calendar-actions">
+                              {plan.state === "needs_approval" && canApprove && (
+                                <>
+                                  <Button variant="primary" size="sm" busy={busy === plan.id} onClick={() => void decide(plan, "approve")}>{t("campaigns.approve")}</Button>
+                                  <Button variant="danger" size="sm" busy={busy === plan.id} onClick={() => void decide(plan, "reject")}>{t("campaigns.reject")}</Button>
+                                </>
+                              )}
+                              {plan.state === "approved" && (
+                                <>
+                                  <Button variant="quiet" size="sm" onClick={() => void copyPostingText(plan)}>{t("campaigns.copyPost")}</Button>
+                                  <Button variant="quiet" size="sm" busy={busy === `package-${plan.id}`} onClick={() => void exportPackage(plan)}>{t("campaigns.exportPackage")}</Button>
+                                  <Link href={`/publish?campaign=${encodeURIComponent(plan.campaign_id)}&plan=${encodeURIComponent(plan.id)}`}>{t("nav.publish")}</Link>
+                                  {plan.deep_link && <a href={plan.deep_link} target="_blank" rel="noreferrer">Open {plan.platform}</a>}
+                                </>
+                              )}
+                            </div>
+                            {manualPackage && (
+                              <div className="package-result">
+                                <div><strong>{manualPackage.path}</strong><small>{size(manualPackage.bytes)} · SHA-256 {manualPackage.sha256.slice(0, 12)}</small></div>
+                                <Button variant="quiet" size="sm" onClick={() => void openFolder(manualPackage.folder)}>{t("downloads.openFolder")}</Button>
+                              </div>
+                            )}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </section>
+                )}
+              />
 
               {/* All that survives of the manual workflow: a way to reach the
                   thing that owns it. Publish is the one-off composer and the
