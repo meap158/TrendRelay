@@ -59,6 +59,10 @@ class CampaignAutopilot(Base):
             name="valid_autopilot_authority",
         ),
         CheckConstraint(
+            "priority IN ('reach','discussion','revenue','balanced')",
+            name="valid_autopilot_priority",
+        ),
+        CheckConstraint(
             "max_products_per_post BETWEEN 1 AND 5",
             name="valid_autopilot_product_count",
         ),
@@ -83,6 +87,10 @@ class CampaignAutopilot(Base):
     #: low-confidence product is held at every level: quality is not a policy
     #: an authority level can waive.
     authority: Mapped[str] = mapped_column(String(20), default="run_by_exception")
+    #: What the campaign optimises for: reach, discussion, revenue, or a
+    #: balanced blend. Ranking reads this; the campaign's prose objective is
+    #: for people.
+    priority: Mapped[str] = mapped_column(String(16), default="balanced")
     #: What the campaign promotes. The tracking links point at this offer's
     #: affiliate URL; without one the campaign still posts, with no link.
     offer_id: Mapped[str | None] = mapped_column(

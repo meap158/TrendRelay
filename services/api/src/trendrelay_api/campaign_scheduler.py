@@ -467,9 +467,15 @@ def plan_campaign(
             pending_per_day[day] = pending_per_day.get(day, 0) + 1
 
     performance = _performance(session, autopilot.workspace_id, list(destinations))
+    from trendrelay_api.campaign_measurement import destination_engagement
+
     ranks = rank_destinations(
         [{"id": item.id, "platform": item.platform} for item in destinations],
         performance,
+        engagement=destination_engagement(
+            session, [item.id for item in destinations]
+        ),
+        priority=autopilot.priority,
     )
     by_id = {item.id: item for item in destinations}
 
@@ -543,6 +549,15 @@ def plan_campaign(
             )
         cached_matches, match_strategy = match_cache[item.id]
         matched = list(cached_matches)
+        # An offer that went unavailable after matching is replaced by the next
+        # match, or the post goes on organic. The redirect layer would refuse
+        # its link anyway; leaving it out here refuses it before it is posted.
+        usable = [match for match in matched if match.availability != "unavailable"]
+        if len(usable) < len(matched):
+            notes.append(
+                "An unavailable offer was left out; its post continues without it."
+            )
+        matched = usable
         if destination.platform in {"instagram", "tiktok"} and len(matched) > 1:
             # A bio exposes one destination. Rotate the primary recommendation
             # across posts rather than pretending several links are behind it.
@@ -738,6 +753,7 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
         "enabled": autopilot.enabled,
         "delivery": autopilot.delivery,
         "authority": autopilot.authority,
+        "priority": autopilot.priority,
         "offer_id": autopilot.offer_id,
         "offer_mode": autopilot.offer_mode,
         "candidate_offer_ids": autopilot.candidate_offer_ids,

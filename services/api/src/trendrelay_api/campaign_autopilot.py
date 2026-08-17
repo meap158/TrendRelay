@@ -251,10 +251,24 @@ def compose_products(
 #: the failure this whole app is built to avoid.
 MIN_CONVERSIONS_TO_RANK = 5
 
+#: The same bar for the engagement axes: below this many measured posts, views
+#: per post is one lucky video, not a property of the account.
+MIN_MEASURED_POSTS_TO_RANK = 5
+
+#: The stop-loss: a destination that has spent this many clicks and settled
+#: nothing is measured, and the measurement is bad. It stops receiving the
+#: default slots and keeps only its exploration share, which is how it earns
+#: its way back if the audience changes.
+STOP_LOSS_CLICKS = 50
+
 #: A share of slots goes to destinations that are not currently winning. Always
 #: posting to the best one guarantees the others never gather the evidence that
 #: would overturn it.
 EXPLORATION_EVERY = 4
+
+#: What a campaign may optimise for. Balanced blends whichever axes have
+#: evidence rather than pretending all three always do.
+PRIORITIES = ("revenue", "reach", "discussion", "balanced")
 
 
 @dataclass(frozen=True)
@@ -266,57 +280,146 @@ class DestinationRank:
     conversions: int
     ranked: bool
     reason: str
+    #: The figure this destination was ordered by, in the chosen objective's
+    #: own unit. None exactly when `ranked` is False.
+    score: float | None = None
+    #: Stop-loss: measured, and measured to be losing. Skipped by the default
+    #: slots but still reachable by exploration.
+    stopped: bool = False
+
+
+def _revenue_axis(found: dict[str, float]) -> tuple[float | None, str]:
+    clicks = float(found.get("clicks", 0))
+    conversions = int(found.get("conversions", 0))
+    commission = float(found.get("net_commission_cents", 0))
+    if conversions >= MIN_CONVERSIONS_TO_RANK and clicks > 0:
+        return (
+            commission / clicks,
+            f"{conversions} settled conversions over {int(clicks)} clicks",
+        )
+    return None, (
+        f"{conversions} settled conversion(s); {MIN_CONVERSIONS_TO_RANK} needed "
+        "before earnings per click means anything"
+    )
+
+
+def _engagement_axis(
+    measured: dict[str, float], field: str, label: str
+) -> tuple[float | None, str]:
+    posts = int(measured.get("posts_measured", 0))
+    total = float(measured.get(field, 0))
+    if posts >= MIN_MEASURED_POSTS_TO_RANK:
+        return total / posts, f"{int(total)} {label} over {posts} measured posts"
+    return None, (
+        f"{posts} measured post(s); {MIN_MEASURED_POSTS_TO_RANK} needed before "
+        f"{label} per post means anything"
+    )
 
 
 def rank_destinations(
     destinations: list[dict[str, object]],
     performance: dict[str, dict[str, float]],
+    *,
+    engagement: dict[str, dict[str, float]] | None = None,
+    priority: str = "revenue",
 ) -> list[DestinationRank]:
-    """Order destinations by measured earnings per click, or say why not.
+    """Order destinations by the campaign's own objective, or say why not.
 
     `performance` maps a destination id to `{"clicks": n, "conversions": n,
-    "net_commission_cents": n}` - the figures attribution already keeps. Nothing
-    is modelled or predicted here: a destination either has enough settled
-    conversions to have earned a number, or it is reported as unranked.
+    "net_commission_cents": n}` - the figures attribution already keeps.
+    `engagement` maps one to what the measurement snapshots hold. Nothing is
+    modelled or predicted: a destination either has enough evidence on the
+    chosen axis to have earned a number, or it is reported as unranked.
+
+    Balanced blends the axes that qualify, each normalised against the best of
+    its kind so dong and view-counts can share a scale, and names the axes it
+    used. A destination qualifying on no axis stays unranked - a blend of
+    nothing is not a middle rank.
     """
+    engagement = engagement or {}
+    axes: dict[str, dict[str, tuple[float | None, str]]] = {}
+    for destination in destinations:
+        identifier = str(destination["id"])
+        found = performance.get(identifier, {})
+        measured = engagement.get(identifier, {})
+        axes[identifier] = {
+            "revenue": _revenue_axis(found),
+            "reach": _engagement_axis(measured, "views", "views"),
+            "discussion": _engagement_axis(measured, "comments", "comments"),
+        }
+
+    # Normalised per axis over whoever qualifies, for the balanced blend.
+    best: dict[str, float] = {}
+    for axis in ("revenue", "reach", "discussion"):
+        values = [axes[key][axis][0] for key in axes if axes[key][axis][0]]
+        best[axis] = max(values) if values else 0.0
+
     ranks: list[DestinationRank] = []
     for destination in destinations:
         identifier = str(destination["id"])
         found = performance.get(identifier, {})
         clicks = float(found.get("clicks", 0))
         conversions = int(found.get("conversions", 0))
-        commission = float(found.get("net_commission_cents", 0))
-        if conversions >= MIN_CONVERSIONS_TO_RANK and clicks > 0:
-            ranks.append(DestinationRank(
-                destination_id=identifier,
-                platform=str(destination.get("platform", "")),
-                epc_cents=commission / clicks,
-                conversions=conversions,
-                ranked=True,
-                reason=f"{conversions} settled conversions over {int(clicks)} clicks.",
-            ))
+        revenue_score, revenue_reason = axes[identifier]["revenue"]
+
+        if priority == "balanced":
+            parts = []
+            for axis in ("revenue", "reach", "discussion"):
+                value, reason = axes[identifier][axis]
+                if value is not None:
+                    normalised = value / best[axis] if best[axis] > 0 else 0.0
+                    parts.append((axis, normalised, reason))
+            score = (
+                sum(part[1] for part in parts) / len(parts) if parts else None
+            )
+            reason = (
+                "Balanced across " + "; ".join(
+                    f"{axis} ({axis_reason})" for axis, _n, axis_reason in parts
+                )
+                if parts
+                else "No axis has enough evidence yet: "
+                + axes[identifier]["revenue"][1]
+            )
+        elif priority in ("reach", "discussion"):
+            score, reason = axes[identifier][priority]
         else:
-            ranks.append(DestinationRank(
-                destination_id=identifier,
-                platform=str(destination.get("platform", "")),
-                epc_cents=None,
-                conversions=conversions,
-                ranked=False,
-                reason=(
-                    f"{conversions} settled conversion(s); "
-                    f"{MIN_CONVERSIONS_TO_RANK} needed before earnings per click "
-                    "means anything."
-                ),
-            ))
-    # Ranked destinations first, best earning first. Unranked keep the order they
-    # were given, which is the order they were connected in - arbitrary, but
-    # stable, and not pretending to be a judgement.
-    ranked = sorted(
+            score, reason = revenue_score, revenue_reason
+
+        # The stop-loss reads the revenue evidence whatever the objective: an
+        # account provably spending clicks and settling nothing is a fact worth
+        # acting on even while optimising for reach.
+        stopped = bool(
+            revenue_score is not None
+            and revenue_score <= 0
+            and clicks >= STOP_LOSS_CLICKS
+        )
+        if stopped:
+            reason = (
+                f"Stop-loss: {int(clicks)} clicks and nothing settled. "
+                "Exploration keeps a way back; the default slots move on."
+            )
+        ranks.append(DestinationRank(
+            destination_id=identifier,
+            platform=str(destination.get("platform", "")),
+            epc_cents=revenue_score,
+            conversions=conversions,
+            ranked=score is not None and not stopped,
+            reason=reason + ("" if reason.endswith(".") else "."),
+            score=None if stopped else score,
+            stopped=stopped,
+        ))
+
+    # Ranked first, best first. Unranked keep the order they were given -
+    # arbitrary, but stable, and not pretending to be a judgement. Stopped
+    # last: measured to be losing sorts below not-yet-measured.
+    ordered = sorted(
         (item for item in ranks if item.ranked),
-        key=lambda item: item.epc_cents or 0,
+        key=lambda item: item.score or 0,
         reverse=True,
     )
-    return ranked + [item for item in ranks if not item.ranked]
+    unranked = [item for item in ranks if not item.ranked and not item.stopped]
+    stopped = [item for item in ranks if item.stopped]
+    return ordered + unranked + stopped
 
 
 def choose_destination(

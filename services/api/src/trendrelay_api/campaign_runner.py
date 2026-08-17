@@ -547,7 +547,12 @@ def tick(session_factory: Any, *, now: datetime | None = None) -> dict[str, Any]
     with session_factory() as session:
         # Outcomes first, plans second: a slot freed by a failure this minute
         # can be re-planned this minute, and a breaker tripped by the outcomes
-        # stops the campaign before it reserves anything else.
+        # stops the campaign before it reserves anything else. Measurement
+        # rides the same pass - free while no engine can be read, and filling
+        # windows the moment one can.
+        from trendrelay_api.campaign_measurement import collect_snapshots
+
+        collect_snapshots(session, now=moment)
         reconcile_executions(session, now=moment)
         pilots = session.scalars(
             select(CampaignAutopilot).where(CampaignAutopilot.enabled.is_(True))

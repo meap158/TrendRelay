@@ -64,6 +64,11 @@ class AutopilotSettings(BaseModel):
         default="run_by_exception",
         pattern=r"^(assist|auto_draft|run_by_exception|autonomous)$",
     )
+    #: What ranking optimises for. Balanced blends whichever axes have
+    #: evidence rather than pretending all three always do.
+    priority: str = Field(
+        default="balanced", pattern=r"^(reach|discussion|revenue|balanced)$"
+    )
     #: Switching an autopilot on hands over an account. It is an external action
     #: like any other here, and it is confirmed like one.
     confirm_external_action: bool = False
@@ -405,6 +410,7 @@ def save_autopilot(
     autopilot.daily_cap_per_account = body.daily_cap_per_account
     autopilot.delivery = body.delivery
     autopilot.authority = body.authority
+    autopilot.priority = body.priority
     autopilot.updated_at = datetime.now(UTC)
     audit(
         session, request, workspace_id, user.id,
