@@ -1817,6 +1817,52 @@ def test_a_bare_product_url_is_not_vouched_for(
     assert preview["attribution"]["tracked"] is False
 
 
+# --- media the network will refuse, said before delivery -----------------------
+
+
+def test_a_too_wide_threads_video_is_refused_at_validation(
+    monkeypatch, media_file: Path
+) -> None:
+    """Buffer relayed Meta's "no more than 1920px" refusal only after the job
+    had already run; the same fact is now stated before anything uploads."""
+    monkeypatch.setattr(publishing, "_video_dimensions", lambda _path: (2560, 1440))
+    body = request(media_file, targets=[
+        publishing.PublishTarget(platform="threads", integration_id="account-1"),
+    ])
+
+    with pytest.raises(ValueError) as refusal:
+        publishing._validate_request(publishing.PROVIDERS["zernio"], body)
+
+    assert "1920px" in str(refusal.value)
+    assert "2560×1440" in str(refusal.value)
+
+
+def test_the_same_wide_video_passes_where_no_network_limit_is_known(
+    monkeypatch, media_file: Path
+) -> None:
+    # Only limits engines have actually enforced are encoded; nothing is
+    # refused on an invented constraint.
+    monkeypatch.setattr(publishing, "_video_dimensions", lambda _path: (2560, 1440))
+    body = request(media_file, targets=[
+        publishing.PublishTarget(platform="facebook", integration_id="account-1"),
+    ])
+
+    publishing._validate_request(publishing.PROVIDERS["zernio"], body)
+
+
+def test_unknown_dimensions_are_not_treated_as_wrong_ones(
+    monkeypatch, media_file: Path
+) -> None:
+    # A broken probe is not evidence the media is wrong; an unreadable file
+    # already fails by name at delivery time.
+    monkeypatch.setattr(publishing, "_video_dimensions", lambda _path: None)
+    body = request(media_file, targets=[
+        publishing.PublishTarget(platform="threads", integration_id="account-1"),
+    ])
+
+    publishing._validate_request(publishing.PROVIDERS["zernio"], body)
+
+
 # --- threads topics -----------------------------------------------------------
 
 

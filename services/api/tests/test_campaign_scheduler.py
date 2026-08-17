@@ -258,6 +258,31 @@ def test_it_schedules_one_post_per_due_slot(session) -> None:
     assert "2 post(s) scheduled" in note
 
 
+def test_a_video_the_network_refuses_is_routed_around_not_posted_into(
+    session, monkeypatch
+) -> None:
+    """A 2160px-wide video is fine on TikTok and refused by Threads.
+
+    The planner skips the unfit pairing and takes the next item that fits,
+    instead of manufacturing the same failed delivery every tick.
+    """
+    from trendrelay_api.integrations import publishing
+
+    monkeypatch.setattr(
+        publishing, "_video_dimensions",
+        lambda path: (2160, 3840) if "wide" in path else (1080, 1920),
+    )
+    destination(session, "d-threads", "threads")
+    slot(session, 12)
+    queue_item(session, "q-wide", video_path=r"S:\media\wide.mp4")
+    queue_item(session, "q-fits", video_path=r"S:\media\fits.mp4", position=1)
+
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert [post.queue_item_id for post in posts] == ["q-fits"]
+    assert "at most 1920px" in note and "2160×3840" in note
+
+
 def test_the_link_lands_in_the_caption_on_youtube_and_in_the_bio_on_tiktok(session) -> None:
     """The decision the feature turns on, seen end to end."""
     destination(session, "d-tube", "youtube")

@@ -988,6 +988,44 @@ def approved_image_paths(image_paths: list[str]) -> list[Path]:
     ]
 
 
+#: Video dimensions a network's API refuses, learned from real rejections
+#: rather than transcribed from marketing pages: Buffer relayed Meta's
+#: "Video width must be no more than 1920px for Threads" only after the job
+#: had already run. Networks absent here have shown no such limit.
+PLATFORM_MAX_VIDEO_WIDTH: dict[str, int] = {"threads": 1920}
+
+#: One probe per file per process: a preview asks about the same clip for
+#: every destination and every engine, and the answer does not change while
+#: the file does not.
+_dimension_cache: dict[tuple[str, float], tuple[int, int] | None] = {}
+
+
+def _video_dimensions(path_text: str) -> tuple[int, int] | None:
+    """The clip's width and height, or None when they cannot be known.
+
+    None is deliberate. A missing file or a broken probe is not evidence the
+    media is wrong, and an unreadable file already fails by name at delivery
+    time - refusing here on top of that would refuse twice for one fault.
+    """
+    try:
+        path = Path(path_text)
+        key = (str(path), path.stat().st_mtime)
+    except OSError:
+        return None
+    if key in _dimension_cache:
+        return _dimension_cache[key]
+    try:
+        from trendrelay_api.media_library import probe_media
+
+        probed = probe_media(path)
+        width, height = probed.get("width"), probed.get("height")
+        result = (width, height) if width and height else None
+    except Exception:
+        result = None
+    _dimension_cache[key] = result
+    return result
+
+
 def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> None:
     unsupported = [
         target.platform for target in request.targets if target.platform not in provider.platforms
@@ -1093,6 +1131,13 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
     if request.mode == "schedule" and request.date <= datetime.now(UTC):
         raise ValueError("Scheduled deliveries need a date and time in the future.")
     chosen = {target.platform for target in request.targets}
+    # Media the network's API will refuse, said before anything uploads
+    # instead of by a failed job hours later.
+    if request.video_path and not _is_photo_post(request):
+        for platform in sorted(chosen):
+            fits, why = video_fits_platform(platform, request.video_path)
+            if not fits:
+                raise ValueError(why)
     if NEEDS_SUBREDDIT in chosen and not request.subreddit:
         raise ValueError(
             "Reddit needs a target subreddit; every engine rejects the post without one."
@@ -1104,6 +1149,30 @@ def _validate_request(provider: ProviderDefinition, request: PublishRequest) -> 
             "Pinterest needs a destination board. Choose one from the account, or "
             "paste the board ID."
         )
+
+
+def video_fits_platform(platform: str, video_path: str | None) -> tuple[bool, str | None]:
+    """Whether this network's API will take the clip, and why not.
+
+    (True, None) also covers dimensions that cannot be known: an unprobeable
+    file is not evidence the media is wrong, and delivery already fails an
+    unreadable file by name. Only limits an engine has actually enforced are
+    encoded, so nothing is refused on an invented constraint.
+    """
+    cap = PLATFORM_MAX_VIDEO_WIDTH.get(platform)
+    if not cap or not video_path:
+        return True, None
+    dimensions = _video_dimensions(video_path)
+    if not dimensions:
+        return True, None
+    width, height = dimensions
+    if width <= cap:
+        return True, None
+    return False, (
+        f"{PLATFORM_LABELS.get(platform, platform)} takes videos at most {cap}px "
+        f"wide and this one is {width}×{height}. Render a narrower cut - the "
+        "Library's resize effects can - or drop that destination."
+    )
 
 
 def carries_tracking_link(request: PublishRequest) -> bool:

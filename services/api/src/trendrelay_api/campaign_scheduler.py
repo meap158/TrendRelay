@@ -579,13 +579,32 @@ def plan_campaign(
                 f"on {destination.label}."
             )
             continue
-        item = eligible[0]
+        # The first eligible item whose media this network will accept: a
+        # 2160px-wide video is fine on TikTok and refused by Threads, and
+        # routing around the refusal here is what lets one queue feed both
+        # instead of manufacturing the same failed job every tick.
         # Frozen before composing, because the links minted below carry the
         # content hash in their sub IDs and the hash comes from the version
         # being frozen. Once per item per plan: the resolution cannot change
         # while this plan is being assembled.
-        if item.id not in frozen_cache:
-            frozen_cache[item.id] = resolve_frozen_media(session, item)
+        from trendrelay_api.integrations.publishing import video_fits_platform
+
+        item = None
+        for candidate in eligible:
+            if candidate.id not in frozen_cache:
+                frozen_cache[candidate.id] = resolve_frozen_media(session, candidate)
+            if candidate.image_paths:
+                item = candidate
+                break
+            fits, why = video_fits_platform(
+                destination.platform, frozen_cache[candidate.id].path
+            )
+            if fits:
+                item = candidate
+                break
+            notes.append(f"Skipped on {destination.label}: {why}")
+        if item is None:
+            continue
         frozen = frozen_cache[item.id]
         if item.id not in match_cache:
             match_cache[item.id] = chosen_matches(
