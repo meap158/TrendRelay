@@ -1888,6 +1888,12 @@ export function AutopilotPanel({
                                 <video
                                   className="timeline-media"
                                   controls
+                                  // Chrome puts a download button in its own
+                                  // video controls, and this is a preview of a
+                                  // post, not a file on offer. The player keeps
+                                  // play, scrub and volume; the saving goes.
+                                  controlsList="nodownload"
+                                  disablePictureInPicture
                                   preload="metadata"
                                   src={`${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview?path=${encodeURIComponent(entry.video_path)}`}
                                   title={entry.video_path}
