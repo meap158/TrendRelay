@@ -21,7 +21,7 @@
  */
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
 import { ProductTable } from "./product-table";
@@ -39,12 +39,6 @@ import type { ProductRow, ProductsPayload } from "./types";
 type Workspace = { id: string; name: string; role: string };
 type Campaign = { id: string; name: string; affiliate_url?: string | null };
 type Plan = { id: string; campaign_id: string; title: string; platform: string; state: string };
-type Offer = {
-  id: string;
-  network: string;
-  availability: string;
-  product: { name: string; marketplace: string };
-};
 type TrackingLink = {
   id: string;
   code: string;
@@ -123,7 +117,6 @@ export default function AttributionPage() {
   const [workspaceId, setWorkspaceId] = useState("");
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
-  const [offers, setOffers] = useState<Offer[]>([]);
   const [links, setLinks] = useState<TrackingLink[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [products, setProducts] = useState<ProductRow[]>([]);
@@ -133,38 +126,31 @@ export default function AttributionPage() {
   // Opened deliberately, closed when done. Neither is a place to be: making a
   // link and bringing rows in are things you do to the table, not other screens
   // to read.
-  const [panel, setPanel] = useState<"" | "link" | "import" | "add">("");
-  // Set when someone builds a link from a product row, so the form opens with
-  // the offer already chosen instead of asking them to find it again in a list.
-  const [presetOffer, setPresetOffer] = useState("");
+  const [panel, setPanel] = useState<"" | "import" | "add">("");
   // Whether Shopee can be read directly. Asked here rather than inside the
   // import form so the two Shopee panels agree about it.
-  const linkFormRef = useRef<HTMLFormElement>(null);
   // Reported over the page. Rendered in flow, these shifted everything below
   // them whenever an action finished, which reads as the interface flinching.
   const { messages: statusMessages, succeed, fail, dismiss } = useStatus();
 
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const canCreate = ["owner", "editor", "approver"].includes(workspace?.role ?? "");
-  const canChangeStatus = ["owner", "approver"].includes(workspace?.role ?? "");
   const canImport = ["owner", "editor", "approver"].includes(workspace?.role ?? "");
 
   const refresh = useCallback(async (nextWorkspace = workspaceId) => {
     if (!nextWorkspace) return;
     const base = `/api/workspaces/${nextWorkspace}`;
     const [
-      campaignBody, planBody, offerBody, linkBody, summaryBody, productBody,
+      campaignBody, planBody, linkBody, summaryBody, productBody,
     ] = await Promise.all([
       json<{ campaigns: Campaign[] }>(await apiFetch(`${base}/campaigns`)),
       json<{ plans: Plan[] }>(await apiFetch(`${base}/campaigns/calendar`)),
-      json<{ offers: Offer[] }>(await apiFetch(`${base}/opportunities/offers`)),
       json<{ links: TrackingLink[] }>(await apiFetch(`${base}/attribution/links`)),
       json<Summary>(await apiFetch(`${base}/attribution/summary`)),
       json<ProductsPayload>(await apiFetch(`${base}/attribution/products`)),
     ]);
     setCampaigns(campaignBody.campaigns);
     setPlans(planBody.plans);
-    setOffers(offerBody.offers);
     setLinks(linkBody.links);
     setSummary(summaryBody);
     setProducts(productBody.products);
@@ -204,73 +190,6 @@ export default function AttributionPage() {
   }, [refresh, workspaceId, fail]);
 
 
-  async function createLink(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy("link");
-    const form = new FormData(event.currentTarget);
-    try {
-      const expiry = String(form.get("expires_at") ?? "");
-      const body = await json<{ link: TrackingLink }>(
-        await apiFetch(`/api/workspaces/${workspaceId}/attribution/links`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            campaign_id: form.get("campaign_id"),
-            plan_id: form.get("plan_id") || null,
-            offer_id: form.get("offer_id") || null,
-            platform: form.get("platform"),
-            campaign_parameter: form.get("campaign_parameter"),
-            platform_parameter: form.get("platform_parameter"),
-            country_destinations: countryDestinations(String(form.get("country_destinations") ?? "")),
-            disclosure: form.get("disclosure"),
-            expires_at: expiry ? new Date(expiry).toISOString() : null,
-            confirm_external_action: true,
-          }),
-        }),
-      );
-      try {
-        await navigator.clipboard.writeText(body.link.url);
-        succeed(t("attribution.linkCreatedCopied"));
-      } catch {
-        succeed(t("attribution.linkCreated", { url: body.link.url }));
-      }
-      setPresetOffer("");
-      setPanel("");
-      await refresh();
-    } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "Tracking link creation failed.");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  const setLinkStatus = useCallback(async (
-    linkId: string,
-    status: "active" | "disabled",
-  ) => {
-    const link = links.find((item) => item.id === linkId);
-    if (!link) return;
-    if (!window.confirm(t(
-      status === "active" ? "attribution.confirmActivate" : "attribution.confirmDisable",
-      { code: link.code },
-    ))) return;
-    setBusy(linkId);
-    try {
-      await json(
-        await apiFetch(`/api/workspaces/${workspaceId}/attribution/links/${linkId}/status`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status, confirm_external_action: true }),
-        }),
-      );
-      succeed(t(status === "active" ? "attribution.activated" : "attribution.disabled"));
-      await refresh();
-    } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "Status update failed.");
-    } finally {
-      setBusy("");
-    }
-  }, [apiFetch, links, refresh, succeed, fail, t, workspaceId]);
 
   /**
    * Every tracking link on the chosen products, one per line.
@@ -280,45 +199,32 @@ export default function AttributionPage() {
    * work selecting removes. Resolved here because this is where the public
    * URLs live; a product row carries only the codes.
    */
+  /**
+   * Every chosen product's affiliate link, one per line.
+   *
+   * The network's own URL, which is what a batch of links is wanted for: a
+   * scheduling sheet, a message, a caption. This used to hand over TrendRelay's
+   * own `/c/` redirects, which resolve on this machine and nowhere else.
+   */
   const copySelectedLinks = useCallback((productIds: string[]) => {
     const wanted = new Set(productIds);
-    const directShopeeUrls = products
+    const urls = products
       .filter((product) => wanted.has(product.id))
-      .flatMap((product) => product.offers
-        .filter((offer) => offer.network.toLowerCase() === "shopee")
-        .map((offer) => offer.affiliate_url));
-    const directProductIds = new Set(products
-      .filter((product) => product.offers.some(
-        (offer) => offer.network.toLowerCase() === "shopee",
-      ))
-      .map((product) => product.id));
-    const trackedUrls = links
-      .filter((link) => link.product_id && wanted.has(link.product_id) && !directProductIds.has(link.product_id))
-      .map((link) => link.url);
-    const urls = [...new Set([...directShopeeUrls, ...trackedUrls])];
+      .flatMap((product) => product.offers.map((offer) => offer.affiliate_url))
+      .filter(Boolean);
     if (!urls.length) {
-      fail("Those products have no publishable links yet.");
+      fail("Those products have no affiliate links.");
       return;
     }
     void navigator.clipboard.writeText(urls.join("\n"));
     succeed(`${urls.length} link${urls.length === 1 ? "" : "s"} copied`);
-  }, [links, products, succeed, fail]);
+  }, [products, succeed, fail]);
 
   const copyAffiliateLink = useCallback((url: string) => {
     void navigator.clipboard.writeText(url);
     succeed(t("attribution.shopee.affiliateLinkCopied"));
   }, [succeed, t]);
 
-  const copyLink = useCallback((code: string) => {
-    const link = links.find((item) => item.code === code);
-    if (link) void navigator.clipboard.writeText(link.url);
-  }, [links]);
-
-  /** From a product row: carry the offer over rather than make them find it. */
-  const startLinkFromProduct = useCallback((_product: ProductRow, offerId: string) => {
-    setPresetOffer(offerId);
-    setPanel("link");
-  }, []);
 
   if (loading) return <main className="attribution-page"><p>{t("attribution.opening")}</p></main>;
   if (!user) return <main className="attribution-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Fattribution">{t("attribution.signInPrompt")}</Link></main>;
@@ -332,44 +238,6 @@ export default function AttributionPage() {
   const chartLinks = [...focusedLinks].sort((a, b) => b.clicks - a.clicks).slice(0, 5);
   const maxCampaignClicks = Math.max(1, ...chartLinks.map((item) => item.clicks));
 
-  const linkForm = (
-    <article className="attribution-panel attribution-panel-bare">
-      <form onSubmit={createLink} ref={linkFormRef}>
-        <label>{t("attribution.campaign")}<select name="campaign_id" required value={campaignId} onChange={(event) => setCampaignId(event.target.value)}>
-          {campaigns.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select></label>
-        <label>{t("attribution.publicationPlan")}<select name="plan_id" defaultValue="">
-          <option value="">{t("attribution.campaignLevelLink")}</option>
-          {plans.filter((item) => item.campaign_id === campaignId).map((item) => <option key={item.id} value={item.id}>{item.title} · {item.platform}</option>)}
-        </select></label>
-        <label>{t("attribution.affiliateOffer")}
-          <input type="hidden" name="offer_id" value={presetOffer} />
-          <SearchSelect
-            value={presetOffer}
-            onChange={setPresetOffer}
-            placeholder={t("attribution.useCampaignDestination")}
-            searchPlaceholder="Search imported offers…"
-            options={offers.filter((item) => item.availability !== "unavailable").map((item) => ({
-              value: item.id,
-              label: item.product.name,
-              description: `${item.network} · ${item.product.marketplace}`,
-            }))}
-          />
-        </label>
-        <label>{t("library.platform")}<select name="platform" defaultValue="tiktok">
-          {["tiktok", "instagram", "youtube", "douyin", "other"].map((item) => <option key={item} value={item}>{item}</option>)}
-        </select></label>
-        <div className="attribution-form-row">
-          <label>{t("attribution.campaignParameter")}<input name="campaign_parameter" defaultValue="tr_campaign" /></label>
-          <label>{t("attribution.platformParameter")}<input name="platform_parameter" defaultValue="tr_platform" /></label>
-        </div>
-        <label>{t("publish.disclosure")}<textarea name="disclosure" rows={2} defaultValue="Affiliate link; we may earn a commission." required /></label>
-        <label>{t("attribution.countryDestinations")}<textarea name="country_destinations" rows={3} placeholder={"TH=https://th.merchant.example/offer\nUS=https://us.merchant.example/offer"} /><small>{t("attribution.countryDestinationsHelp")}</small></label>
-        <label>{t("attribution.expiry")}<input name="expires_at" type="datetime-local" /></label>
-        <button className={buttonClass({ variant: "primary" })} disabled={busy === "link" || !campaignId}>{busy === "link" ? t("attribution.creating") : t("attribution.createAndCopy")}</button>
-      </form>
-    </article>
-  );
 
   return (
     <main className="attribution-page">
@@ -423,14 +291,7 @@ export default function AttributionPage() {
               onClick={() => setPanel("add")}
             ><ActionIcon name="add" /> {t("attribution.addProducts")}</button>
           )}
-          {canCreate && (
-            <button
-              type="button"
-              className={buttonClass({ variant: "primary" })}
-              onClick={() => setPanel("link")}
-              disabled={!campaigns.length}
-            ><ActionIcon name="link" /> {t("attribution.createLink")}</button>
-          )}
+
         </div>
       </header>
 
@@ -440,7 +301,6 @@ export default function AttributionPage() {
             <div><p>CAMPAIGN PERFORMANCE</p><h2>{focusedCampaign.name}</h2></div>
             <nav>
               <Link href={`/campaigns?campaign=${encodeURIComponent(focusedCampaign.id)}`}>Back to campaign</Link>
-              <button type="button" onClick={() => setPanel("link")}>Create campaign link</button>
               <Link href="/publish">Open Publish</Link>
             </nav>
           </div>
@@ -469,13 +329,7 @@ export default function AttributionPage() {
       <section className="attribution-view">
         <ProductTable
           products={products}
-          canCreate={canCreate}
-          canChangeStatus={canChangeStatus}
-          busy={busy}
-          onCreateLink={startLinkFromProduct}
           onCopyAffiliateLink={copyAffiliateLink}
-          onCopyLink={copyLink}
-          onSetLinkStatus={(id, status) => void setLinkStatus(id, status)}
           onCopySelected={copySelectedLinks}
         />
       </section>
@@ -497,13 +351,6 @@ export default function AttributionPage() {
         )}
       </Dialog>
 
-      <Dialog
-        open={panel === "link"}
-        title={t("attribution.createLink")}
-        onClose={() => setPanel("")}
-      >
-        {linkForm}
-      </Dialog>
 
       <StatusToasts messages={statusMessages} onDismiss={dismiss} />
     </main>

@@ -13,7 +13,7 @@
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 
-import { Badge, Card } from "../ui/primitives";
+import { Card } from "../ui/primitives";
 import { Button } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
 import { SelectionCheckbox } from "../ui/selection-checkbox";
@@ -25,11 +25,6 @@ import {
   type ProductSortKey,
 } from "./sort";
 import type { ProductRow } from "./types";
-
-function StatusBadge({ status }: { status: string }) {
-  const tone = status === "active" ? "good" : status === "broken" ? "bad" : "warn";
-  return <Badge tone={tone}>{status}</Badge>;
-}
 
 function offerPrice(product: ProductRow): string {
   const priced = product.offers.filter((offer) => offer.price_cents !== null);
@@ -95,24 +90,12 @@ function SortableHeader({
 
 export function ProductTable({
   products,
-  canCreate,
-  busy,
-  onCreateLink,
   onCopyAffiliateLink,
-  onCopyLink,
-  onSetLinkStatus,
-  canChangeStatus,
   onCopySelected,
 }: {
   products: ProductRow[];
-  canCreate: boolean;
-  canChangeStatus: boolean;
-  busy: string;
-  onCreateLink: (product: ProductRow, offerId: string) => void;
   onCopyAffiliateLink: (url: string) => void;
-  onCopyLink: (code: string) => void;
-  onSetLinkStatus: (linkId: string, status: "active" | "disabled") => void;
-  /** Asked to copy every tracking link on these products, in one go. */
+  /** Asked to copy the affiliate link of every one of these products, at once. */
   onCopySelected?: (productIds: string[]) => void;
 }) {
   const t = useT();
@@ -262,10 +245,6 @@ export function ProductTable({
                 sort={sort} onSort={changeSort} className="product-count" />
               <SortableHeader column="links" label={t("attribution.links")}
                 sort={sort} onSort={changeSort} className="product-count" />
-              <SortableHeader column="clicks" label={t("attribution.clicks")}
-                sort={sort} onSort={changeSort} className="numeric" />
-              <SortableHeader column="netCommission" label={t("attribution.netCommission")}
-                sort={sort} onSort={changeSort} className="numeric" />
             </tr>
           </thead>
           <tbody>
@@ -345,23 +324,6 @@ export function ProductTable({
                   </td>
                   <td className="product-count">{product.offers.length}</td>
                   <td className="product-count">{product.links.length + directOffers.length}</td>
-                  <td className="numeric">{product.clicks}</td>
-                  <td className="numeric">
-                    {product.earnings.length
-                      ? product.earnings.map((bucket) => (
-                          // One line per currency. A blended total is wrong by a
-                          // factor of tens of thousands and reads as plausible.
-                          <span className="product-earning" key={bucket.currency}>
-                            {money(bucket.net_commission_cents, bucket.currency)}
-                            <small>
-                              {t("attribution.approvedCount", { count: bucket.approved })}
-                              {bucket.pending > 0 &&
-                                ` · ${t("attribution.pendingCount", { count: bucket.pending })}`}
-                            </small>
-                          </span>
-                        ))
-                      : <span className="catalog-no-data">—</span>}
-                  </td>
                 </tr>,
                 open && (
                   <tr
@@ -369,7 +331,7 @@ export function ProductTable({
                     id={detailId}
                     className="catalog-edition-row"
                   >
-                    <td colSpan={10}>
+                    <td colSpan={8}>
                       <div className="product-detail">
                         <section>
                           <h4>{t("attribution.whereItGoes")}</h4>
@@ -387,23 +349,18 @@ export function ProductTable({
                                 <li key={offer.id}>
                                   <div>
                                     <strong>{offer.merchant ?? offer.network}</strong>
-                                    <small>
-                                      {offer.price_cents !== null &&
-                                        `${money(offer.price_cents, offer.currency)} · `}
-                                      {offer.commission_flat_cents !== null &&
-                                        `${t("attribution.commission")} ${money(offer.commission_flat_cents, offer.currency)} · `}
-                                      {t("attribution.commissionRate", {
-                                        rate: commission(offer.commission_bps),
-                                      })}
-                                      {offer.cookie_days !== null &&
-                                        ` · ${t("attribution.cookieWindow", { days: offer.cookie_days })}`}
-                                    </small>
+                                    {/* Price, rate and commission are three
+                                        columns of the row this expands from,
+                                        so only the cookie window is left -
+                                        the one thing the row cannot show. */}
+                                    {offer.cookie_days !== null && (
+                                      <small>
+                                        {t("attribution.cookieWindow", { days: offer.cookie_days })}
+                                      </small>
+                                    )}
                                   </div>
                                   <span className="product-row-actions">
-                                    <Badge
-                                      tone={offer.availability === "available" ? "good" : "warn"}
-                                    >{offer.availability}</Badge>
-                                    {offer.network.toLowerCase() === "shopee" ? (
+                                    {offer.affiliate_url ? (
                                       <>
                                         <a
                                           className="ui-button ui-button-secondary ui-button-sm"
@@ -417,14 +374,7 @@ export function ProductTable({
                                           onClick={() => onCopyAffiliateLink(offer.affiliate_url)}
                                         ><ActionIcon name="copy" /> {t("attribution.shopee.copyAffiliateLink")}</Button>
                                       </>
-                                    ) : canCreate && (
-                                      <Button
-                                        variant="secondary"
-                                        size="sm"
-                                        busy={busy === `link-${offer.id}`}
-                                        onClick={() => onCreateLink(product, offer.id)}
-                                      >{t("attribution.createLinkHere")}</Button>
-                                    )}
+                                    ) : null}
                                   </span>
                                 </li>
                               ))}
@@ -432,48 +382,6 @@ export function ProductTable({
                           ) : <p className="catalog-no-data">{t("attribution.noOffers")}</p>}
                         </section>
 
-                        <section>
-                          <h4>{t("attribution.trackingLinks")}</h4>
-                          {product.links.length ? (
-                            <ul className="product-links">
-                              {product.links.map((link) => (
-                                <li key={link.id}>
-                                  <div>
-                                    <code>{link.code}</code>
-                                    <small>{link.platform}</small>
-                                  </div>
-                                  <span className="product-row-actions">
-                                    <StatusBadge status={link.status} />
-                                    <Button
-                                      variant="quiet"
-                                      size="sm"
-                                      onClick={() => onCopyLink(link.code)}
-                                    >{t("attribution.copy")}</Button>
-                                    {canChangeStatus && (
-                                      <Button
-                                        variant="quiet"
-                                        size="sm"
-                                        busy={busy === link.id}
-                                        onClick={() => onSetLinkStatus(
-                                          link.id,
-                                          link.status === "active" ? "disabled" : "active",
-                                        )}
-                                      >{link.status === "active"
-                                        ? t("attribution.disable")
-                                        : t("attribution.activate")}</Button>
-                                    )}
-                                  </span>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="catalog-no-data">
-                              {directOffers.length
-                                ? t("attribution.shopee.noTrackingLinkNeeded")
-                                : t("attribution.noLinksHere")}
-                            </p>
-                          )}
-                        </section>
                       </div>
                     </td>
                   </tr>
@@ -482,7 +390,7 @@ export function ProductTable({
             })}
             {shown.length === 0 && (
               <tr>
-                <td className="product-no-results" colSpan={10}>
+                <td className="product-no-results" colSpan={8}>
                   {t("attribution.noProductMatches")}
                 </td>
               </tr>
