@@ -11,20 +11,11 @@ import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { SearchSelect } from "../ui/search-select";
 import { ActionIcon } from "../ui/action-icons";
-import { clipLength, handoffPath } from "../../lib/media-rules";
+import { handoffPath } from "../../lib/media-rules";
 import {
-  MediaPicker,
-  PICKER_BASE,
   upcomingSlots,
-  type LibraryAsset,
   type Slot,
 } from "../publish/composer";
-import {
-  EMPTY_FACETS,
-  assetFilterParams,
-  type AssetFacets,
-  type AssetFilterValues,
-} from "../ui/asset-filters";
 import {
   platformLabels,
   type PublishingPlatform,
@@ -118,9 +109,6 @@ function values(input: FormDataEntryValue | null): string[] {
     .filter(Boolean);
 }
 
-function destinationKey(account: Pick<ConnectedAccount, "provider" | "id">): string {
-  return `${account.provider}\u001f${account.id}`;
-}
 
 function offerDescription(offer: CampaignOffer): string {
   const commission = offer.commission_bps
@@ -151,26 +139,11 @@ export default function CampaignsPage() {
   const [campaignId, setCampaignId] = useState("");
   const requestedCampaign = useRef("");
   const [plans, setPlans] = useState<PublicationPlan[]>([]);
-  const [videoPath, setVideoPath] = useState("");
-  const [planClips, setPlanClips] = useState<LibraryAsset[]>([]);
-  const [planClip, setPlanClip] = useState<LibraryAsset | null>(null);
-  const [planPickerOpen, setPlanPickerOpen] = useState(false);
-  const [planPickerFacets, setPlanPickerFacets] = useState<AssetFacets>(EMPTY_FACETS);
-  const [planPickerFailure, setPlanPickerFailure] = useState<string | null>(null);
   const [packages, setPackages] = useState<Record<string, ManualPackage>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
   const [offers, setOffers] = useState<CampaignOffer[]>([]);
   const [newCampaignOfferId, setNewCampaignOfferId] = useState("");
-  const [planAccounts, setPlanAccounts] = useState<ConnectedAccount[]>([]);
-  const [planAccountKey, setPlanAccountKey] = useState("");
-  const [planOfferId, setPlanOfferId] = useState("");
-  const [planSlotOptions, setPlanSlotOptions] = useState<
-    { value: string; label: string; day: string }[]
-  >([]);
-  const [planScheduledAt, setPlanScheduledAt] = useState("");
-  const [planSourcesCampaign, setPlanSourcesCampaign] = useState("");
-  const [planSourcesLoading, setPlanSourcesLoading] = useState(false);
   // Reported over the page. Rendered in flow, these shifted everything below
   // them whenever an action finished, which reads as the interface flinching.
   const { messages: statusMessages, succeed, fail, dismiss } = useStatus();
@@ -181,9 +154,6 @@ export default function CampaignsPage() {
   const canCreatePlan = ["owner", "editor", "approver"].includes(selectedWorkspace?.role ?? "");
   const canApprove = ["owner", "approver"].includes(selectedWorkspace?.role ?? "");
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  const selectedPlanAccount = planAccounts.find(
-    (account) => destinationKey(account) === planAccountKey,
-  ) ?? null;
 
   const refresh = useCallback(async (nextWorkspaceId: string) => {
     if (!nextWorkspaceId) return;
@@ -209,7 +179,6 @@ export default function CampaignsPage() {
   useEffect(() => {
     queueMicrotask(() => {
       const params = new URLSearchParams(window.location.search);
-      setVideoPath(params.get("video") ?? "");
       requestedCampaign.current = params.get("campaign") ?? "";
     });
   }, []);
@@ -309,133 +278,6 @@ export default function CampaignsPage() {
     }
   }
 
-  async function createPlan(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!campaignId) return;
-    setBusy("plan");
-    fail(null);
-    succeed(null);
-    try {
-      const formElement = event.currentTarget;
-      const form = new FormData(formElement);
-      const created = await json<{ plan: PublicationPlan }>(
-        await apiFetch(
-          `/api/workspaces/${workspaceId}/campaigns/${campaignId}/plans`,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              title: form.get("title"),
-              platform: form.get("platform"),
-              provider: form.get("provider") || null,
-              integration_id: form.get("integration_id") || null,
-              destination_label: form.get("destination_label") || null,
-              video_path: form.get("video_path"),
-              cover_path: form.get("cover_path") || null,
-              caption: form.get("caption"),
-              hashtags: values(form.get("hashtags")),
-              offer_id: form.get("offer_id") || null,
-              disclosure: form.get("disclosure"),
-              scheduled_at: new Date(String(form.get("scheduled_at"))).toISOString(),
-              timezone,
-            }),
-          },
-        ),
-      );
-      if (canApprove) {
-        await json(await apiFetch(
-          `/api/workspaces/${workspaceId}/campaigns/${campaignId}/plans/${created.plan.id}/decision`,
-          {
-            method: "POST",
-            body: JSON.stringify({ decision: "approve" }),
-          },
-        ));
-      }
-      setVideoPath("");
-      setPlanClip(null);
-      formElement.reset();
-      await refresh(workspaceId);
-      succeed(canApprove
-        ? "Publication plan created and approved."
-        : "Publication plan is ready for owner or approver review.");
-    } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "Publication plan failed.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function choosePlanMedia(filters: AssetFilterValues = PICKER_BASE) {
-    setPlanPickerOpen(true);
-    setPlanPickerFailure(null);
-    setBusy("plan-library");
-    try {
-      const params = assetFilterParams({ ...filters, mediaKind: "video" });
-      params.set("limit", "100");
-      const body = await json<{ assets: LibraryAsset[]; facets?: AssetFacets }>(
-        await apiFetch(
-          `/api/workspaces/${workspaceId}/media/library/assets?${params.toString()}`,
-        ),
-      );
-      setPlanClips(body.assets ?? []);
-      if (body.facets) setPlanPickerFacets(body.facets);
-    } catch (reason) {
-      const message = reason instanceof Error ? reason.message : "The Library could not be opened.";
-      setPlanPickerFailure(message);
-      fail(message);
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function loadPlanSources({ force = false } = {}) {
-    if (!workspaceId || !campaignId || planSourcesLoading) return;
-    if (!force && planSourcesCampaign === campaignId) return;
-    setPlanSourcesLoading(true);
-    try {
-      const [accountBody, autopilotBody, slotBody, offerBody] = await Promise.all([
-        json<{ accounts: ConnectedAccount[] }>(await apiFetch(
-          `/api/workspaces/${workspaceId}/publishing/integrations/all`,
-          { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
-        )),
-        json<{
-          autopilot: { offer_id: string | null };
-          destinations: CampaignDestination[];
-        }>(await apiFetch(
-          `/api/workspaces/${workspaceId}/campaigns/${campaignId}/autopilot`,
-        )),
-        json<{ slots: Slot[] }>(await apiFetch(
-          `/api/workspaces/${workspaceId}/publishing/slots`,
-        )),
-        json<{ offers: CampaignOffer[] }>(await apiFetch(
-          `/api/workspaces/${workspaceId}/opportunities/offers`,
-        )),
-      ]);
-      const available = accountBody.accounts.filter((account) => account.available !== false);
-      const assigned = autopilotBody.destinations
-        .filter((destination) => destination.enabled)
-        .map((destination) => available.find((account) => (
-          account.provider === destination.provider
-          && account.id === destination.integration_id
-        )))
-        .filter((account): account is ConnectedAccount => Boolean(account));
-      const preferredAccount = assigned[0] ?? (available.length === 1 ? available[0] : null);
-      const slotOptions = upcomingSlots(slotBody.slots, new Date(), 12);
-      const campaignOffer = offerBody.offers.find(
-        (offer) => offer.affiliate_url === selectedCampaign?.affiliate_url,
-      );
-      setPlanAccounts(available);
-      setPlanAccountKey(preferredAccount ? destinationKey(preferredAccount) : "");
-      setOffers(offerBody.offers);
-      setPlanOfferId(autopilotBody.autopilot.offer_id ?? campaignOffer?.id ?? "");
-      setPlanSlotOptions(slotOptions);
-      setPlanScheduledAt(slotOptions[0]?.value ?? "");
-      setPlanSourcesCampaign(campaignId);
-    } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "Prepared campaign sources could not be read.");
-    } finally {
-      setPlanSourcesLoading(false);
-    }
-  }
 
   async function setCampaignStatus(status: Campaign["status"]) {
     if (!campaignId) return;
