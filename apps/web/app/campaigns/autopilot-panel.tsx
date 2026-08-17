@@ -1129,13 +1129,14 @@ export function AutopilotPanel({
                 onChange={(event) =>
                   void save({ authority: event.target.value as Autopilot["authority"] })}
               >
-                <option value="assist">Assist — hold every post for approval</option>
-                <option value="auto_draft">Auto-draft — engine drafts only</option>
+                <option value="assist">Assist — approve every post</option>
+                <option value="auto_draft">Auto-draft — approve, then engine drafts only</option>
                 <option value="run_by_exception">Run by exception (recommended)</option>
                 <option value="autonomous">Autonomous — earned after 10 confirmed posts</option>
               </select>
-              <small>How much this campaign may do alone. Held posts wait in
-                the exceptions list on the Timeline.</small>
+              <small>Every post below Autonomous waits on the Timeline for your
+                approval, and only a finished post — real copy, its affiliate
+                link, media its network accepts — can be approved.</small>
             </label>
             <label>Optimise for
               <select
@@ -1755,7 +1756,8 @@ export function AutopilotPanel({
             <header>
               <div>
                 <strong>Waiting for approval</strong>
-                <small>Held by this campaign&apos;s authority rules</small>
+                <small>Nothing reaches an engine before it is approved here,
+                  exactly as frozen</small>
               </div>
               <Badge tone="warn">{exceptions.length} held</Badge>
             </header>
@@ -1937,19 +1939,12 @@ export function AutopilotPanel({
                               ? "See exactly what posted"
                               : "See exactly what will post"}</summary>
                             <div>
-                              {/* The media exactly as it went out, played the
-                                  way the Publish composer plays it. */}
+                              {/* The media exactly as it went out. Played from
+                                  a blob rather than straight off the API, so a
+                                  download manager has no request to grab - see
+                                  TimelinePlayer. */}
                               {entry.video_path && (
-                                <video
-                                  className="timeline-media"
-                                  controls
-                                  // Chrome puts a download button in its own
-                                  // video controls, and this is a preview of a
-                                  // post, not a file on offer. The player keeps
-                                  // play, scrub and volume; the saving goes.
-                                  controlsList="nodownload"
-                                  disablePictureInPicture
-                                  preload="metadata"
+                                <TimelinePlayer
                                   src={`${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview?path=${encodeURIComponent(entry.video_path)}`}
                                   title={entry.video_path}
                                 />

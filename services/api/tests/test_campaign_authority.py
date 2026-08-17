@@ -160,17 +160,41 @@ def test_assist_holds_every_post_for_approval(session, tmp_path, engine_stub) ->
 
     execution = executions(session)[0]
     assert execution.state == "proposed"
-    assert "Assist" in execution.held_reason
+    assert "approves" in execution.held_reason
     assert engine_stub == [], "assist creates no job on its own"
     assert result["held"] and result["posts"] == []
     assert "waiting for approval" in result["note"]
 
 
-def test_run_by_exception_proceeds_when_nothing_trips(
+def test_every_level_below_autonomous_waits_for_approval(
+    session, tmp_path, engine_stub
+) -> None:
+    """Approval before an engine is the pipeline's rule, not one level's.
+
+    Run-by-exception used to publish unattended when nothing tripped; the
+    operator's directive is that a person approves the exact frozen post
+    before anything reaches an engine, at every level below earned autonomy.
+    """
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session)  # run_by_exception, the default
+    run_campaign(session, pilot, now=NOW)
+    session.commit()
+
+    execution = executions(session)[0]
+    assert execution.state == "proposed"
+    assert "approves" in execution.held_reason
+    assert engine_stub == [], "nothing reaches an engine before approval"
+
+    approve_execution(session, pilot, execution, now=NOW)
+    assert execution.state == "queued"
+    assert len(engine_stub) == 1, "approval is what delivers"
+
+
+def test_earned_autonomy_posts_a_finished_post_without_a_person(
     session, tmp_path, engine_stub
 ) -> None:
     campaign_setup(session, tmp_path)
-    run_campaign(session, autopilot(session), now=NOW)
+    run_campaign(session, autopilot(session, authority="autonomous"), now=NOW)
 
     assert executions(session)[0].state == "queued"
     assert len(engine_stub) == 1
@@ -200,11 +224,16 @@ def test_auto_draft_delivers_only_engine_drafts(session, tmp_path, monkeypatch) 
     pilot = autopilot(session, authority="auto_draft", delivery="now")
 
     run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+    # Auto-draft waits for approval like every level below autonomous; its
+    # distinction is what approval delivers - an engine draft, never live.
+    assert execution.state == "proposed"
+    approve_execution(session, pilot, execution, now=NOW)
 
     assert len(captured) == 1
     assert captured[0].delivery == "draft"
     assert captured[0].schedule is False
-    assert executions(session)[0].state == "queued"
+    assert execution.state == "queued"
 
 
 def test_a_low_confidence_pin_is_held_at_every_level(
@@ -262,13 +291,44 @@ def test_approving_after_the_slot_passed_clamps_to_now(
 
 def test_only_a_held_execution_can_be_approved(session, tmp_path, engine_stub) -> None:
     campaign_setup(session, tmp_path)
-    pilot = autopilot(session)
+    pilot = autopilot(session, authority="autonomous")
     run_campaign(session, pilot, now=NOW)
     execution = executions(session)[0]
     assert execution.state == "queued"
 
     with pytest.raises(ValueError, match="Only a held execution"):
         approve_execution(session, pilot, execution, now=NOW)
+
+
+def test_an_unfinished_post_cannot_be_approved(session, tmp_path, engine_stub) -> None:
+    """Approval asserts the post is finished.
+
+    Placeholder copy or a missing affiliate link refuses the approval with
+    the list of what to fix - and leaves the post held rather than failed,
+    because fixing the package is the answer, not burying the post.
+    """
+    from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
+
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+
+    execution.caption = (
+        f"Affiliate link; we may earn a commission.\n\n{PLACEHOLDER_BODY}"
+    )
+    with pytest.raises(ValueError, match="not finished"):
+        approve_execution(session, pilot, execution, now=NOW)
+    assert execution.state == "proposed", "refusal leaves it held, not failed"
+    assert engine_stub == []
+
+    execution.caption = "Real copy, written by a person."
+    execution.offer_ids = ["offer-1"]
+    execution.tracking_links = []
+    with pytest.raises(ValueError, match="affiliate link"):
+        approve_execution(session, pilot, execution, now=NOW)
+    assert execution.state == "proposed"
+    assert engine_stub == []
 
 
 def test_a_held_slot_stays_held_and_a_dismissed_one_frees(

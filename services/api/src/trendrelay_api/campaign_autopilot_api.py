@@ -23,7 +23,11 @@ from trendrelay_api.autopilot_models import (
     CampaignDestination,
     CampaignQueueItem,
 )
-from trendrelay_api.campaign_autopilot import profile_url, resolve_placement
+from trendrelay_api.campaign_autopilot import (
+    PLACEHOLDER_BODY,
+    profile_url,
+    resolve_placement,
+)
 from trendrelay_api.campaign_scheduler import campaign_status, plan_campaign
 from trendrelay_api.foundation import (
     AuthenticatedUser,
@@ -131,13 +135,12 @@ class DestinationPlacement(BaseModel):
     link_placement: str = Field(pattern=r"^(auto|caption|first_comment|bio)$")
 
 
-#: What a package says when nobody has written it yet.
-#:
 #: A caption is required by every network, so a package with none cannot post -
 #: and refusing to accept one at all would mean picking media and writing copy
-#: had to happen in the same sitting. This lets the picking happen now and the
-#: writing happen later, and says plainly on the post which it is.
-PLACEHOLDER_BODY = "Draft copy - write this before the campaign posts it."
+#: had to happen in the same sitting. Picking can happen now and writing later;
+#: the scheduler skips the package and the approve gate refuses it until the
+#: copy is real. `PLACEHOLDER_BODY` itself lives in `campaign_autopilot` so
+#: every layer recognises the same sentence.
 
 
 class QueueItemCreate(BaseModel):

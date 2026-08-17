@@ -136,21 +136,106 @@ def _publish_execution(
     return create_publish_job(request, session=session)
 
 
+def finalization_problems(
+    autopilot: CampaignAutopilot,
+    execution: PublicationExecution,
+    *,
+    engine_check: bool = True,
+) -> list[str]:
+    """What is not finished about this frozen post, in the operator's terms.
+
+    The approve gate refuses a post with any of these, so approval means the
+    post was actually complete: real copy, its affiliate link where products
+    are attached, and - when `engine_check` is on - a request the delivering
+    engine will accept. The unattended path checks content only: engine
+    conditions like media hosting are environment, not authorship, and the
+    delivery guard still enforces them. Media is deliberately absent here -
+    a missing or changed file has its own harder path (`_media_ready` fails
+    the execution and pauses the item).
+    """
+    from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
+    from trendrelay_api.integrations.publishing import (
+        PublishRequest,
+        _validate_request,
+        resolve_provider,
+    )
+
+    problems: list[str] = []
+    caption = (execution.caption or "").strip()
+    if not caption:
+        problems.append("The caption is empty.")
+    elif PLACEHOLDER_BODY in caption:
+        problems.append(
+            "The copy was never written - the caption still carries the "
+            "placeholder. Edit the package's content first."
+        )
+    if execution.offer_ids:
+        written = " ".join(
+            [execution.caption or "", execution.first_comment or "",
+             *(execution.thread or [])]
+        )
+        links = [
+            entry.get("url") for entry in (execution.tracking_links or [])
+            if entry.get("url")
+        ]
+        if not links:
+            problems.append(
+                "Products are attached but no affiliate link was resolved for "
+                "this post. Check the offers' links in Attribution."
+            )
+        elif execution.placement != "bio" and not any(
+            link in written for link in links
+        ):
+            problems.append(
+                "Products are attached but their affiliate link is not in the "
+                "post's own text."
+            )
+    if engine_check:
+        try:
+            _validate_request(resolve_provider(execution.provider), PublishRequest(
+                workspace_id=autopilot.workspace_id,
+                video_path=execution.media_path,
+                image_paths=list(execution.image_paths or []),
+                caption=execution.caption,
+                title=execution.title,
+                first_comment=execution.first_comment,
+                thread=list(execution.thread or []),
+                date=_as_utc(execution.scheduled_at) or datetime.now(UTC),
+                targets=[{
+                    "platform": execution.platform,
+                    "integration_id": execution.integration_id,
+                    "post_type": execution.post_type,
+                    "provider": execution.provider,
+                }],
+            ))
+        except Exception as error:
+            problems.append(str(error))
+    return problems
+
+
 def _hold_reason(autopilot: CampaignAutopilot, post: ScheduledPost) -> str | None:
     """Why this post must wait for a person, or None to proceed.
 
+    Approval before an engine is the pipeline's rule, not one authority
+    level's: below earned autonomy, every frozen post waits in the inbox and
+    a person approves the exact record that will be sent. Autonomous - earned
+    through the graduation gate, revocable by the kill switch - is the one
+    level that posts without a person, and even it holds what the
+    completeness check refuses.
+
     A low-confidence product holds at every authority level: quality is not a
-    policy an authority level can waive, and "low-confidence products remain
-    review-only" is the promise the smart matcher already keeps for unattended
-    matches - this closes the pinned-product path around it.
+    policy an authority level can waive.
     """
     if any(confidence == "low" for confidence in post.offer_confidences):
         return (
             "A pinned product matched this content with low confidence. Approve "
             "to post it anyway, or change the queue item's products."
         )
-    if autopilot.authority == "assist":
-        return "Assist authority: every post waits for approval."
+    if autopilot.authority != "autonomous":
+        return (
+            "Waiting for approval: this exact frozen post reaches its engine "
+            "only after a person approves it."
+        )
     return None
 
 
@@ -312,10 +397,18 @@ def run_campaign(
             failures.append(f"{destination.label}: {problem}")
             continue
         hold = _hold_reason(autopilot, post)
+        if hold is None:
+            # Even earned autonomy does not publish an unfinished post: what
+            # the approve gate would refuse, the unattended path holds.
+            unfinished = finalization_problems(
+                autopilot, execution, engine_check=False
+            )
+            if unfinished:
+                hold = "Not finished: " + " ".join(unfinished)
         if hold:
-            # Held for a person, not failed: the frozen record is complete and
-            # a `proposed` execution keeps its slot and its queue item, so
-            # approving it later delivers exactly what was planned now.
+            # Held for a person, not failed: a `proposed` execution keeps its
+            # slot and its queue item, so approving it later delivers exactly
+            # what was planned now.
             execution.state = "proposed"
             execution.held_reason = hold
             execution.updated_at = moment
@@ -389,6 +482,13 @@ def approve_execution(
         raise ValueError(
             f"Only a held execution can be approved; this one is {execution.state}."
         )
+    # Approval asserts the post is finished. A post that is not - placeholder
+    # copy, a missing affiliate link, a request its engine would refuse - is
+    # refused here with the list of what to fix, rather than approved into a
+    # delivery that fails or, worse, publishes something half-written.
+    unfinished = finalization_problems(autopilot, execution)
+    if unfinished:
+        raise ValueError("This post is not finished. " + " ".join(unfinished))
     moment = now or datetime.now(UTC)
     problem = _media_ready(execution)
     if problem:

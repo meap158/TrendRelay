@@ -587,10 +587,19 @@ def plan_campaign(
         # content hash in their sub IDs and the hash comes from the version
         # being frozen. Once per item per plan: the resolution cannot change
         # while this plan is being assembled.
+        from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
         from trendrelay_api.integrations.publishing import video_fits_platform
 
         item = None
         for candidate in eligible:
+            if candidate.body == PLACEHOLDER_BODY:
+                # An unwritten package never reaches an engine, and holding a
+                # slot for it would block the content that is ready.
+                notes.append(
+                    f"A package has no copy written yet ({candidate.title or candidate.id}); "
+                    "it is skipped until somebody writes it."
+                )
+                continue
             if candidate.id not in frozen_cache:
                 frozen_cache[candidate.id] = resolve_frozen_media(session, candidate)
             if candidate.image_paths:

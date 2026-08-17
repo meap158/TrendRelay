@@ -74,6 +74,11 @@ def autopilot(session, **overrides) -> CampaignAutopilot:
         "daily_cap_per_account": 2,
         "delivery": "draft",
         "posts_scheduled": 0,
+        # These tests exercise the delivery pipeline's mechanics; earned
+        # autonomy is the one level that reaches an engine without a person,
+        # so it is what lets a run go all the way through. The approval gate
+        # has its own suite in test_campaign_authority.
+        "authority": "autonomous",
     }
     fields.update(overrides)
     item = CampaignAutopilot(

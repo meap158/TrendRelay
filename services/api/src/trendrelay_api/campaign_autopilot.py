@@ -47,6 +47,11 @@ FIRST_COMMENT_LINK_PLATFORMS: frozenset[str] = frozenset()
 
 Placement = Literal["caption", "first_comment", "bio", "none"]
 
+#: What a package says when nobody has written it yet. Lives here, in the
+#: dependency-free module, because the scheduler (skip it), the runner
+#: (refuse to approve it) and the API (mark it) all need to recognise it.
+PLACEHOLDER_BODY = "Draft copy - write this before the campaign posts it."
+
 
 @dataclass(frozen=True)
 class LinkPlacement:

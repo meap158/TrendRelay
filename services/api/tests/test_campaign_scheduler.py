@@ -258,6 +258,22 @@ def test_it_schedules_one_post_per_due_slot(session) -> None:
     assert "2 post(s) scheduled" in note
 
 
+def test_an_unwritten_package_is_skipped_not_posted(session) -> None:
+    # A placeholder caption never reaches an engine, and holding a slot for
+    # it would block the content that is ready.
+    from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
+
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(session, "q-unwritten", body=PLACEHOLDER_BODY)
+    queue_item(session, "q-written", position=1)
+
+    posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert [post.queue_item_id for post in posts] == ["q-written"]
+    assert "no copy written yet" in note
+
+
 def test_a_video_the_network_refuses_is_routed_around_not_posted_into(
     session, monkeypatch
 ) -> None:
