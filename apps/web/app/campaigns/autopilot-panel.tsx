@@ -253,6 +253,16 @@ function placementTone(placement: string): "good" | "neutral" | "warn" {
   return "warn";
 }
 
+/* The browser reports a dead connection as the subjectless "Failed to
+   fetch"; the person reading the toast needs to know it was the local API
+   that did not answer, not which browser API gave up. */
+function explainFailure(reason: unknown, fallback: string): string {
+  if (!(reason instanceof Error)) return fallback;
+  return reason.message === "Failed to fetch"
+    ? "The local API did not answer. If it is restarting, retry in a moment."
+    : reason.message;
+}
+
 function previewText(value: string): string {
   return value.replaceAll(/https:\/\/preview\.invalid\/affiliate-link\/[^\s]+/g, "[tracked affiliate link]");
 }
@@ -384,7 +394,7 @@ export function AutopilotPanel({
   useEffect(() => {
     queueMicrotask(() => {
       void refresh().catch((reason) =>
-        fail(reason instanceof Error ? reason.message : "Autopilot unavailable."));
+        fail(explainFailure(reason, "Autopilot unavailable.")));
       // Everything the readiness check needs, loaded once. Each of these is a
       // different subsystem, and the point of the checklist is that it names
       // which one is missing rather than reporting a single blank "not ready".
@@ -436,7 +446,7 @@ export function AutopilotPanel({
         : "Dismissed. Its slot and its clip are free again.");
       await loadExceptions();
     } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "The decision was refused.");
+      fail(explainFailure(reason, "The decision was refused."));
     } finally {
       setBusy("");
     }
@@ -453,7 +463,7 @@ export function AutopilotPanel({
       setSelectedAccounts(new Set());
       setAdding(true);
     } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "Could not load accounts.");
+      fail(explainFailure(reason, "Could not load accounts."));
     } finally {
       setBusy("");
     }
@@ -477,7 +487,7 @@ export function AutopilotPanel({
       setDrafting([]);
       setPicking(true);
     } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "The library could not be read.");
+      fail(explainFailure(reason, "The library could not be read."));
     } finally {
       setBusy("");
     }
@@ -497,7 +507,7 @@ export function AutopilotPanel({
       succeed(await work());
       await refresh();
     } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "That did not work.");
+      fail(explainFailure(reason, "That did not work."));
     } finally {
       setBusy("");
     }
@@ -516,7 +526,7 @@ export function AutopilotPanel({
           : body.note);
       }
     } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "The next posts could not be previewed.");
+      fail(explainFailure(reason, "The next posts could not be previewed."));
     } finally {
       setBusy("");
     }
@@ -564,7 +574,7 @@ export function AutopilotPanel({
       setProductItem(item);
       setPinnedOffers(new Set(item?.offer_ids ?? []));
     } catch (reason) {
-      fail(reason instanceof Error ? reason.message : "Products could not be analyzed.");
+      fail(explainFailure(reason, "Products could not be analyzed."));
     } finally {
       setBusy("");
     }
@@ -713,7 +723,12 @@ export function AutopilotPanel({
               a third choice of its own. */}
           <button type="button" className={section === "schedule" ? "active" : ""}
             onClick={() => jumpTo("schedule")}>
-            <span>Timeline</span><strong>{preview?.posts.length ?? slots.length}</strong>
+            {/* Committed jobs still waiting to go out are upcoming posts too;
+                only what has already delivered or failed leaves the count. */}
+            <span>Timeline</span><strong>{preview
+              ? preview.posts.length + preview.deployed.filter((item) =>
+                  item.status === "queued" || item.status === "running").length
+              : slots.length}</strong>
             <small>{preview ? "upcoming posts" : "posting times"}</small>
           </button>
         </nav>
@@ -1471,9 +1486,12 @@ export function AutopilotPanel({
       />
 
       {section === "schedule" && <>
+      {/* "Posting timeline", not "Upcoming posts": the committed section below
+          keeps recently delivered jobs on screen, and a delivered job under an
+          "upcoming" heading reads like a contradiction. */}
       <Card
         eyebrow="Active campaign pipeline"
-        title="Upcoming posts"
+        title="Posting timeline"
         aside={
           <Button variant="secondary" size="sm" busy={busy === "preview"}
             disabled={!ready.configured}

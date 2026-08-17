@@ -761,6 +761,8 @@ html { scroll-behavior: smooth; }
 /* The reason spans the row rather than squeezing into a column: it is a
    sentence, and a sentence in a 90px column is unreadable. */
 .autopilot-placement-reason { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.autopilot-placement-choice { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.autopilot-placement-choice select { max-width: 240px; font-size: 12px; }
 .autopilot-queue li.draft { border-inline-start: 3px solid var(--amber); }
 .autopilot-queue li.approved { border-inline-start: 3px solid var(--green); }
 .campaign-queue-actions { display: flex !important; flex-wrap: wrap; justify-content: flex-end; gap: 4px !important; }

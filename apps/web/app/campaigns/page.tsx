@@ -465,7 +465,7 @@ export default function CampaignsPage() {
                   rather than them. */}
               <section className="calendar-board">
                 <div className="card-heading">
-                  <div><p className="section-kicker">{t("campaigns.calendar")}</p><h2>{visiblePlans.length} planned posts</h2></div>
+                  <div><p className="section-kicker">{t("campaigns.calendar")}</p><h2>{visiblePlans.length} planned {visiblePlans.length === 1 ? "post" : "posts"}</h2></div>
                 </div>
                 {!visiblePlans.length && <div className="quiet-empty"><strong>{t("campaigns.noPlans")}</strong><span>{t("campaigns.addApprovedMedia")}</span></div>}
                 {visiblePlans.map((plan) => {
