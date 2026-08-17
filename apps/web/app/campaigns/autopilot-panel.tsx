@@ -60,7 +60,6 @@ type Destination = {
   platform: PublishingPlatform;
   label: string;
   enabled: boolean;
-  tracking_code: string | null;
   /** The stored configuration; 'auto' lets the network decide. */
   link_placement_setting: "auto" | "caption" | "first_comment" | "bio";
   /** What the configuration resolves to today. */
@@ -261,10 +260,6 @@ function explainFailure(reason: unknown, fallback: string): string {
   return reason.message === "Failed to fetch"
     ? "The local API did not answer. If it is restarting, retry in a moment."
     : reason.message;
-}
-
-function previewText(value: string): string {
-  return value.replaceAll(/https:\/\/preview\.invalid\/affiliate-link\/[^\s]+/g, "[tracked affiliate link]");
 }
 
 function placementSummary(post: PreviewPost): { label: string; detail: string } {
@@ -1685,14 +1680,14 @@ export function AutopilotPanel({
                               <summary>See exactly what will post</summary>
                               <div>
                                 <strong>Post content</strong>
-                                <pre>{previewText(post.caption)}</pre>
+                                <pre>{post.caption}</pre>
                                 {post.first_comment && <>
                                   <strong>First comment · affiliate link</strong>
-                                  <pre>{previewText(post.first_comment)}</pre>
+                                  <pre>{post.first_comment}</pre>
                                 </>}
                                 {post.thread.map((reply, replyIndex) => <div key={`${replyIndex}-${reply}`}>
                                   <strong>Reply {replyIndex + 1} · affiliate link</strong>
-                                  <pre>{previewText(reply)}</pre>
+                                  <pre>{reply}</pre>
                                 </div>)}
                               </div>
                             </details>

@@ -138,6 +138,27 @@ def test_the_campaign_s_own_language_wins_and_unknowns_stay_english(
     assert language_code(languages) == expected
 
 
+def test_a_shopee_short_link_counts_as_tracked_in_publish() -> None:
+    """The network's own link is the tracking link now (ADR 0022).
+
+    The preview used to warn that a post without an internal /c/ link was
+    unattributable - which would nag on every correctly-linked post carrying
+    the short link Shopee actually pays on.
+    """
+    def post(caption: str) -> publishing.PublishRequest:
+        return publishing.PublishRequest(
+            workspace_id="ws", video_path="clip.mp4", caption=caption,
+            date=__import__("datetime").datetime(2026, 8, 17, 12, 0),
+            targets=[publishing.PublishTarget(platform="facebook", integration_id="a1")],
+            confirm_external_action=True,
+        )
+
+    assert publishing.carries_tracking_link(
+        post("Ba cách pha espresso ngon hơn. https://s.shopee.vn/2gAN9f0Ef6")
+    ) is True
+    assert publishing.carries_tracking_link(post("No link at all here.")) is False
+
+
 def test_scaffolding_speaks_the_language_or_falls_back_to_english() -> None:
     assert "hoa hồng" in localised_text("vi", "disclosure")
     assert localised_text("vi", "bio_hint") == "Link ở tiểu sử"

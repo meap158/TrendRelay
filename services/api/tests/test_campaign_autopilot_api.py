@@ -508,18 +508,16 @@ def test_running_a_switched_off_autopilot_is_refused(workspace) -> None:
     assert "switched off" in response.json()["detail"]
 
 
-def test_an_offer_with_a_plain_http_url_mints_no_tracking_link(workspace) -> None:
-    """Checked here, not by the redirector hours later.
+def test_an_offer_with_a_plain_http_url_is_refused_a_place_in_a_post(workspace) -> None:
+    """Checked where the link is chosen, not discovered in a published caption.
 
-    The attribution endpoint refuses a non-HTTPS destination; minting inside the
-    autopilot run bypassed that check, so an http:// offer would have produced a
-    link that failed at click time, in a different part of the app, long after
-    the setting that caused it.
+    The post carries the offer's URL verbatim now (ADR 0022), so an http:// or
+    credential-bearing URL would go out to readers exactly as stored. Refusing
+    it here keeps the same standard the attribution endpoint always applied.
     """
-    from trendrelay_api.autopilot_models import CampaignAutopilot, CampaignDestination
-    from trendrelay_api.campaign_autopilot_api import link_url_for
+    from trendrelay_api.campaign_autopilot_api import offer_link_url
 
-    campaign_id = campaign(workspace)
+    campaign(workspace)
     with TestingSession.begin() as session:
         session.execute(
             ProductOffer.__table__.update()
@@ -527,21 +525,7 @@ def test_an_offer_with_a_plain_http_url_mints_no_tracking_link(workspace) -> Non
             .values(affiliate_url="http://example.test/aff")
         )
     with TestingSession() as session:
-        pilot = session.scalar(
-            select(CampaignAutopilot).where(
-                CampaignAutopilot.campaign_id == campaign_id
-            )
-        )
-        assert pilot is not None
-        pilot.offer_id = "offer-1"
-        destination = CampaignDestination(
-            workspace_id=workspace, campaign_id=campaign_id, provider="buffer",
-            integration_id="acct-1", platform="youtube", label="brand",
-        )
-        session.add(destination)
-        session.flush()
-        assert link_url_for(session, pilot, destination) is None
-        assert destination.tracking_link_id is None
+        assert offer_link_url(session, "offer-1") is None
 
 
 def test_the_preview_reports_what_an_engine_would_refuse(workspace, tmp_path) -> None:
@@ -627,65 +611,33 @@ def test_the_preview_carries_a_verdict_for_every_post(workspace) -> None:
     assert all("problem" in post for post in body["posts"])
 
 
-def test_an_autopilot_link_carries_sub_ids_too(workspace) -> None:
-    """These are the links that matter most and they were getting none.
+def test_a_post_carries_the_offers_own_short_link_and_mints_nothing(workspace) -> None:
+    """The Shopee short link is what earns the commission, so it goes out whole.
 
-    The autopilot mints its own rather than going through the attribution
-    endpoint, so it missed the assignment entirely - and its posts are the
-    unattended ones, whose conversions come back through the network's report
-    or not at all.
+    Tracking lives in the network's own report now (ADR 0022): the link that
+    lands in a caption is the affiliate URL exactly as imported, and no
+    TrackingLink row is created behind it.
     """
     from trendrelay_api.attribution_models import TrackingLink
-    from trendrelay_api.attribution_subids import link_key
-    from trendrelay_api.autopilot_models import CampaignAutopilot, CampaignDestination
-    from trendrelay_api.campaign_autopilot_api import link_url_for
+    from trendrelay_api.campaign_autopilot_api import offer_link_url
     from trendrelay_api.opportunity_models import ProductOffer
 
-    campaign_id = campaign(workspace)
+    campaign(workspace)
     with TestingSession.begin() as session:
-        # A network we have a sub-ID contract for; the fixture's offer points at
-        # a host we deliberately leave alone.
-        session.get(ProductOffer, "offer-1").affiliate_url = "https://shopee.vn/thing-i.1.2"
-
-    request(
-        "PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
-        json={"enabled": False, "offer_id": "offer-1", "confirm_external_action": True},
-    )
-    request(
-        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/destinations",
-        json={"provider": "buffer", "integration_id": "acct-1",
-              "platform": "instagram", "label": "brand on Instagram"},
-    )
+        session.get(ProductOffer, "offer-1").affiliate_url = (
+            "https://s.shopee.vn/2gAN9f0Ef6"
+        )
 
     with TestingSession.begin() as session:
-        autopilot = session.scalars(select(CampaignAutopilot)).one()
-        destination = session.scalars(select(CampaignDestination)).one()
-        code = link_url_for(session, autopilot, destination)
-        assert code
-        link = session.scalars(
-            select(TrackingLink).where(TrackingLink.code == code)
-        ).one()
-
-        assert link.sub_ids["sub_id1"] == link_key(code)
-        assert link.sub_ids["sub_id3"] == "instagram"
-        assert link.sub_ids["sub_id4"] == "Launch"
-        # One link serves a destination and is reused for every video sent to
-        # it, so there is no content to name. The slot stays empty rather than
-        # being labelled with whichever video happened to go out first - and the
-        # slots after it do not shift up to close the gap, because a network
-        # reads them positionally.
-        assert "sub_id2" not in link.sub_ids
+        assert offer_link_url(session, "offer-1") == "https://s.shopee.vn/2gAN9f0Ef6"
+        assert session.scalars(select(TrackingLink)).all() == []
 
 
-def test_each_destination_product_pair_keeps_its_own_tracking_link(workspace) -> None:
-    from trendrelay_api.autopilot_models import (
-        CampaignAutopilot,
-        CampaignDestination,
-        CampaignDestinationOfferLink,
-    )
-    from trendrelay_api.campaign_autopilot_api import link_url_for
+def test_each_offer_brings_its_own_link(workspace) -> None:
+    """Two products in one post link to two different places - their own."""
+    from trendrelay_api.campaign_autopilot_api import offer_link_url
 
-    campaign_id = campaign(workspace)
+    campaign(workspace)
     with TestingSession.begin() as session:
         session.add(Product(
             id="prod-2", workspace_id=workspace, catalog_key="k2",
@@ -697,27 +649,13 @@ def test_each_destination_product_pair_keeps_its_own_tracking_link(workspace) ->
             affiliate_url="https://example.test/grinder", currency="USD",
             availability="available", created_by="owner-user",
         ))
-    request(
-        "PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
-        json={"offer_mode": "smart", "confirm_external_action": True},
-    )
-    request(
-        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/destinations",
-        json={"provider": "buffer", "integration_id": "acct-1",
-              "platform": "youtube", "label": "brand"},
-    )
 
-    with TestingSession.begin() as session:
-        pilot = session.scalars(select(CampaignAutopilot)).one()
-        destination = session.scalars(select(CampaignDestination)).one()
-        first = link_url_for(session, pilot, destination, "offer-1")
-        second = link_url_for(session, pilot, destination, "offer-2")
-        repeated = link_url_for(session, pilot, destination, "offer-1")
-        mappings = session.scalars(select(CampaignDestinationOfferLink)).all()
-
+    with TestingSession() as session:
+        first = offer_link_url(session, "offer-1")
+        second = offer_link_url(session, "offer-2")
         assert first and second and first != second
-        assert repeated == first
-        assert {mapping.offer_id for mapping in mappings} == {"offer-1", "offer-2"}
+        assert second == "https://example.test/grinder"
+        assert offer_link_url(session, "missing-offer") is None
 
 
 def test_a_destination_post_type_is_checked_when_it_is_set(workspace) -> None:

@@ -1775,15 +1775,15 @@ def test_a_preview_says_when_a_post_cannot_be_attributed(
 ) -> None:
     """The one thing this app exists to optimise, and it was silent about it.
 
-    Clicks exist only because somebody followed a `/c/` link, so a post
-    published without one earns whatever it earns under the network's report
-    with nothing on our side to join it to. No later import repairs that.
+    A post without an affiliate link earns whatever it earns with no report
+    anywhere - not the network's, not ours - that can trace it. Said in the
+    preview, while the caption can still be changed.
     """
     use_provider(monkeypatch, tmp_path, "zernio")
 
     plain = publishing.preview_publish(request(media_file))
     assert plain["attribution"]["tracked"] is False
-    assert "nothing it earns can be attributed" in plain["attribution"]["note"]
+    assert "nothing it earns can be traced" in plain["attribution"]["note"]
 
     tracked = publishing.preview_publish(request(
         media_file,
@@ -1804,11 +1804,12 @@ def test_a_link_in_the_first_comment_counts(
     assert preview["attribution"]["tracked"] is True
 
 
-def test_someone_elses_link_is_not_our_attribution(
+def test_a_bare_product_url_is_not_vouched_for(
     monkeypatch, media_file: Path, tmp_path: Path
 ) -> None:
-    # A bare affiliate URL earns commission but records no click here, which is
-    # exactly the case that looks tracked and is not.
+    # Recognition is deliberately conservative: only the network's own short
+    # hosts count, because a full product URL may or may not carry affiliate
+    # credit and calling it tracked would vouch for something unseeable.
     use_provider(monkeypatch, tmp_path, "zernio")
     preview = publishing.preview_publish(request(
         media_file, caption="Buy it https://shopee.vn/thing-i.1.2?af=me",

@@ -2661,15 +2661,17 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
         # above says which engines could be asked at all.
         "engine_problems": engine_problems,
         # Said before the post goes out, because afterwards is too late. A post
+        # without an affiliate link earns whatever it earns with no report
+        # anywhere that can trace it.
         "attribution": {
             "tracked": carries_tracking_link(request),
             "note": (
-                "This post carries a tracking link, so its clicks and any "
-                "commission can be traced back to it."
+                "This post carries an affiliate link; its clicks and any "
+                "commission are counted in the network's own report."
                 if carries_tracking_link(request)
-                else "No tracking link in this post. It can still be published, "
-                     "but nothing it earns can be attributed to it afterwards - "
-                     "clicks are only recorded when somebody follows one."
+                else "No affiliate link in this post. It can still be "
+                     "published, but nothing it earns can be traced back to "
+                     "it afterwards."
             ),
         },
         "engines": [

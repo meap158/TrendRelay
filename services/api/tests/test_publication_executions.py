@@ -405,34 +405,34 @@ def _linked_campaign(session, tmp_path, platform: str):
     return rows
 
 
-def test_each_caption_post_gets_its_own_link(session, tmp_path, engine_stub) -> None:
+def test_each_caption_post_carries_the_offers_own_link(session, tmp_path, engine_stub) -> None:
+    """The link in the caption is the affiliate URL exactly as imported.
+
+    Tracking lives in the network's own report (ADR 0022), so nothing is
+    minted: both runs of the same offer post the same URL - the one Shopee
+    pays on - and the execution records the offer, not a spent code.
+    """
     rows = _linked_campaign(session, tmp_path, "youtube")
 
-    link_ids = [row.tracking_links[0]["tracking_link_id"] for row in rows]
-    assert None not in link_ids
-    assert link_ids[0] != link_ids[1], (
-        "each caption post carries its own link, which is what makes clip and "
-        "time effects learnable"
+    for row in rows:
+        assert row.tracking_links[0]["url"] == "https://shopee.vn/product/11/22"
+        assert row.tracking_links[0]["tracking_link_id"] is None
+        assert "https://shopee.vn/product/11/22" in row.caption
+    assert session.scalars(select(TrackingLink)).all() == [], (
+        "no internal link rows behind campaign posts"
     )
-    # The per-post link carries the frozen content hash in its sub IDs, and
-    # keeps the campaign, offer and product dimensions a report groups by.
-    minted = session.get(TrackingLink, link_ids[0])
-    content_digest = hashlib.sha256(b"edited bytes").hexdigest()[:8]
-    assert content_digest in minted.sub_ids.values()
-    assert minted.campaign_id == "camp"
-    assert minted.offer_id == "offer-1"
-    assert minted.product_id == "product-offer-1"
 
 
-def test_a_bio_route_keeps_one_stable_link(session, tmp_path, engine_stub) -> None:
+def test_a_bio_route_carries_the_same_offer_link(session, tmp_path, engine_stub) -> None:
     rows = _linked_campaign(session, tmp_path, "tiktok")
 
-    codes = {row.tracking_links[0]["code"] for row in rows}
-    assert len(codes) == 1, (
-        "a bio route keeps the destination's one long-lived link: the profile "
-        "holds a single URL and rotating it per post would orphan it"
+    urls = {row.tracking_links[0]["url"] for row in rows}
+    assert urls == {"https://shopee.vn/product/11/22"}, (
+        "the profile points at the offer's own link, which does not change - "
+        "the stability a bio needs without a minted URL to keep alive"
     )
-    assert all(row.tracking_links[0]["shared"] for row in rows)
+    for row in rows:
+        assert row.tracking_links[0]["placement"] == "bio"
 
 
 # --- circuit breakers -----------------------------------------------------------

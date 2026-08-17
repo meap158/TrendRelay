@@ -9,7 +9,6 @@ next day looks like before anything is created.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from secrets import token_urlsafe
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -17,14 +16,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from trendrelay_api import attribution_subids
-from trendrelay_api.attribution_api import _https_url, _public_url
-from trendrelay_api.attribution_models import TrackingLink
+from trendrelay_api.attribution_api import _https_url
 from trendrelay_api.auth import require_governed_assurance
 from trendrelay_api.autopilot_models import (
     CampaignAutopilot,
     CampaignDestination,
-    CampaignDestinationOfferLink,
     CampaignQueueItem,
 )
 from trendrelay_api.campaign_autopilot import resolve_placement
@@ -195,7 +191,6 @@ def _autopilot(session: Session, workspace_id: str, campaign_id: str,
 def _destination_view(session: Session, item: CampaignDestination) -> dict[str, Any]:
     from trendrelay_api.integrations.publishing import first_comment_deliverable
 
-    link = session.get(TrackingLink, item.tracking_link_id) if item.tracking_link_id else None
     placement = resolve_placement(
         item.platform,
         override=item.link_placement,
@@ -210,7 +205,6 @@ def _destination_view(session: Session, item: CampaignDestination) -> dict[str, 
         "post_type": item.post_type,
         "enabled": item.enabled,
         "last_posted_at": item.last_posted_at,
-        "tracking_code": link.code if link else None,
         # The stored setting and the resolved outcome, separately: 'auto' is a
         # configuration, 'caption' is what it resolved to today.
         "link_placement_setting": item.link_placement,
@@ -240,149 +234,28 @@ def _queue_view(item: CampaignQueueItem) -> dict[str, Any]:
     }
 
 
-def link_url_for(
-    session: Session,
-    autopilot: CampaignAutopilot,
-    destination: CampaignDestination,
-    offer_id: str | None = None,
-) -> str | None:
-    """This destination's tracking code, minting one the first time it is needed.
+def offer_link_url(session: Session, offer_id: str | None) -> str | None:
+    """The offer's own affiliate link, exactly as it was imported.
 
-    One link per destination, reused. A fresh link per post would scatter the
-    clicks for one account across dozens of codes and make the account
-    unmeasurable, which is the opposite of the point.
+    Posts carry the network's short link (``https://s.shopee.vn/...``)
+    verbatim: its clicks and commissions are counted in the network's own
+    report. TrendRelay used to wrap offers in its ``/c/`` redirector so each
+    post could be measured internally (ADR 0015); that is retired for now -
+    a localhost redirect in a published caption tracks nothing, and the
+    network's link already tracks everything the network pays on. ADR 0022
+    records the decision and what it costs.
     """
-    selected_offer_id = offer_id or autopilot.offer_id
-    if not selected_offer_id:
+    if not offer_id:
         return None
-    mapped = session.scalar(select(CampaignDestinationOfferLink).where(
-        CampaignDestinationOfferLink.destination_id == destination.id,
-        CampaignDestinationOfferLink.offer_id == selected_offer_id,
-    ))
-    if mapped:
-        link = session.get(TrackingLink, mapped.tracking_link_id)
-        if link:
-            return link.code
-    # Preserve links minted before per-product destination mappings existed.
-    if destination.tracking_link_id:
-        link = session.get(TrackingLink, destination.tracking_link_id)
-        if link and link.offer_id == selected_offer_id:
-            return link.code
-    offer = session.get(ProductOffer, selected_offer_id)
-    if not offer:
-        return None
-    try:
-        # The same check the attribution endpoint applies. Skipping it here
-        # would let an offer with an http:// or credential-bearing URL mint a
-        # link the redirector then refuses, hours later and somewhere else.
-        destination_url = _https_url(offer.affiliate_url)
-    except ValueError:
-        return None
-    code = token_urlsafe(8)
-    campaign = session.get(Campaign, autopilot.campaign_id)
-    minted_at = utc_now()
-    # The same sub IDs a hand-made link gets. Without this the links that matter
-    # most carry none: these are the ones the autopilot posts with, unattended,
-    # and their conversions come back through the network's report or not at all.
-    #
-    # No content dimension, because one link serves a destination rather than a
-    # post and is reused across every video sent to it. The slot is left empty
-    # rather than filled with the first video's hash, which would label a year of
-    # clicks with whatever happened to go out first. Slots do not shift to close
-    # the gap - they are read positionally, so placement stays in its own.
-    sub_ids = attribution_subids.assign(destination_url, attribution_subids.LinkContext(
-        code=code,
-        platform=destination.platform,
-        campaign_id=autopilot.campaign_id,
-        campaign_name=campaign.name if campaign else None,
-        created_at=minted_at,
-        product_id=offer.product_id,
-    ))
-    link = TrackingLink(
-        code=code,
-        sub_ids=sub_ids,
-        workspace_id=autopilot.workspace_id,
-        campaign_id=autopilot.campaign_id,
-        offer_id=offer.id,
-        product_id=offer.product_id,
-        destination_url=destination_url,
-        country_destinations={},
-        platform=destination.platform,
-        campaign_parameter="tr_campaign",
-        platform_parameter="tr_platform",
-        disclosure=autopilot.disclosure[:500],
-        created_by=autopilot.created_by,
-    )
-    session.add(link)
-    session.flush()
-    session.add(CampaignDestinationOfferLink(
-        workspace_id=autopilot.workspace_id,
-        campaign_id=autopilot.campaign_id,
-        destination_id=destination.id,
-        offer_id=offer.id,
-        tracking_link_id=link.id,
-    ))
-    if offer.id == autopilot.offer_id and not destination.tracking_link_id:
-        destination.tracking_link_id = link.id
-    return link.code
-
-
-def mint_post_link(
-    session: Session,
-    autopilot: CampaignAutopilot,
-    destination: CampaignDestination,
-    offer_id: str,
-    *,
-    content_sha256: str | None = None,
-) -> TrackingLink | None:
-    """A fresh link for one post, carrying the content dimension a shared link cannot.
-
-    `link_url_for` keeps one link per destination and offer, which is right for
-    a bio: the profile holds a single URL, and rotating it per post would
-    orphan the profile link and scatter nothing but confusion. For a caption or
-    a comment the link lives inside the post, and one link per *post* is what
-    lets clicks answer "which video sells" - the content slot in the sub IDs is
-    the video's own hash, which a destination-lifetime link has to leave empty.
-    Account-level measurement is preserved because the scheduler's ranking
-    aggregates every link a destination has ever posted through.
-    """
     offer = session.get(ProductOffer, offer_id)
     if not offer:
         return None
     try:
-        destination_url = _https_url(offer.affiliate_url)
+        # The same check the attribution endpoint applies: an http:// or
+        # credential-bearing URL has no business in a published caption.
+        return _https_url(offer.affiliate_url)
     except ValueError:
         return None
-    code = token_urlsafe(8)
-    campaign = session.get(Campaign, autopilot.campaign_id)
-    minted_at = utc_now()
-    sub_ids = attribution_subids.assign(destination_url, attribution_subids.LinkContext(
-        code=code,
-        platform=destination.platform,
-        campaign_id=autopilot.campaign_id,
-        campaign_name=campaign.name if campaign else None,
-        created_at=minted_at,
-        content_sha256=content_sha256,
-        product_id=offer.product_id,
-    ))
-    link = TrackingLink(
-        code=code,
-        sub_ids=sub_ids,
-        workspace_id=autopilot.workspace_id,
-        campaign_id=autopilot.campaign_id,
-        offer_id=offer.id,
-        product_id=offer.product_id,
-        destination_url=destination_url,
-        country_destinations={},
-        platform=destination.platform,
-        campaign_parameter="tr_campaign",
-        platform_parameter="tr_platform",
-        disclosure=autopilot.disclosure[:500],
-        created_by=autopilot.created_by,
-    )
-    session.add(link)
-    session.flush()
-    return link
 
 
 @router.get("/{campaign_id}/autopilot")
@@ -891,23 +764,12 @@ def preview_autopilot(
             CampaignDestination.enabled.is_(True),
         )
     ).all()
-    # A preview never mints a link: it would leave real tracking codes behind
-    # for a post nobody agreed to send.
-    sample = None
-    if destinations:
-        existing = next(
-            (item for item in destinations if item.tracking_link_id), None
-        )
-        link = session.get(TrackingLink, existing.tracking_link_id) if existing else None
-        sample = link.code if link else "not yet created"
-    preview_link = (
-        _public_url(sample)
-        if sample and sample != "not yet created"
-        else "https://preview.invalid/affiliate-link"
-    )
+    # The preview composes with the offers' own affiliate links - the same
+    # URLs a real run puts in the caption - so what is shown is what goes
+    # out. Nothing is minted or written; the links are read-only data.
     posts, note = plan_campaign(
         session, autopilot, now=datetime.now(UTC),
-        link_for=lambda _destination_id, offer_id: f"{preview_link}/{offer_id}",
+        link_for=lambda _destination_id, offer_id: offer_link_url(session, offer_id),
         allow_inactive=True,
         horizon=timedelta(days=7),
     )
@@ -1002,7 +864,6 @@ def preview_autopilot(
         })
     return {
         "note": note,
-        "tracking_code": sample,
         "posts": rendered,
         "deployed": deployed,
         "problems": sum(1 for item in rendered if item["problem"]),
@@ -1046,13 +907,14 @@ def deploy_autopilot(
     ).all()
     by_id = {item.id: item for item in destinations}
     moment = datetime.now(UTC)
+    # Preflight composes with the offers' real affiliate links: a caption is
+    # accepted or refused at its actual length, not at the length of a
+    # placeholder.
     preview_posts, note = plan_campaign(
         session,
         autopilot,
         now=moment,
-        link_for=lambda _destination_id, offer_id: (
-            f"https://preview.invalid/affiliate-link/{offer_id}"
-        ),
+        link_for=lambda _destination_id, offer_id: offer_link_url(session, offer_id),
         allow_inactive=True,
     )
     if not preview_posts:

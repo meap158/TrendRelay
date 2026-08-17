@@ -227,8 +227,7 @@ def run_campaign(
     session: Session, autopilot: CampaignAutopilot, *, now: datetime | None = None
 ) -> dict[str, Any]:
     """Plan, freeze, and hand over one campaign's next posts."""
-    from trendrelay_api.attribution_api import _public_url
-    from trendrelay_api.campaign_autopilot_api import link_url_for, mint_post_link
+    from trendrelay_api.campaign_autopilot_api import offer_link_url
 
     moment = now or datetime.now(UTC)
     destinations = {
@@ -240,7 +239,7 @@ def run_campaign(
         ).all()
     }
 
-    # Links minted during composition, in order, so each execution can claim
+    # Links resolved during composition, in order, so each execution can claim
     # the exact records that went into its caption. Keyed by destination and
     # offer; a deque because one horizon can plan the same pairing twice.
     minted: dict[tuple[str, str], deque[dict[str, Any]]] = {}
@@ -248,13 +247,15 @@ def run_campaign(
     def link_for(
         destination_id: str, offer_id: str, *, content_sha256: str | None = None
     ) -> str | None:
-        """A link for one post, or the stable bio link, by placement.
+        """The offer's own affiliate link, whatever the placement.
 
-        A bio route keeps the destination's one long-lived link: the profile
-        holds a single URL and rotating it per post would orphan it. Everywhere
-        the link lives inside the post, each post gets its own - which is what
-        makes clip, copy and time effects learnable afterwards.
+        The network's short link is the tracked link now (ADR 0022): Shopee
+        counts its clicks and pays its commissions in Shopee's own report.
+        Nothing is minted, so a bio and a caption carry the same URL - the
+        offer's own - and the frozen execution records which offer went where
+        rather than which internal code was spent.
         """
+        del content_sha256  # The sub-ID slot it filled retired with ADR 0022.
         destination = destinations.get(destination_id)
         if not destination:
             return None
@@ -267,27 +268,16 @@ def run_campaign(
                 destination.provider, destination.platform
             ),
         )
-        if placement.placement == "bio":
-            code = link_url_for(session, autopilot, destination, offer_id)
-            link_id = None
-        else:
-            link = mint_post_link(
-                session, autopilot, destination, offer_id,
-                content_sha256=content_sha256,
-            )
-            if link is None:
-                return None
-            code, link_id = link.code, link.id
-        if not code:
+        url = offer_link_url(session, offer_id)
+        if not url:
             return None
         minted.setdefault((destination_id, offer_id), deque()).append({
             "offer_id": offer_id,
             "placement": placement.placement,
-            "tracking_link_id": link_id,
-            "code": code,
-            "shared": link_id is None,
+            "tracking_link_id": None,
+            "url": url,
         })
-        return _public_url(code)
+        return url
 
     posts, note = plan_campaign(session, autopilot, now=moment, link_for=link_for)
     created: list[dict[str, Any]] = []
