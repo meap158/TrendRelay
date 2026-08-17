@@ -981,3 +981,20 @@ nav strong { color: #1c2b33; }
   .campaign-committed-pipeline li { grid-template-columns: 1fr auto; }
   .campaign-committed-pipeline li > time { grid-column: 1 / -1; }
 }
+
+/* Naming a second login for an engine, and confirming one away.
+   One field and one sentence, so these borrow the form styling the rest of the
+   page uses rather than inventing a look for two dialogs. */
+.engine-login-name { display: grid; gap: 6px; }
+.engine-login-name span { color: var(--muted); font-size: 12px; font-weight: 600; }
+.engine-login-name input {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+}
+.engine-login-name input:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+.engine-login-warning { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }

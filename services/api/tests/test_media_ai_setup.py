@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import socket
 import sys
 
 import httpx
@@ -515,3 +516,46 @@ def test_the_message_is_one_line() -> None:
     # that into a paragraph pushing the rest of the card down.
     message = media_ai.setup_failure(ValueError("first line\n\nsecond line"))
     assert "\n" not in message
+
+
+# --- the download that never gave up -------------------------------------------
+
+
+def test_argos_downloads_get_a_deadline_it_does_not_set_itself() -> None:
+    """argostranslate calls urlopen with no timeout, and the default is forever.
+
+    A connection that is accepted and then stalls hangs the whole setup. It did:
+    eighteen minutes into fetching ru->en, nothing downloaded and nothing
+    logged, which from the interface looks exactly like the retry loop above.
+    Setting the default is the only way in, because urlopen consults it when the
+    caller passes nothing.
+    """
+    before = socket.getdefaulttimeout()
+    with media_ai._socket_deadline(media_ai.ARGOS_SOCKET_TIMEOUT):
+        assert socket.getdefaulttimeout() == media_ai.ARGOS_SOCKET_TIMEOUT
+    assert socket.getdefaulttimeout() == before
+
+
+def test_the_deadline_is_lifted_even_when_the_download_fails() -> None:
+    # It is a process-wide setting, so leaving it behind would put a timeout on
+    # sockets that never asked for one.
+    before = socket.getdefaulttimeout()
+    with pytest.raises(ValueError), media_ai._socket_deadline(5.0):
+        raise ValueError("the download failed")
+    assert socket.getdefaulttimeout() == before
+
+
+def test_preparing_translations_runs_under_the_deadline(monkeypatch) -> None:
+    # The guard is worth nothing if the install does not actually sit inside it.
+    seen: list[float | None] = []
+    monkeypatch.setattr(media_ai, "_runtime_path", lambda: None)
+    monkeypatch.setitem(sys.modules, "argostranslate", type(sys)("argostranslate"))
+    monkeypatch.setattr(
+        media_ai,
+        "_install_translation_packages",
+        lambda package: seen.append(socket.getdefaulttimeout()) or [],
+    )
+
+    media_ai._prepare_translate()
+
+    assert seen == [media_ai.ARGOS_SOCKET_TIMEOUT]

@@ -10,6 +10,7 @@ import json
 import shutil
 import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal
 
@@ -393,6 +394,39 @@ def _fetch_argos_index(configured: str, destination: Path) -> bool:
     return False
 
 
+#: How long a socket may say nothing before the download is treated as dead.
+#:
+#: Per socket operation rather than per transfer, so a slow package still
+#: arrives - a hundred megabytes at dial-up speed never waits two minutes
+#: between packets - while one that has stopped sending is given up on.
+ARGOS_SOCKET_TIMEOUT = 120.0
+
+
+@contextmanager
+def _socket_deadline(seconds: float):
+    """Give argostranslate's downloads a timeout, since it passes none.
+
+    Both of its network calls are bare `urllib.request.urlopen(...)` with no
+    `timeout`, and Python's default is to wait forever. A connection that is
+    accepted and then stalls therefore hangs the whole setup: this run stopped
+    18 minutes into fetching ru->en with nothing downloaded and nothing logged,
+    which from the interface is indistinguishable from the loop fixed above.
+
+    Set globally because that is the only way in - `urlopen` consults the
+    default when given no timeout of its own. Scoped to this call and restored
+    afterwards, and safe to do here because provider setup runs in the durable
+    worker rather than in the process serving requests.
+    """
+    import socket
+
+    previous = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(seconds)
+    try:
+        yield
+    finally:
+        socket.setdefaulttimeout(previous)
+
+
 def _prepare_translate() -> list[str]:
     """Fetch the language packages, reporting rather than failing on a gap.
 
@@ -402,6 +436,11 @@ def _prepare_translate() -> list[str]:
     _runtime_path()
     from argostranslate import package
 
+    with _socket_deadline(ARGOS_SOCKET_TIMEOUT):
+        return _install_translation_packages(package)
+
+
+def _install_translation_packages(package: Any) -> list[str]:
     available = _argos_available_packages(package)
     installed = {(item.from_code, item.to_code) for item in package.get_installed_packages()}
     skipped: list[str] = []

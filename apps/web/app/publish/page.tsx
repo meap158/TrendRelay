@@ -29,6 +29,7 @@ import { AffiliateLink, type LinkPlacement,
 import { ActionIcon } from "../ui/action-icons";
 import { WaitingScreen } from "../ui/waiting-screen";
 import { Button, buttonClass } from "../ui/button";
+import { Dialog } from "../ui/dialog";
 import { Badge, Switch } from "../ui/primitives";
 import { CredentialRow } from "../ui/credential-field";
 import {
@@ -1394,12 +1395,20 @@ export default function PublishPage() {
    * form that fails halfway leaves a login with no key and no card explaining
    * why.
    */
-  async function addConnection(provider: Provider) {
-    const label = window.prompt(
-      t("publish.nameThisAccount", { label: provider.engine_label }),
-      "",
-    );
-    if (label === null) return;
+  /**
+   * The engine a new login is being named for, and the name so far.
+   *
+   * Held rather than asked for with `window.prompt`: that dialog cannot be
+   * styled, ignores the page's language, and on a page assembled out of a
+   * shared UI layer it reads as a fault rather than as a step.
+   */
+  const [namingLogin, setNamingLogin] = useState<Provider | null>(null);
+  const [newLoginLabel, setNewLoginLabel] = useState("");
+  /** The login a removal is waiting to be confirmed for. */
+  const [removingLogin, setRemovingLogin] = useState<Provider | null>(null);
+
+  async function addConnection(provider: Provider, label: string) {
+    setNamingLogin(null);
     setBusy(`${provider.id}-add`);
     setError(null);
     setNotice(null);
@@ -1424,9 +1433,7 @@ export default function PublishPage() {
 
   /** Forget a login and the key that was only for it. */
   async function removeConnection(provider: Provider) {
-    // Destinations pointing at it stop resolving, so this is asked plainly
-    // rather than undone later.
-    if (!window.confirm(t("publish.confirmRemoveAccount", { label: provider.label }))) return;
+    setRemovingLogin(null);
     setBusy(`${provider.id}-remove`);
     setError(null);
     setNotice(null);
@@ -1959,7 +1966,10 @@ export default function PublishPage() {
                       size="sm"
                       disabled={busy !== null || !canExecute}
                       busy={busy === `${provider.id}-add`}
-                      onClick={() => void addConnection(provider)}
+                      onClick={() => {
+                        setNewLoginLabel("");
+                        setNamingLogin(provider);
+                      }}
                     >{t("publish.addAnotherAccount")}</Button>
                   ) : (
                     <Button
@@ -1967,7 +1977,7 @@ export default function PublishPage() {
                       size="sm"
                       disabled={busy !== null || !canExecute}
                       busy={busy === `${provider.id}-remove`}
-                      onClick={() => void removeConnection(provider)}
+                      onClick={() => setRemovingLogin(provider)}
                     >{t("publish.removeAccount")}</Button>
                   )}
                 </div>
@@ -2125,6 +2135,81 @@ export default function PublishPage() {
             You can still review the setup and dry-run a delivery.
           </p>
         )}
+
+        {/* Naming a login is one field, and it still gets a real dialog: it is
+            focus-trapped, closes on Escape, restores focus to the button that
+            opened it, and speaks the page's language. `window.prompt` does none
+            of that. */}
+        <Dialog
+          open={namingLogin !== null}
+          title={t("publish.addAnotherAccount")}
+          description={namingLogin
+            ? t("publish.nameThisAccount", { label: namingLogin.engine_label })
+            : undefined}
+          onClose={() => setNamingLogin(null)}
+          footer={
+            <>
+              <Button variant="quiet" onClick={() => setNamingLogin(null)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                variant="primary"
+                busy={busy === `${namingLogin?.id}-add`}
+                disabled={!newLoginLabel.trim()}
+                onClick={() => {
+                  if (namingLogin) void addConnection(namingLogin, newLoginLabel.trim());
+                }}
+              >{t("publish.addAccount")}</Button>
+            </>
+          }
+        >
+          <label className="engine-login-name">
+            <span>{t("publish.accountName")}</span>
+            <input
+              autoFocus
+              value={newLoginLabel}
+              maxLength={80}
+              placeholder={t("publish.accountNamePlaceholder")}
+              onChange={(event) => setNewLoginLabel(event.target.value)}
+              onKeyDown={(event) => {
+                // Enter submits, because a one-field form where it does not is
+                // a form that feels broken.
+                if (event.key === "Enter" && newLoginLabel.trim() && namingLogin) {
+                  event.preventDefault();
+                  void addConnection(namingLogin, newLoginLabel.trim());
+                }
+              }}
+            />
+          </label>
+        </Dialog>
+
+        {/* Removal says what breaks, in the same words everywhere. Destinations
+            already posting through this login stop resolving, and that is worth
+            reading rather than a browser's own one-line confirm. */}
+        <Dialog
+          open={removingLogin !== null}
+          title={t("publish.removeAccount")}
+          description={removingLogin
+            ? t("publish.confirmRemoveAccount", { label: removingLogin.label })
+            : undefined}
+          onClose={() => setRemovingLogin(null)}
+          footer={
+            <>
+              <Button variant="quiet" onClick={() => setRemovingLogin(null)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                variant="danger"
+                busy={busy === `${removingLogin?.id}-remove`}
+                onClick={() => { if (removingLogin) void removeConnection(removingLogin); }}
+              >{t("publish.removeAccount")}</Button>
+            </>
+          }
+        >
+          <p className="engine-login-warning">
+            {t("publish.removeAccountDetail")}
+          </p>
+        </Dialog>
       </section>
       )}
 
