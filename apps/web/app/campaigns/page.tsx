@@ -355,7 +355,9 @@ export default function CampaignsPage() {
         <div>
           <p className="section-kicker">{t("campaigns.eyebrow")}</p>
           <h1>{t("campaigns.heading")}</h1>
-          <p>{t("campaigns.intro")}</p>
+          {/* No intro paragraph. The heading is the promise; the panel's own
+              summary sentence restates it with this campaign's numbers, and
+              a third telling on every visit was fuss. */}
         </div>
         <label className="workspace-control">
           Workspace
@@ -458,10 +460,8 @@ export default function CampaignsPage() {
                   here was already `hidden` - unreachable markup still carrying
                   its own state, handlers and media picker. */}
               <div className="campaign-one-off-handoff">
-                  <div>
-                    <strong>Create a one-off post in Publish</strong>
-                    <p>Publish owns one-time media, destination, post type, comments, replies, and scheduling. Campaigns keeps the recurring pipeline focused.</p>
-                  </div>
+                  {/* One line, no lecture about what Publish owns. */}
+                  <strong>Need a one-off post instead?</strong>
                   <Link className="ui-button ui-button-secondary ui-button-sm"
                     href={`/publish?campaign=${encodeURIComponent(selectedCampaign.id)}`}>
                     Open Publish

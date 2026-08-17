@@ -574,10 +574,15 @@ export function AutopilotPanel({
   const [editing, setEditing] = useState<QueueItem | null>(null);
   const [editingReplies, setEditingReplies] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
-  // One page, no panes: every area renders, and "navigation" is scrolling.
-  // The old `accounts` and `settings` names survive in the readiness rows,
-  // which is why `jumpTo` translates them rather than every caller being
-  // rewritten.
+  // Three panes with one job each - Posts (what goes out, and approving
+  // it), Content (what feeds it), Setup (how it behaves) - because a page
+  // that showed everything at once was an endless scroll where no section
+  // said what it was for. Approvals stay above the panes: the one thing
+  // that must never hide. The old `accounts`/`settings` names survive in
+  // the readiness rows, which is why `jumpTo` translates them.
+  const [view, setView] = useState<"posts" | "content" | "setup">(
+    campaignStatus === "active" ? "posts" : "content",
+  );
   const searchTimer = useRef<number | null>(null);
   const automaticPreview = useRef(false);
   // The references this mirrors (Buffer, Zernio) offer the same posts as a
@@ -897,15 +902,17 @@ export function AutopilotPanel({
    * they are about, and both now open the one area that answers them.
    */
   function jumpTo(target: string) {
-    const area = target === "accounts" || target === "settings" ? "revenue" : target;
-    if (area !== "media" && area !== "revenue" && area !== "schedule") return;
-    if (area === "revenue") {
+    const pane = target === "media" ? "content"
+      : target === "schedule" ? "posts"
+      : ["accounts", "settings", "revenue"].includes(target) ? "setup"
+      : null;
+    if (!pane) return;
+    if (pane === "setup") {
       if (!accounts.length) void loadAccounts();
       if (!recommendations || recommendations.item_id) void loadRecommendations();
     }
-    if (area === "schedule" && ready.configured && !preview) void loadPreview(false);
-    document.getElementById(`campaign-area-${area}`)
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (pane === "posts" && ready.configured && !preview) void loadPreview(false);
+    setView(pane);
   }
 
   const selectedLibrary = Object.values(selectedAssets);
@@ -1021,8 +1028,8 @@ export function AutopilotPanel({
 
   return (
     <div className="autopilot">
+      {/* One name. "Runs by itself" stacked over "Autopilot" said it twice. */}
       <Card
-        eyebrow={t("autopilot.eyebrow")}
         title={t("autopilot.heading")}
         aside={
           <div className="autopilot-run-row">
@@ -1075,8 +1082,8 @@ export function AutopilotPanel({
           </div>
         }
       >
-        <p className="autopilot-lede">{t("autopilot.lede")}</p>
-
+        {/* No static lede: the dynamic summary below says the same thing
+            with this campaign's own numbers, and one of them is enough. */}
         {/* What the settings add up to, in one sentence.
          *
          * Everything needed to work this out was already on the screen -
@@ -1113,37 +1120,36 @@ export function AutopilotPanel({
           </p>
         )}
 
-        {/* Not tabs any more: every area is on the page, in one flow, and
-            these are the at-a-glance numbers that also scroll to their
-            section. One page is what maximised autonomy needs - the panel's
-            recurring job is approving what is held, and nothing should hide
-            behind a pane for that. */}
-        <nav className="campaign-work-tabs" aria-label="Campaign overview">
-          <button type="button"
-            onClick={() => jumpTo("media")}>
-            <span>Content</span><strong>{autopilot.queue_total}</strong><small>post packages</small>
+        {/* Three panes, named for their jobs. Posts is where the operator
+            lives; Content is what feeds it; Setup is every knob, out of the
+            way the moment it is set. */}
+        <nav className="campaign-work-tabs" aria-label="Campaign workspace">
+          <button type="button" className={view === "posts" ? "active" : ""}
+            onClick={() => jumpTo("schedule")}>
+            {/* Committed jobs still waiting to go out are upcoming posts too;
+                only what has already delivered or failed leaves the count. */}
+            <span>Posts</span><strong>{preview
+              ? preview.posts.length + preview.deployed.filter((item) =>
+                  item.status === "queued" || item.status === "running").length
+              : slots.length}</strong>
+            <small>{preview ? "upcoming" : "posting times"}</small>
           </button>
-          <button type="button"
-            onClick={() => jumpTo("revenue")}>
-            <span>Distribution &amp; revenue</span>
+          {/* "Queue", not "Content": next to a tab called Posts, "Content ·
+              post packages" read as the same thing. The queue is the source
+              material that rotates; Posts is what leaves. */}
+          <button type="button" className={view === "content" ? "active" : ""}
+            onClick={() => jumpTo("media")}>
+            <span>Queue</span><strong>{autopilot.queue_total}</strong><small>packages in rotation</small>
+          </button>
+          <button type="button" className={view === "setup" ? "active" : ""}
+            onClick={() => jumpTo("settings")}>
+            <span>Setup</span>
             <strong>{destinations.length}</strong>
             <small>{autopilot.offer_mode === "smart"
               ? "accounts · smart offers"
               : autopilot.offer_mode === "manual"
                 ? (autopilot.offer_id ? "accounts · 1 offer" : "accounts · no offer")
                 : "accounts · offers off"}</small>
-          </button>
-          {/* Last, because it is what the two choices above produce rather than
-              a third choice of its own. */}
-          <button type="button"
-            onClick={() => jumpTo("schedule")}>
-            {/* Committed jobs still waiting to go out are upcoming posts too;
-                only what has already delivered or failed leaves the count. */}
-            <span>Timeline</span><strong>{preview
-              ? preview.posts.length + preview.deployed.filter((item) =>
-                  item.status === "queued" || item.status === "running").length
-              : slots.length}</strong>
-            <small>{preview ? "upcoming posts" : "posting times"}</small>
           </button>
         </nav>
 
@@ -1177,7 +1183,7 @@ export function AutopilotPanel({
           </p>
         )}
 
-        <div id="campaign-area-revenue" className="autopilot-settings">
+        {view === "setup" && <div className="autopilot-settings">
           <div className="campaign-product-mode">
             <div>
               <strong>Affiliate product matching</strong>
@@ -1404,7 +1410,7 @@ export function AutopilotPanel({
                 leaves the per-account caps as the only limit.</small>
             </label>
           </div>
-        </div>
+        </div>}
       </Card>
 
       {/* The operator's recurring job, front and centre: every post below
@@ -1475,7 +1481,7 @@ export function AutopilotPanel({
         </Card>
       )}
 
-      <Card
+      {view === "setup" && <Card
         eyebrow={t("autopilot.whereEyebrow")}
         title={t("autopilot.destinations", { count: destinations.length })}
         aside={canEdit ? (
@@ -1633,9 +1639,9 @@ export function AutopilotPanel({
             <small className="campaign-source-note">Source: available connected accounts in Publish.</small>
           </div>
         )}
-      </Card>
+      </Card>}
 
-      <div id="campaign-area-media"><Card
+      {view === "content" && <Card
         eyebrow={t("autopilot.queueEyebrow")}
         title={t("autopilot.queue", {
           approved: autopilot.queue_approved, total: autopilot.queue_total,
@@ -2139,7 +2145,7 @@ export function AutopilotPanel({
             <Button type="submit" variant="primary" busy={busy === "edit-copy"}>Save post package</Button>
           </form>
         )}
-      </Card></div>
+      </Card>}
 
       <EffectEditor
         open={effectOpen}
@@ -2157,7 +2163,7 @@ export function AutopilotPanel({
         onRendered={succeed}
       />
 
-      <div id="campaign-area-schedule">
+      {view === "posts" && <>
       {/* "Posting timeline", not "Upcoming posts": the committed section below
           keeps recently delivered jobs on screen, and a delivered job under an
           "upcoming" heading reads like a contradiction. */}
@@ -2180,10 +2186,9 @@ export function AutopilotPanel({
           </span>
         }
       >
-        <p className="autopilot-lede">
-          A rolling seven-day outlook calculated by the same scheduler that deploys the campaign.
-          Preview items are calculated; committed items are durable publishing jobs that persist across sessions.
-        </p>
+        {/* No lede. "Durable publishing jobs that persist across sessions"
+            explained the implementation to someone who asked when the post
+            goes out; the rows below answer that themselves. */}
         {/* Grouped at the top, per the run-by-exception contract: everything
             the autopilot deferred to a person, with the reason on it. */}
         {/* Held posts live in the approval card at the top of the panel,
@@ -2201,10 +2206,11 @@ export function AutopilotPanel({
          * list it landed in. */}
         {timeline.length > 0 && (
           <div className="campaign-pipeline-summary" aria-label="Campaign timeline summary">
+            {/* Three numbers that change decisions. Active days and account
+                counts were true and useless - both already visible in the
+                rows and the tab strip. */}
             <span><strong>{deliveredCount}</strong><small>delivered</small></span>
             <span><strong>{plannedCount}</strong><small>planned</small></span>
-            <span><strong>{timelineDays.length}</strong><small>active days</small></span>
-            <span><strong>{timelineAccounts}</strong><small>accounts</small></span>
             <span className={deliveryWarnings ? "warn" : "good"}>
               <strong>{deliveryWarnings}</strong><small>delivery warnings</small>
             </span>
@@ -2405,13 +2411,16 @@ export function AutopilotPanel({
             switching on activates the campaign and runs it, and this timeline
             is where what it did shows up. */}
       </Card>
-      <Card eyebrow="Workspace schedule" title="Posting times" aside={
+      </>}
+      {/* Configuration, so it lives in Setup: the times themselves are
+          visible in the timeline where they matter. */}
+      {view === "setup" && <Card title="Posting times" aside={
         <Link className="ui-button ui-button-secondary ui-button-sm" href="/publish">
           Edit in Publish
         </Link>
       }>
         <p className="autopilot-lede">
-          These times are shared by every campaign in this workspace. Campaigns reads them for its outlook; Publish is their single source of truth.
+          Shared by every campaign in this workspace; Publish owns them.
         </p>
         <div className="campaign-schedule-readonly">
           <Badge tone="neutral">{scheduleTimezone}</Badge>
@@ -2420,8 +2429,7 @@ export function AutopilotPanel({
           ))}
           {!slots.length && <span>No posting times configured.</span>}
         </div>
-      </Card>
-      </div>
+      </Card>}
     </div>
   );
 }
