@@ -248,9 +248,22 @@ a.ui-button { text-decoration: none; }
 .search-select-chevron { flex: 0 0 auto; transition: transform 150ms ease; }
 .search-select-chevron.open { transform: rotate(180deg); }
 .search-select-trigger:focus-visible { outline: 2px solid color-mix(in srgb, var(--link) 38%, transparent); outline-offset: 1px; }
-.search-select-popover { position: absolute; z-index: 80; inset: calc(100% + 4px) 0 auto; display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); box-shadow: 0 14px 34px rgb(15 23 42 / 16%); }
+/* A modal both hides its overflow and is transformed to centre itself, so a
+   list opened inside one can escape it by neither overflow nor `position:
+   fixed`, and portalling it to the body would put it outside the focus trap,
+   where Radix pulls focus straight back out of the search box. So the panel
+   stops clipping for exactly as long as a list is open. Anchoring the list to
+   the field, inside the trap, keeps typing and picking working. */
+.ui-dialog:has(.search-select-popover) { overflow: visible; }
+
+/* Opens below by default and above when below would be clipped; the component
+   measures the space against whatever ancestor would cut the list off and sets
+   the height. The search box keeps its own height while the list underneath
+   takes what is left, so a constrained list scrolls rather than overflowing. */
+.search-select-popover { position: absolute; z-index: 80; inset: calc(100% + 4px) 0 auto; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; padding: 8px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); box-shadow: 0 14px 34px rgb(15 23 42 / 16%); }
+.search-select-popover[data-side="above"] { inset: auto 0 calc(100% + 4px); box-shadow: 0 -14px 34px rgb(15 23 42 / 16%); }
 .search-select-popover > input { width: 100%; min-height: 36px; padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--text); font: inherit; }
-.search-select-list { display: grid; max-height: min(320px, 45vh); overflow-y: auto; overscroll-behavior: contain; }
+.search-select-list { display: grid; overflow-y: auto; overscroll-behavior: contain; }
 .search-select-list button { display: grid; gap: 2px; width: 100%; padding: 8px 9px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text); text-align: start; cursor: pointer; }
 .search-select-list button:hover, .search-select-list button.selected { background: var(--panel-raised); }
 .search-select-list button.selected { box-shadow: inset 3px 0 var(--link); }
