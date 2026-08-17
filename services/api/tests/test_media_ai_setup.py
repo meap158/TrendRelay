@@ -435,3 +435,83 @@ def test_an_operators_own_index_is_never_swapped_for_a_mirror(tmp_path) -> None:
     assert media_ai._fetch_argos_index(
         "https://mirror.example.internal/argos/index.json", tmp_path / "index.json"
     ) is False
+
+
+# --- what a failure says to the operator ---------------------------------------
+
+#: The text that actually reached the card, kept verbatim as the case to beat.
+HF_401 = (
+    "401 Client Error. (Request ID: Root=1-6a830ff0-7393e50640ae27333b61c4a1;"
+    "2f04f7e3-09d3-4106-972a-6349ac9a96ad)\n\n"
+    "Repository Not Found for url: https://huggingface.co/api/models/"
+    "Systran/faster-whisper-base/revision/main.\n"
+    "Please make sure you specified the correct `repo_id` and `repo_type`.\n"
+    "If you are trying to access a private or gated repo, make sure you are "
+    "authenticated and your token has the required permissions.\n"
+    'For more details, see https://huggingface.co/docs/huggingface_hub/'
+    'authentication\nUser Access Token "First" is expired'
+)
+
+
+class RepositoryNotFoundError(Exception):
+    """Stands in for huggingface_hub's, which the test environment need not have."""
+
+
+def test_the_401_becomes_something_an_operator_can_act_on() -> None:
+    """Every word of the raw error is true and only the last clause matters.
+
+    It arrived as a class name, a request id, two lines of advice about
+    arguments nobody passed, a docs link, and then the cause.
+    """
+    message = media_ai.setup_failure(RepositoryNotFoundError(HF_401))
+
+    assert "Request ID" not in message
+    assert "repo_type" not in message
+    assert "RepositoryNotFoundError" not in message
+    # Names the cause and where to look for it.
+    assert "HF_TOKEN" in message
+    assert "expired token" in message
+
+
+def test_our_own_wording_is_not_dressed_up_as_a_stack_trace() -> None:
+    # These are raised by this module for this reader; prefixing "RuntimeError:"
+    # would make a sentence written for an operator look like a crash.
+    plain = "The language catalogue could not be downloaded. Wait and try again."
+    assert media_ai.setup_failure(RuntimeError(plain)) == plain
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (Exception("HTTP Error 429: Too Many Requests"), "rate-limiting"),
+        (OSError("[Errno 11001] getaddrinfo failed"), "reach the internet"),
+        (OSError(28, "No space left on device"), "disk is full"),
+        (ModuleNotFoundError("No module named 'faster_whisper'"), "will not import"),
+        (Exception("Cannot access gated repo for url https://..."), "gated"),
+    ],
+)
+def test_each_recognised_cause_says_what_to_do(error, expected) -> None:
+    assert expected in media_ai.setup_failure(error)
+
+
+def test_an_unrecognised_failure_keeps_the_libraried_own_first_line() -> None:
+    # Worth more than a vaguer sentence of ours: it is what makes the next
+    # unknown cause diagnosable at all.
+    error = ValueError(
+        "Invalid model size 'huge', expected one of: tiny, base. "
+        "Then a second sentence nobody needs."
+    )
+    message = media_ai.setup_failure(error)
+
+    assert message == "ValueError: Invalid model size 'huge', expected one of: tiny, base."
+
+
+def test_a_failure_with_nothing_to_say_still_names_itself() -> None:
+    assert media_ai.setup_failure(TimeoutError()) == "TimeoutError."
+
+
+def test_the_message_is_one_line() -> None:
+    # It renders into a single span beside a switch; embedded newlines turned
+    # that into a paragraph pushing the rest of the card down.
+    message = media_ai.setup_failure(ValueError("first line\n\nsecond line"))
+    assert "\n" not in message

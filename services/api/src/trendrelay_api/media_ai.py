@@ -519,6 +519,76 @@ def latest_setup_jobs(*, factory=None) -> dict[str, dict[str, Any]]:
     return newest
 
 
+#: A recognised failure, and what the operator can do about it. Matched against
+#: the exception's text in order, so the more specific patterns come first.
+#:
+#: Deliberately short. This list earns its place only for causes that have an
+#: action attached; anything else is better served by the library's own words
+#: than by a guess of ours dressed up as a diagnosis.
+SETUP_FAILURES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (
+        ("401", "unauthorized", "access token", "authentication"),
+        "Hugging Face rejected the request. This download needs no account, so the "
+        "cause is usually an expired token being picked up from HF_TOKEN or from "
+        "~/.cache/huggingface/token. Clear whichever is set and try again.",
+    ),
+    (
+        ("gated",),
+        "This model is gated on Hugging Face and cannot be downloaded without "
+        "accepting its terms there. Choose a different speech model.",
+    ),
+    (
+        ("429", "too many requests", "rate limit"),
+        "The download host is rate-limiting this machine. It is temporary - wait a "
+        "few minutes and try again.",
+    ),
+    (
+        ("no space left", "errno 28", "disk full"),
+        "The disk is full. Free some space and try again.",
+    ),
+    (
+        ("getaddrinfo", "name or service not known", "temporary failure in name",
+         "connection refused", "connection aborted", "network is unreachable",
+         "timed out", "timeout"),
+        "The download could not reach the internet. Check the connection and try "
+        "again.",
+    ),
+    (
+        ("no module named", "cannot be imported"),
+        "The runtime downloaded but will not import, so the install is incomplete. "
+        "Delete .tools/media-ai/runtime and set it up again.",
+    ),
+)
+
+
+def setup_failure(error: BaseException) -> str:
+    """What to show an operator when preparing a provider fails.
+
+    The raw exception went straight to the card, and for the failure that
+    prompted this it read: `RepositoryNotFoundError: 401 Client Error. (Request
+    ID: Root=1-6a83...) Repository Not Found for url: ... Please make sure you
+    specified the correct repo_id and repo_type ... User Access Token "First" is
+    expired`. Every word of that is true and only the last clause matters, and
+    it is behind two lines of advice about arguments the operator never passed.
+
+    Our own `RuntimeError`s are already written for this audience and pass
+    through untouched. Everything else is matched against the causes that have
+    an action attached; an unrecognised one keeps the library's own first line,
+    which is worth more than a vaguer sentence from us.
+    """
+    text = " ".join(str(error).split())
+    if isinstance(error, RuntimeError):
+        # Raised by this module, for this reader. Naming the class in front of
+        # it would only make our own sentence look like a stack trace.
+        return text
+    haystack = text.lower()
+    for needles, message in SETUP_FAILURES:
+        if any(needle in haystack for needle in needles):
+            return message
+    first = text.split(". ")[0].strip().rstrip(".")
+    return f"{type(error).__name__}: {first}." if first else f"{type(error).__name__}."
+
+
 def run_setup_job(
     job_id: str, worker_id: str = "media-ai-worker", *, factory=None
 ) -> dict[str, Any]:
@@ -544,7 +614,7 @@ def run_setup_job(
             factory=factory,
         )
     except Exception as error:
-        fail_job(job_id, worker_id, f"{type(error).__name__}: {error}", factory=factory)
+        fail_job(job_id, worker_id, setup_failure(error), factory=factory)
         raise
 
 

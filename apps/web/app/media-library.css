@@ -17,6 +17,28 @@
 .library-status-dot:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .library-status-tooltip::before { content: ""; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); border: 5px solid transparent; border-bottom-color: #1c2b33; }
 .library-status-reason { display: block; margin-top: 4px; color: #91a0ae; font-size: 10px; }
+/* The transcription indicator is a button, not a tooltip: it has something the
+   operator can do. The popover stays anchored to the dot rather than becoming a
+   row of its own — this is chrome beside a heading, not a panel. */
+.library-status-menu { position: relative; display: inline-grid; }
+.library-status-menu > button.library-status-dot { border: 0; padding: 0; cursor: pointer; }
+.library-status-popover { position: absolute; top: calc(100% + 8px); inset-inline-start: 0; z-index: 120; display: grid; gap: 10px; width: 320px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: 0 12px 28px rgb(0 0 0 / 14%); text-align: start; }
+.library-status-popover-title { margin: 0; color: var(--text); font-size: 12px; font-weight: 600; }
+.library-status-popover-note { margin: 0; color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.45; }
+.library-status-popover-problem { margin: 0; color: var(--danger, #b42318); font-size: 11px; }
+/* Name, then control, then whatever the download has to say underneath. */
+.provider-switch { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-muted, var(--panel)); }
+.provider-switch-name { display: grid; font-size: 12px; font-weight: 600; }
+.provider-switch-name small { color: var(--muted); font-size: 10px; font-weight: 400; }
+.provider-switch-progress { grid-column: 1 / -1; display: grid; gap: 4px; }
+.provider-switch-progress progress { width: 100%; height: 5px; }
+.provider-switch-progress small { color: var(--muted); font-size: 10px; }
+/* These are sentences now rather than a one-line exception, so they get the
+   leading of prose. `anywhere` because a URL in one would otherwise push the
+   card wider than its column. */
+.provider-switch-problem { grid-column: 1 / -1; color: var(--danger, #b42318); font-size: 11px; font-weight: 400; line-height: 1.45; overflow-wrap: anywhere; }
+.provider-switch[data-state="on"] { border-color: var(--green, #1a7f4b); }
+.provider-switch .ui-switch-text { font-size: 11px; }
 .library-layout { display: grid; grid-template-columns: minmax(600px, 1.65fr) minmax(400px, 1fr); gap: 16px; align-items: start; }
 .library-browser { position: sticky; top: 121px; display: grid; gap: 12px; max-height: calc(100vh - 140px); overflow: auto; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .library-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
@@ -555,7 +577,8 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
    language, then read the track that comes out of both. */
 .caption-editor { display: grid; gap: 18px; }
 .caption-editor h4 { margin: 0 0 8px; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
-.caption-editor-setup { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-muted, var(--panel)); color: var(--muted); font-size: 12px; }
+.caption-editor-setup { display: grid; gap: 8px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-muted, var(--panel)); color: var(--muted); font-size: 12px; }
+.caption-editor-setup > p { margin: 0; }
 .caption-editor-setup code, .caption-editor-note code { font-size: 11px; }
 
 /* Auto-fit rather than a fixed count: the number of styles is whatever the

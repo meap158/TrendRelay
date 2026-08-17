@@ -217,7 +217,9 @@ nav strong { color: #1c2b33; }
    and the only place its progress or its reason for failing can be seen. */
 .setup-progress { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; color: #44515d; font-size: 0.78rem; }
 .setup-progress progress { flex: 1 1 220px; height: 6px; }
-.setup-progress-problem { color: var(--danger, #b42318); }
+/* A sentence rather than a one-line exception, so it wraps like prose; and
+   `anywhere` so a URL in one cannot push the card past its column. */
+.setup-progress-problem { color: var(--danger, #b42318); line-height: 1.45; overflow-wrap: anywhere; }
 .privacy-note { margin: 16px 0 0; color: #7c8792; font-size: 0.72rem; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
 /* .secondary-button sets padding: 0 16px from a later sheet, which left a
