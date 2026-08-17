@@ -869,8 +869,11 @@ html { scroll-behavior: smooth; }
 .autopilot > .ui-card { box-shadow: var(--campaign-shadow); }
 .autopilot > .ui-card:first-child { gap: 8px; padding-bottom: 10px; }
 .autopilot > .ui-card:first-child .autopilot-lede { margin-bottom: 0; }
-.campaign-work-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin: 2px -14px -10px; border-block: 1px solid var(--line); background: var(--panel); }
-.campaign-work-tabs button { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 8px; min-height: 56px; border: 0; border-inline-end: 1px solid var(--line); padding: 9px 12px 10px; color: var(--muted); background: transparent; text-align: start; cursor: pointer; }
+/* Three columns for three tabs. This declared four from before the merge to
+   Content / Distribution & revenue / Timeline, which left a blank quarter
+   hanging off the strip with the border running through it. */
+.campaign-work-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 2px -14px -10px; border-block: 1px solid var(--line); background: var(--panel); }
+.campaign-work-tabs button { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 8px; min-height: 56px; border: 0; border-inline-end: 1px solid var(--line); padding: 9px 12px 10px; color: var(--muted); background: transparent; text-align: start; cursor: pointer; }
 .campaign-work-tabs button:last-child { border-inline-end: 0; }
 .campaign-work-tabs button:hover { color: var(--text); background: var(--panel-raised); }
 .campaign-work-tabs button.active { color: var(--link); background: var(--panel-raised); }
@@ -935,8 +938,9 @@ html { scroll-behavior: smooth; }
   .campaign-layout { grid-template-columns: minmax(0, 1fr); }
   .campaign-sidebar { position: static; }
   .campaign-workspace { min-width: 0; }
-  .campaign-work-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .campaign-work-tabs button:nth-child(2) { border-inline-end: 0; }
+  /* Still one row of three: two columns left the third tab beside a hole.
+     The labels are short enough to wrap inside a narrower cell instead. */
+  .campaign-work-tabs button { padding: 8px 9px 9px; }
   .campaign-media-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: none; }
 }
 @media (max-width: 600px) {

@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from trendrelay_api import attribution_subids
 from trendrelay_api.attribution_api import _https_url, _public_url
 from trendrelay_api.attribution_models import TrackingLink
+from trendrelay_api.auth import require_governed_assurance
 from trendrelay_api.autopilot_models import (
     CampaignAutopilot,
     CampaignDestination,
@@ -1083,6 +1084,38 @@ def _held_execution(
             detail=f"Only a held execution can be decided; this one is {execution.state}.",
         )
     return execution
+
+
+@router.post("/{campaign_id}/autopilot/account-recommendations")
+def account_recommendations(
+    workspace_id: str,
+    campaign_id: str,
+    body: ExceptionDecision,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Every reachable account, argued for or against.
+
+    A POST with confirmation because the inventory is the engines' own answer,
+    which costs a live call to each of them - the same shape as Publish's
+    account discovery. The reasoning on top is local and explainable: link
+    policy per network, measured history through the account's links, and the
+    engine's own deliverability, with no invented audience-fit figures.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400, detail="Account discovery requires explicit confirmation."
+        )
+    _campaign(session, workspace_id, campaign_id)
+    autopilot = _autopilot(session, workspace_id, campaign_id, user_id=user.id)
+    from trendrelay_api.campaign_accounts import recommend_accounts
+    from trendrelay_api.integrations.publishing import discover_all_integrations
+
+    return recommend_accounts(
+        session, autopilot, inventory=discover_all_integrations()
+    )
 
 
 @router.get("/{campaign_id}/autopilot/exceptions")
