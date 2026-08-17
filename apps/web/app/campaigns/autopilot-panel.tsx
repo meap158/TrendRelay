@@ -17,7 +17,7 @@
 
 import { clipLength, handoffPath } from "../../lib/media-rules";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl } from "../../lib/api";
 
@@ -163,6 +163,42 @@ type Offer = {
     brand?: string | null;
     marketplace?: string | null;
   };
+};
+
+/**
+ * One row of the campaign timeline, whichever half it came from.
+ *
+ * Deliberately flat and fully populated: every field is present on every row,
+ * null where that half has nothing to say. A union would be more precise and
+ * would push the choosing into the markup, which is exactly where the two
+ * lists grew apart the first time.
+ */
+type TimelineEntry = {
+  key: string;
+  kind: "delivered" | "planned";
+  at: string;
+  title: string | null;
+  caption: string;
+  first_comment: string | null;
+  thread: string[];
+  destination: PreviewPost["destination"];
+  destination_id: string | null;
+  /** Delivered rows only: what the engine did with it. */
+  status: DeployedPost["status"] | null;
+  delivery: DeployedPost["delivery"] | null;
+  post_url: string | null;
+  page_url: string | null;
+  video_path: string | null;
+  image_paths: string[];
+  last_error: string | null;
+  /** Planned rows only: what it will carry and why it was chosen. */
+  asset_id: string | null;
+  problem: string | null;
+  offer_ids: string[];
+  product_details: { offer_id: string; name: string }[];
+  placement: string | null;
+  reason: string | null;
+  route: { label: string; detail: string } | null;
 };
 
 type DeployedPost = {
@@ -322,7 +358,6 @@ export function AutopilotPanel({
   succeed,
   fail,
   onCampaignChanged,
-  plansSlot,
 }: {
   workspaceId: string;
   campaignId: string;
@@ -334,7 +369,6 @@ export function AutopilotPanel({
   onCampaignChanged: () => Promise<void>;
   /** Hand-planned posts, rendered inside the posting timeline so what will
       post and what has posted is one story in one place. */
-  plansSlot?: ReactNode;
 }) {
   const t = useT();
   const [autopilot, setAutopilot] = useState<Autopilot | null>(null);
@@ -664,15 +698,77 @@ export function AutopilotPanel({
   }
 
   const selectedLibrary = Object.values(selectedAssets);
-  const previewDays = preview ? Object.entries(
-    preview.posts.reduce<Record<string, PreviewPost[]>>((days, post) => {
-      const key = new Date(post.at).toLocaleDateString("en-CA", { timeZone: scheduleTimezone });
-      (days[key] ??= []).push(post);
+  /**
+   * Delivered jobs and forecast posts as rows of one kind.
+   *
+   * They arrive as two shapes because they are two things - one is a durable
+   * job with an outcome, the other a calculation - but on screen they answer
+   * the same questions: when, where, through which engine, and has it gone
+   * out. Normalising here rather than in the markup keeps one renderer, which
+   * is what stops the two halves drifting apart again.
+   */
+  const timeline: TimelineEntry[] = preview ? [
+    ...preview.deployed.map((item): TimelineEntry => ({
+      key: `delivered-${item.id}`,
+      kind: "delivered",
+      at: item.at,
+      title: item.title,
+      caption: item.caption,
+      first_comment: item.first_comment,
+      thread: item.thread,
+      destination: item.destination,
+      destination_id: item.destination_id,
+      status: item.status,
+      delivery: item.delivery,
+      post_url: item.post_url,
+      page_url: item.page_url,
+      video_path: item.video_path,
+      image_paths: item.image_paths,
+      last_error: item.last_error,
+      asset_id: null,
+      problem: null,
+      offer_ids: [],
+      product_details: [],
+      placement: null,
+      reason: null,
+      route: null,
+    })),
+    ...preview.posts.map((post): TimelineEntry => ({
+      key: `planned-${post.destination_id}-${post.queue_item_id}-${post.at}`,
+      kind: "planned",
+      at: post.at,
+      title: post.title,
+      caption: post.caption,
+      first_comment: post.first_comment,
+      thread: post.thread,
+      destination: post.destination,
+      destination_id: post.destination_id,
+      status: null,
+      delivery: null,
+      post_url: null,
+      page_url: null,
+      video_path: null,
+      image_paths: [],
+      last_error: null,
+      asset_id: post.asset_id,
+      problem: post.problem,
+      offer_ids: post.offer_ids,
+      product_details: post.product_details,
+      placement: post.placement,
+      reason: post.reason,
+      route: placementSummary(post),
+    })),
+  ].sort((left, right) => left.at.localeCompare(right.at)) : [];
+  const timelineDays = Object.entries(
+    timeline.reduce<Record<string, TimelineEntry[]>>((days, entry) => {
+      const key = new Date(entry.at).toLocaleDateString("en-CA", { timeZone: scheduleTimezone });
+      (days[key] ??= []).push(entry);
       return days;
     }, {}),
-  ) : [];
-  const previewAccounts = new Set(preview?.posts.map((post) => post.destination_id) ?? []).size;
-  const previewProducts = new Set(preview?.posts.flatMap((post) => post.offer_ids) ?? []).size;
+  );
+  const deliveredCount = timeline.filter((entry) => entry.kind === "delivered").length;
+  const plannedCount = timeline.length - deliveredCount;
+  const timelineAccounts = new Set(timeline.map((entry) => entry.destination_id)).size;
 
   return (
     <div className="autopilot">
@@ -1550,213 +1646,199 @@ export function AutopilotPanel({
             </ul>
           </section>
         )}
-        {preview && preview.deployed.length > 0 && (
-          <section className="campaign-committed-pipeline" aria-label="Committed publishing jobs">
-            <header>
-              <div>
-                <strong>Committed pipeline</strong>
-                <small>Already handed to a publishing engine</small>
-              </div>
-              <Badge tone={preview.deployed.some((item) => item.status === "failed") ? "warn" : "good"}>
-                {preview.deployed.length} {preview.deployed.length === 1 ? "job" : "jobs"}
-              </Badge>
-            </header>
-            <ol>
-              {preview.deployed.map((item) => (
-                <li key={item.id} className={item.status}>
-                  <time dateTime={item.at}>{new Date(item.at).toLocaleString(undefined, {
-                    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-                    timeZone: scheduleTimezone,
-                  })}</time>
-                  <span>
-                    {/* The title opens the post itself when the engine told us
-                        where it lives; the account line opens the page. */}
-                    <strong>{item.post_url ? (
-                      <a href={item.post_url} target="_blank" rel="noreferrer">
-                        {item.title || "Untitled campaign post"}
-                      </a>
-                    ) : (item.title || "Untitled campaign post")}</strong>
-                    <small>
-                      {item.page_url ? (
-                        <a href={item.page_url} target="_blank" rel="noreferrer">
-                          {item.destination?.label ?? "Former destination"}
-                        </a>
-                      ) : (item.destination?.label ?? "Former destination")}
-                      {" · "}{item.delivery}
-                    </small>
-                  </span>
-                  <Badge tone={item.status === "succeeded" ? "good" : item.status === "failed" ? "warn" : "neutral"}>
-                    {item.status}
-                  </Badge>
-                  <details>
-                    <summary>Content</summary>
-                    {/* The media exactly as it went out, played the way the
-                        Publish composer plays it. */}
-                    {item.video_path && (
-                      <video
-                        className="timeline-media"
-                        controls
-                        preload="metadata"
-                        src={`${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview?path=${encodeURIComponent(item.video_path)}`}
-                        title={item.video_path}
-                      />
-                    )}
-                    {!item.video_path && item.image_paths.length > 0 && (
-                      <div className="timeline-media-strip">
-                        {item.image_paths.map((path) => (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            key={path}
-                            className="timeline-media"
-                            src={`${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview?path=${encodeURIComponent(path)}`}
-                            alt={path}
-                          />
-                        ))}
-                      </div>
-                    )}
-                    <pre>{item.caption}</pre>
-                    {item.first_comment && <><strong>First comment</strong><pre>{item.first_comment}</pre></>}
-                    {item.thread.map((reply, index) => <div key={`${item.id}-reply-${index}`}>
-                      <strong>Reply {index + 1}</strong><pre>{reply}</pre>
-                    </div>)}
-                    {item.last_error && <p className="autopilot-refusal">{item.last_error}</p>}
-                  </details>
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
-        {/* Hand-planned posts, in the same timeline: what will post and what
-            has posted is one story, told in one place. */}
-        {plansSlot}
-        {preview && preview.deployed.length === 0 && (
-          <p className="campaign-pipeline-legend"><strong>Preview only</strong> · Nothing from this campaign has been committed to a publishing engine yet.</p>
-        )}
-        {preview && preview.posts.length > 0 && (
-          <div className="campaign-pipeline-summary" aria-label="Upcoming campaign summary">
-            <span><strong>{preview.posts.length}</strong><small>posts</small></span>
-            <span><strong>{previewDays.length}</strong><small>active days</small></span>
-            <span><strong>{previewAccounts}</strong><small>accounts</small></span>
-            <span><strong>{previewProducts}</strong><small>products</small></span>
-            <span className={preview.problems ? "warn" : "good"}>
-              <strong>{preview.problems}</strong><small>delivery warnings</small>
+        {/* One timeline, past to future.
+         *
+         * What has posted and what will post is one story. It used to be two:
+         * delivered jobs in a flat list that did not say which engine carried
+         * them, then a day-grouped outlook that did. Same campaign, same
+         * accounts, two designs and two answers to "when".
+         *
+         * So both become rows of one kind, grouped by day and ordered in time.
+         * Whether a post has gone out is a badge on the row rather than which
+         * list it landed in. */}
+        {timeline.length > 0 && (
+          <div className="campaign-pipeline-summary" aria-label="Campaign timeline summary">
+            <span><strong>{deliveredCount}</strong><small>delivered</small></span>
+            <span><strong>{plannedCount}</strong><small>planned</small></span>
+            <span><strong>{timelineDays.length}</strong><small>active days</small></span>
+            <span><strong>{timelineAccounts}</strong><small>accounts</small></span>
+            <span className={preview?.problems ? "warn" : "good"}>
+              <strong>{preview?.problems ?? 0}</strong><small>delivery warnings</small>
             </span>
           </div>
         )}
-        {preview && (
-          preview.posts.length === 0 ? (
-            // The last-run banner above often carries this exact sentence;
-            // saying it once is information, twice is noise.
-            preview.note !== autopilot.last_note && (
-              <p className="autopilot-note" role="status">{preview.note}</p>
-            )
-          ) : (
-            <div className="campaign-pipeline">
-              {previewDays.map(([day, posts]) => (
-                <section className="campaign-pipeline-day" key={day}>
-                  <header>
-                    <strong>{dayHeading(posts[0].at, scheduleTimezone)}</strong>
-                    <span>{posts.length} {posts.length === 1 ? "post" : "posts"}</span>
-                  </header>
-                  <ol>
-                    {posts.map((post, index) => {
-                      const destination = post.destination ?? destinations.find(
-                        (item) => item.id === post.destination_id) ?? null;
-                      const route = placementSummary(post);
-                      const platform = destination?.platform;
-                      const thumbnailAsset: LibraryAsset | null = post.asset_id ? {
-                        id: post.asset_id,
-                        title: post.title ?? "Campaign video",
-                        original_path: "",
-                        media_kind: "video",
-                        duration_ms: null,
-                        platform: platform ?? null,
-                        creator: null,
-                        width: null,
-                        height: null,
-                        versions: [{ id: `${post.asset_id}-thumbnail`, kind: "thumbnail" }],
-                      } : null;
-                      return (
-                        <li key={`${post.destination_id}-${post.queue_item_id}-${post.at}`}
-                          className={post.problem ? "refused" : undefined}>
-                          <div className="campaign-pipeline-time">
-                            <time dateTime={post.at}>{new Date(post.at).toLocaleTimeString(undefined, {
-                              hour: "numeric", minute: "2-digit", timeZone: scheduleTimezone,
-                            })}</time>
-                            <i aria-hidden="true" />
-                          </div>
-                          <div className="campaign-pipeline-thumb">
-                            {thumbnailAsset
-                              ? <AssetThumbnail asset={thumbnailAsset} workspaceId={workspaceId} apiFetch={apiFetch} />
-                              : <span className="campaign-pipeline-thumb-empty"><ActionIcon name="play" /></span>}
-                          </div>
-                          <article>
-                            <div className="campaign-pipeline-destination">
-                              {platform && <PlatformIcon platform={platform} size={24} />}
-                              <span>
-                                <strong>{destination?.label ?? post.destination_id}</strong>
-                                <small>{platform ? platformLabels[platform] : "Social account"}
-                                  {destination?.provider ? ` · ${destination.provider}` : ""}</small>
-                              </span>
-                              <Badge tone={post.problem ? "warn" : "neutral"}>
-                                {autopilot.delivery === "draft" ? "Preview · review draft" : autopilot.delivery === "schedule" ? "Preview · scheduled" : "Preview · publish now"}
+        {preview && timeline.length === 0 && (
+          // The last-run banner above often carries this exact sentence;
+          // saying it once is information, twice is noise.
+          preview.note !== autopilot.last_note && (
+            <p className="autopilot-note" role="status">{preview.note}</p>
+          )
+        )}
+        {timeline.length > 0 && (
+          <div className="campaign-pipeline">
+            {timelineDays.map(([day, entries]) => (
+              <section className="campaign-pipeline-day" key={day}>
+                <header>
+                  <strong>{dayHeading(entries[0].at, scheduleTimezone)}</strong>
+                  <span>{entries.length} {entries.length === 1 ? "post" : "posts"}</span>
+                </header>
+                <ol>
+                  {entries.map((entry, index) => {
+                    const destination = entry.destination ?? destinations.find(
+                      (item) => item.id === entry.destination_id) ?? null;
+                    const platform = destination?.platform;
+                    const thumbnailAsset: LibraryAsset | null = entry.asset_id ? {
+                      id: entry.asset_id,
+                      title: entry.title ?? "Campaign video",
+                      original_path: "",
+                      media_kind: "video",
+                      duration_ms: null,
+                      platform: platform ?? null,
+                      creator: null,
+                      width: null,
+                      height: null,
+                      versions: [{ id: `${entry.asset_id}-thumbnail`, kind: "thumbnail" }],
+                    } : null;
+                    return (
+                      <li
+                        key={entry.key}
+                        className={[
+                          entry.problem ? "refused" : "",
+                          entry.kind === "delivered" ? `delivered ${entry.status ?? ""}` : "",
+                        ].filter(Boolean).join(" ") || undefined}
+                      >
+                        <div className="campaign-pipeline-time">
+                          <time dateTime={entry.at}>{new Date(entry.at).toLocaleTimeString(undefined, {
+                            hour: "numeric", minute: "2-digit", timeZone: scheduleTimezone,
+                          })}</time>
+                          <i aria-hidden="true" />
+                        </div>
+                        <div className="campaign-pipeline-thumb">
+                          {thumbnailAsset
+                            ? <AssetThumbnail asset={thumbnailAsset} workspaceId={workspaceId} apiFetch={apiFetch} />
+                            : <span className="campaign-pipeline-thumb-empty"><ActionIcon name="play" /></span>}
+                        </div>
+                        <article>
+                          {/* Where it went, and what carried it. The engine is
+                              named on every row now: with two logins to one
+                              engine, "which account" and "through which
+                              connection" are different questions. */}
+                          <div className="campaign-pipeline-destination">
+                            {platform && <PlatformIcon platform={platform} size={24} />}
+                            <span>
+                              <strong>{entry.page_url ? (
+                                <a href={entry.page_url} target="_blank" rel="noreferrer">
+                                  {destination?.label ?? entry.destination_id ?? "Former destination"}
+                                </a>
+                              ) : (destination?.label ?? entry.destination_id ?? "Former destination")}</strong>
+                              <small>{platform ? platformLabels[platform] : "Social account"}
+                                {destination?.provider ? ` · ${destination.provider}` : ""}</small>
+                            </span>
+                            {/* Whether it has gone out, in one badge. This was
+                                the difference between the two lists. */}
+                            {entry.kind === "delivered" ? (
+                              <Badge tone={entry.status === "succeeded" ? "good"
+                                : entry.status === "failed" ? "warn" : "neutral"}>
+                                {entry.status === "succeeded"
+                                  ? `Delivered · ${entry.delivery}`
+                                  : entry.status ?? "delivered"}
                               </Badge>
-                            </div>
-                            <h4>{post.title || "Untitled campaign video"}</h4>
-                            {post.problem && (
-                              <p className="autopilot-refusal" role="status">
-                                <strong>{t("autopilot.wouldBeRefused")}</strong> {post.problem}
-                              </p>
+                            ) : (
+                              <Badge tone={entry.problem ? "warn" : "neutral"}>
+                                {autopilot.delivery === "draft" ? "Planned · review draft"
+                                  : autopilot.delivery === "schedule" ? "Planned · scheduled"
+                                  : "Planned · publish now"}
+                              </Badge>
                             )}
-                            <div className={`campaign-affiliate-route ${post.offer_ids.length ? "attached" : "organic"}`}>
+                          </div>
+                          <h4>{entry.post_url ? (
+                            <a href={entry.post_url} target="_blank" rel="noreferrer">
+                              {entry.title || "Untitled campaign post"}
+                            </a>
+                          ) : (entry.title || "Untitled campaign video")}</h4>
+                          {entry.problem && (
+                            <p className="autopilot-refusal" role="status">
+                              <strong>{t("autopilot.wouldBeRefused")}</strong> {entry.problem}
+                            </p>
+                          )}
+                          {entry.last_error && <p className="autopilot-refusal">{entry.last_error}</p>}
+                          {entry.route && (
+                            <div className={`campaign-affiliate-route ${entry.offer_ids.length ? "attached" : "organic"}`}>
                               <span>
-                                <strong>{route.label}</strong>
-                                <small>{route.detail}</small>
+                                <strong>{entry.route.label}</strong>
+                                <small>{entry.route.detail}</small>
                               </span>
-                              <Badge tone={placementTone(post.placement)}>
-                                {post.offer_ids.length
-                                  ? `${post.offer_ids.length} ${post.offer_ids.length === 1 ? "product" : "products"}`
+                              <Badge tone={placementTone(entry.placement ?? "caption")}>
+                                {entry.offer_ids.length
+                                  ? `${entry.offer_ids.length} ${entry.offer_ids.length === 1 ? "product" : "products"}`
                                   : "No products"}
                               </Badge>
                             </div>
-                            {post.product_details.length > 0 && (
-                              <ul className="campaign-pipeline-products" aria-label="Attached affiliate products">
-                                {post.product_details.map((product, productIndex) => (
-                                  <li key={`${product.offer_id}-${productIndex}`}>
-                                    <span aria-hidden="true">{productIndex + 1}</span>
-                                    <strong>{product.name}</strong>
-                                    <small>{post.placement === "bio"
-                                      ? "Profile bio"
-                                      : productIndex > 0 && post.thread.length ? `Reply ${productIndex}` : "Post content"}</small>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                            <details className="campaign-pipeline-content" open={index === 0}>
-                              <summary>See exactly what will post</summary>
-                              <div>
-                                <strong>Post content</strong>
-                                <pre>{post.caption}</pre>
-                                {post.first_comment && <>
-                                  <strong>First comment · affiliate link</strong>
-                                  <pre>{post.first_comment}</pre>
-                                </>}
-                                {post.thread.map((reply, replyIndex) => <div key={`${replyIndex}-${reply}`}>
-                                  <strong>Reply {replyIndex + 1} · affiliate link</strong>
-                                  <pre>{reply}</pre>
-                                </div>)}
-                              </div>
-                            </details>
-                            <small className="campaign-pipeline-reason">{post.reason}</small>
-                          </article>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                </section>
-              ))}
-            </div>
-          )
+                          )}
+                          {entry.product_details.length > 0 && (
+                            <ul className="campaign-pipeline-products" aria-label="Attached affiliate products">
+                              {entry.product_details.map((product, productIndex) => (
+                                <li key={`${product.offer_id}-${productIndex}`}>
+                                  <span aria-hidden="true">{productIndex + 1}</span>
+                                  <strong>{product.name}</strong>
+                                  <small>{entry.placement === "bio"
+                                    ? "Profile bio"
+                                    : productIndex > 0 && entry.thread.length ? `Reply ${productIndex}` : "Post content"}</small>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <details className="campaign-pipeline-content"
+                            open={index === 0 && entry.kind === "planned"}>
+                            <summary>{entry.kind === "delivered"
+                              ? "See exactly what posted"
+                              : "See exactly what will post"}</summary>
+                            <div>
+                              {/* The media exactly as it went out, played the
+                                  way the Publish composer plays it. */}
+                              {entry.video_path && (
+                                <video
+                                  className="timeline-media"
+                                  controls
+                                  preload="metadata"
+                                  src={`${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview?path=${encodeURIComponent(entry.video_path)}`}
+                                  title={entry.video_path}
+                                />
+                              )}
+                              {!entry.video_path && entry.image_paths.length > 0 && (
+                                <div className="timeline-media-strip">
+                                  {entry.image_paths.map((path) => (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      key={path}
+                                      className="timeline-media"
+                                      src={`${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview?path=${encodeURIComponent(path)}`}
+                                      alt={path}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                              <strong>Post content</strong>
+                              <pre>{entry.caption}</pre>
+                              {entry.first_comment && <>
+                                <strong>First comment · affiliate link</strong>
+                                <pre>{entry.first_comment}</pre>
+                              </>}
+                              {entry.thread.map((reply, replyIndex) => <div key={`${entry.key}-reply-${replyIndex}`}>
+                                <strong>Reply {replyIndex + 1} · affiliate link</strong>
+                                <pre>{reply}</pre>
+                              </div>)}
+                            </div>
+                          </details>
+                          {entry.reason && <small className="campaign-pipeline-reason">{entry.reason}</small>}
+                        </article>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </section>
+            ))}
+          </div>
         )}
         {!preview && !ready.configured && (
           <p className="autopilot-empty">{t("autopilot.previewBlocked")}</p>
