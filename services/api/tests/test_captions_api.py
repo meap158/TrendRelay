@@ -6,6 +6,8 @@ handed an empty track that looks like a transcription failure.
 """
 
 import asyncio
+import sys
+import types
 from pathlib import Path
 
 import httpx
@@ -199,13 +201,49 @@ def test_a_misspelled_override_is_refused_rather_than_dropped(workspace) -> None
     assert "fontsize" in response.json()["detail"]
 
 
-def test_asking_for_a_translation_with_no_runtime_says_what_to_do(workspace) -> None:
+def test_asking_for_a_translation_with_no_runtime_says_what_to_do(
+    workspace, monkeypatch
+) -> None:
+    """A missing runtime is a download, and the message has to say so.
+
+    Forced rather than assumed. The media-AI runtime may genuinely be installed
+    on the machine running this - it puts its own site-packages on the path - in
+    which case the code gets past the import and reports a missing language
+    package instead. That is a different problem with a different fix, and the
+    test below covers it.
+    """
     asset_id = add_asset(workspace)
+    monkeypatch.setitem(sys.modules, "argostranslate", None)
 
     response = preview(workspace, asset_id, translate_to="vi")
 
     assert response.status_code == 409
     assert "translation runtime" in response.json()["detail"].lower()
+
+
+def test_a_runtime_with_no_language_package_says_that_instead(
+    workspace, monkeypatch
+) -> None:
+    """The other half, and the state this machine is actually in.
+
+    Telling the two apart is the point: one is fixed by downloading the
+    runtime, the other by downloading a language pair, and reporting either as
+    the other sends somebody to the wrong switch.
+    """
+    asset_id = add_asset(workspace)
+    installed = types.ModuleType("argostranslate.translate")
+    installed.get_installed_languages = lambda: []
+    package = types.ModuleType("argostranslate")
+    package.translate = installed
+    monkeypatch.setitem(sys.modules, "argostranslate", package)
+    monkeypatch.setitem(sys.modules, "argostranslate.translate", installed)
+
+    response = preview(workspace, asset_id, translate_to="vi")
+
+    assert response.status_code == 409
+    detail = response.json()["detail"].lower()
+    assert "language package" in detail
+    assert "translation runtime" not in detail, "the runtime is present; only a pair is not"
 
 
 # --- getting the files back out -----------------------------------------------
