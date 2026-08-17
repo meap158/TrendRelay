@@ -90,6 +90,33 @@ def translate_cues(
     return translated, crowded
 
 
+#: Which sentence splitter Argos should use before translating a passage.
+#:
+#: Its default prefers a stanza tokenizer, and that does not work here. The
+#: language packages ship stanza models built for a much older stanza than the
+#: 1.10.1 Argos itself pins, so loading a bundled one fails on a missing config
+#: key; Argos's answer is to fetch a current manifest and models at translate
+#: time, from `raw.githubusercontent.com`. That host rate-limits, and the first
+#: translation on this machine died there with 429 - after setup had reported
+#: itself ready.
+#:
+#: MiniSBD is Argos's own lighter alternative and a declared dependency, so it
+#: is already installed. Its models are small, match the code that loads them,
+#: and come from GitHub's release storage rather than the raw host.
+#:
+#: Read by `argostranslate.settings` at import, so it has to be set before the
+#: first import of the package in a process - which is why every entry point
+#: here goes through `_argos_settings()`.
+ARGOS_CHUNK_TYPE = "MINISBD"
+
+
+def _argos_settings() -> None:
+    """Choose the sentence splitter before argostranslate reads its settings."""
+    import os  # noqa: PLC0415
+
+    os.environ.setdefault("ARGOS_CHUNK_TYPE", ARGOS_CHUNK_TYPE)
+
+
 def live_translator(source_language: str, target_language: str) -> Callable[[str], str]:
     """A translator backed by the locally installed Argos packages.
 
@@ -99,12 +126,14 @@ def live_translator(source_language: str, target_language: str) -> Callable[[str
     from trendrelay_api.media_ai import _runtime_path  # noqa: PLC0415
 
     _runtime_path()
+    _argos_settings()
     try:
         from argostranslate import translate as argos  # noqa: PLC0415
     except ImportError as error:
         raise RuntimeError(
-            "The translation runtime is not installed. "
-            "Open Tools and run Prepare translation runtime."
+            "The translation runtime is not downloaded. "
+            "Open the transcription switch in the Library, or the Argos Translate "
+            "card in Tools, and choose Download and switch on."
         ) from error
 
     languages = argos.get_installed_languages()
@@ -136,6 +165,7 @@ def installed_pairs(*, argos: Any = None) -> list[dict[str, str]]:
             from trendrelay_api.media_ai import _runtime_path  # noqa: PLC0415
 
             _runtime_path()
+            _argos_settings()
             from argostranslate import translate as argos  # noqa: PLC0415
         except ImportError:
             return []

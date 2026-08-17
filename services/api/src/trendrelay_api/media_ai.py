@@ -237,7 +237,7 @@ def pip_install(packages: tuple[str, ...] | list[str]) -> None:
     )
 
 
-def _prepare_speech() -> list[str]:
+def _prepare_speech(stage: Any = None) -> list[str]:
     """Fetch the configured Whisper model into the local cache.
 
     Anonymously, deliberately. The Systran models are public, and
@@ -255,10 +255,13 @@ def _prepare_speech() -> list[str]:
     _runtime_path()
     from faster_whisper import WhisperModel
 
+    settings = get_settings()
+    if stage:
+        stage(0.1, f"Downloading the {settings.media_ai_speech_model} speech model")
     model_root = MODEL_ROOT / "faster-whisper"
     model_root.mkdir(parents=True, exist_ok=True)
     WhisperModel(
-        get_settings().media_ai_speech_model,
+        settings.media_ai_speech_model,
         device="cpu",
         compute_type="int8",
         download_root=str(model_root),
@@ -267,7 +270,7 @@ def _prepare_speech() -> list[str]:
     return []
 
 
-def _prepare_ocr() -> list[str]:
+def _prepare_ocr(stage: Any = None) -> list[str]:
     _runtime_path()
     if importlib.util.find_spec("rapidocr") is None:
         raise RuntimeError("RapidOCR was downloaded but cannot be imported.")
@@ -427,24 +430,73 @@ def _socket_deadline(seconds: float):
         socket.setdefaulttimeout(previous)
 
 
-def _prepare_translate() -> list[str]:
+def _prepare_translate(stage: Any = None) -> list[str]:
     """Fetch the language packages, reporting rather than failing on a gap.
 
     Eleven working directions and one missing is a better outcome than none, and
     the caller records what was skipped so the interface can say which.
     """
     _runtime_path()
+    from trendrelay_api.subtitle_translate import _argos_settings
+
+    _argos_settings()
     from argostranslate import package
 
+    say = stage or (lambda fraction, label: None)
     with _socket_deadline(ARGOS_SOCKET_TIMEOUT):
-        return _install_translation_packages(package)
+        skipped = _install_translation_packages(package, say)
+        say(0.95, "Fetching the sentence splitters")
+        skipped += _fetch_sentence_splitters(say)
+    return skipped
 
 
-def _install_translation_packages(package: Any) -> list[str]:
+def _fetch_sentence_splitters(stage: Any = None) -> list[str]:
+    """Download the sentence models now, so translating needs no network later.
+
+    Argos fetches these on first use, which would put a download inside the
+    first caption an operator translates - and the card promises this provider
+    runs on the machine with nothing uploaded. Pulling them here is what makes
+    that promise true rather than true-after-a-warm-up.
+
+    Only for the languages we install packages for. MiniSBD publishes eighty-two
+    and there is no reason to hold the ones nobody can translate from.
+    """
+    # The mapping between Argos's language codes and MiniSBD's names lives in
+    # the sentencizer that consumes it rather than being copied here.
+    from argostranslate.sbd import MiniSBDSentencizer
+    from minisbd import models
+
+    published = set(models.list_models())
+    wanted: set[str] = set()
+    for source, _target in DEFAULT_TRANSLATION_PAIRS:
+        name = MiniSBDSentencizer.LANGUAGE_CODE_MAPPING.get(source, source)
+        wanted.add(name if name in published else "en")
+
+    skipped: list[str] = []
+    for name in sorted(wanted):
+        try:
+            models.get_model_file(name)
+        except Exception as error:
+            # One missing splitter is not worth failing the whole setup: Argos
+            # will try again on first use, and every other language still works.
+            skipped.append(f"sentence splitter {name}: {type(error).__name__}")
+    return skipped
+
+
+def _install_translation_packages(package: Any, stage: Any = None) -> list[str]:
+    say = stage or (lambda fraction, label: None)
     available = _argos_available_packages(package)
     installed = {(item.from_code, item.to_code) for item in package.get_installed_packages()}
     skipped: list[str] = []
-    for source, target in DEFAULT_TRANSLATION_PAIRS:
+    total = len(DEFAULT_TRANSLATION_PAIRS)
+    for index, (source, target) in enumerate(DEFAULT_TRANSLATION_PAIRS):
+        # Named and counted, because these are not uniform: most are around
+        # sixty megabytes and ru->en is a hundred and fifty-six, which on this
+        # host arrived at a fiftieth of the speed of the rest and took an hour
+        # and fifty minutes. Against a bar that said only "Preparing the model"
+        # that is indistinguishable from a hang, and it is the reason somebody
+        # gives up on a download that was going to finish.
+        say(index / total, f"Downloading {source}→{target} ({index + 1} of {total})")
         if (source, target) in installed:
             continue
         match = next(
@@ -494,7 +546,13 @@ def prepare_provider(provider: str, *, on_stage: Any = None) -> list[str]:
         stage(0.25, "Downloading the runtime")
         pip_install(PROVIDER_PACKAGES[provider])
     stage(0.6, "Preparing the model")
-    skipped = PROVIDER_PREPARE[provider]()
+    # The prepare step owns the longest stretch of this job by far - one
+    # language package here took an hour and fifty minutes - so it is given the
+    # rest of the bar to report itself across rather than leaving 0.6 on screen
+    # until it is done.
+    skipped = PROVIDER_PREPARE[provider](
+        lambda fraction, label: stage(0.6 + 0.35 * max(0.0, min(1.0, fraction)), label)
+    )
     stage(0.95, "Switching the provider on")
     set_active(tool_id, True)
     return skipped

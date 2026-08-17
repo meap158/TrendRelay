@@ -125,7 +125,7 @@ def test_preparing_ends_with_the_provider_switched_on(monkeypatch) -> None:
     monkeypatch.setattr(
         media_ai, "pip_install", lambda packages: calls.__setitem__("packages", list(packages))
     )
-    monkeypatch.setitem(media_ai.PROVIDER_PREPARE, "speech", lambda: [])
+    monkeypatch.setitem(media_ai.PROVIDER_PREPARE, "speech", lambda stage: [])
     stages: list[str] = []
 
     skipped = media_ai.prepare_provider("speech", on_stage=lambda _, label: stages.append(label))
@@ -154,7 +154,7 @@ def test_a_language_pack_that_will_not_download_is_reported_not_fatal(monkeypatc
     monkeypatch.setattr("trendrelay_api.tool_registry.set_active", lambda tool_id, active: None)
     monkeypatch.setattr(media_ai, "runtime_ready", lambda provider: True)
     monkeypatch.setitem(
-        media_ai.PROVIDER_PREPARE, "translate", lambda: ["en→ar: no package published"]
+        media_ai.PROVIDER_PREPARE, "translate", lambda stage: ["en→ar: no package published"]
     )
 
     assert media_ai.prepare_provider("translate") == ["en→ar: no package published"]
@@ -553,9 +553,100 @@ def test_preparing_translations_runs_under_the_deadline(monkeypatch) -> None:
     monkeypatch.setattr(
         media_ai,
         "_install_translation_packages",
-        lambda package: seen.append(socket.getdefaulttimeout()) or [],
+        lambda package, stage=None: seen.append(socket.getdefaulttimeout()) or [],
     )
+    monkeypatch.setattr(media_ai, "_fetch_sentence_splitters", lambda stage=None: [])
 
     media_ai._prepare_translate()
 
     assert seen == [media_ai.ARGOS_SOCKET_TIMEOUT]
+
+
+# --- saying which of twelve downloads is running --------------------------------
+
+
+class _FakePackages:
+    def __init__(self, available):
+        self.available = available
+
+    def get_installed_packages(self):
+        return []
+
+    def get_available_packages(self):
+        return self.available
+
+
+class _Available:
+    def __init__(self, from_code, to_code):
+        self.from_code, self.to_code = from_code, to_code
+
+    def download(self):
+        return f"{self.from_code}_{self.to_code}.argosmodel"
+
+
+def test_each_language_download_says_which_one_it_is(monkeypatch) -> None:
+    """The complaint was a bar that sat still, not a download that failed.
+
+    These are not uniform: most are around sixty megabytes and ru->en is a
+    hundred and fifty-six, which on this host arrived at a fiftieth of the speed
+    of the others and took an hour and fifty minutes. Behind one unchanging
+    "Preparing the model" that is indistinguishable from a hang - and it is why
+    somebody kills a download that was going to finish.
+    """
+    pairs = media_ai.DEFAULT_TRANSLATION_PAIRS
+    packages = _FakePackages([_Available(s, t) for s, t in pairs])
+    packages.install_from_path = lambda path: None
+    monkeypatch.setattr(media_ai, "_argos_available_packages", lambda p: p.available)
+    labels: list[str] = []
+
+    media_ai._install_translation_packages(
+        packages, lambda fraction, label: labels.append(label)
+    )
+
+    assert len(labels) == len(pairs)
+    assert labels[0] == f"Downloading {pairs[0][0]}→{pairs[0][1]} (1 of {len(pairs)})"
+    assert labels[-1].endswith(f"({len(pairs)} of {len(pairs)})")
+    # The slow one is named rather than hidden behind a count.
+    assert any("ru→en" in label for label in labels)
+
+
+def test_progress_climbs_across_the_downloads(monkeypatch) -> None:
+    # A fraction that never moves is the same as no fraction at all.
+    packages = _FakePackages([])
+    monkeypatch.setattr(media_ai, "_argos_available_packages", lambda p: [])
+    seen: list[float] = []
+
+    media_ai._install_translation_packages(
+        packages, lambda fraction, label: seen.append(fraction)
+    )
+
+    assert seen == sorted(seen)
+    assert seen[0] == 0.0
+    assert seen[-1] < 1.0
+
+
+def test_the_prepare_step_reports_across_the_rest_of_the_bar(monkeypatch) -> None:
+    """It owns the longest stretch of the job, so it gets the room to say so."""
+    monkeypatch.setattr(media_ai, "list_job_records", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        "trendrelay_api.tool_registry.list_tools",
+        lambda: [{"id": "argos-translate", "installed": True, "active": False}],
+    )
+    monkeypatch.setattr("trendrelay_api.tool_registry.set_active", lambda tool_id, active: None)
+    monkeypatch.setattr(media_ai, "runtime_ready", lambda provider: True)
+    def report_both_ends(stage):
+        stage(0.0, "first")
+        stage(1.0, "last")
+        return []
+
+    monkeypatch.setitem(media_ai.PROVIDER_PREPARE, "translate", report_both_ends)
+    seen: list[tuple[float, str]] = []
+
+    media_ai.prepare_provider("translate", on_stage=lambda f, label: seen.append((f, label)))
+
+    reported = dict((label, fraction) for fraction, label in seen)
+    # Mapped into the room between "Preparing the model" and switching on,
+    # rather than overwriting either end.
+    assert reported["first"] == pytest.approx(0.6)
+    assert reported["last"] == pytest.approx(0.95)
+    assert reported["Switching the provider on"] == pytest.approx(0.95)
