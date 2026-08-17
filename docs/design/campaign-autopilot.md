@@ -120,6 +120,53 @@ Three things follow:
 - **Not invent a posting schedule.** Slots stay a workspace preference, and a
   campaign with no slots posts nothing and says so.
 
+## Operator directives, 2026-08-17
+
+Standing instructions from the operator, recorded during the audit-and-rework
+session (commits `49ebcf8` … `79cca45`, ADR 0022). Where these contradict the
+sections above, **these win** - the older text is kept for its reasoning, not
+its conclusions.
+
+1. **Posts carry the network's own affiliate link, verbatim.** The links
+   imported into Attribution (e.g. `https://s.shopee.vn/2gAN9f0Ef6`) are what
+   goes into a caption, comment, reply or bio - in Publish and in Campaigns.
+   Tracking happens on the network's side for the time being; internal
+   tracking is retired, not to be re-enabled until the operator says so.
+   *Supersedes "a tracking link per destination" above - measurement by our
+   own links is paused with it, and revenue truth lives in the network's
+   report.*
+2. **Post, then comment.** On networks where a URL is viewable (Facebook,
+   Threads), a post is followed by its comment carrying the link - first
+   comments where an engine delivers them (Buffer: Facebook/Instagram/
+   LinkedIn), reply threads on Threads. An engine that cannot must say so in
+   the preview; nothing is dropped silently.
+3. **Post language is a setting, never a silent English default.** Composed
+   scaffolding - disclosure, bio hint, product labels - follows the
+   campaign's language for posts, comments, threads and replies alike.
+4. **Link placement is dynamic and configurable.** The network decides by
+   default ('auto'), and a per-destination setting overrides to caption,
+   first comment or bio - honoured with its trade-off written down, or
+   refused out loud when no engine can deliver it. *Amends "the network
+   decides it, not the operator" above: the network still decides the
+   default; the operator now owns the override.*
+5. **Content-first flow, no stacked gates.** Content arrives from Discover
+   or Library, is auto-matched to the most relevant affiliate products, gets
+   its comments composed around the links, and posts smartly. The authority
+   dial and its exception inbox are the only approval layer; queue items
+   arrive ready ('draft' is a parking brake), and the Post automatically
+   switch is the deploy. *Supersedes "only approved items are eligible /
+   autopilot never approves anything on its own" and "not publish without
+   approval" above.*
+6. **One timeline.** Planned posts and committed engine jobs are one
+   calendar view, with each entry's media playable (parity with the Publish
+   composer) and its delivery state visible - pushed to an engine, posted
+   successfully (linking to the live post or the account page), or failed
+   with the reason. No duplicated entries, no message said twice.
+7. **Paid-user finish.** Every automatic decision shows its reason; every
+   configured choice shows its consequence; controls dress like the app's
+   own (the placement dropdown matches the search select); no raw file paths
+   where a preview can play; compact chrome throughout.
+
 ## Sources
 
 - [Links in captions vs first comment (2026)](https://www.socialync.io/blog/links-in-captions-vs-first-comment-2026)
