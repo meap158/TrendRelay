@@ -537,9 +537,9 @@ export const en = {
     loading: "Loading campaigns…",
     signInPrompt: "Sign in to manage campaigns",
     eyebrow: "CAMPAIGN OPERATIONS",
-    heading: "Plan once. Approve once. Publish anywhere.",
+    heading: "Add content. Match products. Publish anywhere.",
     intro:
-      "Connect strategy, approved media, posting time, affiliate disclosure, and fallback delivery.",
+      "Content from Discover or your Library is matched to your affiliate offers, composed in your language, and posted on your times — with the link where it can actually be clicked.",
     listHeading: "CAMPAIGNS",
     empty: "No campaigns yet.",
     create: "New campaign",

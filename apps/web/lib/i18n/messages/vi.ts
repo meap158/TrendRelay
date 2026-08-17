@@ -533,9 +533,9 @@ export const vi: Messages = {
     loading: "Đang tải chiến dịch…",
     signInPrompt: "Đăng nhập để quản lý chiến dịch",
     eyebrow: "VẬN HÀNH CHIẾN DỊCH",
-    heading: "Lên kế hoạch một lần. Duyệt một lần. Đăng ở mọi nơi.",
+    heading: "Thêm nội dung. Ghép sản phẩm. Đăng ở mọi nơi.",
     intro:
-      "Kết nối chiến lược, nội dung đã duyệt, thời điểm đăng, công bố tiếp thị liên kết và phương án dự phòng.",
+      "Nội dung từ Discover hoặc Thư viện được ghép với ưu đãi tiếp thị liên kết, soạn theo ngôn ngữ của bạn và đăng đúng khung giờ — liên kết đặt ở nơi thật sự bấm được.",
     listHeading: "CHIẾN DỊCH",
     empty: "Chưa có chiến dịch nào.",
     create: "Chiến dịch mới",

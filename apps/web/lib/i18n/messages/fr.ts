@@ -541,9 +541,9 @@ export const fr: Messages = {
     loading: "Chargement des campagnes…",
     signInPrompt: "Connectez-vous pour gérer les campagnes",
     eyebrow: "OPÉRATIONS DE CAMPAGNE",
-    heading: "Planifier une fois. Valider une fois. Publier partout.",
+    heading: "Ajoutez du contenu. Associez les produits. Publiez partout.",
     intro:
-      "Reliez la stratégie, les médias validés, l'heure de publication, la mention d'affiliation et la diffusion de secours.",
+      "Le contenu de Discover ou de la bibliothèque est associé à vos offres d'affiliation, composé dans votre langue et publié à vos horaires — avec le lien là où il est réellement cliquable.",
     listHeading: "CAMPAGNES",
     empty: "Aucune campagne pour le moment.",
     create: "Nouvelle campagne",
