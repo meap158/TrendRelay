@@ -89,6 +89,10 @@ type QueueItem = {
 type Autopilot = {
   enabled: boolean;
   delivery: "draft" | "schedule" | "now";
+  /** How much the campaign may do alone; run by exception is the default. */
+  authority: "assist" | "auto_draft" | "run_by_exception" | "autonomous";
+  /** What ranking optimises for. */
+  priority: "reach" | "discussion" | "revenue" | "balanced";
   offer_id: string | null;
   offer_mode: "smart" | "manual" | "none";
   candidate_offer_ids: string[];
@@ -97,12 +101,24 @@ type Autopilot = {
   bio_hint: string;
   min_recycle_days: number;
   daily_cap_per_account: number;
+  weekly_post_cap: number | null;
   posts_scheduled: number;
   last_run_at: string | null;
   last_note: string | null;
   destinations: number;
   queue_total: number;
   queue_approved: number;
+};
+
+type HeldExecution = {
+  id: string;
+  scheduled_at: string | null;
+  destination_label: string | null;
+  platform: string | null;
+  caption: string;
+  title: string | null;
+  held_reason: string | null;
+  reason: string;
 };
 
 type PreviewPost = {
@@ -313,6 +329,8 @@ export function AutopilotPanel({
   const [preview, setPreview] = useState<
     { note: string; posts: PreviewPost[]; deployed: DeployedPost[]; problems: number } | null
   >(null);
+  /** Posts the authority rules deferred to a person, reason attached. */
+  const [exceptions, setExceptions] = useState<HeldExecution[]>([]);
   const [busy, setBusy] = useState("");
   const [adding, setAdding] = useState(false);
   const [library, setLibrary] = useState<LibraryAsset[]>([]);
@@ -346,6 +364,18 @@ export function AutopilotPanel({
     setQueue(body.queue);
   }, [apiFetch, base]);
 
+  const loadExceptions = useCallback(async () => {
+    try {
+      const body = await json<{ exceptions: HeldExecution[] }>(
+        await apiFetch(`${base}/autopilot/exceptions`),
+      );
+      setExceptions(body.exceptions);
+    } catch {
+      // The inbox is supplementary; a failed read leaves the last answer.
+    }
+  }, [apiFetch, base]);
+
+
   useEffect(() => {
     queueMicrotask(() => {
       void refresh().catch((reason) =>
@@ -370,6 +400,42 @@ export function AutopilotPanel({
   useEffect(() => () => {
     if (searchTimer.current) window.clearTimeout(searchTimer.current);
   }, []);
+
+  // The inbox belongs to the Timeline: held posts are timeline entries that
+  // have not earned their place yet, so they load when the timeline shows.
+  // Deferred out of the effect body, the same way the initial refresh is.
+  useEffect(() => {
+    if (section !== "schedule") return;
+    queueMicrotask(() => {
+      void loadExceptions();
+    });
+  }, [section, loadExceptions]);
+
+  async function decideException(executionId: string, action: "approve" | "dismiss") {
+    setBusy(`${action}-${executionId}`);
+    try {
+      const response = await apiFetch(
+        `${base}/autopilot/executions/${executionId}/${action}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(
+            action === "approve" ? { confirm_external_action: true } : {},
+          ),
+        },
+      );
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.detail ?? "The decision was refused.");
+      succeed(action === "approve"
+        ? "Approved. The post is queued exactly as it was frozen."
+        : "Dismissed. Its slot and its clip are free again.");
+      await loadExceptions();
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "The decision was refused.");
+    } finally {
+      setBusy("");
+    }
+  }
 
   async function loadAccounts() {
     setBusy("accounts");
@@ -468,7 +534,10 @@ export function AutopilotPanel({
           bio_hint: next.bio_hint,
           min_recycle_days: next.min_recycle_days,
           daily_cap_per_account: next.daily_cap_per_account,
+          weekly_post_cap: next.weekly_post_cap,
           delivery: next.delivery,
+          authority: next.authority,
+          priority: next.priority,
           confirm_external_action: confirm,
         }),
       }));
@@ -844,6 +913,53 @@ export function AutopilotPanel({
                 <option value="schedule">{t("autopilot.deliverySchedule")}</option>
               </select>
               <small>{t("autopilot.deliveryHelp")}</small>
+            </label>
+            <label>Authority
+              <select
+                value={autopilot.authority}
+                disabled={!canEdit}
+                onChange={(event) =>
+                  void save({ authority: event.target.value as Autopilot["authority"] })}
+              >
+                <option value="assist">Assist — hold every post for approval</option>
+                <option value="auto_draft">Auto-draft — engine drafts only</option>
+                <option value="run_by_exception">Run by exception (recommended)</option>
+                <option value="autonomous">Autonomous — earned after 10 confirmed posts</option>
+              </select>
+              <small>How much this campaign may do alone. Held posts wait in
+                the exceptions list on the Timeline.</small>
+            </label>
+            <label>Optimise for
+              <select
+                value={autopilot.priority}
+                disabled={!canEdit}
+                onChange={(event) =>
+                  void save({ priority: event.target.value as Autopilot["priority"] })}
+              >
+                <option value="balanced">Balanced — blend measured axes</option>
+                <option value="revenue">Revenue — earnings per click</option>
+                <option value="reach">Reach — views per post</option>
+                <option value="discussion">Discussion — comments per post</option>
+              </select>
+              <small>Ranking only uses an axis once it has enough evidence;
+                until then destinations rotate.</small>
+            </label>
+            <label>Weekly post cap
+              <input
+                type="number"
+                min={1}
+                max={200}
+                placeholder="No cap"
+                defaultValue={autopilot.weekly_post_cap ?? ""}
+                disabled={!canEdit}
+                onBlur={(event) => void save({
+                  weekly_post_cap: event.target.value
+                    ? Number(event.target.value)
+                    : null,
+                })}
+              />
+              <small>Across every destination, over a rolling week. Empty
+                leaves the per-account caps as the only limit.</small>
             </label>
           </div>
         </div>}
@@ -1321,6 +1437,47 @@ export function AutopilotPanel({
           A rolling seven-day outlook calculated by the same scheduler that deploys the campaign.
           Preview items are calculated; committed items are durable publishing jobs that persist across sessions.
         </p>
+        {/* Grouped at the top, per the run-by-exception contract: everything
+            the autopilot deferred to a person, with the reason on it. */}
+        {exceptions.length > 0 && (
+          <section className="campaign-committed-pipeline" aria-label="Posts waiting for approval">
+            <header>
+              <div>
+                <strong>Waiting for approval</strong>
+                <small>Held by this campaign&apos;s authority rules</small>
+              </div>
+              <Badge tone="warn">{exceptions.length} held</Badge>
+            </header>
+            <ul className="campaign-exception-list">
+              {exceptions.map((item) => (
+                <li key={item.id}>
+                  <div>
+                    <strong>{item.title || item.caption.slice(0, 80)}</strong>
+                    <small>
+                      {item.destination_label ?? item.platform ?? "destination"}
+                      {item.scheduled_at
+                        ? ` · ${new Date(item.scheduled_at).toLocaleString()}`
+                        : ""}
+                    </small>
+                    <small>{item.held_reason}</small>
+                  </div>
+                  {canEdit && (
+                    <span className="campaign-exception-actions">
+                      <Button variant="primary" size="sm"
+                        busy={busy === `approve-${item.id}`}
+                        onClick={() => void decideException(item.id, "approve")}
+                      >Approve</Button>
+                      <Button variant="quiet" size="sm"
+                        busy={busy === `dismiss-${item.id}`}
+                        onClick={() => void decideException(item.id, "dismiss")}
+                      >Dismiss</Button>
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         {preview && preview.deployed.length > 0 && (
           <section className="campaign-committed-pipeline" aria-label="Committed publishing jobs">
             <header>

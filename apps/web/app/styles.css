@@ -213,6 +213,11 @@ nav strong { color: #1c2b33; }
 .secret-checklist code.missing { color: #7c8792; }
 .connection-note { padding: 11px 13px; border-inline-start: 3px solid #006b4e; background: #f1f8f5; color: #44515d; }
 .setup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+/* A runtime download reports itself here: minutes of work in another process,
+   and the only place its progress or its reason for failing can be seen. */
+.setup-progress { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; color: #44515d; font-size: 0.78rem; }
+.setup-progress progress { flex: 1 1 220px; height: 6px; }
+.setup-progress-problem { color: var(--danger, #b42318); }
 .privacy-note { margin: 16px 0 0; color: #7c8792; font-size: 0.72rem; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
 /* .secondary-button sets padding: 0 16px from a later sheet, which left a
@@ -894,6 +899,14 @@ nav strong { color: #1c2b33; }
 .campaign-committed-pipeline summary { color: var(--link); font-size: 10px; font-weight: 700; cursor: pointer; }
 .campaign-committed-pipeline details pre { max-block-size: 140px; overflow: auto; padding: 8px; background: var(--panel-raised); font: 10px/1.45 ui-monospace, monospace; white-space: pre-wrap; }
 .campaign-committed-pipeline details > strong, .campaign-committed-pipeline details > div > strong { display: block; margin-block-start: 6px; color: var(--muted); font-size: 9px; text-transform: uppercase; }
+/* Held posts share the pipeline's vocabulary but not its time column: what
+   matters here is the reason and the two decisions, not a timestamp grid. */
+.campaign-exception-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.campaign-exception-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; border: 1px solid var(--line); border-inline-start: 3px solid var(--warn, #b45309); border-radius: var(--radius-sm); padding: 8px 10px; background: var(--panel); }
+.campaign-exception-list li > div { display: grid; min-width: 0; gap: 1px; }
+.campaign-exception-list li > div strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-exception-list li > div small { color: var(--muted); font-size: 9px; }
+.campaign-exception-actions { display: flex; align-items: center; gap: 6px; }
 .campaign-pipeline-summary span { display: grid; gap: 1px; padding: 10px 12px; border-inline-start: 1px solid var(--line); }
 .campaign-pipeline-summary span:first-child { border-inline-start: 0; }
 .campaign-pipeline-summary strong { color: var(--text); font-size: 18px; line-height: 1.1; font-variant-numeric: tabular-nums; }
