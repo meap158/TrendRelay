@@ -452,10 +452,10 @@ export const vi: Messages = {
   autopilot: {
     eyebrow: "Tự động chạy",
     heading: "Tự động đăng",
-    switch: "Đăng tự động",
+    switch: "Chiến dịch đang chạy",
     lede: "Lấy nội dung từ hàng đợi để đăng lên các tài khoản bên dưới vào khung giờ bạn đặt, đồng thời gắn liên kết tiếp thị ở nơi thực sự bấm được.",
-    confirmOn: "Bật tự động đăng? Chiến dịch này sẽ tự đăng lên các tài khoản thật.",
-    switchedOn: "Đã bật tự động đăng. Không gì được đăng cho đến khung giờ kế tiếp.",
+    confirmOn: "Bắt đầu chiến dịch này? Nó sẽ tự đăng lên các tài khoản thật vào khung giờ của bạn.",
+    switchedOn: "Chiến dịch đang chạy. Bài sẽ đăng vào các khung giờ của bạn; tắt đi thì không có gì được lên lịch.",
     saved: "Đã lưu thiết lập tự động đăng.",
     lastRun: "Lần chạy gần nhất:",
     fixIt: "Thiết lập",

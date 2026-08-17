@@ -456,10 +456,10 @@ export const en = {
   autopilot: {
     eyebrow: "Runs by itself",
     heading: "Autopilot",
-    switch: "Post automatically",
+    switch: "Campaign is running",
     lede: "Feeds the accounts below from the queue, at your posting times, and attaches the affiliate link where that link can actually be clicked.",
-    confirmOn: "Switch autopilot on? This campaign will post to live accounts on its own.",
-    switchedOn: "Autopilot is on. Nothing publishes until a posting time comes round.",
+    confirmOn: "Start this campaign? It will post to live accounts on its own, at your posting times.",
+    switchedOn: "Campaign is running. Posts go out at your posting times; switch it off and nothing is scheduled.",
     saved: "Autopilot settings saved.",
     lastRun: "Last run:",
     fixIt: "Set up",

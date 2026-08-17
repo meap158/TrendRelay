@@ -400,6 +400,16 @@ def plan_campaign(
         return [], "The campaign is archived. Restore it before planning new posts."
     if campaign.status != "active" and not allow_inactive:
         return [], "The campaign is not active. Autopilot only posts for active campaigns."
+    # Deliberately not covered by `allow_inactive`, which exists so a campaign
+    # still in draft can be previewed before it is switched on. That is about
+    # the campaign's status; this is the switch itself, and an outlook that
+    # keeps forecasting posts while the switch is off describes a future that
+    # will not happen.
+    if not autopilot.enabled:
+        return [], (
+            "Autopilot is switched off, so nothing is scheduled. "
+            "Switch it on to start posting at your posting times."
+        )
 
     destinations = session.scalars(
         select(CampaignDestination).where(

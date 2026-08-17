@@ -647,3 +647,35 @@ def offer(session, identifier: str, name: str, category: str = "Coffee") -> str:
     posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
 
     assert posts[0].video_path.endswith("campaign-cut.mp4")
+
+
+def test_a_campaign_that_is_switched_off_forecasts_nothing(session) -> None:
+    """The switch decides whether there is a future, not just whether it runs.
+
+    The outlook used to keep listing posts while the campaign was off, so the
+    page described a week of publishing that nothing would carry out. Turning
+    it off now empties the outlook, and says why.
+    """
+    pilot = autopilot(session)
+    pilot.enabled = False
+
+    posts, note = plan_campaign(
+        session, pilot, now=NOW, link_for=None, allow_inactive=True
+    )
+
+    assert posts == []
+    assert "switched off" in note
+
+
+def test_previewing_a_draft_campaign_still_works_when_it_is_switched_on(session) -> None:
+    # `allow_inactive` exists so a campaign still in draft can be previewed
+    # before it is started. The switch is a separate question, and gating one
+    # on the other would have taken that away.
+    pilot = autopilot(session)
+    pilot.enabled = True
+
+    _posts, note = plan_campaign(
+        session, pilot, now=NOW, link_for=None, allow_inactive=True
+    )
+
+    assert "switched off" not in note

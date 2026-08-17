@@ -442,10 +442,10 @@ export const zh: Messages = {
   autopilot: {
     eyebrow: "自动运行",
     heading: "自动发布",
-    switch: "自动发布",
+    switch: "活动运行中",
     lede: "按你设定的时段，从队列中取内容发布到下方账号，并把联盟链接放在真正可以点击的位置。",
-    confirmOn: "要启用自动发布吗？该活动将自行发布到真实账号。",
-    switchedOn: "已启用自动发布。到下一个发布时段前不会发布任何内容。",
+    confirmOn: "启动此活动？它将在你的发布时间自动发布到真实账号。",
+    switchedOn: "活动正在运行。将按你的发布时间发帖；关闭后不会安排任何内容。",
     saved: "已保存自动发布设置。",
     lastRun: "上次运行：",
     fixIt: "去设置",

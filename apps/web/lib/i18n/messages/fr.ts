@@ -460,10 +460,10 @@ export const fr: Messages = {
   autopilot: {
     eyebrow: "Fonctionne seul",
     heading: "Pilote automatique",
-    switch: "Publier automatiquement",
+    switch: "Campagne en cours",
     lede: "Alimente les comptes ci-dessous depuis la file, à vos heures de publication, et place le lien d’affiliation là où il peut réellement être cliqué.",
-    confirmOn: "Activer le pilote automatique ? Cette campagne publiera seule sur des comptes réels.",
-    switchedOn: "Pilote automatique activé. Rien ne part avant la prochaine heure de publication.",
+    confirmOn: "Démarrer cette campagne ? Elle publiera seule sur des comptes réels, à vos heures de publication.",
+    switchedOn: "La campagne tourne. Les publications partent à vos heures ; désactivez-la et rien n'est planifié.",
     saved: "Réglages du pilote automatique enregistrés.",
     lastRun: "Dernière exécution :",
     fixIt: "Configurer",

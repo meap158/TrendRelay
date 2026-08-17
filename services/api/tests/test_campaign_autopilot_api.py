@@ -399,7 +399,9 @@ def test_the_preview_explains_a_campaign_that_would_post_nothing(workspace) -> N
         "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/preview"
     ).json()
     assert body["posts"] == []
-    assert "not active" in body["note"] or "No destinations" in body["note"]
+    assert any(reason in body["note"] for reason in (
+        "not active", "No destinations", "switched off",
+    )), body["note"]
 
 
 def test_preview_rows_carry_media_account_and_product_routes(workspace) -> None:
@@ -409,6 +411,11 @@ def test_preview_rows_carry_media_account_and_product_routes(workspace) -> None:
         "provider": "buffer", "integration_id": "acct-1",
         "platform": "youtube", "label": "Coffee channel",
     })
+    # Switched on before anything is queued. Switching on runs the campaign
+    # there and then, and a run reserves what it posts - so enabling after
+    # approving would consume the very item this test wants to see forecast.
+    request("PUT", f"{base}/autopilot",
+            json={"enabled": True, "confirm_external_action": True})
     item = request("POST", f"{base}/queue", json={
         "asset_id": "asset-preview", "video_path": r"S:\media\coffee.mp4",
         "title": "Coffee demo", "body": "Make better espresso.",
@@ -420,7 +427,8 @@ def test_preview_rows_carry_media_account_and_product_routes(workspace) -> None:
         "timezone": "UTC",
         "slots": [{"weekday": -1, "time": upcoming.strftime("%H:%M")}],
     })
-
+    # The outlook forecasts nothing while the switch is off, so a test about
+    # what a running campaign would post has to switch it on.
     response = request("POST", f"{base}/autopilot/preview")
 
     assert response.status_code == 200, response.text
