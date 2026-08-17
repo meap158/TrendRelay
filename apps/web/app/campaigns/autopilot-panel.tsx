@@ -28,6 +28,7 @@ import { Badge, Card, Switch } from "../ui/primitives";
 import { SearchSelect } from "../ui/search-select";
 import { useT } from "../i18n-provider";
 import { EffectEditor } from "../library/effect-editor";
+import { TimelinePlayer } from "./timeline-player";
 import {
   AssetFilters,
   EMPTY_FACETS,
