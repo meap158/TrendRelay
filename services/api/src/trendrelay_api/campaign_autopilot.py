@@ -61,10 +61,95 @@ class LinkPlacement:
         return self.placement in {"caption", "first_comment"}
 
 
-def resolve_placement(platform: str, *, has_link: bool = True) -> LinkPlacement:
-    """Decide where this network's affiliate link belongs."""
+#: The scaffolding the autopilot writes around an operator's copy, per
+#: language. The operator's own text is always their own; these are only the
+#: defaults offered and the labels composed. Extending a language is adding an
+#: entry - anything absent falls back to English rather than to silence.
+LOCALISED_TEXTS: dict[str, dict[str, str]] = {
+    "en": {
+        "disclosure": "Affiliate link; we may earn a commission.",
+        "bio_hint": "Link in bio",
+        "recommended": "Recommended product",
+    },
+    "vi": {
+        "disclosure": "Liên kết tiếp thị; chúng tôi có thể nhận hoa hồng.",
+        "bio_hint": "Link ở tiểu sử",
+        "recommended": "Sản phẩm gợi ý",
+    },
+}
+
+#: How a campaign's free-text language list maps to a code. The list is words
+#: a person typed; only what is recognised changes the default, and anything
+#: else stays English rather than guessing.
+LANGUAGE_ALIASES: dict[str, str] = {
+    "en": "en", "english": "en",
+    "vi": "vi", "vietnamese": "vi", "tiếng việt": "vi", "tieng viet": "vi",
+}
+
+
+def language_code(languages: list[str] | None) -> str:
+    """The first recognised language a campaign names, or English."""
+    for value in languages or []:
+        code = LANGUAGE_ALIASES.get(str(value).strip().casefold())
+        if code:
+            return code
+    return "en"
+
+
+def localised_text(language: str, key: str) -> str:
+    """One scaffolding string in the campaign's language, English as fallback."""
+    table = LOCALISED_TEXTS.get(language) or LOCALISED_TEXTS["en"]
+    return table.get(key) or LOCALISED_TEXTS["en"][key]
+
+
+def resolve_placement(
+    platform: str,
+    *,
+    has_link: bool = True,
+    override: str | None = None,
+    comment_deliverable: bool = False,
+) -> LinkPlacement:
+    """Decide where this network's affiliate link belongs.
+
+    The network decides by default, because it is the network's behaviour
+    being decided about. An explicit `override` is the operator's call and is
+    honoured with its trade-off written into the reason - except a first
+    comment no engine can deliver for this destination, which falls back to
+    the network default and says so: a link in a comment that never gets
+    posted is not a placement, it is a lost link.
+    """
     if not has_link:
         return LinkPlacement("none", "No offer is attached to this campaign.")
+    if override and override != "auto":
+        if override == "caption":
+            return LinkPlacement("caption", (
+                "Configured for this destination."
+                if platform in CAPTION_LINK_PLATFORMS else
+                "Configured for this destination - but links in captions are "
+                f"not clickable on {platform}, so readers must copy it."
+            ))
+        if override == "bio":
+            return LinkPlacement(
+                "bio",
+                "Configured for this destination: the caption points at the "
+                "profile link.",
+            )
+        if override == "first_comment":
+            if comment_deliverable:
+                return LinkPlacement("first_comment", (
+                    "Configured for this destination. On Instagram a comment "
+                    "link costs reach and can be hidden."
+                    if platform in BIO_LINK_PLATFORMS else
+                    "Configured for this destination: the link posts as the "
+                    "first comment."
+                ))
+            # Fall through to the network default, loudly: the engine that
+            # delivers this destination cannot post a comment after the post.
+            fallback = resolve_placement(platform, has_link=True)
+            return LinkPlacement(fallback.placement, (
+                "A first comment was configured, but this destination's engine "
+                f"cannot post one - falling back: {fallback.reason}"
+            ))
     if platform in CAPTION_LINK_PLATFORMS:
         return LinkPlacement(
             "caption",
@@ -116,6 +201,8 @@ def compose(
     link: str | None = None,
     disclosure: str = "",
     bio_hint: str = "Link in bio",
+    placement_override: str | None = None,
+    comment_deliverable: bool = False,
 ) -> ComposedPost:
     """Build the caption and any first comment for one destination.
 
@@ -127,7 +214,12 @@ def compose(
     to a reader who never taps "more". Leading the caption is the only placement
     that satisfies all of those at once, so it is not configurable.
     """
-    placement = resolve_placement(platform, has_link=bool(link))
+    placement = resolve_placement(
+        platform,
+        has_link=bool(link),
+        override=placement_override,
+        comment_deliverable=comment_deliverable,
+    )
     if link and not disclosure.strip():
         raise DisclosureMissing(
             "An affiliate link needs a disclosure in the caption. "
@@ -167,6 +259,8 @@ def compose_products(
     hashtags: list[str] | None = None,
     disclosure: str = "",
     bio_hint: str = "Link in bio",
+    placement_override: str | None = None,
+    comment_deliverable: bool = False,
 ) -> ComposedPost:
     """Compose one post with one or more matched affiliate products.
 
@@ -186,7 +280,12 @@ def compose_products(
             "Affiliate products need a disclosure in the caption and every promotional reply."
         )
     primary_name, primary_link = products[0]
-    placement = resolve_placement(platform, has_link=True)
+    placement = resolve_placement(
+        platform,
+        has_link=True,
+        override=placement_override,
+        comment_deliverable=comment_deliverable,
+    )
     root_body = body.strip()
     thread: list[str] = []
 
@@ -201,6 +300,8 @@ def compose_products(
             link=primary_link,
             disclosure=disclosure,
             bio_hint=f"{bio_hint}: {primary_name}",
+            placement_override=placement_override,
+            comment_deliverable=comment_deliverable,
         )
 
     if platform in THREAD_LINK_PLATFORMS and len(products) > 1:
@@ -211,6 +312,8 @@ def compose_products(
             link=primary_link,
             disclosure=disclosure,
             bio_hint=bio_hint,
+            placement_override=placement_override,
+            comment_deliverable=comment_deliverable,
         )
         for name, link in products[1:]:
             thread.append(f"{disclosure.strip()}\n\n{name}\n{link}")

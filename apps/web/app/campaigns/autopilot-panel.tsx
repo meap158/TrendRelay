@@ -61,6 +61,9 @@ type Destination = {
   label: string;
   enabled: boolean;
   tracking_code: string | null;
+  /** The stored configuration; 'auto' lets the network decide. */
+  link_placement_setting: "auto" | "caption" | "first_comment" | "bio";
+  /** What the configuration resolves to today. */
   link_placement: "caption" | "first_comment" | "bio" | "none";
   link_reason: string;
 };
@@ -102,6 +105,8 @@ type Autopilot = {
   min_recycle_days: number;
   daily_cap_per_account: number;
   weekly_post_cap: number | null;
+  /** The language the composed scaffolding speaks. */
+  post_language: string;
   posts_scheduled: number;
   last_run_at: string | null;
   last_note: string | null;
@@ -538,6 +543,7 @@ export function AutopilotPanel({
           delivery: next.delivery,
           authority: next.authority,
           priority: next.priority,
+          post_language: next.post_language,
           confirm_external_action: confirm,
         }),
       }));
@@ -944,6 +950,20 @@ export function AutopilotPanel({
               <small>Ranking only uses an axis once it has enough evidence;
                 until then destinations rotate.</small>
             </label>
+            <label>Post language
+              <select
+                value={autopilot.post_language}
+                disabled={!canEdit}
+                onChange={(event) =>
+                  void save({ post_language: event.target.value })}
+              >
+                <option value="en">English</option>
+                <option value="vi">Tiếng Việt</option>
+              </select>
+              <small>The language of composed scaffolding — the disclosure
+                default, the bio hint, product labels. Your own copy is always
+                your own.</small>
+            </label>
             <label>Weekly post cap
               <input
                 type="number"
@@ -993,6 +1013,33 @@ export function AutopilotPanel({
                   {t(`autopilot.placement.${item.link_placement}`)}
                 </Badge>
                 <p className="autopilot-placement-reason">{item.link_reason}</p>
+                {canEdit && (
+                  <label className="autopilot-placement-choice">
+                    Link placement
+                    <select
+                      value={item.link_placement_setting}
+                      onChange={(event) => void run("placement", async () => {
+                        await json(await apiFetch(
+                          `${base}/destinations/${item.id}/placement`,
+                          {
+                            method: "POST",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({
+                              link_placement: event.target.value,
+                            }),
+                          },
+                        ));
+                        await refresh();
+                        return `Link placement updated for ${item.label}.`;
+                      })}
+                    >
+                      <option value="auto">Auto — network decides (recommended)</option>
+                      <option value="caption">Always in the caption</option>
+                      <option value="first_comment">First comment, where deliverable</option>
+                      <option value="bio">Always via bio link</option>
+                    </select>
+                  </label>
+                )}
                 {canEdit && (
                   <Button variant="quiet" size="sm" onClick={() => void run("remove", async () => {
                     await json(await apiFetch(`${base}/destinations/${item.id}`,

@@ -446,6 +446,16 @@ MAX_THREAD_PARTS = 25
 
 FIRST_COMMENT_PLATFORMS = frozenset({"instagram", "facebook", "linkedin"})
 
+
+def first_comment_deliverable(provider: str | None, platform: str | None) -> bool:
+    """Whether this destination's engine can post a comment after the post.
+
+    Only Buffer's schema carries the field, and only on the three networks
+    above. Asked before promising a first-comment placement: a link in a
+    comment no engine will post is not a placement, it is a lost link.
+    """
+    return provider == "buffer" and platform in FIRST_COMMENT_PLATFORMS
+
 # YouTube requires a category on create. 22 is People & Blogs, the general
 # bucket short-form creator video falls into; the rest are offered for choice.
 YOUTUBE_CATEGORIES: dict[str, str] = {
@@ -2394,6 +2404,19 @@ def _delivery_plan(
                     notes.append("AI-generated disclosure on")
             if target.platform in {"reddit", "pinterest"}:
                 notes.append("Title required" if not request.title else "Title sent")
+            # Said here, not silently dropped at delivery: only Buffer can
+            # post a comment or a thread after the post, so a request carrying
+            # either through another engine must learn that from the preview
+            # rather than from an empty comment section.
+            if request.first_comment:
+                notes.append(
+                    f"No first comment - {provider.label} cannot post one "
+                    "after the post"
+                )
+            if request.thread:
+                notes.append(
+                    f"No thread - {provider.label} cannot post replies"
+                )
         plan.append(
             {
                 "platform": target.platform,

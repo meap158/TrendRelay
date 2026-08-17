@@ -632,11 +632,17 @@ def campaign_from_opportunity(
     )
     session.add(campaign)
     session.flush()
+    from trendrelay_api.campaign_autopilot import language_code, localised_text
+
+    language = language_code(campaign.languages)
     session.add(
         CampaignAutopilot(
             workspace_id=workspace_id,
             campaign_id=campaign.id,
             offer_id=offer.id if offer else None,
+            post_language=language,
+            disclosure=localised_text(language, "disclosure"),
+            bio_hint=localised_text(language, "bio_hint"),
             created_by=user.id,
         )
     )

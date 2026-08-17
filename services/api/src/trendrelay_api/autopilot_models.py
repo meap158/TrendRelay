@@ -91,6 +91,10 @@ class CampaignAutopilot(Base):
     #: balanced blend. Ranking reads this; the campaign's prose objective is
     #: for people.
     priority: Mapped[str] = mapped_column(String(16), default="balanced")
+    #: The language composed scaffolding speaks - the disclosure default, the
+    #: bio hint, product labels. The operator's own copy is always their own;
+    #: this governs only what the autopilot writes around it.
+    post_language: Mapped[str] = mapped_column(String(16), default="en")
     #: What the campaign promotes. The tracking links point at this offer's
     #: affiliate URL; without one the campaign still posts, with no link.
     offer_id: Mapped[str | None] = mapped_column(
@@ -143,6 +147,10 @@ class CampaignDestination(Base):
         UniqueConstraint(
             "campaign_id", "provider", "integration_id", name="unique_campaign_destination"
         ),
+        CheckConstraint(
+            "link_placement IN ('auto','caption','first_comment','bio')",
+            name="valid_destination_link_placement",
+        ),
     )
 
     id: Mapped[str] = mapped_column(
@@ -161,6 +169,11 @@ class CampaignDestination(Base):
     platform: Mapped[str] = mapped_column(String(24), index=True)
     label: Mapped[str] = mapped_column(String(200))
     post_type: Mapped[str | None] = mapped_column(String(24))
+    #: Where this destination's affiliate link lives. 'auto' - the default,
+    #: and the recommendation - lets the network's own behaviour decide;
+    #: the explicit values exist for the operator who knows better, with the
+    #: trade-off written on the preview rather than assumed away.
+    link_placement: Mapped[str] = mapped_column(String(16), default="auto")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     #: Minted once and reused, so every click from this account lands on one
     #: code and the destination can actually be measured.

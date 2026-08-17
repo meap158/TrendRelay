@@ -258,7 +258,15 @@ def run_campaign(
         destination = destinations.get(destination_id)
         if not destination:
             return None
-        placement = resolve_placement(destination.platform)
+        from trendrelay_api.integrations.publishing import first_comment_deliverable
+
+        placement = resolve_placement(
+            destination.platform,
+            override=destination.link_placement,
+            comment_deliverable=first_comment_deliverable(
+                destination.provider, destination.platform
+            ),
+        )
         if placement.placement == "bio":
             code = link_url_for(session, autopilot, destination, offer_id)
             link_id = None

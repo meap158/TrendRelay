@@ -582,7 +582,18 @@ def plan_campaign(
                 "An unavailable offer was left out; its post continues without it."
             )
         matched = usable
-        if destination.platform in {"instagram", "tiktok"} and len(matched) > 1:
+        from trendrelay_api.campaign_autopilot import resolve_placement
+        from trendrelay_api.integrations.publishing import first_comment_deliverable
+
+        comment_ok = first_comment_deliverable(
+            destination.provider, destination.platform
+        )
+        effective = resolve_placement(
+            destination.platform,
+            override=destination.link_placement,
+            comment_deliverable=comment_ok,
+        )
+        if effective.placement == "bio" and len(matched) > 1:
             # A bio exposes one destination. Rotate the primary recommendation
             # across posts rather than pretending several links are behind it.
             matched = [matched[counter % len(matched)]]
@@ -598,7 +609,12 @@ def plan_campaign(
             except TypeError:
                 legacy_link = None
             if legacy_link:
-                product_links.append(("Recommended product", legacy_link))
+                from trendrelay_api.campaign_autopilot import localised_text
+
+                product_links.append((
+                    localised_text(autopilot.post_language, "recommended"),
+                    legacy_link,
+                ))
         for match in matched:
             if not link_for:
                 continue
@@ -627,6 +643,8 @@ def plan_campaign(
                 products=product_links,
                 disclosure=autopilot.disclosure if product_links else "",
                 bio_hint=autopilot.bio_hint,
+                placement_override=destination.link_placement,
+                comment_deliverable=comment_ok,
             )
         except DisclosureMissing as error:
             return [], str(error)
@@ -778,6 +796,7 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
         "delivery": autopilot.delivery,
         "authority": autopilot.authority,
         "priority": autopilot.priority,
+        "post_language": autopilot.post_language,
         "offer_id": autopilot.offer_id,
         "offer_mode": autopilot.offer_mode,
         "candidate_offer_ids": autopilot.candidate_offer_ids,

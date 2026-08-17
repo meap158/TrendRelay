@@ -107,6 +107,9 @@ class AutopilotSettings(BaseModel):
     #: The whole campaign's rolling-week ceiling, across every destination.
     #: None leaves the per-account caps as the only limit.
     weekly_post_cap: int | None = Field(default=None, ge=1, le=200)
+    #: The language the composed scaffolding speaks. Defaults follow the
+    #: campaign's own languages at creation, not English.
+    post_language: str = Field(default="en", pattern=r"^[a-z]{2}$")
     #: Switching an autopilot on hands over an account. It is an external action
     #: like any other here, and it is confirmed like one.
     confirm_external_action: bool = False
@@ -122,6 +125,14 @@ class DestinationCreate(BaseModel):
     platform: str = Field(min_length=1, max_length=24)
     label: str = Field(min_length=1, max_length=200)
     post_type: str | None = Field(default=None, max_length=24)
+    #: 'auto' lets the network's behaviour decide, and is the recommendation.
+    link_placement: str = Field(
+        default="auto", pattern=r"^(auto|caption|first_comment|bio)$"
+    )
+
+
+class DestinationPlacement(BaseModel):
+    link_placement: str = Field(pattern=r"^(auto|caption|first_comment|bio)$")
 
 
 class QueueItemCreate(BaseModel):
@@ -164,8 +175,17 @@ def _autopilot(session: Session, workspace_id: str, campaign_id: str,
     )
     if found:
         return found
+    from trendrelay_api.campaign_autopilot import language_code, localised_text
+
+    campaign = session.get(Campaign, campaign_id)
+    language = language_code(campaign.languages if campaign else None)
     found = CampaignAutopilot(
-        workspace_id=workspace_id, campaign_id=campaign_id, created_by=user_id
+        workspace_id=workspace_id, campaign_id=campaign_id, created_by=user_id,
+        # The scaffolding speaks the campaign's own language from the first
+        # moment, not English until somebody notices.
+        post_language=language,
+        disclosure=localised_text(language, "disclosure"),
+        bio_hint=localised_text(language, "bio_hint"),
     )
     session.add(found)
     session.flush()
@@ -173,8 +193,14 @@ def _autopilot(session: Session, workspace_id: str, campaign_id: str,
 
 
 def _destination_view(session: Session, item: CampaignDestination) -> dict[str, Any]:
+    from trendrelay_api.integrations.publishing import first_comment_deliverable
+
     link = session.get(TrackingLink, item.tracking_link_id) if item.tracking_link_id else None
-    placement = resolve_placement(item.platform)
+    placement = resolve_placement(
+        item.platform,
+        override=item.link_placement,
+        comment_deliverable=first_comment_deliverable(item.provider, item.platform),
+    )
     return {
         "id": item.id,
         "provider": item.provider,
@@ -185,6 +211,9 @@ def _destination_view(session: Session, item: CampaignDestination) -> dict[str, 
         "enabled": item.enabled,
         "last_posted_at": item.last_posted_at,
         "tracking_code": link.code if link else None,
+        # The stored setting and the resolved outcome, separately: 'auto' is a
+        # configuration, 'caption' is what it resolved to today.
+        "link_placement_setting": item.link_placement,
         # Sent with the destination so the page can say where the link will go
         # before anything is posted, rather than after.
         "link_placement": placement.placement,
@@ -433,6 +462,10 @@ def save_autopilot(
                 detail="One or more shortlisted offers were not found.",
             )
 
+    from trendrelay_api.campaign_autopilot import localised_text
+
+    previous_language = autopilot.post_language
+    autopilot.post_language = body.post_language
     autopilot.enabled = body.enabled
     autopilot.offer_id = body.offer_id
     autopilot.offer_mode = (
@@ -442,8 +475,24 @@ def save_autopilot(
     )
     autopilot.candidate_offer_ids = candidate_ids
     autopilot.max_products_per_post = body.max_products_per_post
-    autopilot.disclosure = body.disclosure.strip()
-    autopilot.bio_hint = body.bio_hint.strip() or "Link in bio"
+    # A disclosure or bio hint still reading its old language's default
+    # follows the language; anything the operator wrote stays theirs.
+    incoming_disclosure = body.disclosure.strip()
+    if (
+        body.post_language != previous_language
+        and incoming_disclosure == localised_text(previous_language, "disclosure")
+    ):
+        incoming_disclosure = localised_text(body.post_language, "disclosure")
+    autopilot.disclosure = incoming_disclosure
+    incoming_hint = body.bio_hint.strip()
+    if (
+        body.post_language != previous_language
+        and incoming_hint == localised_text(previous_language, "bio_hint")
+    ):
+        incoming_hint = localised_text(body.post_language, "bio_hint")
+    autopilot.bio_hint = incoming_hint or localised_text(
+        body.post_language, "bio_hint"
+    )
     autopilot.min_recycle_days = body.min_recycle_days
     autopilot.daily_cap_per_account = body.daily_cap_per_account
     if body.authority == "autonomous" and autopilot.authority != "autonomous":
@@ -521,10 +570,47 @@ def add_destination(
     item = CampaignDestination(
         workspace_id=workspace_id, campaign_id=campaign_id, provider=body.provider,
         integration_id=body.integration_id, platform=body.platform, label=body.label,
-        post_type=body.post_type,
+        post_type=body.post_type, link_placement=body.link_placement,
     )
     session.add(item)
     session.flush()
+    return {"destination": _destination_view(session, item)}
+
+
+@router.post("/{campaign_id}/destinations/{destination_id}/placement")
+def set_destination_placement(
+    workspace_id: str,
+    campaign_id: str,
+    destination_id: str,
+    body: DestinationPlacement,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Where this destination's affiliate link lives, changed with its reason.
+
+    The view answers with both the stored setting and what it resolves to, so
+    an override an engine cannot honour - a first comment through an engine
+    that cannot post one - reads as the fallback it actually is, on the same
+    screen the choice was made.
+    """
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    _campaign(session, workspace_id, campaign_id)
+    item = session.scalar(
+        select(CampaignDestination).where(
+            CampaignDestination.id == destination_id,
+            CampaignDestination.campaign_id == campaign_id,
+            CampaignDestination.workspace_id == workspace_id,
+        )
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Destination not found.")
+    item.link_placement = body.link_placement
+    audit(
+        session, request, workspace_id, user.id,
+        "campaign.destination_placement", "campaign_destination", item.id,
+        {"link_placement": body.link_placement},
+    )
     return {"destination": _destination_view(session, item)}
 
 
