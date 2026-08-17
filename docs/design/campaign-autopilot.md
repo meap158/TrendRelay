@@ -172,6 +172,12 @@ its conclusions.
    configured choice shows its consequence; controls dress like the app's
    own (the placement dropdown matches the search select); no raw file paths
    where a preview can play; compact chrome throughout.
+8. **Tabs earn their existence** (2026-08-18). Prefer no tabs; where they
+   must exist, each does exactly one thing, none overlap, and left to right
+   they tell a logical, coherent flow. Campaigns' three are the pipeline's
+   own story: packages enter the **Queue**, leave as **Posts**, governed by
+   **Setup**. Two tabs whose labels could describe each other's contents
+   ("Posts" beside "Content · post packages") fail this test by definition.
 
 ## Sources
 

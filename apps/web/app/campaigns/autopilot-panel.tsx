@@ -1120,10 +1120,16 @@ export function AutopilotPanel({
           </p>
         )}
 
-        {/* Three panes, named for their jobs. Posts is where the operator
-            lives; Content is what feeds it; Setup is every knob, out of the
-            way the moment it is set. */}
+        {/* The operator's rule for tabs: each does exactly one thing, none
+            overlap, and left to right they tell the pipeline's own story -
+            packages enter the Queue, leave as Posts, governed by Setup.
+            "Queue" and not "Content", because next to a tab called Posts,
+            Content · post packages read as the same thing. */}
         <nav className="campaign-work-tabs" aria-label="Campaign workspace">
+          <button type="button" className={view === "content" ? "active" : ""}
+            onClick={() => jumpTo("media")}>
+            <span>Queue</span><strong>{autopilot.queue_total}</strong><small>packages in rotation</small>
+          </button>
           <button type="button" className={view === "posts" ? "active" : ""}
             onClick={() => jumpTo("schedule")}>
             {/* Committed jobs still waiting to go out are upcoming posts too;
@@ -1133,13 +1139,6 @@ export function AutopilotPanel({
                   item.status === "queued" || item.status === "running").length
               : slots.length}</strong>
             <small>{preview ? "upcoming" : "posting times"}</small>
-          </button>
-          {/* "Queue", not "Content": next to a tab called Posts, "Content ·
-              post packages" read as the same thing. The queue is the source
-              material that rotates; Posts is what leaves. */}
-          <button type="button" className={view === "content" ? "active" : ""}
-            onClick={() => jumpTo("media")}>
-            <span>Queue</span><strong>{autopilot.queue_total}</strong><small>packages in rotation</small>
           </button>
           <button type="button" className={view === "setup" ? "active" : ""}
             onClick={() => jumpTo("settings")}>
