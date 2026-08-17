@@ -19,10 +19,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from secrets import token_hex
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import quote
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AfterValidator, BaseModel, Field, field_validator, model_validator
 
 from trendrelay_api import publishing_connections
 from trendrelay_api.campaign_autopilot import resolve_placement
@@ -69,6 +69,26 @@ PLATFORM_LABELS: dict[str, str] = {
     "googlebusiness": "Google Business",
 }
 ProviderId = Literal["bundle_social", "zernio", "buffer"]
+
+
+def _known_connection(value: str) -> str:
+    """Refuse a login that does not exist, while allowing every one that does.
+
+    This used to be a `Literal` of the three engine ids, which was a closed set
+    for as long as an engine meant one login. It is still closed - an id that
+    resolves to nothing is refused here exactly as pydantic refused it before -
+    but the set is now the connections, so a second Buffer login can be named.
+    """
+    from trendrelay_api import publishing_connections
+
+    identifier = value.strip()
+    if identifier in PROVIDERS or publishing_connections.find(PROVIDERS, identifier):
+        return identifier
+    raise ValueError(f"Unknown publishing provider: {identifier}")
+
+
+#: A connection id, or an engine id - which is the id of its first connection.
+ConnectionId = Annotated[str, AfterValidator(_known_connection), Field(max_length=80)]
 
 # What each network accepts, so an over-long post is refused here instead of
 # after the engine has already been called. These are TrendRelay's own figures
@@ -518,9 +538,15 @@ class PublishTarget(BaseModel):
     platform: Platform
     integration_id: str = Field(min_length=1, max_length=200)
     post_type: str | None = Field(default=None, max_length=20)
-    #: Which engine delivers this destination. None means the request's own
-    #: engine, so a post naming a single engine behaves exactly as before.
-    provider: ProviderId | None = None
+    #: Which login delivers this destination. None means the request's own,
+    #: so a post naming a single engine behaves exactly as before.
+    #:
+    #: Not a `Literal` of the engine ids any more: an engine can have several
+    #: logins and each is named separately here. It stays a closed set - the
+    #: validator refuses anything that is not a connection that exists - but
+    #: the set is now the connections rather than the three engines, and a
+    #: `Literal` would have rejected the second Buffer login outright.
+    provider: ConnectionId | None = None
 
     @field_validator("integration_id")
     @classmethod
@@ -563,7 +589,7 @@ class PublishRequest(BaseModel):
     targets: list[PublishTarget] = Field(min_length=1, max_length=25)
     made_with_ai: bool = False
     visibility: Literal["public", "private"] = "public"
-    provider: ProviderId | None = None
+    provider: ConnectionId | None = None
     media_url: str | None = Field(default=None, max_length=2000)
     #: Posted as a reply immediately after the post, where the engine supports
     #: it. The usual use is hashtags, kept out of the caption itself.
@@ -2551,7 +2577,10 @@ def preview_publish(request: PublishRequest) -> dict[str, Any]:
     providers: dict[str, ProviderDefinition] = {}
     for provider_id, part in scoped.items():
         provider = resolve_provider(provider_id)
-        _validate_request(provider, part)
+        # As the login this destination belongs to: validation calls the engine,
+        # and a key that is right for one login is wrong for another.
+        with using_connection(resolve_connection(provider_id)):
+            _validate_request(provider, part)
         providers[provider_id] = provider
 
     lead = providers[next(iter(scoped))]
@@ -2668,7 +2697,10 @@ def _execute_publish(request: PublishRequest, request_id: str | None = None) -> 
     providers = {}
     for provider_id, part in scoped.items():
         provider = resolve_provider(provider_id)
-        _validate_request(provider, part)
+        # As the login this destination belongs to: validation calls the engine,
+        # and a key that is right for one login is wrong for another.
+        with using_connection(resolve_connection(provider_id)):
+            _validate_request(provider, part)
         providers[provider_id] = provider
 
     hosted: dict[str, Any] | None = None
@@ -2686,7 +2718,8 @@ def _execute_publish(request: PublishRequest, request_id: str | None = None) -> 
     deliveries: list[dict[str, Any]] = []
     for provider_id, part in scoped.items():
         try:
-            outcome = _dispatch(providers[provider_id], part, request_id)
+            with using_connection(resolve_connection(provider_id)):
+                outcome = _dispatch(providers[provider_id], part, request_id)
             deliveries.append({
                 "provider": provider_id,
                 "provider_label": providers[provider_id].label,

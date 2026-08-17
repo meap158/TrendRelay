@@ -9,6 +9,8 @@ key rather than the first one's.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from trendrelay_api import publishing_connections as connections
@@ -176,3 +178,60 @@ def test_a_connection_id_resolves_to_its_engine_s_capabilities(two_logins) -> No
 def test_an_unknown_id_is_still_refused(two_logins) -> None:
     with pytest.raises(ValueError, match="Unknown publishing provider"):
         publishing.resolve_provider("buffer-that-was-deleted")
+
+
+# --- delivering to the right login --------------------------------------------
+
+
+def test_a_post_is_delivered_with_the_key_of_the_login_it_names(two_logins, monkeypatch) -> None:
+    """The whole point, at the moment it matters.
+
+    Two destinations, one on each login, in a single post. Each engine call has
+    to authenticate as the login that owns its destination - getting this wrong
+    publishes a client's post to somebody else's account.
+    """
+    seen: list[tuple[str, str]] = []
+
+    def dispatch(provider, part, request_id):
+        seen.append((
+            part.targets[0].provider,
+            publishing._required_credential(publishing.PROVIDERS["buffer"], "api_key"),
+        ))
+        return {"remote_post_ids": ["x"], "permalinks": []}
+
+    monkeypatch.setattr(publishing, "_dispatch", dispatch)
+    monkeypatch.setattr(publishing, "_validate_request", lambda *args, **kwargs: None)
+
+    request = publishing.PublishRequest(
+        workspace_id="ws", caption="hello",
+        date=datetime(2026, 8, 17, 9, 0, tzinfo=UTC),
+        media_url="https://example.test/v.mp4",
+        targets=[
+            {"platform": "instagram", "integration_id": "first-account", "provider": "buffer"},
+            {"platform": "instagram", "integration_id": "second-account",
+             "provider": two_logins.id},
+        ],
+    )
+    publishing._execute_publish(request, "request-1")
+
+    assert dict(seen) == {
+        "buffer": "key-for-the-first",
+        two_logins.id: "key-for-the-second",
+    }
+
+
+def test_a_destination_naming_a_login_that_does_not_exist_is_refused(two_logins) -> None:
+    # It used to be a Literal of engine ids, and refusing nonsense is a property
+    # worth keeping now that the set is open enough to hold connections.
+    with pytest.raises(ValueError, match="Unknown publishing provider"):
+        publishing.PublishTarget(
+            platform="instagram", integration_id="a", provider="buffer-never-added"
+        )
+
+
+def test_a_destination_may_still_name_a_bare_engine(two_logins) -> None:
+    target = publishing.PublishTarget(
+        platform="instagram", integration_id="a", provider="buffer"
+    )
+
+    assert target.provider == "buffer"
