@@ -551,6 +551,8 @@ export const en = {
     affiliateUrl: "Affiliate URL",
     createButton: "Create campaign",
     measureRevenue: "Measure revenue",
+    settings: "Campaign settings",
+    postLanguage: "Post language",
     activate: "Activate",
     archive: "Archive",
     addPlan: "Add publication plan",

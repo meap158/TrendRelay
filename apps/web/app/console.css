@@ -933,6 +933,13 @@ html { scroll-behavior: smooth; }
 .campaign-media-browser-head, .campaign-media-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; }
 .campaign-media-browser-head > div { display: grid; gap: 2px; }
 .campaign-media-browser-head small { color: var(--muted); font-size: 10px; }
+/* Deliberately the Library category bar's own shape: it is the same choice on
+   another screen, and two pill rows that differ by a few pixels read as two
+   different controls. */
+.campaign-media-kinds { display: flex; gap: 3px; min-width: 0; padding: 0 12px 8px; overflow-x: auto; }
+.campaign-media-kinds button { border: 0; border-radius: 999px; padding: 6px 10px; color: var(--muted); background: transparent; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+.campaign-media-kinds button.selected { color: #fff; background: var(--text); }
+.campaign-media-kinds button span { margin-inline-start: 3px; color: inherit; opacity: 0.68; font-size: 9px; font-variant-numeric: tabular-nums; }
 .campaign-media-browser .asset-filters { margin: 0; border-block: 1px solid var(--line); padding: 9px 12px; background: var(--panel-raised); }
 .campaign-media-actions { flex-wrap: wrap; border-bottom: 1px solid var(--line); }
 .campaign-media-actions > span { margin-inline-end: auto; color: var(--muted); font-size: 11px; }

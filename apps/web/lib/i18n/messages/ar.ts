@@ -545,6 +545,8 @@ export const ar: Messages = {
     affiliateUrl: "رابط تابع",
     createButton: "إنشاء حملة",
     measureRevenue: "قياس الإيرادات",
+    settings: "إعدادات الحملة",
+    postLanguage: "لغة المنشورات",
     activate: "تفعيل",
     archive: "أرشفة",
     addPlan: "إضافة خطة نشر",

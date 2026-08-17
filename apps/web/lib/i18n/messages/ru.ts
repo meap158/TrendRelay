@@ -554,6 +554,8 @@ export const ru: Messages = {
     affiliateUrl: "Партнёрская ссылка",
     createButton: "Создать кампанию",
     measureRevenue: "Измерить выручку",
+    settings: "Настройки кампании",
+    postLanguage: "Язык публикаций",
     activate: "Активировать",
     archive: "В архив",
     addPlan: "Добавить план публикации",

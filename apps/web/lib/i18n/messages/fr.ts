@@ -555,6 +555,8 @@ export const fr: Messages = {
     affiliateUrl: "URL d'affiliation",
     createButton: "Créer la campagne",
     measureRevenue: "Mesurer les revenus",
+    settings: "Paramètres de la campagne",
+    postLanguage: "Langue des publications",
     activate: "Activer",
     archive: "Archiver",
     addPlan: "Ajouter un plan de publication",

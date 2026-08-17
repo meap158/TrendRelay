@@ -547,6 +547,8 @@ export const vi: Messages = {
     affiliateUrl: "Liên kết tiếp thị",
     createButton: "Tạo chiến dịch",
     measureRevenue: "Đo doanh thu",
+    settings: "Cài đặt chiến dịch",
+    postLanguage: "Ngôn ngữ bài đăng",
     activate: "Kích hoạt",
     archive: "Lưu trữ",
     addPlan: "Thêm kế hoạch đăng bài",

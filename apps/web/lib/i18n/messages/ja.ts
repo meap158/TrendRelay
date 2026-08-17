@@ -547,6 +547,8 @@ export const ja: Messages = {
     affiliateUrl: "アフィリエイト URL",
     createButton: "キャンペーンを作成",
     measureRevenue: "売上を計測",
+    settings: "キャンペーン設定",
+    postLanguage: "投稿の言語",
     activate: "有効化",
     archive: "アーカイブ",
     addPlan: "配信プランを追加",

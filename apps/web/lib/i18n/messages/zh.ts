@@ -536,6 +536,8 @@ export const zh: Messages = {
     affiliateUrl: "联盟链接",
     createButton: "创建广告系列",
     measureRevenue: "衡量收入",
+    settings: "活动设置",
+    postLanguage: "发布语言",
     activate: "启用",
     archive: "归档",
     addPlan: "添加发布计划",

@@ -422,7 +422,10 @@ export function AutopilotPanel({
    * can see, and this is the screen where a wrong guess becomes real posts.
    */
   const draftingSplit = {
-    videos: drafting.filter((asset) => asset.media_kind !== "image"),
+    // Both named rather than one being "whatever is left". Audio never reaches
+    // the picker, but reading videos as "not an image" is the kind of rule that
+    // turns a sound file into a video post the first time one slips through.
+    videos: drafting.filter((asset) => asset.media_kind === "video"),
     images: drafting.filter((asset) => asset.media_kind === "image"),
   };
   const draftingPackages = draftingSplit.videos.length + (draftingSplit.images.length ? 1 : 0);
@@ -555,7 +558,9 @@ export function AutopilotPanel({
       }>(await apiFetch(
         `/api/workspaces/${workspaceId}/media/library/assets?${params.toString()}`,
       ));
-      setLibrary(body.assets ?? []);
+      // A campaign posts a clip or a carousel, so a sound file has nothing to
+      // become here. Dropped on arrival rather than offered and then refused.
+      setLibrary((body.assets ?? []).filter((asset) => asset.media_kind !== "audio"));
       if (body.facets) setLibraryFacets(body.facets);
       setLibraryTotal(body.total ?? body.assets?.length ?? 0);
       setDrafting([]);
@@ -568,10 +573,13 @@ export function AutopilotPanel({
   }
 
   function filterLibrary(next: AssetFilterValues) {
-    const normalized = { ...next, mediaKind: "video" as const };
-    setLibraryFilters(normalized);
+    // Passed through as given. This used to pin `mediaKind` to "video" on the
+    // way past, so the picker opened on everything and then hid every picture
+    // the moment anybody typed a search or chose a channel - which made the
+    // carousel support look absent when it was only one line out of reach.
+    setLibraryFilters(next);
     if (searchTimer.current) window.clearTimeout(searchTimer.current);
-    searchTimer.current = window.setTimeout(() => void loadLibrary(normalized), 220);
+    searchTimer.current = window.setTimeout(() => void loadLibrary(next), 220);
   }
 
   const run = useCallback(async (label: string, work: () => Promise<string>) => {
@@ -731,6 +739,26 @@ export function AutopilotPanel({
   }
 
   const selectedLibrary = Object.values(selectedAssets);
+  /**
+   * The kind row, and the counts beside it.
+   *
+   * Read from the facets rather than the page of results, because the API
+   * computes them with the media kind left out of its own filter - so each
+   * count is what choosing that kind would actually show, under whatever else
+   * is already narrowed. `libraryTotal` is not used for this: it counts audio
+   * too, and audio is not offered here.
+   */
+  const kindCount = (kind: string) =>
+    libraryFacets.media_kinds.find((facet) => facet.value === kind)?.count ?? 0;
+  const postableMatching = kindCount("video") + kindCount("image");
+  const selectedKind = libraryFilters.mediaKind ?? "";
+  /** What the head reports: the chosen kind's count, or both kinds together. */
+  const matchingCount = selectedKind ? kindCount(selectedKind) : postableMatching;
+  const postableKinds: Array<{ value: "" | "video" | "image"; label: string }> = [
+    { value: "", label: t("common.all") },
+    { value: "video", label: t("library.videos") },
+    { value: "image", label: t("library.images") },
+  ];
   /**
    * Delivered jobs and forecast posts as rows of one kind.
    *
@@ -1361,7 +1389,7 @@ export function AutopilotPanel({
           open={picking && drafting.length === 0}
           size="wide"
           title="Add media from Library"
-          description="Choose one or more videos, optionally apply effects, then write their campaign copy."
+          description="Choose one or more videos, or pictures to post as one carousel, optionally apply effects, then write their campaign copy."
           onClose={() => {
             setPicking(false);
             setSelectedAssets({});
@@ -1371,16 +1399,35 @@ export function AutopilotPanel({
             <div className="campaign-media-browser-head">
               <div>
                 <strong>{selectedLibrary.length
-                ? `${selectedLibrary.length} clips selected`
-                : t("autopilot.chooseClip")}</strong>
-                <small>{libraryTotal.toLocaleString()} matching videos · showing {library.length}</small>
+                ? `${selectedLibrary.length} selected`
+                : t("autopilot.chooseMedia")}</strong>
+                <small>{matchingCount.toLocaleString()} matching · showing {library.length}</small>
               </div>
+            </div>
+            {/* The same row the Library page carries, so narrowing to pictures
+                works the way it does there. Audio is left off rather than shown
+                and refused: a campaign posts a clip or a carousel, and there is
+                no third thing for a sound file to become. */}
+            <div className="campaign-media-kinds" role="group" aria-label="Media kind">
+              {postableKinds.map(({ value, label }) => {
+                const active = selectedKind === value;
+                const count = value ? kindCount(value) : postableMatching;
+                return (
+                  <button
+                    key={value || "all"}
+                    type="button"
+                    className={active ? "selected" : ""}
+                    aria-pressed={active}
+                    onClick={() => filterLibrary({ ...libraryFilters, mediaKind: value })}
+                  >{label} <span>{(count ?? 0).toLocaleString()}</span></button>
+                );
+              })}
             </div>
             <AssetFilters
               values={libraryFilters}
               facets={libraryFacets}
               fields={["query", "effect", "channel", "platform", "length"]}
-              cleared={{ mediaKind: "video" }}
+              cleared={{}}
               onChange={filterLibrary}
             />
             <div className="campaign-media-actions">
