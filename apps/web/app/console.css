@@ -717,7 +717,15 @@ html { scroll-behavior: smooth; }
 .autopilot-settings > label, .autopilot-numbers > label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 600; }
 .autopilot-settings input, .autopilot-settings select, .autopilot-numbers input, .autopilot-numbers select { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; }
 .autopilot-settings small, .autopilot-numbers small { color: var(--muted); font-weight: 400; line-height: 1.4; }
+/* Three shared rows - caption, control, help - so the controls sit on one line
+   however many lines the captions around them take. Each cell used to stack
+   independently, so "Posts per account per day" wrapping to two lines dropped
+   its input below its neighbours' and left the help text ragged. Row 2 sizing
+   itself to the tallest control also settles selects and number inputs at one
+   height. The 4px gap on the label overrides the parent's 10px for the rows it
+   spans, which keeps each cell tight while the cells stay 10px apart. */
 .autopilot-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.autopilot-numbers > label { grid-row: span 3; grid-template-rows: subgrid; }
 .campaign-product-mode, .campaign-product-intelligence, .campaign-item-products { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; background: var(--panel-raised); }
 .campaign-product-mode > div:first-child, .campaign-product-heading > div { display: grid; gap: 3px; }
 .campaign-product-mode small, .campaign-product-heading small, .campaign-rotation-note, .campaign-product-actions small { color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.45; }
