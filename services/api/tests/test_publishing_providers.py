@@ -2075,3 +2075,73 @@ def test_tiktok_still_takes_thirty_five() -> None:
     assert publishing.carousel_limit("tiktok") == 35
     assert publishing.carousel_limit("instagram") == 10
     assert publishing.carousel_limit("threads") == 0
+
+
+# --- saying something after the post ------------------------------------------
+#
+# Two fields, one capability. Buffer takes `firstComment` on Instagram, Facebook
+# and LinkedIn, and a `thread` array on Twitter, Threads, Mastodon and Bluesky -
+# and on the second group a reply in the thread *is* the follow-up, because
+# there is no comment box beside the post to put one in.
+
+
+def test_a_follow_up_on_threads_rides_the_thread_array(media_file: Path) -> None:
+    """It used to be dropped, and the campaign then reported that this
+    destination's engine "cannot post one" - on a network Buffer had been
+    posting replies to all along."""
+    meta = _buffer_meta(media_file, "threads", first_comment="Link: https://example.com")
+
+    assert "thread: [" in meta
+    # The caption leads, because Buffer wants the root in the array too.
+    assert '{ text: "Launch clip" }, { text: "Link: https://example.com" }' in meta
+    # And never through the field Threads does not declare.
+    assert "firstComment" not in meta
+
+
+def test_a_follow_up_lands_after_the_thread_rather_than_inside_it(media_file: Path) -> None:
+    # On a network with real threads the link belongs after the point has been
+    # made; slipping it in second would cut the thread in half.
+    meta = _buffer_meta(
+        media_file, "threads", thread=["Second point."], first_comment="Link: https://x.com"
+    )
+
+    assert (
+        '{ text: "Launch clip" }, { text: "Second point." }, { text: "Link: https://x.com" }'
+    ) in meta
+
+
+def test_instagram_still_uses_the_field_buffer_declares_for_it(media_file: Path) -> None:
+    meta = _buffer_meta(media_file, "instagram", first_comment="#tags")
+
+    assert 'firstComment: "#tags"' in meta
+    # Instagram declares no thread array, and Buffer rejects a field a network
+    # does not accept outright.
+    assert "thread: [" not in meta
+
+
+def test_a_thread_network_with_nothing_to_add_sends_no_array(media_file: Path) -> None:
+    # An array holding only the caption would turn every ordinary post into a
+    # one-part "thread".
+    meta = _buffer_meta(media_file, "threads")
+
+    assert "thread: [" not in meta
+
+
+def test_the_plan_names_the_follow_up_the_way_each_network_shows_it() -> None:
+    """A plan covering both kinds at once should not call them one thing."""
+    body = publishing.PublishRequest(
+        workspace_id="ws", video_path="clip.mp4", caption="hello",
+        date=datetime(2026, 8, 18, 12, 0),
+        first_comment="the link",
+        targets=[
+            publishing.PublishTarget(platform="threads", integration_id="a1"),
+            publishing.PublishTarget(platform="instagram", integration_id="a2"),
+        ],
+        confirm_external_action=True,
+    )
+
+    plan = {item["platform"]: item["notes"] for item in
+            publishing._delivery_plan(publishing.PROVIDERS["buffer"], body)}
+
+    assert any("reply in the thread" in note for note in plan["threads"])
+    assert any("First comment posted after" in note for note in plan["instagram"])

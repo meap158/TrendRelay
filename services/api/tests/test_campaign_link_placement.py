@@ -40,14 +40,56 @@ def _interface_locales() -> list[dict[str, str]]:
 # --- who can actually post a comment after the post -----------------------------
 
 
-def test_only_buffer_can_post_a_first_comment_and_only_on_three_networks() -> None:
-    assert first_comment_deliverable("buffer", "facebook") is True
-    assert first_comment_deliverable("buffer", "instagram") is True
-    assert first_comment_deliverable("buffer", "linkedin") is True
-    # Threads gets replies through the thread array, not a first comment.
-    assert first_comment_deliverable("buffer", "threads") is False
+#: Which network carries a follow-up, through which Buffer field, and what the
+#: reader sees. Written out because two words here read as one thing: *Threads*
+#: is the Meta network, *a thread* is a chain of replies that four networks
+#: have. Keeping the table in the test is what stops the next reader concluding,
+#: as this test itself once did, that having the second rules out the first.
+FOLLOW_UP_BY_NETWORK = {
+    "instagram": ("firstComment", "first comment"),
+    "facebook": ("firstComment", "first comment"),
+    "linkedin": ("firstComment", "first comment"),
+    "twitter": ("thread[]", "reply in the thread"),
+    "threads": ("thread[]", "reply in the thread"),
+    "mastodon": ("thread[]", "reply in the thread"),
+    "bluesky": ("thread[]", "reply in the thread"),
+}
+#: Buffer serves these too, and none of them takes anything after the post.
+NO_FOLLOW_UP = ("tiktok", "youtube", "pinterest", "googlebusiness")
+
+
+@pytest.mark.parametrize(("network", "expected"), sorted(FOLLOW_UP_BY_NETWORK.items()))
+def test_every_network_that_can_carry_a_follow_up_says_so(network, expected) -> None:
+    """Threads used to answer False here, and the campaign fell back to the
+    caption saying its engine "cannot post one" - on a network Buffer had been
+    posting replies to through the thread array all along. Two fields, one
+    capability: the operator is choosing where the link goes, not which of
+    Buffer's inputs carries it."""
+    _field, called = expected
+
+    assert first_comment_deliverable("buffer", network) is True
+    assert publishing.follow_up_kind(network) == called
+
+
+@pytest.mark.parametrize("network", NO_FOLLOW_UP)
+def test_a_network_with_neither_field_still_says_no(network) -> None:
+    assert first_comment_deliverable("buffer", network) is False
+
+
+def test_the_two_fields_stay_apart_even_though_the_capability_is_one() -> None:
+    # Buffer rejects a field a network does not declare, so the sets that decide
+    # what is *sent* must not be merged along with the question of what is
+    # possible.
+    assert publishing.FIRST_COMMENT_PLATFORMS.isdisjoint(publishing.THREAD_PLATFORMS)
+    assert publishing.FOLLOW_UP_PLATFORMS == (
+        publishing.FIRST_COMMENT_PLATFORMS | publishing.THREAD_PLATFORMS
+    )
+
+
+def test_only_buffer_can_post_a_follow_up_at_all() -> None:
     assert first_comment_deliverable("zernio", "facebook") is False
     assert first_comment_deliverable("bundle_social", "instagram") is False
+    assert first_comment_deliverable("zernio", "threads") is False
 
 
 def test_other_engines_say_they_drop_comments_instead_of_dropping_silently() -> None:

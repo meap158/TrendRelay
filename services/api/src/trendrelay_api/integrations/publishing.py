@@ -457,28 +457,74 @@ POST_TYPES: dict[str, tuple[PostType, ...]] = {
         ),
     ),
 }
-# Buffer accepts a first comment on exactly these three networks; its schema
-# has no such field for the others, so offering it there would be a promise the
-# engine cannot keep. Hashtags in a first comment keep them out of the caption
-# while still counting for reach, which is why anyone wants this.
-# Buffer's schema declares a thread array on exactly these four networks. A
-# thread is one post per reply, so each part is measured against the network's
-# caption limit on its own rather than the whole thread being measured once.
+# --------------------------------------------------------------------------- #
+# Saying something after the post
+# --------------------------------------------------------------------------- #
+#
+# Two words in this file are easy to read as one thing, so they are spelled out
+# once here:
+#
+#   *Threads*  - the Meta network, one destination among several. A platform id,
+#                always lowercase `threads`.
+#   *a thread* - a chain of posts replying to each other. A feature, which four
+#                networks have and Threads is only one of.
+#
+# Buffer can put text after a post on seven networks, by two different fields,
+# and which field decides what the thing is called:
+#
+#   network    field           what the reader sees
+#   ---------  --------------  --------------------------------
+#   instagram  firstComment    a comment under the post
+#   facebook   firstComment    a comment under the post
+#   linkedin   firstComment    a comment under the post
+#   twitter    thread[1]       a reply in the thread
+#   threads    thread[1]       a reply in the thread
+#   mastodon   thread[1]       a reply in the thread
+#   bluesky    thread[1]       a reply in the thread
+#
+# Only the first three were counted as able to carry a follow-up, so a campaign
+# asking for its link in a first comment was told Threads "cannot post one" and
+# quietly fell back to the caption - on a network that had been posting replies
+# through the thread array all along. They are different fields, not different
+# capabilities, and the operator is choosing where the link goes rather than
+# which of Buffer's fields carries it.
+
+#: Buffer's schema declares a thread array on exactly these four networks. A
+#: thread is one post per reply, so each part is measured against the network's
+#: caption limit on its own rather than the whole thread being measured once.
 THREAD_PLATFORMS = frozenset({"twitter", "threads", "mastodon", "bluesky"})
 #: Long enough for any real thread, short enough that a runaway loop is caught.
 MAX_THREAD_PARTS = 25
 
+#: Networks whose follow-up rides Buffer's `firstComment` field. Hashtags in a
+#: first comment keep them out of the caption while still counting for reach,
+#: which is why anyone wants this.
 FIRST_COMMENT_PLATFORMS = frozenset({"instagram", "facebook", "linkedin"})
+
+#: Every network where a follow-up can be delivered at all, by either field.
+FOLLOW_UP_PLATFORMS = FIRST_COMMENT_PLATFORMS | THREAD_PLATFORMS
+
+
+def follow_up_kind(platform: str | None) -> str:
+    """What the text after the post is called on this network.
+
+    Named per network rather than "first comment" everywhere, because on
+    Threads and the other thread networks there is no comment box separate from
+    the thread - the reply *is* the next post - and calling it a comment
+    describes something the reader will never see.
+    """
+    return "reply in the thread" if platform in THREAD_PLATFORMS else "first comment"
 
 
 def first_comment_deliverable(provider: str | None, platform: str | None) -> bool:
-    """Whether this destination's engine can post a comment after the post.
+    """Whether this destination's engine can put text after the post.
 
-    Only Buffer's schema carries the field, and only on the three networks
-    above. Asked before promising a first-comment placement: a link in a
-    comment no engine will post is not a placement, it is a lost link.
+    Asked before promising a first-comment placement: a link in a comment no
+    engine will post is not a placement, it is a lost link. It answers for both
+    fields, because the question is whether the link can go after the post and
+    not which of Buffer's inputs carries it there.
     """
-    return provider == "buffer" and platform in FIRST_COMMENT_PLATFORMS
+    return provider == "buffer" and platform in FOLLOW_UP_PLATFORMS
 
 # YouTube requires a category on create. 22 is People & Blogs, the general
 # bucket short-form creator video falls into; the rest are offered for choice.
@@ -2021,12 +2067,23 @@ def _buffer_metadata(platform: str, request: PublishRequest, kind: PostType) -> 
         else ""
     )
     thread = ""
-    if request.thread and platform in THREAD_PLATFORMS:
-        parts = ", ".join(
-            f"{{ text: {_graphql_literal(part)} }}"
-            for part in [request.caption, *request.thread]
-        )
-        thread = f" thread: [{parts}]"
+    if platform in THREAD_PLATFORMS:
+        # A follow-up on these networks is a reply in the thread; there is no
+        # comment field for Buffer to send it through, and dropping it was how
+        # Threads came to report that its engine "cannot post one".
+        #
+        # Last rather than second: on a network with real threads the link
+        # belongs after the point has been made, and slipping it between the
+        # caption and the rest would cut the thread in half.
+        following = [*(request.thread or [])]
+        if request.first_comment:
+            following.append(request.first_comment)
+        if following:
+            parts = ", ".join(
+                f"{{ text: {_graphql_literal(part)} }}"
+                for part in [request.caption, *following]
+            )
+            thread = f" thread: [{parts}]"
     fields = {
         "instagram": (
             f"instagram: {{ type: {kind.id} shouldShareToFeed: {share_to_feed} "
@@ -2545,25 +2602,36 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
         ) if provider.id == "buffer" else [],
         "max_thread_parts": MAX_THREAD_PARTS,
         "supports_approval": provider.id == "buffer",
-        # Offered only where the plan includes it. Buffer sells first comments,
-        # and a free account is told so by the API only after the post has been
-        # built and sent - so the field is withheld rather than the rejection
-        # being the way somebody finds out.
+        # Where a follow-up can be delivered at all - by either of Buffer's two
+        # fields, which the table above sets out. The thread networks are here
+        # because a reply in the thread is the same thing to the operator, who
+        # is choosing where the link goes and not which input carries it.
+        #
+        # The paid gate covers only the `firstComment` networks. That is the
+        # feature Buffer sells, and the one whose free tier answers "First
+        # comment requires a paid plan" after the post has been built and sent;
+        # the thread array is not sold separately and is not withheld here.
         "first_comment_platforms": sorted(
-            set(provider.platforms) & FIRST_COMMENT_PLATFORMS
-        ) if provider.id == "buffer" and engine_limits.feature_available(
-            provider.id,
-            "first_comment",
-            # Read from the rate-limit policy Buffer returns on every call, the
-            # same way the plan shown beside the engine is. Asking without it
-            # would name no plan, and an unnamed plan keeps the feature.
-            engine_limits.infer_plan(
-                provider.id,
-                policy=engine_limits.parse_rate_limit_policy(
-                    buffer_rate_limit_policy_header()
-                ),
-            ),
-        ) else [],
+            (set(provider.platforms) & THREAD_PLATFORMS)
+            | (
+                set(provider.platforms) & FIRST_COMMENT_PLATFORMS
+                if engine_limits.feature_available(
+                    provider.id,
+                    "first_comment",
+                    # Read from the rate-limit policy Buffer returns on every
+                    # call, the same way the plan shown beside the engine is.
+                    # Asking without it would name no plan, and an unnamed plan
+                    # keeps the feature.
+                    engine_limits.infer_plan(
+                        provider.id,
+                        policy=engine_limits.parse_rate_limit_policy(
+                            buffer_rate_limit_policy_header()
+                        ),
+                    ),
+                )
+                else set()
+            )
+        ) if provider.id == "buffer" else [],
         "youtube_categories": [
             {"id": key, "label": label}
             for key, label in sorted(YOUTUBE_CATEGORIES.items(), key=lambda item: int(item[0]))
@@ -2812,15 +2880,23 @@ def _delivery_plan(
                 notes.append("Not added to the grid")
             if request.thread:
                 notes.append(
-                    f"Thread of {len(request.thread) + 1} posts"
+                    # Counts the follow-up too, because on these networks it is
+                    # one of the posts in the chain rather than a thing beside
+                    # it - see the table above.
+                    f"Thread of {len(request.thread) + bool(request.first_comment) + 1} posts"
                     if target.platform in THREAD_PLATFORMS
                     else "Caption only - this network does not take a thread"
                 )
             if request.needs_approval:
                 notes.append("Held for approval")
             if request.first_comment:
+                # Named for what the reader will see on that network, so a plan
+                # covering Instagram and Threads at once says "comment" for one
+                # and "reply" for the other instead of one word for both.
                 notes.append(
-                    "First comment posted after"
+                    "Posted after, as a reply in the thread"
+                    if target.platform in THREAD_PLATFORMS
+                    else "First comment posted after"
                     if target.platform in FIRST_COMMENT_PLATFORMS
                     else "No first comment - this network does not take one"
                 )

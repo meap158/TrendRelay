@@ -191,6 +191,14 @@ def resolve_placement(
     the network default and says so: a link in a comment that never gets
     posted is not a placement, it is a lost link.
     """
+    # Imported here rather than at module scope: `publishing` imports this
+    # function, so naming it up top would close the circle. The same reason the
+    # API module reaches for `first_comment_deliverable` inside its handler.
+    from trendrelay_api.integrations.publishing import (  # noqa: PLC0415
+        THREAD_PLATFORMS,
+        follow_up_kind,
+    )
+
     if not has_link:
         return LinkPlacement("none", "No offer is attached to this campaign.")
     if override and override != "auto":
@@ -213,15 +221,23 @@ def resolve_placement(
                     "Configured for this destination. On Instagram a comment "
                     "link costs reach and can be hidden."
                     if platform in BIO_LINK_PLATFORMS else
+                    # Named for what appears on that network. Threads and the
+                    # other thread networks have no comment box beside the
+                    # post - the follow-up is the next post in the thread - so
+                    # calling it a comment describes something nobody will see.
+                    "Configured for this destination: the link posts as a "
+                    "reply in the thread."
+                    if platform in THREAD_PLATFORMS else
                     "Configured for this destination: the link posts as the "
                     "first comment."
                 ))
             # Fall through to the network default, loudly: the engine that
-            # delivers this destination cannot post a comment after the post.
+            # delivers this destination cannot post anything after the post.
             fallback = resolve_placement(platform, has_link=True)
             return LinkPlacement(fallback.placement, (
-                "A first comment was configured, but this destination's engine "
-                f"cannot post one - falling back: {fallback.reason}"
+                f"A {follow_up_kind(platform)} was configured, but this "
+                f"destination's engine cannot post one - falling back: "
+                f"{fallback.reason}"
             ))
     if platform in CAPTION_LINK_PLATFORMS:
         return LinkPlacement(

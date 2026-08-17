@@ -25,8 +25,8 @@ import {
   type AssetFacets,
   type AssetFilterValues,
 } from "../ui/asset-filters";
-import { AffiliateLink, type LinkPlacement,
-  type TrackingLink as AffiliateTrackingLink } from "./affiliate-link";
+import { AffiliateLink, type LinkPlacement } from "./affiliate-link";
+import type { ProductRow, ProductsPayload } from "../attribution/types";
 import { ActionIcon } from "../ui/action-icons";
 import { WaitingScreen } from "../ui/waiting-screen";
 import { Button, buttonClass } from "../ui/button";
@@ -371,7 +371,10 @@ export default function PublishPage() {
   const [clip, setClip] = useState<LibraryAsset | null>(null);
   const [thumbnail, setThumbnail] = useState("");
   /** The workspace's tracking links, so one can be attached without leaving. */
-  const [trackingLinks, setTrackingLinks] = useState<AffiliateTrackingLink[]>([]);
+  // The catalogue, so a link can be attached without leaving for Attribution.
+  // This held minted tracking links until ADR 0022 retired them; a post now
+  // carries the network's own affiliate URL, which lives on the offer.
+  const [linkableProducts, setLinkableProducts] = useState<ProductRow[]>([]);
   /**
    * The Pinterest boards of the account this post is going to.
    *
@@ -1030,10 +1033,10 @@ export default function PublishPage() {
     let cancelled = false;
     // Read once with the connection. Attaching a link should not send anyone to
     // another page to copy a code out of it.
-    apiFetch(`/api/workspaces/${workspaceId}/attribution/links`)
-      .then((response) => json<{ links: AffiliateTrackingLink[] }>(response))
-      .then((body) => { if (!cancelled) setTrackingLinks(body.links ?? []); })
-      .catch(() => { if (!cancelled) setTrackingLinks([]); });
+    apiFetch(`/api/workspaces/${workspaceId}/attribution/products`)
+      .then((response) => json<ProductsPayload>(response))
+      .then((body) => { if (!cancelled) setLinkableProducts(body.products ?? []); })
+      .catch(() => { if (!cancelled) setLinkableProducts([]); });
     apiFetch(`/api/workspaces/${workspaceId}/publishing/connection`)
       .then((response) => json<{ connection: Connection }>(response))
       .then((body) => { if (!cancelled) setConnection(body.connection); })
@@ -2929,7 +2932,7 @@ export default function PublishPage() {
           {/* Under the caption, because that is where a link would otherwise be
               typed - and above the first comment, because it can fill either. */}
           <AffiliateLink
-            links={trackingLinks}
+            products={linkableProducts}
             placementByPlatform={connection?.link_placement ?? {}}
             platforms={chosen}
             caption={caption}
@@ -2957,12 +2960,30 @@ export default function PublishPage() {
                   value={firstComment}
                   onChange={(event) => setFirstComment(event.target.value)}
                 />
-                <small>
-                  Posted as a reply straight after the post on{" "}
-                  {carriers.map((platform) => platformLabels[platform]).join(", ")}.
-                  {chosen.length > carriers.length
-                    && " The other destinations do not take one and will be skipped."}
-                </small>
+                {/* Split by what the reader will actually see. One field feeds
+                    two different things: a comment under the post on Instagram
+                    and friends, and the next post in the chain on Threads and
+                    the other thread networks. Naming them together as "a
+                    reply" left it unclear which destination got which. */}
+                {(() => {
+                  const asReply = carriers.filter((platform) =>
+                    providersFor(platform).some(
+                      (provider) => (provider.thread_platforms ?? []).includes(platform)));
+                  const asComment = carriers.filter((platform) => !asReply.includes(platform));
+                  const skipped = chosen.filter((platform) => !carriers.includes(platform));
+                  const name = (list: typeof chosen) =>
+                    list.map((platform) => platformLabels[platform]).join(", ");
+                  return (
+                    <small>
+                      {Boolean(asComment.length)
+                        && <>Posted as a first comment on {name(asComment)}. </>}
+                      {Boolean(asReply.length)
+                        && <>Posted as a reply in the thread on {name(asReply)}. </>}
+                      {Boolean(skipped.length)
+                        && <>{name(skipped)} cannot carry one, and will be skipped.</>}
+                    </small>
+                  );
+                })()}
               </label>
             );
           })()}
