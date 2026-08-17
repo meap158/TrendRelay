@@ -1,5 +1,7 @@
 import json
 import os
+import types
+import pytest
 from pathlib import Path
 
 import scripts.dev as dev
@@ -656,3 +658,64 @@ def test_releasing_only_removes_a_lock_this_process_holds(monkeypatch, tmp_path)
     dev.release_runner_lock()
 
     assert lock.exists(), "another runner's lock must survive"
+# --- the schema the services are about to serve -------------------------------
+#
+# `start.cmd` has always migrated before starting anything; `scripts/dev.py`
+# did not, and the two are used interchangeably. A checkout that gained a
+# migration then came up against an older schema, and the symptom was never a
+# migration warning - it was a 500 from whichever endpoint first touched the
+# new column. That happened twice in one day.
+
+
+def test_migrations_run_before_any_service_is_built(monkeypatch) -> None:
+    order: list[str] = []
+    monkeypatch.setattr(dev, "apply_migrations", lambda: order.append("migrate"))
+    monkeypatch.setattr(dev, "claim_runner_lock", lambda: None)
+    monkeypatch.setattr(dev, "build_services", lambda *_a, **_k: order.append("build") or [])
+    monkeypatch.setattr(dev, "validation_errors", lambda *_a, **_k: ["stop here"])
+    monkeypatch.setattr(dev, "parse_args", lambda: types.SimpleNamespace(
+        desktop=False, check=False, open_browser=False,
+    ))
+
+    dev.main()
+
+    assert order == ["migrate", "build"], "a service must not start on an older schema"
+
+
+def test_a_failed_migration_stops_the_start_and_frees_the_lock(monkeypatch) -> None:
+    """Serving from a half-migrated database is worse than not starting.
+
+    And a runner that refuses to start must not leave its lock behind, or the
+    next attempt is told another runner holds it.
+    """
+    released: list[str] = []
+    monkeypatch.setattr(dev, "apply_migrations", lambda: "the migration failed")
+    monkeypatch.setattr(dev, "claim_runner_lock", lambda: None)
+    monkeypatch.setattr(dev, "release_runner_lock", lambda: released.append("freed"))
+    monkeypatch.setattr(
+        dev, "build_services",
+        lambda *_a, **_k: pytest.fail("services must not be built"),
+    )
+    monkeypatch.setattr(dev, "parse_args", lambda: types.SimpleNamespace(
+        desktop=False, check=False, open_browser=False,
+    ))
+
+    assert dev.main() == 1
+    assert released == ["freed"]
+
+
+def test_check_mode_does_not_migrate(monkeypatch) -> None:
+    # `--check` is documented as validating without starting services, and
+    # migrating a database is not validation.
+    monkeypatch.setattr(
+        dev, "apply_migrations",
+        lambda: pytest.fail("a check must not change the schema"),
+    )
+    monkeypatch.setattr(dev, "existing_runner", lambda: None)
+    monkeypatch.setattr(dev, "build_services", lambda *_a, **_k: [])
+    monkeypatch.setattr(dev, "validation_errors", lambda *_a, **_k: ["stop here"])
+    monkeypatch.setattr(dev, "parse_args", lambda: types.SimpleNamespace(
+        desktop=False, check=True, open_browser=False,
+    ))
+
+    assert dev.main() == 1

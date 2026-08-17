@@ -680,6 +680,51 @@ def release_runner_lock() -> None:
         pass
 
 
+def apply_migrations() -> str | None:
+    """Bring the database up to head, or say why it could not.
+
+    `start.cmd` has always done this before starting anything. Running
+    `scripts/dev.py` directly does not go through `start.cmd`, so a checkout
+    that gained a migration came up against a schema that predated it - and the
+    symptom is not a migration warning but a 500 from whichever endpoint first
+    touches the new column, or a table that does not exist. Twice in one day
+    that read as an application bug: `no such table: publication_executions`,
+    then `no such column: campaign_autopilot.post_language`.
+
+    Applying them here costs nothing when there is nothing to apply, and means
+    the schema matches the code whichever way the stack was started.
+
+    Returned rather than raised so the caller decides. A database that cannot
+    be migrated is worth stopping for, but this should not be the thing that
+    stops somebody starting the frontend to look at a page.
+    """
+    script = ROOT / "scripts" / "db.py"
+    if not script.is_file():
+        return "scripts/db.py is missing, so the schema could not be checked."
+    python = ROOT / ".venv" / ("Scripts/python.exe" if IS_WINDOWS else "bin/python")
+    try:
+        done = subprocess.run(
+            [str(python), str(script), "upgrade"],
+            cwd=ROOT, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=180,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return f"The database migration did not finish: {error}"
+    if done.returncode != 0:
+        tail = (done.stderr or done.stdout or "").strip().splitlines()[-3:]
+        return "The database migration failed:\n  " + "\n  ".join(tail)
+    # Alembic reports every step it ran on stderr; a run with nothing to do says
+    # nothing worth repeating.
+    applied = [
+        line.split("Running upgrade ", 1)[1]
+        for line in (done.stderr or "").splitlines()
+        if "Running upgrade " in line
+    ]
+    for step in applied:
+        print(f"Applied migration {step}")
+    return None
+
+
 def main() -> int:
     args = parse_args()
     # Claimed before anything destructive, not after.
@@ -697,6 +742,15 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    # After the lock, so two runners cannot migrate at once, and before any
+    # service starts against a schema older than the code it is serving.
+    if not args.check:
+        migration_problem = apply_migrations()
+        if migration_problem:
+            print(migration_problem, file=sys.stderr)
+            release_runner_lock()
+            return 1
 
     # A check must not disturb what it is checking.
     services = build_services(args.desktop, may_terminate=not args.check)
