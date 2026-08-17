@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import importlib.util
 import json
@@ -23,6 +25,8 @@ from trendrelay_api.jobs import (
     fail_job,
     get_job_record,
     list_job_records,
+    now_utc,
+    report_progress,
 )
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion, MediaTranscript
 from trendrelay_api.models import DurableJob
@@ -56,6 +60,18 @@ def _module_present(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
 
 
+#: What each provider needs in the isolated runtime before it can run at all.
+PROVIDER_MODULES: dict[str, tuple[str, ...]] = {
+    "speech": ("faster_whisper",),
+    "ocr": ("rapidocr", "onnxruntime"),
+    "translate": ("argostranslate",),
+}
+
+
+def runtime_ready(provider: str) -> bool:
+    return all(_module_present(name) for name in PROVIDER_MODULES[provider])
+
+
 def _translation_pairs() -> list[dict[str, str]]:
     """Which language directions are installed, or none if the runtime is not.
 
@@ -80,15 +96,22 @@ def provider_status() -> dict[str, Any]:
     model = get_settings().media_ai_speech_model
     model_root = MODEL_ROOT / "faster-whisper"
     model_cached = model_root.is_dir() and any(model_root.rglob("model.bin"))
-    speech_runtime = _module_present("faster_whisper")
-    ocr_runtime = _module_present("rapidocr") and _module_present("onnxruntime")
+    speech_runtime = runtime_ready("speech")
+    ocr_runtime = runtime_ready("ocr")
+    translate_runtime = runtime_ready("translate")
     return {
         "speech": {
             "provider": f"faster-whisper {SPEECH_VERSION}",
+            "tool_id": PROVIDER_TOOL["speech"],
             "source_active": active.get("faster-whisper", False),
             "runtime_ready": speech_runtime,
             "model": model,
             "model_cached": model_cached,
+            # Everything the runtime needs is downloaded, whether or not the
+            # operator currently has the provider switched on. This is what
+            # separates "not set up yet", which costs a download, from "turned
+            # off", which is one click either way.
+            "prepared": bool(speech_runtime and model_cached),
             "ready": bool(
                 active.get("faster-whisper", False) and speech_runtime and model_cached
             ),
@@ -96,23 +119,27 @@ def provider_status() -> dict[str, Any]:
         },
         "ocr": {
             "provider": f"RapidOCR {OCR_VERSION} / ONNX Runtime {ONNX_VERSION}",
+            "tool_id": PROVIDER_TOOL["ocr"],
             "source_active": active.get("rapidocr", False),
             "runtime_ready": ocr_runtime,
+            "prepared": ocr_runtime,
             "ready": bool(active.get("rapidocr", False) and ocr_runtime),
             "network_during_analysis": False,
         },
         "translation": {
             "provider": f"Argos Translate {TRANSLATE_VERSION}",
+            "tool_id": PROVIDER_TOOL["translate"],
             "source_active": active.get("argos-translate", False),
-            "runtime_ready": _module_present("argostranslate"),
+            "runtime_ready": translate_runtime,
             # Which directions can be translated right now. A language pair is
             # a separate download, so a ready runtime with no packages can
             # still translate nothing - and offering a target that will fail is
             # worse than not offering it.
             "pairs": _translation_pairs(),
+            "prepared": bool(translate_runtime and _translation_pairs()),
             "ready": bool(
                 active.get("argos-translate", False)
-                and _module_present("argostranslate")
+                and translate_runtime
                 and _translation_pairs()
             ),
             "network_during_analysis": False,
@@ -120,6 +147,405 @@ def provider_status() -> dict[str, Any]:
         "review_required": True,
         "runtime_root": str(RUNTIME_ROOT),
     }
+
+
+# --------------------------------------------------------------------------- #
+# Preparing a provider
+# --------------------------------------------------------------------------- #
+#
+# Getting a provider running means a git checkout, a pip download of a few
+# hundred megabytes, and a model or language pack fetched over the network. That
+# used to be a command in the documentation, and an interface that ends in "now
+# open a terminal and type this" is an interface that stops there: it cannot say
+# how far the download got, cannot report why it failed, and leaves the operator
+# to work out which of three separate things is the one that is missing.
+#
+# So it is a durable job, like every other minutes-long piece of work here. The
+# app queues it, the worker runs it, and the same progress and error surface
+# every other job already has explains itself.
+
+SETUP_JOB_KIND = "media_ai_setup"
+#: Durable jobs are keyed by workspace and this work is not: one machine has one
+#: runtime, shared by every workspace signed in to it. Sharing a key is what
+#: stops two workspaces queueing the same multi-hundred-megabyte download twice.
+SETUP_WORKSPACE_KEY = "local-machine"
+#: The runtime is downloaded once and then kept, so a stalled attempt should
+#: report itself rather than silently spending another twenty minutes.
+SETUP_MAX_ATTEMPTS = 1
+SETUP_LEASE_SECONDS = 3600
+
+#: Which catalog entry gates each provider. Preparing a runtime is also
+#: accepting a third-party tool, so the switch flipped here is the same one the
+#: Tools page shows - there is no second, hidden way to turn a provider on.
+PROVIDER_TOOL: dict[str, str] = {
+    "speech": "faster-whisper",
+    "ocr": "rapidocr",
+    "translate": "argos-translate",
+}
+
+#: Pinned to the same versions `provider_status` reports, so what the page says
+#: is running is what was installed.
+PROVIDER_PACKAGES: dict[str, tuple[str, ...]] = {
+    "speech": (f"faster-whisper=={SPEECH_VERSION}",),
+    "ocr": (f"rapidocr=={OCR_VERSION}", f"onnxruntime=={ONNX_VERSION}"),
+    "translate": (f"argostranslate=={TRANSLATE_VERSION}",),
+}
+
+#: Prepared by default because they are the directions TrendRelay's own
+#: interface implies: the languages it is translated into, paired with English,
+#: which is the hub Argos routes most pairs through anyway.
+DEFAULT_TRANSLATION_PAIRS: tuple[tuple[str, str], ...] = (
+    ("en", "vi"), ("vi", "en"),
+    ("en", "ja"), ("ja", "en"),
+    ("en", "fr"), ("fr", "en"),
+    ("en", "zh"), ("zh", "en"),
+    ("en", "ru"), ("ru", "en"),
+    ("en", "ar"), ("ar", "en"),
+)
+
+
+def pip_install(packages: tuple[str, ...] | list[str]) -> None:
+    """Packages into the isolated runtime, never into the API's own environment.
+
+    `--target` rather than a virtual environment because the API already adds
+    this directory to `sys.path` on demand: a provider the operator never
+    prepared costs nothing, and one they did is importable without a second
+    interpreter to keep in step with this one.
+    """
+    RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
+    completed = subprocess.run(
+        [
+            sys.executable, "-m", "pip", "install", "--upgrade",
+            "--target", str(RUNTIME_ROOT), *packages,
+        ],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if completed.returncode == 0:
+        return
+    # pip's own last words, not "exit code 1". The usual causes - no network, a
+    # wheel with no build for this Python - are all named in that output, and
+    # the operator cannot see the console this ran in.
+    detail = (completed.stderr or completed.stdout).strip().splitlines()
+    raise RuntimeError(
+        "The download failed. " + (detail[-1][:400] if detail else "pip reported no reason.")
+    )
+
+
+def _prepare_speech() -> list[str]:
+    """Fetch the configured Whisper model into the local cache.
+
+    Anonymously, deliberately. The Systran models are public, and
+    `huggingface_hub` otherwise resolves a token from the environment or from
+    whatever `huggingface-cli login` last wrote to the user's home directory.
+    A stale one there is not ignored: the Hub answers a credentialled request
+    for a public repo with 401, which arrives as `RepositoryNotFoundError` and
+    reads as though the model does not exist. That is what it said on this
+    machine, against a token from two years ago and a repo that resolves fine
+    with no token at all.
+
+    `False` rather than `None` is the distinction that matters - `None` means
+    "find me a token", `False` means "send none".
+    """
+    _runtime_path()
+    from faster_whisper import WhisperModel
+
+    model_root = MODEL_ROOT / "faster-whisper"
+    model_root.mkdir(parents=True, exist_ok=True)
+    WhisperModel(
+        get_settings().media_ai_speech_model,
+        device="cpu",
+        compute_type="int8",
+        download_root=str(model_root),
+        use_auth_token=False,
+    )
+    return []
+
+
+def _prepare_ocr() -> list[str]:
+    _runtime_path()
+    if importlib.util.find_spec("rapidocr") is None:
+        raise RuntimeError("RapidOCR was downloaded but cannot be imported.")
+    from rapidocr import RapidOCR
+
+    RapidOCR()
+    return []
+
+
+def _argos_available_packages(package: Any) -> list[Any]:
+    """The Argos catalogue, without walking into its retry loop.
+
+    `argostranslate.package` has a trap in it:
+
+        except FileNotFoundError:
+            update_package_index()          # catches everything, returns
+            return get_available_packages() # index still absent, recurse
+
+    `update_package_index` swallows the reason it failed, so the recursion has
+    no exit but `RecursionError` - about a thousand requests deep. Against
+    `raw.githubusercontent.com`, which is where the catalogue lives, the loop
+    earns the 429 that then keeps it going, and "Preparing the model" sits
+    there until something gives out. That is what it was doing here.
+
+    So the index is checked rather than assumed, and a usable one from an
+    earlier run is preferred to a failed refresh. `get_available_packages` is
+    only ever called with the file already on disk, which is the one condition
+    under which it cannot recurse.
+    """
+    from argostranslate import settings
+
+    index = Path(settings.local_package_index)
+
+    def usable() -> bool:
+        try:
+            return bool(json.loads(index.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return False
+
+    had_one = usable()
+    # Never fatal on its own: a stale catalogue still installs packages, and it
+    # is a better answer than refusing to translate because GitHub is busy.
+    package.update_package_index()
+    if not usable() and not _fetch_argos_index(settings.remote_package_index, index):
+        if had_one:
+            raise RuntimeError(
+                "The language catalogue could not be refreshed and the copy on disk "
+                "is unreadable. Delete it and try again: " + str(index)
+            )
+        raise RuntimeError(
+            "The language catalogue could not be downloaded from "
+            f"{settings.remote_package_index} or its mirror. That host rate-limits, "
+            "so this is usually temporary - wait a few minutes and try again. Set "
+            "ARGOS_PACKAGE_INDEX to name a different source."
+        )
+    return list(package.get_available_packages())
+
+
+#: Other routes to the same catalogue, for when `raw.githubusercontent.com`
+#: rate-limits - which it does per address, and was answering 429 to every
+#: request from this machine.
+#:
+#: The API's contents endpoint is first because it is the one that held up when
+#: this was measured. It keeps a rate limit of its own, but a separate one, and
+#: sixty an hour is generous for fetching a catalogue. jsDelivr is second and
+#: not relied upon: it served the file and then answered 404 for the same URL
+#: minutes later, which is branch references being cached inconsistently.
+#: Proxies that merely front raw.githubusercontent - githack and friends -
+#: inherit its 429 and are no use here.
+#:
+#: Only the index needs any of this. The packages come from argos-net.com and
+#: were reachable throughout.
+ARGOS_INDEX_MIRRORS = (
+    "https://api.github.com/repos/argosopentech/argospm-index/contents/index.json",
+    "https://cdn.jsdelivr.net/gh/argosopentech/argospm-index@main/index.json",
+)
+
+
+def _argos_index_payload(body: bytes) -> bytes | None:
+    """The catalogue itself, unwrapped, or None if this is not a catalogue.
+
+    The API's contents endpoint answers with the file base64-encoded inside a
+    JSON envelope, so the two mirrors do not return the same shape. Checked
+    rather than trusted: a 429 body or an error page is still bytes, and
+    writing one to the path argostranslate reads would trade a clear failure
+    for a confusing one.
+    """
+    try:
+        parsed = json.loads(body)
+    except ValueError:
+        return None
+    if isinstance(parsed, dict) and parsed.get("encoding") == "base64":
+        try:
+            body = base64.b64decode(parsed.get("content", ""))
+            parsed = json.loads(body)
+        except (ValueError, binascii.Error):
+            return None
+    return body if isinstance(parsed, list) and parsed else None
+
+
+def _fetch_argos_index(configured: str, destination: Path) -> bool:
+    """Write a usable catalogue from a mirror. True if one arrived.
+
+    Skipped entirely when the operator pointed `ARGOS_PACKAGE_INDEX` somewhere
+    of their own: a mirror of the default index is not what they asked for, and
+    silently substituting it would be the wrong kind of helpful.
+    """
+    import urllib.request
+
+    if "argosopentech/argospm-index" not in configured:
+        return False
+    for url in ARGOS_INDEX_MIRRORS:
+        try:
+            request = urllib.request.Request(url, headers={"User-Agent": "TrendRelay"})
+            with urllib.request.urlopen(request, timeout=30) as response:
+                payload = _argos_index_payload(response.read())
+        except OSError:
+            continue
+        if payload is None:
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(payload)
+        return True
+    return False
+
+
+def _prepare_translate() -> list[str]:
+    """Fetch the language packages, reporting rather than failing on a gap.
+
+    Eleven working directions and one missing is a better outcome than none, and
+    the caller records what was skipped so the interface can say which.
+    """
+    _runtime_path()
+    from argostranslate import package
+
+    available = _argos_available_packages(package)
+    installed = {(item.from_code, item.to_code) for item in package.get_installed_packages()}
+    skipped: list[str] = []
+    for source, target in DEFAULT_TRANSLATION_PAIRS:
+        if (source, target) in installed:
+            continue
+        match = next(
+            (item for item in available
+             if item.from_code == source and item.to_code == target),
+            None,
+        )
+        if match is None:
+            skipped.append(f"{source}→{target}: no package published")
+            continue
+        try:
+            package.install_from_path(match.download())
+        except Exception as error:
+            skipped.append(f"{source}→{target}: {type(error).__name__}")
+    return skipped
+
+
+PROVIDER_PREPARE = {
+    "speech": _prepare_speech,
+    "ocr": _prepare_ocr,
+    "translate": _prepare_translate,
+}
+
+
+def prepare_provider(provider: str, *, on_stage: Any = None) -> list[str]:
+    """Install, download, warm and switch on one provider. Returns what it skipped.
+
+    The whole of "enable transcription" in one call, because it is one decision.
+    Split across three buttons it becomes three chances to stop half way and a
+    status page that says a provider is unavailable without saying which of the
+    three steps is the reason.
+    """
+    if provider not in PROVIDER_TOOL:
+        raise ValueError(f"Unknown media analysis provider: {provider}.")
+    from trendrelay_api.tool_registry import install_tool, list_tools, set_active
+
+    stage = on_stage or (lambda fraction, label: None)
+    tool_id = PROVIDER_TOOL[provider]
+    tool = next((item for item in list_tools() if item["id"] == tool_id), None)
+    if tool is None:
+        raise RuntimeError(f"{tool_id} is not in the tool catalog.")
+
+    if not tool["installed"]:
+        stage(0.05, "Fetching the pinned source")
+        install_tool(tool_id)
+    if not runtime_ready(provider):
+        stage(0.25, "Downloading the runtime")
+        pip_install(PROVIDER_PACKAGES[provider])
+    stage(0.6, "Preparing the model")
+    skipped = PROVIDER_PREPARE[provider]()
+    stage(0.95, "Switching the provider on")
+    set_active(tool_id, True)
+    return skipped
+
+
+def create_setup_job(
+    provider: str, *, actor_user_id: str, factory=None
+) -> dict[str, Any]:
+    """Queue the preparation, or hand back the one already running.
+
+    Asking twice is what an operator does when a download looks stuck, and two
+    pip processes writing the same directory is how it actually breaks. So a
+    second request joins the first rather than starting one.
+    """
+    if provider not in PROVIDER_TOOL:
+        raise ValueError(f"Unknown media analysis provider: {provider}.")
+    factory = factory or JOB_SESSION_FACTORY
+    unfinished = _unfinished_setup_job(provider, factory=factory)
+    if unfinished:
+        return unfinished
+    job_id = "mediaaisetup_" + hashlib.sha256(
+        f"{provider}:{PROVIDER_PACKAGES[provider]}:{now_utc().isoformat()}".encode()
+    ).hexdigest()[:20]
+    return create_job_record(
+        job_id,
+        SETUP_WORKSPACE_KEY,
+        SETUP_JOB_KIND,
+        {
+            "id": job_id,
+            "provider": provider,
+            "tool_id": PROVIDER_TOOL[provider],
+            "packages": list(PROVIDER_PACKAGES[provider]),
+            "actor_user_id": actor_user_id,
+        },
+        max_attempts=SETUP_MAX_ATTEMPTS,
+        factory=factory,
+    )
+
+
+def _unfinished_setup_job(provider: str, *, factory) -> dict[str, Any] | None:
+    for record in list_job_records(SETUP_WORKSPACE_KEY, SETUP_JOB_KIND, 20, factory=factory):
+        if record["payload"].get("provider") != provider:
+            continue
+        if record["status"] in {"queued", "running"} and not record["stalled"]:
+            return record
+        # Only the newest attempt per provider decides; an older running row
+        # whose worker died is history, not a reason to refuse.
+        return None
+    return None
+
+
+def latest_setup_jobs(*, factory=None) -> dict[str, dict[str, Any]]:
+    """The most recent preparation per provider, for the interface to poll."""
+    factory = factory or JOB_SESSION_FACTORY
+    newest: dict[str, dict[str, Any]] = {}
+    for record in list_job_records(SETUP_WORKSPACE_KEY, SETUP_JOB_KIND, 60, factory=factory):
+        provider = record["payload"].get("provider")
+        # Already newest-first, so the first of each provider is the one.
+        if provider and provider not in newest:
+            newest[provider] = record
+    return newest
+
+
+def run_setup_job(
+    job_id: str, worker_id: str = "media-ai-worker", *, factory=None
+) -> dict[str, Any]:
+    factory = factory or JOB_SESSION_FACTORY
+    claimed = claim_job(job_id, worker_id, lease_seconds=SETUP_LEASE_SECONDS, factory=factory)
+    provider = claimed["payload"]["provider"]
+    try:
+        skipped = prepare_provider(
+            provider,
+            on_stage=lambda fraction, label: report_progress(
+                job_id, fraction, label, factory=factory
+            ),
+        )
+        status = provider_status()
+        return complete_job(
+            job_id,
+            worker_id,
+            {
+                "provider": provider,
+                "skipped": skipped,
+                "ready": status["translation" if provider == "translate" else provider]["ready"],
+            },
+            factory=factory,
+        )
+    except Exception as error:
+        fail_job(job_id, worker_id, f"{type(error).__name__}: {error}", factory=factory)
+        raise
 
 
 def _version_path(session: Any, asset_id: str, kind: str) -> Path | None:
@@ -149,8 +575,9 @@ def _speech_draft(path: Path, language: str | None) -> dict[str, Any]:
     model_root = MODEL_ROOT / "faster-whisper"
     if not model_root.is_dir() or not any(model_root.rglob("model.bin")):
         raise RuntimeError(
-            "The configured faster-whisper model is not prepared. "
-            "Open Tools and run Prepare speech runtime."
+            "The configured faster-whisper model is not downloaded. "
+            "Open the transcription switch in the Library, or the faster-whisper "
+            "card in Tools, and choose Download and switch on."
         )
     model = WhisperModel(
         settings.media_ai_speech_model,
@@ -378,7 +805,14 @@ def run_enrichment_job(
         for mode in payload["modes"]:
             if not status[mode]["ready"]:
                 raise RuntimeError(
-                    f"{status[mode]['provider']} is not ready. Complete its Tools setup."
+                    f"{status[mode]['provider']} is "
+                    + (
+                        "switched off. Turn it on from the transcription switch in "
+                        "the Library."
+                        if status[mode]["prepared"]
+                        else "not downloaded yet. Set it up from the transcription "
+                        "switch in the Library, or its card in Tools."
+                    )
                 )
         with factory() as session:
             asset = session.scalar(
