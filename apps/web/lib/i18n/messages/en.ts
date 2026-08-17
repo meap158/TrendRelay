@@ -479,6 +479,7 @@ export const en = {
     delivery: "Delivery",
     deliveryDraft: "Fill drafts for review",
     deliverySchedule: "Schedule and publish",
+    deliveryNow: "Publish now, at the posting time",
     deliveryHelp: "Drafts land in the engine for you to release. Scheduling publishes without asking again.",
     whereEyebrow: "Where it posts",
     destinations: "{count, plural, one {# destination} other {# destinations}}",

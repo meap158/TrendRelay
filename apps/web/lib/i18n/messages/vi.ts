@@ -475,6 +475,7 @@ export const vi: Messages = {
     delivery: "Cách đăng",
     deliveryDraft: "Tạo bản nháp để duyệt",
     deliverySchedule: "Lên lịch và đăng",
+    deliveryNow: "Đăng ngay, vào khung giờ đã đặt",
     deliveryHelp: "Bản nháp nằm trong công cụ để bạn duyệt. Lên lịch thì đăng mà không hỏi lại.",
     whereEyebrow: "Đăng ở đâu",
     destinations: "{count} đích đến",

@@ -809,6 +809,13 @@ export function AutopilotPanel({
               >
                 <option value="draft">{t("autopilot.deliveryDraft")}</option>
                 <option value="schedule">{t("autopilot.deliverySchedule")}</option>
+                {/* The column and the engines have always allowed this; only
+                    the dropdown did not, so "Planned · publish now" was a badge
+                    for a state nothing could reach. Chosen before the engine is
+                    handed anything, which is what keeps it simple: there is no
+                    scheduled job to modify, so there is no second post to
+                    make. */}
+                <option value="now">{t("autopilot.deliveryNow")}</option>
               </select>
             </label>
           <Switch

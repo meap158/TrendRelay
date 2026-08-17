@@ -465,6 +465,7 @@ export const zh: Messages = {
     delivery: "发布方式",
     deliveryDraft: "生成草稿待审",
     deliverySchedule: "定时并发布",
+    deliveryNow: "到点立即发布",
     deliveryHelp: "草稿留在引擎中由你发布；定时则不再询问直接发布。",
     whereEyebrow: "发到哪里",
     destinations: "{count} 个目标",

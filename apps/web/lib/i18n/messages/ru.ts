@@ -482,6 +482,7 @@ export const ru: Messages = {
     delivery: "Способ публикации",
     deliveryDraft: "Создавать черновики",
     deliverySchedule: "Планировать и публиковать",
+    deliveryNow: "Публиковать сразу, в назначенное время",
     deliveryHelp: "Черновики остаются в движке — выпускаете их вы. Планирование публикует без повторного вопроса.",
     whereEyebrow: "Куда публикует",
     destinations: "{count, plural, one {# направление} few {# направления} many {# направлений} other {# направления}}",

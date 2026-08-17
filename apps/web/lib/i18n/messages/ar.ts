@@ -473,6 +473,7 @@ export const ar: Messages = {
     delivery: "طريقة النشر",
     deliveryDraft: "أنشئ مسودات للمراجعة",
     deliverySchedule: "جدولة ونشر",
+    deliveryNow: "النشر فورًا في الوقت المحدد",
     deliveryHelp: "تبقى المسودات في المحرّك لتُطلقها أنت. أمّا الجدولة فتنشر دون سؤال جديد.",
     whereEyebrow: "أين ينشر",
     destinations: "{count, plural, zero {لا وجهات} one {وجهة واحدة} two {وجهتان} few {# وجهات} many {# وجهة} other {# وجهة}}",

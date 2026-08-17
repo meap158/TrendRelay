@@ -475,6 +475,7 @@ export const ja: Messages = {
     delivery: "投稿方法",
     deliveryDraft: "下書きを作って確認する",
     deliverySchedule: "予約して公開する",
+    deliveryNow: "投稿時間に即時公開",
     deliveryHelp: "下書きはエンジン側に残り、あなたが公開します。予約は確認なしで公開されます。",
     whereEyebrow: "投稿先",
     destinations: "配信先{count}件",

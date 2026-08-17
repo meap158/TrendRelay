@@ -483,6 +483,7 @@ export const fr: Messages = {
     delivery: "Mode de publication",
     deliveryDraft: "Créer des brouillons à relire",
     deliverySchedule: "Programmer et publier",
+    deliveryNow: "Publier immédiatement, à l'heure prévue",
     deliveryHelp: "Les brouillons restent dans le moteur, à vous de les publier. La programmation publie sans redemander.",
     whereEyebrow: "Où il publie",
     destinations: "{count, plural, one {# destination} other {# destinations}}",
