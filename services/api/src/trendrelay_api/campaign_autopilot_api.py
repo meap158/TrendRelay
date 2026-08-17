@@ -57,6 +57,12 @@ class AutopilotSettings(BaseModel):
     min_recycle_days: int = Field(default=30, ge=1, le=365)
     daily_cap_per_account: int = Field(default=2, ge=1, le=24)
     delivery: str = Field(default="draft", pattern=r"^(draft|schedule|now)$")
+    #: How much the campaign may do alone. Run by exception is the recommended
+    #: default: proceed, and hold only what trips a rule.
+    authority: str = Field(
+        default="run_by_exception",
+        pattern=r"^(assist|auto_draft|run_by_exception|autonomous)$",
+    )
     #: Switching an autopilot on hands over an account. It is an external action
     #: like any other here, and it is confirmed like one.
     confirm_external_action: bool = False
@@ -397,6 +403,7 @@ def save_autopilot(
     autopilot.min_recycle_days = body.min_recycle_days
     autopilot.daily_cap_per_account = body.daily_cap_per_account
     autopilot.delivery = body.delivery
+    autopilot.authority = body.authority
     autopilot.updated_at = datetime.now(UTC)
     audit(
         session, request, workspace_id, user.id,
@@ -404,6 +411,7 @@ def save_autopilot(
         {
             "enabled": body.enabled,
             "delivery": body.delivery,
+            "authority": body.authority,
             "offer_id": body.offer_id,
             "offer_mode": body.offer_mode,
             "candidate_offers": len(candidate_ids),
@@ -1016,6 +1024,7 @@ def _execution_view(item: PublicationExecution) -> dict[str, Any]:
         "permalinks": list(item.permalinks or []),
         "failure_class": item.failure_class,
         "error": item.error,
+        "held_reason": item.held_reason,
         "queued_at": item.queued_at,
         "published_at": item.published_at,
         "reconciled_at": item.reconciled_at,
@@ -1050,3 +1059,112 @@ def list_autopilot_executions(
         .limit(limit)
     ).all()
     return {"executions": [_execution_view(item) for item in rows]}
+
+
+class ExceptionDecision(BaseModel):
+    confirm_external_action: bool = False
+
+
+def _held_execution(
+    session: Session, workspace_id: str, campaign_id: str, execution_id: str
+) -> PublicationExecution:
+    execution = session.scalar(
+        select(PublicationExecution).where(
+            PublicationExecution.id == execution_id,
+            PublicationExecution.workspace_id == workspace_id,
+            PublicationExecution.campaign_id == campaign_id,
+        )
+    )
+    if not execution:
+        raise HTTPException(status_code=404, detail="Execution not found.")
+    if execution.state != "proposed":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Only a held execution can be decided; this one is {execution.state}.",
+        )
+    return execution
+
+
+@router.get("/{campaign_id}/autopilot/exceptions")
+def list_autopilot_exceptions(
+    workspace_id: str,
+    campaign_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Everything waiting on a person, oldest first, with the reason on it."""
+    membership(session, workspace_id, user.id)
+    _campaign(session, workspace_id, campaign_id)
+    rows = session.scalars(
+        select(PublicationExecution)
+        .where(
+            PublicationExecution.workspace_id == workspace_id,
+            PublicationExecution.campaign_id == campaign_id,
+            PublicationExecution.state == "proposed",
+        )
+        .order_by(PublicationExecution.created_at)
+    ).all()
+    return {"exceptions": [_execution_view(item) for item in rows]}
+
+
+@router.post("/{campaign_id}/autopilot/executions/{execution_id}/approve")
+def approve_autopilot_execution(
+    workspace_id: str,
+    campaign_id: str,
+    execution_id: str,
+    body: ExceptionDecision,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Deliver a held post exactly as it was frozen.
+
+    Confirmed, because this is the moment a decision the autopilot deferred
+    becomes an external action - the one thing the exception inbox exists to
+    put in front of a person.
+    """
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    ensure_profile(session, user)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400, detail="Approving a held post requires confirmation."
+        )
+    _campaign(session, workspace_id, campaign_id)
+    autopilot = _autopilot(session, workspace_id, campaign_id, user_id=user.id)
+    execution = _held_execution(session, workspace_id, campaign_id, execution_id)
+    from trendrelay_api.campaign_runner import approve_execution
+
+    try:
+        approve_execution(session, autopilot, execution)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    audit(
+        session, request, workspace_id, user.id,
+        "campaign.exception_approved", "campaign", campaign_id,
+        {"execution_id": execution.id, "state": execution.state},
+    )
+    return {"execution": _execution_view(execution)}
+
+
+@router.post("/{campaign_id}/autopilot/executions/{execution_id}/dismiss")
+def dismiss_autopilot_execution(
+    workspace_id: str,
+    campaign_id: str,
+    execution_id: str,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Decline a held post. Cancelling frees its slot and its queue item."""
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    _campaign(session, workspace_id, campaign_id)
+    execution = _held_execution(session, workspace_id, campaign_id, execution_id)
+    execution.state = "cancelled"
+    execution.reconciled_at = utc_now()
+    execution.updated_at = utc_now()
+    audit(
+        session, request, workspace_id, user.id,
+        "campaign.exception_dismissed", "campaign", campaign_id,
+        {"execution_id": execution.id},
+    )
+    return {"execution": _execution_view(execution)}

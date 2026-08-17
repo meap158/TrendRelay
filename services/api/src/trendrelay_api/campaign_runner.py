@@ -80,31 +80,51 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _publish(session: Session, autopilot: CampaignAutopilot, post: Any,
-             destination: CampaignDestination) -> dict[str, Any]:
-    """Create one publishing job for one scheduled post."""
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _publish_execution(
+    session: Session,
+    autopilot: CampaignAutopilot,
+    execution: PublicationExecution,
+    *,
+    at: datetime | None = None,
+) -> dict[str, Any]:
+    """Create one publishing job from an execution's frozen inputs.
+
+    From the execution rather than from the plan, so what is delivered is
+    literally the record that was frozen and possibly reviewed - one source,
+    whether the post went straight through or waited in the exception inbox.
+    """
     from trendrelay_api.integrations.publishing import PublishRequest, create_publish_job
 
+    # Auto-draft authority proceeds unattended but only ever as engine drafts:
+    # the campaign fills a queue somebody looks at, and nothing it does alone
+    # can reach an audience.
+    delivery = "draft" if autopilot.authority == "auto_draft" else autopilot.delivery
     request = PublishRequest(
         workspace_id=autopilot.workspace_id,
         campaign_id=autopilot.campaign_id,
-        queue_item_id=post.queue_item_id,
-        destination_id=destination.id,
-        video_path=post.video_path,
-        caption=post.caption,
+        queue_item_id=execution.queue_item_id,
+        destination_id=execution.destination_id,
+        video_path=execution.media_path,
+        caption=execution.caption,
         # Reddit and Pinterest refuse a post without one, and the engines take
         # it as a separate field rather than reading the first caption line.
-        title=post.title,
-        first_comment=post.first_comment,
-        thread=list(post.thread),
-        date=post.at,
-        delivery=autopilot.delivery,
-        schedule=autopilot.delivery == "schedule",
+        title=execution.title,
+        first_comment=execution.first_comment,
+        thread=list(execution.thread or []),
+        date=at or _as_utc(execution.scheduled_at),
+        delivery=delivery,
+        schedule=delivery == "schedule",
         targets=[{
-            "platform": destination.platform,
-            "integration_id": destination.integration_id,
-            "post_type": destination.post_type,
-            "provider": destination.provider,
+            "platform": execution.platform,
+            "integration_id": execution.integration_id,
+            "post_type": execution.post_type,
+            "provider": execution.provider,
         }],
         # The operator confirmed when they switched autopilot on. Re-confirming
         # per post is not possible unattended and would only mean "never run".
@@ -113,6 +133,24 @@ def _publish(session: Session, autopilot: CampaignAutopilot, post: Any,
     # Same transaction as the campaign bookkeeping above it: a second
     # connection would wait on this one's uncommitted write.
     return create_publish_job(request, session=session)
+
+
+def _hold_reason(autopilot: CampaignAutopilot, post: ScheduledPost) -> str | None:
+    """Why this post must wait for a person, or None to proceed.
+
+    A low-confidence product holds at every authority level: quality is not a
+    policy an authority level can waive, and "low-confidence products remain
+    review-only" is the promise the smart matcher already keeps for unattended
+    matches - this closes the pinned-product path around it.
+    """
+    if any(confidence == "low" for confidence in post.offer_confidences):
+        return (
+            "A pinned product matched this content with low confidence. Approve "
+            "to post it anyway, or change the queue item's products."
+        )
+    if autopilot.authority == "assist":
+        return "Assist authority: every post waits for approval."
+    return None
 
 
 def _freeze_execution(
@@ -246,6 +284,7 @@ def run_campaign(
     posts, note = plan_campaign(session, autopilot, now=moment, link_for=link_for)
     created: list[dict[str, Any]] = []
     failures: list[str] = []
+    held: list[dict[str, Any]] = []
     reserved: list[ScheduledPost] = []
     for post in posts:
         destination = destinations.get(post.destination_id)
@@ -272,8 +311,24 @@ def run_campaign(
                 item.updated_at = moment
             failures.append(f"{destination.label}: {problem}")
             continue
+        hold = _hold_reason(autopilot, post)
+        if hold:
+            # Held for a person, not failed: the frozen record is complete and
+            # a `proposed` execution keeps its slot and its queue item, so
+            # approving it later delivers exactly what was planned now.
+            execution.state = "proposed"
+            execution.held_reason = hold
+            execution.updated_at = moment
+            reserved.append(post)
+            held.append({
+                "execution_id": execution.id,
+                "destination_id": destination.id,
+                "at": post.at,
+                "reason": hold,
+            })
+            continue
         try:
-            job = _publish(session, autopilot, post, destination)
+            job = _publish_execution(session, autopilot, execution)
             execution.job_id = job["id"]
             execution.state = "queued"
             execution.queued_at = moment
@@ -302,12 +357,57 @@ def run_campaign(
             execution.updated_at = moment
             failures.append(f"{destination.label}: {error}")
 
+    if held:
+        note = (
+            f"{note} {len(held)} post(s) waiting for approval in the "
+            "exception inbox."
+        )
     if failures:
         note = f"{note} Not sent: {'; '.join(failures)}"
     # Reservation bookkeeping only. Nothing is counted as posted here - that
     # happens in reconciliation, when the provider has actually answered.
     record_scheduled(session, autopilot, reserved, note=note, now=moment)
-    return {"note": note, "posts": created, "failures": failures}
+    return {"note": note, "posts": created, "held": held, "failures": failures}
+
+
+def approve_execution(
+    session: Session,
+    autopilot: CampaignAutopilot,
+    execution: PublicationExecution,
+    *,
+    now: datetime | None = None,
+) -> PublicationExecution:
+    """Deliver a held execution, exactly as it was frozen.
+
+    The one path out of the exception inbox that posts. The media is verified
+    again - it has been sitting while a person decided - and the scheduled
+    time is clamped to now when it has already passed, because an engine asked
+    to post in the past either refuses or posts immediately anyway, and the
+    record should say which time was really requested.
+    """
+    if execution.state != "proposed":
+        raise ValueError(
+            f"Only a held execution can be approved; this one is {execution.state}."
+        )
+    moment = now or datetime.now(UTC)
+    problem = _media_ready(execution)
+    if problem:
+        execution.state = "failed"
+        execution.failure_class = "media"
+        execution.error = problem[:1000]
+        execution.reconciled_at = moment
+        execution.updated_at = moment
+        return execution
+    scheduled = _as_utc(execution.scheduled_at)
+    at = scheduled if scheduled and scheduled > moment else moment
+    job = _publish_execution(session, autopilot, execution, at=at)
+    execution.job_id = job["id"]
+    execution.state = "queued"
+    execution.queued_at = moment
+    execution.scheduled_at = at
+    execution.held_reason = None
+    execution.updated_at = moment
+    return execution
 
 
 def _outcome_of(job: DurableJob) -> tuple[list[str], list[str]]:

@@ -162,6 +162,9 @@ class PublicationExecution(Base):
     permalinks: Mapped[list[str]] = mapped_column(JSON, default=list)
     failure_class: Mapped[str | None] = mapped_column(String(24))
     error: Mapped[str | None] = mapped_column(String(1000))
+    #: Why a `proposed` execution is waiting for a person - the sentence the
+    #: exception inbox shows. Empty on anything that was never held.
+    held_reason: Mapped[str | None] = mapped_column(String(500))
     #: Timestamped native-performance snapshots, filled by the measurement
     #: phase. Declared now so measuring needs no migration.
     performance_snapshots: Mapped[list[dict[str, Any]]] = mapped_column(

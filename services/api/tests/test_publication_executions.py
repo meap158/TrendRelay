@@ -150,20 +150,20 @@ def engine_stub(monkeypatch):
     calls: list = []
     behaviour = {"raise": None}
 
-    def fake_publish(session, autopilot, post, dest):
+    def fake_publish(session, autopilot, execution, *, at=None):
         if behaviour["raise"]:
             raise RuntimeError(behaviour["raise"])
-        calls.append(post)
+        calls.append(execution)
         job_id = f"publish_stub{len(calls)}"
         session.add(DurableJob(
             id=job_id, workspace_key=autopilot.workspace_id,
             kind="workspace_publishing", status="queued",
-            payload={"video_path": post.video_path}, max_attempts=1,
+            payload={"video_path": execution.media_path}, max_attempts=1,
         ))
         session.flush()
         return {"id": job_id}
 
-    monkeypatch.setattr(campaign_runner, "_publish", fake_publish)
+    monkeypatch.setattr(campaign_runner, "_publish_execution", fake_publish)
     return type("Stub", (), {"calls": calls, "behaviour": behaviour})
 
 
@@ -332,7 +332,7 @@ def test_the_frozen_cut_is_what_the_job_delivers(session, tmp_path, engine_stub)
     assert execution.media_sha256 == hashlib.sha256(b"edited bytes").hexdigest()
     assert execution.effect_ids == ["face_blur"]
     # The job was handed the frozen path, byte-identical to the preview.
-    assert engine_stub.calls[0].video_path == render_path
+    assert engine_stub.calls[0].media_path == render_path
 
 
 def test_media_that_changed_after_freezing_fails_by_name(

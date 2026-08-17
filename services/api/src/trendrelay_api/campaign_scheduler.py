@@ -71,6 +71,9 @@ class ScheduledPost:
     thread: tuple[str, ...] = ()
     offer_ids: tuple[str, ...] = ()
     product_names: tuple[str, ...] = ()
+    #: The matcher's confidence per attached offer, in the same order. What the
+    #: authority rules read: a low-confidence product never posts unattended.
+    offer_confidences: tuple[str, ...] = ()
     #: The exact Library version this post was composed against, frozen here so
     #: the execution record and the delivery use what the preview showed. None
     #: for a queue item that carries a raw path with no Library identity.
@@ -623,6 +626,7 @@ def plan_campaign(
             thread=(*custom_thread, *post.thread),
             offer_ids=tuple(match.offer_id for match in linked_matches),
             product_names=tuple(match.product_name for match in linked_matches),
+            offer_confidences=tuple(match.confidence for match in linked_matches),
         ))
         reserved[(item.id, destination.id)] = moment
         planned_per_day[day_key] = already_planned + 1
@@ -733,6 +737,7 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
     return {
         "enabled": autopilot.enabled,
         "delivery": autopilot.delivery,
+        "authority": autopilot.authority,
         "offer_id": autopilot.offer_id,
         "offer_mode": autopilot.offer_mode,
         "candidate_offer_ids": autopilot.candidate_offer_ids,

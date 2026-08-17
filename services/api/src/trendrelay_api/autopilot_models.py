@@ -55,6 +55,10 @@ class CampaignAutopilot(Base):
             "offer_mode IN ('smart','manual','none')", name="valid_autopilot_offer_mode"
         ),
         CheckConstraint(
+            "authority IN ('assist','auto_draft','run_by_exception','autonomous')",
+            name="valid_autopilot_authority",
+        ),
+        CheckConstraint(
             "max_products_per_post BETWEEN 1 AND 5",
             name="valid_autopilot_product_count",
         ),
@@ -72,6 +76,13 @@ class CampaignAutopilot(Base):
     #: Off by default, and off is the only state a new campaign can be created
     #: in. Nothing starts posting because a form was submitted.
     enabled: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    #: How much this campaign may do alone. `assist` plans and holds every post
+    #: for approval; `auto_draft` proceeds but only ever as engine drafts;
+    #: `run_by_exception` - the recommended default - proceeds and holds only
+    #: what trips a rule; `autonomous` holds nothing but the hard gates. A
+    #: low-confidence product is held at every level: quality is not a policy
+    #: an authority level can waive.
+    authority: Mapped[str] = mapped_column(String(20), default="run_by_exception")
     #: What the campaign promotes. The tracking links point at this offer's
     #: affiliate URL; without one the campaign still posts, with no link.
     offer_id: Mapped[str | None] = mapped_column(
