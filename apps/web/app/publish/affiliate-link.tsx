@@ -1,11 +1,17 @@
 "use client";
 
 /**
- * Attaching a tracking link to a post, and putting it where it works.
+ * Attaching a product's affiliate link to a post, and putting it where it works.
  *
  * The composer had a first-comment field and no way to reach Attribution, so
- * the only route was to open another page, copy a code, and paste it back. The
- * disclosure that has to accompany it was left to memory.
+ * the only route was to open another page, copy a link, and paste it back.
+ * The disclosure that has to accompany it was left to memory.
+ *
+ * What is attached is the network's own affiliate URL. This used to offer
+ * TrendRelay's minted `/c/` codes; ADR 0022 retired that redirector, so nothing
+ * mints one and the codes it listed resolve nowhere. The product is chosen from
+ * the catalogue itself - see `OfferPicker` - because a code was never something
+ * anybody recognised a product by.
  *
  * Two rules govern this, and both come from outside the interface:
  *
@@ -23,26 +29,25 @@
 import { useMemo, useState } from "react";
 
 import { Button } from "../ui/button";
-import { SearchSelect } from "../ui/search-select";
 import { useT } from "../i18n-provider";
 import { withDisclosure } from "../../lib/publish-rules";
-
-export type TrackingLink = {
-  id: string;
-  code: string;
-  url: string;
-  campaign_id: string;
-  product_id: string | null;
-  destination_host: string;
-  disclosure: string;
-  status: string;
-  clicks: number;
-};
+import { commissionLabel } from "../commission";
+import { OfferPicker, type OfferChoice } from "./offer-picker";
+import type { ProductRow } from "../attribution/types";
 
 export type LinkPlacement = { placement: string; reason: string };
 
+/**
+ * What every post says about being an advertisement.
+ *
+ * The same sentence a campaign starts with, so a post written by hand and one
+ * written by an autopilot disclose identically. An offer carries no disclosure
+ * of its own - the obligation belongs to the post, not to the merchant.
+ */
+export const DEFAULT_DISCLOSURE = "Affiliate link; we may earn a commission.";
+
 export function AffiliateLink({
-  links,
+  products,
   placementByPlatform,
   platforms,
   caption,
@@ -52,7 +57,7 @@ export function AffiliateLink({
   commentPlatforms,
   disabled,
 }: {
-  links: TrackingLink[];
+  products: ProductRow[];
   placementByPlatform: Record<string, LinkPlacement>;
   /** The networks this post is actually going to. */
   platforms: string[];
@@ -65,9 +70,8 @@ export function AffiliateLink({
   disabled?: boolean;
 }) {
   const t = useT();
-  const active = links.filter((item) => item.status === "active");
-  const [chosen, setChosen] = useState("");
-  const link = active.find((item) => item.id === chosen) ?? null;
+  const [picking, setPicking] = useState(false);
+  const [offer, setOffer] = useState<OfferChoice | null>(null);
 
   /** What each chosen network will do with this link, grouped by outcome. */
   const outcomes = useMemo(() => {
@@ -83,51 +87,67 @@ export function AffiliateLink({
   const bioOnly = (outcomes.bio ?? []).length > 0;
 
   function addToCaption() {
-    if (!link) return;
-    const body = withDisclosure(caption, link.disclosure);
-    onCaption(body.includes(link.url) ? body : `${body.trimEnd()}\n\n${link.url}`);
-  }
-
-  function addToComment() {
-    if (!link) return;
-    // The disclosure still goes in the caption, not the comment. In a comment it
-    // discloses nothing to a reader who never opens the comments.
-    onCaption(withDisclosure(caption, link.disclosure));
-    onFirstComment(
-      firstComment.includes(link.url)
-        ? firstComment
-        : `${firstComment.trim()}${firstComment.trim() ? "\n" : ""}${link.url}`.trim(),
+    if (!offer) return;
+    const body = withDisclosure(caption, DEFAULT_DISCLOSURE);
+    onCaption(
+      body.includes(offer.affiliate_url)
+        ? body
+        : `${body.trimEnd()}\n\n${offer.affiliate_url}`,
     );
   }
 
-  if (!active.length) {
+  function addToComment() {
+    if (!offer) return;
+    // The disclosure still goes in the caption, not the comment. In a comment it
+    // discloses nothing to a reader who never opens the comments.
+    onCaption(withDisclosure(caption, DEFAULT_DISCLOSURE));
+    onFirstComment(
+      firstComment.includes(offer.affiliate_url)
+        ? firstComment
+        : `${firstComment.trim()}${firstComment.trim() ? "\n" : ""}${offer.affiliate_url}`.trim(),
+    );
+  }
+
+  if (!products.some((product) => product.offers.some((item) => item.affiliate_url))) {
     return (
       <div className="affiliate-link empty">
-        <span>{t("publish.noTrackingLinks")}</span>
+        <span>{t("publish.noProductsToLink")}</span>
       </div>
     );
   }
 
   return (
     <div className="affiliate-link">
-      <label>{t("publish.affiliateLink")}
-        <SearchSelect
-          value={chosen}
+      <div className="affiliate-chooser">
+        <span className="affiliate-chooser-label">{t("publish.affiliateLink")}</span>
+        {/* The chosen product stated in full rather than as a code. What it
+            pays is part of that: the rate is usually why this offer was
+            attached instead of another on the same product. */}
+        {offer ? (
+          <span className="affiliate-chosen">
+            <strong>{offer.name}</strong>
+            <small>{[offer.network, commissionLabel(offer)].filter(Boolean).join(" · ")}</small>
+          </span>
+        ) : (
+          <span className="affiliate-chosen empty">{t("publish.chooseProductPrompt")}</span>
+        )}
+        <Button
+          variant="secondary"
+          size="sm"
           disabled={disabled}
-          onChange={setChosen}
-          placeholder={t("publish.chooseTrackingLink")}
-          searchPlaceholder="Search links, products, or destinations…"
-          options={active.map((item) => ({
-            value: item.id,
-            label: item.code,
-            description: `${item.destination_host}${item.clicks > 0
-              ? ` · ${t("publish.linkClicks", { count: item.clicks })}` : ""}`,
-            keywords: `${item.product_id ?? ""} ${item.campaign_id}`,
-          }))}
-        />
-      </label>
+          onClick={() => setPicking(true)}
+        >{offer ? t("publish.changeProduct") : t("publish.chooseProductAction")}</Button>
+      </div>
 
-      {link && (
+      <OfferPicker
+        open={picking}
+        products={products}
+        chosen={offer?.offer_id ?? ""}
+        onChoose={(next) => { setOffer(next); setPicking(false); }}
+        onClose={() => setPicking(false)}
+      />
+
+      {offer && (
         <>
           {/* Said before inserting, not after. Someone attaching a link to an
               Instagram post needs to know it will not be tappable there while
@@ -164,7 +184,7 @@ export function AffiliateLink({
           {/* The disclosure travels with the link either way, so it is stated
               rather than left as a surprise edit to the caption. */}
           <small className="affiliate-note">
-            {t("publish.disclosureGoesFirst", { disclosure: link.disclosure })}
+            {t("publish.disclosureGoesFirst", { disclosure: DEFAULT_DISCLOSURE })}
           </small>
           {bioOnly && (
             <small className="affiliate-note warn">

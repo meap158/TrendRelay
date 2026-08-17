@@ -16,9 +16,18 @@ export type ProductSort = {
   direction: "asc" | "desc";
 };
 
-type Comparable = string | number | [string, number] | null;
+/**
+ * A sortable cell: a word, a number, money as [currency, amount], or nothing.
+ *
+ * Money is a pair because a blended USD/VND column is not a quantity. Grouping
+ * by currency first means like is compared with like and unlike currencies
+ * never masquerade as one numeric scale.
+ */
+export type Comparable = string | number | [string, number] | null;
 
-const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+export const collator = new Intl.Collator(undefined, {
+  numeric: true, sensitivity: "base",
+});
 
 function oneOfferNumber(
   product: ProductRow,
@@ -77,7 +86,7 @@ function valueFor(product: ProductRow, key: ProductSortKey): Comparable {
   return commissionKey(product);
 }
 
-function compareValue(left: Comparable, right: Comparable): number {
+export function compareValue(left: Comparable, right: Comparable): number {
   // Missing values stay at the bottom in both directions. Otherwise switching
   // to descending makes a table begin with a wall of em dashes.
   if (left === null) return right === null ? 0 : 1;
@@ -89,17 +98,31 @@ function compareValue(left: Comparable, right: Comparable): number {
   return collator.compare(String(left), String(right));
 }
 
-export function sortProducts(products: ProductRow[], sort: ProductSort): ProductRow[] {
-  return products
-    .map((product, index) => ({ product, index, value: valueFor(product, sort.key) }))
+/**
+ * Order rows by one key, stably, with the missing values kept at the bottom.
+ *
+ * Shared so a second table does not grow a third opinion about what "sorted"
+ * means. The rules that are easy to get subtly wrong live here once: ties keep
+ * their original order, and a row with nothing in the column stays at the
+ * bottom whichever way the arrow points - otherwise switching to descending
+ * opens the table with a wall of em dashes.
+ */
+export function sortRows<Row>(
+  rows: Row[],
+  direction: "asc" | "desc",
+  valueOf: (row: Row) => Comparable,
+): Row[] {
+  return rows
+    .map((row, index) => ({ row, index, value: valueOf(row) }))
     .sort((left, right) => {
       const compared = compareValue(left.value, right.value);
       if (!compared) return left.index - right.index;
-      // Null handling is deliberately direction-independent.
-      const leftMissing = left.value === null;
-      const rightMissing = right.value === null;
-      if (leftMissing || rightMissing) return compared;
-      return sort.direction === "asc" ? compared : -compared;
+      if (left.value === null || right.value === null) return compared;
+      return direction === "asc" ? compared : -compared;
     })
-    .map(({ product }) => product);
+    .map(({ row }) => row);
+}
+
+export function sortProducts(products: ProductRow[], sort: ProductSort): ProductRow[] {
+  return sortRows(products, sort.direction, (product) => valueFor(product, sort.key));
 }

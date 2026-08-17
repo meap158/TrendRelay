@@ -797,6 +797,28 @@ nav strong { color: #1c2b33; }
 .affiliate-link { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
 .affiliate-link.empty { color: var(--muted); font-size: 12px; }
 .affiliate-link > label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 600; }
+/* One row: what it is for, which product is on it, and the way to change that.
+   The product's name is the wide part, because it is the thing being read. */
+.affiliate-chooser { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; }
+.affiliate-chooser-label { color: var(--muted); font-size: 11px; font-weight: 600; }
+.affiliate-chosen { display: grid; min-width: 0; gap: 1px; }
+.affiliate-chosen strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.affiliate-chosen small { color: var(--muted); font-size: 10px; }
+.affiliate-chosen.empty { color: var(--muted); font-size: 12px; }
+
+/* The catalogue in a dialog. It borrows `.product-table` from Attribution
+   deliberately: it is the same table answering the same question, and two that
+   differ by a few pixels read as two different things. */
+.offer-picker { display: grid; gap: 8px; min-height: 0; }
+.offer-picker-search { width: 100%; }
+.offer-picker-count { margin: 0; color: var(--muted); font-size: 11px; }
+.offer-picker-empty { margin: 0; padding: 16px 0; color: var(--muted); font-size: 12px; text-align: center; }
+/* Scrolls itself so the dialog does not, which is what keeps the search box and
+   the header row in place while a long catalogue moves under them. */
+.offer-picker-scroll { max-height: min(52vh, 420px); overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.offer-picker-pick { width: 1%; white-space: nowrap; }
+.offer-picker tbody tr.selected { background: var(--panel-raised); }
+
 .affiliate-outcomes { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .affiliate-outcomes li { display: flex; gap: 8px; align-items: baseline; font-size: 11px; }
 .affiliate-outcomes b { flex: none; border-radius: 999px; padding: 1px 7px; font-size: 10px; font-weight: 700; }
