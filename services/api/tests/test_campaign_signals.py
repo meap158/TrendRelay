@@ -230,3 +230,155 @@ def test_describing_a_signal_never_invents_a_field() -> None:
 
     assert shown["observed"] == {} and shown["tags"] == [] and shown["angles"] == []
     assert shown["provider"] is None
+
+
+# --- the lifecycle: watch, use, retire ----------------------------------------
+
+
+def watch(workspace_id: str, **changes) -> httpx.Response:
+    return request(
+        "POST", f"/api/workspaces/{workspace_id}/signals", json=signal(**changes)
+    )
+
+
+def signals(workspace_id: str, **params) -> httpx.Response:
+    return request("GET", f"/api/workspaces/{workspace_id}/signals", params=params)
+
+
+def test_a_signal_can_be_watched_without_a_campaign(workspace) -> None:
+    """The point of watching is not committing to anything yet."""
+    response = watch(workspace)
+
+    assert response.status_code == 201
+    kept = response.json()["signal"]
+    assert kept["campaign_id"] is None
+    assert kept["status"] == "watching"
+
+
+def test_a_signal_captured_against_a_campaign_is_active(workspace) -> None:
+    campaign = create(workspace).json()["campaign"]["id"]
+
+    kept = watch(workspace, campaign_id=campaign).json()["signal"]
+
+    assert kept["campaign_id"] == campaign and kept["status"] == "active"
+
+
+def test_seeing_the_same_signal_again_refreshes_it_rather_than_duplicating(
+    workspace,
+) -> None:
+    """A watched trend that keeps appearing should stay current, not pile up."""
+    first = watch(workspace).json()["signal"]
+    second = watch(workspace, evidence="Still rising, day 5").json()["signal"]
+
+    assert first["id"] == second["id"]
+    assert second["evidence"] == "Still rising, day 5"
+    assert signals(workspace).json()["signals"] != []
+    assert len(signals(workspace).json()["signals"]) == 1
+
+
+def test_a_watched_signal_can_be_pointed_at_a_campaign_later(workspace) -> None:
+    kept = watch(workspace).json()["signal"]
+    campaign = create(workspace).json()["campaign"]["id"]
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/signals/{kept['id']}/campaign",
+        json={"campaign_id": campaign},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["signal"]["campaign_id"] == campaign
+    assert response.json()["signal"]["status"] == "active"
+
+
+def test_the_same_evidence_cannot_be_attached_to_one_campaign_twice(workspace) -> None:
+    campaign = create(workspace, signals=[signal()]).json()["campaign"]["id"]
+    watched = watch(workspace).json()["signal"]
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/signals/{watched['id']}/campaign",
+        json={"campaign_id": campaign},
+    )
+
+    assert response.status_code == 409
+
+
+def test_retiring_a_signal_keeps_it(workspace) -> None:
+    """A trend that saturated is part of why a campaign looks as it does."""
+    kept = watch(workspace).json()["signal"]
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/signals/{kept['id']}/status",
+        json={"status": "retired", "reason": "Saturated; every account ran it"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["signal"]["status"] == "retired"
+    assert len(signals(workspace).json()["signals"]) == 1
+
+
+def test_expiry_cannot_be_set_by_hand(workspace) -> None:
+    """It is arithmetic on `expires_at`; writing it would let it disagree."""
+    kept = watch(workspace).json()["signal"]
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/signals/{kept['id']}/status",
+        json={"status": "expired"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_signals_can_be_read_back_for_one_campaign(workspace) -> None:
+    """What every later view needs to answer "why this?"."""
+    campaign = create(workspace, signals=[signal()]).json()["campaign"]["id"]
+    watch(workspace, external_id="topic:VN:other", label="Unrelated")
+
+    listed = signals(workspace, campaign_id=campaign).json()["signals"]
+
+    assert [item["external_id"] for item in listed] == ["topic:VN:giaydep"]
+
+
+def test_stale_evidence_is_counted_and_can_be_filtered(workspace) -> None:
+    from trendrelay_api.signal_models import CampaignSignal as Model
+
+    watch(workspace)
+    with TestingSession() as db:
+        item = db.scalars(select(Model)).one()
+        item.expires_at = datetime(2020, 1, 1)
+        db.commit()
+
+    body = signals(workspace).json()
+    assert body["stale_count"] == 1
+    assert signals(workspace, include_stale=False).json()["signals"] == []
+
+
+def test_archived_campaigns_refuse_new_evidence(workspace) -> None:
+    campaign = create(workspace).json()["campaign"]["id"]
+    request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign}/status",
+        json={"status": "archived"},
+    )
+
+    response = watch(workspace, campaign_id=campaign)
+
+    assert response.status_code == 409
+
+
+def test_a_signal_from_another_workspace_is_not_reachable(workspace) -> None:
+    kept = watch(workspace).json()["signal"]
+    other = request(
+        "POST", "/api/workspaces", json={"name": "Other", "slug": "other"}
+    ).json()["workspace"]["id"]
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{other}/signals/{kept['id']}/status",
+        json={"status": "retired"},
+    )
+
+    assert response.status_code == 404

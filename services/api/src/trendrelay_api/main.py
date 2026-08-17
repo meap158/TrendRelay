@@ -69,6 +69,7 @@ from trendrelay_api.media_library_api import router as media_library_router
 from trendrelay_api.opportunities_api import router as opportunities_router
 from trendrelay_api.production_api import router as production_router
 from trendrelay_api.publishing_api import router as publishing_router
+from trendrelay_api.signals_api import router as signals_router
 from trendrelay_api.tool_registry import (
     PROJECT_ROOT,
     ToolRegistryError,
@@ -93,6 +94,7 @@ app = FastAPI(
 app.include_router(foundation_router)
 app.include_router(attribution_router)
 app.include_router(campaigns_router)
+app.include_router(signals_router)
 app.include_router(campaign_autopilot_router)
 app.include_router(catalog_router)
 app.include_router(device_pairing_router)
