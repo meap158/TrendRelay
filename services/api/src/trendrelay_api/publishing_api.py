@@ -9,12 +9,14 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
+from trendrelay_api import publishing_connections
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
 from trendrelay_api.database import get_session
 from trendrelay_api.env_store import EnvWriteError
 from trendrelay_api.foundation import membership, require_role
 from trendrelay_api.integrations import media_hosting, posting_slots
 from trendrelay_api.integrations.publishing import (
+    PROVIDERS,
     PublishRequest,
     approved_media_path,
     board_options,
@@ -101,6 +103,130 @@ def save_credentials(
     except EnvWriteError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     return {"result": result, "connection": connection_status()}
+
+
+class ConnectionRequest(BaseModel):
+    """Another login for an engine that already has one."""
+
+    provider: str = Field(min_length=1, max_length=40)
+    label: str = Field(default="", max_length=80)
+
+
+class ConnectionRename(BaseModel):
+    label: str = Field(min_length=1, max_length=80)
+
+
+def _connections_payload() -> list[dict[str, Any]]:
+    return [
+        publishing_connections.payload(
+            row, provider_label=PROVIDERS[row.provider].label
+        )
+        for row in publishing_connections.connections(PROVIDERS)
+    ]
+
+
+@router.get("/connections")
+def list_publishing_connections(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Every login, including the one each engine starts with."""
+    membership(session, workspace_id, user.id)
+    return {"connections": _connections_payload()}
+
+
+@router.post("/connections")
+def add_publishing_connection(
+    workspace_id: str,
+    body: ConnectionRequest,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Make room for a second set of keys on an engine.
+
+    Local-machine only and owner-level, because it writes to the same file the
+    keys live in. No credentials are accepted here: adding the login and
+    filling it in are two steps, the second needing somewhere to put the key,
+    which is what this creates.
+    """
+    require_local_request(request)
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    require_governed_assurance(user)
+    try:
+        added = publishing_connections.add(PROVIDERS, body.provider, body.label)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except EnvWriteError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {
+        "connection": publishing_connections.payload(
+            added, provider_label=PROVIDERS[added.provider].label
+        ),
+        "connections": _connections_payload(),
+    }
+
+
+@router.post("/connections/{connection_id}/rename")
+def rename_publishing_connection(
+    workspace_id: str,
+    connection_id: str,
+    body: ConnectionRename,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    require_local_request(request)
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    try:
+        renamed = publishing_connections.rename(PROVIDERS, connection_id, body.label)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except EnvWriteError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {
+        "connection": publishing_connections.payload(
+            renamed, provider_label=PROVIDERS[renamed.provider].label
+        ),
+        "connections": _connections_payload(),
+    }
+
+
+@router.post("/connections/{connection_id}/remove")
+def remove_publishing_connection(
+    workspace_id: str,
+    connection_id: str,
+    body: ExternalConfirmation,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Forget a login and the keys that were only for it.
+
+    Confirmed explicitly: destinations already pointing at this login stop
+    resolving, and that is not something to do because a button was near the
+    cursor. POST rather than DELETE so the browser sends it - the CORS method
+    list is the app's, and a verb it does not carry fails before it arrives.
+    """
+    require_local_request(request)
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    require_governed_assurance(user)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400, detail="Removing a connection requires confirmation."
+        )
+    found = publishing_connections.find(PROVIDERS, connection_id)
+    if not found:
+        raise HTTPException(status_code=404, detail="No such connection.")
+    keys = tuple(field.key for field in PROVIDERS[found.provider].credentials)
+    try:
+        publishing_connections.remove(PROVIDERS, connection_id, keys)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except EnvWriteError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {"removed": connection_id, "connections": _connections_payload()}
 
 
 @router.post("/media-hosting/credentials")

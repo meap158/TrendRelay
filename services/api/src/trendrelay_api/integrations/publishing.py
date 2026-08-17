@@ -2432,7 +2432,15 @@ def reveal_credential(key: str) -> str:
 
 
 def save_provider_credentials(provider_id: str, values: dict[str, str]) -> dict[str, Any]:
+    """Save one login's keys.
+
+    `provider_id` is a connection id - and for an engine's first connection
+    that is the engine id, which is what every existing caller sends. The keys
+    written are that connection's, so filling in a second Buffer login does not
+    overwrite the first one's.
+    """
     provider = resolve_provider(provider_id)
+    connection = resolve_connection(provider_id)
     fields = {field.id: field for field in provider.credentials}
     unknown = sorted(set(values) - set(fields))
     if unknown:
@@ -2443,16 +2451,17 @@ def save_provider_credentials(provider_id: str, values: dict[str, str]) -> dict[
         field = fields[field_id]
         if not value and field.required:
             raise ValueError(f"{provider.label} {field.label} cannot be empty.")
-        updates[field.key] = value
+        updates[connection.key_for(field.key)] = value
     if not updates:
         raise ValueError("Provide at least one setting to save.")
     written = write_env_values(updates)
-    return {"provider": provider.id, "written_keys": written}
+    return {"provider": connection.id, "written_keys": written}
 
 
 def test_provider(provider_id: str) -> dict[str, Any]:
-    """Probe one engine's credentials without changing the active engine."""
-    status = provider_status(provider_id, probe=True)
+    """Probe one login's credentials without changing the active engine."""
+    with using_connection(resolve_connection(provider_id)):
+        status = provider_status(provider_id, probe=True)
     if status["authenticated"]:
         try:
             accounts = discover_integrations(provider_id)["accounts"]
