@@ -149,14 +149,20 @@ its conclusions.
    refused out loud when no engine can deliver it. *Amends "the network
    decides it, not the operator" above: the network still decides the
    default; the operator now owns the override.*
-5. **Content-first flow, no stacked gates.** Content arrives from Discover
-   or Library, is auto-matched to the most relevant affiliate products, gets
-   its comments composed around the links, and posts smartly. The authority
-   dial and its exception inbox are the only approval layer; queue items
-   arrive ready ('draft' is a parking brake), and the Post automatically
-   switch is the deploy. *Supersedes "only approved items are eligible /
-   autopilot never approves anything on its own" and "not publish without
-   approval" above.*
+5. **Content-first flow, one gate, at the execution layer.** Content
+   arrives from Discover or Library, is auto-matched to the most relevant
+   affiliate products, gets its comments composed around the links - and
+   every frozen post then **waits in the inbox for approval before it
+   reaches an engine** (refined 2026-08-18). Below earned autonomy no post
+   is pushed without a person; auto-draft's distinction is that approval
+   delivers an engine draft. Approval itself refuses an unfinished post:
+   placeholder copy, a product with no affiliate link in the text, or a
+   request its engine would refuse comes back as a list of what to fix.
+   Queue items arrive ready ('draft' is a parking brake), the scheduler
+   skips unwritten packages, and the Post automatically switch is the
+   deploy. *Supersedes "only approved items are eligible / autopilot never
+   approves anything on its own" above - approval moved to the frozen
+   execution, where what is approved is exactly what will be sent.*
 6. **One timeline.** Planned posts and committed engine jobs are one
    calendar view, with each entry's media playable (parity with the Publish
    composer) and its delivery state visible - pushed to an engine, posted
