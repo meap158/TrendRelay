@@ -30,7 +30,6 @@ import { buttonClass } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Dialog } from "../ui/dialog";
-import { SearchSelect } from "../ui/search-select";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { useT } from "../i18n-provider";
 import { money } from "./format";
@@ -39,30 +38,6 @@ import type { ProductRow, ProductsPayload } from "./types";
 type Workspace = { id: string; name: string; role: string };
 type Campaign = { id: string; name: string; affiliate_url?: string | null };
 type Plan = { id: string; campaign_id: string; title: string; platform: string; state: string };
-type TrackingLink = {
-  id: string;
-  code: string;
-  url: string;
-  campaign_id: string;
-  plan_id?: string | null;
-  offer_id?: string | null;
-  /** Which product this link is for, so a selection of rows can find its links. */
-  product_id?: string | null;
-  destination_host: string;
-  country_destinations: Record<string, string>;
-  platform: string;
-  /** What the affiliate network will report this link as, one entry per slot. */
-  sub_id_slots?: Array<{ parameter: string; dimension: string; value: string }>;
-  /** The value that identifies this link in a network's own export. */
-  sub_id_key?: string;
-  disclosure: string;
-  status: "active" | "disabled" | "broken" | "expired";
-  expires_at?: string | null;
-  clicks: number;
-  conversions: number;
-  pending_conversions: number;
-  commission_by_currency: Record<string, number>;
-};
 type Summary = {
   totals: { links: number; active_links: number; clicks: number; unique_visitors: number };
   by_currency: Record<string, {
@@ -101,7 +76,6 @@ export default function AttributionPage() {
   const [workspaceId, setWorkspaceId] = useState("");
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
-  const [links, setLinks] = useState<TrackingLink[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [campaignFocus, setCampaignFocus] = useState("");
@@ -121,17 +95,15 @@ export default function AttributionPage() {
     if (!nextWorkspace) return;
     const base = `/api/workspaces/${nextWorkspace}`;
     const [
-      campaignBody, planBody, linkBody, summaryBody, productBody,
+      campaignBody, planBody, summaryBody, productBody,
     ] = await Promise.all([
       json<{ campaigns: Campaign[] }>(await apiFetch(`${base}/campaigns`)),
       json<{ plans: Plan[] }>(await apiFetch(`${base}/campaigns/calendar`)),
-      json<{ links: TrackingLink[] }>(await apiFetch(`${base}/attribution/links`)),
       json<Summary>(await apiFetch(`${base}/attribution/summary`)),
       json<ProductsPayload>(await apiFetch(`${base}/attribution/products`)),
     ]);
     setCampaigns(campaignBody.campaigns);
     setPlans(planBody.plans);
-    setLinks(linkBody.links);
     setSummary(summaryBody);
     setProducts(productBody.products);
     const requested = new URLSearchParams(window.location.search).get("campaign");
@@ -197,13 +169,10 @@ export default function AttributionPage() {
   if (!user) return <main className="attribution-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Fattribution">{t("attribution.signInPrompt")}</Link></main>;
 
   const focusedCampaign = campaigns.find((item) => item.id === campaignFocus);
-  const focusedLinks = links.filter((item) => item.campaign_id === campaignFocus);
   const focusedPlans = plans.filter((item) => item.campaign_id === campaignFocus);
   const focusedPerformance = (summary?.campaigns ?? []).filter(
     (item) => item.campaign_id === campaignFocus,
   );
-  const chartLinks = [...focusedLinks].sort((a, b) => b.clicks - a.clicks).slice(0, 5);
-  const maxCampaignClicks = Math.max(1, ...chartLinks.map((item) => item.clicks));
 
 
   return (
@@ -270,25 +239,17 @@ export default function AttributionPage() {
               <Link href="/publish">Open Publish</Link>
             </nav>
           </div>
+          {/* Plans and commission only. A tracking-link count, a clicks total
+              and a per-link clicks chart stood here, all of them reading from
+              the retired redirector; the chart's empty state went further and
+              invited you to create the first campaign link, which is the flow
+              ADR 0022 removed. */}
           <div className="attribution-focus-metrics">
             <span><strong>{focusedPlans.length}</strong> plans</span>
-            <span><strong>{focusedLinks.length}</strong> tracking links</span>
-            <span><strong>{focusedLinks.reduce((total, item) => total + item.clicks, 0)}</strong> clicks</span>
             {focusedPerformance.map((item) => (
               <span key={item.currency}><strong>{money(item.net_commission_cents, item.currency)}</strong> net commission</span>
             ))}
           </div>
-          {chartLinks.length > 0 ? (
-            <div className="attribution-link-chart" aria-label="Clicks by campaign link">
-              {chartLinks.map((item) => (
-                <div key={item.id}>
-                  <span>{item.code}</span>
-                  <i><b style={{ width: `${Math.max(3, item.clicks / maxCampaignClicks * 100)}%` }} /></i>
-                  <strong>{item.clicks}</strong>
-                </div>
-              ))}
-            </div>
-          ) : <p className="attribution-focus-empty">Create the first campaign link to start its performance timeline.</p>}
         </section>
       )}
 

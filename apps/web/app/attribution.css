@@ -292,12 +292,6 @@
 .attribution-focus-metrics { display: flex; flex-wrap: wrap; gap: 8px; }
 .attribution-focus-metrics span { min-width: 110px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--muted); font-size: 11px; }
 .attribution-focus-metrics strong { display: block; margin-bottom: 2px; color: var(--text); font-size: 15px; }
-.attribution-link-chart { display: grid; gap: 6px; padding-top: 2px; }
-.attribution-link-chart > div { display: grid; grid-template-columns: minmax(90px, 150px) minmax(100px, 1fr) 32px; gap: 8px; align-items: center; font-size: 10px; }
-.attribution-link-chart > div > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.attribution-link-chart i { height: 7px; overflow: hidden; border-radius: 999px; background: var(--panel-raised); }
-.attribution-link-chart b { display: block; height: 100%; border-radius: inherit; background: var(--link); }
-.attribution-focus-empty { margin: 0; padding: 8px 10px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 11px; }
 @media (max-width: 700px) {
   .attribution-focus-heading { align-items: start; flex-direction: column; }
 }
