@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "../auth-provider";
-import { useT } from "../i18n-provider";
+import { useLocale } from "../i18n-provider";
 import { apiBaseUrl } from "../../lib/api";
 import { AutopilotPanel } from "./autopilot-panel";
 import { StatusToasts, useStatus } from "../ui/status";
@@ -83,19 +83,48 @@ type CampaignOffer = {
   };
 };
 
+/**
+ * What a campaign is trying to do, offered as choices rather than a blank box.
+ *
+ * These are stored verbatim as the objective, which is the heaviest single
+ * piece of evidence product matching reads - heavier than the campaign name or
+ * the audience - so each one has to read as a real sentence about the work, not
+ * as a category label. Anything not on the list is still typed by hand.
+ */
+const CAMPAIGN_GOALS = [
+  "Drive affiliate sales from short-form video",
+  "Grow reach and find new followers",
+  "Build trust by demonstrating products in use",
+  "Move seasonal and promotional stock",
+];
+
+/** Who the posts are for, the second-heaviest matching signal. */
+const CAMPAIGN_AUDIENCES = [
+  "Students and young professionals",
+  "Parents shopping for the household",
+  "Home and lifestyle shoppers",
+  "Deal-seekers comparing prices",
+];
+
+/**
+ * The languages the composer can actually write in.
+ *
+ * This seeds the campaign's post language, along with its disclosure and bio
+ * hint, so the scaffolding speaks the right language from the first post. The
+ * field used to be free text suggesting "en, th"; anything outside this pair is
+ * silently ignored and the campaign falls back to English, so a Thai campaign
+ * looked accepted and was not.
+ */
+const POST_LANGUAGES = [
+  { value: "vi", label: "Tiếng Việt" },
+  { value: "en", label: "English" },
+];
+
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
   if (!response.ok) throw new Error(body.detail ?? "Campaign request failed.");
   return body;
 }
-
-function values(input: FormDataEntryValue | null): string[] {
-  return String(input ?? "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 
 function offerDescription(offer: CampaignOffer): string {
   const commission = offer.commission_bps
@@ -114,7 +143,7 @@ function planPlatformLabel(platform: PublicationPlan["platform"]): string {
 
 
 export default function CampaignsPage() {
-  const t = useT();
+  const { t, locale } = useLocale();
   const { loading, user, apiFetch } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
@@ -124,6 +153,9 @@ export default function CampaignsPage() {
   const [plans, setPlans] = useState<PublicationPlan[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
+  // The chosen preset, or "" for the one that opens a box to type in.
+  const [objectiveChoice, setObjectiveChoice] = useState(CAMPAIGN_GOALS[0]);
+  const [audienceChoice, setAudienceChoice] = useState(CAMPAIGN_AUDIENCES[0]);
   const [offers, setOffers] = useState<CampaignOffer[]>([]);
   const [newCampaignOfferId, setNewCampaignOfferId] = useState("");
   // Reported over the page. Rendered in flow, these shifted everything below
@@ -241,8 +273,10 @@ export default function CampaignsPage() {
             name: form.get("name"),
             objective: form.get("objective"),
             audience: form.get("audience"),
-            markets: values(form.get("markets")),
-            languages: values(form.get("languages")),
+            // One language, chosen from the two the composer writes. Markets is
+            // no longer asked for: nothing scored it, and a free-text country
+            // list was a question with no consequence.
+            languages: [form.get("language")].filter(Boolean),
             offer_id: newCampaignOfferId || null,
           }),
         }),
@@ -314,7 +348,14 @@ export default function CampaignsPage() {
                 type="button"
               >
                 <strong>{campaign.name}</strong>
-                <span>{campaign.status} · {campaign.markets.join(", ") || "global"}</span>
+                {/* The language it posts in, not the market it was never asked
+                    for. Every campaign reported "global" once markets stopped
+                    being collected, which is a word that told you nothing. */}
+                <span>{campaign.status} · {
+                  POST_LANGUAGES.find((item) => item.value === campaign.languages[0])?.label
+                  ?? campaign.languages[0]
+                  ?? "English"
+                }</span>
               </button>
             ))}
             {!campaigns.length && <p>{t("campaigns.empty")}</p>}
@@ -396,14 +437,49 @@ export default function CampaignsPage() {
       >
         <form className="campaign-dialog-form" onSubmit={createCampaign}>
           <label>{t("campaigns.name")}<input name="name" required maxLength={160} autoFocus /></label>
+          {/* Chosen rather than composed. Both of these are read by product
+              matching, so what goes in them has to be a sentence about the
+              campaign - which is a lot to ask of an empty textarea, and the
+              reason most of them ended up thin. The list carries the phrasing;
+              anything it does not cover is still typed. */}
           <div className="campaign-dialog-grid">
-            <label>{t("campaigns.objective")}<textarea name="objective" rows={3} required /></label>
-            <label>{t("campaigns.audience")}<textarea name="audience" rows={3} required /></label>
+            <label>{t("campaigns.objective")}
+              <select
+                name={objectiveChoice ? "objective" : undefined}
+                value={objectiveChoice}
+                onChange={(event) => setObjectiveChoice(event.target.value)}
+              >
+                {CAMPAIGN_GOALS.map((goal) => <option key={goal} value={goal}>{goal}</option>)}
+                <option value="">Something else…</option>
+              </select>
+              {!objectiveChoice && (
+                <textarea name="objective" rows={2} required maxLength={1000}
+                  placeholder="What should this campaign achieve?" />
+              )}
+            </label>
+            <label>{t("campaigns.audience")}
+              <select
+                name={audienceChoice ? "audience" : undefined}
+                value={audienceChoice}
+                onChange={(event) => setAudienceChoice(event.target.value)}
+              >
+                {CAMPAIGN_AUDIENCES.map((who) => <option key={who} value={who}>{who}</option>)}
+                <option value="">Something else…</option>
+              </select>
+              {!audienceChoice && (
+                <textarea name="audience" rows={2} required maxLength={1000}
+                  placeholder="Who are these posts for?" />
+              )}
+            </label>
           </div>
-          <div className="campaign-dialog-grid">
-            <label>{t("campaigns.markets")}<input name="markets" placeholder="TH, US" /></label>
-            <label>{t("campaigns.languages")}<input name="languages" placeholder="en, th" /></label>
-          </div>
+          <label>Post language
+            <select name="language" defaultValue={POST_LANGUAGES.some((item) => item.value === locale) ? locale : "en"}>
+              {POST_LANGUAGES.map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
+            </select>
+            <small>The language the disclosure, bio hint and product labels are written in. Your own copy is always your own.</small>
+          </label>
           <label>Affiliate offer from Attribution
             <SearchSelect
               value={newCampaignOfferId}

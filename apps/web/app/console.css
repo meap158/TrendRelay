@@ -967,7 +967,14 @@ html { scroll-behavior: smooth; }
 .campaign-manual-work > .plan-create { border-width: 1px 0 0; border-radius: 0; }
 .campaign-dialog-form { display: grid; gap: 12px; }
 .campaign-dialog-form label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
-.campaign-dialog-form :is(input, textarea) { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; }
+.campaign-dialog-form :is(input, textarea, select) { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; }
+/* The same flat field with its own chevron the rest of the app's dropdowns
+   use, rather than the platform's control, which is a different height and a
+   different grey beside the inputs next to it. */
+.campaign-dialog-form select { appearance: none; padding-inline-end: 30px; background: var(--panel) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23667085' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>") no-repeat right 10px center; }
+.campaign-dialog-form label > small { color: var(--muted); font-weight: 400; line-height: 1.45; }
+/* The typed alternative sits under the list it belongs to. */
+.campaign-dialog-form textarea { resize: vertical; }
 .campaign-dialog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .campaign-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
 @media (max-width: 1100px) { .campaign-media-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
