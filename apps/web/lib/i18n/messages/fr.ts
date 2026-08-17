@@ -433,6 +433,7 @@ export const fr: Messages = {
     removeAccountDetail: "Sa clé enregistrée est également supprimée. Les publications déjà faites restent en place.",
     addAnotherAccountHint: "Connectez un second identifiant à n'importe quel moteur, pour plus de comptes.",
     whichEngine: "Moteur",
+    removeThisAccount: "Supprimer {label}",
     openDashboard: "Tableau de bord",
     openKeys: "Gérer les clés {label}",
     openChannels: "Connecter des canaux dans {label}",

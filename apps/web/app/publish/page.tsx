@@ -1414,6 +1414,20 @@ export default function PublishPage() {
   /** The login a removal is waiting to be confirmed for. */
   const [removingLogin, setRemovingLogin] = useState<Provider | null>(null);
 
+  /**
+   * What to call the next login on an engine, before anybody types anything.
+   *
+   * "Buffer 2" is right often enough to be worth filling in, and it is the
+   * field's value rather than its placeholder so Enter works immediately. A
+   * placeholder would look the same and submit nothing.
+   */
+  function suggestedLoginName(engine: PublishingEngine | null): string {
+    if (!engine) return "";
+    const rows = (connection?.providers ?? []).filter((item) => item.engine === engine);
+    const label = rows.find((item) => item.is_default)?.engine_label ?? engine;
+    return `${label} ${rows.length + 1}`;
+  }
+
   async function addConnection(engine: PublishingEngine, label: string) {
     setAddingToEngine(null);
     setBusy(`${engine}-add`);
@@ -1978,7 +1992,15 @@ export default function PublishPage() {
                       disabled={busy !== null || !canExecute}
                       busy={busy === `${provider.id}-remove`}
                       onClick={() => setRemovingLogin(provider)}
-                    >{t("publish.removeAccount")}</Button>
+                      /* The only destructive control on a card that has three
+                         others, and the one action this app already draws the
+                         same way everywhere. The name goes in the label rather
+                         than beside the icon, because "Remove this account" on
+                         a card headed "Buffer · Client B" repeats what the
+                         heading just said. */
+                      title={t("publish.removeAccount")}
+                      aria-label={t("publish.removeThisAccount", { label: provider.label })}
+                    ><ActionIcon name="delete" /></Button>
                   )}
                 </div>
                 {open && (
@@ -2033,10 +2055,9 @@ export default function PublishPage() {
               type="button"
               className="engine-add-tile"
               onClick={() => {
-                setNewLoginLabel("");
-                setAddingToEngine(
-                  (connection?.providers[0]?.engine ?? "buffer") as PublishingEngine,
-                );
+                const engine = (connection?.providers[0]?.engine ?? "buffer") as PublishingEngine;
+                setAddingToEngine(engine);
+                setNewLoginLabel(suggestedLoginName(engine));
               }}
             >
               <span className="engine-add-plus" aria-hidden="true">+</span>
@@ -2192,8 +2213,16 @@ export default function PublishPage() {
             <span>{t("publish.whichEngine")}</span>
             <select
               value={addingToEngine ?? ""}
-              onChange={(event) =>
-                setAddingToEngine(event.target.value as PublishingEngine)}
+              onChange={(event) => {
+                const engine = event.target.value as PublishingEngine;
+                // The suggestion follows the engine, but only while it is
+                // still a suggestion: a name somebody typed is theirs, and
+                // having it replaced by changing a dropdown would be theft.
+                if (newLoginLabel === suggestedLoginName(addingToEngine)) {
+                  setNewLoginLabel(suggestedLoginName(engine));
+                }
+                setAddingToEngine(engine);
+              }}
             >
               {(connection?.providers ?? [])
                 .filter((item) => item.is_default)

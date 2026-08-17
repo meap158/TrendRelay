@@ -415,6 +415,7 @@ export const zh: Messages = {
     removeAccountDetail: "保存的密钥也会被删除。已发布的内容保持不变。",
     addAnotherAccountHint: "为任意引擎连接第二个登录，以添加更多账号。",
     whichEngine: "引擎",
+    removeThisAccount: "删除 {label}",
     openDashboard: "控制台",
     openKeys: "管理 {label} 密钥",
     openChannels: "在 {label} 中连接渠道",

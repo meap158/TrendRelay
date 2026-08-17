@@ -432,6 +432,7 @@ export const ru: Messages = {
     removeAccountDetail: "Сохранённый ключ также удаляется. Уже опубликованные посты остаются на месте.",
     addAnotherAccountHint: "Подключите второй логин к любому движку, чтобы добавить аккаунты.",
     whichEngine: "Движок",
+    removeThisAccount: "Удалить {label}",
     openDashboard: "Панель",
     openKeys: "Ключи {label}",
     openChannels: "Подключить каналы в {label}",
