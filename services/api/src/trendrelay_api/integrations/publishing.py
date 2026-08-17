@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,6 +24,7 @@ from urllib.parse import quote
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from trendrelay_api import publishing_connections
 from trendrelay_api.campaign_autopilot import resolve_placement
 from trendrelay_api.config import get_settings
 from trendrelay_api.database import SessionFactory
@@ -726,24 +729,98 @@ def active_provider_id() -> str:
     return configured if configured in PROVIDERS else "bundle_social"
 
 
-def resolve_provider(provider_id: str | None) -> ProviderDefinition:
+def resolve_connection(provider_id: str | None) -> publishing_connections.Connection:
+    """Which login a stored `provider` value refers to.
+
+    Destinations, slots and executions all carry one of these strings. Before
+    connections existed it was always an engine id; now an engine id is also
+    the id of that engine's first connection, so the old values resolve here
+    without being rewritten.
+    """
     identifier = provider_id or active_provider_id()
-    if identifier not in PROVIDERS:
+    found = publishing_connections.find(PROVIDERS, identifier)
+    if found is None:
         raise ValueError(f"Unknown publishing provider: {identifier}")
-    return PROVIDERS[identifier]
+    return found
 
 
-def _credential(field: CredentialField) -> str:
-    return effective_value(field.key).strip()
+def resolve_provider(provider_id: str | None) -> ProviderDefinition:
+    """The engine behind a stored `provider` value - its capabilities.
+
+    Takes a connection id or an engine id, because for an engine's first
+    connection those are the same string, and everything written down before
+    connections existed carries the latter.
+    """
+    identifier = provider_id or active_provider_id()
+    if identifier in PROVIDERS:
+        return PROVIDERS[identifier]
+    connection = publishing_connections.find(PROVIDERS, identifier)
+    if connection is None:
+        raise ValueError(f"Unknown publishing provider: {identifier}")
+    return PROVIDERS[connection.provider]
+
+
+#: Which login the engine calls below should authenticate as.
+#:
+#: Ambient rather than an argument because every call already routes through
+#: `_required_credential`, and the alternative is threading a parameter through
+#: several dozen functions that have no other interest in it. A `ContextVar` is
+#: per-task, so two requests reading two different connections at once do not
+#: see each other's.
+#:
+#: Unset means the engine's first connection - which is what every call site
+#: meant before connections existed, and still means now.
+_active_connection: ContextVar[publishing_connections.Connection | None] = ContextVar(
+    "trendrelay_publishing_connection", default=None
+)
+
+
+@contextmanager
+def using_connection(connection: publishing_connections.Connection | None):
+    """Authenticate as this login for the duration of the block."""
+    token = _active_connection.set(connection)
+    try:
+        yield
+    finally:
+        _active_connection.reset(token)
+
+
+def active_connection() -> publishing_connections.Connection | None:
+    return _active_connection.get()
+
+
+def _credential_key(provider_id: str, base_key: str) -> str:
+    """Where this engine's credential lives for the connection in force.
+
+    Guarded by the engine id. One engine's code sometimes reads another's
+    credential - a Bundle team id is fetched while publishing through it - and
+    suffixing that key because an unrelated connection happened to be active
+    would send it looking for a key nobody wrote.
+    """
+    connection = _active_connection.get()
+    if connection is None or connection.provider != provider_id:
+        return base_key
+    return connection.key_for(base_key)
+
+
+def _credential(field: CredentialField, provider_id: str) -> str:
+    return effective_value(_credential_key(provider_id, field.key)).strip()
 
 
 def _required_credential(provider: ProviderDefinition, field_id: str) -> str:
     field = next(item for item in provider.credentials if item.id == field_id)
-    value = _credential(field)
+    value = _credential(field, provider.id)
     if not value:
+        key = _credential_key(provider.id, field.key)
+        connection = _active_connection.get()
+        where = (
+            f" for {connection.label}"
+            if connection is not None and not connection.is_default
+            else ""
+        )
         raise RuntimeError(
-            f"{provider.label} {field.label} is not configured. "
-            f"Add it on the Publish screen or set {field.key} in .env."
+            f"{provider.label} {field.label} is not configured{where}. "
+            f"Add it on the Publish screen or set {key} in .env."
         )
     return value
 
@@ -1389,7 +1466,8 @@ def _woopsocial_project_id() -> str:
     there is more than one and the wrong one would be chosen.
     """
     configured = _credential(
-        next(field for field in PROVIDERS["woopsocial"].credentials if field.id == "project_id")
+        next(field for field in PROVIDERS["woopsocial"].credentials if field.id == "project_id"),
+        "woopsocial",
     )
     if configured:
         return configured
@@ -1722,7 +1800,8 @@ def _graphql_literal(value: str) -> str:
 
 def _buffer_organization_id() -> str:
     configured = _credential(
-        next(field for field in PROVIDERS["buffer"].credentials if field.id == "organization_id")
+        next(field for field in PROVIDERS["buffer"].credentials if field.id == "organization_id"),
+        "buffer",
     )
     if configured:
         return configured
@@ -1988,73 +2067,113 @@ def discover_all_integrations() -> dict[str, Any]:
     """
     accounts: list[dict[str, Any]] = []
     engines: list[dict[str, Any]] = []
-    for provider_id, provider in PROVIDERS.items():
-        status = provider_status(provider_id, probe=False)
-        if not status["configured"]:
-            engines.append({
-                "id": provider_id, "label": provider.label,
-                "reachable": False, "reason": "No key saved for this engine.",
-                "account_count": 0, "channels": [], "allowances": [],
-                "plan": engine_limits.plan_payload(engine_limits.infer_plan(provider_id)),
-                "quota": {"blocked": False, "reason": None, "allowance_id": None},
-            })
-            continue
-        try:
-            found = [
-                {**account, "provider": provider_id, "provider_label": provider.label}
-                for account in ACCOUNT_READERS[provider_id]()
-            ]
-        except Exception as error:
-            engines.append({
-                "id": provider_id, "label": provider.label,
-                "reachable": False, "reason": str(error), "account_count": 0,
-                # No channels rather than none known: an engine that would not
-                # answer has told us nothing about what is connected to it.
-                "channels": [],
-                # Still worth reporting: a refused key does not change what the
-                # plan allows, and "3 accounts allowed" is useful while fixing it.
-                "allowances": [
-                    engine_limits.payload(item)
-                    for item in engine_limits.allowances(provider_id, account_count=0)
-                ],
-                "plan": engine_limits.plan_payload(engine_limits.infer_plan(provider_id)),
-                # Unreachable is a different state from out of quota, and the
-                # card already says which. Claiming both would give two reasons
-                # for one silence.
-                "quota": {"blocked": False, "reason": None, "allowance_id": None},
-            })
-            continue
-        measured_daily = (
-            bundle_daily_limits(found[0]["id"])
-            if provider_id == "bundle_social" and found else None
+    for connection in publishing_connections.connections(PROVIDERS):
+        engine_id = connection.provider
+        provider = PROVIDERS[engine_id]
+        # The id a destination stores, and the id everything downstream routes
+        # on. For an engine's first connection it is the engine id, which is why
+        # nothing already written down needs rewriting.
+        provider_id = connection.id
+        # Two logins to one engine are two rows of identical account names
+        # otherwise, and the connection's own name is the only thing telling
+        # them apart.
+        shown = (
+            provider.label if connection.is_default
+            else f"{provider.label} · {connection.label}"
         )
-        measured = engine_limits.allowances(
-            provider_id,
-            account_count=len(found),
-            rate_limit=(
-                engine_limits.parse_rate_limit(buffer_rate_limit_header())
-                if provider_id == "buffer" else None
-            ),
-            policy=(
-                engine_limits.parse_rate_limit_policy(buffer_rate_limit_policy_header())
-                if provider_id == "buffer" else None
-            ),
-            daily=measured_daily,
-        )
+        card = {
+            "id": provider_id,
+            "label": shown,
+            "engine": engine_id,
+            "engine_label": provider.label,
+            "connection_label": connection.label,
+            "is_default": connection.is_default,
+        }
+        with using_connection(connection):
+            if not provider_status(provider_id, probe=False)["configured"]:
+                engines.append({
+                    **card,
+                    "reachable": False, "reason": "No key saved for this engine.",
+                    "account_count": 0, "channels": [], "allowances": [],
+                    "plan": engine_limits.plan_payload(engine_limits.infer_plan(engine_id)),
+                    "quota": {"blocked": False, "reason": None, "allowance_id": None},
+                })
+                continue
+            try:
+                found = [
+                    {
+                        **account,
+                        "provider": provider_id,
+                        "provider_label": shown,
+                        "engine": engine_id,
+                        "connection_label": connection.label,
+                    }
+                    for account in ACCOUNT_READERS[engine_id]()
+                ]
+            except Exception as error:
+                engines.append({
+                    **card,
+                    "reachable": False, "reason": str(error), "account_count": 0,
+                    # No channels rather than none known: an engine that would
+                    # not answer has told us nothing about what is connected.
+                    "channels": [],
+                    # Still worth reporting: a refused key does not change what
+                    # the plan allows, and "3 accounts allowed" is useful while
+                    # fixing it.
+                    "allowances": [
+                        engine_limits.payload(item)
+                        for item in engine_limits.allowances(engine_id, account_count=0)
+                    ],
+                    "plan": engine_limits.plan_payload(engine_limits.infer_plan(engine_id)),
+                    # Unreachable is a different state from out of quota, and the
+                    # card already says which. Claiming both would give two
+                    # reasons for one silence.
+                    "quota": {"blocked": False, "reason": None, "allowance_id": None},
+                })
+                continue
+            # Every measurement below is this connection's own. Two logins to
+            # one engine are two separate plans with two separate counters, so
+            # reading them under the connection is what keeps one login's
+            # exhausted quota from greying out the other's accounts.
+            measured_daily = (
+                bundle_daily_limits(found[0]["id"])
+                if engine_id == "bundle_social" and found else None
+            )
+            measured = engine_limits.allowances(
+                engine_id,
+                account_count=len(found),
+                rate_limit=(
+                    engine_limits.parse_rate_limit(buffer_rate_limit_header())
+                    if engine_id == "buffer" else None
+                ),
+                policy=(
+                    engine_limits.parse_rate_limit_policy(buffer_rate_limit_policy_header())
+                    if engine_id == "buffer" else None
+                ),
+                daily=measured_daily,
+            )
+            plan = engine_limits.plan_payload(engine_limits.infer_plan(
+                engine_id,
+                policy=engine_limits.parse_rate_limit_policy(
+                    buffer_rate_limit_policy_header()
+                ) if engine_id == "buffer" else None,
+                daily=measured_daily,
+                account_count=len(found),
+            ))
         # An engine with nothing left cannot deliver, so its accounts stop being
-        # somewhere a post can go. Marked rather than dropped: a destination
-        # that vanishes looks like a disconnected account, and the number that
-        # ran out is the thing worth reading.
+        # somewhere a post can go. Marked rather than dropped: a destination that
+        # vanishes looks like a disconnected account, and the number that ran out
+        # is the thing worth reading.
         spent = engine_limits.exhausted(measured)
         for account in found:
             account["available"] = spent is None
             account["unavailable_reason"] = (
-                f"{provider.label} has no quota left. {engine_limits.spent_note(spent)}"
+                f"{shown} has no quota left. {engine_limits.spent_note(spent)}"
                 if spent else None
             )
         accounts.extend(found)
         engines.append({
-            "id": provider_id, "label": provider.label,
+            **card,
             "reachable": True, "reason": None, "account_count": len(found),
             # What is actually connected, not what the engine supports. The card
             # showed the platform list off the provider definition, which is the
@@ -2068,14 +2187,7 @@ def discover_all_integrations() -> dict[str, Any]:
                 }
                 for account in found
             ],
-            "plan": engine_limits.plan_payload(engine_limits.infer_plan(
-                provider_id,
-                policy=engine_limits.parse_rate_limit_policy(
-                    buffer_rate_limit_policy_header()
-                ) if provider_id == "buffer" else None,
-                daily=measured_daily,
-                account_count=len(found),
-            )),
+            "plan": plan,
             # One account's counter, not a sum: bundle.social meters per account,
             # and adding them would invent a total the engine does not have.
             "allowances": [engine_limits.payload(item) for item in measured],
