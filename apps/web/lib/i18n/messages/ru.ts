@@ -625,8 +625,6 @@ export const ru: Messages = {
     signInPrompt: "Войдите, чтобы открыть атрибуцию",
     eyebrow: "Цикл дохода",
     heading: "Измерить эффективность дистрибуции",
-    activeLinks: "Активные ссылки",
-    clicks: "Клики",
     subIdDimension: {
       link: "Определяет эту ссылку и сопоставляет её конверсии при импорте",
       content: "Видео, для которого создана ссылка",
@@ -746,7 +744,6 @@ export const ru: Messages = {
       "{count, plural, one {# подтверждена} few {# подтверждены} many {# подтверждено} other {# подтверждено}}",
     pendingCount:
       "{count, plural, one {# в ожидании} few {# в ожидании} many {# в ожидании} other {# в ожидании}}",
-    privacySafeVisitors: "{count} обезличенных посетителей",
     notAdditive:
       "Комиссия по товару и роялти по книге — это одни и те же конверсии, посчитанные один раз и сгруппированные двумя способами. Никогда не складывайте их.",
     trackingLinksHelp:

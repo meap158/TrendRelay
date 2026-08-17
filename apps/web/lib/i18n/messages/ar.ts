@@ -616,8 +616,6 @@ export const ar: Messages = {
     signInPrompt: "سجّل الدخول لفتح إسناد النتائج",
     eyebrow: "دورة الإيرادات",
     heading: "قياس أداء التوزيع",
-    activeLinks: "الروابط النشطة",
-    clicks: "النقرات",
     subIdDimension: {
       link: "يحدّد هذا الرابط ويطابق تحويلاته عند الاستيراد",
       content: "الفيديو الذي أُنشئ الرابط من أجله",
@@ -737,7 +735,6 @@ export const ar: Messages = {
       "{count, plural, zero {لا شيء معتمد} one {واحدة معتمدة} two {اثنتان معتمدتان} few {# معتمدة} many {# معتمدة} other {# معتمدة}}",
     pendingCount:
       "{count, plural, zero {لا شيء معلّق} one {واحدة معلّقة} two {اثنتان معلّقتان} few {# معلّقة} many {# معلّقة} other {# معلّقة}}",
-    privacySafeVisitors: "{count} زائرًا مجهول الهوية",
     notAdditive:
       "عمولة المنتج وحقوق ملكية الكتاب هما التحويلات نفسها، تُحتسب مرة واحدة وتُجمَّع بطريقتين. لا تجمعهما أبدًا.",
     trackingLinksHelp:

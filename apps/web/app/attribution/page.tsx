@@ -215,14 +215,13 @@ export default function AttributionPage() {
           what one row says. */}
       <header className="attribution-heading">
         <h1>{t("attribution.tab.products")}</h1>
+        {/* What this page can actually count. Active links, clicks and visitors
+            stood here until ADR 0022 retired the `/c/` redirector: nothing mints
+            a code any more and nothing serves one, so all three were zero by
+            construction rather than because the week had been quiet. Commission
+            stays because it renders only when there is some. */}
         <p className="attribution-figures">
-          <span><strong>{summary?.totals.active_links ?? 0}</strong> {t("attribution.activeLinks")}</span>
-          <span><strong>{summary?.totals.clicks ?? 0}</strong> {t("attribution.clicks")}</span>
-          {/* Beside the clicks it qualifies: a click count on its own reads as
-              traffic when it may be one person nine times, and this is the
-              number the routing goes to trouble to make countable without
-              identifying anybody. */}
-          <span>{t("attribution.privacySafeVisitors", { count: summary?.totals.unique_visitors ?? 0 })}</span>
+          <span>{t("attribution.productCount", { count: products.length })}</span>
           {Object.entries(summary?.by_currency ?? {}).map(([currency, item]) => (
             <span key={currency}>
               <strong>{money(item.net_commission_cents, currency)}</strong> {t("attribution.netCommission")}

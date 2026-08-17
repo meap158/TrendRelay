@@ -622,8 +622,6 @@ export const en = {
     signInPrompt: "Sign in to open Attribution",
     eyebrow: "Revenue loop",
     heading: "Measure distribution performance",
-    activeLinks: "Active links",
-    clicks: "Clicks",
     subIdDimension: {
       link: "Identifies this link, and matches its conversions on import",
       content: "The video this link was made for",
@@ -738,7 +736,6 @@ export const en = {
     noLinksHere: "No tracking links for this product yet.",
     approvedCount: "{count, plural, one {# approved} other {# approved}}",
     pendingCount: "{count, plural, one {# pending} other {# pending}}",
-    privacySafeVisitors: "{count} privacy-safe visitors",
     notAdditive:
       "A product\u2019s commission and its book\u2019s royalty are the same conversions counted once, grouped two ways. Never add them together.",
     trackingLinksHelp:

@@ -618,8 +618,6 @@ export const ja: Messages = {
     signInPrompt: "効果測定を開くにはログインしてください",
     eyebrow: "収益ループ",
     heading: "配信の成果を測る",
-    activeLinks: "有効なリンク",
-    clicks: "クリック数",
     subIdDimension: {
       link: "このリンクを識別し、取り込み時にコンバージョンを照合します",
       content: "このリンクの対象となる動画",
@@ -735,7 +733,6 @@ export const ja: Messages = {
     noLinksHere: "この商品にはまだトラッキングリンクがありません。",
     approvedCount: "承認済み{count}件",
     pendingCount: "保留中{count}件",
-    privacySafeVisitors: "プライバシー保護済み訪問者{count}人",
     notAdditive:
       "商品の報酬と書籍の印税は、同じコンバージョンを二通りに集計したものです。合計しないでください。",
     trackingLinksHelp:

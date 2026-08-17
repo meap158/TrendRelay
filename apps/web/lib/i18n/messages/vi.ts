@@ -618,8 +618,6 @@ export const vi: Messages = {
     signInPrompt: "Đăng nhập để mở Phân bổ",
     eyebrow: "Vòng doanh thu",
     heading: "Đo hiệu quả phân phối",
-    activeLinks: "Liên kết đang hoạt động",
-    clicks: "Lượt nhấp",
     subIdDimension: {
       link: "Định danh liên kết này và khớp chuyển đổi khi nhập",
       content: "Video mà liên kết này được tạo cho",
@@ -734,7 +732,6 @@ export const vi: Messages = {
     noLinksHere: "Sản phẩm này chưa có liên kết theo dõi nào.",
     approvedCount: "{count} đã duyệt",
     pendingCount: "{count} chờ duyệt",
-    privacySafeVisitors: "{count} khách truy cập ẩn danh",
     notAdditive:
       "Hoa hồng của sản phẩm và tiền bản quyền của cuốn sách là cùng một lượt chuyển đổi, chỉ đếm một lần theo hai cách nhóm. Đừng bao giờ cộng chúng lại.",
     trackingLinksHelp:

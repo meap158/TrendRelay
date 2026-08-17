@@ -627,8 +627,6 @@ export const fr: Messages = {
     signInPrompt: "Connectez-vous pour ouvrir l'attribution",
     eyebrow: "Boucle de revenus",
     heading: "Mesurer la performance de diffusion",
-    activeLinks: "Liens actifs",
-    clicks: "Clics",
     subIdDimension: {
       link: "Identifie ce lien et rapproche ses conversions à l'import",
       content: "La vidéo pour laquelle ce lien a été créé",
@@ -744,7 +742,6 @@ export const fr: Messages = {
     noLinksHere: "Aucun lien de suivi pour ce produit.",
     approvedCount: "{count, plural, one {# approuvée} other {# approuvées}}",
     pendingCount: "{count, plural, one {# en attente} other {# en attente}}",
-    privacySafeVisitors: "{count} visiteurs anonymisés",
     notAdditive:
       "La commission d’un produit et les droits d’auteur de son livre sont les mêmes conversions, comptées une fois et regroupées de deux façons. Ne les additionnez jamais.",
     trackingLinksHelp:

@@ -606,8 +606,6 @@ export const zh: Messages = {
     signInPrompt: "登录后即可打开归因分析",
     eyebrow: "收入闭环",
     heading: "衡量分发效果",
-    activeLinks: "生效中的链接",
-    clicks: "点击量",
     subIdDimension: {
       link: "标识此链接，并在导入时匹配其转化",
       content: "此链接对应的视频",
@@ -722,7 +720,6 @@ export const zh: Messages = {
     noLinksHere: "该商品暂无追踪链接。",
     approvedCount: "已确认 {count} 笔",
     pendingCount: "待确认 {count} 笔",
-    privacySafeVisitors: "{count} 位匿名访客",
     notAdditive:
       "商品佣金与图书版税是同一批转化，只计一次，只是分组方式不同。切勿相加。",
     trackingLinksHelp:
