@@ -419,6 +419,12 @@ export function AutopilotPanel({
   const [libraryTotal, setLibraryTotal] = useState(0);
   /** The clips sharing this campaign copy. Empty when the composer is closed. */
   const [drafting, setDrafting] = useState<LibraryAsset[]>([]);
+  // The product decision is part of the package, made when it is added:
+  // smart matching by default, or offers pinned by hand - so what gets
+  // approved later is a post whose products were already decided.
+  const [draftProductMode, setDraftProductMode] = useState<"smart" | "manual">("smart");
+  const [draftPinned, setDraftPinned] = useState<Set<string>>(new Set());
+  const [draftMatches, setDraftMatches] = useState<OfferMatch[] | null>(null);
   /**
    * What the current selection will become, in the words used to describe it.
    *
@@ -653,6 +659,29 @@ export function AutopilotPanel({
     // Switching on activates the campaign server-side; the parent's status
     // chip and list need to hear about it.
     if (turningOn) await onCampaignChanged();
+  }
+
+  async function loadDraftMatches() {
+    setDraftProductMode("manual");
+    if (draftMatches) return;
+    setBusy("draft-products");
+    try {
+      const body = await json<Recommendations>(await apiFetch(
+        `${base}/offer-recommendations?limit=12`,
+      ));
+      setDraftMatches(body.matches);
+    } catch (reason) {
+      fail(explainFailure(reason, "Products could not be analyzed."));
+      setDraftProductMode("smart");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  function resetDraftProducts() {
+    setDraftProductMode("smart");
+    setDraftPinned(new Set());
+    setDraftMatches(null);
   }
 
   async function loadRecommendations(item: QueueItem | null = null) {
@@ -1501,11 +1530,16 @@ export function AutopilotPanel({
               void run("queue", async () => {
                 const hashtags = String(form.get("hashtags") ?? "")
                   .split(/[\s,]+/).filter(Boolean);
+                const offerIds = draftProductMode === "manual"
+                  ? Array.from(draftPinned)
+                  : [];
                 const post = async (payload: Record<string, unknown>) =>
                   json(await apiFetch(`${base}/queue`, {
                     method: "POST",
                     headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ ...payload, body, hashtags }),
+                    body: JSON.stringify({
+                      ...payload, body, hashtags, offer_ids: offerIds,
+                    }),
                   }));
                 // One package per clip, and one package for all the pictures.
                 await Promise.all([
@@ -1524,6 +1558,7 @@ export function AutopilotPanel({
                 setDrafting([]);
                 setSelectedAssets({});
                 setPicking(false);
+                resetDraftProducts();
                 return `${count} ${count === 1 ? "package" : "packages"} added to the campaign queue.`;
               });
             }}
@@ -1534,7 +1569,10 @@ export function AutopilotPanel({
                 : draftingSplit.images.length && !draftingSplit.videos.length
                   ? `Carousel of ${draftingSplit.images.length} pictures`
                   : `${draftingPackages} ${draftingPackages === 1 ? "package" : "packages"}`}</strong>
-              <Button variant="quiet" size="sm" onClick={() => setDrafting([])}>
+              <Button variant="quiet" size="sm" onClick={() => {
+                setDrafting([]);
+                resetDraftProducts();
+              }}>
                 {t("autopilot.chooseAnother")}
               </Button>
             </div>
@@ -1551,8 +1589,75 @@ export function AutopilotPanel({
             <label>{t("autopilot.hashtags")}
               <input name="hashtags" placeholder={t("autopilot.hashtagsExample")} />
             </label>
+            {/* The product decision belongs to the package, made here rather
+                than discovered later: what gets approved is a post whose
+                products were already decided - smartly or by hand. */}
+            <div className="campaign-product-mode">
+              <div>
+                <strong>Products</strong>
+                <small>{autopilot.offer_mode === "none"
+                  ? "This campaign has products switched off, so smart match posts organic. Pinned products still attach."
+                  : "Decided now, either way. The affiliate link follows the product, per network."}</small>
+              </div>
+              <div className="campaign-mode-options" role="radiogroup"
+                aria-label="Products for this package">
+                <button type="button" role="radio"
+                  aria-checked={draftProductMode === "smart"}
+                  className={draftProductMode === "smart" ? "active" : ""}
+                  onClick={() => setDraftProductMode("smart")}>
+                  <strong>Smart match</strong>
+                  <small>Best-fitting offers, chosen when it posts</small>
+                </button>
+                <button type="button" role="radio"
+                  aria-checked={draftProductMode === "manual"}
+                  className={draftProductMode === "manual" ? "active" : ""}
+                  onClick={() => void loadDraftMatches()}>
+                  <strong>Pin products</strong>
+                  <small>Pick from your imported offers</small>
+                </button>
+              </div>
+            </div>
+            {draftProductMode === "manual" && (
+              <ul className="campaign-product-matches selectable">
+                {busy === "draft-products" && (
+                  <li className="campaign-media-empty">Analyzing your offers…</li>
+                )}
+                {(draftMatches ?? []).map((match) => (
+                  <li key={match.offer_id}>
+                    <label>
+                      <input type="checkbox" checked={draftPinned.has(match.offer_id)}
+                        disabled={!draftPinned.has(match.offer_id) && draftPinned.size >= 5}
+                        onChange={() => setDraftPinned((current) => {
+                          const next = new Set(current);
+                          if (next.has(match.offer_id)) next.delete(match.offer_id);
+                          else next.add(match.offer_id);
+                          return next;
+                        })} />
+                      <span className="campaign-match-score" data-confidence={match.confidence}>
+                        <strong>{match.score}</strong><small>% fit</small>
+                      </span>
+                      <span className="campaign-match-copy">
+                        <strong>{match.product_name}</strong>
+                        <small>{match.reasons.join(" ")}</small>
+                      </span>
+                      <Badge tone={match.confidence === "high" ? "good" : match.confidence === "medium" ? "warn" : "neutral"}>
+                        {match.confidence}
+                      </Badge>
+                    </label>
+                  </li>
+                ))}
+                {draftMatches !== null && draftMatches.length === 0 && (
+                  <li className="campaign-media-empty">
+                    No usable offers yet. Import them in Attribution first.
+                  </li>
+                )}
+              </ul>
+            )}
             <Button type="submit" variant="primary" busy={busy === "queue"}>
               {t("autopilot.addToQueue")}
+              {draftProductMode === "manual" && draftPinned.size > 0
+                ? ` · ${draftPinned.size} ${draftPinned.size === 1 ? "product" : "products"}`
+                : ""}
             </Button>
           </form>
         )}
