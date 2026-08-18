@@ -3281,18 +3281,24 @@ export default function PublishPage() {
                 source={previewSource}
                 sourceIsImage={wantsCarousel}
                 carousel={carouselSources}
+                wantsCarousel={wantsCarousel}
               />
               {/* What the removed "What will be sent" card said that this one
                   did not: which file is playing. The panels showed the same
                   clip, but only one of them promised it was the cut that
-                  actually uploads. */}
+                  actually uploads. A carousel is not played and has no cut, so
+                  it is described as what it is rather than borrowing the
+                  wording for a clip. */}
               <p className="privacy-note">
-                {mediaUrl
-                  ? "Playing the public URL the engine will fetch. "
-                  : "Playing the local file this delivery will upload — the blurred cut "
-                    + "where one replaced the original. "}
-                A rehearsal of the caption and frame against this network&apos;s shape,
-                not a render of what {deliveringNames || activeProvider?.label} will produce.
+                {wantsCarousel
+                  ? "Showing the pictures this delivery will upload, in the order they are swiped. "
+                  : mediaUrl
+                    ? "Playing the public URL the engine will fetch. "
+                    : "Playing the local file this delivery will upload — the blurred cut "
+                      + "where one replaced the original. "}
+                A rehearsal of the caption and {wantsCarousel ? "pictures" : "frame"} against
+                this network&apos;s shape, not a render of what{" "}
+                {deliveringNames || activeProvider?.label} will produce.
               </p>
             </article>
           )}

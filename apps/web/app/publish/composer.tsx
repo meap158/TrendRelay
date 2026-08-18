@@ -236,6 +236,7 @@ export function PostPreview({
   source,
   sourceIsImage,
   carousel,
+  wantsCarousel,
 }: {
   platform: PublishingPlatform;
   postTypeLabel: string;
@@ -249,6 +250,15 @@ export function PostPreview({
   sourceIsImage?: boolean;
   /** Every frame of a carousel, in swipe order, so the preview can be swiped. */
   carousel?: string[];
+  /**
+   * Whether this post is a carousel, which is not the same as having frames.
+   *
+   * Before any picture is chosen there are no frames to count, and the panel
+   * still has to ask for the right thing: a post going out as a carousel needs
+   * pictures, and telling somebody to choose a clip sends them to the wrong
+   * control.
+   */
+  wantsCarousel?: boolean;
 }) {
   const t = useT();
   const story = postTypeLabel.toLowerCase() === "story";
@@ -319,14 +329,20 @@ export function PostPreview({
             const { naturalWidth, naturalHeight } = event.currentTarget;
             measure(naturalWidth, naturalHeight);
           }} />
-        ) : thumbnail ? (
+        ) : thumbnail && !wantsCarousel ? (
+          // The clip's own still, and only for a post that is a clip. A
+          // carousel that has no pictures yet would otherwise show a frame of
+          // whichever video was chosen before the post type changed - media
+          // that is not going out, presented as though it were.
           // eslint-disable-next-line @next/next/no-img-element
           <img alt="" src={thumbnail} onLoad={(event) => {
             const { naturalWidth, naturalHeight } = event.currentTarget;
             measure(naturalWidth, naturalHeight);
           }} />
         ) : (
-          <p>{t("composer.chooseClipForFrame")}</p>
+          <p>{wantsCarousel
+            ? t("composer.choosePicturesForFrames")
+            : t("composer.chooseClipForFrame")}</p>
         )}
         {neighbours.map((source) => (
           // eslint-disable-next-line @next/next/no-img-element
