@@ -184,6 +184,17 @@ class CampaignUpdate(BaseModel):
     clear_weekly_cap: bool = False
     authority: str | None = Field(default=None, pattern=r"^[a-z_]{4,20}$")
     priority: str | None = Field(default=None, pattern=r"^[a-z]{4,12}$")
+    #: How products attach: smart matching, one fixed offer, or none at all.
+    #: A package can still override it by pinning, but this is what a package
+    #: that says nothing falls through to.
+    offer_mode: str | None = Field(default=None, pattern=r"^(smart|manual|none)$")
+    offer_id: str | None = Field(default=None, max_length=64)
+    #: The scaffolding the composed captions are built from. Here rather than
+    #: beside the queue because they follow the post language, which is here:
+    #: changing the language rewrites both, unless the operator has written
+    #: their own.
+    disclosure: str | None = Field(default=None, max_length=280)
+    bio_hint: str | None = Field(default=None, max_length=120)
 
     @field_validator("name", "objective", "audience")
     @classmethod
@@ -518,6 +529,20 @@ def update_campaign(
     autopilot = session.scalar(
         select(CampaignAutopilot).where(CampaignAutopilot.campaign_id == campaign_id)
     )
+    # The same rule the autopilot endpoint enforces: a campaign that attaches
+    # products needs a disclosure, because it leads every caption. Checked
+    # against what this request would leave behind rather than what either
+    # side sends, since one of the two may not be changing.
+    if autopilot:
+        mode = body.offer_mode or autopilot.offer_mode
+        disclosure = (
+            body.disclosure if body.disclosure is not None else autopilot.disclosure
+        )
+        if mode != "none" and not (disclosure or "").strip():
+            raise HTTPException(
+                status_code=422,
+                detail="An offer needs a disclosure; it leads every caption.",
+            )
     # Stored on the autopilot, which is what reads it, and set from here because
     # this is where the campaign says what it is for. The same arrangement the
     # language already has: one writer, and the row that consumes it is updated
@@ -531,6 +556,15 @@ def update_campaign(
             "priority": body.priority,
         }
         for field, value in policy.items():
+            if value is None:
+                continue
+            before[field] = getattr(autopilot, field)
+            setattr(autopilot, field, value)
+        # After the language pass below would be too late for the disclosure:
+        # that pass rewrites it when the language changes, and an operator who
+        # typed one in the same submission means the one they typed.
+        for field in ("offer_mode", "offer_id", "disclosure", "bio_hint"):
+            value = getattr(body, field)
             if value is None:
                 continue
             before[field] = getattr(autopilot, field)

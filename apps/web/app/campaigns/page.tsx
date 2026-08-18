@@ -43,6 +43,10 @@ type CampaignPolicy = {
   weekly_post_cap: number | null;
   authority: string;
   priority: string;
+  offer_mode: "smart" | "manual" | "none";
+  offer_id: string | null;
+  disclosure: string;
+  bio_hint: string;
 };
 
 type PublicationPlan = {
@@ -169,6 +173,11 @@ export default function CampaignsPage() {
   // changes nothing and the list keeps showing what is actually saved.
   const [settingsFor, setSettingsFor] = useState<Campaign | null>(null);
   const [policy, setPolicy] = useState<CampaignPolicy | null>(null);
+  /** Held apart from the form because the offer picker appears only for one
+      of the three modes, and a radio group cannot drive that on its own. */
+  const [offerMode, setOfferMode] = useState<"smart" | "manual" | "none">("smart");
+  /** SearchSelect is controlled, so the chosen offer cannot ride the form. */
+  const [offerChoice, setOfferChoice] = useState("");
   const [offers, setOffers] = useState<CampaignOffer[]>([]);
   const [newCampaignOfferId, setNewCampaignOfferId] = useState("");
   // Reported over the page. Rendered in flow, these shifted everything below
@@ -324,6 +333,8 @@ export default function CampaignsPage() {
           `/api/workspaces/${workspaceId}/campaigns/${campaign.id}/autopilot`,
         ));
         setPolicy(body.autopilot);
+        setOfferMode(body.autopilot.offer_mode);
+        setOfferChoice(body.autopilot.offer_id ?? "");
       } catch {
         // The identity half of the dialog still works without it, and a
         // campaign with no autopilot yet has no policy to show.
@@ -360,6 +371,12 @@ export default function CampaignsPage() {
               weekly_post_cap: form.get("weekly_post_cap")
                 ? Number(form.get("weekly_post_cap")) : null,
               clear_weekly_cap: !form.get("weekly_post_cap"),
+              offer_mode: offerMode,
+              // Only meaningful for the one-offer mode, and cleared otherwise
+              // so a mode change does not leave a stale pin behind it.
+              offer_id: offerMode === "manual" ? (offerChoice || null) : null,
+              disclosure: form.get("disclosure"),
+              bio_hint: form.get("bio_hint"),
             } : {}),
           }),
         }),
@@ -661,6 +678,58 @@ export default function CampaignsPage() {
                   <option value="autonomous">Autonomous — send without approval</option>
                 </select>
                 <small>How much of the posting runs without you.</small>
+              </label>
+              <div className="campaign-product-mode">
+                <div>
+                  <strong>Products</strong>
+                  <small>What a post attaches when it does not pin its own.
+                    Pinning in the composer overrides this for that post.</small>
+                </div>
+                <div className="campaign-mode-options" role="radiogroup"
+                  aria-label="Affiliate product matching">
+                  {([
+                    ["smart", "Smart match", "Fit content automatically"],
+                    ["manual", "One product", "Use one offer everywhere"],
+                    ["none", "No products", "Organic posts only"],
+                  ] as const).map(([mode, title, hint]) => (
+                    <button key={mode} type="button" role="radio"
+                      aria-checked={offerMode === mode}
+                      className={offerMode === mode ? "active" : ""}
+                      onClick={() => setOfferMode(mode)}>
+                      <strong>{title}</strong><small>{hint}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {offerMode === "manual" && (
+                <label>Offer
+                  <SearchSelect
+                    value={offerChoice}
+                    onChange={setOfferChoice}
+                    placeholder="Choose an imported offer"
+                    searchPlaceholder="Search imported offers…"
+                    options={offers.map((offer) => ({
+                      value: offer.id,
+                      label: offer.product.name,
+                      description: offer.network,
+                    }))}
+                  />
+                  <small>Source: imported offers in Attribution.</small>
+                </label>
+              )}
+              {/* The words every caption is scaffolded with. They live beside
+                  the language above, which rewrites them when it changes
+                  unless they have been edited. */}
+              <label>Disclosure
+                <input name="disclosure" maxLength={280}
+                  defaultValue={policy.disclosure} />
+                <small>Leads every caption, on every network. Not optional:
+                  each post is its own advertisement.</small>
+              </label>
+              <label>Profile-link wording
+                <input name="bio_hint" maxLength={120}
+                  defaultValue={policy.bio_hint} />
+                <small>Used where a link in a post is not clickable.</small>
               </label>
               <label>Optimise for
                 <select name="priority" defaultValue={policy.priority}>

@@ -597,3 +597,63 @@ def test_the_policy_change_is_named_in_the_audit() -> None:
 
     assert response.status_code == 200, response.text
     assert autopilot_of(campaign_id).min_recycle_days == 21
+
+
+def test_campaign_settings_set_how_products_attach() -> None:
+    workspace_id = create_workspace()
+    campaign_id = create_campaign(workspace_id)["id"]
+
+    response = update_campaign(
+        workspace_id, campaign_id,
+        offer_mode="none", disclosure="Paid partnership.", bio_hint="Link in bio",
+    )
+
+    assert response.status_code == 200, response.text
+    saved = autopilot_of(campaign_id)
+    assert saved.offer_mode == "none"
+    assert saved.disclosure == "Paid partnership."
+    assert saved.bio_hint == "Link in bio"
+
+
+def test_a_commercial_campaign_still_needs_a_disclosure() -> None:
+    """The rule the autopilot endpoint enforces, enforced here too.
+
+    Otherwise moving the mode to this dialog would let somebody set it against
+    an empty disclosure from a screen that no longer shows one.
+    """
+    workspace_id = create_workspace()
+    campaign_id = create_campaign(workspace_id)["id"]
+    update_campaign(workspace_id, campaign_id, offer_mode="none", disclosure=" ")
+
+    refused = update_campaign(workspace_id, campaign_id, offer_mode="smart")
+
+    assert refused.status_code == 422
+    assert "disclosure" in refused.json()["detail"]
+
+
+def test_the_check_reads_what_the_request_would_leave_behind() -> None:
+    # Turning products on and writing the disclosure in one submission is a
+    # legal campaign, so checking either side alone would refuse it.
+    workspace_id = create_workspace()
+    campaign_id = create_campaign(workspace_id)["id"]
+    update_campaign(workspace_id, campaign_id, offer_mode="none", disclosure=" ")
+
+    allowed = update_campaign(
+        workspace_id, campaign_id, offer_mode="smart", disclosure="#ad",
+    )
+
+    assert allowed.status_code == 200, allowed.text
+    assert autopilot_of(campaign_id).offer_mode == "smart"
+
+
+def test_an_explicit_disclosure_survives_a_language_change() -> None:
+    # The language pass rewrites the scaffolding it wrote itself. Somebody who
+    # typed a disclosure in the same submission meant the one they typed.
+    workspace_id = create_workspace()
+    campaign_id = create_campaign(workspace_id)["id"]
+
+    update_campaign(
+        workspace_id, campaign_id, languages=["fr"], disclosure="Mon propre texte",
+    )
+
+    assert autopilot_of(campaign_id).disclosure == "Mon propre texte"

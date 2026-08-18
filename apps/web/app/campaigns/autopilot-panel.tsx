@@ -2320,44 +2320,12 @@ export function AutopilotPanel({
         )}
       </Card>}
         {<div className="autopilot-settings">
-          <div className="campaign-product-mode">
-            <div>
-              <strong>Affiliate product matching</strong>
-              <small>Choose how products are assigned to each post. Smart matching is the recommended default.</small>
-            </div>
-            <div className="campaign-mode-options" role="radiogroup" aria-label="Affiliate product matching">
-              {(["smart", "manual", "none"] as const).map((mode) => (
-                <button key={mode} type="button" role="radio"
-                  aria-checked={autopilot.offer_mode === mode}
-                  className={autopilot.offer_mode === mode ? "active" : ""}
-                  disabled={!canEdit}
-                  onClick={() => void save({
-                    offer_mode: mode,
-                    offer_id: mode === "manual" ? autopilot.offer_id : null,
-                  })}>
-                  <strong>{mode === "smart" ? "Smart match" : mode === "manual" ? "One product" : "No products"}</strong>
-                  <small>{mode === "smart" ? "Fit content automatically" : mode === "manual" ? "Use one offer everywhere" : "Organic posts only"}</small>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {autopilot.offer_mode === "manual" && <label>{t("autopilot.offer")}
-            <SearchSelect
-              value={autopilot.offer_id ?? ""}
-              disabled={!canEdit}
-              onChange={(value) => void save({ offer_id: value || null })}
-              placeholder={t("autopilot.noOffer")}
-              searchPlaceholder="Search imported offers…"
-              options={offers.map((offer) => ({
-                value: offer.id,
-                label: offer.product.name,
-                description: offerDescription(offer),
-                keywords: `${offer.product.brand ?? ""} ${offer.product.marketplace ?? ""} ${offer.network} ${offer.affiliate_url}`,
-              }))}
-            />
-            <small>{t("autopilot.offerHelp")} Source: imported offers in Attribution.</small>
-          </label>}
+          {/* Products, the disclosure and the profile-link wording moved
+              to Campaign settings. All three are the campaign saying what
+              it is and how commercial it is, answered once; and the two
+              texts follow the post language, which is already there and
+              rewrites them when it changes. What is left below is the
+              analysis, which is a tool rather than a setting. */}
 
           {autopilot.offer_mode === "smart" && (
             <div className="campaign-product-intelligence">
@@ -2415,38 +2383,6 @@ export function AutopilotPanel({
             </div>
           )}
 
-          <label>{t("autopilot.disclosure")}
-            <input
-              defaultValue={autopilot.disclosure}
-              disabled={!canEdit}
-              maxLength={500}
-              onBlur={(event) => {
-                if (event.target.value !== autopilot.disclosure) {
-                  void save({ disclosure: event.target.value });
-                }
-              }}
-            />
-            {/* Not a preference. Stated here so nobody spends time looking for
-                the setting that turns it off. */}
-            <small>{t("autopilot.disclosureHelp")}</small>
-          </label>
-
-          <label>Profile-link wording
-            <input
-              defaultValue={autopilot.bio_hint}
-              disabled={!canEdit}
-              maxLength={120}
-              onBlur={(event) => {
-                if (event.target.value !== autopilot.bio_hint) {
-                  void save({ bio_hint: event.target.value });
-                }
-              }}
-            />
-            <small>
-              Used for Instagram, TikTok, and other destinations where post links are not clickable.
-              TrendRelay does not change the account profile automatically, so verify its bio link before deployment.
-            </small>
-          </label>
 
           {/* The caps, the authority and the ranking axis moved to
               Campaign settings. Every one is set when the campaign is
