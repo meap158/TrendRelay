@@ -103,23 +103,39 @@ DISMISS_OBSERVER = r"""
 })();
 """
 
-# Called every scroll round. The observer hides the login panel as it mounts,
-# but after the first page Douyin re-raises the sign-up prompt with a backdrop
-# that locks body scroll - so a person clicks it away to keep going. This does
-# the same without clicking (clicking a close glyph once navigated into a
-# video): hide the login panels, drop the fixed near-fullscreen backdrop that
-# freezes scrolling, and put overflow back to auto.
+# Called every scroll round. After the first page Douyin re-raises the sign-up
+# prompt behind a backdrop that locks body scroll, and merely hiding the panel
+# was not enough - the operator still had to close it by hand. So this first
+# clicks the modal's OWN close control (scoped inside the login container, so it
+# is the prompt's X and not some arbitrary glyph - an untargeted glyph click
+# once navigated into a video), then hides any login panel still standing, drops
+# the fixed near-fullscreen backdrop that freezes scrolling, and restores
+# overflow. Returns whether a close control was found, for logging.
 DISMISS_NOW = r"""() => {
   const LOGIN = [
-    '#login-full-panel', '#login-pannel', '[id*="login-panel"]',
+    '#login-full-panel', '#login-pannel', '[id*="login-panel"]', '[id*="login-modal"]',
     '[class*="login-guide"]', '[class*="loginGuide"]', '[class*="login-mask"]',
-    '[class*="login-container"]', '[class*="account-guide"]', '[class*="login-modal"]'
+    '[class*="login-container"]', '[class*="account-guide"]', '[class*="login-modal"]',
+    '[class*="login_modal"]', '[class*="login-scene"]', '[class*="loginModal"]'
   ];
+  const containers = new Set();
   for (const selector of LOGIN) {
-    for (const el of document.querySelectorAll(selector)) el.style.display = 'none';
+    for (const el of document.querySelectorAll(selector)) containers.add(el);
   }
-  // A fixed, near-fullscreen, high-z overlay is the scroll-locking backdrop;
-  // remove it, but never the grid (which is not fixed) or small fixed chrome.
+  let clicked = false;
+  const CLOSE = '[class*="close"], [aria-label*="关闭"], [aria-label*="close"], ' +
+                '[class*="dy-account-close"], svg[class*="close"]';
+  for (const box of containers) {
+    for (const btn of box.querySelectorAll(CLOSE)) {
+      const r = btn.getBoundingClientRect();
+      // A real close control: small, and it does not wrap a video thumbnail.
+      if (r.width > 0 && r.width < 60 && r.height < 60 &&
+          !btn.querySelector('a[href*="/video/"]')) {
+        try { btn.click(); clicked = true; } catch (e) {}
+      }
+    }
+  }
+  for (const box of containers) box.style.display = 'none';
   for (const el of document.querySelectorAll('div')) {
     const st = getComputedStyle(el);
     if (st.position !== 'fixed') continue;
@@ -132,6 +148,40 @@ DISMISS_NOW = r"""() => {
   }
   document.body.style.overflow = 'auto';
   document.documentElement.style.overflow = 'auto';
+  return clicked;
+}"""
+
+# Scroll the grid's OWN container, not the window. Douyin renders the profile
+# grid inside a nested element with its own overflow scroller and lazy-loads the
+# next page when that element nears its bottom - so scrolling the window (which
+# a wheel event at the wrong spot does) never advances it, while a hand on the
+# grid does. This walks up from a video link to the nearest scrollable ancestor
+# and nudges it down a viewport at a time, falling back to the window. Returns
+# whether anything could still scroll, so the loop knows when it has bottomed.
+GRID_SCROLL = r"""() => {
+  const link = document.querySelector('a[href*="/video/"]');
+  let el = link;
+  let scroller = null;
+  while (el && el !== document.body) {
+    const st = getComputedStyle(el);
+    if (/(auto|scroll)/.test(st.overflowY) && el.scrollHeight > el.clientHeight + 40) {
+      scroller = el;
+      break;
+    }
+    el = el.parentElement;
+  }
+  if (scroller) {
+    const before = scroller.scrollTop;
+    scroller.scrollTop = Math.min(
+      scroller.scrollTop + scroller.clientHeight * 0.9,
+      scroller.scrollHeight
+    );
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }));
+    return scroller.scrollTop > before || scroller.scrollTop < scroller.scrollHeight - 4;
+  }
+  const before = window.scrollY;
+  window.scrollTo(0, document.body.scrollHeight);
+  return window.scrollY > before;
 }"""
 
 # Douyin serves an automation-flagged visit a "service exception, refresh to
@@ -331,18 +381,21 @@ async def enumerate_profile(
                 break
             before = len(ids)
             try:
-                # Close the sign-up popup every round before scrolling. The
-                # observer hides it as it mounts, but Douyin re-raises it after
-                # the first page and locks body scroll behind a backdrop; this
-                # also drops the backdrop and restores overflow so the next
-                # wheel actually advances the feed instead of the frozen page.
+                # Close the sign-up popup every round before scrolling - clicking
+                # its own X, hiding what is left, dropping the scroll-locking
+                # backdrop - plus Escape, since merely hiding it left the operator
+                # closing it by hand.
                 await page.evaluate(DISMISS_NOW)
-                # A real wheel event drives Douyin's own infinite scroll, at a
-                # pace a person's hand would keep rather than a tight loop.
-                await page.mouse.wheel(0, random.randint(2600, 3800))
+                await page.keyboard.press("Escape")
+                # Scroll the grid's own container - the window scroll a bare
+                # wheel drives does not advance the feed. A real wheel over the
+                # grid centre backs it up the way a hand would.
+                await page.evaluate(GRID_SCROLL)
+                await page.mouse.move(760, 460)
+                await page.mouse.wheel(0, random.randint(2000, 3200))
             except Exception:
                 break
-            await page.wait_for_timeout(random.randint(900, 1500))
+            await page.wait_for_timeout(random.randint(1000, 1600))
             await _harvest(page, ids)
 
             if limit and len(ids) >= limit:
