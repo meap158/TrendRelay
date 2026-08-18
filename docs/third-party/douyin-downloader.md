@@ -38,7 +38,11 @@ Without a login, TrendRelay recovers more than the first page on a **best-effort
 
 After the first page Douyin re-raises the sign-up prompt behind a scroll-locking backdrop; each scroll round the enumerator hides the login panels and drops that backdrop (never the grid, never by clicking) so the feed keeps advancing — the same thing a person does by closing the popup.
 
-The window is visible on purpose: Douyin serves a headless context an empty feed, and a person watching can clear a captcha the observer missed. `--headless` exists for experiments but is not used by the download flow, precisely because it is served the empty feed.
+**Infinite scroll is bot-gated; the enumerator is human-assisted.** Probing established that Douyin withholds a profile's infinite scroll from an automated session even when the client-side tells are clean (`navigator.webdriver` undefined, no CDP artifacts in `window`/`document`, real plugins/languages/UA) and the grid container is scrolled all the way to its bottom: no second `/aweme/post/` request fires for any input — trusted synthetic keyboard (End, Ctrl+End), trusted wheel, or `scrollBy` alike. A real hand on the same window does trigger it and loads through to `暂时没有更多了` ("no more for now"). The gate is deeper than JavaScript can reach (CDP-attach or session/IP trust), so it is not defeated in automation.
+
+The enumerator therefore drops a banner into the window asking the operator to scroll to the bottom (they are already there closing the sign-up prompt), keeps its own scroll attempts for sessions that are not flagged, and harvests continuously until it sees the `暂时没有更多了` end marker or the grid stops growing. It is patient about idling so a person has time to reach the window. If nobody finishes the scroll, it returns the first page and the floor guard keeps the profile link so the provider still fetches that page.
+
+The window is visible on purpose: Douyin serves a headless context an empty feed, a person watching can clear a captcha the observer missed, and - as above - only a person's scroll carries a flagged session through the whole profile. `--headless` exists for experiments but is not used by the download flow.
 
 The upstream `browser_fallback` is **disabled** (`browser_fallback.enabled: false`): it opens its own browser but only closes captchas, not the sign-up prompt, so it froze on the prompt and harvested almost nothing. Our enumerator replaces it. The login browser and this profile-read browser are the only browsers TrendRelay opens.
 
