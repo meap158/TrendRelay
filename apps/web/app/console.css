@@ -746,8 +746,8 @@ html { scroll-behavior: smooth; }
 .campaign-match-copy { display: grid; min-width: 0; gap: 3px; }
 .campaign-match-copy > strong, .campaign-match-copy > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-match-copy > small { color: var(--muted); font-size: 10px; }
-.campaign-match-copy > span, .campaign-queue-products { display: flex; flex-wrap: wrap; gap: 4px; }
-.campaign-match-copy em, .campaign-queue-products em { border-radius: 999px; padding: 2px 6px; color: var(--muted); background: var(--panel-raised); font-size: 9px; font-style: normal; }
+.campaign-match-copy > span { display: flex; flex-wrap: wrap; gap: 4px; }
+.campaign-match-copy em { border-radius: 999px; padding: 2px 6px; color: var(--muted); background: var(--panel-raised); font-size: 9px; font-style: normal; }
 .campaign-product-matches.selectable > li { display: block; padding: 0; }
 .campaign-product-matches.selectable label { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 9px; align-items: center; padding: 8px; cursor: pointer; }
 .campaign-product-matches.selectable input { accent-color: var(--link); }
@@ -783,8 +783,8 @@ html { scroll-behavior: smooth; }
 .campaign-product-actions { border-top: 1px solid var(--line); padding-top: 10px; }
 
 .autopilot-destinations, .autopilot-queue { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.autopilot-destinations li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
-.autopilot-queue li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.autopilot-destinations > li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.autopilot-queue > li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
 .autopilot-queue-thumb { display: grid; place-items: center; }
 .autopilot-queue-thumb .picker-thumb, .autopilot-queue-thumb .campaign-pipeline-thumb-empty { display: grid; place-items: center; inline-size: 84px; block-size: 64px; overflow: hidden; border-radius: var(--radius-sm); background: #e8edf3; color: var(--muted); }
 .autopilot-queue-thumb .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }
@@ -792,9 +792,9 @@ html { scroll-behavior: smooth; }
 .autopilot-queue-thumb .picker-thumb i { display: none; }
 /* A placeholder that will post as-is is a warning, not body copy. */
 .autopilot-needs-copy { color: #7a5c00; }
-.autopilot-destinations li > div, .autopilot-queue li > div { display: grid; gap: 2px; min-width: 0; }
-.autopilot-destinations strong, .autopilot-queue strong { overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.autopilot-destinations small, .autopilot-queue small { color: var(--muted); font-size: 11px; }
+.autopilot-destinations > li > div, .autopilot-queue > li > div { display: grid; gap: 3px; min-width: 0; }
+.autopilot-destinations > li > div > strong, .autopilot-queue > li > div > strong { overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.autopilot-destinations > li > div > small, .autopilot-queue > li > div > small { color: var(--muted); font-size: 11px; }
 .autopilot-queue-copy { display: -webkit-box; overflow: hidden; color: var(--muted); font-size: 11px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 /* The reason spans the row rather than squeezing into a column: it is a
    sentence, and a sentence in a 90px column is unreadable. */
@@ -864,8 +864,8 @@ html { scroll-behavior: smooth; }
 .timeline-media { max-width: 240px; max-height: 180px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #000; }
 .timeline-media-strip { display: flex; flex-wrap: wrap; gap: 6px; }
 .timeline-media-strip .timeline-media { max-width: 110px; max-height: 110px; object-fit: cover; }
-.autopilot-queue li.draft { border-inline-start: 3px solid var(--amber); }
-.autopilot-queue li.approved { border-inline-start: 3px solid var(--green); }
+.autopilot-queue > li.draft { border-inline-start: 3px solid var(--amber); }
+.autopilot-queue > li.approved { border-inline-start: 3px solid var(--green); }
 .campaign-queue-actions { display: flex !important; flex-wrap: wrap; justify-content: flex-end; gap: 4px !important; }
 
 .autopilot-account-picker { margin-top: 10px; padding: 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); }
@@ -892,7 +892,7 @@ html { scroll-behavior: smooth; }
 .autopilot-preview small { color: var(--muted); font-size: 11px; line-height: 1.4; }
 
 @media (max-width: 700px) {
-  .autopilot-destinations li, .autopilot-queue li { grid-template-columns: minmax(0, 1fr) auto; }
+  .autopilot-destinations > li, .autopilot-queue > li { grid-template-columns: minmax(0, 1fr) auto; }
   .campaign-mode-options { grid-template-columns: 1fr; }
   .campaign-product-matches > li { grid-template-columns: auto minmax(0, 1fr) auto; }
   .campaign-product-matches > li > .ui-button { grid-column: 2 / -1; justify-self: start; }
@@ -906,8 +906,6 @@ html { scroll-behavior: smooth; }
 .autopilot-compose small { color: var(--muted); font-weight: 400; line-height: 1.4; }
 .autopilot-compose .ui-button { justify-self: start; }
 .autopilot-picker-head > span { display: grid; gap: 2px; }
-.campaign-content-post { display: flex; flex-wrap: wrap; gap: 4px; margin-block-start: 5px; }
-.campaign-content-post em { border: 1px solid var(--line); border-radius: 999px; padding: 2px 6px; color: var(--muted); background: var(--panel-raised); font-size: 9px; font-style: normal; }
 .campaign-reply-editor { display: grid; gap: 8px; min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px; }
 .campaign-reply-editor legend { padding-inline: 4px; color: var(--text); font-size: 11px; font-weight: 700; }
 .campaign-reply-editor > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 6px; }
@@ -1185,12 +1183,23 @@ html { scroll-behavior: smooth; }
 .campaign-entry-source button { border: 0; padding: 0; background: none; color: var(--link); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
 /* Held for a moment after arriving from the schedule, so the eye lands on the
    row that was asked for rather than hunting the list for it. */
-.autopilot-queue li.just-linked { outline: 2px solid var(--link); outline-offset: 2px; border-radius: var(--radius-sm); }
+.autopilot-queue > li.just-linked { outline: 2px solid var(--link); outline-offset: 2px; border-radius: var(--radius-sm); }
 @media (prefers-reduced-motion: no-preference) {
-  .autopilot-queue li.just-linked { transition: outline-color .3s ease-out; }
+  .autopilot-queue > li.just-linked { transition: outline-color .3s ease-out; }
 }
 /* The absence of a product is a fact about the post, so it is set apart from
    the products themselves rather than dressed as one. */
-.campaign-queue-products em.empty { background: transparent; padding-inline: 0; font-style: italic; }
 /* Attached because nothing better was found, not because it fits. */
-.campaign-queue-products em.weak { border: 1px dashed var(--line-strong); }
+/* One line, one chip style. The row used to carry three: bordered pills for
+   what the post is made of, filled pills for its products, and a plain italic
+   aside - six bands of nine-point text under a thirteen-point title. */
+.campaign-queue-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.campaign-queue-facts em { max-inline-size: 320px; overflow: hidden; border-radius: 999px; padding: 2px 7px; color: var(--muted); background: var(--panel-raised); font-size: 9px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+/* The product is the one fact here worth the reader's full attention. */
+.campaign-queue-facts em.product { color: var(--text); }
+/* A product and its caveat wrap as one, so "weak fit" cannot end up alone on
+   a line under a long product name, reading as a verdict on the whole row. */
+.campaign-queue-product { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-inline-size: 100%; }
+.campaign-queue-product > em.product { min-width: 0; }
+/* A caveat on the chip beside it, not a chip of its own. */
+.campaign-queue-facts em.soft { padding-inline: 0; background: transparent; font-style: italic; }

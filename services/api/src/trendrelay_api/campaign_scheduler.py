@@ -607,7 +607,7 @@ def plan_campaign(
                 # An unwritten package never reaches an engine, and holding a
                 # slot for it would block the content that is ready.
                 notes.append(
-                    f"A package has no copy written yet ({candidate.title or candidate.id}); "
+                    f"A post has no copy written yet ({candidate.title or candidate.id}); "
                     "it is skipped until somebody writes it."
                 )
                 continue

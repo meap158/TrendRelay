@@ -88,6 +88,8 @@ type Destination = {
   platform: PublishingPlatform;
   label: string;
   enabled: boolean;
+  /** What this account posts as - a Reel, a Story - where it has been set. */
+  post_type?: string | null;
   /** The stored configuration; 'auto' lets the network decide. */
   link_placement_setting: "auto" | "caption" | "first_comment" | "bio";
   /** What the configuration resolves to today. */
@@ -561,7 +563,15 @@ function dayHeading(value: string, timeZone: string): string {
  * of post.
  */
 function formatName(post: PreviewPost, item: QueueItem): string {
-  const configured = post.destination?.post_type;
+  return namedFormat(post.destination?.post_type, item);
+}
+
+/** The same answer for an account the plan has not reached. */
+function destinationFormat(destination: Destination, item: QueueItem): string {
+  return namedFormat(destination.post_type ?? null, item);
+}
+
+function namedFormat(configured: string | null | undefined, item: QueueItem): string {
   if (configured) {
     return configured.replace(/_/g, " ").replace(/^./, (first) => first.toUpperCase());
   }
@@ -570,6 +580,7 @@ function formatName(post: PreviewPost, item: QueueItem): string {
   if (item.image_paths.length === 1) return "Image";
   return "Post";
 }
+
 
 /**
  * Every outing a queued post has ahead of it, rehearsed.
@@ -587,18 +598,63 @@ function QueueRehearsal({
   outings,
   workspaceId,
   noPlanReason,
+  destinations,
+  slots,
 }: {
   item: QueueItem;
   outings: PreviewPost[];
   workspaceId: string;
   /** Why this post has no outings, when it has none. */
   noPlanReason: string;
+  /** The campaign's accounts, for a row the plan has not reached. */
+  destinations: Destination[];
+  /** The campaign's posting times, for the same reason. */
+  slots: Slot[];
 }) {
-  // Said rather than left blank. A drafted post, or a campaign with no posting
-  // times, has nothing in the preview - and a row that simply showed nothing
-  // looked like a row whose plan had failed to load.
+  // Where and when, even with nothing scheduled. A row with no plan used to
+  // say only why, and the two questions somebody actually has - which accounts
+  // is this for, and when does this campaign post - are answered by the
+  // campaign itself rather than by the plan. No times are invented here: these
+  // are the campaign's own posting times and its own accounts, said plainly as
+  // what this post is waiting on rather than as a schedule it has been given.
   if (!outings.length) {
-    return <p className="campaign-row-noplan">{noPlanReason}</p>;
+    return (
+      <details className="campaign-row-rehearsal">
+        {/* The reason on the line, the detail behind it. A boxed paragraph
+            with a list of accounts under it turned every unscheduled row into
+            a panel, and there are usually several of them. */}
+        <summary>
+          <span>Where it would go</span>
+          <small>{noPlanReason}</small>
+        </summary>
+        <div className="campaign-rehearsal-list">
+          {destinations.map((destination) => (
+            <p key={destination.id} className="campaign-would-go">
+              <PlatformIcon platform={destination.platform} size={16} />
+              <b>{destination.label}</b>
+              <span>{platformLabels[destination.platform]}
+                {" · "}{destinationFormat(destination, item)}
+                {" · "}link {destination.link_placement === "bio"
+                  ? "in the profile"
+                  : destination.link_placement === "first_comment"
+                    ? `in the ${followUpKind(destination.platform)}`
+                    : destination.link_placement === "none"
+                      ? "not carried"
+                      : "in the caption"}</span>
+            </p>
+          ))}
+          {slots.length > 0 && (
+            <p className="campaign-would-when">
+              This campaign posts at {slots.map(
+                (slot) => `${slot.weekday_label} ${slot.time}`).join(", ")}.
+            </p>
+          )}
+          {!destinations.length && (
+            <p className="campaign-would-when">No accounts on this campaign yet.</p>
+          )}
+        </div>
+      </details>
+    );
   }
   const media = (path: string) =>
     `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview?path=${encodeURIComponent(path)}`;
@@ -2155,13 +2211,24 @@ export function AutopilotPanel({
                   ) : (
                     <span className="autopilot-queue-copy">{item.body}</span>
                   )}
-                  <span className="campaign-content-post" aria-label="Configured post">
-                    <em>Post</em>
-                    {item.first_comment && <em>First comment</em>}
-                    {item.thread.length > 0 && (
-                      <em>{item.thread.length} {item.thread.length === 1 ? "reply" : "replies"}</em>
+                  {/* One line of facts. This was three: a chip row for what
+                      the post is made of, a second chip row for its products
+                      in a different chip style, and a plain italic aside in a
+                      third - six bands of nine-point text down a row whose
+                      title is thirteen. What it is, where it goes, what it
+                      carries, in that order and in one style. */}
+                  <span className="campaign-queue-facts">
+                    <em>{namedFormat(null, item)}</em>
+                    <em>{item.times_posted > 0
+                      ? t("autopilot.postedTimes", { count: item.times_posted })
+                      : t("autopilot.neverPosted")}</em>
+                    {destinations.length > 0 && (
+                      <em>{destinations.length} {destinations.length === 1 ? "account" : "accounts"}</em>
                     )}
-                  </span>
+                    {item.first_comment && <em>+ {followUpFieldName.toLowerCase()}</em>}
+                    {item.thread.length > 0 && (
+                      <em>+ {item.thread.length} {item.thread.length === 1 ? "reply" : "replies"}</em>
+                    )}
                   {/* What this post would carry, and when it would carry
                       nothing, why. Every match being low confidence rendered
                       an empty space: the filter dropped them all and the
@@ -2180,41 +2247,53 @@ export function AutopilotPanel({
                       .slice(0, autopilot.max_products_per_post);
                     const weak = !confident.length && Boolean(ranked.length);
                     return (
-                      <span className="campaign-queue-products">
+                      <>
                         {attaching.map((match) => (
-                          <em key={match.offer_id} className={weak ? "weak" : ""}>
-                            {match.product_name} · {match.score}%
-                            {commissionLabel(match) && ` · ${commissionLabel(match)}`}
-                          </em>
+                          // The caveat is inside the group, not beside it: as a
+                          // sibling chip it wrapped to a line of its own under a
+                          // long product name and read as a verdict on the row
+                          // rather than on the product.
+                          <span key={match.offer_id} className="campaign-queue-product">
+                            <em className="product">
+                              {match.product_name} · {match.score}%
+                              {commissionLabel(match) && ` · ${commissionLabel(match)}`}
+                            </em>
+                            {/* Said rather than left to the percentage. Nothing
+                                here cleared the evidence bar, and the best of a
+                                weak field is still what goes out. */}
+                            {weak && <em className="soft">weak fit</em>}
+                          </span>
                         ))}
-                        {/* Said rather than left to the percentage. Nothing
-                            here cleared the evidence bar, and the best of a
-                            weak field is still what goes out. */}
-                        {weak && <em className="empty">best available, weak fit</em>}
-                        {!ranked.length && <em className="empty">Product analysis pending</em>}
-                      </span>
+                        {!ranked.length && <em className="soft">analysis pending</em>}
+                      </>
                     );
                   })()}
-                  <small>
-                    {item.times_posted > 0
-                      ? t("autopilot.postedTimes", { count: item.times_posted })
-                      : t("autopilot.neverPosted")}
-                  </small>
+                  </span>
                   {/* When, where, how it reads there, and what follows it. The
                       row used to answer only the first of those. */}
                   <QueueRehearsal
                     item={item}
                     outings={outings.get(item.id) ?? []}
                     workspaceId={workspaceId}
-                    noPlanReason={item.state !== "approved"
-                      ? "Not scheduled: approve it and the plan appears here."
-                      : !destinations.length
-                        ? "Nowhere to post it yet. Add an account."
-                        : !slots.length
-                          ? "No posting times yet. Add one and the plan appears here."
-                          : preview
-                            ? "Nothing scheduled this cycle - another post holds every slot."
-                            : "Loading the plan…"}
+                    destinations={destinations}
+                    slots={slots}
+                    /* In the order the scheduler applies them. Copy comes
+                       before everything: an unwritten post is skipped whatever
+                       else is true of it, and guessing "another post holds
+                       every slot" at a post that was never a candidate sent
+                       somebody looking for a scheduling problem that was
+                       really an empty caption. */
+                    noPlanReason={item.needs_copy
+                      ? "Not scheduled: no copy written yet. Write it and this post joins the rotation."
+                      : item.state !== "approved"
+                        ? "Not scheduled: approve it and the plan appears here."
+                        : !destinations.length
+                          ? "Nowhere to post it yet. Add an account."
+                          : !slots.length
+                            ? "No posting times yet. Add one and the plan appears here."
+                            : preview
+                              ? "Not in this cycle: every slot is taken by another post."
+                              : "Loading the plan…"}
                   />
                 </div>
                 <Badge tone={item.state === "approved" ? "good" : "neutral"}>
