@@ -310,11 +310,44 @@ function offerDescription(offer: Offer): string {
   ].filter(Boolean).join(" · ");
 }
 
+//: How many packages are sent at once. One SQLite file takes writes in series
+//: whatever the client does, so a hundred parallel posts only queue up inside
+//: the API; a small batch keeps the browser responsive and the database calm.
+const QUEUE_BATCH = 8;
+
+/** What one queued package is written with, before it is sent. */
+type PackageCopy = { body: string; hashtags: string };
+
+/**
+ * One row in the composer: the media it posts, and the copy written for it.
+ *
+ * A carousel is one package holding several pictures, so the assets are a list
+ * rather than one - and `id` keys the copy, which is why it is the lead asset's
+ * id and not the index. Reordering rows must not move somebody's caption onto
+ * another clip.
+ */
+type DraftPackage = {
+  id: string;
+  kind: "video" | "carousel" | "image";
+  assets: LibraryAsset[];
+};
+
 type LibraryAsset = {
   id: string;
   title: string;
   original_path: string;
   media_kind: string;
+  /**
+   * What the clip was posted with where it came from.
+   *
+   * Shown beside the copy as reference and never seeded into it: these are
+   * Douyin captions in Chinese and the campaign posts in Vietnamese, so
+   * pre-filling would put the wrong language into the post - and machine
+   * translation of an idiom is a draft nobody asked for. It is here to remind
+   * the writer what the clip is about.
+   */
+  caption?: string | null;
+  hashtags?: string[] | null;
   duration_ms: number | null;
   platform: string | null;
   creator: string | null;
@@ -572,6 +605,52 @@ export function AutopilotPanel({
     images: drafting.filter((asset) => asset.media_kind === "image"),
   };
   const draftingPackages = draftingSplit.videos.length + (draftingSplit.images.length ? 1 : 0);
+  /**
+   * Copy is per package, not per batch.
+   *
+   * One caption used to be typed once and spread across every selected clip,
+   * so picking five videos made five posts word for word identical - which is
+   * the one thing a hundred clips must not be. Keyed by package so a row keeps
+   * what was written for it while its neighbours are edited.
+   */
+  const [draftCopy, setDraftCopy] = useState<Record<string, PackageCopy>>({});
+  /**
+   * Whether the selected pictures ride together.
+   *
+   * One carousel is what multi-selecting pictures usually means, so it is the
+   * default; splitting turns them into a post each. Videos are never grouped -
+   * two clips are two posts on every network here.
+   */
+  const [splitPictures, setSplitPictures] = useState(false);
+  /**
+   * The rows, derived rather than stored.
+   *
+   * Held as a derivation of the selection so adding or dropping media cannot
+   * leave a row pointing at an asset that is no longer chosen. The copy is
+   * stored separately and keyed by package id, which survives that.
+   */
+  const draftPackages: DraftPackage[] = [
+    ...draftingSplit.videos.map((asset) => ({
+      id: asset.id, kind: "video" as const, assets: [asset],
+    })),
+    ...(splitPictures
+      ? draftingSplit.images.map((asset) => ({
+          id: asset.id, kind: "image" as const, assets: [asset],
+        }))
+      : draftingSplit.images.length
+        ? [{
+            id: draftingSplit.images[0].id,
+            kind: "carousel" as const,
+            assets: draftingSplit.images,
+          }]
+        : []),
+  ];
+  const copyFor = (id: string): PackageCopy =>
+    draftCopy[id] ?? { body: "", hashtags: "" };
+  const setCopyFor = (id: string, patch: Partial<PackageCopy>) =>
+    setDraftCopy((current) => ({
+      ...current, [id]: { ...copyFor(id), ...patch },
+    }));
   const [selectedAssets, setSelectedAssets] = useState<Record<string, LibraryAsset>>({});
   const [effectOpen, setEffectOpen] = useState(false);
   const [editing, setEditing] = useState<QueueItem | null>(null);
@@ -1858,14 +1937,7 @@ export function AutopilotPanel({
             className="autopilot-compose"
             onSubmit={(event) => {
               event.preventDefault();
-              const form = new FormData(event.currentTarget);
-              // Copy is optional now. A package can be picked today and
-              // written later; the API stands a placeholder in and marks it,
-              // which is what the badge on the queue reads from.
-              const body = String(form.get("body") ?? "").trim();
               void run("queue", async () => {
-                const hashtags = String(form.get("hashtags") ?? "")
-                  .split(/[\s,]+/).filter(Boolean);
                 const offerIds = draftProductMode === "manual"
                   ? Array.from(draftPinned)
                   : [];
@@ -1873,38 +1945,56 @@ export function AutopilotPanel({
                   json(await apiFetch(`${base}/queue`, {
                     method: "POST",
                     headers: { "content-type": "application/json" },
-                    body: JSON.stringify({
-                      ...payload, body, hashtags, offer_ids: offerIds,
-                    }),
+                    body: JSON.stringify({ ...payload, offer_ids: offerIds }),
                   }));
-                // One package per clip, and one package for all the pictures.
-                await Promise.all([
-                  ...draftingSplit.videos.map((asset) => post({
-                    asset_id: asset.id,
-                    video_path: handoffPath(asset),
-                    title: asset.title,
-                  })),
-                  ...(draftingSplit.images.length ? [post({
-                    asset_id: draftingSplit.images[0].id,
-                    image_paths: draftingSplit.images.map(handoffPath),
-                    title: draftingSplit.images[0].title,
-                  })] : []),
-                ]);
-                const count = draftingPackages;
+                // Each row carries the copy written for it. Copy is still
+                // optional: a package can be picked today and written later,
+                // and the API stands a placeholder in and marks it, which is
+                // what the badge on the queue reads from.
+                const requests = draftPackages.map((entry) => {
+                  const written = copyFor(entry.id);
+                  const lead = entry.assets[0];
+                  const shared = {
+                    asset_id: lead.id,
+                    title: lead.title,
+                    body: written.body.trim(),
+                    hashtags: written.hashtags.split(/[\s,]+/).filter(Boolean),
+                  };
+                  return entry.kind === "carousel"
+                    ? { ...shared, image_paths: entry.assets.map(handoffPath) }
+                    : entry.kind === "image"
+                      ? { ...shared, image_paths: [handoffPath(lead)] }
+                      : { ...shared, video_path: handoffPath(lead) };
+                });
+                // In batches rather than all at once. A hundred clips is a
+                // reasonable selection here and `Promise.all` over all of them
+                // opens a hundred parallel writes against one SQLite file,
+                // which is how the API comes to block on itself.
+                for (let index = 0; index < requests.length; index += QUEUE_BATCH) {
+                  await Promise.all(
+                    requests.slice(index, index + QUEUE_BATCH).map(post),
+                  );
+                }
+                const count = requests.length;
                 setDrafting([]);
                 setSelectedAssets({});
                 setPicking(false);
+                setDraftCopy({});
+                setSplitPictures(false);
                 resetDraftProducts();
                 return `${count} ${count === 1 ? "package" : "packages"} added to the campaign queue.`;
               });
             }}
           >
             <div className="autopilot-picker-head">
-              <strong>{drafting.length === 1
-                ? drafting[0].title
-                : draftingSplit.images.length && !draftingSplit.videos.length
-                  ? `Carousel of ${draftingSplit.images.length} pictures`
-                  : `${draftingPackages} ${draftingPackages === 1 ? "package" : "packages"}`}</strong>
+              {/* Counts packages, not files: three pictures riding together
+                  are one post, and saying "3" over a single carousel row is
+                  how somebody comes to expect three. */}
+              <strong>{draftPackages.length === 1
+                ? draftPackages[0].kind === "carousel"
+                  ? `Carousel of ${draftPackages[0].assets.length} pictures`
+                  : draftPackages[0].assets[0].title
+                : `${draftPackages.length} packages`}</strong>
               <Button variant="quiet" size="sm" onClick={() => {
                 setDrafting([]);
                 resetDraftProducts();
@@ -1941,19 +2031,73 @@ export function AutopilotPanel({
                 </>}
               </p>
             )}
-            <label>{t("autopilot.copy")}
-              {/* Not required. Media is often chosen before anybody has
-                  written for it, and forcing both into one sitting is what
-                  made people paste something they did not mean. */}
-              <textarea name="body" rows={4} maxLength={4000}
-                placeholder={t("autopilot.copyPlaceholder")} />
-              {/* The disclosure and the link are added per network at post
-                  time, so writing either here would duplicate them. */}
-              <small>{t("autopilot.copyHelp")}</small>
-            </label>
-            <label>{t("autopilot.hashtags")}
-              <input name="hashtags" placeholder={t("autopilot.hashtagsExample")} />
-            </label>
+            {/* A row per package, each with its own copy.
+                One caption used to be written once and spread across every
+                selected clip, so five videos became five identical posts -
+                the one thing a hundred clips must not be. The disclosure and
+                the affiliate link are still added per network at post time,
+                so neither is written here. */}
+            <p className="autopilot-note">{t("autopilot.copyHelp")}</p>
+            <ol className="draft-packages">
+              {draftPackages.map((entry) => {
+                const lead = entry.assets[0];
+                const written = copyFor(entry.id);
+                return (
+                  <li key={entry.id} className="draft-package">
+                    <div className="draft-package-head">
+                      <strong>
+                        {entry.kind === "carousel"
+                          ? `${entry.assets.length} pictures - one carousel`
+                          : lead.title}
+                      </strong>
+                      {entry.kind === "carousel" && (
+                        <Button variant="quiet" size="sm"
+                          onClick={() => setSplitPictures(true)}>
+                          Split into {entry.assets.length} posts
+                        </Button>
+                      )}
+                      {entry.kind === "image" && draftingSplit.images.length > 1 && (
+                        <Button variant="quiet" size="sm"
+                          onClick={() => setSplitPictures(false)}>
+                          Group as one carousel
+                        </Button>
+                      )}
+                    </div>
+                    <label>
+                      <span className="sr-only">{t("autopilot.copy")}</span>
+                      <textarea
+                        rows={3}
+                        maxLength={4000}
+                        value={written.body}
+                        placeholder={t("autopilot.copyPlaceholder")}
+                        onChange={(event) =>
+                          setCopyFor(entry.id, { body: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span className="sr-only">{t("autopilot.hashtags")}</span>
+                      <input
+                        value={written.hashtags}
+                        placeholder={t("autopilot.hashtagsExample")}
+                        onChange={(event) =>
+                          setCopyFor(entry.id, { hashtags: event.target.value })}
+                      />
+                    </label>
+                    {/* Reference, never seeded. These are the captions the
+                        clips were posted with where they came from - Chinese,
+                        on a campaign that posts in Vietnamese - so copying one
+                        into the box would put the wrong language into a post.
+                        It is here to remind the writer what the clip is. */}
+                    {lead.caption && (
+                      <p className="draft-package-source">
+                        <span>Originally posted as</span>
+                        <q>{lead.caption}</q>
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
             {/* The product decision belongs to the package, made here rather
                 than discovered later: what gets approved is a post whose
                 products were already decided - smartly or by hand. */}
@@ -2019,7 +2163,9 @@ export function AutopilotPanel({
               </ul>
             )}
             <Button type="submit" variant="primary" busy={busy === "queue"}>
-              {t("autopilot.addToQueue")}
+              {draftPackages.length > 1
+                ? `Add ${draftPackages.length} packages`
+                : t("autopilot.addToQueue")}
               {draftProductMode === "manual" && draftPinned.size > 0
                 ? ` · ${draftPinned.size} ${draftPinned.size === 1 ? "product" : "products"}`
                 : ""}

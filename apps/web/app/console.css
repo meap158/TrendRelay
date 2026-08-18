@@ -1093,3 +1093,20 @@ html { scroll-behavior: smooth; }
   min-height: 30px;
   padding-inline: 8px;
 }
+
+/* --- One row per package in the campaign composer ------------------------- */
+/* Copy is written per post, so each package gets its own block rather than the
+   whole selection sharing one box. Plain scrolling, however many there are: a
+   hundred clips is a reasonable selection and hiding any of them behind a
+   filter is how somebody queues a post they never read. */
+.draft-packages { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.draft-package { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.draft-package-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.draft-package-head strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.draft-package label { display: grid; }
+.draft-package textarea, .draft-package input { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; }
+/* The caption the clip carried where it came from. Quiet, and never editable:
+   it is here to say what the clip is, not to be posted. */
+.draft-package-source { display: grid; gap: 1px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.draft-package-source span { font-weight: 600; text-transform: uppercase; letter-spacing: .03em; font-size: 9px; }
+.draft-package-source q { overflow-wrap: anywhere; font-style: italic; }
