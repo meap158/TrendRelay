@@ -388,6 +388,7 @@ export const ja: Messages = {
     saveKeyFirst: "先にこのエンジンのAPIキーを保存してください。",
     saving: "保存中",
     saveToEnv: ".env に保存",
+    nowDefault: "{label} を既定のエンジンにしました。",
     engineSetup: "エンジン設定",
     notOffering: "配信先を提供していません: {engines}。",
     enginesOff: "ここでオフにしています: {engines}。",

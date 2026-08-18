@@ -394,6 +394,7 @@ export const ru: Messages = {
     saveKeyFirst: "Сначала сохраните API-ключ этого движка.",
     saving: "Сохранение…",
     saveToEnv: "Сохранить в .env",
+    nowDefault: "Теперь {label} — движок по умолчанию.",
     engineSetup: "Настройка движков",
     notOffering: "Не дают направлений: {engines}.",
     enginesOff: "Выключены здесь: {engines}.",

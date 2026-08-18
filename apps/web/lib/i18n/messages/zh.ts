@@ -378,6 +378,7 @@ export const zh: Messages = {
     saveKeyFirst: "请先保存该引擎的 API 密钥。",
     saving: "保存中",
     saveToEnv: "保存到 .env",
+    nowDefault: "{label} 已设为默认引擎。",
     engineSetup: "引擎设置",
     notOffering: "未提供目标：{engines}。",
     enginesOff: "已在此关闭：{engines}。",

@@ -388,6 +388,7 @@ export const vi: Messages = {
     saveKeyFirst: "Hãy lưu khóa API của công cụ này trước.",
     saving: "Đang lưu",
     saveToEnv: "Lưu vào .env",
+    nowDefault: "{label} giờ là công cụ mặc định.",
     engineSetup: "Thiết lập công cụ",
     notOffering: "Không cung cấp đích đến: {engines}.",
     enginesOff: "Đã tắt tại đây: {engines}.",

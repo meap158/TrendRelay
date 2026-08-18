@@ -1199,7 +1199,21 @@ export default function PublishPage() {
     };
   }
 
-  async function saveCredentials(provider: Provider, activate: boolean) {
+  /**
+   * Save the key, and adopt the engine only if nothing usable is default.
+   *
+   * Saving used to make the engine default whatever else was configured, so
+   * typing a key into a second Zernio login silently moved every destination
+   * that names no engine of its own onto it. Two decisions, and only the first
+   * was asked for - "Make default" is its own control on the same card.
+   *
+   * But never adopting is the opposite mistake. The default falls back to
+   * bundle_social whether or not anybody has given it a key, so somebody who
+   * sets up Zernio alone and never finds that button has a workspace pointed
+   * at an engine that cannot deliver. Adopting when the incumbent has no key
+   * moves nothing that was working.
+   */
+  async function saveCredentials(provider: Provider, adopt: boolean) {
     const values = credentialDrafts[provider.id] ?? {};
     const missing = provider.credential_fields.filter(
       (field) => field.required && !field.configured && !values[field.id]?.trim(),
@@ -1211,7 +1225,7 @@ export default function PublishPage() {
     const payload = Object.fromEntries(
       Object.entries(values).filter(([, value]) => value.trim().length > 0),
     );
-    if (!Object.keys(payload).length && !activate) {
+    if (!Object.keys(payload).length) {
       setError(`Nothing new to save for ${provider.label}.`);
       return;
     }
@@ -1226,18 +1240,20 @@ export default function PublishPage() {
           body: JSON.stringify({
             provider: provider.id,
             values: payload,
-            activate,
+            activate: adopt,
             confirm_external_action: true,
           }),
         }),
       );
       setCredentialDrafts((current) => ({ ...current, [provider.id]: {} }));
       setConnection(body.connection);
-      if (activate) { setTargets([]); setPostTypes({}); }
+      // The destinations chosen for the post in hand were picked against the
+      // old engine's accounts, which the new one does not have.
+      if (adopt) { setTargets([]); setPostTypes({}); }
       setOpenProvider(null);
       setNotice(
-        `Saved ${body.result.written_keys.join(", ")} to .env.` +
-        (activate ? ` ${t("publish.nowDefault", { label: provider.label })}` : ""),
+        `Saved ${body.result.written_keys.join(", ")} to .env.`
+        + (adopt ? ` ${t("publish.nowDefault", { label: provider.label })}` : ""),
       );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Credentials could not be saved.");
@@ -1848,6 +1864,8 @@ export default function PublishPage() {
         <div className="engine-grid">
           {connection?.providers.map((provider) => {
             const isDefault = provider.id === connection.active_provider;
+            const defaultIsUsable = Boolean(connection.providers.find(
+              (item) => item.id === connection.active_provider)?.configured);
             const status = engineState(provider);
             // Whether this engine could deliver if asked. Whether it should is
             // the switch below, and the two are deliberately not the same test.
@@ -2163,11 +2181,15 @@ export default function PublishPage() {
                         variant="primary"
                         disabled={!canExecute}
                         busy={busy === `${provider.id}-credentials`}
-                        onClick={() => void saveCredentials(provider, !isDefault)}
+                        // Adopted only when the engine currently in charge has
+                        // no key of its own, which is the case a fresh install
+                        // starts in: the default falls back to bundle_social
+                        // whether or not anyone has configured it.
+                        onClick={() => void saveCredentials(provider, !defaultIsUsable)}
                       >
                         {busy === `${provider.id}-credentials`
                           ? t("publish.saving")
-                          : isDefault ? t("publish.saveToEnv") : t("publish.saveAndUse")}
+                          : t("publish.saveToEnv")}
                       </Button>
                       <a className={buttonClass({ variant: "quiet" })} href={provider.dashboard_url} target="_blank" rel="noopener noreferrer">
                         Get a key

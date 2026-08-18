@@ -395,6 +395,7 @@ export const fr: Messages = {
     saveKeyFirst: "Enregistrez d’abord la clé d’API de ce moteur.",
     saving: "Enregistrement…",
     saveToEnv: "Enregistrer dans .env",
+    nowDefault: "{label} est désormais le moteur par défaut.",
     engineSetup: "Configuration des moteurs",
     notOffering: "Ne propose aucune destination : {engines}.",
     enginesOff: "Désactivés ici : {engines}.",

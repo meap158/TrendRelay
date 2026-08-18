@@ -391,6 +391,7 @@ export const en = {
     saveKeyFirst: "Save this engine's API key first.",
     saving: "Saving",
     saveToEnv: "Save to .env",
+    nowDefault: "{label} is now the default engine.",
     engineSetup: "Engine setup",
     notOffering: "Not offering destinations: {engines}.",
     enginesOff: "Switched off here: {engines}.",

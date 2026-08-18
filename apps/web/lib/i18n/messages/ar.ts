@@ -385,6 +385,7 @@ export const ar: Messages = {
     saveKeyFirst: "احفظ مفتاح API لهذا المحرّك أولاً.",
     saving: "جارٍ الحفظ",
     saveToEnv: "احفظ في .env",
+    nowDefault: "أصبح {label} المحرّك الافتراضي.",
     engineSetup: "إعداد المحرّكات",
     notOffering: "لا توفّر وجهات: {engines}.",
     enginesOff: "موقوفة هنا: {engines}.",
