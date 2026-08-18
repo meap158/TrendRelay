@@ -1214,6 +1214,23 @@ def list_autopilot_executions(
 
 class ExceptionDecision(BaseModel):
     confirm_external_action: bool = False
+    #: The operator's approval-time call to skip the scheduled wait and
+    #: deliver immediately. Auto-draft authority still delivers a draft.
+    publish_now: bool = False
+
+
+class ExceptionEdit(BaseModel):
+    """What an operator may rewrite on a held post before approving it.
+
+    Amending the frozen record keeps the approval promise intact: what is
+    approved is exactly what is sent - the operator just wrote part of it
+    themselves. Media stays frozen; changing the clip is a different post.
+    """
+
+    title: str | None = Field(default=None, max_length=200)
+    caption: str | None = Field(default=None, min_length=1, max_length=4000)
+    first_comment: str | None = Field(default=None, max_length=2000)
+    thread: list[str] | None = Field(default=None, max_length=24)
 
 
 def _held_execution(
@@ -1449,13 +1466,55 @@ def approve_autopilot_execution(
     from trendrelay_api.campaign_runner import approve_execution
 
     try:
-        approve_execution(session, autopilot, execution)
+        approve_execution(session, autopilot, execution, publish_now=body.publish_now)
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     audit(
         session, request, workspace_id, user.id,
         "campaign.exception_approved", "campaign", campaign_id,
-        {"execution_id": execution.id, "state": execution.state},
+        {
+            "execution_id": execution.id,
+            "state": execution.state,
+            "publish_now": body.publish_now,
+        },
+    )
+    return {"execution": _execution_view(execution)}
+
+
+@router.patch("/{campaign_id}/autopilot/executions/{execution_id}")
+def edit_autopilot_execution(
+    workspace_id: str,
+    campaign_id: str,
+    execution_id: str,
+    body: ExceptionEdit,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Rewrite a held post before deciding on it.
+
+    Only while `proposed`: once approved, what was approved is what ships.
+    The amended record is still exactly what gets sent - the operator wrote
+    part of it themselves - and the approve gate's completeness check runs
+    against the edit, so removing the affiliate link or blanking the copy is
+    refused at approval rather than published.
+    """
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    _campaign(session, workspace_id, campaign_id)
+    execution = _held_execution(session, workspace_id, campaign_id, execution_id)
+    if "title" in body.model_fields_set:
+        execution.title = (body.title or "").strip() or None
+    if body.caption is not None:
+        execution.caption = body.caption
+    if "first_comment" in body.model_fields_set:
+        execution.first_comment = (body.first_comment or "").strip() or None
+    if body.thread is not None:
+        execution.thread = [part.strip() for part in body.thread if part.strip()]
+    execution.updated_at = utc_now()
+    audit(
+        session, request, workspace_id, user.id,
+        "campaign.exception_edited", "campaign", campaign_id,
+        {"execution_id": execution.id},
     )
     return {"execution": _execution_view(execution)}
 

@@ -101,9 +101,10 @@ def campaign_setup(session, tmp_path):
 def engine_stub(monkeypatch):
     calls: list = []
 
-    def fake_publish(session, autopilot, execution, *, at=None):
+    def fake_publish(session, autopilot, execution, *, at=None, delivery_override=None):
         calls.append({"execution": execution, "at": at,
-                      "authority": autopilot.authority})
+                      "authority": autopilot.authority,
+                      "delivery_override": delivery_override})
         job_id = f"publish_stub{len(calls)}"
         session.add(DurableJob(
             id=job_id, workspace_key=autopilot.workspace_id,
@@ -329,6 +330,72 @@ def test_an_unfinished_post_cannot_be_approved(session, tmp_path, engine_stub) -
         approve_execution(session, pilot, execution, now=NOW)
     assert execution.state == "proposed"
     assert engine_stub == []
+
+
+def test_publish_now_skips_the_wait_but_not_the_draft_promise(
+    session, tmp_path, monkeypatch
+) -> None:
+    """Approval can say now instead of at the slot.
+
+    The request goes out with delivery now and the current time - except
+    under auto-draft authority, whose engine-drafts-only promise not even an
+    explicit now overrides.
+    """
+    import trendrelay_api.integrations.publishing as publishing
+
+    campaign_setup(session, tmp_path)
+    captured: list = []
+
+    def fake_create(request, *, session=None):
+        captured.append(request)
+        session.add(DurableJob(
+            id=f"publish_stub{len(captured)}", workspace_key=request.workspace_id,
+            kind="workspace_publishing", status="queued", payload={}, max_attempts=1,
+        ))
+        session.flush()
+        return {"id": f"publish_stub{len(captured)}"}
+
+    monkeypatch.setattr(publishing, "create_publish_job", fake_create)
+    pilot = autopilot(session, delivery="schedule")
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+    later = NOW.replace(hour=NOW.hour + 2)
+
+    approve_execution(session, pilot, execution, now=later, publish_now=True)
+
+    assert captured[0].delivery == "now"
+    assert captured[0].date == later
+    assert execution.scheduled_at == later
+
+    # Auto-draft: publish-now still delivers a draft.
+    pilot.authority = "auto_draft"
+    session.query(PublicationExecution).delete()
+    session.commit()
+    run_campaign(session, pilot, now=NOW)
+    held = executions(session)[0]
+    approve_execution(session, pilot, held, now=later, publish_now=True)
+    assert captured[-1].delivery == "draft"
+
+
+def test_a_held_post_can_be_rewritten_and_approval_covers_the_rewrite(
+    session, tmp_path, engine_stub
+) -> None:
+    """Amending the frozen record keeps the promise: what is approved is
+    exactly what is sent - the operator wrote part of it themselves."""
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+
+    execution.caption = (
+        "Affiliate link; we may earn a commission.\n\nRewritten by hand."
+    )
+    execution.first_comment = "A comment the operator added."
+    approve_execution(session, pilot, execution, now=NOW)
+
+    sent = engine_stub[0]["execution"]
+    assert "Rewritten by hand." in sent.caption
+    assert sent.first_comment == "A comment the operator added."
 
 
 def test_a_held_slot_stays_held_and_a_dismissed_one_frees(

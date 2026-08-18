@@ -92,6 +92,7 @@ def _publish_execution(
     execution: PublicationExecution,
     *,
     at: datetime | None = None,
+    delivery_override: str | None = None,
 ) -> dict[str, Any]:
     """Create one publishing job from an execution's frozen inputs.
 
@@ -101,10 +102,13 @@ def _publish_execution(
     """
     from trendrelay_api.integrations.publishing import PublishRequest, create_publish_job
 
-    # Auto-draft authority proceeds unattended but only ever as engine drafts:
-    # the campaign fills a queue somebody looks at, and nothing it does alone
-    # can reach an audience.
-    delivery = "draft" if autopilot.authority == "auto_draft" else autopilot.delivery
+    # Auto-draft authority delivers only ever as engine drafts - its whole
+    # promise - so not even an explicit publish-now overrides it. Everywhere
+    # else the override is the operator's approval-time decision.
+    delivery = (
+        "draft" if autopilot.authority == "auto_draft"
+        else delivery_override or autopilot.delivery
+    )
     request = PublishRequest(
         workspace_id=autopilot.workspace_id,
         campaign_id=autopilot.campaign_id,
@@ -484,6 +488,7 @@ def approve_execution(
     execution: PublicationExecution,
     *,
     now: datetime | None = None,
+    publish_now: bool = False,
 ) -> PublicationExecution:
     """Deliver a held execution, exactly as it was frozen.
 
@@ -492,6 +497,11 @@ def approve_execution(
     time is clamped to now when it has already passed, because an engine asked
     to post in the past either refuses or posts immediately anyway, and the
     record should say which time was really requested.
+
+    `publish_now` is the operator's approval-time decision to skip the wait:
+    the post goes out immediately, whatever the campaign's delivery mode -
+    except under auto-draft authority, whose engine-drafts-only promise not
+    even an explicit now overrides.
     """
     if execution.state != "proposed":
         raise ValueError(
@@ -514,8 +524,13 @@ def approve_execution(
         execution.updated_at = moment
         return execution
     scheduled = _as_utc(execution.scheduled_at)
-    at = scheduled if scheduled and scheduled > moment else moment
-    job = _publish_execution(session, autopilot, execution, at=at)
+    at = moment if publish_now else (
+        scheduled if scheduled and scheduled > moment else moment
+    )
+    job = _publish_execution(
+        session, autopilot, execution, at=at,
+        delivery_override="now" if publish_now else None,
+    )
     execution.job_id = job["id"]
     execution.state = "queued"
     execution.queued_at = moment

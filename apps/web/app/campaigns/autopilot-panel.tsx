@@ -590,6 +590,8 @@ export function AutopilotPanel({
   // answers "how does the month look". Null month means the current one.
   const [timelineView, setTimelineView] = useState<"list" | "calendar">("list");
   const [calendarMonth, setCalendarMonth] = useState<string | null>(null);
+  // The held post being rewritten before its decision, if any.
+  const [editingHeld, setEditingHeld] = useState<HeldExecution | null>(null);
 
   const base = `/api/workspaces/${workspaceId}/campaigns/${campaignId}`;
   /** The same media the Publish composer plays, streamed from the same roots. */
@@ -652,7 +654,11 @@ export function AutopilotPanel({
     });
   }, [loadExceptions]);
 
-  async function decideException(executionId: string, action: "approve" | "dismiss") {
+  async function decideException(
+    executionId: string,
+    action: "approve" | "dismiss",
+    { publishNow = false } = {},
+  ) {
     setBusy(`${action}-${executionId}`);
     try {
       const response = await apiFetch(
@@ -661,18 +667,54 @@ export function AutopilotPanel({
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(
-            action === "approve" ? { confirm_external_action: true } : {},
+            action === "approve"
+              ? { confirm_external_action: true, publish_now: publishNow }
+              : {},
           ),
         },
       );
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.detail ?? "The decision was refused.");
-      succeed(action === "approve"
-        ? "Approved. The post is queued exactly as it was frozen."
-        : "Dismissed. Its slot and its clip are free again.");
+      succeed(action === "dismiss"
+        ? "Dismissed. Its slot and its clip are free again."
+        : publishNow
+          ? "Approved and publishing now."
+          : "Approved. The post is queued exactly as it was frozen.");
       await loadExceptions();
     } catch (reason) {
       fail(explainFailure(reason, "The decision was refused."));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  /** Save the operator's rewrite of a held post; approval still covers it. */
+  async function saveHeldEdit(
+    executionId: string,
+    edit: {
+      title: string | null;
+      caption: string;
+      first_comment: string | null;
+      thread: string[];
+    },
+  ) {
+    setBusy(`edit-held-${executionId}`);
+    try {
+      const response = await apiFetch(
+        `${base}/autopilot/executions/${executionId}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(edit),
+        },
+      );
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.detail ?? "The edit was refused.");
+      succeed("Saved. What you approve is what you wrote.");
+      setEditingHeld(null);
+      await loadExceptions();
+    } catch (reason) {
+      fail(explainFailure(reason, "The edit was refused."));
     } finally {
       setBusy("");
     }
@@ -1450,28 +1492,92 @@ export function AutopilotPanel({
                       ? ` · ${new Date(item.scheduled_at).toLocaleString()}`
                       : ""}
                   </small>
-                  {item.first_comment && <>
-                    <strong>First comment</strong>
-                    <pre>{item.first_comment}</pre>
-                  </>}
-                  {item.thread.map((reply, index) => (
-                    <div key={`${item.id}-reply-${index}`}>
-                      <strong>Reply {index + 1}</strong>
-                      <pre>{reply}</pre>
-                    </div>
-                  ))}
-                  <p className="autopilot-note" role="status">{item.held_reason}</p>
-                  {canEdit && (
-                    <span className="campaign-exception-actions">
-                      <Button variant="primary" size="sm"
-                        busy={busy === `approve-${item.id}`}
-                        onClick={() => void decideException(item.id, "approve")}
-                      >Approve</Button>
-                      <Button variant="quiet" size="sm"
-                        busy={busy === `dismiss-${item.id}`}
-                        onClick={() => void decideException(item.id, "dismiss")}
-                      >Dismiss</Button>
-                    </span>
+                  {editingHeld?.id === item.id ? (
+                    /* The rewrite: everything the post says is the
+                       operator's to change; the media stays frozen. The
+                       approve gate still refuses an edit that removes the
+                       link or blanks the copy. */
+                    <form
+                      className="campaign-approval-edit"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        const form = new FormData(event.currentTarget);
+                        void saveHeldEdit(item.id, {
+                          title: String(form.get("title") ?? "").trim() || null,
+                          caption: String(form.get("caption") ?? ""),
+                          first_comment:
+                            String(form.get("first_comment") ?? "").trim() || null,
+                          thread: item.thread.map((_, index) =>
+                            String(form.get(`reply-${index}`) ?? "").trim(),
+                          ).filter(Boolean),
+                        });
+                      }}
+                    >
+                      {item.title !== null && (
+                        <label>Title
+                          <input name="title" defaultValue={item.title ?? ""}
+                            maxLength={200} />
+                        </label>
+                      )}
+                      <label>Caption
+                        <textarea name="caption" rows={5} maxLength={4000}
+                          defaultValue={item.caption} required />
+                      </label>
+                      <label>First comment
+                        <textarea name="first_comment" rows={3} maxLength={2000}
+                          defaultValue={item.first_comment ?? ""} />
+                      </label>
+                      {item.thread.map((reply, index) => (
+                        <label key={`${item.id}-edit-reply-${index}`}>
+                          Reply {index + 1}
+                          <textarea name={`reply-${index}`} rows={2}
+                            maxLength={4000} defaultValue={reply} />
+                        </label>
+                      ))}
+                      <span className="campaign-exception-actions">
+                        <Button type="submit" variant="primary" size="sm"
+                          busy={busy === `edit-held-${item.id}`}>Save</Button>
+                        <Button variant="quiet" size="sm"
+                          onClick={() => setEditingHeld(null)}>Cancel</Button>
+                      </span>
+                    </form>
+                  ) : (
+                    <>
+                      {item.first_comment && <>
+                        <strong>First comment</strong>
+                        <pre>{item.first_comment}</pre>
+                      </>}
+                      {item.thread.map((reply, index) => (
+                        <div key={`${item.id}-reply-${index}`}>
+                          <strong>Reply {index + 1}</strong>
+                          <pre>{reply}</pre>
+                        </div>
+                      ))}
+                      <p className="autopilot-note" role="status">{item.held_reason}</p>
+                      {canEdit && (
+                        <span className="campaign-exception-actions">
+                          <Button variant="primary" size="sm"
+                            busy={busy === `approve-${item.id}`}
+                            onClick={() => void decideException(item.id, "approve")}
+                          >Approve</Button>
+                          <Button variant="secondary" size="sm"
+                            busy={busy === `approve-${item.id}`}
+                            onClick={() => {
+                              if (!window.confirm(
+                                `Publishes to ${item.destination_label ?? item.platform} immediately instead of waiting for the slot. Continue?`,
+                              )) return;
+                              void decideException(item.id, "approve", { publishNow: true });
+                            }}
+                          >Publish now</Button>
+                          <Button variant="quiet" size="sm"
+                            onClick={() => setEditingHeld(item)}>Edit</Button>
+                          <Button variant="quiet" size="sm"
+                            busy={busy === `dismiss-${item.id}`}
+                            onClick={() => void decideException(item.id, "dismiss")}
+                          >Dismiss</Button>
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
               </li>

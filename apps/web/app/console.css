@@ -831,6 +831,9 @@ html { scroll-behavior: smooth; }
 /* Without a poster the frame has no intrinsic width and collapses to
    nothing; here the column is its width, and the aspect ratio its height. */
 .campaign-approval-list .post-preview-frame { inline-size: 100%; }
+.campaign-approval-edit { display: grid; gap: 8px; }
+.campaign-approval-edit label { display: grid; gap: 3px; color: var(--muted); font-size: 11px; }
+.campaign-approval-edit input, .campaign-approval-edit textarea { inline-size: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; font-size: 12px; }
 @media (max-width: 900px) { .campaign-approval-list > li { grid-template-columns: 1fr; } }
 
 /* The post's own media in the timeline, sized as a preview rather than a
