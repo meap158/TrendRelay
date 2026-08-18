@@ -32,6 +32,7 @@ import argparse
 import asyncio
 import contextlib
 import json
+import os
 import random
 import re
 import sys
@@ -198,31 +199,6 @@ SERVICE_ERROR_MARKERS = ("服务异常", "重新刷新", "刷新试试", "网络
 # it is the one certain sign the whole list is in the DOM.
 END_MARKERS = ("暂时没有更多了", "没有更多了", "已经到底")
 
-# A banner dropped into the page so the person watching the window knows to
-# finish the scroll. Douyin withholds its infinite scroll from an automated
-# session - even trusted synthetic keyboard and wheel input do not trigger it,
-# while a real hand does - so when the automated scroll stalls at the first
-# page, the reliable path is to let the operator carry it to the bottom, which
-# this asks for in the window they are already looking at. Removed once the end
-# marker appears.
-BANNER = r"""(text) => {
-  let el = document.getElementById('trendrelay-scroll-hint');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'trendrelay-scroll-hint';
-    el.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:2147483647;' +
-      'background:#111;color:#fff;font:600 14px system-ui,sans-serif;padding:10px 16px;' +
-      'text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.4)';
-    document.documentElement.appendChild(el);
-  }
-  el.textContent = text;
-}"""
-
-REMOVE_BANNER = r"""() => {
-  const el = document.getElementById('trendrelay-scroll-hint');
-  if (el) el.remove();
-}"""
-
 # How many posts the page itself says the profile has, so a partial load can be
 # told from a finished one.
 CLAIMED_TOTAL = r"""() => {
@@ -336,10 +312,33 @@ async def enumerate_profile(
     url = f"https://www.douyin.com/user/{sec_uid}"
     ids: set[str] = set()
 
+    # Point this at an already-running Chrome's debugging endpoint to drive the
+    # operator's own browser instead of launching one. Their real, warmed
+    # session is the one Douyin trusts to paginate a profile - a
+    # Playwright-launched browser is flagged and served only the first page,
+    # even with a persistent profile - so when the launched path stalls, this is
+    # the way to use an environment Douyin will actually extend.
+    cdp_url = os.environ.get("DOUYIN_CDP_URL", "").strip()
+
     async with async_playwright() as playwright:
-        context = await _launch_context(playwright, profile_dir, headless)
+        connected_browser = None
+        if cdp_url:
+            connected_browser = await playwright.chromium.connect_over_cdp(cdp_url)
+            context = (
+                connected_browser.contexts[0]
+                if connected_browser.contexts
+                else await connected_browser.new_context()
+            )
+            # Its own tab, so the operator's other tabs are left alone.
+            page = await context.new_page()
+        else:
+            context = await _launch_context(playwright, profile_dir, headless)
+            page = context.pages[0] if context.pages else await context.new_page()
+
         await context.add_init_script(DISMISS_OBSERVER)
-        if cookie_file and cookie_file.is_file():
+        # A connected browser already carries the operator's cookies; only the
+        # launched one needs the saved session seeded into it.
+        if not cdp_url and cookie_file and cookie_file.is_file():
             cookies = _load_cookies(cookie_file)
             if cookies:
                 await context.add_cookies(cookies)
@@ -366,7 +365,6 @@ async def enumerate_profile(
 
             asyncio.ensure_future(read())
 
-        page = context.pages[0] if context.pages else await context.new_page()
         page.on("response", on_response)
         timeout_ms = max(30, int(timeout_seconds)) * 1000
 
@@ -416,18 +414,6 @@ async def enumerate_profile(
                 file=sys.stderr,
             )
 
-        # Ask the operator to finish the scroll, in the window they are already
-        # watching. Douyin withholds infinite scroll from an automated session,
-        # so the automated pass below may stall at the first page; a real hand
-        # on the wheel carries it the rest of the way, and this harvests
-        # throughout until the end marker appears.
-        assisted_hint = (
-            "TrendRelay: scroll to the very bottom of this profile to load every "
-            "video (Ctrl+End works), then this closes on its own."
-        )
-        with contextlib.suppress(Exception):
-            await page.evaluate(BANNER, assisted_hint)
-
         stable = 0
         reached_end = False
         for round_number in range(1, max(1, int(max_scrolls)) + 1):
@@ -436,18 +422,11 @@ async def enumerate_profile(
             before = len(ids)
             scroll_state = None
             try:
-                # Close the sign-up popup every round - clicking its own X,
-                # hiding what is left, dropping the scroll-locking backdrop -
-                # plus Escape, since merely hiding it left the operator closing
-                # it by hand.
                 await page.evaluate(DISMISS_NOW)
                 await page.keyboard.press("Escape")
-                # Keep the banner up (DISMISS_NOW may have cleared overlays) and
-                # advance the grid's own scroller. On a trusted session this
-                # pages by itself; on a flagged one it stalls and the operator's
-                # scroll does the work while we keep harvesting.
-                with contextlib.suppress(Exception):
-                    await page.evaluate(BANNER, assisted_hint)
+                # Advance the grid's own scroller with scrollBy, the one thing
+                # measured to actually move it, and back it up with a native
+                # scroll of the last tile into view.
                 scroll_state = await page.evaluate(GRID_SCROLL)
                 try:
                     await page.locator('a[href*="/video/"]').last.scroll_into_view_if_needed(
@@ -485,15 +464,9 @@ async def enumerate_profile(
                 break
             if limit and len(ids) >= limit:
                 break
-            # Patient about idling: the operator may take a moment to reach for
-            # the window, so a stall waits many rounds (not a handful) before
-            # giving up, and any new video resets it.
             stable = stable + 1 if len(ids) == before else 0
             if stable >= max(1, int(idle_rounds)):
                 break
-
-        with contextlib.suppress(Exception):
-            await page.evaluate(REMOVE_BANNER)
 
         print(
             f"Enumerated {len(ids)} video(s) over {feed_requests['count']} feed "
@@ -501,7 +474,13 @@ async def enumerate_profile(
             file=sys.stderr,
         )
 
-        await context.close()
+        if connected_browser is not None:
+            # Leave the operator's Chrome running - just close our tab and drop
+            # the connection.
+            with contextlib.suppress(Exception):
+                await page.close()
+        else:
+            await context.close()
 
     ordered = sorted(ids)
     return ordered[:limit] if limit else ordered
@@ -528,10 +507,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit", type=int, default=0, help="Stop after this many ids; 0 for all."
     )
     parser.add_argument("--max-scrolls", type=int, default=300)
-    # Patient by default: a flagged session needs the operator to finish the
-    # scroll, and they may take a moment to reach the window, so a stall waits
-    # tens of rounds before giving up rather than a handful.
-    parser.add_argument("--idle-rounds", type=int, default=30)
+    parser.add_argument("--idle-rounds", type=int, default=10)
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument(
         "--profile-dir",
