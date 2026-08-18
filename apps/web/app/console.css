@@ -801,7 +801,6 @@ html { scroll-behavior: smooth; }
    current day outlined - the shape Buffer and Zernio both use for the same
    question. */
 .campaign-timeline-tools { display: flex; gap: 8px; align-items: center; }
-.campaign-view-switch { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
 .campaign-calendar { display: grid; gap: 6px; }
 .campaign-calendar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .campaign-calendar-head strong { font-size: 14px; font-weight: 600; }

@@ -164,6 +164,29 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .recipe-grid dd { margin: 4px 0 0; line-height: 1.4; }
 .library-enrichment > div > p { color: var(--muted); }
 .library-enrichment .ui-button { justify-self: start; }
+/* Asking for a machine reading, at the top of the form its answer feeds. One
+   strip: what to read, and the button. */
+.auto-transcribe { display: grid; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-muted, var(--panel)); }
+.auto-transcribe-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.auto-transcribe-label { color: var(--text); font-size: 12px; font-weight: 600; }
+.auto-transcribe-modes { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.auto-transcribe-modes label { display: flex; gap: 5px; align-items: center; color: var(--muted); font-size: 11px; font-weight: 500; }
+.auto-transcribe-modes input { inline-size: auto; margin: 0; }
+/* The button sits at the end of the strip rather than under it. */
+.auto-transcribe-head > .ui-button { margin-inline-start: auto; }
+.auto-transcribe-progress { display: grid; gap: 4px; }
+.auto-transcribe-progress progress { inline-size: 100%; block-size: 5px; }
+.auto-transcribe-progress small { color: var(--muted); font-size: 10px; }
+.auto-transcribe-problem { margin: 0; color: var(--danger, #b42318); font-size: 11px; line-height: 1.45; }
+/* A draft belongs under the field it is a candidate for, folded: the text is
+   often long and this form is already tall. */
+.transcript-draft { display: grid; gap: 6px; margin-top: -3px; padding: 7px 10px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); }
+.transcript-draft-head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: space-between; }
+.transcript-draft-head > span:first-child { display: grid; gap: 1px; min-width: 0; }
+.transcript-draft-head strong { font-size: 11px; }
+.transcript-draft-head small { color: var(--muted); font-size: 10px; font-weight: 400; }
+.transcript-draft-actions { display: flex; flex: none; gap: 6px; align-items: center; }
+.transcript-draft-text { margin: 0; max-block-size: 160px; overflow: auto; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.5; white-space: pre-wrap; }
 @media (max-width: 1050px) {
   .library-layout { grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr); }
   .library-detail-grid { grid-template-columns: 1fr; }
@@ -194,9 +217,6 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .library-collection-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
 .library-collection-toolbar > strong { color: var(--muted); font-size: 11px; font-weight: 600; }
 .library-collection-actions { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; }
-.library-view-switcher { display: inline-flex; justify-self: end; margin-inline-start: auto; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius); background: #f5f7f9; }
-.library-view-switcher button { display: inline-flex; gap: 5px; align-items: center; border: 0; border-radius: var(--radius-sm); padding: 6px 9px; color: var(--muted); background: transparent; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
-.library-view-switcher button.selected { color: var(--text); background: var(--panel); box-shadow: 0 1px 2px rgba(29, 38, 48, 0.12); }
 .library-collection { width: 100%; min-width: 0; box-sizing: border-box; }
 .library-thumbnail-frame { position: relative; width: 92px; height: 58px; overflow: hidden; border-radius: var(--radius-sm); background: #edf0f3; }
 .library-thumbnail-frame .library-thumbnail { width: 100%; height: 100%; }
@@ -238,8 +258,9 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .library-category-bar, .library-collection-toolbar, .library-collection-actions { width: 100%; min-width: 0; box-sizing: border-box; }
 .library-collection-toolbar { min-height: 34px; }
 .library-collection-actions { min-width: 0; }
-.library-view-switcher { flex: 0 0 auto; }
-.library-view-switcher button { justify-content: center; width: 32px; min-width: 32px; height: 32px; padding: 0; }
+/* Square, icon-only segments here: the page's layout, not the control's. */
+.library-collection-actions .ui-segmented { flex: 0 0 auto; }
+.library-collection-actions .ui-segmented button { justify-content: center; width: 32px; min-width: 32px; height: 32px; padding: 0; }
 @media (max-width: 1050px) {
   .library-category-bar { align-items: stretch; flex-direction: column; }
   .library-category-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; overflow: visible; }
@@ -258,7 +279,7 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
   .library-category-bar label { min-height: 34px; }
   .library-category-bar select { flex: 1; min-height: 34px; }
   .library-collection-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-  .library-view-switcher button { width: 40px; min-width: 40px; height: 40px; }
+  .library-collection-actions .ui-segmented button { width: 40px; min-width: 40px; height: 40px; }
 }
 @media (max-width: 480px) {
   .library-collection-actions { grid-template-columns: 1fr; }

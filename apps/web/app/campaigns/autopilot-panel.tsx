@@ -22,6 +22,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiBaseUrl } from "../../lib/api";
 
 import { Button } from "../ui/button";
+import { SegmentedControl } from "../ui/segmented";
 import { ActionIcon } from "../ui/action-icons";
 import { Dialog } from "../ui/dialog";
 import { Badge, Card, Switch } from "../ui/primitives";
@@ -2477,14 +2478,15 @@ export function AutopilotPanel({
         title="Posting timeline"
         aside={
           <span className="campaign-timeline-tools">
-            <span className="campaign-view-switch" role="group" aria-label="Timeline view">
-              <Button variant={timelineView === "list" ? "secondary" : "quiet"} size="sm"
-                aria-pressed={timelineView === "list"}
-                onClick={() => setTimelineView("list")}>List</Button>
-              <Button variant={timelineView === "calendar" ? "secondary" : "quiet"} size="sm"
-                aria-pressed={timelineView === "calendar"}
-                onClick={() => setTimelineView("calendar")}>Calendar</Button>
-            </span>
+            <SegmentedControl
+              label="Timeline view"
+              value={timelineView}
+              onChange={setTimelineView}
+              options={[
+                { value: "list", label: "List" },
+                { value: "calendar", label: "Calendar" },
+              ]}
+            />
             <Button variant="secondary" size="sm" busy={busy === "preview"}
               disabled={!ready.configured}
               onClick={() => void loadPreview()}><ActionIcon name="refresh" />Refresh outlook</Button>

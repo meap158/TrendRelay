@@ -109,6 +109,18 @@ a.ui-button { text-decoration: none; }
 @keyframes ui-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .ui-button-spinner { animation-duration: 2.4s; } }
 
+/* --- segmented control ------------------------------------------------------ */
+/* An inset track with the chosen option raised out of it. The campaign timeline
+ * used to put whole buttons in a track of this shape, so their borders and
+ * filled variants fought the track and the pair read as two buttons in a box. */
+.ui-segmented { display: inline-flex; flex: none; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-raised); }
+.ui-segmented button { display: inline-flex; gap: 5px; align-items: center; min-height: 26px; border: 0; border-radius: var(--radius-sm); padding: 5px 10px; color: var(--muted); background: transparent; font: inherit; font-size: 11px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.ui-segmented button:hover:not(.selected) { color: var(--text); }
+/* Raised rather than merely tinted: on a track this small a colour change alone
+ * reads as a hover state rather than as the current choice. */
+.ui-segmented button.selected { color: var(--text); background: var(--panel); box-shadow: 0 1px 2px rgb(29 38 48 / 12%); }
+.ui-segmented button:focus-visible { outline: 2px solid var(--link); outline-offset: -1px; }
+
 /* --- badge ----------------------------------------------------------------- */
 .ui-badge {
   display: inline-flex;

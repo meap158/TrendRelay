@@ -13,12 +13,14 @@ import { blurredVersion, handoffPath, openingCut } from "../../lib/media-rules";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, buttonClass } from "../ui/button";
 import { Dialog } from "../ui/dialog";
+import { SegmentedControl } from "../ui/segmented";
 import { ActionIcon, bulkActionIcon } from "../ui/action-icons";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Badge } from "../ui/primitives";
 import { CaptionEditor } from "./caption-editor";
 import { ClipEditor } from "./clip-editor";
 import { EffectEditor } from "./effect-editor";
+import { AutoTranscribe, TranscriptDraft } from "./auto-transcribe";
 import { TranscriptionSwitch } from "./transcription-setup";
 import {
   AssetFilters,
@@ -421,7 +423,19 @@ function EffectActivity({
     </section>
   );
 }
-type Transcript = { id: string; kind: "speech" | "ocr"; language: string; text: string };
+/**
+ * `provider` and `status` are what separate a machine reading from a reviewed
+ * one. The API has always sent both; nothing read them until the drafts had
+ * somewhere to appear.
+ */
+type Transcript = {
+  id: string;
+  kind: "speech" | "ocr";
+  language: string;
+  text: string;
+  provider: string;
+  status: string;
+};
 type Analysis = {
   version: number;
   spoken_hook?: string | null;
@@ -481,6 +495,20 @@ async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
   if (!response.ok) throw new Error(body.detail ?? "Media library request failed.");
   return body;
+}
+
+/**
+ * What a person signed off, for the field that holds exactly that.
+ *
+ * A machine draft used to land here too, because this only matched on `kind`.
+ * That put unchecked text in the reviewed box, where saving the form once
+ * promoted it to reviewed without anybody having read it — the drafts appear
+ * under the field now instead, with a button that says what it is doing.
+ */
+function reviewedText(asset: Asset, kind: "speech" | "ocr"): string {
+  return asset.transcripts.find(
+    (item) => item.kind === kind && item.status === "reviewed",
+  )?.text ?? "";
 }
 
 function displaySize(bytes: number): string {
@@ -881,6 +909,11 @@ export default function LibraryPage() {
   const latestSortOrder = useRef(sortOrder);
   const latestWorkspaceId = useRef(workspaceId);
   const refreshSequence = useRef(0);
+  // The two reviewed-text boxes, so a machine draft can be copied into one on
+  // request. The form reads its values from the DOM, so writing to the node is
+  // what the submit will pick up.
+  const speechField = useRef<HTMLTextAreaElement | null>(null);
+  const ocrField = useRef<HTMLTextAreaElement | null>(null);
   const [viewMode, setViewMode] = usePersistedState<ViewMode>(
     "trendrelay.library.view", "gallery", isViewMode,
   );
@@ -1541,10 +1574,19 @@ export default function LibraryPage() {
             </strong>
             <div className="library-collection-actions">
               {canImport && <Button variant="quiet" size="sm" busy={busy === "sync"} onClick={() => void syncDownloads()}><ActionIcon name="refresh" />{busy === "sync" ? "Refreshing" : "Refresh downloads"}</Button>}
-              <div className="library-view-switcher" role="group" aria-label={t("library.viewLabel")}>
-                <button type="button" className={viewMode === "gallery" ? "selected" : ""} aria-label={t("library.galleryView")} title={t("library.galleryView")} aria-pressed={viewMode === "gallery"} onClick={() => chooseView("gallery")}><ActionIcon name="grid" /></button>
-                <button type="button" className={viewMode === "list" ? "selected" : ""} aria-label={t("library.listView")} title={t("library.listView")} aria-pressed={viewMode === "list"} onClick={() => chooseView("list")}><ActionIcon name="list" /></button>
-              </div>
+              {/* The control this one always was, now shared - the campaign
+                  timeline had a second version of it that did not match. */}
+              <SegmentedControl
+                label={t("library.viewLabel")}
+                value={viewMode}
+                onChange={chooseView}
+                options={[
+                  { value: "gallery", title: t("library.galleryView"),
+                    icon: <ActionIcon name="grid" /> },
+                  { value: "list", title: t("library.listView"),
+                    icon: <ActionIcon name="list" /> },
+                ]}
+              />
             </div>
           </div>
           </div>
@@ -1882,14 +1924,37 @@ export default function LibraryPage() {
                     <h3>{t("recipe.reviewedHeading")}</h3>
                     <p>{t("recipe.reviewedIntro")}</p>
                   </div>
-                  <form onSubmit={enrich}>
+                  {/* Keyed to the asset. These fields are uncontrolled, so
+                      without it selecting another clip left the previous one's
+                      transcript sitting in the boxes — which matters far more
+                      now that a draft can be poured into them. */}
+                  <form key={selected.id} onSubmit={enrich}>
+                    <AutoTranscribe
+                      workspaceId={workspaceId}
+                      assetId={selected.id}
+                      hasAudio={selected.has_audio}
+                      mediaKind={selected.media_kind}
+                      apiFetch={apiFetch}
+                      canEdit={canEnrich}
+                      onFinished={() => void refresh()}
+                    />
                     <div className="library-form-row">
                       <label>{t("recipe.language")}<input name="language" defaultValue="und" /></label>
                       <label>{t("recipe.productShown")}<input name="product_shown" defaultValue={selected.analysis?.product_shown ?? ""} /></label>
                       <label>{t("recipe.creativeFormat")}<input name="creative_format" defaultValue={selected.analysis?.creative_format ?? ""} placeholder="faceless demo" /></label>
                     </div>
-                    <label>{t("recipe.reviewedSpeech")}<textarea name="speech_text" rows={5} defaultValue={selected.transcripts.find((item) => item.kind === "speech")?.text ?? ""} /></label>
-                    <label>{t("recipe.reviewedText")}<textarea name="ocr_text" rows={4} defaultValue={selected.transcripts.find((item) => item.kind === "ocr")?.text ?? ""} /></label>
+                    <label>{t("recipe.reviewedSpeech")}<textarea ref={speechField} name="speech_text" rows={5} defaultValue={reviewedText(selected, "speech")} /></label>
+                    <TranscriptDraft
+                      transcripts={selected.transcripts}
+                      kind="speech"
+                      onUse={(text) => { if (speechField.current) speechField.current.value = text; }}
+                    />
+                    <label>{t("recipe.reviewedText")}<textarea ref={ocrField} name="ocr_text" rows={4} defaultValue={reviewedText(selected, "ocr")} /></label>
+                    <TranscriptDraft
+                      transcripts={selected.transcripts}
+                      kind="ocr"
+                      onUse={(text) => { if (ocrField.current) ocrField.current.value = text; }}
+                    />
                     <div className="library-form-row">
                       <label>{t("recipe.sceneCuts")}<input name="scene_boundaries_ms" placeholder="1200, 2800, 5100" /></label>
                       <label>{t("recipe.productReveal")}<input name="product_reveal_ms" type="number" min={0} defaultValue={selected.analysis?.product_reveal_ms ?? ""} /></label>
