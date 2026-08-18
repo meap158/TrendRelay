@@ -293,6 +293,15 @@ type MatchStrategy = {
 type Recommendations = {
   item_id: string | null;
   matches: OfferMatch[];
+  /**
+   * Which of the matches would actually attach, as the scheduler resolves it.
+   *
+   * Not the same as the top of the ranking: the resolver drops low confidence,
+   * caps the count, and honours pins and campaign mode over the scores. Sent by
+   * the API rather than worked out here, so the panel cannot come to disagree
+   * with what posts.
+   */
+  chosen_offer_ids?: string[];
   strategy: MatchStrategy;
 };
 
@@ -2022,10 +2031,22 @@ export function AutopilotPanel({
                       <strong>{match.score}</strong><small>% fit</small>
                     </span>
                     <span className="campaign-match-copy">
-                      <strong>{match.product_name}</strong>
+                      <strong>{match.product_name}
+                        {commissionLabel(match) && (
+                          <b className="campaign-match-pay">{commissionLabel(match)}</b>
+                        )}
+                      </strong>
                       <small>{match.reasons.join(" ")}</small>
                       <span>{match.matched_terms.slice(0, 6).map((term) => <em key={term}>{term}</em>)}</span>
                     </span>
+                    {/* Marked when nothing is pinned, because that is when the
+                        ranking below is a forecast rather than a menu: these
+                        are the ones smart match would attach. A pin overrides
+                        every one of them, so the mark would be a lie. */}
+                    {!pinnedOffers.size
+                      && recommendations.chosen_offer_ids?.includes(match.offer_id) && (
+                      <Badge tone="good">would post</Badge>
+                    )}
                     <Badge tone={match.confidence === "high" ? "good" : match.confidence === "medium" ? "warn" : "neutral"}>
                       {match.confidence}
                     </Badge>
@@ -2036,7 +2057,10 @@ export function AutopilotPanel({
             <div className="campaign-product-actions">
               <small>{pinnedOffers.size
                 ? `${pinnedOffers.size} pinned product${pinnedOffers.size === 1 ? "" : "s"}; these override smart matching for this post.`
-                : "Smart matching will choose the strongest evidence-backed products when each post is planned."}</small>
+                : recommendations.chosen_offer_ids?.length
+                  ? `Smart matching would attach the ${recommendations.chosen_offer_ids.length === 1
+                      ? "product" : `${recommendations.chosen_offer_ids.length} products`} marked above.`
+                  : "Nothing here is confident enough to attach unattended. Pin a product, or leave this post organic."}</small>
               <Button variant="primary" size="sm" busy={busy === "pin-products"}
                 onClick={() => void run("pin-products", async () => {
                   await json(await apiFetch(`${base}/queue/${productItem.id}`, {

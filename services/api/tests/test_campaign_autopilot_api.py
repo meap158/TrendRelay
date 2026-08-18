@@ -1039,3 +1039,70 @@ def test_a_selection_larger_than_the_cap_is_refused(workspace) -> None:
     )
 
     assert response.status_code == 422
+
+
+# --- what would actually attach, not just what fits ----------------------------
+
+
+def test_review_says_which_matches_would_be_posted(workspace) -> None:
+    """The ranking answers "what fits"; only the resolver answers "what posts".
+
+    They differ by the confidence floor, the per-post ceiling, and every pin or
+    campaign mode that outranks the scores - so the panel asks the API rather
+    than reapplying the rule and drifting from the scheduler.
+    """
+    campaign_id = campaign(workspace)
+    item = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={
+            "video_path": r"S:\media\espresso.mp4",
+            "title": "Portable coffee setup",
+            "body": "Make espresso anywhere with this compact coffee kit.",
+            "hashtags": ["coffee", "espresso"],
+        },
+    ).json()["item"]
+
+    body = request(
+        "GET",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/offer-recommendations",
+        params={"item_id": item["id"]},
+    ).json()
+
+    assert body["chosen_offer_ids"] == ["offer-1"]
+    # A forecast of the ranking, not the whole of it.
+    assert len(body["chosen_offer_ids"]) <= len(body["matches"])
+
+
+def test_a_pin_is_what_would_post_whatever_the_scores_say(workspace) -> None:
+    campaign_id = campaign(workspace)
+    item = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={"video_path": r"S:\media\x.mp4", "body": "Anything at all."},
+    ).json()["item"]
+    request(
+        "PATCH",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/{item['id']}",
+        json={"offer_ids": ["offer-1"]},
+    )
+
+    body = request(
+        "GET",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/offer-recommendations",
+        params={"item_id": item["id"]},
+    ).json()
+
+    assert body["chosen_offer_ids"] == ["offer-1"]
+
+
+def test_asking_about_the_campaign_forecasts_nothing(workspace) -> None:
+    # Without an item there is no post to attach anything to, so the ranking
+    # stands alone rather than pretending to predict one.
+    campaign_id = campaign(workspace)
+
+    body = request(
+        "GET",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/offer-recommendations",
+    ).json()
+
+    assert body["chosen_offer_ids"] == []
+    assert body["matches"]

@@ -840,7 +840,7 @@ def offer_recommendations(
         CampaignDestination.campaign_id == campaign_id,
         CampaignDestination.enabled.is_(True),
     )).all()
-    from trendrelay_api.campaign_offer_matcher import match_offers
+    from trendrelay_api.campaign_offer_matcher import chosen_matches, match_offers
 
     matches, strategy = match_offers(
         session,
@@ -850,9 +850,19 @@ def offer_recommendations(
         destinations=destinations,
         limit=limit,
     )
+    # Which of these would actually attach, resolved by the function the
+    # scheduler resolves with rather than by reapplying its rule here. The
+    # ranking answers "what fits"; only the resolver answers "what posts", and
+    # the two differ by the confidence floor, the per-post ceiling, and every
+    # pin and campaign mode that outranks the ranking entirely.
+    chosen: list[str] = []
+    if item:
+        picked, _ = chosen_matches(session, campaign, autopilot, item, destinations)
+        chosen = [match.offer_id for match in picked]
     return {
         "item_id": item.id if item else None,
         "matches": [match.view() for match in matches],
+        "chosen_offer_ids": chosen,
         "strategy": strategy,
     }
 

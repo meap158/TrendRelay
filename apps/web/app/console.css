@@ -1145,3 +1145,6 @@ html { scroll-behavior: smooth; }
   .campaign-work-split { grid-template-columns: minmax(0, 1fr); }
   .campaign-work-side { position: static; }
 }
+/* What the offer pays, on the review row. Beside the name because that is the
+   pair being compared - which product, and for how much. */
+.campaign-match-pay { margin-inline-start: 6px; color: var(--green); font-size: 11px; font-variant-numeric: tabular-nums; }
