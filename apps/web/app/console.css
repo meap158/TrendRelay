@@ -1101,8 +1101,12 @@ html { scroll-behavior: smooth; }
    filter is how somebody queues a post they never read. */
 .draft-packages { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .draft-package { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
-.draft-package-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
-.draft-package-head strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.draft-package-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+/* The title takes the room the thumbnail and the buttons leave, so a long
+   Douyin filename ellipsises instead of pushing the split control off. */
+.draft-package-head strong { flex: 1 1 auto; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.draft-package-head .picker-thumb { flex: 0 0 auto; }
+.draft-package-head .ui-button { flex: 0 0 auto; }
 .draft-package label { display: grid; }
 .draft-package textarea, .draft-package input { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; }
 /* The caption the clip carried where it came from. Quiet, and never editable:
@@ -1115,4 +1119,7 @@ html { scroll-behavior: smooth; }
    decision already made. */
 .draft-package-offers { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .draft-package-offers li { display: inline-flex; align-items: center; gap: 5px; min-width: 0; border-radius: 999px; padding: 2px 9px 2px 3px; background: var(--panel-raised); color: var(--muted); font-size: 10px; }
-.draft-package-offers li > span:last-child { overflow: hidden; max-width: 22ch; text-overflow: ellipsis; white-space: nowrap; }
+.draft-package-offers li > span:nth-child(2) { overflow: hidden; max-width: 22ch; text-overflow: ellipsis; white-space: nowrap; }
+/* What the offer pays. Set in the accent the rest of the app uses for money,
+   because on a chip about a product it is the number being compared. */
+.draft-package-offers b { flex: 0 0 auto; color: var(--green); font-variant-numeric: tabular-nums; }

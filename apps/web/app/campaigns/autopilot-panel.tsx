@@ -2087,6 +2087,14 @@ export function AutopilotPanel({
                 return (
                   <li key={entry.id} className="draft-package">
                     <div className="draft-package-head">
+                      {/* The clip itself, because a row named by a filename is
+                          not enough to write a caption against - and a hundred
+                          Douyin titles are the same shape as each other. */}
+                      <AssetThumbnail
+                        asset={lead}
+                        workspaceId={workspaceId}
+                        apiFetch={apiFetch}
+                      />
                       <strong>
                         {entry.kind === "carousel"
                           ? `${entry.assets.length} pictures - one carousel`
@@ -2118,6 +2126,14 @@ export function AutopilotPanel({
                               data-confidence={match.confidence}
                             ><strong>{match.score}</strong><small>%</small></span>
                             <span>{match.product_name}</span>
+                            {/* What it pays, through the one formatter that
+                                spells this the same way everywhere: the rate
+                                is the reason one offer beats another, so it
+                                belongs beside the offer. Absent when the
+                                network states none, rather than a dash. */}
+                            {commissionLabel(match) && (
+                              <b>{commissionLabel(match)}</b>
+                            )}
                           </li>
                         ))}
                       </ul>
