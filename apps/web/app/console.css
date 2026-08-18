@@ -952,15 +952,19 @@ html { scroll-behavior: smooth; }
 /* Three columns for three tabs. This declared four from before the merge to
    Content / Distribution & revenue / Timeline, which left a blank quarter
    hanging off the strip with the border running through it. */
-.campaign-work-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 2px -14px -10px; border-block: 1px solid var(--line); background: var(--panel); }
-.campaign-work-tabs button { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 8px; min-height: 56px; border: 0; border-inline-end: 1px solid var(--line); padding: 9px 12px 10px; color: var(--muted); background: transparent; text-align: start; cursor: pointer; }
+/* Sized to their words rather than stretched across the panel. Three tabs
+   divided the width sensibly; two took half each and became a pair of banners
+   with a number stranded in the middle of all that room. */
+.campaign-work-tabs { display: flex; flex-wrap: wrap; gap: 0; margin: 2px -14px -10px; border-block: 1px solid var(--line); background: var(--panel); }
+.campaign-work-tabs button { position: relative; display: grid; grid-template-columns: auto auto; align-items: baseline; gap: 1px 7px; min-height: 46px; border: 0; border-inline-end: 1px solid var(--line); padding: 7px 16px 8px; color: var(--muted); background: transparent; text-align: start; cursor: pointer; }
 .campaign-work-tabs button:last-child { border-inline-end: 0; }
 .campaign-work-tabs button:hover { color: var(--text); background: var(--panel-raised); }
 .campaign-work-tabs button.active { color: var(--link); background: var(--panel-raised); }
 .campaign-work-tabs button.active::after { position: absolute; inset: auto 0 -1px; height: 3px; background: var(--link); content: ""; }
 .campaign-work-tabs span { color: currentColor; font-size: 12px; font-weight: 600; }
 .campaign-work-tabs strong { color: var(--text); font-size: 14px; font-weight: 600; }
-.campaign-work-tabs small { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
+.campaign-work-tabs strong { justify-self: start; }
+.campaign-work-tabs small { grid-column: 1 / -1; color: var(--muted); font-size: 10px; white-space: nowrap; }
 .campaign-work-tabs button:focus-visible, .campaign-media-grid label:has(input:focus-visible) { z-index: 1; outline: 2px solid var(--link); outline-offset: -2px; }
 .autopilot-checklist { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0 0; padding: 0; border: 0; background: transparent; }
 .autopilot-checklist li { min-height: 26px; gap: 5px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; background: var(--panel-raised); font-size: 10px; }
