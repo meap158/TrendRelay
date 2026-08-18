@@ -2313,7 +2313,7 @@ export function AutopilotPanel({
                     noPlanReason={item.needs_copy
                       ? "Not scheduled: no copy written yet. Write it and this post joins the rotation."
                       : item.state !== "approved"
-                        ? "Not scheduled: approve it and the plan appears here."
+                        ? "Held back: add it to the rotation and the plan appears here."
                         : !destinations.length
                           ? "Nowhere to post it yet. Add an account."
                           : !slots.length

@@ -246,9 +246,26 @@ def _hold_reason(autopilot: CampaignAutopilot, post: ScheduledPost) -> str | Non
     policy an authority level can waive.
     """
     if any(confidence == "low" for confidence in post.offer_confidences):
+        # How the product was chosen decides what there is to do about it. The
+        # message assumed a pin, because until smart matching learned to attach
+        # the best available rather than nothing, a pin was the only way a weak
+        # product could get this far - so a campaign that never pinned anything
+        # was told to go and change a pin it had not made.
+        if post.offer_selection == "queue item override":
+            return (
+                "A product pinned to this post matched its content with low "
+                "confidence. Approve to post it anyway, or pin a different one."
+            )
+        if post.offer_selection == "campaign manual offer":
+            return (
+                "This campaign's one product matched this content with low "
+                "confidence. Approve to post it anyway, or change the product "
+                "in the campaign's settings."
+            )
         return (
-            "A pinned product matched this content with low confidence. Approve "
-            "to post it anyway, or change the queue item's products."
+            "Smart matching found nothing here that fits this post well, so "
+            "the best available product is attached. Approve to post it, or "
+            "pin a product to this post yourself."
         )
     if autopilot.authority != "autonomous":
         return (

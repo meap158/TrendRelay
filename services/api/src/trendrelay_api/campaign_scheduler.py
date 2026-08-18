@@ -79,6 +79,10 @@ class ScheduledPost:
     #: The matcher's confidence per attached offer, in the same order. What the
     #: authority rules read: a low-confidence product never posts unattended.
     offer_confidences: tuple[str, ...] = ()
+    #: How those offers were chosen, from the matcher's own strategy. Carried
+    #: so the approval inbox can say whether a weak product was pinned by hand
+    #: or was the best smart matching could find - two different things to fix.
+    offer_selection: str = ""
     #: The exact Library version this post was composed against, frozen here so
     #: the execution record and the delivery use what the preview showed. None
     #: for a queue item that carries a raw path with no Library identity.
@@ -768,6 +772,7 @@ def plan_campaign(
             offer_ids=tuple(match.offer_id for match in linked_matches),
             product_names=tuple(match.product_name for match in linked_matches),
             offer_confidences=tuple(match.confidence for match in linked_matches),
+            offer_selection=str(match_strategy.get("selection", "")),
         ))
         reserved[(item.id, destination.id)] = moment
         planned_per_day[day_key] = already_planned + 1

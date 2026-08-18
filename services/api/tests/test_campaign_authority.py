@@ -118,8 +118,14 @@ def engine_stub(monkeypatch):
     return calls
 
 
-def low_confidence_match(session, monkeypatch) -> None:
-    """A queue-item pin that matched, but weakly."""
+def low_confidence_match(
+    session, monkeypatch, selection: str = "queue item override"
+) -> None:
+    """A product that matched weakly, chosen the way `selection` says.
+
+    How it was chosen is the caller's business: the same hold carries a
+    different remedy for a pin than for smart matching's best available.
+    """
     from trendrelay_api.opportunity_models import Product, ProductOffer
 
     session.add(Product(
@@ -143,7 +149,7 @@ def low_confidence_match(session, monkeypatch) -> None:
     )
     monkeypatch.setattr(
         campaign_scheduler, "chosen_matches",
-        lambda *args, **kwargs: ([match], {"selection": "queue item override"}),
+        lambda *args, **kwargs: ([match], {"selection": selection}),
     )
 
 
@@ -253,6 +259,32 @@ def test_a_low_confidence_pin_is_held_at_every_level(
     assert "low confidence" in execution.held_reason
     assert engine_stub == []
     assert result["held"]
+
+
+def test_a_weak_smart_match_is_not_blamed_on_a_pin(
+    session, tmp_path, engine_stub, monkeypatch
+) -> None:
+    """The same hold, with the remedy that matches how it happened.
+
+    Smart matching attaches the best available when nothing clears the evidence
+    bar, so this is now the commoner way a weak product reaches the inbox - and
+    telling somebody to change a pin they never made sends them looking for a
+    control that is not set.
+    """
+    campaign_setup(session, tmp_path)
+    low_confidence_match(
+        session, monkeypatch, selection="smart content match, best available"
+    )
+    pilot = autopilot(session, authority="autonomous")
+
+    run_campaign(session, pilot, now=NOW)
+    session.commit()
+
+    execution = executions(session)[0]
+    assert execution.state == "proposed"
+    assert "pinned" not in execution.held_reason
+    assert "best available product is attached" in execution.held_reason
+    assert engine_stub == []
 
 
 # --- the inbox ------------------------------------------------------------------
