@@ -619,8 +619,16 @@ nav strong { color: #1c2b33; }
 .account-options { display: grid; gap: 5px; align-content: start; }
 /* Two lines now: the channel, and the engine that reaches it. The same network
  * can be connected through more than one engine, and two identically named
- * channels are otherwise indistinguishable. */
-.account-options button { display: grid; gap: 1px; width: 100%; overflow: hidden; text-align: start; }
+ * channels are otherwise indistinguishable.
+ *
+ * The column is told to fill the button, and `justify-content` is reset. These
+ * buttons also match `.platform-card button` above, which lays them out as a
+ * centred inline-flex. This rule wins on `display` by coming later, but
+ * `justify-content: center` survived into the grid - where it centres the whole
+ * column rather than the text inside it. So `text-align: start` had nothing to
+ * align against, and every channel name sat at a different left edge depending
+ * on how long it was. */
+.account-options button { display: grid; grid-template-columns: minmax(0, 1fr); justify-content: stretch; gap: 1px; width: 100%; overflow: hidden; text-align: start; }
 .account-options button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-options button > i { color: var(--muted); font-size: 10px; font-style: normal; }
 .account-options button.selected > i { color: inherit; opacity: .8; }
