@@ -310,11 +310,16 @@ async def enumerate_profile(
             if cookies:
                 await context.add_cookies(cookies)
 
-        # Sniff the profile's own post-list responses: when the page does manage
-        # a page the API refuses us directly, its ids land here too.
+        # Sniff the profile's own post-list responses: their ids land here, and
+        # counting them tells whether scrolling is triggering more pages at all
+        # (the difference between a scroll that does not reach the feed and a
+        # session the server refuses to paginate).
+        feed_requests = {"count": 0}
+
         def on_response(response) -> None:
             if "/aweme/v1/web/aweme/post/" not in (response.url or ""):
                 return
+            feed_requests["count"] += 1
 
             async def read() -> None:
                 try:
@@ -378,33 +383,58 @@ async def enumerate_profile(
             )
 
         stable = 0
-        for _ in range(max(1, int(max_scrolls))):
+        for round_number in range(1, max(1, int(max_scrolls)) + 1):
             if page.is_closed():
                 break
             before = len(ids)
             try:
-                # Close the sign-up popup every round before scrolling - clicking
-                # its own X, hiding what is left, dropping the scroll-locking
-                # backdrop - plus Escape, since merely hiding it left the operator
-                # closing it by hand.
+                # Close the sign-up popup every round - clicking its own X,
+                # hiding what is left, dropping the scroll-locking backdrop -
+                # plus Escape, since merely hiding it left the operator closing
+                # it by hand.
                 await page.evaluate(DISMISS_NOW)
                 await page.keyboard.press("Escape")
-                # Scroll the grid's own container - the window scroll a bare
-                # wheel drives does not advance the feed. A real wheel over the
-                # grid centre backs it up the way a hand would.
-                await page.evaluate(GRID_SCROLL)
+                # Bring the last loaded tile into view through the browser's own
+                # scroll, which is the path Douyin's infinite scroll listens on -
+                # the window does not scroll here, and setting scrollTop by hand
+                # did not advance it. Then a real wheel over the grid, and the
+                # container nudge as a belt-and-braces fallback.
+                try:
+                    await page.locator('a[href*="/video/"]').last.scroll_into_view_if_needed(
+                        timeout=4000
+                    )
+                except Exception:
+                    pass
                 await page.mouse.move(760, 460)
                 await page.mouse.wheel(0, random.randint(2000, 3200))
+                await page.evaluate(GRID_SCROLL)
             except Exception:
                 break
             await page.wait_for_timeout(random.randint(1000, 1600))
             await _harvest(page, ids)
+
+            # Progress to stderr: whether the feed is actually paginating. If the
+            # count climbs while feed requests stay at one, the scroll is not
+            # reaching the loader; if requests climb but ids do not, the session
+            # is being throttled - two different problems, told apart here.
+            if round_number % 5 == 0:
+                print(
+                    f"scroll {round_number}: {len(ids)} videos, "
+                    f"{feed_requests['count']} feed request(s)",
+                    file=sys.stderr,
+                )
 
             if limit and len(ids) >= limit:
                 break
             stable = stable + 1 if len(ids) == before else 0
             if stable >= max(1, int(idle_rounds)):
                 break
+
+        print(
+            f"Enumerated {len(ids)} video(s) over {feed_requests['count']} feed "
+            "request(s).",
+            file=sys.stderr,
+        )
 
         await context.close()
 
