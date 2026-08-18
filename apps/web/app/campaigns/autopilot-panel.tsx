@@ -1810,9 +1810,13 @@ export function AutopilotPanel({
             <div className="campaign-product-mode">
               <div>
                 <strong>Products</strong>
-                <small>{autopilot.offer_mode === "none"
-                  ? "This campaign has products switched off, so smart match posts organic. Pinned products still attach."
-                  : "Decided now, either way. The affiliate link follows the product, per network."}</small>
+                {/* The precedence, said once: a pin on the package beats the
+                    campaign, and nothing else here overrides it. The old
+                    wording only mentioned this when products were switched
+                    off, which is when it was most surprising and least
+                    useful. */}
+                <small>Pinning here overrides the campaign for this package.
+                  The affiliate link follows the product, per network.</small>
               </div>
               <div className="campaign-mode-options" role="radiogroup"
                 aria-label="Products for this package">
@@ -1820,8 +1824,19 @@ export function AutopilotPanel({
                   aria-checked={draftProductMode === "smart"}
                   className={draftProductMode === "smart" ? "active" : ""}
                   onClick={() => setDraftProductMode("smart")}>
-                  <strong>Smart match</strong>
-                  <small>Best-fitting offers, chosen when it posts</small>
+                  {/* Named for what it does, which is not choose. Pinning here
+                      writes `offer_ids` on the package and that beats every
+                      campaign setting; leaving it alone falls through to the
+                      campaign, whose answer may be smart matching, one fixed
+                      offer, or no products at all. Calling this "Smart match"
+                      promised the first of those three on a campaign that had
+                      chosen either of the others. */}
+                  <strong>Campaign default</strong>
+                  <small>{autopilot.offer_mode === "smart"
+                    ? "Smart match — best-fitting offers, chosen when it posts"
+                    : autopilot.offer_mode === "manual"
+                      ? "One offer, set for this campaign"
+                      : "No products — this campaign posts organic"}</small>
                 </button>
                 <button type="button" role="radio"
                   aria-checked={draftProductMode === "manual"}
