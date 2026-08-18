@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from trendrelay_api import campaign_scheduler as scheduler
 from trendrelay_api.attribution_models import ClickEvent, Conversion, TrackingLink
 from trendrelay_api.autopilot_models import (
     CampaignAutopilot,
@@ -778,3 +779,52 @@ def test_a_carousel_goes_to_the_destination_that_can_carry_it(session) -> None:
     posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
 
     assert [post.destination_id for post in posts] == ["d1"]
+
+
+# --- what the run reports afterwards -------------------------------------------
+
+
+class _Post:
+    """Just the field the summary counts by."""
+
+    def __init__(self, destination_id="d1"):
+        self.destination_id = destination_id
+
+
+def test_a_run_that_scheduled_nothing_says_so() -> None:
+    """It used to report only its reasons.
+
+    "halcyonbooks.official already has a post at this time. Nothing approved has
+    rested 30 days on halcyonbooks.official." never states the outcome, leaving
+    the reader to infer that nothing was scheduled from the absence of a number.
+    """
+    note = scheduler._explain_run([], ["Account already has a post at this time."], 14)
+
+    assert note.startswith("No posts scheduled.")
+
+
+def test_a_reason_carries_how_many_slots_it_cost() -> None:
+    # Recorded once per slot tried, so deduplicating alone made one blocked hour
+    # read exactly like a blocked fortnight - and those want different answers.
+    note = scheduler._explain_run([], ["Nothing has rested."] * 11, 14)
+
+    assert "(11 of 14 slots)" in note
+
+
+def test_a_reason_that_happened_once_is_not_counted_at_the_reader() -> None:
+    note = scheduler._explain_run([_Post()], ["Account is at its daily cap."], 14)
+
+    assert "slots)" not in note
+    assert note == "1 post(s) scheduled across 1 destination(s). Account is at its daily cap."
+
+
+def test_a_successful_run_still_leads_with_what_it_did() -> None:
+    note = scheduler._explain_run([_Post("d1"), _Post("d2")], [], 6)
+
+    assert note == "2 post(s) scheduled across 2 destination(s)."
+
+
+def test_nothing_due_and_nothing_wrong_says_neither() -> None:
+    # No slots came round, so there is no outcome to report and no reason to
+    # give. "No posts scheduled." on a quiet horizon would read as a fault.
+    assert scheduler._explain_run([], [], 0) == "Nothing to schedule right now."

@@ -753,15 +753,44 @@ def plan_campaign(
         planned_per_day[day_key] = already_planned + 1
         counter += 1
 
+    return scheduled, _explain_run(scheduled, notes, len(upcoming))
+
+
+def _explain_run(
+    scheduled: list[ScheduledPost], notes: list[str], slots: int
+) -> str:
+    """What the run did, and what stopped it doing more.
+
+    The outcome leads, in both directions. A run that scheduled nothing used to
+    report only its reasons - "halcyonbooks.official already has a post at this
+    time. Nothing approved has rested 30 days on halcyonbooks.official." - which
+    never actually says that nothing was scheduled, and leaves the reader to
+    infer it from the absence of a number.
+
+    Reasons are counted rather than merely deduplicated. They are recorded once
+    per slot the scheduler tried, so one slot and fourteen collapsed to the same
+    sentence: an account that blocked a single hour read exactly like one that
+    blocked the whole horizon, and the two want different responses.
+    """
+    from collections import Counter  # noqa: PLC0415
+
     if scheduled:
-        summary = (
+        headline = (
             f"{len(scheduled)} post(s) scheduled across "
             f"{len({item.destination_id for item in scheduled})} destination(s)."
         )
-        if notes:
-            summary += " " + " ".join(dict.fromkeys(notes))
-        return scheduled, summary
-    return [], " ".join(dict.fromkeys(notes)) or "Nothing to schedule right now."
+    else:
+        headline = "No posts scheduled."
+    if not notes:
+        return headline if scheduled else "Nothing to schedule right now."
+    counted = Counter(notes)
+    return " ".join([
+        headline,
+        *(
+            note if times == 1 else f"{note} ({times} of {slots} slots)"
+            for note, times in counted.items()
+        ),
+    ])
 
 
 def link_for(session: Session, destination: CampaignDestination) -> str | None:
