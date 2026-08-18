@@ -227,6 +227,11 @@ def cookie_status() -> dict[str, Any]:
     missing = [key for key in REQUIRED_COOKIE_KEYS if not cookies.get(key)]
     return {
         "ready": not missing,
+        # `sessionid` exists only after an actual login. Douyin serves an
+        # anonymous session one page of a profile (about 20 posts) and returns
+        # empty pages after it, so the difference decides whether a profile
+        # downloads whole or truncated - worth naming, not just "connected".
+        "signed_in": bool(cookies.get("sessionid")),
         "source": source,
         "missing": missing,
         "cookie_file": str(COOKIE_FILE),
@@ -305,7 +310,14 @@ def connection_status() -> dict[str, Any]:
     if cookies["ready"]:
         return {
             "state": "connected",
-            "message": "Douyin cookies are ready.",
+            "message": (
+                "Douyin session is signed in and ready."
+                if cookies.get("signed_in")
+                else "Douyin session is anonymous: single links download fine, "
+                "but a profile fetch stops after its first page (about 20 "
+                "posts). Refresh the session and log in to fetch whole "
+                "profiles."
+            ),
             "updated_at": None,
         }
     if payload is None:
@@ -936,6 +948,20 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         summary = f"Fetched {len(artifacts)} media file(s)"
         if source_errors:
             summary = f"{summary}; {len(source_errors)} source(s) failed"
+        # A profile fetched anonymously is served exactly one page and then
+        # empty pages, so a 60-post profile quietly arrives as 20 files and
+        # looks complete. The truncation is invisible in the file count -
+        # only the session strength predicts it - so it is named here, with
+        # the remedy, instead of letting the count pass for the whole.
+        if (
+            any("/user/" in url for url in request["urls"])
+            and not cookie_status().get("signed_in")
+        ):
+            summary = (
+                f"{summary}. Anonymous Douyin session: each profile stops "
+                "after its first page (about 20 posts). Refresh the session "
+                "and log in to fetch whole profiles."
+            )
         result = {
             **payload,
             "status": "succeeded",

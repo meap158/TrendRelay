@@ -135,8 +135,14 @@ def check_provider() -> int:
         return result.returncode
     print(f"Douyin provider ready: {result.stdout.strip() or REVISION[:12]}")
     cookie_status = cookie_readiness()
-    if cookie_status["ready"]:
-        print(f"Douyin cookies ready ({cookie_status['source']}).")
+    if cookie_status["ready"] and cookie_status["signed_in"]:
+        print(f"Douyin cookies ready, signed in ({cookie_status['source']}).")
+    elif cookie_status["ready"]:
+        print(
+            f"Douyin cookies ready, anonymous ({cookie_status['source']}). "
+            "A profile fetch stops after its first page (about 20 posts); "
+            "run `npm run douyin -- connect` and log in to fetch whole profiles."
+        )
     else:
         print(
             "Douyin cookies are missing or incomplete; downloads will fail anti-bot checks.",
@@ -210,6 +216,9 @@ def cookie_readiness() -> dict[str, object]:
     cookies, source = resolve_cookies()
     return {
         "ready": cookies_are_ready(cookies),
+        # `sessionid` is set only by an actual login. Without it Douyin serves
+        # one page of a profile (about 20 posts) and refuses the rest.
+        "signed_in": bool(cookies.get("sessionid")),
         "source": source,
         "keys": sorted(cookies),
         "missing": [key for key in REQUIRED_COOKIE_KEYS if not cookies.get(key)],
@@ -430,6 +439,13 @@ def build_config(args: argparse.Namespace, urls: list[str]) -> dict[str, object]
         # saves the bandwidth rather than fetching and discarding it.
         "cover": bool(getattr(args, "covers", False)),
         "music": bool(getattr(args, "music", False)),
+        # Stated, because the provider treats an absent key as enabled. When a
+        # profile's paging is cut short it would open a visible Chromium on the
+        # profile - seeded without login cookies, which upstream strips - so
+        # the window shows a signed-out page with no videos and collects
+        # nothing. A surprise empty browser mid-download explains nothing;
+        # the job summary names the actual cause instead.
+        "browser_fallback": {"enabled": False},
         "progress": {"quiet_logs": not args.verbose},
         "cookies": cookies,
     }

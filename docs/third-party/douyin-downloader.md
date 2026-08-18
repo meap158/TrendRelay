@@ -21,4 +21,15 @@ Douyin blocks unauthenticated media detail requests (empty HTTP 200 / anti-bot).
 
 Jobs fail when cookies are missing or when the provider exits without writing media. Upstream can return exit code 0 even on failed fetches; TrendRelay treats empty output folders as failure.
 
-Users are responsible for platform terms, privacy, copyright, consent, and having permission to download or reuse content. The optional login browser may require manual CAPTCHA completion and is used only to capture cookies; media downloads never use a browser fallback.
+### Session strength
+
+A captured session comes in two strengths, and the difference decides how much of a profile downloads:
+
+- **Anonymous** (`ttwid` + `odin_tt` + `passport_csrf_token`, set by merely visiting the site): downloads single links and reads the hot board, but Douyin serves it exactly one page of a profile's posts (about 20) and answers later pages with an empty list — a 60-post profile quietly arrives as 20 files. Topic search is refused entirely (`2483`).
+- **Signed in** (adds `sessionid`, set only by an actual login): profile pagination and topic search work.
+
+The connection status, `npm run douyin -- check`, and the job summary of an anonymous profile fetch all name this limit and the remedy (reconnect and log in).
+
+At this upstream revision, a profile whose paging is cut short triggers a visible Chromium "browser fallback" on the profile page. TrendRelay disables it (`browser_fallback.enabled: false` in the generated config): upstream seeds that browser with the cookie jar minus login cookies, so it renders a signed-out profile with no videos and collects nothing — an unexplained empty browser window mid-download. The login browser remains the only browser TrendRelay opens, and only to capture cookies.
+
+Users are responsible for platform terms, privacy, copyright, consent, and having permission to download or reuse content. The login browser may require manual CAPTCHA completion and is used only to capture cookies.

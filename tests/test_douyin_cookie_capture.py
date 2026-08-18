@@ -121,7 +121,10 @@ def test_a_browsing_session_is_saved_but_not_called_signed_in(
     assert saved["ttwid"] == "tw"
     assert "sessionid" not in saved
     assert reported["state"] == "connected"
-    assert "signed-in account" in reported["message"]
+    # The message must name what an anonymous session cannot do - a profile
+    # stops after its first page, search is refused - and the remedy.
+    assert "first page" in reported["message"]
+    assert "log in" in reported["message"]
 
 
 def test_closing_the_window_early_keeps_what_was_captured(

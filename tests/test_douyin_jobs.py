@@ -524,6 +524,97 @@ def test_worker_records_downloaded_media(
     assert queued[0]["engagement"]["origin_urls"] == request().urls
 
 
+def _profile_request() -> douyin.DownloadRequest:
+    return douyin.DownloadRequest(
+        workspace_id="workspace-1",
+        urls=["https://www.douyin.com/user/MS4wLjABAAAAexample"],
+        confirm_external_action=True,
+    )
+
+
+def _run_profile_job(monkeypatch, tmp_path: Path, *, signed_in: bool) -> dict:
+    """A profile download that saves one file, under a session of given strength."""
+    monkeypatch.setattr(douyin, "OUTPUT_ROOT", tmp_path / "downloads")
+    monkeypatch.setattr(
+        douyin,
+        "cookie_status",
+        lambda: {"ready": True, "signed_in": signed_in, "missing": []},
+    )
+    job = douyin.create_download_job(_profile_request(), actor_user_id="user-1")
+
+    def fake_run(command, **_kwargs):
+        output = Path(command[command.index("--output") + 1])
+        output.mkdir(parents=True, exist_ok=True)
+        (output / "clip.mp4").write_bytes(b"downloaded-media")
+        return subprocess.CompletedProcess(command, 0, "done", "")
+
+    monkeypatch.setattr(
+        media_library,
+        "create_ingest_job",
+        lambda **kwargs: {
+            "id": "media-1",
+            "status": "queued",
+            "available_at": datetime.now(UTC),
+        },
+    )
+    monkeypatch.setattr(douyin.subprocess, "run", fake_run)
+    return douyin.run_download_job(job["id"])
+
+
+def test_an_anonymous_profile_fetch_names_the_first_page_limit(
+    monkeypatch, tmp_path: Path, job_factory
+) -> None:
+    """Douyin serves an anonymous session one profile page, then empty pages.
+
+    A 60-post profile therefore arrives as ~20 files and the count alone looks
+    complete. The truncation is invisible on disk - only the session strength
+    predicts it - so the job summary must say it, with the remedy.
+    """
+    completed = _run_profile_job(monkeypatch, tmp_path, signed_in=False)
+
+    assert completed["status"] == "succeeded"
+    summary = completed["result"]["summary"]
+    assert "first page" in summary
+    assert "log in" in summary
+
+
+def test_a_signed_in_profile_fetch_is_not_second_guessed(
+    monkeypatch, tmp_path: Path, job_factory
+) -> None:
+    completed = _run_profile_job(monkeypatch, tmp_path, signed_in=True)
+
+    assert completed["status"] == "succeeded"
+    assert "first page" not in completed["result"]["summary"]
+
+
+def test_connection_message_says_whether_the_session_is_signed_in(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        douyin, "CONNECTION_STATUS_FILE", tmp_path / "connection-status.json"
+    )
+    monkeypatch.setattr(douyin, "CONNECTION_PROCESS", None)
+
+    monkeypatch.setattr(
+        douyin,
+        "cookie_status",
+        lambda: {"ready": True, "signed_in": False, "missing": []},
+    )
+    anonymous = douyin.connection_status()
+    assert anonymous["state"] == "connected"
+    assert "anonymous" in anonymous["message"]
+    assert "first page" in anonymous["message"]
+
+    monkeypatch.setattr(
+        douyin,
+        "cookie_status",
+        lambda: {"ready": True, "signed_in": True, "missing": []},
+    )
+    signed_in = douyin.connection_status()
+    assert signed_in["state"] == "connected"
+    assert "signed in" in signed_in["message"]
+
+
 def test_downloads_do_not_wait_for_library_preparation(
     monkeypatch, tmp_path: Path, job_factory
 ) -> None:
