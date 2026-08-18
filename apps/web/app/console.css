@@ -1181,6 +1181,10 @@ html { scroll-behavior: smooth; }
    says which one and offers a way back to it. */
 .campaign-entry-source { margin: 2px 0 0; color: var(--muted); font-size: 10px; }
 .campaign-entry-source button { border: 0; padding: 0; background: none; color: var(--link); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+/* The edit route leads the line: it is an action, and the post it came from
+   is context for it. Undecorated so the two links do not read as a pair. */
+.campaign-entry-edit { margin-inline-end: 7px; text-decoration: none !important; }
+.campaign-entry-edit::after { margin-inline-start: 7px; color: var(--line-strong); content: "·"; }
 /* Held for a moment after arriving from the schedule, so the eye lands on the
    row that was asked for rather than hunting the list for it. */
 .autopilot-queue > li.just-linked { outline: 2px solid var(--link); outline-offset: 2px; border-radius: var(--radius-sm); }

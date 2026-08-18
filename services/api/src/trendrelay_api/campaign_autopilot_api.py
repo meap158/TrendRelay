@@ -230,7 +230,10 @@ def _autopilot(session: Session, workspace_id: str, campaign_id: str,
 
 
 def _destination_view(session: Session, item: CampaignDestination) -> dict[str, Any]:
-    from trendrelay_api.integrations.publishing import first_comment_deliverable
+    from trendrelay_api.integrations.publishing import (
+        first_comment_deliverable,
+        limits_for,
+    )
 
     placement = resolve_placement(
         item.platform,
@@ -260,6 +263,11 @@ def _destination_view(session: Session, item: CampaignDestination) -> dict[str, 
         # here, so the package editor can show at a glance which destinations
         # a written comment will actually reach.
         "follow_up_deliverable": first_comment_deliverable(item.provider, item.platform),
+        # Whether this network has a title at all, read from the limits table
+        # that decides it rather than from a second list: YouTube, Reddit and
+        # Pinterest have one, and asking for a title on a campaign that posts
+        # to none of them is asking for something nobody will ever see.
+        "takes_title": limits_for(item.platform).title is not None,
         "integration_id": item.integration_id,
         "platform": item.platform,
         "label": item.label,

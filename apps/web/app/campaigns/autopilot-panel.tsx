@@ -84,6 +84,8 @@ type Destination = {
   accepts_carousel?: boolean;
   /** Whether a first comment or thread reply can be delivered here. */
   follow_up_deliverable?: boolean;
+  /** Whether this network has a title field at all. */
+  takes_title?: boolean;
   integration_id: string;
   platform: PublishingPlatform;
   label: string;
@@ -1374,6 +1376,18 @@ export function AutopilotPanel({
         ? "First comment, or first reply in the thread"
         : "First comment";
 
+  /**
+   * The fields worth asking for, given where this campaign posts.
+   *
+   * Every field was always shown, so a campaign posting only to Threads was
+   * asked for a title no network it uses has, and one posting only to TikTok
+   * was asked for a first comment no engine there will deliver. Asking for
+   * something nobody will ever see is worse than not asking: it reads as a
+   * field somebody forgot to fill in.
+   */
+  const titleAccounts = destinations.filter((item) => item.takes_title);
+  const followUpAccounts = destinations.filter((item) => item.follow_up_deliverable);
+
   const selectedLibrary = Object.values(selectedAssets);
   /**
    * The kind row, and the counts beside it.
@@ -2474,10 +2488,18 @@ export function AutopilotPanel({
               </span>
               <Button variant="quiet" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
             </div>
-            <label>Title
-              <input name="title" defaultValue={editing.title ?? ""} maxLength={200} />
-              <small>Used by accounts that require a title, and on the schedule.</small>
-            </label>
+            {/* Only where a title exists. It is still shown when nothing takes
+                one but this post already has a title, because hiding a field
+                that holds text is how text gets lost. */}
+            {(titleAccounts.length > 0 || editing.title) && (
+              <label>Title
+                <input name="title" defaultValue={editing.title ?? ""} maxLength={200} />
+                <small>{titleAccounts.length
+                  ? `Shown on ${[...new Set(titleAccounts.map(
+                      (item) => platformLabels[item.platform]))].join(", ")}, and on the schedule.`
+                  : "No account on this campaign shows a title. Kept because this post has one."}</small>
+              </label>
+            )}
             <label>{t("autopilot.copy")}
               <textarea name="body" rows={4} required maxLength={4000}
                 defaultValue={editing.body} />
@@ -2498,9 +2520,10 @@ export function AutopilotPanel({
               <textarea name="first_comment" rows={3} maxLength={2000}
                 defaultValue={editing.first_comment ?? ""}
                 placeholder={`Optional ${followUpFieldName.toLowerCase()}, published straight after the post`} />
-              <small>Where the product link goes here too, your words lead and
-                the link follows them in the same comment. The timeline warns
-                when a publishing engine cannot post one at all.</small>
+              <small>{followUpAccounts.length
+                ? `Delivered on ${[...new Set(followUpAccounts.map(
+                    (item) => platformLabels[item.platform]))].join(", ")}. Where the product link goes here too, your words lead and the link follows them in the same comment.`
+                : "No account on this campaign can deliver one. Anything written here is kept but not sent."}</small>
             </label>
             <fieldset className="campaign-reply-editor">
               <legend>Replies / thread
@@ -3021,6 +3044,21 @@ export function AutopilotPanel({
                               without this the reader cannot tell that. */}
                           {entry.queue_item_id && queueById.get(entry.queue_item_id) && (
                             <p className="campaign-entry-source">
+                              {/* Editable from here, not only findable. This
+                                  is where somebody reads the post and decides
+                                  it needs changing, and sending them to
+                                  another tab to find the row again loses the
+                                  thought that started it. */}
+                              {canEdit && entry.kind === "planned" && (
+                                <button type="button" className="campaign-entry-edit"
+                                  onClick={() => {
+                                    const item = queueById.get(entry.queue_item_id!)!;
+                                    setView("content");
+                                    setEditing(item);
+                                    setEditingReplies(item.thread.length ? item.thread : [""]);
+                                    revealPanel("campaign-edit-content");
+                                  }}>Edit this post</button>
+                              )}
                               From{" "}
                               <button type="button" onClick={() => {
                                 setView("content");
@@ -3065,9 +3103,18 @@ export function AutopilotPanel({
                                 <li key={`${product.offer_id}-${productIndex}`}>
                                   <span aria-hidden="true">{productIndex + 1}</span>
                                   <strong>{product.name}</strong>
+                                  {/* Where this particular link sits. The
+                                      first-comment case fell through to "Post
+                                      content", so an entry headed First
+                                      comment listed its product as being in
+                                      the caption two lines below. */}
                                   <small>{entry.placement === "bio"
                                     ? "Profile bio"
-                                    : productIndex > 0 && entry.thread.length ? `Reply ${productIndex}` : "Post content"}
+                                    : productIndex > 0 && entry.thread.length
+                                      ? `Reply ${productIndex}`
+                                      : entry.placement === "first_comment"
+                                        ? followUpLabel(entry.destination?.platform, 0)
+                                        : "Post content"}
                                     {/* What it pays, beside what it is. The rate
                                         is the reason this offer was attached
                                         rather than another, and the row named
