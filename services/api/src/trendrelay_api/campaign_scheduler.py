@@ -729,7 +729,19 @@ def plan_campaign(
         # Operator-authored comments and replies form one persistent content
         # package with the base caption. Generated affiliate replies are added
         # afterwards, so the timeline can show and validate the exact sequence.
-        first_comment = (item.first_comment or "").strip() or post.first_comment
+        #
+        # Both, when both exist. This used to be `written or generated`, which
+        # meant that on a first-comment network - where the comment *is* where
+        # the link lives - anyone who wrote a comment silently deleted the
+        # link, and the post went out selling nothing with no sign anything had
+        # been dropped. The words lead and the link follows them, one comment,
+        # because the network only takes one.
+        written = (item.first_comment or "").strip()
+        generated = (post.first_comment or "").strip()
+        first_comment = (
+            f"{written}\n\n{generated}" if written and generated
+            else written or post.first_comment
+        )
         custom_thread = tuple(
             part.strip() for part in (item.thread or []) if part.strip()
         )

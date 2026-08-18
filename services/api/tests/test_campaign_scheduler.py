@@ -379,6 +379,38 @@ def test_operator_comments_and_replies_stay_with_the_content_package(session) ->
     assert posts[0].thread == ("First planned reply.", "Second planned reply.")
 
 
+def test_a_written_comment_does_not_delete_the_affiliate_link(session) -> None:
+    """On a first-comment network the comment is where the link lives.
+
+    The written comment used to replace the generated one outright, so anybody
+    who added a note to an Instagram post silently deleted its only link and
+    the post went out selling nothing.
+    """
+    destination(session, "d1", "instagram", link_placement="first_comment")
+    slot(session, 12)
+    queue_item(
+        session,
+        "q1",
+        body="Three ways to pull a better espresso.",
+        first_comment="Ask us which grind size to start with.",
+    )
+    chosen = offer(session, "offer-maker", "Espresso maker")
+
+    posts, _ = plan_campaign(
+        session,
+        autopilot(session, offer_mode="smart"),
+        now=NOW,
+        link_for=lambda _destination, offer_id: f"https://tr.example/{offer_id}",
+    )
+
+    assert posts[0].placement == "first_comment"
+    assert posts[0].first_comment is not None
+    # The words lead, the link follows, and both are in the one comment the
+    # network takes.
+    assert posts[0].first_comment.startswith("Ask us which grind size to start with.")
+    assert f"https://tr.example/{chosen}" in posts[0].first_comment
+
+
 def test_operator_replies_precede_generated_product_replies(session) -> None:
     destination(session, "d1", "threads")
     slot(session, 12)

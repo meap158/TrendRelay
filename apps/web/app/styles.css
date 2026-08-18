@@ -1114,11 +1114,17 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .campaign-rehearsal-list > article > header strong { min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 /* The time is the point of the row, so it keeps its width when the account
    name is long enough to want all of it. */
-.campaign-rehearsal-list > article > header small { flex: none; margin-inline-start: auto; color: var(--muted); font-size: 10px; }
+.campaign-rehearsal-list > article > header small { flex: none; color: var(--muted); font-size: 10px; }
+/* The placement sits opposite the time, whether or not an account name leads the row. */
+.campaign-rehearsal-list > article > header > .ui-badge { margin-inline-start: auto; }
 .campaign-rehearsal-follow { display: grid; gap: 3px; }
 .campaign-rehearsal-follow strong { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
 .campaign-rehearsal-follow pre { max-block-size: 120px; margin: 0; overflow: auto; padding: 7px 9px; border-radius: var(--radius-sm); background: var(--panel); font: 10px/1.45 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .campaign-rehearsal-follow.empty { color: var(--muted); font-size: 10px; line-height: 1.4; }
+/* What it goes out as, beside who it goes to. */
+.campaign-rehearsal-format { flex: none; padding: 1px 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 9px; font-style: normal; text-transform: uppercase; letter-spacing: .03em; }
+/* Why a row has no plan, where the plan would have been. */
+.campaign-row-noplan { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
 
 @media (max-width: 900px) {
   .campaign-pipeline-summary { grid-template-columns: repeat(3, 1fr); }

@@ -760,6 +760,29 @@ html { scroll-behavior: smooth; }
 .campaign-match-marks { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 /* Standing out without shouting: the same badge, ringed. */
 .campaign-match-chosen { box-shadow: 0 0 0 1px var(--green); }
+
+/* What the campaign adds to the copy above, and where it lands. The form only
+   edits two thirds of a post; this is the third somebody could not see. */
+.campaign-post-anatomy { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.campaign-post-anatomy > strong { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
+.campaign-post-anatomy ol { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; counter-reset: anatomy; }
+.campaign-post-anatomy ol > li { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.campaign-post-anatomy ol > li > b { counter-increment: anatomy; font-size: 10px; }
+.campaign-post-anatomy ol > li > b::before { content: counter(anatomy) ". "; color: var(--muted); }
+.campaign-post-anatomy ol > li > span { color: var(--muted); font-size: 10px; line-height: 1.45; }
+/* The columns live on the list, not the row: as a grid per row the badge
+   column was as wide as that row's own badge, so three accounts put their
+   notes in three different places. */
+.campaign-link-map { display: grid; grid-template-columns: 18px minmax(0, 140px) auto minmax(0, 1fr); gap: 5px 7px; align-items: center; margin: 0; padding-block-start: 8px; border-block-start: 1px solid var(--line); list-style: none; }
+.campaign-link-map > li { display: contents; }
+.campaign-link-map > li > strong { min-width: 0; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-link-map > li > small { color: var(--muted); font-size: 10px; line-height: 1.4; }
+
+@media (max-width: 620px) {
+  .campaign-post-anatomy ol > li { grid-template-columns: 1fr; gap: 2px; }
+  .campaign-link-map { grid-template-columns: 18px minmax(0, 1fr) auto; }
+  .campaign-link-map > li > small { grid-column: 1 / -1; }
+}
 .campaign-item-products { margin-top: 10px; border-color: var(--line-strong); }
 .campaign-product-actions { border-top: 1px solid var(--line); padding-top: 10px; }
 

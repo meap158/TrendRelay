@@ -60,7 +60,7 @@ import {
   platformLabels,
   type PublishingPlatform,
 } from "../publishing-icons";
-import { followUpKind, followUpLabel, takesFollowUp } from "../../lib/follow-up";
+import { followUpKind, followUpLabel, isThreadPlatform, takesFollowUp } from "../../lib/follow-up";
 
 type Account = {
   id: string;
@@ -553,6 +553,25 @@ function dayHeading(value: string, timeZone: string): string {
 }
 
 /**
+ * What this post goes out as on this account.
+ *
+ * The account's configured post type when it has one - a Reel and a Story are
+ * different posts made from the same clip - and otherwise the shape of the
+ * media itself, which is the honest answer when the network has only one kind
+ * of post.
+ */
+function formatName(post: PreviewPost, item: QueueItem): string {
+  const configured = post.destination?.post_type;
+  if (configured) {
+    return configured.replace(/_/g, " ").replace(/^./, (first) => first.toUpperCase());
+  }
+  if (item.video_path) return "Video";
+  if (item.image_paths.length > 1) return `Carousel · ${item.image_paths.length}`;
+  if (item.image_paths.length === 1) return "Image";
+  return "Post";
+}
+
+/**
  * Every outing a queued post has ahead of it, rehearsed.
  *
  * The row used to say "Next Thu 09:00 on halcyonbooks" and stop, which answers
@@ -567,12 +586,20 @@ function QueueRehearsal({
   item,
   outings,
   workspaceId,
+  noPlanReason,
 }: {
   item: QueueItem;
   outings: PreviewPost[];
   workspaceId: string;
+  /** Why this post has no outings, when it has none. */
+  noPlanReason: string;
 }) {
-  if (!outings.length) return null;
+  // Said rather than left blank. A drafted post, or a campaign with no posting
+  // times, has nothing in the preview - and a row that simply showed nothing
+  // looked like a row whose plan had failed to load.
+  if (!outings.length) {
+    return <p className="campaign-row-noplan">{noPlanReason}</p>;
+  }
   const media = (path: string) =>
     `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview?path=${encodeURIComponent(path)}`;
   const when = (value: string) => new Date(value).toLocaleString(undefined, {
@@ -587,7 +614,8 @@ function QueueRehearsal({
             plan without the summary line wrapping to three rows. */}
         <small>{outings.slice(0, 2).map((post) =>
           `${when(post.at)} · ${post.destination
-            ? platformLabels[post.destination.platform] : "Account"}`).join("  ·  ")}
+            ? platformLabels[post.destination.platform] : "Account"}`
+            + ` · ${formatName(post, item)}`).join("  ·  ")}
           {outings.length > 2 && `  ·  +${outings.length - 2} more`}</small>
       </summary>
       <div className="campaign-rehearsal-list">
@@ -599,9 +627,12 @@ function QueueRehearsal({
           ];
           return (
             <article key={`${post.destination_id}-${post.at}`}>
+              {/* The time and where the link lands - the two things the post
+                  preview below cannot show. It already draws the account, the
+                  network and the format under its own handle, so repeating
+                  them here said the same thing twice in two type sizes. */}
               <header>
-                {platform && <PlatformIcon platform={platform} />}
-                <strong>{post.destination?.label ?? "Account"}</strong>
+                {!platform && <strong>{post.destination?.label ?? "Account"}</strong>}
                 <small>{when(post.at)}</small>
                 <Badge tone={placementTone(post.placement)}>
                   {placementSummary(post).label}
@@ -617,7 +648,7 @@ function QueueRehearsal({
               {platform && (
                 <PostPreview
                   platform={platform}
-                  postTypeLabel={post.destination?.post_type ?? "Post"}
+                  postTypeLabel={formatName(post, item)}
                   handle={post.destination?.label ?? ""}
                   caption={post.caption}
                   title={post.title ?? ""}
@@ -1260,6 +1291,23 @@ export function AutopilotPanel({
     forItem.push(post);
     outings.set(post.queue_item_id, forItem);
   }
+
+  /**
+   * What to call the text after the post, given where this campaign posts.
+   *
+   * A campaign posting only to Threads has no comment box; one posting to both
+   * kinds has to name both, because one field feeds them all.
+   */
+  const followUpPlatforms = destinations
+    .filter((item) => item.follow_up_deliverable)
+    .map((item) => item.platform);
+  const followUpFieldName = !followUpPlatforms.length
+    ? "First comment"
+    : followUpPlatforms.every((platform) => isThreadPlatform(platform))
+      ? "First reply in the thread"
+      : followUpPlatforms.some((platform) => isThreadPlatform(platform))
+        ? "First comment, or first reply in the thread"
+        : "First comment";
 
   const selectedLibrary = Object.values(selectedAssets);
   /**
@@ -2158,6 +2206,15 @@ export function AutopilotPanel({
                     item={item}
                     outings={outings.get(item.id) ?? []}
                     workspaceId={workspaceId}
+                    noPlanReason={item.state !== "approved"
+                      ? "Not scheduled: approve it and the plan appears here."
+                      : !destinations.length
+                        ? "Nowhere to post it yet. Add an account."
+                        : !slots.length
+                          ? "No posting times yet. Add one and the plan appears here."
+                          : preview
+                            ? "Nothing scheduled this cycle - another post holds every slot."
+                            : "Loading the plan…"}
                   />
                 </div>
                 <Badge tone={item.state === "approved" ? "good" : "neutral"}>
@@ -2312,7 +2369,9 @@ export function AutopilotPanel({
             <div className="autopilot-picker-head">
               <span>
                 <strong>Edit post</strong>
-                <small>Configure the primary post and optional follow-up content. Affiliate links remain routed safely per destination.</small>
+                <small>Everything below is one post. The campaign adds the
+                  disclosure and the product link to it, differently on each
+                  account - what that comes to is spelled out underneath.</small>
               </span>
               <Button variant="quiet" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
             </div>
@@ -2327,7 +2386,10 @@ export function AutopilotPanel({
             <label>{t("autopilot.hashtags")}
               <input name="hashtags" defaultValue={editing.hashtags.join(" ")} />
             </label>
-            <label>First comment
+            {/* Named for the networks it will actually land on. Calling this
+                a first comment on a campaign that only posts to Threads
+                describes a comment box that network does not have. */}
+            <label>{followUpFieldName}
               <FeatureReach
                 chosen={[...new Set(destinations.map((item) => item.platform))]}
                 supported={[...new Set(destinations
@@ -2336,8 +2398,10 @@ export function AutopilotPanel({
               />
               <textarea name="first_comment" rows={3} maxLength={2000}
                 defaultValue={editing.first_comment ?? ""}
-                placeholder="Optional comment published immediately after the post" />
-              <small>The timeline will warn when a selected publishing engine cannot post it.</small>
+                placeholder={`Optional ${followUpFieldName.toLowerCase()}, published straight after the post`} />
+              <small>Where the product link goes here too, your words lead and
+                the link follows them in the same comment. The timeline warns
+                when a publishing engine cannot post one at all.</small>
             </label>
             <fieldset className="campaign-reply-editor">
               <legend>Replies / thread
@@ -2368,6 +2432,55 @@ export function AutopilotPanel({
                 Add reply
               </Button>
             </fieldset>
+            {/* What is being edited is two thirds of the post. The campaign
+                supplies the rest, and it used to supply it invisibly: somebody
+                writing a caption here had no way to know a disclosure would be
+                prepended to it, that the hashtags would be moved below a link,
+                or that on TikTok the link would not appear in the post at all. */}
+            <section className="campaign-post-anatomy">
+              <strong>What goes out</strong>
+              <ol>
+                <li>
+                  <b>Disclosure</b>
+                  <span>{autopilot.disclosure
+                    ? `Leads the caption whenever a product is attached: "${autopilot.disclosure}"`
+                    : "None set. A post with a product attached will be refused until Campaign settings has one."}</span>
+                </li>
+                <li><b>Your copy</b><span>The caption above, then the hashtags.</span></li>
+                <li>
+                  <b>The product link</b>
+                  <span>{autopilot.offer_mode === "none"
+                    ? "Nothing is attached: this campaign posts organically."
+                    : "Added per account, in the place that account allows."}</span>
+                </li>
+                <li>
+                  <b>Your follow-up</b>
+                  <span>{editing.thread.length || editing.first_comment
+                    ? "Publishes after the post, ahead of any generated product replies."
+                    : "Nothing written; only generated product replies would follow the post."}</span>
+                </li>
+              </ol>
+              {autopilot.offer_mode !== "none" && destinations.length > 0 && (
+                <ul className="campaign-link-map" aria-label="Where the link lands">
+                  {destinations.map((item) => (
+                    <li key={item.id}>
+                      <PlatformIcon platform={item.platform} size={18} />
+                      <strong>{item.label}</strong>
+                      <Badge tone={placementTone(item.link_placement)}>
+                        {t(`autopilot.placement.${item.link_placement}`)}
+                      </Badge>
+                      <small>{item.link_placement === "bio"
+                        ? `Not clickable in the post. The caption points at the profile: "${autopilot.bio_hint}".`
+                        : item.link_placement === "first_comment"
+                          ? `In the ${followUpKind(item.platform)}, straight after the post.`
+                          : item.link_placement === "none"
+                            ? "No link goes out here at all."
+                            : "In the caption itself, below your copy."}</small>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
             <Button type="submit" variant="primary" busy={busy === "edit-copy"}>Save post</Button>
           </form>
         )}
