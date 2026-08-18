@@ -1257,7 +1257,10 @@ export default function PublishPage() {
         const body = await json<{ assets: LibraryAsset[]; facets?: AssetFacets }>(
           await apiFetch(`/api/workspaces/${workspaceId}/media/library/assets?${params}`),
         );
-        setLibrary(body.assets ?? []);
+        // Audio dropped on arrival, the way the campaign picker does it: a
+        // post here is a clip or a carousel, so a sound file has nothing to
+        // become and offering one only to refuse it is the worse half.
+        setLibrary((body.assets ?? []).filter((asset) => asset.media_kind !== "audio"));
         if (body.facets) setLibraryFacets(body.facets);
         setLibraryState({ loading: false, failure: null });
       } catch (reason) {
@@ -3397,7 +3400,12 @@ export default function PublishPage() {
           facets={libraryFacets}
           onSearch={(filters) => void loadLibrary(filters)}
           mediaKind={pickerMode === "images" ? "image" : "video"}
-          onPick={pickerMode === "images" ? addCarouselImage : pickClip}
+          // Routed by what was picked rather than by which button opened the
+          // dialog. "Choose from Library" now shows pictures too, and a
+          // picture chosen there belongs in the carousel - sending it to the
+          // video slot would set a path no destination can post.
+          onPick={(asset) =>
+            (asset.media_kind === "image" ? addCarouselImage : pickClip)(asset)}
           onClose={() => setPickerOpen(false)}
         />
       )}
