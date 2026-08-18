@@ -210,6 +210,14 @@ type Offer = {
 type TimelineEntry = {
   key: string;
   kind: "delivered" | "planned";
+  /**
+   * The queued post this one came from, where the plan knows it.
+   *
+   * A scheduled post is one outing of a post that repeats, and the schedule
+   * named neither the post nor how to find it - so the two tabs read as two
+   * unrelated lists rather than two ends of one pipeline.
+   */
+  queue_item_id?: string | null;
   at: string;
   title: string | null;
   caption: string;
@@ -1097,6 +1105,27 @@ export function AutopilotPanel({
     }
   }
 
+  /**
+   * When each queued post next goes out, and to which account.
+   *
+   * Derived from the preview rather than recomputed: the scheduler already
+   * decided this, and a second guess at it here would be a number that drifts
+   * from the one on the Schedule tab. Empty until a preview has been loaded,
+   * which is honest - nothing is due until the plan says so.
+   */
+  /** The queued posts by id, so the schedule can name the one it came from. */
+  const queueById = new Map(queue.map((item) => [item.id, item]));
+  const nextRun = new Map<string, { when: string; where: string }>();
+  for (const post of preview?.posts ?? []) {
+    if (nextRun.has(post.queue_item_id)) continue;
+    nextRun.set(post.queue_item_id, {
+      when: new Date(post.at).toLocaleString(undefined, {
+        weekday: "short", hour: "2-digit", minute: "2-digit",
+      }),
+      where: post.destination?.label ?? "",
+    });
+  }
+
   const selectedLibrary = Object.values(selectedAssets);
   /**
    * The kind row, and the counts beside it.
@@ -1169,6 +1198,7 @@ export function AutopilotPanel({
     ...preview.posts.map((post): TimelineEntry => ({
       key: `planned-${post.destination_id}-${post.queue_item_id}-${post.at}`,
       kind: "planned",
+      queue_item_id: post.queue_item_id,
       at: post.at,
       title: post.title,
       caption: post.caption,
@@ -1907,7 +1937,7 @@ export function AutopilotPanel({
         ) : (
           <ul className="autopilot-queue">
             {queue.map((item) => (
-              <li key={item.id} className={item.state}>
+              <li key={item.id} id={`queued-${item.id}`} className={item.state}>
                 {/* The clip itself, not just its name: this list is where
                     content is curated, and a thumbnail answers "which video
                     is this" faster than any filename. */}
@@ -1964,6 +1994,16 @@ export function AutopilotPanel({
                     {item.times_posted > 0
                       ? t("autopilot.postedTimes", { count: item.times_posted })
                       : t("autopilot.neverPosted")}
+                    {/* When it next goes out, and where. The queue could say
+                        only "not posted yet" while the schedule already knew
+                        the slot, so the two halves of one pipeline each held a
+                        fact the other needed. Read from the same preview the
+                        Schedule tab renders, so they cannot disagree. */}
+                    {nextRun.get(item.id) && (
+                      <> · Next {nextRun.get(item.id)!.when}
+                        {nextRun.get(item.id)!.where
+                          && ` on ${nextRun.get(item.id)!.where}`}</>
+                    )}
                   </small>
                 </div>
                 <Badge tone={item.state === "approved" ? "good" : "neutral"}>
@@ -2581,6 +2621,31 @@ export function AutopilotPanel({
                               {displayTitle(entry.title) || "Untitled campaign post"}
                             </a>
                           ) : (displayTitle(entry.title) || "Untitled campaign video")}</h4>
+                          {/* Which queued post this outing is of, and a way
+                              back to it. A post repeats, so the same one
+                              appears on the schedule several times, and
+                              without this the reader cannot tell that. */}
+                          {entry.queue_item_id && queueById.get(entry.queue_item_id) && (
+                            <p className="campaign-entry-source">
+                              From{" "}
+                              <button type="button" onClick={() => {
+                                setView("content");
+                                window.requestAnimationFrame(() => {
+                                  const row = document.getElementById(
+                                    `queued-${entry.queue_item_id}`);
+                                  row?.scrollIntoView({ behavior: "smooth", block: "center" });
+                                  row?.classList.add("just-linked");
+                                  window.setTimeout(
+                                    () => row?.classList.remove("just-linked"), 1600);
+                                });
+                              }}>
+                                {displayTitle(queueById.get(entry.queue_item_id)!.title)
+                                  || "a queued post"}
+                              </button>
+                              {(queueById.get(entry.queue_item_id)!.times_posted ?? 0) > 0
+                                && ` · posted ${queueById.get(entry.queue_item_id)!.times_posted}× before`}
+                            </p>
+                          )}
                           {entry.problem && (
                             <p className="autopilot-refusal" role="status">
                               <strong>{t("autopilot.wouldBeRefused")}</strong> {entry.problem}

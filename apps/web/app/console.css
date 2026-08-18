@@ -1148,3 +1148,15 @@ html { scroll-behavior: smooth; }
 /* What the offer pays, on the review row. Beside the name because that is the
    pair being compared - which product, and for how much. */
 .campaign-match-pay { margin-inline-start: 6px; color: var(--green); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+/* --- the two ends of one pipeline ----------------------------------------- */
+/* A scheduled post is one outing of a queued post that repeats, so the row
+   says which one and offers a way back to it. */
+.campaign-entry-source { margin: 2px 0 0; color: var(--muted); font-size: 10px; }
+.campaign-entry-source button { border: 0; padding: 0; background: none; color: var(--link); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+/* Held for a moment after arriving from the schedule, so the eye lands on the
+   row that was asked for rather than hunting the list for it. */
+.autopilot-queue li.just-linked { outline: 2px solid var(--link); outline-offset: 2px; border-radius: var(--radius-sm); }
+@media (prefers-reduced-motion: no-preference) {
+  .autopilot-queue li.just-linked { transition: outline-color .3s ease-out; }
+}
