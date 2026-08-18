@@ -561,21 +561,19 @@ def _run_profile_job(monkeypatch, tmp_path: Path, *, signed_in: bool) -> dict:
     return douyin.run_download_job(job["id"])
 
 
-def test_an_anonymous_profile_fetch_names_the_first_page_limit(
+def test_an_anonymous_profile_fetch_explains_the_browser_read(
     monkeypatch, tmp_path: Path, job_factory
 ) -> None:
-    """Douyin serves an anonymous session one profile page, then empty pages.
-
-    A 60-post profile therefore arrives as ~20 files and the count alone looks
-    complete. The truncation is invisible on disk - only the session strength
-    predicts it - so the job summary must say it, with the remedy.
+    """An anonymous profile is read in a browser, so the count is the whole
+    list - unless the window closed early. The summary explains how the list
+    was read and what a short count means, rather than treating it as final.
     """
     completed = _run_profile_job(monkeypatch, tmp_path, signed_in=False)
 
     assert completed["status"] == "succeeded"
     summary = completed["result"]["summary"]
-    assert "first page" in summary
-    assert "log in" in summary
+    assert "browser" in summary
+    assert "retry" in summary
 
 
 def test_a_signed_in_profile_fetch_is_not_second_guessed(
@@ -584,7 +582,7 @@ def test_a_signed_in_profile_fetch_is_not_second_guessed(
     completed = _run_profile_job(monkeypatch, tmp_path, signed_in=True)
 
     assert completed["status"] == "succeeded"
-    assert "first page" not in completed["result"]["summary"]
+    assert "browser" not in completed["result"]["summary"]
 
 
 def test_connection_message_says_whether_the_session_is_signed_in(
@@ -602,8 +600,10 @@ def test_connection_message_says_whether_the_session_is_signed_in(
     )
     anonymous = douyin.connection_status()
     assert anonymous["state"] == "connected"
+    # Anonymous downloads whole profiles now (via the browser); the only thing
+    # it cannot do is topic search.
     assert "anonymous" in anonymous["message"]
-    assert "first page" in anonymous["message"]
+    assert "search" in anonymous["message"]
 
     monkeypatch.setattr(
         douyin,

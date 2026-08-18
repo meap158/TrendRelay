@@ -3,11 +3,13 @@ from pathlib import Path
 
 import pytest
 
+import scripts.douyin as douyin_cli
 from scripts.douyin import (
     batch_download,
     build_config,
     build_parser,
     collect_urls,
+    expand_profiles,
     extract_urls,
     resolve_cookies,
 )
@@ -67,6 +69,104 @@ def test_builds_bounded_incremental_batch_config(
     # Absent means enabled to the provider, which mid-download opens a visible
     # signed-out browser that can collect nothing. Off must be said.
     assert config["browser_fallback"] == {"enabled": False}
+
+
+def test_a_profile_expands_to_its_videos_when_the_harvest_beats_the_api(
+    monkeypatch,
+) -> None:
+    # Anonymous, and the browser cleared the first-page floor: the profile is
+    # replaced by its videos, each downloadable through the per-video path.
+    harvest = [f"https://www.douyin.com/video/{n}" for n in range(25)]
+    monkeypatch.setattr(
+        douyin_cli, "cookie_readiness", lambda: {"ready": True, "signed_in": False}
+    )
+    monkeypatch.setattr(
+        douyin_cli, "enumerate_profile_urls", lambda url, limit: harvest
+    )
+    result = expand_profiles(["https://www.douyin.com/user/abc"], ["post"], limit=0)
+    assert result == harvest
+
+
+def test_a_throttled_harvest_below_the_api_page_keeps_the_profile(monkeypatch) -> None:
+    # The browser recovered fewer than a plain fetch would: keep the profile
+    # link so the provider still brings down its first page, never fewer.
+    monkeypatch.setattr(
+        douyin_cli, "cookie_readiness", lambda: {"ready": True, "signed_in": False}
+    )
+    monkeypatch.setattr(
+        douyin_cli,
+        "enumerate_profile_urls",
+        lambda url, limit: [f"https://www.douyin.com/video/{n}" for n in range(8)],
+    )
+    urls = ["https://www.douyin.com/user/abc"]
+    assert expand_profiles(urls, ["post"], limit=0) == urls
+
+
+def test_a_small_limit_accepts_a_small_but_complete_harvest(monkeypatch) -> None:
+    # When only five were asked for, five is the whole request - not a throttle
+    # below the floor - so the harvest is used.
+    harvest = [f"https://www.douyin.com/video/{n}" for n in range(5)]
+    monkeypatch.setattr(
+        douyin_cli, "cookie_readiness", lambda: {"ready": True, "signed_in": False}
+    )
+    monkeypatch.setattr(
+        douyin_cli, "enumerate_profile_urls", lambda url, limit: harvest
+    )
+    result = expand_profiles(["https://www.douyin.com/user/abc"], ["post"], limit=5)
+    assert result == harvest
+
+
+def test_a_signed_in_profile_is_left_for_the_api(monkeypatch) -> None:
+    # Signed in, the API paginates the whole profile, so no browser is opened.
+    monkeypatch.setattr(
+        douyin_cli, "cookie_readiness", lambda: {"ready": True, "signed_in": True}
+    )
+    monkeypatch.setattr(
+        douyin_cli,
+        "enumerate_profile_urls",
+        lambda url, limit: pytest.fail("must not enumerate when signed in"),
+    )
+    urls = ["https://www.douyin.com/user/abc"]
+    assert expand_profiles(urls, ["post"], limit=0) == urls
+
+
+def test_a_profile_that_enumerates_to_nothing_is_kept(monkeypatch) -> None:
+    # A profile that harvested nothing stays a profile link, so the provider
+    # still brings down its first page rather than the source failing.
+    monkeypatch.setattr(
+        douyin_cli, "cookie_readiness", lambda: {"ready": True, "signed_in": False}
+    )
+    monkeypatch.setattr(douyin_cli, "enumerate_profile_urls", lambda url, limit: [])
+    urls = ["https://www.douyin.com/user/abc"]
+    assert expand_profiles(urls, ["post"], limit=0) == urls
+
+
+def test_a_single_video_is_never_sent_to_the_browser(monkeypatch) -> None:
+    monkeypatch.setattr(
+        douyin_cli, "cookie_readiness", lambda: {"ready": True, "signed_in": False}
+    )
+    monkeypatch.setattr(
+        douyin_cli,
+        "enumerate_profile_urls",
+        lambda url, limit: pytest.fail("a /video/ URL needs no enumeration"),
+    )
+    urls = ["https://www.douyin.com/video/999"]
+    assert expand_profiles(urls, ["post"], limit=0) == urls
+
+
+def test_liked_and_collection_modes_are_left_alone(monkeypatch) -> None:
+    # Enumeration harvests the posts grid only; other profile facets keep the
+    # provider's own path.
+    monkeypatch.setattr(
+        douyin_cli, "cookie_readiness", lambda: {"ready": True, "signed_in": False}
+    )
+    monkeypatch.setattr(
+        douyin_cli,
+        "enumerate_profile_urls",
+        lambda url, limit: pytest.fail("only post mode enumerates"),
+    )
+    urls = ["https://www.douyin.com/user/abc"]
+    assert expand_profiles(urls, ["like"], limit=0) == urls
 
 
 def test_batch_parser_rejects_removed_browser_fallback() -> None:

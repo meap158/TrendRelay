@@ -623,15 +623,15 @@ export default function Dashboard() {
             <div><strong>{t("downloads.refreshSession")}</strong><span>{status?.douyin.connection?.message}</span></div>
             <Button variant="secondary" busy={connecting} disabled={selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}><ActionIcon name="refresh" />{connecting ? "Opening" : "Refresh session"}</Button>
           </div>}
-          {providerReady && cookiesReady && !refreshRequired && anonymousSession && <div className="connection-callout warning">
-            {/* Anonymous is connected - single links download - but Douyin
-                serves it one page of a profile, so a 60-post profile quietly
-                arrives as 20 files. Said here, before the download, where the
-                operator can still do something about it. */}
-            <div><strong>Signed out of Douyin</strong><span>{status?.douyin.connection?.message}</span></div>
-            <Button variant="secondary" busy={connecting} disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
-              {connecting || connectionActive ? "Waiting for sign-in" : "Log in to Douyin"}
-            </Button>
+          {providerReady && cookiesReady && !refreshRequired && anonymousSession && <div className="connection-callout connected">
+            {/* Anonymous works: single links reliably, and a profile is read
+                in a browser that recovers more than the first page when Douyin
+                allows it. Not a warning; signing in is the dependable path for
+                whole profiles and the only path for topic search. */}
+            <div><strong>Douyin connected (signed out)</strong><span>{status?.douyin.connection?.message}</span></div>
+            <button type="button" className={buttonClass({ variant: "link" })} disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
+              {connecting || connectionActive ? "Opening…" : "Log in for full profiles"}
+            </button>
           </div>}
           {providerReady && cookiesReady && !refreshRequired && !anonymousSession && <div className="connection-callout connected">
             <div><strong>{t("downloads.readyToDownload")}</strong><span>{t("downloads.refreshSessionHelp")}</span></div>

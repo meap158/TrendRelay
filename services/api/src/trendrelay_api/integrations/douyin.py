@@ -313,10 +313,11 @@ def connection_status() -> dict[str, Any]:
             "message": (
                 "Douyin session is signed in and ready."
                 if cookies.get("signed_in")
-                else "Douyin session is anonymous: single links download fine, "
-                "but a profile fetch stops after its first page (about 20 "
-                "posts). Refresh the session and log in to fetch whole "
-                "profiles."
+                else "Douyin session is anonymous. Single links download "
+                "reliably; a profile is read in a browser that recovers more "
+                "than the first 20 posts when Douyin lets it, but an anonymous "
+                "session can be throttled partway. Log in for dependable "
+                "whole-profile fetches and topic search."
             ),
             "updated_at": None,
         }
@@ -948,19 +949,20 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         summary = f"Fetched {len(artifacts)} media file(s)"
         if source_errors:
             summary = f"{summary}; {len(source_errors)} source(s) failed"
-        # A profile fetched anonymously is served exactly one page and then
-        # empty pages, so a 60-post profile quietly arrives as 20 files and
-        # looks complete. The truncation is invisible in the file count -
-        # only the session strength predicts it - so it is named here, with
-        # the remedy, instead of letting the count pass for the whole.
+        # A profile is read in a browser before the provider runs (the API
+        # caps an anonymous session at one page), so the count reflects the
+        # whole profile. If that browser could not open - not installed, or
+        # closed early - the provider still got the first page, so the note
+        # says how the list is read rather than treating the count as final.
         if (
             any("/user/" in url for url in request["urls"])
             and not cookie_status().get("signed_in")
         ):
             summary = (
-                f"{summary}. Anonymous Douyin session: each profile stops "
-                "after its first page (about 20 posts). Refresh the session "
-                "and log in to fetch whole profiles."
+                f"{summary}. A profile is read in a browser that recovers more "
+                "than the first 20 posts when Douyin allows it; an anonymous "
+                "session can be throttled partway, so if fewer arrived than the "
+                "profile shows, retry (downloads resume) or log in for the rest."
             )
         result = {
             **payload,
