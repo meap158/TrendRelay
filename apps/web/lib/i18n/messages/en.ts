@@ -450,6 +450,8 @@ export const en = {
     noCommentHere: "None of the chosen networks take a first comment.",
     commentPlanLocked:
       "{platforms} takes a first comment, but the engine's current plan does not include it. Upgrade the plan, or put the link in the caption — it is clickable there.",
+    commentEngineLocked:
+      "{platforms} takes a first comment, but {engine} cannot send one — only Buffer delivers first comments. Use a Buffer destination for it, or put the link in the caption.",
     commentReach: "Instagram reduces reach for posts that funnel to a comment link, and often hides the comment.",
     chooseDestinationsFirst: "Choose destinations to see where this link will land.",
     disclosureLeads: "This leads the caption on every network, including where the link is in the bio.",

@@ -57,7 +57,7 @@ export function AffiliateLink({
   onFirstComment,
   onDisclosure,
   commentPlatforms,
-  commentLockedPlatforms = [],
+  commentUnavailableReason,
   disabled,
 }: {
   products: ProductRow[];
@@ -73,8 +73,8 @@ export function AffiliateLink({
   onDisclosure: (next: string) => void;
   /** Networks among the chosen that accept a first comment at all. */
   commentPlatforms: string[];
-  /** Chosen networks that take one, but the engine plan withholds it. */
-  commentLockedPlatforms?: string[];
+  /** Why none will carry one - the plan or the engine, already worded. */
+  commentUnavailableReason?: string | null;
   disabled?: boolean;
 }) {
   const t = useT();
@@ -206,15 +206,12 @@ export function AffiliateLink({
               disabled={disabled || !commentPlatforms.length}
               title={commentPlatforms.length
                 ? t("publish.commentReach")
-                // The network and the plan are different culprits. Facebook
-                // takes a first comment; a Buffer Free login does not send
-                // one - and blaming the network for the plan sent the
-                // operator investigating the wrong thing.
-                : commentLockedPlatforms.length
-                  ? t("publish.commentPlanLocked", {
-                      platforms: commentLockedPlatforms.join(", "),
-                    })
-                  : t("publish.noCommentHere")}
+                // The network, the plan and the engine are different
+                // culprits. Facebook takes a first comment; a Buffer Free
+                // login does not send one, and Zernio cannot - and blaming
+                // the network sent the operator investigating the wrong
+                // thing.
+                : commentUnavailableReason ?? t("publish.noCommentHere")}
               onClick={addToComment}
             >{t("publish.addToFirstComment")}</Button>
           </div>

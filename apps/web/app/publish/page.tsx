@@ -543,6 +543,43 @@ export default function PublishPage() {
     [chosenAccounts],
   );
   /**
+   * Why no chosen destination will carry a first comment, or null when one
+   * will. Two culprits, two sentences: a network the engine's plan withholds
+   * (Buffer Free) and a network the engine cannot send one to at all
+   * (everything that is not Buffer). Both used to read "none of the chosen
+   * networks take a first comment", which blamed the network for the engine
+   * and sent the operator investigating the wrong thing.
+   */
+  const commentBlockedNote = useMemo(() => {
+    if (!chosen.length) return null;
+    const delivers = (platform: string) => providersFor(platform).some(
+      (provider) => (provider.first_comment_platforms ?? []).includes(platform));
+    if (chosen.some(delivers)) return null;
+    const planLocked = chosen.filter((platform) =>
+      providersFor(platform).some((provider) =>
+        (provider.first_comment_locked_platforms ?? []).includes(platform)));
+    if (planLocked.length) {
+      return t("publish.commentPlanLocked", {
+        platforms: planLocked.map((platform) => platformLabels[platform]).join(", "),
+      });
+    }
+    const anywhere = [...providerById.values()];
+    const engineLocked = chosen.filter((platform) => anywhere.some((provider) =>
+      (provider.first_comment_platforms ?? []).includes(platform)
+      || (provider.first_comment_locked_platforms ?? []).includes(platform)));
+    if (engineLocked.length) {
+      const engines = [...new Set(engineLocked.flatMap((platform) =>
+        providersFor(platform).map((provider) => provider.engine_label)))].join(", ");
+      return t("publish.commentEngineLocked", {
+        platforms: engineLocked.map((platform) => platformLabels[platform]).join(", "),
+        engine: engines || "this engine",
+      });
+    }
+    return null;
+    // providersFor reads chosenAccounts and providerById, both below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosen, chosenAccounts, providerById, t]);
+  /**
    * Whether any destination is set to post a photo carousel.
    *
    * Read from the chosen post types rather than from images being attached:
@@ -2970,11 +3007,7 @@ export default function PublishPage() {
             commentPlatforms={chosen.filter((platform) =>
               providersFor(platform).some(
                 (provider) => (provider.first_comment_platforms ?? []).includes(platform)))}
-            commentLockedPlatforms={chosen.filter((platform) =>
-              providersFor(platform).some((provider) =>
-                (provider.first_comment_locked_platforms ?? []).includes(platform))
-              && !providersFor(platform).some((provider) =>
-                (provider.first_comment_platforms ?? []).includes(platform)))}
+            commentUnavailableReason={commentBlockedNote}
             disabled={!canExecute}
           />
 
@@ -2985,15 +3018,10 @@ export default function PublishPage() {
             if (!carriers.length) {
               // The field hiding silently is how a plan limit got blamed on
               // the network. Where a chosen network takes a first comment
-              // that only the plan withholds, say which.
-              const locked = chosen.filter((platform) =>
-                providersFor(platform).some((provider) =>
-                  (provider.first_comment_locked_platforms ?? []).includes(platform)));
-              return locked.length ? (
+              // that the plan or the engine withholds, say which.
+              return commentBlockedNote ? (
                 <p className="publish-plan-note" role="status">
-                  {t("publish.commentPlanLocked", {
-                    platforms: locked.map((platform) => platformLabels[platform]).join(", "),
-                  })}
+                  {commentBlockedNote}
                 </p>
               ) : null;
             }

@@ -446,6 +446,8 @@ export const vi: Messages = {
     noCommentHere: "Không nền tảng nào đã chọn nhận bình luận đầu.",
     commentPlanLocked:
       "{platforms} có hỗ trợ bình luận đầu tiên, nhưng gói hiện tại của nền tảng đăng không bao gồm tính năng này. Nâng cấp gói, hoặc đặt liên kết vào chú thích — ở đó vẫn bấm được.",
+    commentEngineLocked:
+      "{platforms} có hỗ trợ bình luận đầu tiên, nhưng {engine} không thể gửi — chỉ Buffer gửi được bình luận đầu tiên. Dùng đích Buffer cho bài này, hoặc đặt liên kết vào chú thích.",
     commentReach: "Instagram giảm tiếp cận với bài dẫn tới liên kết ở bình luận, và thường ẩn bình luận đó.",
     chooseDestinationsFirst: "Hãy chọn đích đến để xem liên kết sẽ nằm ở đâu.",
     disclosureLeads: "Câu này mở đầu chú thích trên mọi nền tảng, kể cả khi liên kết nằm ở tiểu sử.",
