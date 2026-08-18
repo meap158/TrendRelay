@@ -1110,3 +1110,9 @@ html { scroll-behavior: smooth; }
 .draft-package-source { display: grid; gap: 1px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .draft-package-source span { font-weight: 600; text-transform: uppercase; letter-spacing: .03em; font-size: 9px; }
 .draft-package-source q { overflow-wrap: anywhere; font-style: italic; }
+/* What smart match would attach to this post, beside the copy being written
+   for it. Quiet: a suggestion the campaign confirms at post time, not a
+   decision already made. */
+.draft-package-offers { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.draft-package-offers li { display: inline-flex; align-items: center; gap: 5px; min-width: 0; border-radius: 999px; padding: 2px 9px 2px 3px; background: var(--panel-raised); color: var(--muted); font-size: 10px; }
+.draft-package-offers li > span:last-child { overflow: hidden; max-width: 22ch; text-overflow: ellipsis; white-space: nowrap; }

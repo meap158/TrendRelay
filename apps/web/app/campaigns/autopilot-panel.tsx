@@ -590,6 +590,15 @@ export function AutopilotPanel({
   const [draftPinned, setDraftPinned] = useState<Set<string>>(new Set());
   const [draftMatches, setDraftMatches] = useState<OfferMatch[] | null>(null);
   /**
+   * The products that fit each clip, per row, matched before anything queues.
+   *
+   * Fetched for the whole selection in one call as the composer opens, so the
+   * writer sees what would attach while choosing rather than after approving.
+   * Keyed by asset because that is what was scored; a carousel is answered for
+   * by its cover, which is the picture the row is named after.
+   */
+  const [rowMatches, setRowMatches] = useState<Record<string, OfferMatch[]>>({});
+  /**
    * What the current selection will become, in the words used to describe it.
    *
    * The rule is one sentence long on purpose: a video is a post, and pictures
@@ -940,6 +949,32 @@ export function AutopilotPanel({
       setBusy("");
     }
   }
+
+  /**
+   * Match the whole selection at once, when the composer opens.
+   *
+   * Failure is quiet: a row without a suggestion still composes, and an error
+   * banner over a panel somebody opened to write copy is noise about a feature
+   * they were not using yet.
+   */
+  const loadRowMatches = useCallback(async (assets: LibraryAsset[]) => {
+    const ids = assets.map((asset) => asset.id);
+    if (!ids.length) return;
+    try {
+      const body = await json<{ assets: Record<string, { matches: OfferMatch[] }> }>(
+        await apiFetch(`${base}/offer-recommendations/draft`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ asset_ids: ids.slice(0, 100), limit: 2 }),
+        }),
+      );
+      setRowMatches(Object.fromEntries(
+        Object.entries(body.assets).map(([id, found]) => [id, found.matches]),
+      ));
+    } catch {
+      setRowMatches({});
+    }
+  }, [apiFetch, base]);
 
   function resetDraftProducts() {
     setDraftProductMode("smart");
@@ -1897,7 +1932,13 @@ export function AutopilotPanel({
               <Button variant="secondary" size="sm" disabled={!selectedLibrary.length}
                 onClick={() => setEffectOpen(true)}>Apply effects</Button>
               <Button variant="primary" size="sm" disabled={!selectedLibrary.length}
-                onClick={() => setDrafting(selectedLibrary)}>Write campaign copy</Button>
+                onClick={() => {
+                  setDrafting(selectedLibrary);
+                  // Matched as the composer opens, so the suggestions are
+                  // already there when the first row is read rather than
+                  // arriving under the cursor a moment later.
+                  void loadRowMatches(selectedLibrary);
+                }}>Write campaign copy</Button>
               {selectedLibrary.length > 0 && (
                 <Button variant="quiet" size="sm" onClick={() => setSelectedAssets({})}>
                   Clear selection
@@ -1981,6 +2022,7 @@ export function AutopilotPanel({
                 setPicking(false);
                 setDraftCopy({});
                 setSplitPictures(false);
+                setRowMatches({});
                 resetDraftProducts();
                 return `${count} ${count === 1 ? "package" : "packages"} added to the campaign queue.`;
               });
@@ -2063,6 +2105,23 @@ export function AutopilotPanel({
                         </Button>
                       )}
                     </div>
+                    {/* What smart match would attach to this post, shown while
+                        it is being written rather than discovered after it is
+                        approved. A suggestion, not a commitment: the campaign
+                        picks at post time from the offers that still fit. */}
+                    {Boolean(rowMatches[lead.id]?.length) && (
+                      <ul className="draft-package-offers">
+                        {rowMatches[lead.id].slice(0, 2).map((match) => (
+                          <li key={match.offer_id}>
+                            <span
+                              className="campaign-match-score"
+                              data-confidence={match.confidence}
+                            ><strong>{match.score}</strong><small>%</small></span>
+                            <span>{match.product_name}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     <label>
                       <span className="sr-only">{t("autopilot.copy")}</span>
                       <textarea

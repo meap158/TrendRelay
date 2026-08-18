@@ -924,3 +924,118 @@ def test_copy_somebody_wrote_is_not_marked_as_needing_writing(workspace) -> None
 
     assert item["needs_copy"] is False
     assert item["body"] == "Real copy."
+
+
+# --- matching before anything is queued ----------------------------------------
+#
+# The composer shows the fitting products per row while media is being chosen,
+# so somebody sees what would attach before approving rather than after.
+
+
+def _draft_asset(workspace, asset_id, title, caption, hashtags):
+    with TestingSession.begin() as session:
+        session.add(MediaAsset(
+            id=asset_id, workspace_id=workspace, title=title,
+            media_kind="video", source_type="upload", caption=caption,
+            hashtags=hashtags, original_path=rf"S:\media\{asset_id}.mp4",
+            original_sha256=asset_id.ljust(64, "0")[:64], mime_type="video/mp4",
+            size_bytes=20, created_by="owner-user",
+        ))
+
+
+def test_a_clip_is_matched_before_it_reaches_the_queue(workspace) -> None:
+    campaign_id = campaign(workspace)
+    _draft_asset(
+        workspace, "asset-draft", "Portable espresso setup",
+        "Make espresso anywhere with this compact coffee kit", ["coffee"],
+    )
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/offer-recommendations/draft",
+        json={"asset_ids": ["asset-draft"]},
+    )
+
+    assert response.status_code == 200, response.text
+    found = response.json()["assets"]["asset-draft"]
+    assert found["matches"][0]["offer_id"] == "offer-1"
+    # Scored off the asset, which is where the strongest signals live.
+    assert any(
+        "caption" in source or "media title" in source
+        for source in found["matches"][0]["evidence_sources"]
+    )
+
+
+def test_matching_a_draft_never_leaves_a_queue_item_behind(workspace) -> None:
+    """The risk in scoring against an item that was built and not saved.
+
+    Reusing the real matcher means handing it a `CampaignQueueItem`, and one
+    that reached a flush would become a queue row nobody asked for - media
+    would appear in the campaign merely because somebody looked at it.
+    """
+    campaign_id = campaign(workspace)
+    _draft_asset(workspace, "asset-ghost", "Ghost clip", "A clip", [])
+
+    request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/offer-recommendations/draft",
+        json={"asset_ids": ["asset-ghost"]},
+    )
+
+    queue = request(
+        "GET", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot"
+    ).json()["queue"]
+    assert queue == []
+
+
+def test_one_stale_id_does_not_cost_the_rest_their_suggestions(workspace) -> None:
+    # A selection of a hundred should not lose every suggestion because one
+    # asset was deleted between picking and composing.
+    campaign_id = campaign(workspace)
+    _draft_asset(workspace, "asset-real", "Real clip", "Espresso coffee kit", [])
+
+    body = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/offer-recommendations/draft",
+        json={"asset_ids": ["asset-real", "asset-gone"]},
+    ).json()
+
+    assert "asset-real" in body["assets"]
+    assert "asset-gone" not in body["assets"]
+
+
+def test_the_whole_selection_is_matched_in_one_request(workspace) -> None:
+    # One call for the row set: a hundred rows as a hundred requests would
+    # re-read the same campaign and the same offer catalogue each time.
+    campaign_id = campaign(workspace)
+    for index in range(3):
+        _draft_asset(
+            workspace, f"asset-many-{index}", f"Clip {index}", "Espresso kit", [],
+        )
+
+    body = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/offer-recommendations/draft",
+        json={"asset_ids": [f"asset-many-{index}" for index in range(3)]},
+    ).json()
+
+    assert sorted(body["assets"]) == ["asset-many-0", "asset-many-1", "asset-many-2"]
+
+
+def test_a_selection_larger_than_the_cap_is_refused(workspace) -> None:
+    # Each id costs a scoring pass, so the cap is what stops one request
+    # becoming a hundred sequential matches inside a single handler.
+    campaign_id = campaign(workspace)
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/offer-recommendations/draft",
+        json={"asset_ids": [f"asset-{index}" for index in range(101)]},
+    )
+
+    assert response.status_code == 422

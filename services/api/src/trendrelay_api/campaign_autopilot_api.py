@@ -45,6 +45,7 @@ from trendrelay_api.integrations.publishing import (
     resolve_post_type,
     resolve_provider,
 )
+from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.models import Campaign, DurableJob, utc_now
 from trendrelay_api.opportunity_models import ProductOffer
 from trendrelay_api.publication_models import PublicationExecution
@@ -723,6 +724,94 @@ def _require_offer_ids(
             status_code=422,
             detail="Every pinned product must be a usable offer in this workspace.",
         )
+
+
+class DraftMatchRequest(BaseModel):
+    """Assets being composed into packages, before any of them is queued."""
+
+    #: Bounded because each id costs a scoring pass. A hundred clips is a real
+    #: selection here, and the cap is what keeps one request from becoming a
+    #: hundred sequential matches inside a single handler.
+    asset_ids: list[str] = Field(min_length=1, max_length=100)
+    #: Only the leaders are wanted per row; the full ranking is a click away on
+    #: the queued item. Three keeps the row readable.
+    limit: int = Field(default=3, ge=1, le=10)
+
+
+@router.post("/{campaign_id}/offer-recommendations/draft")
+def draft_offer_recommendations(
+    workspace_id: str,
+    campaign_id: str,
+    body: DraftMatchRequest,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Which products fit each clip, before any of it reaches the queue.
+
+    The composer shows this per row so somebody choosing media can see what
+    would attach to each post rather than discovering it after approving. The
+    same matcher the scheduler runs, so what is shown is what would be picked.
+
+    Scored against a queue item that is built and never saved. It is the one
+    way to reuse the real path exactly: `match_offers` reads its evidence off
+    an item, and an item's strongest signals - the creative analysis, the
+    source caption, the hashtags - all hang off the asset, which exists now.
+    Reimplementing the scoring against a bare asset would be a second ranking
+    to keep in step with the first.
+
+    One call for the whole selection rather than one per row: a hundred rows
+    would otherwise be a hundred requests, each re-reading the same campaign
+    and the same offer catalogue.
+    """
+    membership(session, workspace_id, user.id)
+    campaign = _campaign(session, workspace_id, campaign_id)
+    autopilot = _autopilot(session, workspace_id, campaign_id, user_id=user.id)
+    destinations = session.scalars(select(CampaignDestination).where(
+        CampaignDestination.campaign_id == campaign_id,
+        CampaignDestination.enabled.is_(True),
+    )).all()
+    from trendrelay_api.campaign_offer_matcher import match_offers
+
+    wanted = list(dict.fromkeys(body.asset_ids))
+    known = {
+        asset.id: asset
+        for asset in session.scalars(select(MediaAsset).where(
+            MediaAsset.workspace_id == workspace_id,
+            MediaAsset.id.in_(wanted),
+        )).all()
+    }
+    found: dict[str, Any] = {}
+    for asset_id in wanted:
+        asset = known.get(asset_id)
+        if asset is None:
+            # Silently absent rather than a 404 for the batch: one stale id in
+            # a selection of a hundred should cost that row its suggestion, not
+            # the other ninety-nine theirs.
+            continue
+        draft = CampaignQueueItem(
+            workspace_id=workspace_id,
+            campaign_id=campaign_id,
+            asset_id=asset.id,
+            title=asset.title,
+            body="",
+            hashtags=[],
+        )
+        matches, strategy = match_offers(
+            session,
+            campaign,
+            autopilot,
+            item=draft,
+            destinations=destinations,
+            limit=body.limit,
+        )
+        found[asset_id] = {
+            "matches": [match.view() for match in matches],
+            "strategy": strategy,
+        }
+    # Nothing was added to the session, and saying so is cheaper than trusting
+    # it: a transient item that reached a flush would become a real queue row.
+    session.expunge_all()
+    return {"assets": found}
 
 
 @router.get("/{campaign_id}/offer-recommendations")
