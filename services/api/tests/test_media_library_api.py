@@ -255,7 +255,12 @@ def test_ingest_deduplicates_enriches_searches_and_plans(
     assert "publishable" not in asset
     assert "rights_status" not in asset
     assert asset["original_sha256"] == media_library.file_sha256(source)
-    assert asset["published_at"].startswith("2026-07-20T08:30:00")
+    # The instant that was sent, not the wall clock it was written in. It
+    # arrives as 08:30+07:00 and comes back as the same moment in UTC.
+    # This used to assert 08:30 with no offset, which is that clock face
+    # relabelled as UTC - seven hours wrong, and the reason every
+    # timestamp in the interface read stale on a machine east of London.
+    assert asset["published_at"].startswith("2026-07-20T01:30:00")
     assert asset["engagement"]["likes"] == 1200
     assert asset["source_urls"] == [
         "https://www.douyin.com/video/456",

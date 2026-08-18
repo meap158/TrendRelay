@@ -18,10 +18,44 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
 
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+class UtcDateTime(TypeDecorator):
+    """A moment that still knows it is UTC after a round trip.
+
+    SQLite has no timezone type, so an aware `datetime` written through the
+    plain `DateTime` came back naive - and naive is not a smaller truth, it is
+    an ambiguous one. Serialised, it reached the browser as
+    `2026-08-18T14:27:41` with no offset, which `new Date()` reads as *local*
+    time. On a machine seven hours ahead of UTC every timestamp in the
+    interface was seven hours stale: a job that finished a minute ago read
+    "7h ago".
+
+    Stored values are already UTC - everything writes `utc_now()` - so this
+    changes no data. It stamps back on the way out what was always true, and
+    normalises an aware value to UTC on the way in, so a caller passing a local
+    moment cannot write an unmarked one.
+    """
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None or value.tzinfo is None:
+            # Naive in means naive as written: every writer here means UTC, and
+            # guessing the server's zone would invent a fact.
+            return value
+        return value.astimezone(UTC).replace(tzinfo=None)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
 def new_id(prefix: str) -> str:
@@ -29,7 +63,10 @@ def new_id(prefix: str) -> str:
 
 
 class Base(DeclarativeBase):
-    pass
+    #: Every `Mapped[datetime]` in every model, in one place.
+    #: Declared here rather than column by column so a model added
+    #: later cannot forget it.
+    type_annotation_map = {datetime: UtcDateTime}
 
 
 class UserProfile(Base):
