@@ -755,6 +755,11 @@ html { scroll-behavior: smooth; }
 .campaign-product-matches.selectable > li { display: block; padding: 0; }
 .campaign-product-matches.selectable label { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 9px; align-items: center; padding: 8px; cursor: pointer; }
 .campaign-product-matches.selectable input { accent-color: var(--link); }
+/* One cell for both marks, so a row that has a "would post" mark and a row
+   that does not still put confidence in the same place. */
+.campaign-match-marks { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+/* Standing out without shouting: the same badge, ringed. */
+.campaign-match-chosen { box-shadow: 0 0 0 1px var(--green); }
 .campaign-item-products { margin-top: 10px; border-color: var(--line-strong); }
 .campaign-product-actions { border-top: 1px solid var(--line); padding-top: 10px; }
 

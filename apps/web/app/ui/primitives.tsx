@@ -5,12 +5,15 @@ import type { ReactNode } from "react";
 /** Short status word: configured / required / failed. */
 export function Badge({
   tone = "neutral",
+  className,
   children,
 }: {
   tone?: "neutral" | "good" | "warn" | "bad" | "accent";
+  /** For a badge one screen needs to single out among its siblings. */
+  className?: string;
   children: ReactNode;
 }) {
-  return <b className={`ui-badge ui-badge-${tone}`}>{children}</b>;
+  return <b className={`ui-badge ui-badge-${tone}${className ? ` ${className}` : ""}`}>{children}</b>;
 }
 
 /**

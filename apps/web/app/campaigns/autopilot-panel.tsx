@@ -60,6 +60,7 @@ import {
   platformLabels,
   type PublishingPlatform,
 } from "../publishing-icons";
+import { followUpKind, followUpLabel, takesFollowUp } from "../../lib/follow-up";
 
 type Account = {
   id: string;
@@ -549,6 +550,120 @@ function dayHeading(value: string, timeZone: string): string {
       ? "Tomorrow"
       : date.toLocaleDateString(undefined, { weekday: "long", timeZone });
   return `${prefix} · ${date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone })}`;
+}
+
+/**
+ * Every outing a queued post has ahead of it, rehearsed.
+ *
+ * The row used to say "Next Thu 09:00 on halcyonbooks" and stop, which answers
+ * one of the four questions somebody has before approving: when, where, what it
+ * reads like there, and what follows it. A post going to Threads and to
+ * Instagram is two different posts - different caption length, and text after
+ * it that is a reply on one and a comment on the other - and the row showed
+ * neither. Read from the same preview the Schedule tab renders, so the two
+ * cannot disagree.
+ */
+function QueueRehearsal({
+  item,
+  outings,
+  workspaceId,
+}: {
+  item: QueueItem;
+  outings: PreviewPost[];
+  workspaceId: string;
+}) {
+  if (!outings.length) return null;
+  const media = (path: string) =>
+    `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview?path=${encodeURIComponent(path)}`;
+  const when = (value: string) => new Date(value).toLocaleString(undefined, {
+    weekday: "short", month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+  return (
+    <details className="campaign-row-rehearsal">
+      <summary>
+        <span>Goes out {outings.length}×</span>
+        {/* The first two spelled out, the rest counted. Enough to recognise the
+            plan without the summary line wrapping to three rows. */}
+        <small>{outings.slice(0, 2).map((post) =>
+          `${when(post.at)} · ${post.destination
+            ? platformLabels[post.destination.platform] : "Account"}`).join("  ·  ")}
+          {outings.length > 2 && `  ·  +${outings.length - 2} more`}</small>
+      </summary>
+      <div className="campaign-rehearsal-list">
+        {outings.map((post) => {
+          const platform = post.destination?.platform;
+          const followUps = [
+            ...(post.first_comment ? [post.first_comment] : []),
+            ...post.thread,
+          ];
+          return (
+            <article key={`${post.destination_id}-${post.at}`}>
+              <header>
+                {platform && <PlatformIcon platform={platform} />}
+                <strong>{post.destination?.label ?? "Account"}</strong>
+                <small>{when(post.at)}</small>
+                <Badge tone={placementTone(post.placement)}>
+                  {placementSummary(post).label}
+                </Badge>
+              </header>
+              {/* Said before the caption, not after it: this one is not going
+                  anywhere, and reading the copy first wastes the reader's time. */}
+              {post.problem && (
+                <p className="autopilot-refusal" role="status">
+                  <strong>Would be refused.</strong> {post.problem}
+                </p>
+              )}
+              {platform && (
+                <PostPreview
+                  platform={platform}
+                  postTypeLabel={post.destination?.post_type ?? "Post"}
+                  handle={post.destination?.label ?? ""}
+                  caption={post.caption}
+                  title={post.title ?? ""}
+                  thumbnail=""
+                  source={item.video_path
+                    ? media(item.video_path)
+                    : item.image_paths[0] ? media(item.image_paths[0]) : undefined}
+                  sourceIsImage={!item.video_path && item.image_paths.length > 0}
+                  carousel={item.image_paths.length > 1
+                    ? item.image_paths.map(media) : undefined}
+                  wantsCarousel={item.image_paths.length > 1}
+                />
+              )}
+              {/* Named for the network it lands on. On Threads there is no
+                  comment box separate from the thread, so calling this a first
+                  comment describes something the reader will never see. */}
+              {followUps.map((text, index) => (
+                <div key={`follow-${index}`} className="campaign-rehearsal-follow">
+                  <strong>{followUpLabel(platform, index)}</strong>
+                  <pre>{text}</pre>
+                </div>
+              ))}
+              {!followUps.length && takesFollowUp(platform) && (
+                <p className="campaign-rehearsal-follow empty">
+                  Nothing follows the post here, though this account takes a
+                  {" "}{followUpKind(platform)}.
+                </p>
+              )}
+              {post.product_details.length > 0 && (
+                <ul className="campaign-pipeline-products" aria-label="Attached products">
+                  {post.product_details.map((product, index) => (
+                    <li key={`${product.offer_id}-${index}`}>
+                      <span aria-hidden="true">{index + 1}</span>
+                      <strong>{product.name}</strong>
+                      <small>{placementSummary(post).label}
+                        {commissionLabel(product) ? ` · ${commissionLabel(product)}` : ""}</small>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </details>
+  );
 }
 
 export function AutopilotPanel({
@@ -1133,15 +1248,17 @@ export function AutopilotPanel({
    */
   /** The queued posts by id, so the schedule can name the one it came from. */
   const queueById = new Map(queue.map((item) => [item.id, item]));
-  const nextRun = new Map<string, { when: string; where: string }>();
+  /**
+   * Every planned outing, by the post it came from.
+   *
+   * Was only the next one, which made a post going to four accounts look like
+   * a post going to one.
+   */
+  const outings = new Map<string, PreviewPost[]>();
   for (const post of preview?.posts ?? []) {
-    if (nextRun.has(post.queue_item_id)) continue;
-    nextRun.set(post.queue_item_id, {
-      when: new Date(post.at).toLocaleString(undefined, {
-        weekday: "short", hour: "2-digit", minute: "2-digit",
-      }),
-      where: post.destination?.label ?? "",
-    });
+    const forItem = outings.get(post.queue_item_id) ?? [];
+    forItem.push(post);
+    outings.set(post.queue_item_id, forItem);
   }
 
   const selectedLibrary = Object.values(selectedAssets);
@@ -2034,17 +2151,14 @@ export function AutopilotPanel({
                     {item.times_posted > 0
                       ? t("autopilot.postedTimes", { count: item.times_posted })
                       : t("autopilot.neverPosted")}
-                    {/* When it next goes out, and where. The queue could say
-                        only "not posted yet" while the schedule already knew
-                        the slot, so the two halves of one pipeline each held a
-                        fact the other needed. Read from the same preview the
-                        Schedule tab renders, so they cannot disagree. */}
-                    {nextRun.get(item.id) && (
-                      <> · Next {nextRun.get(item.id)!.when}
-                        {nextRun.get(item.id)!.where
-                          && ` on ${nextRun.get(item.id)!.where}`}</>
-                    )}
                   </small>
+                  {/* When, where, how it reads there, and what follows it. The
+                      row used to answer only the first of those. */}
+                  <QueueRehearsal
+                    item={item}
+                    outings={outings.get(item.id) ?? []}
+                    workspaceId={workspaceId}
+                  />
                 </div>
                 <Badge tone={item.state === "approved" ? "good" : "neutral"}>
                   {t(`autopilot.state.${item.state}`)}
@@ -2131,17 +2245,25 @@ export function AutopilotPanel({
                       <small>{match.reasons.join(" ")}</small>
                       <span>{match.matched_terms.slice(0, 6).map((term) => <em key={term}>{term}</em>)}</span>
                     </span>
-                    {/* Marked when nothing is pinned, because that is when the
-                        ranking below is a forecast rather than a menu: these
-                        are the ones smart match would attach. A pin overrides
-                        every one of them, so the mark would be a lie. */}
-                    {!pinnedOffers.size
-                      && recommendations.chosen_offer_ids?.includes(match.offer_id) && (
-                      <Badge tone="good">would post</Badge>
-                    )}
-                    <Badge tone={match.confidence === "high" ? "good" : match.confidence === "medium" ? "warn" : "neutral"}>
-                      {match.confidence}
-                    </Badge>
+                    {/* Both marks in one cell, always present. As two grid
+                        children the second appeared on some rows and not
+                        others, so the confidence badge sat in a different
+                        column on every row and the list read as ragged.
+                        Anchored right, the "would post" mark grows leftward
+                        and confidence stays where the eye left it. */}
+                    <span className="campaign-match-marks">
+                      {/* Marked when nothing is pinned, because that is when
+                          the ranking is a forecast rather than a menu: these
+                          are the ones smart match would attach. A pin
+                          overrides every one of them, so the mark would lie. */}
+                      {!pinnedOffers.size
+                        && recommendations.chosen_offer_ids?.includes(match.offer_id) && (
+                        <Badge tone="good" className="campaign-match-chosen">would post</Badge>
+                      )}
+                      <Badge tone={match.confidence === "high" ? "good" : match.confidence === "medium" ? "warn" : "neutral"}>
+                        {match.confidence}
+                      </Badge>
+                    </span>
                   </label>
                 </li>
               ))}
