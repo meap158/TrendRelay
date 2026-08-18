@@ -15,6 +15,10 @@ from trendrelay_api.integrations import douyin
 from trendrelay_api.models import Base, DurableJob
 from trendrelay_api.media_models import MediaAsset
 
+# PublicationPlan carries a foreign key to product_offers, so create_all needs
+# that table registered even though no test here touches offers.
+import trendrelay_api.opportunity_models  # noqa: F401
+
 
 @pytest.fixture
 def job_factory(monkeypatch):
@@ -417,7 +421,9 @@ def test_duplicate_ingest_fills_missing_source_metadata(
         assert asset is not None
         assert asset.creator == "Creator channel"
         assert asset.caption == "Recovered caption"
-        assert asset.published_at.isoformat() == "2025-03-16T00:00:00"
+        # The moment, not its rendering: whether tzinfo survives the SQLite
+        # round-trip depends on the SQLAlchemy version, not on this code.
+        assert asset.published_at.replace(tzinfo=None) == datetime(2025, 3, 16)
         assert asset.source_url == "https://www.douyin.com/video/123"
 
 
