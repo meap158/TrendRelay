@@ -93,7 +93,11 @@ def _supported_source_url(url: str) -> bool:
 
 class DownloadRequest(BaseModel):
     workspace_id: str = Field(min_length=1, max_length=80)
-    urls: list[str] = Field(min_length=1, max_length=20)
+    # Room for a whole profile's worth of per-video links pasted at once - the
+    # reliable no-login way to fetch a large profile is to load it in a real
+    # browser, copy every video link, and hand them all here to download one by
+    # one (which an anonymous session is allowed to do).
+    urls: list[str] = Field(min_length=1, max_length=400)
     mode: Literal["post", "like", "mix", "music"] = "post"
     limit: int = Field(default=0, ge=0, le=100)
     incremental: bool = True

@@ -409,10 +409,11 @@ async def enumerate_profile(
                 else await connected_browser.new_context()
             )
             page = await context.new_page()
-        else:
-            # Default: start the system Chrome as a plain process and attach -
-            # the least detectable launch. Fall back to the bundled Chromium
-            # only when system Chrome is missing.
+        elif os.environ.get("DOUYIN_CHROME_PROFILE", "").strip():
+            # Opt-in: start the system Chrome as a plain process on a named
+            # profile (meant for a real, daily-use one) and attach. Only when
+            # asked, because a launched-and-controlled browser is flagged
+            # regardless, so this is no better than the default by itself.
             try:
                 connected_browser, chrome_process = await _launch_real_chrome(
                     playwright, profile_dir, headless
@@ -427,6 +428,9 @@ async def enumerate_profile(
                 print(f"Using the bundled browser ({error}).", file=sys.stderr)
                 context = await _launch_context(playwright, profile_dir, headless)
                 page = context.pages[0] if context.pages else await context.new_page()
+        else:
+            context = await _launch_context(playwright, profile_dir, headless)
+            page = context.pages[0] if context.pages else await context.new_page()
 
         await context.add_init_script(DISMISS_OBSERVER)
         # The operator's own Chrome already carries their cookies; only a browser
