@@ -1162,3 +1162,5 @@ html { scroll-behavior: smooth; }
 /* The absence of a product is a fact about the post, so it is set apart from
    the products themselves rather than dressed as one. */
 .campaign-queue-products em.empty { background: transparent; padding-inline: 0; font-style: italic; }
+/* Attached because nothing better was found, not because it fits. */
+.campaign-queue-products em.weak { border: 1px dashed var(--line-strong); }

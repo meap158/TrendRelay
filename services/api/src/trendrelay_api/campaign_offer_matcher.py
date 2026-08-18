@@ -485,8 +485,23 @@ def chosen_matches(
         selected = []
         strategy = {**strategy, "selection": "non-commercial campaign"}
     else:
-        # Low-confidence products may be shown for review, but unattended posts
-        # only attach evidence-backed recommendations.
-        selected = [match for match in ranked if match.confidence != "low"]
-        strategy = {**strategy, "selection": "smart content match"}
+        confident = [match for match in ranked if match.confidence != "low"]
+        if confident:
+            selected = confident
+            strategy = {**strategy, "selection": "smart content match"}
+        else:
+            # Nothing cleared the evidence bar, so the best available goes on
+            # anyway. A commercial campaign that posts without a link earns
+            # nothing from the post, and skipping was the outcome nobody chose:
+            # smart matching had been asked for and quietly did not match.
+            #
+            # One rather than a full complement. The ceiling is there for
+            # products that fit; filling it with guesses would multiply the
+            # weakness rather than cover it.
+            selected = ranked[:1]
+            strategy = {
+                **strategy,
+                "selection": "smart content match, best available",
+                "below_evidence_bar": True,
+            }
     return selected[: autopilot.max_products_per_post], strategy

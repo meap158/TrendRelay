@@ -1006,6 +1006,22 @@ export function AutopilotPanel({
     setDraftMatches(null);
   }
 
+  /**
+   * Bring a panel that has just opened into view.
+   *
+   * Both editors render after the whole queue, so pressing Edit content or
+   * Review products on a row near the top opened something below the fold and
+   * read as a button that did nothing. The next frame, because the panel does
+   * not exist until this render commits.
+   */
+  function revealPanel(id: string) {
+    window.requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({
+        behavior: "smooth", block: "center",
+      });
+    });
+  }
+
   async function loadRecommendations(item: QueueItem | null = null) {
     setBusy(item ? `recommend-${item.id}` : "recommendations");
     try {
@@ -1016,6 +1032,7 @@ export function AutopilotPanel({
       setRecommendations(body);
       setProductItem(item);
       setPinnedOffers(new Set(item?.offer_ids ?? []));
+      if (item) revealPanel("campaign-products");
     } catch (reason) {
       fail(explainFailure(reason, "Products could not be analyzed."));
     } finally {
@@ -1988,24 +2005,28 @@ export function AutopilotPanel({
                       like one nobody had analysed. */}
                   {(() => {
                     const ranked = item.offer_match?.matches ?? [];
-                    const attaching = ranked.filter((match) => item.offer_ids.length
+                    // Mirrors the matcher: pins win, then confident matches,
+                    // and failing both the best available still goes on rather
+                    // than the post going out bare.
+                    const confident = ranked.filter((match) => item.offer_ids.length
                       ? item.offer_ids.includes(match.offer_id)
-                      : match.confidence !== "low")
+                      : match.confidence !== "low");
+                    const attaching = (confident.length ? confident : ranked.slice(0, 1))
                       .slice(0, autopilot.max_products_per_post);
+                    const weak = !confident.length && Boolean(ranked.length);
                     return (
                       <span className="campaign-queue-products">
                         {attaching.map((match) => (
-                          <em key={match.offer_id}>
+                          <em key={match.offer_id} className={weak ? "weak" : ""}>
                             {match.product_name} · {match.score}%
                             {commissionLabel(match) && ` · ${commissionLabel(match)}`}
                           </em>
                         ))}
-                        {!attaching.length && (
-                          <em className="empty">{!ranked.length
-                            ? "Product analysis pending"
-                            : `Nothing fits well enough to attach — best was ${
-                                ranked[0].score}%`}</em>
-                        )}
+                        {/* Said rather than left to the percentage. Nothing
+                            here cleared the evidence bar, and the best of a
+                            weak field is still what goes out. */}
+                        {weak && <em className="empty">best available, weak fit</em>}
+                        {!ranked.length && <em className="empty">Product analysis pending</em>}
                       </span>
                     );
                   })()}
@@ -2049,6 +2070,7 @@ export function AutopilotPanel({
                     <Button variant="quiet" size="sm" onClick={() => {
                       setEditing(item);
                       setEditingReplies(item.thread.length ? item.thread : [""]);
+                      revealPanel("campaign-edit-content");
                     }}>Edit content</Button>
                     <Button variant="quiet" size="sm" busy={busy === `recommend-${item.id}`}
                       onClick={() => void loadRecommendations(item)}>
@@ -2065,11 +2087,22 @@ export function AutopilotPanel({
           </ul>
         )}
         {productItem && recommendations?.item_id === productItem.id && (
-          <div className="campaign-item-products">
+          <div className="campaign-item-products" id="campaign-products">
             <div className="campaign-product-heading">
               <div>
                 <strong>Products for {productItem.title ?? "this queued post"}</strong>
-                <small>Leave every box clear for smart matching, or pin specific products to this post.</small>
+                {/* What it carries today, before anything is changed. Opening
+                    this on a post with nothing pinned showed twelve empty
+                    boxes and no sign of what smart matching had already
+                    settled on, so the panel read as a chooser for a decision
+                    that had in fact been made. */}
+                <small>{pinnedOffers.size
+                  ? `Pinned: ${pinnedOffers.size} product${pinnedOffers.size === 1 ? "" : "s"}. Untick every box to hand this back to smart matching.`
+                  : recommendations.chosen_offer_ids?.length
+                    ? `Smart matching attaches ${recommendations.matches
+                        .filter((match) => recommendations.chosen_offer_ids?.includes(match.offer_id))
+                        .map((match) => match.product_name).join(", ")}. Tick a box to pin something else instead.`
+                    : "Smart matching has nothing to attach here. Tick a box to pin one."}</small>
               </div>
               <Button variant="quiet" size="sm" onClick={() => {
                 setProductItem(null); setRecommendations(null); setPinnedOffers(new Set());
@@ -2134,7 +2167,7 @@ export function AutopilotPanel({
           </div>
         )}
         {editing && (
-          <form className="autopilot-compose" onSubmit={(event) => {
+          <form className="autopilot-compose" id="campaign-edit-content" onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
             void run("edit-copy", async () => {
