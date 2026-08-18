@@ -280,6 +280,30 @@ def test_an_unwritten_package_is_skipped_not_posted(session) -> None:
     assert "no copy written yet" in note
 
 
+def test_an_unwritten_post_counts_as_approved_but_not_as_ready(session) -> None:
+    """Approved says nobody parked it; ready says it can go out.
+
+    Queue items arrive approved - approval is the authority dial's business
+    rather than a form's - so counting approved items told the page a campaign
+    of nothing but placeholders was good to go, while this scheduler skipped
+    every one of them.
+    """
+    from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
+    from trendrelay_api.campaign_scheduler import campaign_status
+
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(session, "q-unwritten", body=PLACEHOLDER_BODY)
+    queue_item(session, "q-written", position=1)
+    pilot = autopilot(session)
+
+    status = campaign_status(session, pilot)
+
+    assert status["queue_total"] == 2
+    assert status["queue_approved"] == 2
+    assert status["queue_ready"] == 1
+
+
 def test_a_video_the_network_refuses_is_routed_around_not_posted_into(
     session, monkeypatch
 ) -> None:

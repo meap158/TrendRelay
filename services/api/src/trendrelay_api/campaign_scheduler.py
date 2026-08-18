@@ -930,6 +930,20 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
             CampaignQueueItem.state == "approved",
         )
     ) or 0
+    # What could go out tonight, which is not the same as what is approved.
+    # Items arrive approved - approval is the authority dial's business, not a
+    # form's - so an unwritten post counted as ready, and a campaign of nothing
+    # but placeholders reported itself good to go while this scheduler skipped
+    # every one of them and the delivery guard would have refused any that got
+    # through.
+    from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
+    ready = session.scalar(
+        select(func.count(CampaignQueueItem.id)).where(
+            CampaignQueueItem.campaign_id == autopilot.campaign_id,
+            CampaignQueueItem.state == "approved",
+            CampaignQueueItem.body != PLACEHOLDER_BODY,
+        )
+    ) or 0
     total = session.scalar(
         select(func.count(CampaignQueueItem.id)).where(
             CampaignQueueItem.campaign_id == autopilot.campaign_id
@@ -956,4 +970,5 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
         "destinations": len(destinations),
         "queue_total": total,
         "queue_approved": approved,
+        "queue_ready": ready,
     }

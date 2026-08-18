@@ -145,6 +145,13 @@ type Autopilot = {
   destinations: number;
   queue_total: number;
   queue_approved: number;
+  /**
+   * Approved *and* written, which is what can actually go out.
+   *
+   * Items arrive approved - approval is the authority dial's business rather
+   * than a form's - so `queue_approved` says only that nobody has parked it.
+   */
+  queue_ready: number;
 };
 
 type HeldExecution = {
@@ -1260,7 +1267,9 @@ export function AutopilotPanel({
       },
       {
         id: "queue",
-        met: (autopilot?.queue_approved ?? 0) > 0,
+        // Written, not merely unparked: the checklist's promise is that the
+        // campaign can post, and a queue of placeholders cannot.
+        met: (autopilot?.queue_ready ?? 0) > 0,
         label: t("autopilot.needApproved"),
         section: "media" as const,
       },
@@ -1276,7 +1285,7 @@ export function AutopilotPanel({
       all: rows.every((row) => row.met),
       configured: rows.filter((row) => row.id !== "active").every((row) => row.met),
     };
-  }, [campaignStatus, destinations.length, autopilot?.queue_approved, slots.length, t]);
+  }, [campaignStatus, destinations.length, autopilot?.queue_ready, slots.length, t]);
 
   useEffect(() => {
     if (
@@ -1551,7 +1560,7 @@ export function AutopilotPanel({
             {(() => {
               const perAccount = Math.min(slots.length, autopilot.daily_cap_per_account);
               const perDay = perAccount * destinations.length;
-              const posts = autopilot.queue_approved;
+              const posts = autopilot.queue_ready;
               return (
                 <>
                   <strong>{posts} {posts === 1 ? "post" : "posts"}</strong>
@@ -1775,7 +1784,7 @@ export function AutopilotPanel({
       {<Card
         eyebrow={t("autopilot.queueEyebrow")}
         title={t("autopilot.queue", {
-          approved: autopilot.queue_approved, total: autopilot.queue_total,
+          ready: autopilot.queue_ready, total: autopilot.queue_total,
         })}
         aside={canEdit ? (
           <Button variant="secondary" size="sm" busy={busy === "library"}
@@ -2206,7 +2215,11 @@ export function AutopilotPanel({
                   <strong>{displayTitle(item.title) ?? item.body.slice(0, 60)}</strong>
                   {item.needs_copy ? (
                     <span className="autopilot-queue-copy autopilot-needs-copy">
-                      No copy yet — this placeholder posts unless somebody writes it.
+                      {/* It is skipped, not sent. This said the opposite - that
+                          the placeholder would post - which was true before the
+                          scheduler learned to skip unwritten posts and the
+                          delivery guard learned to refuse them. */}
+                      No copy yet — this post is skipped until somebody writes it.
                     </span>
                   ) : (
                     <span className="autopilot-queue-copy">{item.body}</span>
@@ -2296,8 +2309,15 @@ export function AutopilotPanel({
                               : "Loading the plan…"}
                   />
                 </div>
-                <Badge tone={item.state === "approved" ? "good" : "neutral"}>
-                  {t(`autopilot.state.${item.state}`)}
+                {/* What the row can do, not what column it stores. Every item
+                    arrives approved, so an unwritten one wore a green
+                    "approved" badge above a warning that it could not be sent -
+                    and the badge is the part people read. */}
+                <Badge tone={item.needs_copy
+                  ? "warn" : item.state === "approved" ? "good" : "neutral"}>
+                  {item.needs_copy
+                    ? t("autopilot.state.needsCopy")
+                    : t(`autopilot.state.${item.state}`)}
                 </Badge>
                 {canEdit && (
                   <div className="campaign-queue-actions">
