@@ -32,7 +32,6 @@ DEFAULT_COOKIE_FILE = ROOT / ".data" / "douyin" / "cookies.json"
 CONNECTION_STATUS_FILE = ROOT / ".data" / "douyin" / "connection-status.json"
 COOKIE_CAPTURE_SCRIPT = ROOT / "scripts" / "douyin_cookie_capture.py"
 TOPIC_VIDEOS_SCRIPT = ROOT / "scripts" / "douyin_topic_videos.py"
-PROFILE_ENUM_SCRIPT = ROOT / "scripts" / "douyin_profile_enum.py"
 SUPPORTED_MODES = ("post", "like", "mix", "music", "collect", "collectmix")
 URL_PATTERN = re.compile(r"https?://[^\s<>\"']+")
 MEDIA_SUFFIXES = {
@@ -142,10 +141,9 @@ def check_provider() -> int:
     elif cookie_status["ready"]:
         print(
             f"Douyin cookies ready, anonymous ({cookie_status['source']}). "
-            "Single links download; a profile is read in a browser that "
-            "recovers more than the first 20 posts when Douyin allows it, but "
-            "an anonymous session can be throttled partway. Log in for "
-            "dependable whole-profile fetches and topic search."
+            "Single links download in full; a profile fetches its first page "
+            "(about 20 videos), Douyin's ceiling without an account. A "
+            "connected account fetches whole profiles and topic search."
         )
     else:
         print(
@@ -443,11 +441,10 @@ def build_config(args: argparse.Namespace, urls: list[str]) -> dict[str, object]
         # saves the bandwidth rather than fetching and discarding it.
         "cover": bool(getattr(args, "covers", False)),
         "music": bool(getattr(args, "music", False)),
-        # Off: we enumerate a capped profile ourselves (see expand_profiles)
-        # before the provider runs, so by the time a link reaches it every
-        # profile is already a set of per-video URLs. The provider's own
-        # fallback opens a second browser that does not close the sign-up
-        # prompt, so it froze on it and harvested almost nothing.
+        # Off: the provider's browser fallback opens a window that Douyin's
+        # anti-bot caps or challenges anyway, so it added a popup mid-download
+        # for no gain. A profile is fetched to its first page over the signed
+        # API instead; whole profiles need a signed-in account.
         "browser_fallback": {"enabled": False},
         "progress": {"quiet_logs": not args.verbose},
         "cookies": cookies,
@@ -733,10 +730,6 @@ def _read_jsonl(path: Path) -> list[dict]:
     return items
 
 
-def _is_profile_url(url: str) -> bool:
-    return "/user/" in urlparse(url).path.lower()
-
-
 _VIDEO_ID_IN_URL = re.compile(r"/video/(\d+)")
 
 
@@ -789,102 +782,12 @@ def skip_downloaded_videos(urls: list[str]) -> list[str]:
     return kept
 
 
-def enumerate_profile_urls(profile_url: str, limit: int, timeout: int = 600) -> list[str]:
-    """Video URLs for a profile, harvested from a visible browser we drive.
-
-    Douyin caps an anonymous session at the first API page of a profile, but
-    the grid keeps loading as the page scrolls. douyin_profile_enum.py opens
-    the profile, closes the sign-up prompt, scrolls, and returns every video id
-    it renders; each becomes a per-video link the provider can fetch without a
-    login. Run in the tool venv, where the browser lives.
-    """
-    if not login_browser_ready():
-        print(
-            "The browser used to read a whole profile is not installed. "
-            "Run `npm run douyin -- connect` once to install it.",
-            file=sys.stderr,
-        )
-        return []
-    command = [str(tool_python()), str(PROFILE_ENUM_SCRIPT), profile_url]
-    if limit:
-        command += ["--limit", str(limit)]
-    if DEFAULT_COOKIE_FILE.is_file():
-        command += ["--cookies", str(DEFAULT_COOKIE_FILE)]
-    completed = subprocess.run(
-        command,
-        cwd=ROOT,
-        env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-        timeout=timeout,
-    )
-    if completed.stderr.strip():
-        print(completed.stderr.strip(), file=sys.stderr)
-    try:
-        payload = json.loads(completed.stdout.strip() or "{}")
-    except json.JSONDecodeError:
-        return []
-    ids = payload.get("ids") if isinstance(payload, dict) else None
-    if not isinstance(ids, list):
-        return []
-    return [f"https://www.douyin.com/video/{aweme_id}" for aweme_id in ids if aweme_id]
-
-
-# The provider's own first API page returns about this many. A browser harvest
-# is only worth using if it beats that - below it, the plain fetch is better,
-# so we leave the profile link alone rather than trading 20 posts for fewer.
-_API_FIRST_PAGE = 20
-
-
-def expand_profiles(urls: list[str], modes: list[str], limit: int) -> list[str]:
-    """Replace a profile URL with its videos when a browser beats the API page.
-
-    Only for the plain post feed (the mode a profile URL means) and only when
-    the session is not signed in - a signed-in session paginates a profile
-    through the API and needs no browser. Douyin caps an anonymous API fetch at
-    its first page (~20, server-side, confirmed against the current provider
-    and upstream alike); the browser recovers more by reading the rendered grid
-    when Douyin allows it, but it is throttled unpredictably. So the harvest is
-    used only when it clears that first-page floor: a smaller harvest means the
-    browser was throttled below what a plain fetch would return, and the
-    profile link is kept so the provider still brings down its first page.
-    """
-    if modes != ["post"] or cookie_readiness().get("signed_in"):
-        return urls
-    expanded: list[str] = []
-    seen: set[str] = set()
-
-    def keep(url: str) -> None:
-        if url not in seen:
-            seen.add(url)
-            expanded.append(url)
-
-    for url in urls:
-        if not _is_profile_url(url):
-            keep(url)
-            continue
-        print(f"Reading the profile in a browser: {url}", file=sys.stderr)
-        videos = enumerate_profile_urls(url, limit)
-        # A limited request that harvested at least what was asked for is
-        # complete; otherwise the harvest has to clear the plain-fetch floor.
-        floor = min(limit, _API_FIRST_PAGE) if limit else _API_FIRST_PAGE
-        if len(videos) >= floor:
-            print(f"Harvested {len(videos)} video(s) from the profile.", file=sys.stderr)
-            for video in videos:
-                keep(video)
-        else:
-            # Throttled below a plain fetch, or nothing at all: let the provider
-            # take the first page rather than trading it for fewer.
-            print(
-                f"Browser recovered only {len(videos)}; letting the provider "
-                "fetch the first page instead.",
-                file=sys.stderr,
-            )
-            keep(url)
-    return expanded
+# A profile URL is left as-is for the provider, which fetches its first page
+# (~20 videos) through the signed API - the reliable ceiling Douyin serves an
+# anonymous caller. The browser enumerator that once tried to scroll past it was
+# retired: Douyin's anti-bot caps or challenges any automated browser, so it
+# only ever harvested an unpredictable 8-26 and added a popup window mid-run for
+# no gain. Whole profiles need a signed-in account (see docs/third-party).
 
 
 def batch_download(args: argparse.Namespace) -> int:
@@ -900,11 +803,10 @@ def batch_download(args: argparse.Namespace) -> int:
         return 2
 
     if not args.dry_run:
-        urls = expand_profiles(urls, modes, args.limit)
         # Incremental is the "skip what we already have" intent, so honour it by
-        # dropping per-video links already in the provider database. A profile
-        # whose every video is held collapses to nothing here and is reported as
-        # already-complete rather than a failed empty fetch.
+        # dropping per-video links already in the provider database. Profile URLs
+        # pass straight to the provider, which fetches the first page (~20) - the
+        # reliable anonymous ceiling Douyin serves without a signed-in account.
         if args.incremental:
             requested_videos = sum(1 for url in urls if _video_id(url))
             urls = skip_downloaded_videos(urls)

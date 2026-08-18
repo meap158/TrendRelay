@@ -319,11 +319,10 @@ def connection_status() -> dict[str, Any]:
             "message": (
                 "Douyin session is signed in and ready."
                 if cookies.get("signed_in")
-                else "Douyin session is anonymous. Single links download "
-                "reliably; a profile is read in a browser that recovers more "
-                "than the first 20 posts when Douyin lets it, but an anonymous "
-                "session can be throttled partway. Log in for dependable "
-                "whole-profile fetches and topic search."
+                else "Douyin session is anonymous. Single links download in "
+                "full; a profile fetches its first page (about 20 videos), "
+                "which is all Douyin serves an anonymous caller. A connected "
+                "account fetches whole profiles and topic search."
             ),
             "updated_at": None,
         }
@@ -1009,20 +1008,17 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         summary = f"Fetched {len(artifacts)} media file(s)"
         if source_errors:
             summary = f"{summary}; {len(source_errors)} source(s) failed"
-        # A profile is read in a browser before the provider runs (the API
-        # caps an anonymous session at one page), so the count reflects the
-        # whole profile. If that browser could not open - not installed, or
-        # closed early - the provider still got the first page, so the note
-        # says how the list is read rather than treating the count as final.
+        # Douyin serves an anonymous caller only the first page of a profile
+        # (~20 videos), so name that ceiling rather than letting the count look
+        # like the whole list. A connected account fetches the rest.
         if (
             any("/user/" in url for url in request["urls"])
             and not cookie_status().get("signed_in")
         ):
             summary = (
-                f"{summary}. A profile is read in a browser that recovers more "
-                "than the first 20 posts when Douyin allows it; an anonymous "
-                "session can be throttled partway, so if fewer arrived than the "
-                "profile shows, retry (downloads resume) or log in for the rest."
+                f"{summary}. Anonymous fetch stops at a profile's first page "
+                "(about 20 videos) - Douyin's ceiling without an account. "
+                "Connect an account to fetch the whole profile."
             )
         result = {
             **payload,

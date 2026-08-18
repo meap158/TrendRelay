@@ -649,19 +649,19 @@ def _run_profile_job(monkeypatch, tmp_path: Path, *, signed_in: bool) -> dict:
     return douyin.run_download_job(job["id"])
 
 
-def test_an_anonymous_profile_fetch_explains_the_browser_read(
+def test_an_anonymous_profile_fetch_names_the_first_page_ceiling(
     monkeypatch, tmp_path: Path, job_factory
 ) -> None:
-    """An anonymous profile is read in a browser, so the count is the whole
-    list - unless the window closed early. The summary explains how the list
-    was read and what a short count means, rather than treating it as final.
+    """Douyin serves an anonymous caller only a profile's first page, so the
+    summary names that ceiling and points to a connected account for the rest,
+    rather than letting the count pass for the whole profile.
     """
     completed = _run_profile_job(monkeypatch, tmp_path, signed_in=False)
 
     assert completed["status"] == "succeeded"
     summary = completed["result"]["summary"]
-    assert "browser" in summary
-    assert "retry" in summary
+    assert "first page" in summary
+    assert "account" in summary
 
 
 def test_a_signed_in_profile_fetch_is_not_second_guessed(
@@ -670,7 +670,7 @@ def test_a_signed_in_profile_fetch_is_not_second_guessed(
     completed = _run_profile_job(monkeypatch, tmp_path, signed_in=True)
 
     assert completed["status"] == "succeeded"
-    assert "browser" not in completed["result"]["summary"]
+    assert "first page" not in completed["result"]["summary"]
 
 
 def test_connection_message_says_whether_the_session_is_signed_in(
