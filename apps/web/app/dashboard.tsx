@@ -53,6 +53,8 @@ type MediaStatus = {
     active: boolean;
     revision?: string;
     cookies_ready?: boolean;
+    /** signed_in distinguishes a logged-in session from a merely-visited one. */
+    cookies?: { signed_in?: boolean };
     connection?: { state: string; message: string };
   };
   tiktok: { installed: boolean; active: boolean; reason: string };
@@ -359,6 +361,9 @@ export default function Dashboard() {
   const selectedWorkspace = workspaces.find((item) => item.id === workspaceId);
   const providerReady = Boolean(status?.douyin.installed && status?.douyin.active);
   const cookiesReady = status?.douyin.cookies_ready === true;
+  // Only an explicit false warns: an older API without the field says nothing
+  // about the session, and warning on silence would nag every setup.
+  const anonymousSession = status?.douyin.cookies?.signed_in === false;
   const connectionState = status?.douyin.connection?.state ?? "disconnected";
   const refreshRequired = connectionState === "refresh_required";
   const canFetch = providerReady && cookiesReady && !refreshRequired;
@@ -618,7 +623,17 @@ export default function Dashboard() {
             <div><strong>{t("downloads.refreshSession")}</strong><span>{status?.douyin.connection?.message}</span></div>
             <Button variant="secondary" busy={connecting} disabled={selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}><ActionIcon name="refresh" />{connecting ? "Opening" : "Refresh session"}</Button>
           </div>}
-          {providerReady && cookiesReady && !refreshRequired && <div className="connection-callout connected">
+          {providerReady && cookiesReady && !refreshRequired && anonymousSession && <div className="connection-callout warning">
+            {/* Anonymous is connected - single links download - but Douyin
+                serves it one page of a profile, so a 60-post profile quietly
+                arrives as 20 files. Said here, before the download, where the
+                operator can still do something about it. */}
+            <div><strong>Signed out of Douyin</strong><span>{status?.douyin.connection?.message}</span></div>
+            <Button variant="secondary" busy={connecting} disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
+              {connecting || connectionActive ? "Waiting for sign-in" : "Log in to Douyin"}
+            </Button>
+          </div>}
+          {providerReady && cookiesReady && !refreshRequired && !anonymousSession && <div className="connection-callout connected">
             <div><strong>{t("downloads.readyToDownload")}</strong><span>{t("downloads.refreshSessionHelp")}</span></div>
             <button type="button" className={buttonClass({ variant: "link" })} disabled={connecting || connectionActive || selectedWorkspace?.role !== "owner"} onClick={() => void connectDouyin()}>
               {connecting || connectionActive ? "Refreshing…" : "Refresh session"}
