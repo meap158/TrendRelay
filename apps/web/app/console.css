@@ -1123,3 +1123,21 @@ html { scroll-behavior: smooth; }
 /* What the offer pays. Set in the accent the rest of the app uses for money,
    because on a chip about a product it is the number being compared. */
 .draft-package-offers b { flex: 0 0 auto; color: var(--green); font-variant-numeric: tabular-nums; }
+
+/* --- Queue and setup, side by side ---------------------------------------- */
+/* One pane rather than two tabs: getting a campaign live needs content and
+   accounts, and the readiness checklist used to throw the operator between
+   them to satisfy one job. The queue takes the width because it is the daily
+   work; the settings stand beside it rather than under it, so neither is a
+   scroll away from the other. */
+.campaign-work-split { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(300px, 1fr); gap: 16px; align-items: start; }
+.campaign-work-main, .campaign-work-side { display: grid; gap: 16px; min-width: 0; align-content: start; }
+/* Sticky so the accounts and the caps stay in view while a long queue scrolls
+   past them - the pairing is the reason they share a pane. */
+.campaign-work-side { position: sticky; top: 16px; }
+/* Below this the two columns are narrower than the queue's own rows, and a
+   side column of 300px stops being a column and starts being a gutter. */
+@media (max-width: 1180px) {
+  .campaign-work-split { grid-template-columns: minmax(0, 1fr); }
+  .campaign-work-side { position: static; }
+}

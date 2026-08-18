@@ -665,13 +665,19 @@ export function AutopilotPanel({
   const [editing, setEditing] = useState<QueueItem | null>(null);
   const [editingReplies, setEditingReplies] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
-  // Three panes with one job each - Posts (what goes out, and approving
-  // it), Content (what feeds it), Setup (how it behaves) - because a page
-  // that showed everything at once was an endless scroll where no section
-  // said what it was for. Approvals stay above the panes: the one thing
-  // that must never hide. The old `accounts`/`settings` names survive in
-  // the readiness rows, which is why `jumpTo` translates them.
-  const [view, setView] = useState<"posts" | "content" | "setup">(
+  // Two panes: Posts is what goes out, Queue & setup is everything behind it.
+  //
+  // It was three, split from one endless scroll so each section could say what
+  // it was for. That was right, and one line too far: getting a campaign live
+  // needs accounts and content, and the readiness checklist threw the operator
+  // between two tabs to satisfy one job. They are now two columns of one pane -
+  // the queue wide, the settings beside it - so the checklist scrolls instead
+  // of switching, and neither is a scroll away from the other.
+  //
+  // Approvals stay above the panes: the one thing that must never hide. The old
+  // `accounts`/`settings` names survive in the readiness rows, which is why
+  // `jumpTo` translates them.
+  const [view, setView] = useState<"posts" | "content">(
     campaignStatus === "active" ? "posts" : "content",
   );
   const searchTimer = useRef<number | null>(null);
@@ -1061,17 +1067,25 @@ export function AutopilotPanel({
    * they are about, and both now open the one area that answers them.
    */
   function jumpTo(target: string) {
-    const pane = target === "media" ? "content"
+    const settings = ["accounts", "settings", "revenue"].includes(target);
+    const pane = target === "media" || settings ? "content"
       : target === "schedule" ? "posts"
-      : ["accounts", "settings", "revenue"].includes(target) ? "setup"
       : null;
     if (!pane) return;
-    if (pane === "setup") {
+    if (settings) {
       if (!accounts.length) void loadAccounts();
       if (!recommendations || recommendations.item_id) void loadRecommendations();
     }
     if (pane === "posts" && ready.configured && !preview) void loadPreview(false);
     setView(pane);
+    // Content and settings share a pane now, so a checklist row scrolls to the
+    // block that answers it rather than moving the page under the reader.
+    if (settings) {
+      window.requestAnimationFrame(() => {
+        document.getElementById("campaign-setup")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
   }
 
   const selectedLibrary = Object.values(selectedAssets);
@@ -1285,9 +1299,15 @@ export function AutopilotPanel({
             "Queue" and not "Content", because next to a tab called Posts,
             Content · post packages read as the same thing. */}
         <nav className="campaign-work-tabs" aria-label="Campaign workspace">
+          {/* Counts the queue, because that is the number somebody comes to
+              this tab for. The destinations are named on the tab's own second
+              line rather than competing for the figure. */}
           <button type="button" className={view === "content" ? "active" : ""}
             onClick={() => jumpTo("media")}>
-            <span>Queue</span><strong>{autopilot.queue_total}</strong><small>packages in rotation</small>
+            <span>Queue &amp; setup</span><strong>{autopilot.queue_total}</strong>
+            <small>{destinations.length === 1
+              ? "packages · 1 account"
+              : `packages · ${destinations.length} accounts`}</small>
           </button>
           <button type="button" className={view === "posts" ? "active" : ""}
             onClick={() => jumpTo("schedule")}>
@@ -1299,16 +1319,7 @@ export function AutopilotPanel({
               : slots.length}</strong>
             <small>{preview ? "upcoming" : "posting times"}</small>
           </button>
-          <button type="button" className={view === "setup" ? "active" : ""}
-            onClick={() => jumpTo("settings")}>
-            <span>Setup</span>
-            <strong>{destinations.length}</strong>
-            <small>{autopilot.offer_mode === "smart"
-              ? "accounts · smart offers"
-              : autopilot.offer_mode === "manual"
-                ? (autopilot.offer_id ? "accounts · 1 offer" : "accounts · no offer")
-                : "accounts · offers off"}</small>
-          </button>
+
         </nav>
 
         {/* Before the switch, not after it. An autopilot switched on with
@@ -1341,234 +1352,6 @@ export function AutopilotPanel({
           </p>
         )}
 
-        {view === "setup" && <div className="autopilot-settings">
-          <div className="campaign-product-mode">
-            <div>
-              <strong>Affiliate product matching</strong>
-              <small>Choose how products are assigned to each post. Smart matching is the recommended default.</small>
-            </div>
-            <div className="campaign-mode-options" role="radiogroup" aria-label="Affiliate product matching">
-              {(["smart", "manual", "none"] as const).map((mode) => (
-                <button key={mode} type="button" role="radio"
-                  aria-checked={autopilot.offer_mode === mode}
-                  className={autopilot.offer_mode === mode ? "active" : ""}
-                  disabled={!canEdit}
-                  onClick={() => void save({
-                    offer_mode: mode,
-                    offer_id: mode === "manual" ? autopilot.offer_id : null,
-                  })}>
-                  <strong>{mode === "smart" ? "Smart match" : mode === "manual" ? "One product" : "No products"}</strong>
-                  <small>{mode === "smart" ? "Fit content automatically" : mode === "manual" ? "Use one offer everywhere" : "Organic posts only"}</small>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {autopilot.offer_mode === "manual" && <label>{t("autopilot.offer")}
-            <SearchSelect
-              value={autopilot.offer_id ?? ""}
-              disabled={!canEdit}
-              onChange={(value) => void save({ offer_id: value || null })}
-              placeholder={t("autopilot.noOffer")}
-              searchPlaceholder="Search imported offers…"
-              options={offers.map((offer) => ({
-                value: offer.id,
-                label: offer.product.name,
-                description: offerDescription(offer),
-                keywords: `${offer.product.brand ?? ""} ${offer.product.marketplace ?? ""} ${offer.network} ${offer.affiliate_url}`,
-              }))}
-            />
-            <small>{t("autopilot.offerHelp")} Source: imported offers in Attribution.</small>
-          </label>}
-
-          {autopilot.offer_mode === "smart" && (
-            <div className="campaign-product-intelligence">
-              <div className="campaign-product-heading">
-                <div>
-                  <strong>Best-fit products</strong>
-                  <small>Ranked from campaign goals, approved copy, hashtags, media metadata, creative analysis, and transcripts.</small>
-                </div>
-                <Button variant="secondary" size="sm" busy={busy === "recommendations"}
-                  onClick={() => void loadRecommendations()}>Analyze campaign</Button>
-              </div>
-              {autopilot.candidate_offer_ids.length > 0 && (
-                <div className="campaign-shortlist-note">
-                  Matching is limited to {autopilot.candidate_offer_ids.length} shortlisted product{autopilot.candidate_offer_ids.length === 1 ? "" : "s"}.
-                  <Button variant="quiet" size="sm" onClick={() => void save({ candidate_offer_ids: [] })}>Use all offers</Button>
-                </div>
-              )}
-              {recommendations && !recommendations.item_id && (
-                <>
-                  <div className="campaign-strategy-summary">
-                    <span><strong>{recommendations.strategy.posting_slots}</strong> posting times</span>
-                    <span><strong>{recommendations.strategy.platforms.length}</strong> platforms</span>
-                    <span><strong>{recommendations.strategy.recommended_products_per_post}</strong> auto products/post</span>
-                    <span><strong>{recommendations.strategy.evidence_sources.length}</strong> evidence sources</span>
-                  </div>
-                  <p className="campaign-rotation-note">{recommendations.strategy.rotation}</p>
-                  <ul className="campaign-product-matches">
-                    {recommendations.matches.map((match) => {
-                      const shortlisted = autopilot.candidate_offer_ids.includes(match.offer_id);
-                      return <li key={match.offer_id}>
-                        <div className="campaign-match-score" data-confidence={match.confidence}>
-                          <strong>{match.score}</strong><small>% fit</small>
-                        </div>
-                        <div className="campaign-match-copy">
-                          <strong>{match.product_name}</strong>
-                          <small>{match.reasons[0]}</small>
-                          <span>{match.matched_terms.slice(0, 5).map((term) => <em key={term}>{term}</em>)}</span>
-                        </div>
-                        <Badge tone={match.confidence === "high" ? "good" : match.confidence === "medium" ? "warn" : "neutral"}>
-                          {match.confidence}
-                        </Badge>
-                        <Button variant={shortlisted ? "secondary" : "quiet"} size="sm" disabled={!canEdit}
-                          onClick={() => {
-                            const next = shortlisted
-                              ? autopilot.candidate_offer_ids.filter((id) => id !== match.offer_id)
-                              : [...autopilot.candidate_offer_ids, match.offer_id];
-                            void save({ candidate_offer_ids: next });
-                          }}>{shortlisted ? "Shortlisted" : "Shortlist"}</Button>
-                      </li>;
-                    })}
-                    {!recommendations.matches.length && <li className="autopilot-empty">No usable imported offers match this campaign yet.</li>}
-                  </ul>
-                </>
-              )}
-            </div>
-          )}
-
-          <label>{t("autopilot.disclosure")}
-            <input
-              defaultValue={autopilot.disclosure}
-              disabled={!canEdit}
-              maxLength={500}
-              onBlur={(event) => {
-                if (event.target.value !== autopilot.disclosure) {
-                  void save({ disclosure: event.target.value });
-                }
-              }}
-            />
-            {/* Not a preference. Stated here so nobody spends time looking for
-                the setting that turns it off. */}
-            <small>{t("autopilot.disclosureHelp")}</small>
-          </label>
-
-          <label>Profile-link wording
-            <input
-              defaultValue={autopilot.bio_hint}
-              disabled={!canEdit}
-              maxLength={120}
-              onBlur={(event) => {
-                if (event.target.value !== autopilot.bio_hint) {
-                  void save({ bio_hint: event.target.value });
-                }
-              }}
-            />
-            <small>
-              Used for Instagram, TikTok, and other destinations where post links are not clickable.
-              TrendRelay does not change the account profile automatically, so verify its bio link before deployment.
-            </small>
-          </label>
-
-          <div className="autopilot-numbers">
-            {autopilot.offer_mode === "smart" && <label>Products per post
-              <input type="number" min={1} max={5}
-                defaultValue={autopilot.max_products_per_post}
-                disabled={!canEdit}
-                onBlur={(event) => void save({ max_products_per_post: Number(event.target.value) })} />
-              <small>Bio-only networks still use one and rotate products across posts.</small>
-            </label>}
-            <label>{t("autopilot.rest")}
-              <input
-                type="number"
-                min={1}
-                max={365}
-                defaultValue={autopilot.min_recycle_days}
-                disabled={!canEdit}
-                onBlur={(event) => void save({ min_recycle_days: Number(event.target.value) })}
-              />
-              <small>{t("autopilot.restHelp")}</small>
-            </label>
-            <label>{t("autopilot.cap")}
-              <input
-                type="number"
-                min={1}
-                max={24}
-                defaultValue={autopilot.daily_cap_per_account}
-                disabled={!canEdit}
-                onBlur={(event) =>
-                  void save({ daily_cap_per_account: Number(event.target.value) })}
-              />
-              <small>{t("autopilot.capHelp")}</small>
-            </label>
-            <label>Authority
-              <select
-                value={autopilot.authority}
-                disabled={!canEdit}
-                onChange={(event) =>
-                  void save({ authority: event.target.value as Autopilot["authority"] })}
-              >
-                <option value="assist">Assist — approve every post</option>
-                <option value="auto_draft">Auto-draft — approve, then engine drafts only</option>
-                <option value="run_by_exception">Run by exception (recommended)</option>
-                <option value="autonomous">Autonomous — earned after 10 confirmed posts</option>
-              </select>
-              <small>Every post below Autonomous waits on the Timeline for your
-                approval, and only a finished post — real copy, its affiliate
-                link, media its network accepts — can be approved.</small>
-            </label>
-            <label>Optimise for
-              <select
-                value={autopilot.priority}
-                disabled={!canEdit}
-                onChange={(event) =>
-                  void save({ priority: event.target.value as Autopilot["priority"] })}
-              >
-                <option value="balanced">Balanced — blend measured axes</option>
-                <option value="revenue">Revenue — earnings per click</option>
-                <option value="reach">Reach — views per post</option>
-                <option value="discussion">Discussion — comments per post</option>
-              </select>
-              <small>Ranking only uses an axis once it has enough evidence;
-                until then destinations rotate.</small>
-            </label>
-            <label>{t("campaigns.postLanguage")}
-              <select
-                value={autopilot.post_language}
-                disabled={!canEdit}
-                onChange={(event) =>
-                  void save({ post_language: event.target.value })}
-              >
-                {/* The languages TrendRelay speaks, from the list that defines
-                    them. Spelled out here, this offered two while the campaign
-                    form offered a different set. */}
-                {LOCALES.map((item) => (
-                  <option key={item.code} value={item.code}>{item.label}</option>
-                ))}
-              </select>
-              <small>The language of composed scaffolding — the disclosure
-                default, the bio hint, product labels. Your own copy is always
-                your own.</small>
-            </label>
-            <label>Weekly post cap
-              <input
-                type="number"
-                min={1}
-                max={200}
-                placeholder="No cap"
-                defaultValue={autopilot.weekly_post_cap ?? ""}
-                disabled={!canEdit}
-                onBlur={(event) => void save({
-                  weekly_post_cap: event.target.value
-                    ? Number(event.target.value)
-                    : null,
-                })}
-              />
-              <small>Across every destination, over a rolling week. Empty
-                leaves the per-account caps as the only limit.</small>
-            </label>
-          </div>
-        </div>}
       </Card>
 
       {/* The operator's recurring job, front and centre: every post below
@@ -1703,167 +1486,15 @@ export function AutopilotPanel({
         </Card>
       )}
 
-      {view === "setup" && <Card
-        eyebrow={t("autopilot.whereEyebrow")}
-        title={t("autopilot.destinations", { count: destinations.length })}
-        aside={canEdit ? (
-          <Button variant="secondary" size="sm" busy={busy === "accounts"}
-            onClick={() => void loadAccounts()}>{t("autopilot.addAccount")}</Button>
-        ) : undefined}
-      >
-        {destinations.length === 0 ? (
-          <p className="autopilot-empty">{t("autopilot.noDestinations")}</p>
-        ) : (
-          <ul className="autopilot-destinations">
-            {destinations.map((item) => (
-              <li key={item.id}>
-                <div className="campaign-account-identity">
-                  <PlatformIcon platform={item.platform} size={30} />
-                  <span>
-                    <strong>{item.label}</strong>
-                    <small>{platformLabels[item.platform]} · {item.provider_label ?? item.provider}
-                      {accountIdentity({ account: item.connection_account })
-                        ? ` · ${accountIdentity({ account: item.connection_account })}`
-                        : ""}
-                      {/* Only worth saying where it is true: every destination
-                          takes video, so "video only" is the exception and
-                          "carousels too" is the news. */}
-                      {item.accepts_carousel ? " · carousels too" : ""}</small>
-                  </span>
-                </div>
-                {/* The decision, next to the account it applies to. Someone who
-                    expects a tappable link on TikTok needs to find out here,
-                    not from a post that already went out. */}
-                <Badge tone={placementTone(item.link_placement)}>
-                  {t(`autopilot.placement.${item.link_placement}`)}
-                </Badge>
-                <p className="autopilot-placement-reason">{item.link_reason}</p>
-                {canEdit && (
-                  <div className="autopilot-destination-controls">
-                  <label className="autopilot-placement-choice">
-                    Link placement
-                    <select
-                      value={item.link_placement_setting}
-                      onChange={(event) => void run("placement", async () => {
-                        await json(await apiFetch(
-                          `${base}/destinations/${item.id}/placement`,
-                          {
-                            method: "POST",
-                            headers: { "content-type": "application/json" },
-                            body: JSON.stringify({
-                              link_placement: event.target.value,
-                            }),
-                          },
-                        ));
-                        await refresh();
-                        return `Link placement updated for ${item.label}.`;
-                      })}
-                    >
-                      <option value="auto">Auto — network decides (recommended)</option>
-                      <option value="caption">Always in the caption</option>
-                      <option value="first_comment">First comment, where deliverable</option>
-                      <option value="bio">Always via bio link</option>
-                    </select>
-                  </label>
-                  {/* The icon, like every other removal in the app. As a word
-                      it stretched to a grid column: 106px of button beside a
-                      250px select, two pixels shorter than it, which is what
-                      made the row look assembled from spare parts. */}
-                  <Button
-                    data-destination-remove=""
-                    variant="quiet"
-                    size="sm"
-                    title={t("common.delete")}
-                    aria-label={t("autopilot.removeDestination", { label: item.label })}
-                    onClick={() => void run("remove", async () => {
-                      await json(await apiFetch(`${base}/destinations/${item.id}`,
-                        { method: "DELETE" }));
-                      return t("autopilot.destinationRemoved", { label: item.label });
-                    })}
-                  ><ActionIcon name="delete" /></Button>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
 
-        {adding && (
-          <div className="autopilot-account-picker">
-            <div className="autopilot-picker-head">
-              <strong>{selectedAccounts.size
-                ? `${selectedAccounts.size} accounts selected`
-                : t("autopilot.chooseAccounts")}</strong>
-              <Button variant="quiet" size="sm" onClick={() => setAdding(false)}>
-                {t("common.close")}
-              </Button>
-            </div>
-            <div className="autopilot-picker-tools">
-              <Button variant="primary" size="sm" disabled={!selectedAccounts.size}
-                busy={busy === "add-accounts"} onClick={() => void run("add-accounts", async () => {
-                  const chosen = accounts.filter((account) =>
-                    selectedAccounts.has(`${account.provider}:${account.id}`));
-                  await Promise.all(chosen.map(async (account) => json(await apiFetch(
-                    `${base}/destinations`, {
-                      method: "POST",
-                      headers: { "content-type": "application/json" },
-                      body: JSON.stringify({
-                        provider: account.provider,
-                        integration_id: account.id,
-                        platform: account.platform,
-                        label: account.label,
-                      }),
-                    }))));
-                  setSelectedAccounts(new Set());
-                  setAdding(false);
-                  // The product decision is in this same area now, so the
-                  // only move left is on to the schedule.
-                  if (slots.length) void loadRecommendations();
-                  else jumpTo("schedule");
-                  return `${chosen.length} ${chosen.length === 1 ? "account" : "accounts"} assigned.`;
-                })}>Assign selected accounts</Button>
-            </div>
-            <ul className="autopilot-media-picker">
-              {accounts
-                .filter((account) => account.available !== false)
-                .filter((account) => !destinations.some(
-                  (item) => item.integration_id === account.id
-                    && item.provider === account.provider))
-                .map((account) => (
-                  <li key={`${account.provider}:${account.id}`}>
-                    <label>
-                      <input type="checkbox"
-                        checked={selectedAccounts.has(`${account.provider}:${account.id}`)}
-                        onChange={() => setSelectedAccounts((current) => {
-                          const key = `${account.provider}:${account.id}`;
-                          const next = new Set(current);
-                          if (next.has(key)) next.delete(key); else next.add(key);
-                          return next;
-                        })} />
-                      <PlatformIcon platform={account.platform} size={28} />
-                      <span>
-                        <strong>{account.label}</strong>
-                        {/* Which login carries it, not just which engine. Two
-                            Buffer connections put the same engine name on every
-                            row; the account the engine reports is the thing
-                            that tells them apart. */}
-                        <small>{platformLabels[account.platform]} · {account.provider_label}
-                          {accountIdentity({ account: account.connection_account })
-                            ? ` · ${accountIdentity({ account: account.connection_account })}`
-                            : ""}</small>
-                      </span>
-                    </label>
-                  </li>
-                ))}
-              {!accounts.some((account) => account.available !== false)
-                && <li>{t("autopilot.noAccounts")}</li>}
-            </ul>
-            <small className="campaign-source-note">Source: available connected accounts in Publish.</small>
-          </div>
-        )}
-      </Card>}
-
-      {view === "content" && <Card
+      {view === "content" && (
+        /* Two columns: the queue is the daily job and takes the width,
+           the settings sit beside it. They were separate tabs, and
+           getting a campaign live needs both - the readiness checklist
+           threw the operator between them to satisfy one job. */
+        <div className="campaign-work-split">
+          <div className="campaign-work-main">
+      {<Card
         eyebrow={t("autopilot.queueEyebrow")}
         title={t("autopilot.queue", {
           approved: autopilot.queue_approved, total: autopilot.queue_total,
@@ -2488,6 +2119,414 @@ export function AutopilotPanel({
           </form>
         )}
       </Card>}
+          </div>
+          <aside className="campaign-work-side" id="campaign-setup">
+      {<Card
+        eyebrow={t("autopilot.whereEyebrow")}
+        title={t("autopilot.destinations", { count: destinations.length })}
+        aside={canEdit ? (
+          <Button variant="secondary" size="sm" busy={busy === "accounts"}
+            onClick={() => void loadAccounts()}>{t("autopilot.addAccount")}</Button>
+        ) : undefined}
+      >
+        {destinations.length === 0 ? (
+          <p className="autopilot-empty">{t("autopilot.noDestinations")}</p>
+        ) : (
+          <ul className="autopilot-destinations">
+            {destinations.map((item) => (
+              <li key={item.id}>
+                <div className="campaign-account-identity">
+                  <PlatformIcon platform={item.platform} size={30} />
+                  <span>
+                    <strong>{item.label}</strong>
+                    <small>{platformLabels[item.platform]} · {item.provider_label ?? item.provider}
+                      {accountIdentity({ account: item.connection_account })
+                        ? ` · ${accountIdentity({ account: item.connection_account })}`
+                        : ""}
+                      {/* Only worth saying where it is true: every destination
+                          takes video, so "video only" is the exception and
+                          "carousels too" is the news. */}
+                      {item.accepts_carousel ? " · carousels too" : ""}</small>
+                  </span>
+                </div>
+                {/* The decision, next to the account it applies to. Someone who
+                    expects a tappable link on TikTok needs to find out here,
+                    not from a post that already went out. */}
+                <Badge tone={placementTone(item.link_placement)}>
+                  {t(`autopilot.placement.${item.link_placement}`)}
+                </Badge>
+                <p className="autopilot-placement-reason">{item.link_reason}</p>
+                {canEdit && (
+                  <div className="autopilot-destination-controls">
+                  <label className="autopilot-placement-choice">
+                    Link placement
+                    <select
+                      value={item.link_placement_setting}
+                      onChange={(event) => void run("placement", async () => {
+                        await json(await apiFetch(
+                          `${base}/destinations/${item.id}/placement`,
+                          {
+                            method: "POST",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({
+                              link_placement: event.target.value,
+                            }),
+                          },
+                        ));
+                        await refresh();
+                        return `Link placement updated for ${item.label}.`;
+                      })}
+                    >
+                      <option value="auto">Auto — network decides (recommended)</option>
+                      <option value="caption">Always in the caption</option>
+                      <option value="first_comment">First comment, where deliverable</option>
+                      <option value="bio">Always via bio link</option>
+                    </select>
+                  </label>
+                  {/* The icon, like every other removal in the app. As a word
+                      it stretched to a grid column: 106px of button beside a
+                      250px select, two pixels shorter than it, which is what
+                      made the row look assembled from spare parts. */}
+                  <Button
+                    data-destination-remove=""
+                    variant="quiet"
+                    size="sm"
+                    title={t("common.delete")}
+                    aria-label={t("autopilot.removeDestination", { label: item.label })}
+                    onClick={() => void run("remove", async () => {
+                      await json(await apiFetch(`${base}/destinations/${item.id}`,
+                        { method: "DELETE" }));
+                      return t("autopilot.destinationRemoved", { label: item.label });
+                    })}
+                  ><ActionIcon name="delete" /></Button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {adding && (
+          <div className="autopilot-account-picker">
+            <div className="autopilot-picker-head">
+              <strong>{selectedAccounts.size
+                ? `${selectedAccounts.size} accounts selected`
+                : t("autopilot.chooseAccounts")}</strong>
+              <Button variant="quiet" size="sm" onClick={() => setAdding(false)}>
+                {t("common.close")}
+              </Button>
+            </div>
+            <div className="autopilot-picker-tools">
+              <Button variant="primary" size="sm" disabled={!selectedAccounts.size}
+                busy={busy === "add-accounts"} onClick={() => void run("add-accounts", async () => {
+                  const chosen = accounts.filter((account) =>
+                    selectedAccounts.has(`${account.provider}:${account.id}`));
+                  await Promise.all(chosen.map(async (account) => json(await apiFetch(
+                    `${base}/destinations`, {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({
+                        provider: account.provider,
+                        integration_id: account.id,
+                        platform: account.platform,
+                        label: account.label,
+                      }),
+                    }))));
+                  setSelectedAccounts(new Set());
+                  setAdding(false);
+                  // The product decision is in this same area now, so the
+                  // only move left is on to the schedule.
+                  if (slots.length) void loadRecommendations();
+                  else jumpTo("schedule");
+                  return `${chosen.length} ${chosen.length === 1 ? "account" : "accounts"} assigned.`;
+                })}>Assign selected accounts</Button>
+            </div>
+            <ul className="autopilot-media-picker">
+              {accounts
+                .filter((account) => account.available !== false)
+                .filter((account) => !destinations.some(
+                  (item) => item.integration_id === account.id
+                    && item.provider === account.provider))
+                .map((account) => (
+                  <li key={`${account.provider}:${account.id}`}>
+                    <label>
+                      <input type="checkbox"
+                        checked={selectedAccounts.has(`${account.provider}:${account.id}`)}
+                        onChange={() => setSelectedAccounts((current) => {
+                          const key = `${account.provider}:${account.id}`;
+                          const next = new Set(current);
+                          if (next.has(key)) next.delete(key); else next.add(key);
+                          return next;
+                        })} />
+                      <PlatformIcon platform={account.platform} size={28} />
+                      <span>
+                        <strong>{account.label}</strong>
+                        {/* Which login carries it, not just which engine. Two
+                            Buffer connections put the same engine name on every
+                            row; the account the engine reports is the thing
+                            that tells them apart. */}
+                        <small>{platformLabels[account.platform]} · {account.provider_label}
+                          {accountIdentity({ account: account.connection_account })
+                            ? ` · ${accountIdentity({ account: account.connection_account })}`
+                            : ""}</small>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              {!accounts.some((account) => account.available !== false)
+                && <li>{t("autopilot.noAccounts")}</li>}
+            </ul>
+            <small className="campaign-source-note">Source: available connected accounts in Publish.</small>
+          </div>
+        )}
+      </Card>}
+        {<div className="autopilot-settings">
+          <div className="campaign-product-mode">
+            <div>
+              <strong>Affiliate product matching</strong>
+              <small>Choose how products are assigned to each post. Smart matching is the recommended default.</small>
+            </div>
+            <div className="campaign-mode-options" role="radiogroup" aria-label="Affiliate product matching">
+              {(["smart", "manual", "none"] as const).map((mode) => (
+                <button key={mode} type="button" role="radio"
+                  aria-checked={autopilot.offer_mode === mode}
+                  className={autopilot.offer_mode === mode ? "active" : ""}
+                  disabled={!canEdit}
+                  onClick={() => void save({
+                    offer_mode: mode,
+                    offer_id: mode === "manual" ? autopilot.offer_id : null,
+                  })}>
+                  <strong>{mode === "smart" ? "Smart match" : mode === "manual" ? "One product" : "No products"}</strong>
+                  <small>{mode === "smart" ? "Fit content automatically" : mode === "manual" ? "Use one offer everywhere" : "Organic posts only"}</small>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {autopilot.offer_mode === "manual" && <label>{t("autopilot.offer")}
+            <SearchSelect
+              value={autopilot.offer_id ?? ""}
+              disabled={!canEdit}
+              onChange={(value) => void save({ offer_id: value || null })}
+              placeholder={t("autopilot.noOffer")}
+              searchPlaceholder="Search imported offers…"
+              options={offers.map((offer) => ({
+                value: offer.id,
+                label: offer.product.name,
+                description: offerDescription(offer),
+                keywords: `${offer.product.brand ?? ""} ${offer.product.marketplace ?? ""} ${offer.network} ${offer.affiliate_url}`,
+              }))}
+            />
+            <small>{t("autopilot.offerHelp")} Source: imported offers in Attribution.</small>
+          </label>}
+
+          {autopilot.offer_mode === "smart" && (
+            <div className="campaign-product-intelligence">
+              <div className="campaign-product-heading">
+                <div>
+                  <strong>Best-fit products</strong>
+                  <small>Ranked from campaign goals, approved copy, hashtags, media metadata, creative analysis, and transcripts.</small>
+                </div>
+                <Button variant="secondary" size="sm" busy={busy === "recommendations"}
+                  onClick={() => void loadRecommendations()}>Analyze campaign</Button>
+              </div>
+              {autopilot.candidate_offer_ids.length > 0 && (
+                <div className="campaign-shortlist-note">
+                  Matching is limited to {autopilot.candidate_offer_ids.length} shortlisted product{autopilot.candidate_offer_ids.length === 1 ? "" : "s"}.
+                  <Button variant="quiet" size="sm" onClick={() => void save({ candidate_offer_ids: [] })}>Use all offers</Button>
+                </div>
+              )}
+              {recommendations && !recommendations.item_id && (
+                <>
+                  <div className="campaign-strategy-summary">
+                    <span><strong>{recommendations.strategy.posting_slots}</strong> posting times</span>
+                    <span><strong>{recommendations.strategy.platforms.length}</strong> platforms</span>
+                    <span><strong>{recommendations.strategy.recommended_products_per_post}</strong> auto products/post</span>
+                    <span><strong>{recommendations.strategy.evidence_sources.length}</strong> evidence sources</span>
+                  </div>
+                  <p className="campaign-rotation-note">{recommendations.strategy.rotation}</p>
+                  <ul className="campaign-product-matches">
+                    {recommendations.matches.map((match) => {
+                      const shortlisted = autopilot.candidate_offer_ids.includes(match.offer_id);
+                      return <li key={match.offer_id}>
+                        <div className="campaign-match-score" data-confidence={match.confidence}>
+                          <strong>{match.score}</strong><small>% fit</small>
+                        </div>
+                        <div className="campaign-match-copy">
+                          <strong>{match.product_name}</strong>
+                          <small>{match.reasons[0]}</small>
+                          <span>{match.matched_terms.slice(0, 5).map((term) => <em key={term}>{term}</em>)}</span>
+                        </div>
+                        <Badge tone={match.confidence === "high" ? "good" : match.confidence === "medium" ? "warn" : "neutral"}>
+                          {match.confidence}
+                        </Badge>
+                        <Button variant={shortlisted ? "secondary" : "quiet"} size="sm" disabled={!canEdit}
+                          onClick={() => {
+                            const next = shortlisted
+                              ? autopilot.candidate_offer_ids.filter((id) => id !== match.offer_id)
+                              : [...autopilot.candidate_offer_ids, match.offer_id];
+                            void save({ candidate_offer_ids: next });
+                          }}>{shortlisted ? "Shortlisted" : "Shortlist"}</Button>
+                      </li>;
+                    })}
+                    {!recommendations.matches.length && <li className="autopilot-empty">No usable imported offers match this campaign yet.</li>}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
+
+          <label>{t("autopilot.disclosure")}
+            <input
+              defaultValue={autopilot.disclosure}
+              disabled={!canEdit}
+              maxLength={500}
+              onBlur={(event) => {
+                if (event.target.value !== autopilot.disclosure) {
+                  void save({ disclosure: event.target.value });
+                }
+              }}
+            />
+            {/* Not a preference. Stated here so nobody spends time looking for
+                the setting that turns it off. */}
+            <small>{t("autopilot.disclosureHelp")}</small>
+          </label>
+
+          <label>Profile-link wording
+            <input
+              defaultValue={autopilot.bio_hint}
+              disabled={!canEdit}
+              maxLength={120}
+              onBlur={(event) => {
+                if (event.target.value !== autopilot.bio_hint) {
+                  void save({ bio_hint: event.target.value });
+                }
+              }}
+            />
+            <small>
+              Used for Instagram, TikTok, and other destinations where post links are not clickable.
+              TrendRelay does not change the account profile automatically, so verify its bio link before deployment.
+            </small>
+          </label>
+
+          <div className="autopilot-numbers">
+            {autopilot.offer_mode === "smart" && <label>Products per post
+              <input type="number" min={1} max={5}
+                defaultValue={autopilot.max_products_per_post}
+                disabled={!canEdit}
+                onBlur={(event) => void save({ max_products_per_post: Number(event.target.value) })} />
+              <small>Bio-only networks still use one and rotate products across posts.</small>
+            </label>}
+            <label>{t("autopilot.rest")}
+              <input
+                type="number"
+                min={1}
+                max={365}
+                defaultValue={autopilot.min_recycle_days}
+                disabled={!canEdit}
+                onBlur={(event) => void save({ min_recycle_days: Number(event.target.value) })}
+              />
+              <small>{t("autopilot.restHelp")}</small>
+            </label>
+            <label>{t("autopilot.cap")}
+              <input
+                type="number"
+                min={1}
+                max={24}
+                defaultValue={autopilot.daily_cap_per_account}
+                disabled={!canEdit}
+                onBlur={(event) =>
+                  void save({ daily_cap_per_account: Number(event.target.value) })}
+              />
+              <small>{t("autopilot.capHelp")}</small>
+            </label>
+            <label>Authority
+              <select
+                value={autopilot.authority}
+                disabled={!canEdit}
+                onChange={(event) =>
+                  void save({ authority: event.target.value as Autopilot["authority"] })}
+              >
+                <option value="assist">Assist — approve every post</option>
+                <option value="auto_draft">Auto-draft — approve, then engine drafts only</option>
+                <option value="run_by_exception">Run by exception (recommended)</option>
+                <option value="autonomous">Autonomous — earned after 10 confirmed posts</option>
+              </select>
+              <small>Every post below Autonomous waits on the Timeline for your
+                approval, and only a finished post — real copy, its affiliate
+                link, media its network accepts — can be approved.</small>
+            </label>
+            <label>Optimise for
+              <select
+                value={autopilot.priority}
+                disabled={!canEdit}
+                onChange={(event) =>
+                  void save({ priority: event.target.value as Autopilot["priority"] })}
+              >
+                <option value="balanced">Balanced — blend measured axes</option>
+                <option value="revenue">Revenue — earnings per click</option>
+                <option value="reach">Reach — views per post</option>
+                <option value="discussion">Discussion — comments per post</option>
+              </select>
+              <small>Ranking only uses an axis once it has enough evidence;
+                until then destinations rotate.</small>
+            </label>
+            <label>{t("campaigns.postLanguage")}
+              <select
+                value={autopilot.post_language}
+                disabled={!canEdit}
+                onChange={(event) =>
+                  void save({ post_language: event.target.value })}
+              >
+                {/* The languages TrendRelay speaks, from the list that defines
+                    them. Spelled out here, this offered two while the campaign
+                    form offered a different set. */}
+                {LOCALES.map((item) => (
+                  <option key={item.code} value={item.code}>{item.label}</option>
+                ))}
+              </select>
+              <small>The language of composed scaffolding — the disclosure
+                default, the bio hint, product labels. Your own copy is always
+                your own.</small>
+            </label>
+            <label>Weekly post cap
+              <input
+                type="number"
+                min={1}
+                max={200}
+                placeholder="No cap"
+                defaultValue={autopilot.weekly_post_cap ?? ""}
+                disabled={!canEdit}
+                onBlur={(event) => void save({
+                  weekly_post_cap: event.target.value
+                    ? Number(event.target.value)
+                    : null,
+                })}
+              />
+              <small>Across every destination, over a rolling week. Empty
+                leaves the per-account caps as the only limit.</small>
+            </label>
+          </div>
+        </div>}
+      {<Card title="Posting times" aside={
+        <Link className="ui-button ui-button-secondary ui-button-sm" href="/publish">
+          Edit in Publish
+        </Link>
+      }>
+        <p className="autopilot-lede">
+          Shared by every campaign in this workspace; Publish owns them.
+        </p>
+        <div className="campaign-schedule-readonly">
+          <Badge tone="neutral">{scheduleTimezone}</Badge>
+          {slots.map((slot) => (
+            <span key={slot.id}>{slot.weekday_label} · {slot.time}</span>
+          ))}
+          {!slots.length && <span>No posting times configured.</span>}
+        </div>
+      </Card>}
+          </aside>
+        </div>
+      )}
 
       <EffectEditor
         open={effectOpen}
@@ -2756,22 +2795,6 @@ export function AutopilotPanel({
       </>}
       {/* Configuration, so it lives in Setup: the times themselves are
           visible in the timeline where they matter. */}
-      {view === "setup" && <Card title="Posting times" aside={
-        <Link className="ui-button ui-button-secondary ui-button-sm" href="/publish">
-          Edit in Publish
-        </Link>
-      }>
-        <p className="autopilot-lede">
-          Shared by every campaign in this workspace; Publish owns them.
-        </p>
-        <div className="campaign-schedule-readonly">
-          <Badge tone="neutral">{scheduleTimezone}</Badge>
-          {slots.map((slot) => (
-            <span key={slot.id}>{slot.weekday_label} · {slot.time}</span>
-          ))}
-          {!slots.length && <span>No posting times configured.</span>}
-        </div>
-      </Card>}
     </div>
   );
 }
