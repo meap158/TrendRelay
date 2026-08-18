@@ -136,16 +136,20 @@ export function AffiliateLink({
         >{offer ? t("publish.changeProduct") : t("publish.chooseProductAction")}</Button>
       </div>
 
-      {/* The product as a card rather than a line of text: the picture and the
-          name are what somebody checks they picked the right thing by, and the
-          rate is why they picked it over another offer. Empty, it is a place
-          for a product rather than a sentence saying there is none. */}
+      {/* The product as a card rather than a line of text: the name is what
+          somebody checks they picked the right thing by, and the rate is why
+          they picked it over another offer. Empty, it is a place for a product
+          rather than a sentence saying there is none. */}
       {offer ? (
         <div className="affiliate-product">
-          {offer.image_url
+          {/* Only when there is one. A Shopee export carries no image URL, so a
+              placeholder here would be a grey square standing in for data the
+              file cannot provide - and initials drawn from these names would
+              collapse half the catalogue onto the same two letters. */}
+          {offer.image_url && (
             // eslint-disable-next-line @next/next/no-img-element
-            ? <img className="product-thumb" src={offer.image_url} alt="" loading="lazy" />
-            : <span className="product-thumb product-thumb-empty" aria-hidden="true" />}
+            <img className="product-thumb" src={offer.image_url} alt="" loading="lazy" />
+          )}
           <span className="affiliate-product-named">
             <strong>{offer.name}</strong>
             <small>{offer.network}</small>
@@ -161,7 +165,6 @@ export function AffiliateLink({
           disabled={disabled}
           onClick={() => setPicking(true)}
         >
-          <span className="product-thumb product-thumb-empty" aria-hidden="true" />
           <span className="affiliate-product-named">
             <strong>{t("publish.chooseProductPrompt")}</strong>
             <small>{t("publish.chooseProductHint")}</small>

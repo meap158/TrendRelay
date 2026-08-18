@@ -72,6 +72,15 @@ export function OfferPicker({
   });
 
   const all = useMemo(() => offerChoices(products), [products]);
+  /**
+   * Whether to give the picture a column at all.
+   *
+   * A Shopee export carries no image URL, and that is the whole catalogue here,
+   * so the column was thirty-five identical grey squares saying nothing. The
+   * slot is reserved only when something in the list actually fills it -
+   * otherwise the name starts where the eye already is.
+   */
+  const showThumbnails = useMemo(() => all.some((row) => row.image_url), [all]);
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const matching = needle
@@ -168,10 +177,13 @@ export function OfferPicker({
                     >
                       <th scope="row">
                         <span className="offer-picker-product">
-                          {row.image_url
+                          {showThumbnails && (row.image_url
                             // eslint-disable-next-line @next/next/no-img-element
                             ? <img className="product-thumb" src={row.image_url} alt="" loading="lazy" />
-                            : <span className="product-thumb product-thumb-empty" aria-hidden="true" />}
+                            // Only once some row has a picture is a blank one
+                            // worth its space, and then only to keep the names
+                            // on one line down the column.
+                            : <span className="product-thumb product-thumb-empty" aria-hidden="true" />)}
                           <span className="offer-picker-named">
                             <span>{row.name}</span>
                             <small>{[row.brand, row.marketplace].filter(Boolean).join(" · ")}</small>
