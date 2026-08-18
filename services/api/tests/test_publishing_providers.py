@@ -1817,6 +1817,36 @@ def test_a_bare_product_url_is_not_vouched_for(
     assert preview["attribution"]["tracked"] is False
 
 
+def test_a_plan_locked_first_comment_blames_the_plan_not_the_network(
+    monkeypatch,
+) -> None:
+    """Facebook takes a first comment; a Buffer Free login does not send one.
+
+    The status told those apart nowhere, so the interface said none of the
+    chosen networks take a first comment - and the operator went
+    investigating the network instead of the plan.
+    """
+    # Buffer's Free tier, identified the way the app really identifies it:
+    # by the 3,000-requests-per-30-days figure in the rate-limit policy.
+    monkeypatch.setattr(
+        publishing, "buffer_rate_limit_policy_header",
+        lambda: "3000;w=2592000",
+    )
+    status = publishing.provider_status("buffer", probe=False)
+    assert "facebook" not in status["first_comment_platforms"]
+    assert "facebook" in status["first_comment_locked_platforms"]
+    # The thread networks are not sold separately and stay deliverable.
+    assert "threads" in status["first_comment_platforms"]
+
+    # An unnamed plan keeps the feature, and nothing reads as locked.
+    monkeypatch.setattr(
+        publishing, "buffer_rate_limit_policy_header", lambda: None,
+    )
+    status = publishing.provider_status("buffer", probe=False)
+    assert "facebook" in status["first_comment_platforms"]
+    assert status["first_comment_locked_platforms"] == []
+
+
 # --- media the network will refuse, said before delivery -----------------------
 
 

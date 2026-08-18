@@ -452,6 +452,8 @@ export const fr: Messages = {
     addToFirstComment: "Ajouter en premier commentaire",
     noCaptionLinkHere: "Aucun réseau choisi ne rend cliquable un lien en légende.",
     noCommentHere: "Aucun réseau choisi n’accepte de premier commentaire.",
+    commentPlanLocked:
+      "{platforms} accepte un premier commentaire, mais l’offre actuelle du moteur ne l’inclut pas. Passez à une offre supérieure, ou placez le lien dans la légende — il y est cliquable.",
     commentReach: "Instagram réduit la portée des publications qui renvoient à un lien en commentaire, et masque souvent ce commentaire.",
     chooseDestinationsFirst: "Choisissez des destinations pour voir où ce lien atterrira.",
     disclosureLeads: "Cette phrase ouvre la légende sur chaque réseau, y compris lorsque le lien est dans la bio.",

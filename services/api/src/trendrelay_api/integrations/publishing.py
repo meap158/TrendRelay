@@ -2626,6 +2626,29 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
             authenticated = True
         except RuntimeError as error:
             authorization_error = str(error)
+    # Where a first comment can actually be delivered through this login, and
+    # - separately - where the network takes one but the plan withholds it.
+    # Both are told apart in the interface: "Facebook takes a first comment,
+    # but your plan does not include it" is a different sentence from "this
+    # network has no comment to post into", and showing the second for the
+    # first blamed the network for the plan.
+    comment_capable = (
+        set(provider.platforms) & FIRST_COMMENT_PLATFORMS
+        if provider.id == "buffer" else set()
+    )
+    comment_included = comment_capable and engine_limits.feature_available(
+        provider.id,
+        "first_comment",
+        # Read from the rate-limit policy Buffer returns on every call, the
+        # same way the plan shown beside the engine is. Asking without it
+        # would name no plan, and an unnamed plan keeps the feature.
+        engine_limits.infer_plan(
+            provider.id,
+            policy=engine_limits.parse_rate_limit_policy(
+                buffer_rate_limit_policy_header()
+            ),
+        ),
+    )
     return {
         # The connection's id, which for an engine's first login is the engine
         # id - so every existing caller reads exactly what it read before.
@@ -2674,25 +2697,13 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
         # the thread array is not sold separately and is not withheld here.
         "first_comment_platforms": sorted(
             (set(provider.platforms) & THREAD_PLATFORMS)
-            | (
-                set(provider.platforms) & FIRST_COMMENT_PLATFORMS
-                if engine_limits.feature_available(
-                    provider.id,
-                    "first_comment",
-                    # Read from the rate-limit policy Buffer returns on every
-                    # call, the same way the plan shown beside the engine is.
-                    # Asking without it would name no plan, and an unnamed plan
-                    # keeps the feature.
-                    engine_limits.infer_plan(
-                        provider.id,
-                        policy=engine_limits.parse_rate_limit_policy(
-                            buffer_rate_limit_policy_header()
-                        ),
-                    ),
-                )
-                else set()
-            )
+            | (comment_capable if comment_included else set())
         ) if provider.id == "buffer" else [],
+        # Networks that take a first comment which this login's plan withholds
+        # - so the interface can blame the plan, not the network.
+        "first_comment_locked_platforms": sorted(
+            set() if comment_included else comment_capable
+        ),
         "youtube_categories": [
             {"id": key, "label": label}
             for key, label in sorted(YOUTUBE_CATEGORIES.items(), key=lambda item: int(item[0]))

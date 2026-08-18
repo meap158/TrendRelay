@@ -434,6 +434,8 @@ export const zh: Messages = {
     addToFirstComment: "加入首条评论",
     noCaptionLinkHere: "所选平台都不支持文案中的可点击链接。",
     noCommentHere: "所选平台都不接受首条评论。",
+    commentPlanLocked:
+      "{platforms} 支持首条评论，但发布引擎当前的套餐不包含此功能。请升级套餐，或将链接放入文案——文案中的链接可以点击。",
     commentReach: "Instagram 会降低引导至评论链接的帖子的触达，并常隐藏该评论。",
     chooseDestinationsFirst: "选择目标后即可看到链接会放在哪里。",
     disclosureLeads: "这句话会出现在每个平台的文案开头，即使链接放在主页简介里也一样。",

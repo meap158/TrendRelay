@@ -152,6 +152,8 @@ type Provider = {
   topic_platforms?: string[];
   limits: Record<string, PlatformLimit>;
   first_comment_platforms: string[];
+  /** Networks that take a first comment which this login's plan withholds. */
+  first_comment_locked_platforms?: string[];
   thread_platforms: string[];
   max_thread_parts: number;
   supports_approval: boolean;
@@ -2968,6 +2970,11 @@ export default function PublishPage() {
             commentPlatforms={chosen.filter((platform) =>
               providersFor(platform).some(
                 (provider) => (provider.first_comment_platforms ?? []).includes(platform)))}
+            commentLockedPlatforms={chosen.filter((platform) =>
+              providersFor(platform).some((provider) =>
+                (provider.first_comment_locked_platforms ?? []).includes(platform))
+              && !providersFor(platform).some((provider) =>
+                (provider.first_comment_platforms ?? []).includes(platform)))}
             disabled={!canExecute}
           />
 
@@ -2975,7 +2982,21 @@ export default function PublishPage() {
             const carriers = chosen.filter((platform) =>
               providersFor(platform).some(
                 (provider) => (provider.first_comment_platforms ?? []).includes(platform)));
-            if (!carriers.length) return null;
+            if (!carriers.length) {
+              // The field hiding silently is how a plan limit got blamed on
+              // the network. Where a chosen network takes a first comment
+              // that only the plan withholds, say which.
+              const locked = chosen.filter((platform) =>
+                providersFor(platform).some((provider) =>
+                  (provider.first_comment_locked_platforms ?? []).includes(platform)));
+              return locked.length ? (
+                <p className="publish-plan-note" role="status">
+                  {t("publish.commentPlanLocked", {
+                    platforms: locked.map((platform) => platformLabels[platform]).join(", "),
+                  })}
+                </p>
+              ) : null;
+            }
             return (
               <label>{t("publish.firstComment")} <i>{t("publish.optional")}</i>
                 <textarea

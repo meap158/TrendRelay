@@ -444,6 +444,8 @@ export const ja: Messages = {
     addToFirstComment: "最初のコメントに追加",
     noCaptionLinkHere: "選んだネットワークではキャプション内のリンクをタップできません。",
     noCommentHere: "選んだネットワークは最初のコメントを受け付けません。",
+    commentPlanLocked:
+      "{platforms}はファーストコメントに対応していますが、現在のエンジンのプランには含まれていません。プランをアップグレードするか、リンクをキャプションに入れてください。キャプションではタップできます。",
     commentReach: "Instagram はコメントのリンクへ誘導する投稿のリーチを下げ、そのコメントを隠すことがあります。",
     chooseDestinationsFirst: "配信先を選ぶと、リンクの行き先が表示されます。",
     disclosureLeads: "この一文がすべてのネットワークでキャプションの先頭に入ります。リンクがプロフィールにある場合も同じです。",

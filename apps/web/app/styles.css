@@ -406,6 +406,9 @@ nav strong { color: #1c2b33; }
 .chosen-clip em { font-style: normal; }
 
 /* --- live post preview ---------------------------------------------------- */
+/* A plan limitation, said where the withheld field would have been. */
+.publish-plan-note { margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--muted); font-size: 12px; }
+
 .post-preview { display: grid; gap: 10px; margin: 0 0 10px; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel); }
 .post-preview figcaption { display: flex; align-items: center; gap: 8px; }
 .post-preview figcaption span { display: grid; gap: 1px; min-width: 0; }

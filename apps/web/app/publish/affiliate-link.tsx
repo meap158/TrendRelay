@@ -57,6 +57,7 @@ export function AffiliateLink({
   onFirstComment,
   onDisclosure,
   commentPlatforms,
+  commentLockedPlatforms = [],
   disabled,
 }: {
   products: ProductRow[];
@@ -72,6 +73,8 @@ export function AffiliateLink({
   onDisclosure: (next: string) => void;
   /** Networks among the chosen that accept a first comment at all. */
   commentPlatforms: string[];
+  /** Chosen networks that take one, but the engine plan withholds it. */
+  commentLockedPlatforms?: string[];
   disabled?: boolean;
 }) {
   const t = useT();
@@ -203,7 +206,15 @@ export function AffiliateLink({
               disabled={disabled || !commentPlatforms.length}
               title={commentPlatforms.length
                 ? t("publish.commentReach")
-                : t("publish.noCommentHere")}
+                // The network and the plan are different culprits. Facebook
+                // takes a first comment; a Buffer Free login does not send
+                // one - and blaming the network for the plan sent the
+                // operator investigating the wrong thing.
+                : commentLockedPlatforms.length
+                  ? t("publish.commentPlanLocked", {
+                      platforms: commentLockedPlatforms.join(", "),
+                    })
+                  : t("publish.noCommentHere")}
               onClick={addToComment}
             >{t("publish.addToFirstComment")}</Button>
           </div>
