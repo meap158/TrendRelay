@@ -2656,13 +2656,20 @@ export function AutopilotPanel({
 
           {autopilot.offer_mode === "smart" && (
             <div className="campaign-product-intelligence">
+              {/* Named for the one thing this block does that nothing else
+                  does. It used to be headed "Best-fit products" over a
+                  description of how ranking works - which the queue rows now
+                  answer per post, and Review products answers per post in
+                  detail. Narrowing the pool smart matching may draw from is
+                  the decision that lives only here. */}
               <div className="campaign-product-heading">
                 <div>
-                  <strong>Best-fit products</strong>
-                  <small>Ranked from campaign goals, approved copy, hashtags, media metadata, creative analysis, and transcripts.</small>
+                  <strong>Which products this campaign may use</strong>
+                  <small>Smart matching draws from every imported offer.
+                    Shortlist to narrow it to a few.</small>
                 </div>
                 <Button variant="secondary" size="sm" busy={busy === "recommendations"}
-                  onClick={() => void loadRecommendations()}>Analyze campaign</Button>
+                  onClick={() => void loadRecommendations()}>Rank all products</Button>
               </div>
               {autopilot.candidate_offer_ids.length > 0 && (
                 <div className="campaign-shortlist-note">
@@ -2672,12 +2679,12 @@ export function AutopilotPanel({
               )}
               {recommendations && !recommendations.item_id && (
                 <>
-                  <div className="campaign-strategy-summary">
-                    <span><strong>{recommendations.strategy.posting_slots}</strong> posting times</span>
-                    <span><strong>{recommendations.strategy.platforms.length}</strong> platforms</span>
-                    <span><strong>{recommendations.strategy.recommended_products_per_post}</strong> auto products/post</span>
-                    <span><strong>{recommendations.strategy.evidence_sources.length}</strong> evidence sources</span>
-                  </div>
+                  {/* The four-number strip is gone. Posting times are listed
+                      in full in the card below it, platforms are the accounts
+                      card above it, products per post is in Campaign settings,
+                      and "4 evidence sources" was a number nobody could act
+                      on. How products rotate across posts is not said anywhere
+                      else, so it stays. */}
                   <p className="campaign-rotation-note">{recommendations.strategy.rotation}</p>
                   <ul className="campaign-product-matches">
                     {recommendations.matches.map((match) => {

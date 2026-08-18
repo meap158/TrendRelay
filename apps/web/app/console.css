@@ -736,10 +736,6 @@ html { scroll-behavior: smooth; }
 .campaign-mode-options button:disabled { cursor: default; opacity: .7; }
 .campaign-product-heading, .campaign-product-actions, .campaign-shortlist-note { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .campaign-shortlist-note { border-radius: var(--radius-sm); padding: 7px 9px; color: var(--muted); background: var(--panel); font-size: 11px; }
-.campaign-strategy-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
-.campaign-strategy-summary span { display: grid; gap: 1px; border-inline-end: 1px solid var(--line); padding: 8px; color: var(--muted); font-size: 10px; }
-.campaign-strategy-summary span:last-child { border-inline-end: 0; }
-.campaign-strategy-summary strong { color: var(--text); font-size: 14px; }
 .campaign-rotation-note { margin: 0; }
 .campaign-product-matches { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .campaign-product-matches > li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 9px; align-items: center; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px; background: var(--panel); }
@@ -897,9 +893,7 @@ html { scroll-behavior: smooth; }
 
 @media (max-width: 700px) {
   .autopilot-destinations li, .autopilot-queue li { grid-template-columns: minmax(0, 1fr) auto; }
-  .campaign-mode-options, .campaign-strategy-summary { grid-template-columns: 1fr; }
-  .campaign-strategy-summary span { border-inline-end: 0; border-bottom: 1px solid var(--line); }
-  .campaign-strategy-summary span:last-child { border-bottom: 0; }
+  .campaign-mode-options { grid-template-columns: 1fr; }
   .campaign-product-matches > li { grid-template-columns: auto minmax(0, 1fr) auto; }
   .campaign-product-matches > li > .ui-button { grid-column: 2 / -1; justify-self: start; }
   .campaign-product-heading, .campaign-product-actions { align-items: stretch; flex-direction: column; }
