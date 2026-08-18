@@ -454,7 +454,9 @@ export const fr: Messages = {
     noCommentHere: "Aucun réseau choisi n’accepte de premier commentaire.",
     commentReach: "Instagram réduit la portée des publications qui renvoient à un lien en commentaire, et masque souvent ce commentaire.",
     chooseDestinationsFirst: "Choisissez des destinations pour voir où ce lien atterrira.",
-    disclosureGoesFirst: "La mention ouvre la légende dans les deux cas : « {disclosure} »",
+    disclosureLeads: "Cette phrase ouvre la légende sur chaque réseau, y compris lorsque le lien est dans la bio.",
+    disclosureEmpty: "Aucune mention. Rien ne sera ajouté à la légende.",
+    chooseProductHint: "Choisir dans le catalogue",
     bioOnlyHere: "Sur {platforms}, aucun lien dans une publication n’est cliquable : placez ce lien sur le profil et laissez la légende y renvoyer.",
   },
 

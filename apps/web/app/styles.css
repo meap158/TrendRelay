@@ -797,27 +797,57 @@ nav strong { color: #1c2b33; }
 .affiliate-link { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
 .affiliate-link.empty { color: var(--muted); font-size: 12px; }
 .affiliate-link > label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 600; }
-/* One row: what it is for, which product is on it, and the way to change that.
-   The product's name is the wide part, because it is the thing being read. */
-.affiliate-chooser { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; }
-.affiliate-chooser-label { color: var(--muted); font-size: 11px; font-weight: 600; }
-.affiliate-chosen { display: grid; min-width: 0; gap: 1px; }
-.affiliate-chosen strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.affiliate-chosen small { color: var(--muted); font-size: 10px; }
-.affiliate-chosen.empty { color: var(--muted); font-size: 12px; }
+/* The label and the way to change what is chosen, on one line above the card. */
+.affiliate-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.affiliate-head-label { color: var(--muted); font-size: 11px; font-weight: 600; }
+
+/* The product as a card. Picture, name, and what it pays - the three things
+   somebody checks they picked the right offer by. */
+.affiliate-product { display: flex; gap: 10px; align-items: center; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); text-align: start; }
+.affiliate-product-named { display: grid; flex: 1; min-width: 0; gap: 1px; }
+.affiliate-product-named strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.affiliate-product-named small { color: var(--muted); font-size: 10px; }
+/* Empty, it is a place for a product rather than a sentence saying there is
+   none - so the whole card is the way to fill it. */
+button.affiliate-product { border-style: dashed; cursor: pointer; font: inherit; color: inherit; }
+button.affiliate-product:hover:not(:disabled) { border-color: var(--line-strong); background: var(--panel-raised); }
+button.affiliate-product:disabled { cursor: default; opacity: .6; }
+.affiliate-product.empty .affiliate-product-named strong { color: var(--muted); font-weight: 600; }
+/* The rate reads as a figure, not prose: it is the number being compared. */
+.affiliate-rate { flex: none; border-radius: 999px; padding: 3px 9px; background: var(--green-dark); color: var(--green); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.affiliate-disclosure { display: grid; gap: 4px; }
+.affiliate-disclosure > span { color: var(--muted); font-size: 11px; font-weight: 600; }
+.affiliate-disclosure input { width: 100%; }
 
 /* The catalogue in a dialog. It borrows `.product-table` from Attribution
    deliberately: it is the same table answering the same question, and two that
    differ by a few pixels read as two different things. */
-.offer-picker { display: grid; gap: 8px; min-height: 0; }
-.offer-picker-search { width: 100%; }
-.offer-picker-count { margin: 0; color: var(--muted); font-size: 11px; }
-.offer-picker-empty { margin: 0; padding: 16px 0; color: var(--muted); font-size: 12px; text-align: center; }
-/* Scrolls itself so the dialog does not, which is what keeps the search box and
-   the header row in place while a long catalogue moves under them. */
-.offer-picker-scroll { max-height: min(52vh, 420px); overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); }
-.offer-picker-pick { width: 1%; white-space: nowrap; }
-.offer-picker tbody tr.selected { background: var(--panel-raised); }
+.offer-picker { display: grid; gap: 10px; min-height: 0; }
+.offer-picker-toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+/* The magnifier sits inside the field rather than beside it, so the toolbar is
+   one object and not a row of loose parts. */
+.offer-picker-search { display: flex; flex: 1; gap: 6px; align-items: center; min-width: 0; padding: 0 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--muted); }
+.offer-picker-search:focus-within { border-color: var(--line-strong); }
+.offer-picker-search input { flex: 1; min-width: 0; border: 0; padding: 7px 0; background: none; color: var(--text); font: inherit; font-size: 12px; }
+.offer-picker-search input:focus { outline: none; }
+.offer-picker-count { flex: none; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.offer-picker-empty { margin: 0; padding: 28px 0; color: var(--muted); font-size: 12px; text-align: center; }
+/* Scrolls itself so the dialog does not, which is what lets the header row stay
+   put while a long catalogue moves under it. */
+.offer-picker-scroll { max-height: min(56vh, 460px); overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.offer-picker-table thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); }
+.offer-picker-table thead th button { display: inline-flex; gap: 4px; align-items: center; border: 0; padding: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.offer-picker-table thead th button[data-active] { color: var(--text); }
+.offer-picker-row { cursor: pointer; }
+.offer-picker-row:hover { background: var(--panel-raised); }
+.offer-picker-row[aria-selected="true"] { background: var(--panel-raised); box-shadow: inset 2px 0 0 var(--link); }
+.offer-picker-product { display: flex; gap: 9px; align-items: center; min-width: 0; }
+.offer-picker-named { display: grid; min-width: 0; gap: 1px; }
+.offer-picker-named > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.offer-picker-named small { color: var(--muted); font-size: 10px; }
+.offer-picker-tick { flex: none; color: var(--link); }
+.offer-picker-rate { font-weight: 700; }
 
 .affiliate-outcomes { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .affiliate-outcomes li { display: flex; gap: 8px; align-items: baseline; font-size: 11px; }

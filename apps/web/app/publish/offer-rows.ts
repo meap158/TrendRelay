@@ -15,6 +15,7 @@ export type OfferChoice = {
   product_id: string;
   name: string;
   brand: string | null;
+  image_url: string | null;
   marketplace: string;
   network: string;
   affiliate_url: string;
@@ -44,6 +45,7 @@ export function offerChoices(products: ProductRow[]): OfferChoice[] {
         product_id: product.id,
         name: product.name,
         brand: product.brand,
+        image_url: product.image_url,
         marketplace: product.marketplace,
         network: offer.network,
         affiliate_url: offer.affiliate_url,

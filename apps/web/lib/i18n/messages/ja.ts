@@ -446,7 +446,9 @@ export const ja: Messages = {
     noCommentHere: "選んだネットワークは最初のコメントを受け付けません。",
     commentReach: "Instagram はコメントのリンクへ誘導する投稿のリーチを下げ、そのコメントを隠すことがあります。",
     chooseDestinationsFirst: "配信先を選ぶと、リンクの行き先が表示されます。",
-    disclosureGoesFirst: "いずれの場合も開示文がキャプションの先頭に入ります:「{disclosure}」",
+    disclosureLeads: "この一文がすべてのネットワークでキャプションの先頭に入ります。リンクがプロフィールにある場合も同じです。",
+    disclosureEmpty: "表示なし。キャプションには何も追加されません。",
+    chooseProductHint: "カタログから選ぶ",
     bioOnlyHere: "{platforms} では投稿内のリンクをタップできないため、このリンクはプロフィールに置き、キャプションからそこを指します。",
   },
 

@@ -450,7 +450,9 @@ export const en = {
     noCommentHere: "None of the chosen networks take a first comment.",
     commentReach: "Instagram reduces reach for posts that funnel to a comment link, and often hides the comment.",
     chooseDestinationsFirst: "Choose destinations to see where this link will land.",
-    disclosureGoesFirst: "The disclosure leads the caption either way: “{disclosure}”",
+    disclosureLeads: "This leads the caption on every network, including where the link is in the bio.",
+    disclosureEmpty: "No disclosure. Nothing will be added to the caption.",
+    chooseProductHint: "Pick one from the catalogue",
     bioOnlyHere: "On {platforms} no link in a post is clickable, so put this link on the profile and let the caption point at it.",
   },
 

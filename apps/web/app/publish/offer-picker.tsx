@@ -17,13 +17,16 @@
  *
  * One row per offer rather than per product. A product with two offers is two
  * different links paying two different rates, and the post can only carry one.
+ *
+ * The whole row is the control. A column of "Choose" buttons repeated the same
+ * verb down the page and made the picture and the name - the parts anybody
+ * actually recognises a product by - compete with a button for attention.
  */
 
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronsUpDown, Search } from "lucide-react";
 
 import { Dialog } from "../ui/dialog";
-import { Button } from "../ui/button";
 import { useT } from "../i18n-provider";
 import { commissionRate } from "../commission";
 import { money } from "../attribution/format";
@@ -68,8 +71,8 @@ export function OfferPicker({
     direction: "desc",
   });
 
+  const all = useMemo(() => offerChoices(products), [products]);
   const rows = useMemo(() => {
-    const all = offerChoices(products);
     const needle = query.trim().toLowerCase();
     const matching = needle
       ? all.filter((row) => [row.name, row.brand, row.marketplace, row.network]
@@ -77,7 +80,7 @@ export function OfferPicker({
           .some((field) => String(field).toLowerCase().includes(needle)))
       : all;
     return sortRows(matching, sort.direction, (row) => offerValue(row, sort.key));
-  }, [products, query, sort]);
+  }, [all, query, sort]);
 
   function reorder(key: SortKey) {
     setSort((current) => current.key === key
@@ -92,29 +95,39 @@ export function OfferPicker({
       open={open}
       size="wide"
       title="Choose a product"
-      description="The product's own affiliate link goes in the post. Sorted by what each offer pays."
+      description="Its own affiliate link goes in the post. Sorted by what each offer pays."
       onClose={onClose}
     >
       <div className="offer-picker">
-        <input
-          type="search"
-          className="offer-picker-search"
-          value={query}
-          placeholder={t("attribution.searchProducts")}
-          aria-label={t("attribution.searchProducts")}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        <p className="offer-picker-count">
-          {t("attribution.productCount", { count: rows.length })}
-        </p>
+        <div className="offer-picker-toolbar">
+          <span className="offer-picker-search">
+            <Search size={14} aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              placeholder={t("attribution.searchProducts")}
+              aria-label={t("attribution.searchProducts")}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </span>
+          <span className="offer-picker-count">
+            {query.trim() && rows.length !== all.length
+              ? `${rows.length} of ${all.length}`
+              : t("attribution.productCount", { count: rows.length })}
+          </span>
+        </div>
+
         {rows.length === 0 ? (
-          <p className="offer-picker-empty">{t("attribution.noProductMatches")}</p>
+          <p className="offer-picker-empty">
+            {all.length
+              ? t("attribution.noProductMatches")
+              : t("publish.noProductsToLink")}
+          </p>
         ) : (
           <div className="offer-picker-scroll">
-            <table className="product-table">
+            <table className="product-table offer-picker-table">
               <thead>
                 <tr>
-                  <th scope="col" className="offer-picker-pick"><span className="sr-only">Choose</span></th>
                   {COLUMNS.map((column) => {
                     const active = sort.key === column.key;
                     const Icon = !active ? ChevronsUpDown
@@ -127,7 +140,11 @@ export function OfferPicker({
                         aria-sort={!active ? "none"
                           : sort.direction === "asc" ? "ascending" : "descending"}
                       >
-                        <button type="button" onClick={() => reorder(column.key)}>
+                        <button
+                          type="button"
+                          data-active={active || undefined}
+                          onClick={() => reorder(column.key)}
+                        >
                           {column.label}
                           <Icon size={12} aria-hidden="true" />
                         </button>
@@ -137,34 +154,48 @@ export function OfferPicker({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
-                  <tr
-                    key={row.offer_id}
-                    className={row.offer_id === chosen ? "selected" : undefined}
-                  >
-                    <td className="offer-picker-pick">
-                      <Button
-                        variant={row.offer_id === chosen ? "primary" : "secondary"}
-                        size="sm"
-                        onClick={() => onChoose(row)}
-                      >{row.offer_id === chosen ? "Chosen" : "Choose"}</Button>
-                    </td>
-                    <th scope="row">
-                      <strong>{row.name}</strong>
-                      <small>{[row.brand, row.marketplace].filter(Boolean).join(" · ")}</small>
-                    </th>
-                    <td>{row.network}</td>
-                    <td className="numeric">
-                      {row.price_cents === null ? "—" : money(row.price_cents, row.currency)}
-                    </td>
-                    <td className="numeric">{commissionRate(row) || "—"}</td>
-                    <td className="numeric">
-                      {row.commission_flat_cents === null
-                        ? "—"
-                        : money(row.commission_flat_cents, row.currency)}
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((row) => {
+                  const picked = row.offer_id === chosen;
+                  return (
+                    <tr
+                      key={row.offer_id}
+                      // The row is the button. `aria-selected` rather than a
+                      // checkbox column: exactly one of these ends up on the
+                      // post, and a checkbox implies otherwise.
+                      className="offer-picker-row"
+                      aria-selected={picked}
+                      onClick={() => onChoose(row)}
+                    >
+                      <th scope="row">
+                        <span className="offer-picker-product">
+                          {row.image_url
+                            // eslint-disable-next-line @next/next/no-img-element
+                            ? <img className="product-thumb" src={row.image_url} alt="" loading="lazy" />
+                            : <span className="product-thumb product-thumb-empty" aria-hidden="true" />}
+                          <span className="offer-picker-named">
+                            <span>{row.name}</span>
+                            <small>{[row.brand, row.marketplace].filter(Boolean).join(" · ")}</small>
+                          </span>
+                          {picked && <Check className="offer-picker-tick" size={15} aria-label="Chosen" />}
+                        </span>
+                      </th>
+                      <td>{row.network}</td>
+                      <td className="numeric">
+                        {row.price_cents === null ? "—" : money(row.price_cents, row.currency)}
+                      </td>
+                      {/* The rate carries the emphasis: it is the column this
+                          table opens sorted by, and the reason for the choice. */}
+                      <td className="numeric offer-picker-rate">
+                        {commissionRate(row) || "—"}
+                      </td>
+                      <td className="numeric">
+                        {row.commission_flat_cents === null
+                          ? "—"
+                          : money(row.commission_flat_cents, row.currency)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

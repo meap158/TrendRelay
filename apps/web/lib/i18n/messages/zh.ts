@@ -436,7 +436,9 @@ export const zh: Messages = {
     noCommentHere: "所选平台都不接受首条评论。",
     commentReach: "Instagram 会降低引导至评论链接的帖子的触达，并常隐藏该评论。",
     chooseDestinationsFirst: "选择目标后即可看到链接会放在哪里。",
-    disclosureGoesFirst: "无论哪种方式，披露说明都会放在文案开头：「{disclosure}」",
+    disclosureLeads: "这句话会出现在每个平台的文案开头，即使链接放在主页简介里也一样。",
+    disclosureEmpty: "没有披露声明。不会向文案添加任何内容。",
+    chooseProductHint: "从商品目录中选择",
     bioOnlyHere: "在 {platforms} 上帖内链接无法点击，请将此链接放在简介，并让文案指向它。",
   },
 

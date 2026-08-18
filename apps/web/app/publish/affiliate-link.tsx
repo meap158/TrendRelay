@@ -52,8 +52,10 @@ export function AffiliateLink({
   platforms,
   caption,
   firstComment,
+  disclosure,
   onCaption,
   onFirstComment,
+  onDisclosure,
   commentPlatforms,
   disabled,
 }: {
@@ -63,8 +65,11 @@ export function AffiliateLink({
   platforms: string[];
   caption: string;
   firstComment: string;
+  /** The sentence that leads the caption. Editable: see below. */
+  disclosure: string;
   onCaption: (next: string) => void;
   onFirstComment: (next: string) => void;
+  onDisclosure: (next: string) => void;
   /** Networks among the chosen that accept a first comment at all. */
   commentPlatforms: string[];
   disabled?: boolean;
@@ -88,7 +93,7 @@ export function AffiliateLink({
 
   function addToCaption() {
     if (!offer) return;
-    const body = withDisclosure(caption, DEFAULT_DISCLOSURE);
+    const body = withDisclosure(caption, disclosure);
     onCaption(
       body.includes(offer.affiliate_url)
         ? body
@@ -100,7 +105,7 @@ export function AffiliateLink({
     if (!offer) return;
     // The disclosure still goes in the caption, not the comment. In a comment it
     // discloses nothing to a reader who never opens the comments.
-    onCaption(withDisclosure(caption, DEFAULT_DISCLOSURE));
+    onCaption(withDisclosure(caption, disclosure));
     onFirstComment(
       firstComment.includes(offer.affiliate_url)
         ? firstComment
@@ -118,26 +123,48 @@ export function AffiliateLink({
 
   return (
     <div className="affiliate-link">
-      <div className="affiliate-chooser">
-        <span className="affiliate-chooser-label">{t("publish.affiliateLink")}</span>
-        {/* The chosen product stated in full rather than as a code. What it
-            pays is part of that: the rate is usually why this offer was
-            attached instead of another on the same product. */}
-        {offer ? (
-          <span className="affiliate-chosen">
-            <strong>{offer.name}</strong>
-            <small>{[offer.network, commissionLabel(offer)].filter(Boolean).join(" · ")}</small>
-          </span>
-        ) : (
-          <span className="affiliate-chosen empty">{t("publish.chooseProductPrompt")}</span>
-        )}
+      <div className="affiliate-head">
+        <span className="affiliate-head-label">{t("publish.affiliateLink")}</span>
         <Button
-          variant="secondary"
+          variant={offer ? "quiet" : "secondary"}
           size="sm"
           disabled={disabled}
           onClick={() => setPicking(true)}
         >{offer ? t("publish.changeProduct") : t("publish.chooseProductAction")}</Button>
       </div>
+
+      {/* The product as a card rather than a line of text: the picture and the
+          name are what somebody checks they picked the right thing by, and the
+          rate is why they picked it over another offer. Empty, it is a place
+          for a product rather than a sentence saying there is none. */}
+      {offer ? (
+        <div className="affiliate-product">
+          {offer.image_url
+            // eslint-disable-next-line @next/next/no-img-element
+            ? <img className="product-thumb" src={offer.image_url} alt="" loading="lazy" />
+            : <span className="product-thumb product-thumb-empty" aria-hidden="true" />}
+          <span className="affiliate-product-named">
+            <strong>{offer.name}</strong>
+            <small>{offer.network}</small>
+          </span>
+          {commissionLabel(offer) && (
+            <span className="affiliate-rate">{commissionLabel(offer)}</span>
+          )}
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="affiliate-product empty"
+          disabled={disabled}
+          onClick={() => setPicking(true)}
+        >
+          <span className="product-thumb product-thumb-empty" aria-hidden="true" />
+          <span className="affiliate-product-named">
+            <strong>{t("publish.chooseProductPrompt")}</strong>
+            <small>{t("publish.chooseProductHint")}</small>
+          </span>
+        </button>
+      )}
 
       <OfferPicker
         open={picking}
@@ -181,10 +208,29 @@ export function AffiliateLink({
             >{t("publish.addToFirstComment")}</Button>
           </div>
 
-          {/* The disclosure travels with the link either way, so it is stated
-              rather than left as a surprise edit to the caption. */}
-          <small className="affiliate-note">
-            {t("publish.disclosureGoesFirst", { disclosure: DEFAULT_DISCLOSURE })}
+          {/* Editable, and stated before it is used.
+           *
+           * It was a fixed sentence read off the tracking link, which made the
+           * one line of a post carrying a legal obligation the one line that
+           * could not be changed here. It is not one sentence for everybody:
+           * wording differs by market and by each network's own rules, and
+           * somebody posting in Vietnamese should not have to disclose in
+           * English. Emptying it is allowed, and says what that means. */}
+          <label className="affiliate-disclosure">
+            <span>{t("publish.disclosure")}</span>
+            <input
+              type="text"
+              value={disclosure}
+              maxLength={500}
+              disabled={disabled}
+              placeholder={DEFAULT_DISCLOSURE}
+              onChange={(event) => onDisclosure(event.target.value)}
+            />
+          </label>
+          <small className={`affiliate-note${disclosure.trim() ? "" : " warn"}`}>
+            {disclosure.trim()
+              ? t("publish.disclosureLeads")
+              : t("publish.disclosureEmpty")}
           </small>
           {bioOnly && (
             <small className="affiliate-note warn">

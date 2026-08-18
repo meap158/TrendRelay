@@ -25,7 +25,7 @@ import {
   type AssetFacets,
   type AssetFilterValues,
 } from "../ui/asset-filters";
-import { AffiliateLink, type LinkPlacement } from "./affiliate-link";
+import { AffiliateLink, DEFAULT_DISCLOSURE, type LinkPlacement } from "./affiliate-link";
 import type { ProductRow, ProductsPayload } from "../attribution/types";
 import { ActionIcon } from "../ui/action-icons";
 import { WaitingScreen } from "../ui/waiting-screen";
@@ -261,6 +261,15 @@ function sinceLabel(iso: string) {
 
 const DRAFT_KEY = "trendrelay.publish.draft";
 
+/**
+ * The disclosure keeps its own key rather than riding in the draft.
+ *
+ * It is a standing preference, not part of one post: somebody who has settled
+ * on their wording - in their own language, to their own market's rules -
+ * should not find it reset to English the first time they clear a draft.
+ */
+const DISCLOSURE_KEY = "trendrelay.publish.disclosure";
+
 export default function PublishPage() {
   const t = useT();
   const { loading, user, apiFetch } = useAuth();
@@ -375,6 +384,7 @@ export default function PublishPage() {
   // This held minted tracking links until ADR 0022 retired them; a post now
   // carries the network's own affiliate URL, which lives on the offer.
   const [linkableProducts, setLinkableProducts] = useState<ProductRow[]>([]);
+  const [disclosure, setDisclosure] = useState(DEFAULT_DISCLOSURE);
   /**
    * The Pinterest boards of the account this post is going to.
    *
@@ -886,6 +896,15 @@ export default function PublishPage() {
     queueMicrotask(() => {
       const handoff = new URLSearchParams(window.location.search).get("video");
       if (handoff) setVideoPath(handoff);
+      // Read separately from the draft, and before it: this survives clearing
+      // a post. An empty string is a real choice - somebody may disclose in the
+      // media itself - so only a missing key falls back to the default.
+      try {
+        const saved = window.localStorage.getItem(DISCLOSURE_KEY);
+        if (saved !== null) setDisclosure(saved);
+      } catch {
+        // Blocked storage costs the remembered wording, not the page.
+      }
       // A caption is the expensive part of a post to retype, and this page is
       // reloaded often - after saving a key, after switching engine. Restore
       // what was being written unless a handoff is bringing its own clip.
@@ -982,6 +1001,11 @@ export default function PublishPage() {
     // empty, and saving that would erase the draft this page exists to bring
     // back - the save would win the race against its own restore.
     if (!draftRestored.current) return;
+    try {
+      window.localStorage.setItem(DISCLOSURE_KEY, disclosure);
+    } catch {
+      // As above: not worth failing a page over.
+    }
     const draft = { caption, title, videoPath, mediaUrl, firstComment, thread };
     const empty = !caption && !title && !videoPath && !mediaUrl && !firstComment;
     try {
@@ -990,7 +1014,7 @@ export default function PublishPage() {
     } catch {
       // Storage can be full or blocked; losing a draft is not worth an error.
     }
-  }, [caption, title, videoPath, mediaUrl, firstComment, thread]);
+  }, [caption, title, videoPath, mediaUrl, firstComment, thread, disclosure]);
 
   useEffect(() => {
     setActiveWorkspaceId(workspaceId || null);
@@ -2937,8 +2961,10 @@ export default function PublishPage() {
             platforms={chosen}
             caption={caption}
             firstComment={firstComment}
+            disclosure={disclosure}
             onCaption={setCaption}
             onFirstComment={setFirstComment}
+            onDisclosure={setDisclosure}
             commentPlatforms={chosen.filter((platform) =>
               providersFor(platform).some(
                 (provider) => (provider.first_comment_platforms ?? []).includes(platform)))}
