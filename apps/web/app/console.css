@@ -885,8 +885,8 @@ html { scroll-behavior: smooth; }
 .autopilot-compose small { color: var(--muted); font-weight: 400; line-height: 1.4; }
 .autopilot-compose .ui-button { justify-self: start; }
 .autopilot-picker-head > span { display: grid; gap: 2px; }
-.campaign-content-package { display: flex; flex-wrap: wrap; gap: 4px; margin-block-start: 5px; }
-.campaign-content-package em { border: 1px solid var(--line); border-radius: 999px; padding: 2px 6px; color: var(--muted); background: var(--panel-raised); font-size: 9px; font-style: normal; }
+.campaign-content-post { display: flex; flex-wrap: wrap; gap: 4px; margin-block-start: 5px; }
+.campaign-content-post em { border: 1px solid var(--line); border-radius: 999px; padding: 2px 6px; color: var(--muted); background: var(--panel-raised); font-size: 9px; font-style: normal; }
 .campaign-reply-editor { display: grid; gap: 8px; min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px; }
 .campaign-reply-editor legend { padding-inline: 4px; color: var(--text); font-size: 11px; font-weight: 700; }
 .campaign-reply-editor > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 6px; }
@@ -1103,30 +1103,30 @@ html { scroll-behavior: smooth; }
    whole selection sharing one box. Plain scrolling, however many there are: a
    hundred clips is a reasonable selection and hiding any of them behind a
    filter is how somebody queues a post they never read. */
-.draft-packages { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
-.draft-package { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
-.draft-package-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.draft-posts { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.draft-post { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.draft-post-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 /* The title takes the room the thumbnail and the buttons leave, so a long
    Douyin filename ellipsises instead of pushing the split control off. */
-.draft-package-head strong { flex: 1 1 auto; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.draft-package-head .picker-thumb { flex: 0 0 auto; }
-.draft-package-head .ui-button { flex: 0 0 auto; }
-.draft-package label { display: grid; }
-.draft-package textarea, .draft-package input { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; }
+.draft-post-head strong { flex: 1 1 auto; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.draft-post-head .picker-thumb { flex: 0 0 auto; }
+.draft-post-head .ui-button { flex: 0 0 auto; }
+.draft-post label { display: grid; }
+.draft-post textarea, .draft-post input { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; }
 /* The caption the clip carried where it came from. Quiet, and never editable:
    it is here to say what the clip is, not to be posted. */
-.draft-package-source { display: grid; gap: 1px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
-.draft-package-source span { font-weight: 600; text-transform: uppercase; letter-spacing: .03em; font-size: 9px; }
-.draft-package-source q { overflow-wrap: anywhere; font-style: italic; }
+.draft-post-source { display: grid; gap: 1px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.draft-post-source span { font-weight: 600; text-transform: uppercase; letter-spacing: .03em; font-size: 9px; }
+.draft-post-source q { overflow-wrap: anywhere; font-style: italic; }
 /* What smart match would attach to this post, beside the copy being written
    for it. Quiet: a suggestion the campaign confirms at post time, not a
    decision already made. */
-.draft-package-offers { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.draft-package-offers li { display: inline-flex; align-items: center; gap: 5px; min-width: 0; border-radius: 999px; padding: 2px 9px 2px 3px; background: var(--panel-raised); color: var(--muted); font-size: 10px; }
-.draft-package-offers li > span:nth-child(2) { overflow: hidden; max-width: 22ch; text-overflow: ellipsis; white-space: nowrap; }
+.draft-post-offers { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.draft-post-offers li { display: inline-flex; align-items: center; gap: 5px; min-width: 0; border-radius: 999px; padding: 2px 9px 2px 3px; background: var(--panel-raised); color: var(--muted); font-size: 10px; }
+.draft-post-offers li > span:nth-child(2) { overflow: hidden; max-width: 22ch; text-overflow: ellipsis; white-space: nowrap; }
 /* What the offer pays. Set in the accent the rest of the app uses for money,
    because on a chip about a product it is the number being compared. */
-.draft-package-offers b { flex: 0 0 auto; color: var(--green); font-variant-numeric: tabular-nums; }
+.draft-post-offers b { flex: 0 0 auto; color: var(--green); font-variant-numeric: tabular-nums; }
 
 /* --- Queue and setup, side by side ---------------------------------------- */
 /* One pane rather than two tabs: getting a campaign live needs content and

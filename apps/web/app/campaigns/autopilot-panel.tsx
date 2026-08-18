@@ -325,7 +325,7 @@ function offerDescription(offer: Offer): string {
 const QUEUE_BATCH = 8;
 
 /** What one queued package is written with, before it is sent. */
-type PackageCopy = { body: string; hashtags: string };
+type PostCopy = { body: string; hashtags: string };
 
 /**
  * One row in the composer: the media it posts, and the copy written for it.
@@ -335,7 +335,7 @@ type PackageCopy = { body: string; hashtags: string };
  * id and not the index. Reordering rows must not move somebody's caption onto
  * another clip.
  */
-type DraftPackage = {
+type DraftPost = {
   id: string;
   kind: "video" | "carousel" | "image";
   assets: LibraryAsset[];
@@ -622,7 +622,7 @@ export function AutopilotPanel({
     videos: drafting.filter((asset) => asset.media_kind === "video"),
     images: drafting.filter((asset) => asset.media_kind === "image"),
   };
-  const draftingPackages = draftingSplit.videos.length + (draftingSplit.images.length ? 1 : 0);
+  const draftingPosts = draftingSplit.videos.length + (draftingSplit.images.length ? 1 : 0);
   /**
    * Copy is per package, not per batch.
    *
@@ -631,7 +631,7 @@ export function AutopilotPanel({
    * the one thing a hundred clips must not be. Keyed by package so a row keeps
    * what was written for it while its neighbours are edited.
    */
-  const [draftCopy, setDraftCopy] = useState<Record<string, PackageCopy>>({});
+  const [draftCopy, setDraftCopy] = useState<Record<string, PostCopy>>({});
   /**
    * Whether the selected pictures ride together.
    *
@@ -647,7 +647,7 @@ export function AutopilotPanel({
    * leave a row pointing at an asset that is no longer chosen. The copy is
    * stored separately and keyed by package id, which survives that.
    */
-  const draftPackages: DraftPackage[] = [
+  const draftPosts: DraftPost[] = [
     ...draftingSplit.videos.map((asset) => ({
       id: asset.id, kind: "video" as const, assets: [asset],
     })),
@@ -663,9 +663,9 @@ export function AutopilotPanel({
           }]
         : []),
   ];
-  const copyFor = (id: string): PackageCopy =>
+  const copyFor = (id: string): PostCopy =>
     draftCopy[id] ?? { body: "", hashtags: "" };
-  const setCopyFor = (id: string, patch: Partial<PackageCopy>) =>
+  const setCopyFor = (id: string, patch: Partial<PostCopy>) =>
     setDraftCopy((current) => ({
       ...current, [id]: { ...copyFor(id), ...patch },
     }));
@@ -1282,11 +1282,11 @@ export function AutopilotPanel({
             {(() => {
               const perAccount = Math.min(slots.length, autopilot.daily_cap_per_account);
               const perDay = perAccount * destinations.length;
-              const packages = autopilot.queue_approved;
+              const posts = autopilot.queue_approved;
               return (
                 <>
-                  <strong>{packages} {packages === 1 ? "package" : "packages"}</strong>
-                  {packages === 1 ? " goes to " : " go to "}
+                  <strong>{posts} {posts === 1 ? "post" : "posts"}</strong>
+                  {posts === 1 ? " goes to " : " go to "}
                   <strong>{destinations.length} {destinations.length === 1 ? "account" : "accounts"}</strong>
                   {", up to "}
                   <strong>{perDay} {perDay === 1 ? "post" : "posts"} a day</strong>
@@ -1315,14 +1315,14 @@ export function AutopilotPanel({
             onClick={() => jumpTo("media")}>
             <span>Queue &amp; setup</span><strong>{autopilot.queue_total}</strong>
             <small>{destinations.length === 1
-              ? "packages · 1 account"
+              ? "posts · 1 account"
               : `packages · ${destinations.length} accounts`}</small>
           </button>
           <button type="button" className={view === "posts" ? "active" : ""}
             onClick={() => jumpTo("schedule")}>
             {/* Committed jobs still waiting to go out are upcoming posts too;
                 only what has already delivered or failed leaves the count. */}
-            <span>Posts</span><strong>{preview
+            <span>Schedule</span><strong>{preview
               ? preview.posts.length + preview.deployed.filter((item) =>
                   item.status === "queued" || item.status === "running").length
               : slots.length}</strong>
@@ -1632,7 +1632,7 @@ export function AutopilotPanel({
                 // optional: a package can be picked today and written later,
                 // and the API stands a placeholder in and marks it, which is
                 // what the badge on the queue reads from.
-                const requests = draftPackages.map((entry) => {
+                const requests = draftPosts.map((entry) => {
                   const written = copyFor(entry.id);
                   const lead = entry.assets[0];
                   const shared = {
@@ -1664,7 +1664,7 @@ export function AutopilotPanel({
                 setSplitPictures(false);
                 setRowMatches({});
                 resetDraftProducts();
-                return `${count} ${count === 1 ? "package" : "packages"} added to the campaign queue.`;
+                return `${count} ${count === 1 ? "post" : "posts"} added to the campaign queue.`;
               });
             }}
           >
@@ -1672,11 +1672,11 @@ export function AutopilotPanel({
               {/* Counts packages, not files: three pictures riding together
                   are one post, and saying "3" over a single carousel row is
                   how somebody comes to expect three. */}
-              <strong>{draftPackages.length === 1
-                ? draftPackages[0].kind === "carousel"
-                  ? `Carousel of ${draftPackages[0].assets.length} pictures`
-                  : draftPackages[0].assets[0].title
-                : `${draftPackages.length} packages`}</strong>
+              <strong>{draftPosts.length === 1
+                ? draftPosts[0].kind === "carousel"
+                  ? `Carousel of ${draftPosts[0].assets.length} pictures`
+                  : draftPosts[0].assets[0].title
+                : `${draftPosts.length} posts`}</strong>
               <Button variant="quiet" size="sm" onClick={() => {
                 setDrafting([]);
                 resetDraftProducts();
@@ -1704,7 +1704,7 @@ export function AutopilotPanel({
                     skipped on them: {carouselReach.refusing.map((item) => item.label).join(", ")}.
                   </>}
                 </> : <>
-                  <strong>No destination on this campaign can post a photo carousel.</strong>
+                  <strong>No account on this campaign can post a photo carousel.</strong>
                   {" "}
                   {carouselReach.refusing.map((item) => item.label).join(", ")} take
                   video only, so this package would never be posted. Add a
@@ -1720,13 +1720,13 @@ export function AutopilotPanel({
                 the affiliate link are still added per network at post time,
                 so neither is written here. */}
             <p className="autopilot-note">{t("autopilot.copyHelp")}</p>
-            <ol className="draft-packages">
-              {draftPackages.map((entry) => {
+            <ol className="draft-posts">
+              {draftPosts.map((entry) => {
                 const lead = entry.assets[0];
                 const written = copyFor(entry.id);
                 return (
-                  <li key={entry.id} className="draft-package">
-                    <div className="draft-package-head">
+                  <li key={entry.id} className="draft-post">
+                    <div className="draft-post-head">
                       {/* The clip itself, because a row named by a filename is
                           not enough to write a caption against - and a hundred
                           Douyin titles are the same shape as each other. */}
@@ -1758,7 +1758,7 @@ export function AutopilotPanel({
                         approved. A suggestion, not a commitment: the campaign
                         picks at post time from the offers that still fit. */}
                     {Boolean(rowMatches[lead.id]?.length) && (
-                      <ul className="draft-package-offers">
+                      <ul className="draft-post-offers">
                         {rowMatches[lead.id].slice(0, 2).map((match) => (
                           <li key={match.offer_id}>
                             <span
@@ -1804,7 +1804,7 @@ export function AutopilotPanel({
                         into the box would put the wrong language into a post.
                         It is here to remind the writer what the clip is. */}
                     {lead.caption && (
-                      <p className="draft-package-source">
+                      <p className="draft-post-source">
                         <span>Originally posted as</span>
                         <q>{lead.caption}</q>
                       </p>
@@ -1828,7 +1828,7 @@ export function AutopilotPanel({
                   The affiliate link follows the product, per network.</small>
               </div>
               <div className="campaign-mode-options" role="radiogroup"
-                aria-label="Products for this package">
+                aria-label="Products for this post">
                 <button type="button" role="radio"
                   aria-checked={draftProductMode === "smart"}
                   className={draftProductMode === "smart" ? "active" : ""}
@@ -1893,8 +1893,8 @@ export function AutopilotPanel({
               </ul>
             )}
             <Button type="submit" variant="primary" busy={busy === "queue"}>
-              {draftPackages.length > 1
-                ? `Add ${draftPackages.length} packages`
+              {draftPosts.length > 1
+                ? `Add ${draftPosts.length} posts`
                 : t("autopilot.addToQueue")}
               {draftProductMode === "manual" && draftPinned.size > 0
                 ? ` · ${draftPinned.size} ${draftPinned.size === 1 ? "product" : "products"}`
@@ -1942,7 +1942,7 @@ export function AutopilotPanel({
                   ) : (
                     <span className="autopilot-queue-copy">{item.body}</span>
                   )}
-                  <span className="campaign-content-package" aria-label="Configured post package">
+                  <span className="campaign-content-post" aria-label="Configured post">
                     <em>Post</em>
                     {item.first_comment && <em>First comment</em>}
                     {item.thread.length > 0 && (
@@ -2097,14 +2097,14 @@ export function AutopilotPanel({
           }}>
             <div className="autopilot-picker-head">
               <span>
-                <strong>Edit post package</strong>
+                <strong>Edit post</strong>
                 <small>Configure the primary post and optional follow-up content. Affiliate links remain routed safely per destination.</small>
               </span>
               <Button variant="quiet" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
             </div>
             <label>Title
               <input name="title" defaultValue={editing.title ?? ""} maxLength={200} />
-              <small>Used by destinations that require a title and in the campaign timeline.</small>
+              <small>Used by accounts that require a title, and on the schedule.</small>
             </label>
             <label>{t("autopilot.copy")}
               <textarea name="body" rows={4} required maxLength={4000}
@@ -2154,7 +2154,7 @@ export function AutopilotPanel({
                 Add reply
               </Button>
             </fieldset>
-            <Button type="submit" variant="primary" busy={busy === "edit-copy"}>Save post package</Button>
+            <Button type="submit" variant="primary" busy={busy === "edit-copy"}>Save post</Button>
           </form>
         )}
       </Card>}
@@ -2553,9 +2553,9 @@ export function AutopilotPanel({
                             <span>
                               <strong>{entry.page_url ? (
                                 <a href={entry.page_url} target="_blank" rel="noreferrer">
-                                  {destination?.label ?? entry.destination_id ?? "Former destination"}
+                                  {destination?.label ?? entry.destination_id ?? "Former account"}
                                 </a>
-                              ) : (destination?.label ?? entry.destination_id ?? "Former destination")}</strong>
+                              ) : (destination?.label ?? entry.destination_id ?? "Former account")}</strong>
                               <small>{platform ? platformLabels[platform] : "Social account"}
                                 {destination?.provider ? ` · ${destination.provider}` : ""}</small>
                             </span>
