@@ -1529,7 +1529,7 @@ export function AutopilotPanel({
             <span>Queue &amp; setup</span><strong>{autopilot.queue_total}</strong>
             <small>{destinations.length === 1
               ? "posts · 1 account"
-              : `packages · ${destinations.length} accounts`}</small>
+              : `posts · ${destinations.length} accounts`}</small>
           </button>
           <button type="button" className={view === "posts" ? "active" : ""}
             onClick={() => jumpTo("schedule")}>

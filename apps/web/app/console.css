@@ -977,7 +977,11 @@ html { scroll-behavior: smooth; }
    divided the width sensibly; two took half each and became a pair of banners
    with a number stranded in the middle of all that room. */
 .campaign-work-tabs { display: flex; flex-wrap: wrap; gap: 0; margin: 2px -14px -10px; border-block: 1px solid var(--line); background: var(--panel); }
-.campaign-work-tabs button { position: relative; display: grid; grid-template-columns: auto auto; align-items: baseline; gap: 1px 7px; min-height: 46px; border: 0; border-inline-end: 1px solid var(--line); padding: 7px 16px 8px; color: var(--muted); background: transparent; text-align: start; cursor: pointer; }
+/* One line. The sub-line was a gloss on the count - "2 posts, 2 accounts" -
+   promoted to a second row where it read as a second heading and cost the
+   strip half its height for it. Beside the number it says the same thing in
+   the space the number already needed. */
+.campaign-work-tabs button { position: relative; display: grid; grid-template-columns: auto auto auto; align-items: baseline; gap: 1px 7px; border: 0; border-inline-end: 1px solid var(--line); padding: 9px 15px 10px; color: var(--muted); background: transparent; text-align: start; cursor: pointer; }
 .campaign-work-tabs button:last-child { border-inline-end: 0; }
 .campaign-work-tabs button:hover { color: var(--text); background: var(--panel-raised); }
 .campaign-work-tabs button.active { color: var(--link); background: var(--panel-raised); }
@@ -985,7 +989,7 @@ html { scroll-behavior: smooth; }
 .campaign-work-tabs span { color: currentColor; font-size: 12px; font-weight: 600; }
 .campaign-work-tabs strong { color: var(--text); font-size: 14px; font-weight: 600; }
 .campaign-work-tabs strong { justify-self: start; }
-.campaign-work-tabs small { grid-column: 1 / -1; color: var(--muted); font-size: 10px; white-space: nowrap; }
+.campaign-work-tabs small { color: var(--muted); font-size: 10px; white-space: nowrap; }
 .campaign-work-tabs button:focus-visible, .campaign-media-grid label:has(input:focus-visible) { z-index: 1; outline: 2px solid var(--link); outline-offset: -2px; }
 .autopilot-checklist { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0 0; padding: 0; border: 0; background: transparent; }
 .autopilot-checklist li { min-height: 26px; gap: 5px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; background: var(--panel-raised); font-size: 10px; }
@@ -1063,7 +1067,11 @@ html { scroll-behavior: smooth; }
   .campaign-heading, .campaign-summary { display: grid; }
   .campaign-dialog-grid { grid-template-columns: 1fr; }
   .campaign-media-grid { grid-template-columns: 1fr; }
-  .campaign-work-tabs button { min-height: 52px; }
+  /* Back to two lines where one will not fit: the gloss beside the count
+     needs the width, and a tab strip that wraps to four rows is worse than
+     one that is two lines tall. */
+  .campaign-work-tabs button { grid-template-columns: auto auto; }
+  .campaign-work-tabs small { grid-column: 1 / -1; }
   .campaign-one-off-handoff { display: grid; }
   .campaign-reply-editor > div { grid-template-columns: 1fr; }
 }
