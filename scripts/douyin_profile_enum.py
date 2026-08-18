@@ -35,7 +35,10 @@ import json
 import os
 import random
 import re
+import socket
+import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
 #: Douyin sec_uid: the opaque id in a /user/ URL.
@@ -253,6 +256,78 @@ async def _harvest(page, ids: set[str]) -> None:
         pass
 
 
+_CHROME_LOCATIONS = (
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+)
+
+
+def _find_chrome() -> str | None:
+    for location in _CHROME_LOCATIONS:
+        if Path(location).is_file():
+            return location
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        candidate = Path(local) / "Google" / "Chrome" / "Application" / "chrome.exe"
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+def _free_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+async def _launch_real_chrome(playwright, profile_dir: Path, headless: bool):
+    """Start the system Chrome as an ordinary process and attach over CDP.
+
+    The least detectable launch there is: Chrome runs as a plain process with
+    only a debugging port, none of the flags a driver adds, and we connect after
+    it is already up - closer to a browser a person opened than one a test
+    harness spawned, which is the distinction Douyin draws when it decides
+    whether to paginate a profile. Returns ``(browser, process)``; the caller
+    ends the process on the way out. Raises if Chrome is not installed, so the
+    caller can fall back to the bundled Chromium.
+
+    ``DOUYIN_CHROME_PROFILE`` overrides the profile directory, so it can be
+    pointed at a real, daily-use Chrome profile (its trust is the whole point) -
+    that profile must not be open in another Chrome window, which holds a lock.
+    """
+    chrome = _find_chrome()
+    if not chrome:
+        raise RuntimeError("system Chrome not found")
+    override = os.environ.get("DOUYIN_CHROME_PROFILE", "").strip()
+    user_data_dir = Path(override) if override else profile_dir
+    user_data_dir.mkdir(parents=True, exist_ok=True)
+    port = _free_port()
+    args = [
+        chrome,
+        f"--remote-debugging-port={port}",
+        f"--user-data-dir={user_data_dir}",
+        "--no-first-run",
+        "--no-default-browser-check",
+    ]
+    if headless:
+        args.append("--headless=new")
+    process = subprocess.Popen(args)
+    endpoint = f"http://127.0.0.1:{port}"
+    for _ in range(60):
+        try:
+            await asyncio.to_thread(
+                urllib.request.urlopen, f"{endpoint}/json/version", None, 1
+            )
+            break
+        except Exception:
+            await asyncio.sleep(0.5)
+    else:
+        process.terminate()
+        raise RuntimeError("Chrome debugging endpoint did not come up")
+    browser = await playwright.chromium.connect_over_cdp(endpoint)
+    return browser, process
+
+
 async def _launch_context(playwright, profile_dir: Path, headless: bool):
     """A persistent browser context, warming across runs like a normal profile.
 
@@ -322,26 +397,45 @@ async def enumerate_profile(
 
     async with async_playwright() as playwright:
         connected_browser = None
+        chrome_process = None
+        external_cdp = False
         if cdp_url:
+            # Attach to a Chrome the operator is already running.
             connected_browser = await playwright.chromium.connect_over_cdp(cdp_url)
+            external_cdp = True
             context = (
                 connected_browser.contexts[0]
                 if connected_browser.contexts
                 else await connected_browser.new_context()
             )
-            # Its own tab, so the operator's other tabs are left alone.
             page = await context.new_page()
         else:
-            context = await _launch_context(playwright, profile_dir, headless)
-            page = context.pages[0] if context.pages else await context.new_page()
+            # Default: start the system Chrome as a plain process and attach -
+            # the least detectable launch. Fall back to the bundled Chromium
+            # only when system Chrome is missing.
+            try:
+                connected_browser, chrome_process = await _launch_real_chrome(
+                    playwright, profile_dir, headless
+                )
+                context = (
+                    connected_browser.contexts[0]
+                    if connected_browser.contexts
+                    else await connected_browser.new_context()
+                )
+                page = context.pages[0] if context.pages else await context.new_page()
+            except Exception as error:
+                print(f"Using the bundled browser ({error}).", file=sys.stderr)
+                context = await _launch_context(playwright, profile_dir, headless)
+                page = context.pages[0] if context.pages else await context.new_page()
 
         await context.add_init_script(DISMISS_OBSERVER)
-        # A connected browser already carries the operator's cookies; only the
-        # launched one needs the saved session seeded into it.
-        if not cdp_url and cookie_file and cookie_file.is_file():
+        # The operator's own Chrome already carries their cookies; only a browser
+        # we launched needs the saved session seeded into it.
+        if not external_cdp and cookie_file and cookie_file.is_file():
             cookies = _load_cookies(cookie_file)
             if cookies:
-                await context.add_cookies(cookies)
+                with contextlib.suppress(Exception):
+                    await context.add_cookies(cookies)
 
         # Sniff the profile's own post-list responses: their ids land here, and
         # counting them tells whether scrolling is triggering more pages at all
@@ -474,11 +568,16 @@ async def enumerate_profile(
             file=sys.stderr,
         )
 
-        if connected_browser is not None:
-            # Leave the operator's Chrome running - just close our tab and drop
-            # the connection.
+        if external_cdp:
+            # The operator's own Chrome: close only our tab, leave it running.
             with contextlib.suppress(Exception):
                 await page.close()
+        elif chrome_process is not None:
+            # A Chrome we started: disconnect, then end the process we own.
+            with contextlib.suppress(Exception):
+                await connected_browser.close()
+            with contextlib.suppress(Exception):
+                chrome_process.terminate()
         else:
             await context.close()
 
