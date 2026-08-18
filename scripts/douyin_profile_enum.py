@@ -151,18 +151,19 @@ DISMISS_NOW = r"""() => {
   return clicked;
 }"""
 
-# Scroll the grid's OWN container, not the window. Douyin renders the profile
-# grid inside a nested element with its own overflow scroller and lazy-loads the
-# next page when that element nears its bottom - so scrolling the window (which
-# a wheel event at the wrong spot does) never advances it, while a hand on the
-# grid does. This walks up from a video link to the nearest scrollable ancestor
-# and nudges it down a viewport at a time, falling back to the window. Returns
-# whether anything could still scroll, so the loop knows when it has bottomed.
+# Scroll the grid's OWN container, by scrollBy - not the window, and not a wheel
+# event. Douyin renders the profile grid inside a nested element with its own
+# overflow scroller and lazy-loads the next page as that element nears its
+# bottom. The window does not scroll at all here, and - measured - the container
+# ignores wheel events (real or synthetic) entirely; only scrollTop / scrollBy
+# actually moves it, and moving it is what the loader watches. This walks up
+# from a video tile to that scroller and advances it most of a viewport, and
+# reports its position so the caller can see the feed actually moving and tell a
+# stuck scroll from a page the session is not allowed to extend.
 GRID_SCROLL = r"""() => {
-  const link = document.querySelector('a[href*="/video/"]');
-  let el = link;
+  let el = document.querySelector('a[href*="/video/"]');
   let scroller = null;
-  while (el && el !== document.body) {
+  while (el && el !== document.documentElement) {
     const st = getComputedStyle(el);
     if (/(auto|scroll)/.test(st.overflowY) && el.scrollHeight > el.clientHeight + 40) {
       scroller = el;
@@ -170,18 +171,21 @@ GRID_SCROLL = r"""() => {
     }
     el = el.parentElement;
   }
-  if (scroller) {
-    const before = scroller.scrollTop;
-    scroller.scrollTop = Math.min(
-      scroller.scrollTop + scroller.clientHeight * 0.9,
-      scroller.scrollHeight
-    );
-    scroller.dispatchEvent(new Event('scroll', { bubbles: true }));
-    return scroller.scrollTop > before || scroller.scrollTop < scroller.scrollHeight - 4;
+  if (!scroller) {
+    const se = document.scrollingElement || document.documentElement;
+    const before = se.scrollTop;
+    se.scrollBy(0, Math.round(se.clientHeight * 0.85));
+    return { scroller: 'window', top: se.scrollTop, sh: se.scrollHeight,
+             ch: se.clientHeight, moved: se.scrollTop - before };
   }
-  const before = window.scrollY;
-  window.scrollTo(0, document.body.scrollHeight);
-  return window.scrollY > before;
+  const before = scroller.scrollTop;
+  scroller.scrollBy(0, Math.round(scroller.clientHeight * 0.85));
+  // scrollBy already fires a scroll event; dispatch one more so a loader that
+  // listens on the element rather than the document is nudged too.
+  scroller.dispatchEvent(new Event('scroll', { bubbles: true }));
+  return { scroller: (scroller.className || 'el').toString().slice(0, 24),
+           top: scroller.scrollTop, sh: scroller.scrollHeight,
+           ch: scroller.clientHeight, moved: scroller.scrollTop - before };
 }"""
 
 # Douyin serves an automation-flagged visit a "service exception, refresh to
@@ -387,6 +391,7 @@ async def enumerate_profile(
             if page.is_closed():
                 break
             before = len(ids)
+            scroll_state = None
             try:
                 # Close the sign-up popup every round - clicking its own X,
                 # hiding what is left, dropping the scroll-locking backdrop -
@@ -394,33 +399,36 @@ async def enumerate_profile(
                 # it by hand.
                 await page.evaluate(DISMISS_NOW)
                 await page.keyboard.press("Escape")
-                # Bring the last loaded tile into view through the browser's own
-                # scroll, which is the path Douyin's infinite scroll listens on -
-                # the window does not scroll here, and setting scrollTop by hand
-                # did not advance it. Then a real wheel over the grid, and the
-                # container nudge as a belt-and-braces fallback.
+                # Advance the grid's own scroller with scrollBy, the one thing
+                # measured to actually move it (wheel events do not), and back it
+                # up with a native scroll of the last tile into view.
+                scroll_state = await page.evaluate(GRID_SCROLL)
                 try:
                     await page.locator('a[href*="/video/"]').last.scroll_into_view_if_needed(
-                        timeout=4000
+                        timeout=3000
                     )
                 except Exception:
                     pass
-                await page.mouse.move(760, 460)
-                await page.mouse.wheel(0, random.randint(2000, 3200))
-                await page.evaluate(GRID_SCROLL)
             except Exception:
                 break
-            await page.wait_for_timeout(random.randint(1000, 1600))
+            await page.wait_for_timeout(random.randint(1100, 1700))
             await _harvest(page, ids)
 
-            # Progress to stderr: whether the feed is actually paginating. If the
-            # count climbs while feed requests stay at one, the scroll is not
-            # reaching the loader; if requests climb but ids do not, the session
-            # is being throttled - two different problems, told apart here.
+            # Progress to stderr: the scroller position, videos found, and feed
+            # requests fired. If the position climbs but ids and requests do not,
+            # the scroll works and the session is capped; if the position stays
+            # at zero, the scroll is not moving the grid at all - two different
+            # problems, told apart here.
             if round_number % 5 == 0:
+                top = scroll_state.get("top") if isinstance(scroll_state, dict) else "?"
+                bottom = (
+                    scroll_state.get("sh", 0) - scroll_state.get("ch", 0)
+                    if isinstance(scroll_state, dict) else "?"
+                )
                 print(
                     f"scroll {round_number}: {len(ids)} videos, "
-                    f"{feed_requests['count']} feed request(s)",
+                    f"{feed_requests['count']} feed request(s), "
+                    f"scroller at {top}/{bottom}",
                     file=sys.stderr,
                 )
 
