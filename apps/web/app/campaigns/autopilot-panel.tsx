@@ -2409,104 +2409,13 @@ export function AutopilotPanel({
             </small>
           </label>
 
-          <div className="autopilot-numbers">
-            {autopilot.offer_mode === "smart" && <label>Products per post
-              <input type="number" min={1} max={5}
-                defaultValue={autopilot.max_products_per_post}
-                disabled={!canEdit}
-                onBlur={(event) => void save({ max_products_per_post: Number(event.target.value) })} />
-              <small>Bio-only networks still use one and rotate products across posts.</small>
-            </label>}
-            <label>{t("autopilot.rest")}
-              <input
-                type="number"
-                min={1}
-                max={365}
-                defaultValue={autopilot.min_recycle_days}
-                disabled={!canEdit}
-                onBlur={(event) => void save({ min_recycle_days: Number(event.target.value) })}
-              />
-              <small>{t("autopilot.restHelp")}</small>
-            </label>
-            <label>{t("autopilot.cap")}
-              <input
-                type="number"
-                min={1}
-                max={24}
-                defaultValue={autopilot.daily_cap_per_account}
-                disabled={!canEdit}
-                onBlur={(event) =>
-                  void save({ daily_cap_per_account: Number(event.target.value) })}
-              />
-              <small>{t("autopilot.capHelp")}</small>
-            </label>
-            <label>Authority
-              <select
-                value={autopilot.authority}
-                disabled={!canEdit}
-                onChange={(event) =>
-                  void save({ authority: event.target.value as Autopilot["authority"] })}
-              >
-                <option value="assist">Assist — approve every post</option>
-                <option value="auto_draft">Auto-draft — approve, then engine drafts only</option>
-                <option value="run_by_exception">Run by exception (recommended)</option>
-                <option value="autonomous">Autonomous — earned after 10 confirmed posts</option>
-              </select>
-              <small>Every post below Autonomous waits on the Timeline for your
-                approval, and only a finished post — real copy, its affiliate
-                link, media its network accepts — can be approved.</small>
-            </label>
-            <label>Optimise for
-              <select
-                value={autopilot.priority}
-                disabled={!canEdit}
-                onChange={(event) =>
-                  void save({ priority: event.target.value as Autopilot["priority"] })}
-              >
-                <option value="balanced">Balanced — blend measured axes</option>
-                <option value="revenue">Revenue — earnings per click</option>
-                <option value="reach">Reach — views per post</option>
-                <option value="discussion">Discussion — comments per post</option>
-              </select>
-              <small>Ranking only uses an axis once it has enough evidence;
-                until then destinations rotate.</small>
-            </label>
-            <label>{t("campaigns.postLanguage")}
-              <select
-                value={autopilot.post_language}
-                disabled={!canEdit}
-                onChange={(event) =>
-                  void save({ post_language: event.target.value })}
-              >
-                {/* The languages TrendRelay speaks, from the list that defines
-                    them. Spelled out here, this offered two while the campaign
-                    form offered a different set. */}
-                {LOCALES.map((item) => (
-                  <option key={item.code} value={item.code}>{item.label}</option>
-                ))}
-              </select>
-              <small>The language of composed scaffolding — the disclosure
-                default, the bio hint, product labels. Your own copy is always
-                your own.</small>
-            </label>
-            <label>Weekly post cap
-              <input
-                type="number"
-                min={1}
-                max={200}
-                placeholder="No cap"
-                defaultValue={autopilot.weekly_post_cap ?? ""}
-                disabled={!canEdit}
-                onBlur={(event) => void save({
-                  weekly_post_cap: event.target.value
-                    ? Number(event.target.value)
-                    : null,
-                })}
-              />
-              <small>Across every destination, over a rolling week. Empty
-                leaves the per-account caps as the only limit.</small>
-            </label>
-          </div>
+          {/* The caps, the authority and the ranking axis moved to
+              Campaign settings. Every one is set when the campaign is
+              described and rarely touched after, and this pane is the one
+              somebody works in daily - the queue beside it is the reason
+              they open it. What stays here is what changes while running:
+              the accounts, the product matching, and the words the posts
+              are scaffolded with. */}
         </div>}
       {<Card title="Posting times" aside={
         <Link className="ui-button ui-button-secondary ui-button-sm" href="/publish">

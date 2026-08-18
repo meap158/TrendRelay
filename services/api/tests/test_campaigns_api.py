@@ -11,13 +11,13 @@ from sqlalchemy.pool import StaticPool
 
 from trendrelay_api import campaigns_api
 from trendrelay_api.auth import CurrentUser, current_user
+from trendrelay_api.autopilot_models import CampaignAutopilot
+from trendrelay_api.campaign_autopilot import localised_text
 from trendrelay_api.database import get_session
 from trendrelay_api.integrations import publishing
 from trendrelay_api.main import app
 from trendrelay_api.models import Base
 from trendrelay_api.opportunity_models import Product, ProductOffer
-from trendrelay_api.campaign_autopilot import localised_text
-from trendrelay_api.autopilot_models import CampaignAutopilot
 
 engine = create_engine(
     "sqlite://",
@@ -527,3 +527,73 @@ def test_updating_a_campaign_in_another_workspace_is_refused() -> None:
     ).json()["workspace"]["id"]
 
     assert update_campaign(other, campaign["id"], name="Renamed").status_code == 404
+
+
+# --- the campaign owns how hard it is run ---------------------------------------
+#
+# The caps, the authority and the ranking axis are set when the campaign is
+# described and rarely touched after, so they are asked beside the objective
+# and the audience rather than beside the queue somebody works in daily. They
+# are still stored on the autopilot, which is what reads them.
+
+
+def test_campaign_settings_set_the_posting_policy() -> None:
+    workspace_id = create_workspace()
+    campaign_id = create_campaign(workspace_id)["id"]
+
+    response = update_campaign(
+        workspace_id, campaign_id,
+        max_products_per_post=3, min_recycle_days=14,
+        daily_cap_per_account=4, weekly_post_cap=20,
+        authority="autonomous", priority="revenue",
+    )
+
+    assert response.status_code == 200, response.text
+    saved = autopilot_of(campaign_id)
+    assert saved.max_products_per_post == 3
+    assert saved.min_recycle_days == 14
+    assert saved.daily_cap_per_account == 4
+    assert saved.weekly_post_cap == 20
+    assert saved.authority == "autonomous"
+    assert saved.priority == "revenue"
+
+
+def test_correcting_the_audience_does_not_reset_the_policy() -> None:
+    """Every policy field is optional for exactly this.
+
+    Somebody fixing a typo in the audience sends the identity fields and
+    nothing else, and must not thereby put the caps back to their defaults.
+    """
+    workspace_id = create_workspace()
+    campaign_id = create_campaign(workspace_id)["id"]
+    update_campaign(workspace_id, campaign_id, min_recycle_days=7, authority="assist")
+
+    update_campaign(workspace_id, campaign_id, audience="Frequent travelers and students")
+
+    saved = autopilot_of(campaign_id)
+    assert saved.min_recycle_days == 7
+    assert saved.authority == "assist"
+
+
+def test_no_weekly_cap_is_a_setting_rather_than_an_omission() -> None:
+    # An empty box means no cap; a field left out means leave it alone. Those
+    # are different answers, so the form says which one it means.
+    workspace_id = create_workspace()
+    campaign_id = create_campaign(workspace_id)["id"]
+    update_campaign(workspace_id, campaign_id, weekly_post_cap=20)
+
+    update_campaign(workspace_id, campaign_id, clear_weekly_cap=True)
+
+    assert autopilot_of(campaign_id).weekly_post_cap is None
+
+
+def test_the_policy_change_is_named_in_the_audit() -> None:
+    # It is written to the autopilot, so a comparison against the campaign row
+    # would have asked for an attribute that is not there.
+    workspace_id = create_workspace()
+    campaign_id = create_campaign(workspace_id)["id"]
+
+    response = update_campaign(workspace_id, campaign_id, min_recycle_days=21)
+
+    assert response.status_code == 200, response.text
+    assert autopilot_of(campaign_id).min_recycle_days == 21

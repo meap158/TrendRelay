@@ -220,6 +220,12 @@ a.ui-button { text-decoration: none; }
 .ui-dialog-head > .ui-button-icon { margin: -2px -4px 0 0; }
 .ui-dialog-head h2 { margin: 0 0 2px; font-size: 15px; font-weight: 500; }
 .ui-dialog-head p { margin: 0; color: var(--muted); }
+/* Takes the room the head and the foot leave, and scrolls when the content
+   wants more. `min-height: 0` because a flex child will not shrink below its
+   content without it, which is how the overflow ends up outside the panel
+   instead of inside this box. The negative margin and matching padding keep a
+   focus ring from being clipped at the edges of the scroller. */
+.ui-dialog-body { display: grid; gap: 12px; align-content: start; min-height: 0; overflow-y: auto; margin: -2px; padding: 2px; }
 .ui-dialog-foot { display: flex; flex: none; justify-content: flex-end; gap: 8px; }
 .ui-dialog:focus-visible { outline: none; }
 

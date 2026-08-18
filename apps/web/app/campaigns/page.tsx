@@ -35,6 +35,16 @@ type Campaign = {
   affiliate_url?: string | null;
   status: "draft" | "active" | "archived";
 };
+/** How hard a campaign is run. Stored on its autopilot, set from its settings. */
+type CampaignPolicy = {
+  max_products_per_post: number;
+  min_recycle_days: number;
+  daily_cap_per_account: number;
+  weekly_post_cap: number | null;
+  authority: string;
+  priority: string;
+};
+
 type PublicationPlan = {
   id: string;
   campaign_id: string;
@@ -158,6 +168,7 @@ export default function CampaignsPage() {
   // The campaign being edited, held as its own copy so an abandoned edit
   // changes nothing and the list keeps showing what is actually saved.
   const [settingsFor, setSettingsFor] = useState<Campaign | null>(null);
+  const [policy, setPolicy] = useState<CampaignPolicy | null>(null);
   const [offers, setOffers] = useState<CampaignOffer[]>([]);
   const [newCampaignOfferId, setNewCampaignOfferId] = useState("");
   // Reported over the page. Rendered in flow, these shifted everything below
@@ -297,8 +308,28 @@ export default function CampaignsPage() {
   }
 
 
+  /**
+   * What the campaign is, and how hard it is run, in one dialog.
+   *
+   * The policy lives on the autopilot row because that is what reads it, and
+   * it is fetched when the dialog opens rather than folded into every campaign
+   * payload: this is the one screen that needs it, and it is opened by hand.
+   */
   function openCampaignSettings(campaign: Campaign) {
     setSettingsFor(campaign);
+    setPolicy(null);
+    void (async () => {
+      try {
+        const body = await json<{ autopilot: CampaignPolicy }>(await apiFetch(
+          `/api/workspaces/${workspaceId}/campaigns/${campaign.id}/autopilot`,
+        ));
+        setPolicy(body.autopilot);
+      } catch {
+        // The identity half of the dialog still works without it, and a
+        // campaign with no autopilot yet has no policy to show.
+        setPolicy(null);
+      }
+    })();
   }
 
   async function saveCampaignSettings(event: FormEvent<HTMLFormElement>) {
@@ -317,6 +348,19 @@ export default function CampaignsPage() {
             objective: form.get("objective"),
             audience: form.get("audience"),
             languages: [form.get("language")].filter(Boolean),
+            // Only sent when the dialog had them to show. Every one is
+            // optional at the API, so a campaign whose autopilot has not been
+            // created yet corrects its wording without inventing a policy.
+            ...(policy ? {
+              max_products_per_post: Number(form.get("max_products_per_post")),
+              min_recycle_days: Number(form.get("min_recycle_days")),
+              daily_cap_per_account: Number(form.get("daily_cap_per_account")),
+              authority: form.get("authority"),
+              priority: form.get("priority"),
+              weekly_post_cap: form.get("weekly_post_cap")
+                ? Number(form.get("weekly_post_cap")) : null,
+              clear_weekly_cap: !form.get("weekly_post_cap"),
+            } : {}),
           }),
         }),
       );
@@ -581,6 +625,53 @@ export default function CampaignsPage() {
               </select>
               <small>Changes the disclosure and bio hint too, unless you have written your own.</small>
             </label>
+            {/* How hard it is run. Set once when the campaign is described
+                and rarely touched after, which is why it is here rather than
+                beside the queue somebody works in every day. */}
+            {policy && <>
+              <div className="campaign-dialog-grid">
+                <label>Products per post
+                  <input type="number" name="max_products_per_post" min={0} max={10}
+                    defaultValue={policy.max_products_per_post} />
+                  <small>Bio-only networks still use one and rotate across posts.</small>
+                </label>
+                <label>Rest days
+                  <input type="number" name="min_recycle_days" min={1} max={365}
+                    defaultValue={policy.min_recycle_days} />
+                  <small>Before the same item may go to the same account again.</small>
+                </label>
+              </div>
+              <div className="campaign-dialog-grid">
+                <label>Posts per account per day
+                  <input type="number" name="daily_cap_per_account" min={1} max={24}
+                    defaultValue={policy.daily_cap_per_account} />
+                  <small>A ceiling, not a target.</small>
+                </label>
+                <label>Weekly post cap
+                  <input type="number" name="weekly_post_cap" min={1} max={200}
+                    placeholder="No cap" defaultValue={policy.weekly_post_cap ?? ""} />
+                  <small>Across every destination. Empty leaves the per-account caps.</small>
+                </label>
+              </div>
+              <label>Authority
+                <select name="authority" defaultValue={policy.authority}>
+                  <option value="assist">Assist — draft everything for review</option>
+                  <option value="auto_draft">Auto draft — prepare, never send</option>
+                  <option value="run_by_exception">Run by exception (recommended)</option>
+                  <option value="autonomous">Autonomous — send without approval</option>
+                </select>
+                <small>How much of the posting runs without you.</small>
+              </label>
+              <label>Optimise for
+                <select name="priority" defaultValue={policy.priority}>
+                  <option value="balanced">Balanced — blend measured axes</option>
+                  <option value="revenue">Revenue — earnings per click</option>
+                  <option value="reach">Reach — views per post</option>
+                  <option value="discussion">Discussion — comments per post</option>
+                </select>
+                <small>Ranking uses an axis only once it has evidence.</small>
+              </label>
+            </>}
             <div className="campaign-dialog-actions">
               <Button type="button" variant="quiet" onClick={() => setSettingsFor(null)}>{t("common.cancel")}</Button>
               <Button type="submit" variant="primary" busy={busy === "settings"}>{t("common.save")}</Button>

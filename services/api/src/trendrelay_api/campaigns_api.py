@@ -160,6 +160,30 @@ class CampaignUpdate(BaseModel):
     objective: str = Field(min_length=2, max_length=1000)
     audience: str = Field(min_length=2, max_length=1000)
     languages: list[str] = Field(default_factory=list, max_length=20)
+    #: How commercial this campaign is: the ceiling on products attached to one
+    #: post. Asked here beside the objective and the audience because it is the
+    #: same kind of answer - what this campaign is for - and because those are
+    #: the two heaviest pieces of evidence the same matcher reads.
+    #:
+    #: Optional so a caller that only means to fix a typo in the audience does
+    #: not have to restate it, and cannot reset it by omission.
+    max_products_per_post: int | None = Field(default=None, ge=0, le=10)
+    #: How hard the campaign is run, and how much of it is trusted to run
+    #: itself. Set once when the campaign is described and rarely touched
+    #: after, which is why they are asked here rather than beside the queue
+    #: somebody works in every day.
+    #:
+    #: All optional, and all for the same reason as the ceiling above: a caller
+    #: correcting the audience must not have to restate the caps, and must not
+    #: reset them by leaving them out.
+    min_recycle_days: int | None = Field(default=None, ge=1, le=365)
+    daily_cap_per_account: int | None = Field(default=None, ge=1, le=24)
+    weekly_post_cap: int | None = Field(default=None, ge=1, le=200)
+    #: Explicitly nullable and distinguishable from "not sent": no cap is a
+    #: real setting, so the form says which it means.
+    clear_weekly_cap: bool = False
+    authority: str | None = Field(default=None, pattern=r"^[a-z_]{4,20}$")
+    priority: str | None = Field(default=None, pattern=r"^[a-z]{4,12}$")
 
     @field_validator("name", "objective", "audience")
     @classmethod
@@ -491,6 +515,35 @@ def update_campaign(
         "audience": item.audience,
         "languages": list(item.languages or []),
     }
+    autopilot = session.scalar(
+        select(CampaignAutopilot).where(CampaignAutopilot.campaign_id == campaign_id)
+    )
+    # Stored on the autopilot, which is what reads it, and set from here because
+    # this is where the campaign says what it is for. The same arrangement the
+    # language already has: one writer, and the row that consumes it is updated
+    # rather than copied.
+    if autopilot:
+        policy = {
+            "max_products_per_post": body.max_products_per_post,
+            "min_recycle_days": body.min_recycle_days,
+            "daily_cap_per_account": body.daily_cap_per_account,
+            "authority": body.authority,
+            "priority": body.priority,
+        }
+        for field, value in policy.items():
+            if value is None:
+                continue
+            before[field] = getattr(autopilot, field)
+            setattr(autopilot, field, value)
+        # No cap is a setting, not an omission, so clearing it is asked for
+        # rather than inferred from a missing number.
+        if body.clear_weekly_cap or body.weekly_post_cap is not None:
+            before["weekly_post_cap"] = autopilot.weekly_post_cap
+            autopilot.weekly_post_cap = (
+                None if body.clear_weekly_cap else body.weekly_post_cap
+            )
+        if any(field in before for field in (*policy, "weekly_post_cap")):
+            autopilot.updated_at = utc_now()
     item.name = body.name
     item.objective = body.objective
     item.audience = body.audience
@@ -498,9 +551,6 @@ def update_campaign(
     item.updated_at = utc_now()
 
     language = language_code(body.languages)
-    autopilot = session.scalar(
-        select(CampaignAutopilot).where(CampaignAutopilot.campaign_id == campaign_id)
-    )
     retranslated = False
     if autopilot and autopilot.post_language != language:
         previous = autopilot.post_language
@@ -522,9 +572,17 @@ def update_campaign(
         "campaign",
         item.id,
         {
+            # Read from whichever row owns the field: the products ceiling
+            # lives on the autopilot, which is what consumes it, so comparing
+            # it against the campaign would ask for an attribute that is not
+            # there.
             "changed": sorted(
                 field for field, was in before.items()
-                if was != getattr(item, field)
+                if was != (
+                    getattr(autopilot, field)
+                    if autopilot and hasattr(autopilot, field)
+                    else getattr(item, field, was)
+                )
             ),
             "post_language": language if retranslated else None,
         },

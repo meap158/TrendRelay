@@ -75,7 +75,11 @@ export function Dialog({
               </Button>
             </RadixDialog.Close>
           </header>
-          {children}
+          {/* The body scrolls, the head and the foot do not. The panel caps
+              its own height, and without somewhere for the overflow to go a
+              long form was simply cut off at the bottom - which Campaign
+              settings became the moment it took the posting policy on. */}
+          <div className="ui-dialog-body">{children}</div>
           {footer && <footer className="ui-dialog-foot">{footer}</footer>}
         </RadixDialog.Content>
       </RadixDialog.Portal>
