@@ -3,15 +3,19 @@ from pathlib import Path
 
 import pytest
 
+import sqlite3
+
 import scripts.douyin as douyin_cli
 from scripts.douyin import (
     batch_download,
     build_config,
     build_parser,
     collect_urls,
+    downloaded_aweme_ids,
     expand_profiles,
     extract_urls,
     resolve_cookies,
+    skip_downloaded_videos,
 )
 
 
@@ -167,6 +171,45 @@ def test_liked_and_collection_modes_are_left_alone(monkeypatch) -> None:
     )
     urls = ["https://www.douyin.com/user/abc"]
     assert expand_profiles(urls, ["like"], limit=0) == urls
+
+
+def test_downloaded_aweme_ids_reads_the_provider_database(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "dy_downloader.db"
+    connection = sqlite3.connect(database)
+    connection.execute("CREATE TABLE aweme (id INTEGER PRIMARY KEY, aweme_id TEXT UNIQUE)")
+    connection.executemany(
+        "INSERT INTO aweme (aweme_id) VALUES (?)", [("111",), ("222",)]
+    )
+    connection.commit()
+    connection.close()
+    monkeypatch.setattr(douyin_cli, "DEFAULT_DATABASE", database)
+
+    assert downloaded_aweme_ids() == {"111", "222"}
+
+
+def test_downloaded_aweme_ids_missing_database_is_empty(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(douyin_cli, "DEFAULT_DATABASE", tmp_path / "absent.db")
+    assert downloaded_aweme_ids() == set()
+
+
+def test_skip_downloaded_videos_drops_only_known_ids(monkeypatch) -> None:
+    monkeypatch.setattr(douyin_cli, "downloaded_aweme_ids", lambda: {"111"})
+    urls = [
+        "https://www.douyin.com/video/111",
+        "https://www.douyin.com/video/222",
+        "https://www.douyin.com/user/abc",
+    ]
+    # The held video is dropped; the fresh video and the non-video link stay.
+    assert skip_downloaded_videos(urls) == [
+        "https://www.douyin.com/video/222",
+        "https://www.douyin.com/user/abc",
+    ]
+
+
+def test_skip_downloaded_videos_keeps_everything_when_nothing_is_held(monkeypatch) -> None:
+    monkeypatch.setattr(douyin_cli, "downloaded_aweme_ids", lambda: set())
+    urls = ["https://www.douyin.com/video/111"]
+    assert skip_downloaded_videos(urls) == urls
 
 
 def test_batch_parser_rejects_removed_browser_fallback() -> None:

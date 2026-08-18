@@ -251,6 +251,7 @@ export default function Dashboard() {
   const [connecting, setConnecting] = useState(false);
   const [clearingHistory, setClearingHistory] = useState(false);
   const [resumingJobId, setResumingJobId] = useState("");
+  const [cancellingJobId, setCancellingJobId] = useState("");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
   const [visibleJobCount, setVisibleJobCount] = useState(INITIAL_JOB_COUNT);
   // Announced over the page rather than inside it. Rendering these in flow
@@ -499,6 +500,23 @@ export default function Dashboard() {
     }
   }
 
+  async function cancelDownload(jobId: string) {
+    setCancellingJobId(jobId);
+    clearStatus();
+    try {
+      await json(await apiFetch(`/api/workspaces/${workspaceId}/media/downloads/${jobId}/cancel`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }));
+      succeed("Stopping the download. Anything already saved is kept.");
+      await refreshJobs();
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "The download could not be stopped.");
+    } finally {
+      setCancellingJobId("");
+    }
+  }
+
   async function resumeDownload(jobId: string, fromSavedFiles = false) {
     setResumingJobId(jobId);
     clearStatus();
@@ -737,6 +755,11 @@ export default function Dashboard() {
               <div className="download-job-body">
                 {ACTIVE_STATUSES.has(current) && <div className={"job-progress " + current} aria-label={current === "queued" ? "Waiting to start" : preparingLibrary ? "Preparing downloaded media for Library" : downloadingAndPreparing ? "Downloading while preparing earlier files for Library" : "Download in progress"}><span style={preparingLibrary ? { width: `${libraryPercent}%` } : undefined} /></div>}
                 {progress?.folder_exists && <div className="download-live-status"><strong>{job.error && current === "queued" ? "Ready to resume" : preparingLibrary ? "Preparing Library" : downloadingAndPreparing ? "Downloading now · preparing Library" : ACTIVE_STATUSES.has(current) ? "Downloading now" : "Files on disk"}</strong><span>{libraryProgress && (preparingLibrary || downloadingAndPreparing) ? `${progressBreakdown(progress)} · ${libraryProgressBreakdown(libraryProgress, t)}` : progressBreakdown(progress)}</span></div>}
+                {ACTIVE_STATUSES.has(current) && !job.error && <div className="download-job-actions">
+                  {/* Stop keeps whatever already downloaded - a running job
+                      halts at its next source, a queued one right away. */}
+                  <Button variant="secondary" size="sm" disabled={cancellingJobId === job.id} onClick={() => void cancelDownload(job.id)}><ActionIcon name="dismiss" />{cancellingJobId === job.id ? "Stopping…" : "Stop download"}</Button>
+                </div>}
                 {(sources.length > 0 || canOpenFolder || job.status === "succeeded") && <div className="download-job-actions">
                   {sources.length > 0 && <Button variant="secondary" size="sm" onClick={() => reuseLinks(sources)}><ActionIcon name="link" />Reuse {sources.length === 1 ? "link" : "links"}</Button>}
                   {creatorProfiles.length > 0 && <Button variant="secondary" size="sm" title={t("downloads.addCreatorProfile")} onClick={() => addCreatorProfiles(creatorProfiles)}>Add creator {creatorProfiles.length === 1 ? "profile" : `profiles (${creatorProfiles.length})`}</Button>}

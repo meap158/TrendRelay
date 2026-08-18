@@ -7,6 +7,7 @@ import contextlib
 import json
 import os
 import re
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -736,6 +737,58 @@ def _is_profile_url(url: str) -> bool:
     return "/user/" in urlparse(url).path.lower()
 
 
+_VIDEO_ID_IN_URL = re.compile(r"/video/(\d+)")
+
+
+def _video_id(url: str) -> str | None:
+    match = _VIDEO_ID_IN_URL.search(url)
+    return match.group(1) if match else None
+
+
+def downloaded_aweme_ids() -> set[str]:
+    """Video ids the provider has already saved, read from its own database.
+
+    The provider keeps an ``aweme`` table keyed by ``aweme_id`` for exactly this
+    - so a re-run does not fetch what is already held. Read-only and defensive:
+    a missing or unreadable database just means nothing is known to be done yet,
+    which fetches everything rather than skipping wrongly.
+    """
+    if not DEFAULT_DATABASE.is_file():
+        return set()
+    try:
+        connection = sqlite3.connect(f"file:{DEFAULT_DATABASE}?mode=ro", uri=True)
+        try:
+            rows = connection.execute("SELECT aweme_id FROM aweme").fetchall()
+        finally:
+            connection.close()
+    except sqlite3.Error:
+        return set()
+    return {str(row[0]) for row in rows if row and row[0]}
+
+
+def skip_downloaded_videos(urls: list[str]) -> list[str]:
+    """Drop per-video links whose id the provider has already downloaded.
+
+    Matches the operator's ask: a profile re-run, or a batch that repeats a
+    link, skips the videos already held rather than fetching them again. Only
+    ``/video/`` links are matched by id; anything else passes through untouched.
+    """
+    done = downloaded_aweme_ids()
+    if not done:
+        return urls
+    kept: list[str] = []
+    skipped = 0
+    for url in urls:
+        video_id = _video_id(url)
+        if video_id and video_id in done:
+            skipped += 1
+            continue
+        kept.append(url)
+    if skipped:
+        print(f"Skipping {skipped} video(s) already downloaded.", file=sys.stderr)
+    return kept
+
+
 def enumerate_profile_urls(profile_url: str, limit: int, timeout: int = 600) -> list[str]:
     """Video URLs for a profile, harvested from a visible browser we drive.
 
@@ -848,6 +901,16 @@ def batch_download(args: argparse.Namespace) -> int:
 
     if not args.dry_run:
         urls = expand_profiles(urls, modes, args.limit)
+        # Incremental is the "skip what we already have" intent, so honour it by
+        # dropping per-video links already in the provider database. A profile
+        # whose every video is held collapses to nothing here and is reported as
+        # already-complete rather than a failed empty fetch.
+        if args.incremental:
+            requested_videos = sum(1 for url in urls if _video_id(url))
+            urls = skip_downloaded_videos(urls)
+            if requested_videos and not urls:
+                print("Everything requested is already downloaded; nothing new to fetch.")
+                return 0
 
     config = build_config(args, urls)
     if args.dry_run:

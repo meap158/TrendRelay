@@ -13,6 +13,7 @@ from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, membership, require_role
 from trendrelay_api.integrations.douyin import (
     DownloadRequest,
+    cancel_download_job,
     clear_download_history,
     create_download_job,
     download_job,
@@ -335,6 +336,37 @@ def resume_download(
             "files_on_disk": job["progress"]["files_downloaded"],
             "from_saved_files": body.from_saved_files,
         },
+    )
+    return {"job": job}
+
+
+@router.post("/downloads/{job_id}/cancel", status_code=202)
+def cancel_download(
+    workspace_id: str,
+    job_id: str,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    require_role(
+        membership(session, workspace_id, user.id),
+        {"owner", "editor", "approver"},
+    )
+    try:
+        job = cancel_download_job(job_id, workspace_id)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Download not found.") from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media.download_cancelled",
+        "download",
+        job_id,
+        {"status": job["status"]},
     )
     return {"job": job}
 

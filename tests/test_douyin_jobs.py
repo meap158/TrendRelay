@@ -477,6 +477,94 @@ def test_douyin_sidecar_metadata_flows_to_library(
     ]
 
 
+def _ready_provider(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(douyin, "OUTPUT_ROOT", tmp_path / "downloads")
+    monkeypatch.setattr(
+        douyin,
+        "provider_status",
+        lambda: {
+            "installed": True,
+            "active": True,
+            "revision": "pinned",
+            "cookies_ready": True,
+            "cookies": {"ready": True, "missing": []},
+        },
+    )
+    monkeypatch.setattr(
+        media_library,
+        "create_ingest_job",
+        lambda **kwargs: {
+            "id": "media-1",
+            "status": "queued",
+            "available_at": datetime.now(UTC),
+        },
+    )
+
+
+def test_stopping_a_running_download_keeps_what_it_saved(
+    monkeypatch, tmp_path: Path, job_factory
+) -> None:
+    """A stop mid-batch keeps the finished files and marks the job cancelled.
+
+    Two sources; the first saves a file, then a cancel is requested, so the
+    second never runs. The job must read cancelled - not failed - and still
+    carry the one artifact it managed to download.
+    """
+    _ready_provider(monkeypatch, tmp_path)
+    batch = douyin.DownloadRequest(
+        workspace_id="workspace-1",
+        urls=[
+            "https://www.douyin.com/video/1",
+            "https://www.douyin.com/video/2",
+        ],
+        confirm_external_action=True,
+    )
+    job = douyin.create_download_job(batch, actor_user_id="user-1")
+
+    calls = {"n": 0}
+
+    def fake_run(command, **_kwargs):
+        calls["n"] += 1
+        output = Path(command[command.index("--output") + 1])
+        output.mkdir(parents=True, exist_ok=True)
+        (output / f"clip{calls['n']}.mp4").write_bytes(b"media")
+        # After the first source finishes, ask the job to stop.
+        douyin.request_job_cancellation(job["id"], factory=douyin.JOB_SESSION_FACTORY)
+        return subprocess.CompletedProcess(command, 0, "done", "")
+
+    monkeypatch.setattr(douyin.subprocess, "run", fake_run)
+    completed = douyin.run_download_job(job["id"])
+
+    assert completed["status"] == "cancelled"
+    assert calls["n"] == 1  # the second source was never downloaded
+    assert len(completed["result"]["artifacts"]) == 1
+    assert "Stopped after 1" in completed["result"]["summary"]
+
+
+def test_a_fully_downloaded_batch_reports_success_not_failure(
+    monkeypatch, tmp_path: Path, job_factory
+) -> None:
+    """When every requested video is already held, the job succeeds cleanly.
+
+    The skip pass writes no files and the CLI says so; that must read as a
+    finished job with nothing to add, not the empty-folder failure.
+    """
+    _ready_provider(monkeypatch, tmp_path)
+    job = douyin.create_download_job(request(), actor_user_id="user-1")
+
+    def fake_run(command, **_kwargs):
+        return subprocess.CompletedProcess(
+            command, 0, "Everything requested is already downloaded; nothing new to fetch.", ""
+        )
+
+    monkeypatch.setattr(douyin.subprocess, "run", fake_run)
+    completed = douyin.run_download_job(job["id"])
+
+    assert completed["status"] == "succeeded"
+    assert completed["result"]["artifacts"] == []
+    assert "already downloaded" in completed["result"]["summary"].lower()
+
+
 def test_worker_records_downloaded_media(
     monkeypatch, tmp_path: Path, job_factory
 ) -> None:

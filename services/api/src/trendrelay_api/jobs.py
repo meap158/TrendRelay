@@ -774,3 +774,18 @@ def request_job_cancellation(
         item.updated_at = timestamp
         session.flush()
         return serialize_job(item)
+
+
+def cancellation_requested(
+    job_id: str, *, factory: SessionMaker = SessionFactory
+) -> bool:
+    """Whether a stop has been asked for - the one field a long worker polls.
+
+    Kept separate from the full record read so a download loop can check it
+    between sources cheaply, without deserialising the whole job.
+    """
+    with factory() as session:
+        flag = session.scalar(
+            select(DurableJob.cancellation_requested).where(DurableJob.id == job_id)
+        )
+        return bool(flag)

@@ -22,6 +22,7 @@ from sqlalchemy import select
 from trendrelay_api.database import SessionFactory
 from trendrelay_api.integrations import longpath
 from trendrelay_api.jobs import (
+    cancellation_requested,
     claim_job,
     complete_job,
     create_job_record,
@@ -30,6 +31,7 @@ from trendrelay_api.jobs import (
     heartbeat_job,
     list_job_records,
     merge_running_result,
+    request_job_cancellation,
 )
 from trendrelay_api.models import DurableJob
 from trendrelay_api.tool_registry import PROJECT_ROOT, list_tools
@@ -848,7 +850,9 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         source_errors: list[str] = []
         creator_urls: list[str] = []
         blocked_sources = 0
+        already_complete = 0
         last_detail = ""
+        cancelled = False
 
         Prepared = tuple[
             list[dict[str, Any]], list[dict[str, Any]], list[str], list[str]
@@ -881,9 +885,20 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
             else:
                 urls = list(request["urls"])
                 for position, url in enumerate(urls, start=1):
+                    # Stop between sources when a cancel was asked for. A source
+                    # is one provider run and cannot be interrupted mid-file, so
+                    # this is the finest a stop can be honoured; whatever already
+                    # downloaded is kept and ingested below.
+                    if cancellation_requested(job_id, factory=JOB_SESSION_FACTORY):
+                        cancelled = True
+                        break
                     code, detail = _download_source(url, output_root, request)
                     last_detail = detail or last_detail
-                    if code == 0 or code == 3 or "without saving any media" in detail.lower():
+                    if "already downloaded" in detail.lower():
+                        # The skip pass found every requested video already held;
+                        # this is completion, not an empty or blocked fetch.
+                        already_complete += 1
+                    elif code == 0 or code == 3 or "without saving any media" in detail.lower():
                         if code != 0:
                             # Nothing new here: already held, or blocked.
                             blocked_sources += 1
@@ -910,6 +925,47 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
                 library_jobs.extend(queued)
                 library_errors.extend(errors)
                 creator_urls.extend(creators)
+
+        if cancelled or cancellation_requested(job_id, factory=JOB_SESSION_FACTORY):
+            # Stopped on request. Keep whatever finished - complete_job marks the
+            # record cancelled because the flag is set - rather than failing it,
+            # so the partial media stays in the library and the row reads
+            # "cancelled", not "failed".
+            summary = (
+                f"Stopped after {len(artifacts)} media file(s)."
+                if artifacts
+                else "Stopped before any media was saved."
+            )
+            result = {
+                **payload,
+                "status": "cancelled",
+                "updated_at": _now(),
+                "completed_at": _now(),
+                "artifacts": artifacts,
+                "library_jobs": [_compact_library_job(item) for item in library_jobs],
+                "library_errors": library_errors,
+                "creator_urls": list(dict.fromkeys(creator_urls)),
+                "source_errors": source_errors,
+                "summary": summary,
+            }
+            return complete_job(job_id, worker_id, result, factory=JOB_SESSION_FACTORY)
+
+        if not artifacts and already_complete and not source_errors and not blocked_sources:
+            # Every requested source was already downloaded. That is a finished
+            # job with nothing to add, not the empty-folder failure below.
+            result = {
+                **payload,
+                "status": "succeeded",
+                "updated_at": _now(),
+                "completed_at": _now(),
+                "artifacts": [],
+                "library_jobs": [],
+                "library_errors": [],
+                "creator_urls": [],
+                "source_errors": [],
+                "summary": "Everything requested was already downloaded.",
+            }
+            return complete_job(job_id, worker_id, result, factory=JOB_SESSION_FACTORY)
 
         if not artifacts:
             details = source_errors or ([last_detail] if last_detail else [])
@@ -988,6 +1044,23 @@ def download_job(job_id: str) -> dict[str, Any]:
     return _with_download_progress(
         get_job_record(job_id, factory=JOB_SESSION_FACTORY)
     )
+
+
+def cancel_download_job(job_id: str, workspace_id: str) -> dict[str, Any]:
+    """Ask a queued or running download to stop.
+
+    A queued job is cancelled at once; a running one is flagged and stops at its
+    next source boundary, keeping whatever already downloaded. Scoped to the
+    workspace so one cannot stop another's download by guessing an id.
+    """
+    if not re.fullmatch(r"download_[a-f0-9]{16}", job_id):
+        raise ValueError("Invalid download identifier")
+    with JOB_SESSION_FACTORY() as session:
+        item = session.get(DurableJob, job_id)
+        if not item or item.workspace_key != workspace_id or item.kind != JOB_KIND:
+            raise FileNotFoundError(job_id)
+    request_job_cancellation(job_id, factory=JOB_SESSION_FACTORY)
+    return download_job(job_id)
 
 
 def list_download_jobs(workspace_id: str, limit: int = 20) -> list[dict[str, Any]]:
