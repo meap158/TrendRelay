@@ -41,13 +41,37 @@ SEC_UID_PATTERN = re.compile(r"[A-Za-z0-9_-]{16,120}")
 #: A Douyin video/note id as it appears in links and page data.
 AWEME_ID_PATTERN = re.compile(r"\d{15,20}")
 
-# Installed before any page script runs, in every frame. Hides the known
-# sign-up / login panels as they mount and keeps the scroll containers
-# unlocked, without clicking anything - clicking a close glyph once navigated
-# the page into a video. Removing generic overlays destabilised the grid, so
-# this names only Douyin's login panels.
+# Installed before any page script runs, in every frame. Two jobs: look like a
+# real browser so Douyin serves the feed rather than its "service exception"
+# page, and hide the sign-up prompt the instant it mounts so the scroll is
+# never frozen. Only Douyin's own login panels are touched - removing generic
+# overlays destabilised the grid - and nothing is clicked, because clicking a
+# close glyph once navigated the page into a video.
 DISMISS_OBSERVER = r"""
 (() => {
+  const patch = (obj, prop, value) => {
+    try { Object.defineProperty(obj, prop, { get: () => value }); } catch (e) {}
+  };
+  patch(navigator, 'webdriver', undefined);
+  patch(navigator, 'languages', ['zh-CN', 'zh', 'en']);
+  patch(navigator, 'plugins', [1, 2, 3, 4, 5]);
+  patch(navigator, 'deviceMemory', 8);
+  patch(navigator, 'hardwareConcurrency', 16);
+  window.chrome = window.chrome || { runtime: {}, app: {}, csi: () => {}, loadTimes: () => {} };
+  const query = window.navigator.permissions && window.navigator.permissions.query;
+  if (query) {
+    window.navigator.permissions.query = (p) =>
+      p && p.name === 'notifications'
+        ? Promise.resolve({ state: Notification.permission })
+        : query(p);
+  }
+  const getParameter = WebGLRenderingContext.prototype.getParameter;
+  WebGLRenderingContext.prototype.getParameter = function (p) {
+    if (p === 37445) return 'Intel Inc.';
+    if (p === 37446) return 'Intel Iris OpenGL Engine';
+    return getParameter.call(this, p);
+  };
+
   const LOGIN = [
     '#login-full-panel', '#login-pannel', '[id*="login-panel"]',
     '[class*="login-guide"]', '[class*="loginGuide"]', '[class*="login-mask"]',
@@ -71,9 +95,20 @@ DISMISS_OBSERVER = r"""
     hide();
   };
   begin();
-  Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
 })();
 """
+
+# Douyin serves an automation-flagged visit a "service exception, refresh to
+# retry" page instead of the feed. It is probabilistic, so a reload sometimes
+# clears it - which is exactly what the page tells a person to do.
+SERVICE_ERROR_MARKERS = ("服务异常", "重新刷新", "刷新试试", "网络异常")
+
+# How many posts the page itself says the profile has, so a partial load can be
+# told from a finished one.
+CLAIMED_TOTAL = r"""() => {
+  const m = document.body ? document.body.innerText.match(/作品\s*(\d+)/) : null;
+  return m ? parseInt(m[1], 10) : 0;
+}"""
 
 # Harvests every aweme id the page currently holds: from anchor hrefs and from
 # ids embedded in the server-rendered HTML.
@@ -176,13 +211,40 @@ async def enumerate_profile(
         page = await context.new_page()
         page.on("response", on_response)
         timeout_ms = max(30, int(timeout_seconds)) * 1000
-        try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-        except Exception as error:
-            print(f"profile did not finish loading: {error}", file=sys.stderr)
 
-        await page.wait_for_timeout(3500)
-        await _harvest(page, ids)
+        # Load, and reload past Douyin's "service exception" page. It is served
+        # to automation-flagged visits in place of the feed, probabilistically,
+        # and the page's own advice is to refresh - so that is what this does,
+        # a few times with a growing wait, until the grid actually appears.
+        loaded = False
+        for attempt in range(1, 6):
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            except Exception as error:
+                print(f"profile did not finish loading: {error}", file=sys.stderr)
+            await page.wait_for_timeout(2500 + attempt * 1000)
+            try:
+                body = await page.evaluate("() => document.body ? document.body.innerText : ''")
+            except Exception:
+                body = ""
+            await _harvest(page, ids)
+            blocked = any(marker in body for marker in SERVICE_ERROR_MARKERS)
+            if ids or not blocked:
+                loaded = True
+                break
+            print(
+                f"Douyin served its service-exception page (attempt {attempt}); "
+                "refreshing.",
+                file=sys.stderr,
+            )
+            await page.wait_for_timeout(random.randint(1500, 3000))
+        if not loaded:
+            print(
+                "Douyin kept serving its service-exception page instead of the "
+                "profile - it is refusing this automated view. Retry, or sign in "
+                "for a reliable fetch.",
+                file=sys.stderr,
+            )
 
         stable = 0
         for _ in range(max(1, int(max_scrolls))):
