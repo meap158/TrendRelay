@@ -1980,17 +1980,35 @@ export function AutopilotPanel({
                       <em>{item.thread.length} {item.thread.length === 1 ? "reply" : "replies"}</em>
                     )}
                   </span>
-                  <span className="campaign-queue-products">
-                    {(item.offer_match?.matches ?? [])
-                      .filter((match) => item.offer_ids.length
-                        ? item.offer_ids.includes(match.offer_id)
-                        : match.confidence !== "low")
-                      .slice(0, autopilot.max_products_per_post)
-                      .map((match) => (
-                        <em key={match.offer_id}>{match.product_name} · {match.score}%</em>
-                      ))}
-                    {!(item.offer_match?.matches ?? []).length && <em>Product analysis pending</em>}
-                  </span>
+                  {/* What this post would carry, and when it would carry
+                      nothing, why. Every match being low confidence rendered
+                      an empty space: the filter dropped them all and the
+                      fallback only spoke when there were none at all, so a
+                      campaign whose products all scored badly looked exactly
+                      like one nobody had analysed. */}
+                  {(() => {
+                    const ranked = item.offer_match?.matches ?? [];
+                    const attaching = ranked.filter((match) => item.offer_ids.length
+                      ? item.offer_ids.includes(match.offer_id)
+                      : match.confidence !== "low")
+                      .slice(0, autopilot.max_products_per_post);
+                    return (
+                      <span className="campaign-queue-products">
+                        {attaching.map((match) => (
+                          <em key={match.offer_id}>
+                            {match.product_name} · {match.score}%
+                            {commissionLabel(match) && ` · ${commissionLabel(match)}`}
+                          </em>
+                        ))}
+                        {!attaching.length && (
+                          <em className="empty">{!ranked.length
+                            ? "Product analysis pending"
+                            : `Nothing fits well enough to attach — best was ${
+                                ranked[0].score}%`}</em>
+                        )}
+                      </span>
+                    );
+                  })()}
                   <small>
                     {item.times_posted > 0
                       ? t("autopilot.postedTimes", { count: item.times_posted })

@@ -1159,3 +1159,6 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: no-preference) {
   .autopilot-queue li.just-linked { transition: outline-color .3s ease-out; }
 }
+/* The absence of a product is a fact about the post, so it is set apart from
+   the products themselves rather than dressed as one. */
+.campaign-queue-products em.empty { background: transparent; padding-inline: 0; font-style: italic; }
