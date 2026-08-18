@@ -859,6 +859,47 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .offer-picker-tick { flex: none; color: var(--link); }
 .offer-picker-rate { font-weight: 700; }
 
+/* The heading and the button that explains what is under it. */
+.engine-setup-title { display: flex; gap: 4px; align-items: center; }
+
+/* Which engine posts what, where. Wide by nature - thirteen networks against
+   four engines - so it scrolls inside the dialog rather than stretching it. */
+.capability-matrix { display: grid; gap: 12px; min-height: 0; }
+.capability-notes { display: grid; gap: 5px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); list-style: none; color: var(--muted); font-size: 11px; }
+.capability-scroll { max-height: min(50vh, 420px); overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.capability-table { font-size: 12px; }
+.capability-table thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); }
+.capability-table th[scope="row"] { min-width: 150px; }
+.capability-table th[scope="row"] small { display: block; color: var(--muted); font-size: 10px; font-weight: 500; }
+.capability-engine { text-align: center; }
+.capability-cell { text-align: center; }
+.capability-network { display: flex; gap: 7px; align-items: center; }
+
+/* Clickable or not is the affiliate question, so it is coloured like an
+   outcome rather than printed as another word in a row of words. */
+.capability-link { display: inline-flex; gap: 4px; align-items: center; border-radius: 999px; padding: 2px 8px; font-size: 10px; font-weight: 600; white-space: nowrap; }
+.capability-link.yes { color: var(--green); background: var(--green-dark); }
+.capability-link.no { color: #7a5c00; background: #fdf5db; }
+
+.capability-followup { display: grid; gap: 1px; }
+.capability-followup small { color: var(--muted); font-size: 10px; }
+.capability-carousel { display: grid; gap: 1px; font-variant-numeric: tabular-nums; font-weight: 700; }
+.capability-carousel small { color: var(--muted); font-size: 10px; font-weight: 500; }
+/* A ceiling nothing can reach is the trap this table exists to spring. */
+.capability-carousel.unreachable { color: var(--muted); }
+.capability-none { color: var(--line-strong); }
+
+.capability-yes { display: inline-flex; gap: 3px; align-items: center; justify-content: center; color: var(--green); }
+.capability-marks { display: inline-flex; gap: 2px; color: var(--link); font-size: 11px; }
+.capability-no { color: var(--line-strong); }
+
+.capability-legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: 11px; }
+.capability-legend li { display: inline-flex; gap: 5px; align-items: center; }
+.capability-legend b { color: var(--link); }
+.capability-heading { margin: 4px 0 0; font-size: 12px; }
+.capability-note-cell { max-width: 300px; color: var(--muted); font-size: 11px; }
+.capability-footnote { margin: 0; color: var(--muted); font-size: 11px; }
+
 .affiliate-outcomes { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .affiliate-outcomes li { display: flex; gap: 8px; align-items: baseline; font-size: 11px; }
 .affiliate-outcomes b { flex: none; border-radius: 999px; padding: 1px 7px; font-size: 10px; font-weight: 700; }

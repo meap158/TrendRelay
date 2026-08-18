@@ -27,6 +27,7 @@ import {
   type AssetFilterValues,
 } from "../ui/asset-filters";
 import { AffiliateLink, DEFAULT_DISCLOSURE, type LinkPlacement } from "./affiliate-link";
+import { CapabilityMatrixButton } from "./capability-matrix";
 import type { ProductRow, ProductsPayload } from "../attribution/types";
 import { ActionIcon } from "../ui/action-icons";
 import { WaitingScreen } from "../ui/waiting-screen";
@@ -1826,8 +1827,11 @@ export default function PublishPage() {
       ) : (
       <section className="engine-setup" aria-labelledby="engine-setup-title">
         <div className="section-heading">
-          <div>
+          <div className="engine-setup-title">
             <h2 id="engine-setup-title">{t("publish.chooseEngine")}</h2>
+            {/* The table that answers "can this engine post that here"
+                before somebody composes into an engine that cannot. */}
+            <CapabilityMatrixButton workspaceId={workspaceId} />
           </div>
           <div className="section-heading-aside">
             {connection && <span>{connection.next_step}</span>}

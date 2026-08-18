@@ -35,6 +35,7 @@ from trendrelay_api.integrations.publishing import (
     set_active_provider,
     test_provider,
 )
+from trendrelay_api.integrations.publishing_matrix import capability_matrix
 from trendrelay_api.models import Workspace
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/publishing", tags=["publishing"])
@@ -81,6 +82,26 @@ def publishing_connection(
 ) -> dict[str, Any]:
     membership(session, workspace_id, user.id)
     return {"connection": connection_status()}
+
+
+@router.get("/capabilities")
+def publishing_capabilities(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Which engine can do what, on which network.
+
+    Static: it describes the engines themselves, not this workspace's keys,
+    so it answers the same for everybody and needs no probe. Membership is
+    still required because every route on this router is a workspace's.
+
+    Served rather than written into the interface so there is one source for
+    it. A table kept by hand in the frontend would be correct on the day it
+    was typed and quietly wrong from the next engine onwards.
+    """
+    membership(session, workspace_id, user.id)
+    return capability_matrix()
 
 
 @router.post("/providers/credentials")
