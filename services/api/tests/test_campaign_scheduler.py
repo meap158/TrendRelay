@@ -230,7 +230,9 @@ def test_a_draft_item_is_never_posted(session) -> None:
     queue_item(session, "q1", state="draft")
     posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert posts == []
-    assert "Nothing approved" in note
+    # Says it is waiting on a decision, rather than on a recycle window that has
+    # nothing to do with it. A draft is content that exists and is not approved.
+    assert "1 queued post(s), none approved yet." in note
 
 
 def test_an_offer_with_no_disclosure_stops_the_campaign(session) -> None:
@@ -828,3 +830,53 @@ def test_nothing_due_and_nothing_wrong_says_neither() -> None:
     # No slots came round, so there is no outcome to report and no reason to
     # give. "No posts scheduled." on a quiet horizon would read as a fault.
     assert scheduler._explain_run([], [], 0) == "Nothing to schedule right now."
+
+
+# --- why a destination had nothing to post -------------------------------------
+
+
+class _Item:
+    """Stands in for a queue row; the helper only counts them."""
+
+
+def _why(queue, approved, rested):
+    return scheduler._why_nothing_eligible(
+        queue, approved, rested=rested, label="halcyonbooks.official",
+        min_recycle_days=30,
+    )
+
+
+def test_an_empty_queue_does_not_blame_the_recycle_window() -> None:
+    """The bug this splits apart.
+
+    A campaign with nothing in it reported "Nothing approved has rested 30 days
+    on halcyonbooks.official", which sends somebody to shorten a recycle window
+    when what they need is to write a post. This workspace's own run said
+    exactly that against a queue of zero items.
+    """
+    note = _why([], [], [])
+
+    assert "rested" not in note
+    assert "nothing in the queue yet" in note
+
+
+def test_queued_but_unapproved_says_how_many_are_waiting() -> None:
+    # Different action again: the content exists and needs a decision.
+    note = _why([_Item(), _Item()], [], [])
+
+    assert note == "2 queued post(s), none approved yet."
+
+
+def test_approved_but_unrested_keeps_the_sentence_that_was_always_right() -> None:
+    note = _why([_Item()], [_Item()], [])
+
+    assert note == "Nothing approved has rested 30 days on halcyonbooks.official."
+
+
+def test_rested_but_committed_elsewhere_is_its_own_answer() -> None:
+    # Waiting is the fix here, and shortening the window would not help: these
+    # are mid-flight on this account or promised to an earlier slot in this run.
+    note = _why([_Item()], [_Item()], [_Item()])
+
+    assert "already spoken for" in note
+    assert "rested 30 days" not in note

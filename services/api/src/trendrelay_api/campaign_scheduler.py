@@ -574,10 +574,18 @@ def plan_campaign(
             >= timedelta(days=autopilot.min_recycle_days)
         ]
         if not eligible:
-            notes.append(
-                f"Nothing approved has rested {autopilot.min_recycle_days} days "
-                f"on {destination.label}."
-            )
+            notes.append(_why_nothing_eligible(
+                queue,
+                approved,
+                rested=_eligible_items(
+                    approved,
+                    destination_id=destination.id,
+                    now=moment,
+                    min_recycle_days=autopilot.min_recycle_days,
+                ),
+                label=destination.label,
+                min_recycle_days=autopilot.min_recycle_days,
+            ))
             continue
         # The first eligible item whose media this network will accept: a
         # 2160px-wide video is fine on TikTok and refused by Threads, and
@@ -754,6 +762,37 @@ def plan_campaign(
         counter += 1
 
     return scheduled, _explain_run(scheduled, notes, len(upcoming))
+
+
+def _why_nothing_eligible(
+    queue: list[CampaignQueueItem],
+    approved: list[CampaignQueueItem],
+    *,
+    rested: list[CampaignQueueItem],
+    label: str,
+    min_recycle_days: int,
+) -> str:
+    """Why this destination had nothing to post, told apart from its neighbours.
+
+    Four states used to share one sentence - "Nothing approved has rested N days
+    on X" - and only the last of them is what that sentence describes. An empty
+    campaign said its content had not rested long enough, which sends somebody
+    to shorten a recycle window when what they need is to write a post. This
+    workspace's own run said exactly that with a queue of zero items.
+
+    They want different answers, so they get different sentences.
+    """
+    if not queue:
+        return "There is nothing in the queue yet - add media and write a post."
+    if not approved:
+        return f"{len(queue)} queued post(s), none approved yet."
+    if not rested:
+        return (
+            f"Nothing approved has rested {min_recycle_days} days on {label}."
+        )
+    # Rested, and still unavailable: every candidate is either mid-flight on
+    # this account or already promised to an earlier slot in this same plan.
+    return f"Everything rested is already spoken for on {label}."
 
 
 def _explain_run(
