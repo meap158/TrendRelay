@@ -52,4 +52,32 @@ The enumerator harvests continuously and stops on the `暂时没有更多了` ("
 
 The upstream `browser_fallback` is **disabled** (`browser_fallback.enabled: false`): it opens its own browser but only closes captchas, not the sign-up prompt, so it froze on the prompt and harvested almost nothing. Our enumerator replaces it. The login browser and this profile-read browser are the only browsers TrendRelay opens.
 
+### Anti-bot root cause: the `msToken` (investigation, 2026-08-19)
+
+A long live investigation with the operator traced the anonymous pagination cap to a single mechanism, **`msToken`** — Douyin's per-request anti-bot token, minted by the page's own obfuscated JS (`byted_acrawler` / `webmssdk` / the `secsdk` API, all present on the page as `byted_acrawler` with a `frontierSign` method, `useWebSecsdkApi`, `_secsdk_uifid`).
+
+Captured evidence (raw CDP, `Network` domain, comparing an automation-navigated tab against a tab the operator duplicated by hand in the same browser):
+
+- The **automated tab's** `/aweme/v1/web/aweme/post/` request carries `a_bogus`, `verifyFp`, `fp`, `x-secsdk-web-signature`, `timestamp`, `from_user_page`, `webid` — but **no `msToken`**. Douyin caps it at page 1.
+- The **hand-duplicated tab's** request carries a full `msToken=…` and pages the whole profile.
+
+Follow-up tests pinned it down:
+
+- In an automated browser (Playwright, raw CDP, real Chrome over CDP, and **undetected-chromedriver** — all four), the `msToken` cookie **never appears** (waited 40s), and requests either omit it or, when a stale one is reused, are **refused** — server returns empty page 2 (65 token-bearing pagination requests fired in one test, videos stayed at 26).
+- The differentiator is the navigation/context being programmatic. A genuine user gesture — a typed URL or a **tab duplicate** (a browser-UI action, above the page, which no page-level automation can produce) — mints an `msToken` Douyin **accepts**. `Target.setAutoAttach` to every tab re-flags even the duplicates, confirming the flag is **per-tab devtools attachment + programmatic navigation**, not the browser instance.
+- Params-only replay does not work: adding `verifyFp` (= the `s_v_web_id` cookie), `fp`, `webid`, `timestamp`, `from_user_page` to our API client still returns empty page 2, because `a_bogus` and `x-secsdk-web-signature` must be **freshly computed per request** by Douyin's JS over the exact params, and a stale/foreign signature is rejected.
+- The cap is therefore **not** IP-based (same machine/IP: the operator's hand-driven Chrome and Edge page fully; every automated browser caps at ~25), **not** cookie-freshness, **not** client version (pinned and current upstream both cap), and **not** `navigator.webdriver`/`cdc_` (all clean).
+
+**Conclusion.** Whole-profile anonymous download needs an `msToken` minted in a context Douyin trusts. It grants that token to a genuine, user-driven browser and withholds/refuses it for any programmatically-driven one. A signed-in session sidesteps the whole thing — `sessionid` makes the API paginate server-side with no browser.
+
+### The browser-free bypass: a REAL msToken (research, 2026-08-19)
+
+The reason the browser path is stuck is that we were reading the token from the browser, where automation is refused one. The mature scrapers do not use a browser at all — they **mint a real msToken over plain HTTP**:
+
+- **The only valid msToken comes from the mssdk `common/report` endpoint** (`mssdk.bytedance.com`), by POSTing an encrypted `strData` payload (`magic`, `version`, `dataType`, `strData`, `ulr`, `tspFromClient`); the real token comes back in the response **cookies** (`msToken`, 164 or 184 chars). No browser. A locally-random "fake" msToken is what our provider's `MsTokenManager` produces, and it is what Douyin refuses on the cursored page — the whole cap.
+- **`a_bogus`** (which replaced the deprecated `X-Bogus`, retired June 2024) is a **pure-Python** signature (SM3 + RC4 + custom Base64 over the URL + UA + fingerprint). Our provider already ships an `abogus.py`; it may need refreshing to the current algorithm.
+- Reference implementation: **[F2 (`Johnserf-Seed/f2`)](https://github.com/Johnserf-Seed/f2)** — actively maintained Python, `TokenManager.gen_real_msToken()` + `ABogusManager.model_2_endpoint()` do exactly this for the `aweme/post` (user videos) endpoint, no browser. `Douyin_TikTok_Download_API` and `riboly/douyin-bypass-downloader` are similar. Paid APIs (TikHub, TikAPIs, Apify) sell the solved version.
+
+**Actionable plan to lift the anonymous cap without login** (verify F2's licence — Apache/MIT — before vendoring): port `gen_real_msToken` (the mssdk POST + config payload) and the current `a_bogus` into our provider's `api_client.get_user_post`, regenerate the msToken per batch (it rotates ~1 min), and drop the browser enumerator entirely. Caveats: the token layer is IP-and-session sensitive — datacenter / non-China IPs can still get `__ac` challenge shells or empty bodies, though a residential IP (the operator's own, where their browser pages fine) should pass. If a real msToken still yields empty page 2 from this IP, the residual gate is `x-secsdk-web-signature` (the `secsdk` layer), the last signature to reproduce.
+
 Users are responsible for platform terms, privacy, copyright, consent, and having permission to download or reuse content. The login browser may require manual CAPTCHA completion and is used only to capture cookies.
