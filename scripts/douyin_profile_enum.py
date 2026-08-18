@@ -41,6 +41,11 @@ SEC_UID_PATTERN = re.compile(r"[A-Za-z0-9_-]{16,120}")
 #: A Douyin video/note id as it appears in links and page data.
 AWEME_ID_PATTERN = re.compile(r"\d{15,20}")
 
+ROOT = Path(__file__).resolve().parents[1]
+#: A persistent browser profile that warms across runs, kept beside the cookies
+#: so a signed-out session earns Douyin's trust the way a normal browser does.
+DEFAULT_PROFILE_DIR = ROOT / ".data" / "douyin" / "browser-profile"
+
 # Installed before any page script runs, in every frame. Two jobs: look like a
 # real browser so Douyin serves the feed rather than its "service exception"
 # page, and hide the sign-up prompt the instant it mounts so the scroll is
@@ -97,6 +102,37 @@ DISMISS_OBSERVER = r"""
   begin();
 })();
 """
+
+# Called every scroll round. The observer hides the login panel as it mounts,
+# but after the first page Douyin re-raises the sign-up prompt with a backdrop
+# that locks body scroll - so a person clicks it away to keep going. This does
+# the same without clicking (clicking a close glyph once navigated into a
+# video): hide the login panels, drop the fixed near-fullscreen backdrop that
+# freezes scrolling, and put overflow back to auto.
+DISMISS_NOW = r"""() => {
+  const LOGIN = [
+    '#login-full-panel', '#login-pannel', '[id*="login-panel"]',
+    '[class*="login-guide"]', '[class*="loginGuide"]', '[class*="login-mask"]',
+    '[class*="login-container"]', '[class*="account-guide"]', '[class*="login-modal"]'
+  ];
+  for (const selector of LOGIN) {
+    for (const el of document.querySelectorAll(selector)) el.style.display = 'none';
+  }
+  // A fixed, near-fullscreen, high-z overlay is the scroll-locking backdrop;
+  // remove it, but never the grid (which is not fixed) or small fixed chrome.
+  for (const el of document.querySelectorAll('div')) {
+    const st = getComputedStyle(el);
+    if (st.position !== 'fixed') continue;
+    const r = el.getBoundingClientRect();
+    if (r.width > window.innerWidth * 0.8 && r.height > window.innerHeight * 0.8 &&
+        parseInt(st.zIndex || '0', 10) >= 100 &&
+        !el.querySelector('a[href*="/video/"]')) {
+      el.style.display = 'none';
+    }
+  }
+  document.body.style.overflow = 'auto';
+  document.documentElement.style.overflow = 'auto';
+}"""
 
 # Douyin serves an automation-flagged visit a "service exception, refresh to
 # retry" page instead of the feed. It is probabilistic, so a reload sometimes
@@ -157,10 +193,52 @@ async def _harvest(page, ids: set[str]) -> None:
         pass
 
 
+async def _launch_context(playwright, profile_dir: Path, headless: bool):
+    """A persistent browser context, warming across runs like a normal profile.
+
+    The difference the operator spotted: a normal tab shows a profile's videos,
+    an incognito tab does not - and neither does a throwaway automation context,
+    which starts with no cookies, no localStorage, no IndexedDB. Douyin reads
+    that emptiness as untrusted and serves its service-exception page instead of
+    the feed. A persistent profile accumulates the same trust markers a normal
+    browser does, so the feed is served; measured, it cleared the block where a
+    fresh context was refused. Real Chrome when present (least detectable),
+    falling back to the bundled Chromium.
+    """
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    launch_kwargs = dict(
+        user_data_dir=str(profile_dir),
+        headless=headless,
+        # Drop the flag that raises Chrome's "controlled by automated test
+        # software" infobar - the infobar is both a detection signal and, in
+        # real Chrome, an "unsupported flag" banner the operator sees. The
+        # webdriver property is hidden in the init script instead. Blink's
+        # AutomationControlled flag is deliberately not passed: real Chrome
+        # rejects it as unsupported and shows its own banner.
+        ignore_default_args=["--enable-automation"],
+        args=["--no-first-run", "--no-default-browser-check", "--disable-infobars"],
+        viewport={"width": 1512, "height": 900},
+        locale="zh-CN",
+        user_agent=(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
+        ),
+    )
+    try:
+        return await playwright.chromium.launch_persistent_context(
+            channel="chrome", **launch_kwargs
+        )
+    except Exception:
+        # No system Chrome: the bundled Chromium still gets the persistence
+        # benefit, just with a slightly more detectable fingerprint.
+        return await playwright.chromium.launch_persistent_context(**launch_kwargs)
+
+
 async def enumerate_profile(
     sec_uid: str,
     *,
     cookie_file: Path | None,
+    profile_dir: Path,
     limit: int,
     max_scrolls: int,
     idle_rounds: int,
@@ -173,18 +251,7 @@ async def enumerate_profile(
     ids: set[str] = set()
 
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(
-            headless=headless,
-            args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
-        )
-        context = await browser.new_context(
-            locale="zh-CN",
-            viewport={"width": 1500, "height": 900},
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
-            ),
-        )
+        context = await _launch_context(playwright, profile_dir, headless)
         await context.add_init_script(DISMISS_OBSERVER)
         if cookie_file and cookie_file.is_file():
             cookies = _load_cookies(cookie_file)
@@ -208,9 +275,21 @@ async def enumerate_profile(
 
             asyncio.ensure_future(read())
 
-        page = await context.new_page()
+        page = context.pages[0] if context.pages else await context.new_page()
         page.on("response", on_response)
         timeout_ms = max(30, int(timeout_seconds)) * 1000
+
+        # Warm the session before the profile: a moment on the home feed lets a
+        # cold profile pick up the cookies a normal browser would already hold,
+        # so the profile request arrives looking established rather than brand
+        # new. Skipped quietly if it does not load.
+        try:
+            await page.goto(
+                "https://www.douyin.com/", wait_until="domcontentloaded", timeout=timeout_ms
+            )
+            await page.wait_for_timeout(3500)
+        except Exception:
+            pass
 
         # Load, and reload past Douyin's "service exception" page. It is served
         # to automation-flagged visits in place of the feed, probabilistically,
@@ -252,6 +331,12 @@ async def enumerate_profile(
                 break
             before = len(ids)
             try:
+                # Close the sign-up popup every round before scrolling. The
+                # observer hides it as it mounts, but Douyin re-raises it after
+                # the first page and locks body scroll behind a backdrop; this
+                # also drops the backdrop and restores overflow so the next
+                # wheel actually advances the feed instead of the frozen page.
+                await page.evaluate(DISMISS_NOW)
                 # A real wheel event drives Douyin's own infinite scroll, at a
                 # pace a person's hand would keep rather than a tight loop.
                 await page.mouse.wheel(0, random.randint(2600, 3800))
@@ -267,7 +352,6 @@ async def enumerate_profile(
                 break
 
         await context.close()
-        await browser.close()
 
     ordered = sorted(ids)
     return ordered[:limit] if limit else ordered
@@ -297,6 +381,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--idle-rounds", type=int, default=10)
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument(
+        "--profile-dir",
+        type=Path,
+        default=DEFAULT_PROFILE_DIR,
+        help="Persistent browser profile that warms across runs.",
+    )
+    parser.add_argument(
         "--headless",
         action="store_true",
         help="Run without a visible window. Douyin may serve an empty feed.",
@@ -316,6 +406,7 @@ def main() -> int:
         enumerate_profile(
             sec_uid,
             cookie_file=args.cookies,
+            profile_dir=args.profile_dir,
             limit=max(0, int(args.limit)),
             max_scrolls=args.max_scrolls,
             idle_rounds=args.idle_rounds,
