@@ -255,6 +255,10 @@ def _destination_view(session: Session, item: CampaignDestination) -> dict[str, 
         # Carousel support is narrow: only Zernio and WoopSocial post one, and
         # only to TikTok.
         "accepts_carousel": carousel_fits_destination(item.provider, item.platform, 1)[0],
+        # Whether a follow-up (first comment or thread reply) can be delivered
+        # here, so the package editor can show at a glance which destinations
+        # a written comment will actually reach.
+        "follow_up_deliverable": first_comment_deliverable(item.provider, item.platform),
         "integration_id": item.integration_id,
         "platform": item.platform,
         "label": item.label,

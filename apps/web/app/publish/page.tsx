@@ -9,6 +9,7 @@ import { useAuth } from "../auth-provider";
 import { useT } from "../i18n-provider";
 import { useJobs } from "../jobs-provider";
 import {
+  FeatureReach,
   PlatformIcon,
   ProviderMark,
   platformLabels,
@@ -2891,6 +2892,10 @@ export default function PublishPage() {
               sitting there being ignored. */}
           {topicTargets.length > 0 && (
             <label>{t("publish.threadsTopic")} <i>{t("publish.threadsTopicNote")}</i>
+              <FeatureReach
+                chosen={chosen}
+                supported={[...new Set(topicTargets.map((account) => account.platform))]}
+              />
               <input
                 name="topic"
                 value={topic}
@@ -2938,7 +2943,9 @@ export default function PublishPage() {
             return (
               <div className="thread-composer">
                 <div className="thread-head">
-                  <strong>{t("publish.thread")}</strong>
+                  <strong>{t("publish.thread")}
+                    <FeatureReach chosen={chosen} supported={threaders} />
+                  </strong>
                   <span>
                     {thread.length
                       ? `${thread.length + 1} posts on ${threaders.map((p) => platformLabels[p]).join(", ")}`
@@ -3027,6 +3034,7 @@ export default function PublishPage() {
             }
             return (
               <label>{t("publish.firstComment")} <i>{t("publish.optional")}</i>
+                <FeatureReach chosen={chosen} supported={carriers} />
                 <textarea
                   name="first_comment"
                   rows={2}
@@ -3102,7 +3110,11 @@ export default function PublishPage() {
             {/* The heading and its hint are one item, not two. Each child of a
                 label is a grid row, so the loose <i> put the select a row lower
                 than the field beside it. */}
-            <label><span>{t("publish.visibility")} <i>{t("publish.visibilityScope")}</i></span>
+            <label><span>{t("publish.visibility")} <i>{t("publish.visibilityScope")}</i>
+              <FeatureReach chosen={chosen}
+                supported={chosen.filter((platform) =>
+                  platform === "tiktok" || platform === "youtube")} />
+            </span>
               <select name="visibility" defaultValue="public">
                 <option value="public">{t("publish.public")}</option>
                 <option value="private">{t("publish.privateOnlyMe")}</option>

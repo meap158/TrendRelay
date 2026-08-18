@@ -165,6 +165,51 @@ export function PlatformIcon({
   );
 }
 
+/**
+ * Which of the chosen networks a feature applies to, at a glance.
+ *
+ * Marks rather than a sentence: with several networks selected, "posted as a
+ * first comment on Facebook and LinkedIn but not TikTok" is a paragraph, and
+ * a row of icons with the non-carriers struck through is read in the time it
+ * takes to look at it. Rendered only when there is a mix worth telling apart -
+ * a single network's field answers for itself, and a feature every chosen
+ * network carries needs no legend.
+ */
+export function FeatureReach({
+  chosen,
+  supported,
+  size = 15,
+}: {
+  /** The networks this post is going to. */
+  chosen: PublishingPlatform[];
+  /** The subset this feature actually reaches. */
+  supported: PublishingPlatform[];
+  size?: number;
+}) {
+  const reaches = (platform: PublishingPlatform) => supported.includes(platform);
+  if (chosen.length < 2 || chosen.every(reaches)) return null;
+  return (
+    <span
+      className="feature-reach"
+      role="img"
+      aria-label={`Applies to ${chosen.filter(reaches).map((platform) =>
+        platformLabels[platform]).join(", ") || "none of the chosen networks"}`}
+    >
+      {chosen.map((platform) => (
+        <span
+          key={platform}
+          className={reaches(platform) ? "on" : "off"}
+          title={reaches(platform)
+            ? platformLabels[platform]
+            : `Not on ${platformLabels[platform]}`}
+        >
+          <PlatformIcon platform={platform} size={size} muted={!reaches(platform)} />
+        </span>
+      ))}
+    </span>
+  );
+}
+
 const providerTint: Record<PublishingEngine, string> = {
   bundle_social: "#5b5bd6",
   zernio: "#0f9d8f",
