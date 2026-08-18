@@ -259,13 +259,15 @@ async def _launch_context(playwright, profile_dir: Path, headless: bool):
     launch_kwargs = dict(
         user_data_dir=str(profile_dir),
         headless=headless,
-        # Drop the flag that raises Chrome's "controlled by automated test
-        # software" infobar - the infobar is both a detection signal and, in
-        # real Chrome, an "unsupported flag" banner the operator sees. The
-        # webdriver property is hidden in the init script instead. Blink's
-        # AutomationControlled flag is deliberately not passed: real Chrome
-        # rejects it as unsupported and shows its own banner.
-        ignore_default_args=["--enable-automation"],
+        # Drop two flags Playwright passes by default that real Chrome surfaces
+        # to the operator: --enable-automation (the "controlled by automated
+        # test software" infobar, also a detection signal) and --no-sandbox
+        # (the yellow "stability and security will suffer" banner). Chrome
+        # sandboxes fine without the latter on Windows, so removing it is more
+        # secure, not less. The webdriver property is hidden in the init script
+        # instead; Blink's AutomationControlled flag is not passed either,
+        # because real Chrome rejects it as unsupported and shows its own banner.
+        ignore_default_args=["--enable-automation", "--no-sandbox"],
         args=["--no-first-run", "--no-default-browser-check", "--disable-infobars"],
         viewport={"width": 1512, "height": 900},
         locale="zh-CN",
