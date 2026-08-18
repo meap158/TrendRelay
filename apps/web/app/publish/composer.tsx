@@ -35,12 +35,21 @@ type Fetcher = (path: string, init?: RequestInit) => Promise<Response>;
 export const MEDIA_DRAG_TYPE = "application/x-trendrelay-media";
 
 /**
- * The picker only ever offers videos, so that is where clearing returns to
- * rather than to nothing at all.
+ * What "clear" returns the picker to: everything it can post.
+ *
+ * Not pinned to video any more. A post here is a clip *or* a carousel of
+ * pictures, and a picker that shows only clips cannot express the second - the
+ * carousel support looked absent when it was one filter out of reach. Audio is
+ * dropped on arrival instead, because no destination here publishes a sound
+ * file and offering one only to refuse it later is the worse half of the
+ * choice.
  */
-export const PICKER_BASE: AssetFilterValues = { mediaKind: "video" };
-/** The same dialog, looking for a carousel's frames instead of a clip. */
+export const PICKER_BASE: AssetFilterValues = {};
+/** The same dialog opened straight onto a carousel's frames. */
 export const IMAGE_PICKER_BASE: AssetFilterValues = { mediaKind: "image" };
+
+/** Kinds this picker can hand to Publish, in the order the chooser shows them. */
+export const POSTABLE_KINDS = ["video", "image"] as const;
 
 // Re-exported so the screens importing them from here keep working, while the
 // rules themselves live somewhere they can be tested. Imported as well as
@@ -124,9 +133,9 @@ export function MediaPicker({
   const t = useT();
   const images = mediaKind === "image";
   const base = images ? IMAGE_PICKER_BASE : PICKER_BASE;
-  // Initialised from what this dialog is looking for. The caller keys it on
+  // Initialised from what this dialog was opened for. The caller keys it on
   // `mediaKind`, so opening it for carousel frames after opening it for a clip
-  // starts a fresh dialog rather than one still filtered to videos.
+  // starts a fresh dialog rather than one still narrowed to the last kind.
   const [filters, setFilters] = useState<AssetFilterValues>(base);
 
   /** Applied on change, because narrowing the list is a new search either way. */
@@ -135,24 +144,37 @@ export function MediaPicker({
     onSearch(next);
   }
 
+  // Audio is not offered. Publish sends a clip or a gallery of pictures, so a
+  // sound file has nothing to become here, and a kind in the chooser that
+  // returns a list nobody can pick from is worse than one that is absent.
+  const postable: AssetFacets = {
+    ...facets,
+    media_kinds: facets.media_kinds.filter(
+      (facet) => (POSTABLE_KINDS as readonly string[]).includes(facet.value),
+    ),
+  };
+
   // Stays mounted and is driven by `open`: unmounting it on close would cut
   // short the sequence that returns focus to whatever opened it.
   return (
     <Dialog
       open={open}
       size="wide"
-      title={images ? t("composer.chooseImages") : t("composer.chooseClip")}
+      title={images ? t("composer.chooseImages") : t("composer.chooseMedia")}
       description={images
         ? "Images in this workspace's library. Pick them in the order they are swiped."
-        : "Videos in this workspace's library."}
+        : "Clips and pictures in this workspace's library. A clip fills the video "
+          + "slot; a picture starts a carousel."}
       onClose={onClose}
     >
-      {/* The same control the Library uses, minus the media kind: this dialog
-          only ever offers videos, so a kind selector here would be a lie. */}
+      {/* The same control the Library uses, media kind included. It used to be
+          left out on the grounds that this dialog only offered videos, which
+          was true and was the bug: pictures are postable here as a carousel
+          and there was no way to reach them. */}
       <AssetFilters
         values={filters}
-        facets={facets}
-        fields={["query", "effect", "channel", "platform", "length"]}
+        facets={postable}
+        fields={["query", "mediaKind", "effect", "channel", "platform", "length"]}
         cleared={base}
         onChange={apply}
       />
@@ -161,7 +183,7 @@ export function MediaPicker({
         <p className="picker-empty">
           {images
             ? "No images matched. Import them in the Library tab, then pick them here."
-            : "No videos matched. Import clips in the Library tab, then pick one here."}
+            : "Nothing matched. Import media in the Library tab, then pick it here."}
         </p>
       )}
       <ul className="picker-results">

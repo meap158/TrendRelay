@@ -26,3 +26,32 @@ test("clearing a filter removes it from the request", () => {
 
   assert.equal(params.toString(), "");
 });
+
+
+// --- what a picker asks for when it is not pinned to one kind -----------------
+
+test("an unpinned picker asks for every kind rather than just video", () => {
+  // Publish's picker pinned mediaKind to "video", so "Choose from Library"
+  // could not reach a picture even though a post here can be a carousel of
+  // them. An empty base sends no media_kind at all, which is what lets both
+  // arrive; audio is dropped from the answer rather than from the question,
+  // because the library legitimately holds some.
+  const params = assetFilterParams({});
+
+  assert.equal(params.get("media_kind"), null);
+  assert.equal(params.toString(), "");
+});
+
+test("choosing a kind in the picker still narrows to it", () => {
+  const params = assetFilterParams({ mediaKind: "image", channel: "LuLu" });
+
+  assert.equal(params.get("media_kind"), "image");
+  assert.equal(params.get("creator"), "LuLu");
+});
+
+test("an unpinned base counts as no active filter", () => {
+  // The picker's "Clear" returns here, so it must not read as one filter still
+  // applied - that is what put a stray "Clear 1" on an untouched dialog.
+  assert.equal(activeFilterCount({}, {}), 0);
+  assert.equal(activeFilterCount({ mediaKind: "image" }, {}), 1);
+});
