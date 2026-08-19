@@ -263,6 +263,9 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
   .library-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+/* Why the primary action cannot be pressed, beside the action. */
+.effect-apply-blocker { flex: 1 1 200px; min-width: 0; color: var(--warn); font-size: 10px; line-height: 1.4; text-align: end; }
+
 /* Responsive Library controls: compact on desktop, touch-friendly on narrow screens. */
 .library-browser > * { min-width: 0; }
 .library-browser-toolbar { position: sticky; top: -14px; z-index: 80; display: grid; margin: -14px -2px 0; padding: 14px 2px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }

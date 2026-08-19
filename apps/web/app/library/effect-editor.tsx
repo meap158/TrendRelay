@@ -72,6 +72,8 @@ export function EffectEditor({
   const [steps, setSteps] = useState<Step[]>([]);
   const [busy, setBusy] = useState("");
   const [failure, setFailure] = useState("");
+  /** Which part of a long batch is in flight, so the wait is not a blank. */
+  const [busyDetail, setBusyDetail] = useState("");
   const [recipeRecovered, setRecipeRecovered] = useState(false);
   const [saved, setSaved] = useState(true);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -87,6 +89,15 @@ export function EffectEditor({
 
   const base = `/api/workspaces/${workspaceId}/media/library`;
   const targetIds = assetIds?.length ? assetIds : targets.map((target) => target.id);
+  /**
+   * How many assets one request queues.
+   *
+   * Smaller than it was. Two hundred is a single silent request that either
+   * queues everything or, on one unexpected failure, nothing - and no progress
+   * can be reported inside it. Twenty-five keeps each request short enough to
+   * report between, and keeps what one failure can cost to twenty-five.
+   */
+  const CHUNK = 25;
   const batch = targetIds.length > 1;
   const primary = targets[0]!;
 
@@ -214,28 +225,52 @@ export function EffectEditor({
       if (batch) {
         const totals = { queued: 0, skipped: 0, failed: 0, missing: 0 };
         const queuedJobs: any[] = [];
-        for (let at = 0; at < targetIds.length; at += 200) {
-          const response = await apiFetch(`${base}/effects/render-batch`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              asset_ids: targetIds.slice(at, at + 200),
-              steps,
-              confirm_external_action: true,
-            }),
-          });
-          const body = await response.json();
-          if (!response.ok) throw new Error(body.detail ?? "The batch render could not start.");
-          for (const key of Object.keys(totals) as Array<keyof typeof totals>) {
-            totals[key] += body.counts?.[key] ?? 0;
+        // What went wrong on the way, kept rather than thrown. A chunk that
+        // fails used to abandon the whole call, so the items already queued by
+        // earlier chunks vanished from the summary while their jobs ran on -
+        // the screen said nothing had happened and the queue disagreed.
+        let interrupted = "";
+        for (let at = 0; at < targetIds.length; at += CHUNK) {
+          setBusyDetail(`Queueing ${Math.min(at + CHUNK, targetIds.length)} of ${targetIds.length}…`);
+          try {
+            const response = await apiFetch(`${base}/effects/render-batch`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                asset_ids: targetIds.slice(at, at + CHUNK),
+                steps,
+                confirm_external_action: true,
+              }),
+            });
+            const body = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(body.detail ?? `The server refused the batch (${response.status}).`);
+            }
+            for (const key of Object.keys(totals) as Array<keyof typeof totals>) {
+              totals[key] += body.counts?.[key] ?? 0;
+            }
+            queuedJobs.push(...(body.jobs ?? []));
+          } catch (reason) {
+            interrupted = reason instanceof Error ? reason.message : "The batch stopped early.";
+            break;
           }
-          queuedJobs.push(...(body.jobs ?? []));
         }
+        setBusyDetail("");
         announceEffectJobs(queuedJobs);
         const details = [`${totals.queued} queued`];
         if (totals.skipped) details.push(`${totals.skipped} skipped`);
         if (totals.failed) details.push(`${totals.failed} failed`);
         if (totals.missing) details.push(`${totals.missing} missing`);
+        const done = totals.queued + totals.skipped + totals.failed + totals.missing;
+        if (interrupted) {
+          // Said in the dialog and left open, because there is something to do
+          // about it: the rest of the selection has not been queued.
+          setFailure(
+            `${interrupted} ${done} of ${targetIds.length} were handled `
+            + `(${details.join(" · ")}); the rest were not queued.`,
+          );
+          return;
+        }
         onRendered(`Effect stack: ${details.join(" · ")}. Track each item in notifications.`);
       } else {
         const response = await apiFetch(`${base}/effects/render`, {
@@ -305,6 +340,16 @@ export function EffectEditor({
   const unavailable = steps
     .map((step) => definitionOf(step.effect))
     .filter((effect): effect is EffectDefinition => Boolean(effect) && !effect!.available);
+  /** What stops Apply, in the words of the thing that stops it. */
+  const applyBlocker = !canEdit
+    ? "You do not have permission to render in this workspace."
+    : !steps.length
+      ? "Add an effect to the stack first."
+      : unavailable.length > 0
+        ? `${unavailable.map((effect) => effect.label).join(", ")} ${
+            unavailable.length === 1 ? "is" : "are"} not available: ${
+            unavailable[0]!.unavailable_reason ?? "its runtime is not installed."}`
+        : null;
 
   /** The step whose gallery is open, paired with the parameter that opened it. */
   const gallery = (() => {
@@ -354,12 +399,19 @@ export function EffectEditor({
             title={previewBlocker?.unpreviewable_reason ?? undefined}
             onClick={() => void preview()}
           >Preview stack</Button>
+          {/* Why it cannot be pressed, beside it. A disabled primary action
+              with no reason is a dead end: the click does nothing, the dialog
+              stays open, and nothing on screen accounts for either. */}
+          {applyBlocker && <small className="effect-apply-blocker">{applyBlocker}</small>}
           <Button
             variant="primary"
             busy={busy === "render"}
-            disabled={!canEdit || !steps.length || unavailable.length > 0}
+            disabled={Boolean(applyBlocker)}
+            title={applyBlocker ?? undefined}
             onClick={() => void render()}
-          >{batch ? "Apply to selection" : t("effectEditor.render")}</Button>
+          >{busy === "render" && busyDetail
+            ? busyDetail
+            : batch ? `Apply to ${targetIds.length.toLocaleString()} items` : t("effectEditor.render")}</Button>
         </>
       )}
     >

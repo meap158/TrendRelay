@@ -351,16 +351,31 @@ def library_status(
     workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
 ) -> dict[str, Any]:
     membership(session, workspace_id, user.id)
+    from trendrelay_api.media_ai import provider_status
+
+    speech = provider_status()["speech"]
     return {
         "runtime": {
             "ffmpeg": FFMPEG.is_file(),
             "ffprobe": FFPROBE.is_file(),
             "local_derivatives": FFMPEG.is_file() and FFPROBE.is_file(),
         },
+        # Three states, not two, because they need three different answers from
+        # the operator: nothing downloaded yet is a download, downloaded but
+        # switched off is one click, and running is nothing at all. Saying only
+        # "not configured" sent them to the documentation for all three.
         "transcription": {
             "reviewed_import": True,
-            "automatic_provider": None,
-            "reason": "No reviewed automatic transcription provider is configured.",
+            "automatic_provider": speech["provider"] if speech["ready"] else None,
+            "prepared": speech["prepared"],
+            "active": speech["source_active"],
+            "reason": (
+                ""
+                if speech["ready"]
+                else "Switched off. Turn it on to transcribe automatically."
+                if speech["prepared"]
+                else "Not downloaded yet. Set it up to transcribe automatically."
+            ),
         },
     }
 
@@ -2115,6 +2130,25 @@ def submit_batch_render(
                 "detail": str(error),
             })
             continue
+        except Exception as error:  # noqa: BLE001
+            # Anything else this one asset can raise - a file that has gone from
+            # disk, a codec probe that dies, a driver that is not there - is one
+            # asset's problem and is reported as one. It used to escape the
+            # loop, which made it the whole selection's problem: the request
+            # 500'd, the transaction rolled back, and seventy-six jobs that were
+            # ready to queue were lost along with the audit record that would
+            # have said so. The operator saw a dialog that did not close.
+            #
+            # The type is named in the detail because an unexpected failure has
+            # no message worth reading on its own - "" tells nobody which of
+            # seventy-seven items went wrong or why.
+            results.append({
+                "asset_id": asset.id,
+                "title": asset.title,
+                "status": "failed",
+                "detail": f"{type(error).__name__}: {error}",
+            })
+            continue
         _store_recipe(session, workspace_id, asset.id, normalised, user.id)
         jobs.append(job)
         results.append({
@@ -2292,6 +2326,96 @@ def run_bulk_action(
         {"counts": outcome["counts"]},
     )
     return outcome
+
+
+class TranscriptionRequest(BaseModel):
+    """Which of the two readings to take, and in what language.
+
+    Both are optional individually and at least one is required, because they
+    answer different questions: what the clip says and what it shows. A product
+    name typed onto the first frame is not in the audio at all.
+    """
+
+    modes: list[Literal["speech", "ocr"]] = Field(min_length=1, max_length=2)
+    #: Left to the model by default. Naming a language it then disagrees with is
+    #: worse than letting it detect one, but a clip with music over speech
+    #: detects badly and the operator usually knows the answer.
+    language: str | None = Field(default=None, max_length=40)
+
+
+@router.post("/assets/{asset_id}/transcription", status_code=202)
+def transcribe_asset(
+    workspace_id: str,
+    asset_id: str,
+    body: TranscriptionRequest,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Queue a machine reading of one asset.
+
+    Produces a draft, never a fact: what comes back is recorded as a machine
+    transcript for somebody to check, which is why this is separate from the
+    reviewed text the enrichment form saves.
+
+    A provider that is switched off is refused here rather than in the worker.
+    The worker checks too - by the time it runs, minutes later, the answer may
+    have changed - but a refusal that arrives at the click can say what to do
+    about it while the operator is still looking at the control.
+    """
+    require_role(
+        membership(session, workspace_id, user.id),
+        {"owner", "editor", "analyst"},
+    )
+    item = _asset_record(session, workspace_id, asset_id)
+    from trendrelay_api.media_ai import create_enrichment_job, provider_status
+
+    status = provider_status()
+    for mode in body.modes:
+        if not status[mode]["ready"]:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"{status[mode]['provider']} is "
+                    + (
+                        "switched off. Turn it on to read this clip automatically."
+                        if status[mode]["prepared"]
+                        else "not downloaded yet. Set it up to read this clip "
+                        "automatically."
+                    )
+                ),
+            )
+    try:
+        job = create_enrichment_job(
+            workspace_id=workspace_id,
+            asset_id=item.id,
+            actor_user_id=user.id,
+            modes=list(body.modes),
+            language=body.language,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media.transcription.queued",
+        "media_asset",
+        item.id,
+        {"modes": sorted(body.modes), "job_id": job["id"]},
+    )
+    return {"job": job}
+
+
+@router.get("/transcription/jobs")
+def transcription_jobs(
+    workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
+) -> dict[str, Any]:
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.media_ai import list_enrichment_jobs
+
+    return {"jobs": list_enrichment_jobs(workspace_id)}
 
 
 @router.post("/assets/{asset_id}/enrichment", status_code=201)

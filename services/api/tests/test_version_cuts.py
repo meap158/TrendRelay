@@ -613,6 +613,55 @@ def test_a_batch_queues_the_same_stack_and_skips_incompatible_media(
         assert queued.max_attempts == effect_render.RENDER_MAX_ATTEMPTS
 
 
+def test_one_asset_failing_unexpectedly_does_not_lose_the_batch(
+    tmp_path, monkeypatch
+) -> None:
+    """The whole selection used to go with it.
+
+    An unexpected error - a file gone from disk, a probe that dies - escaped
+    the per-asset loop, so the request 500'd, the transaction rolled back, and
+    every job that was ready to queue was lost along with the audit record that
+    would have said so. What the operator saw was a dialog that did not close.
+    """
+    from trendrelay_api.integrations import effect_render
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    monkeypatch.setattr(effect_render, "approved_source", lambda path: Path(path))
+    monkeypatch.setattr(effect_render, "run_render_job", lambda _job_id: None)
+    workspace = create_workspace()
+    doomed = make_asset(workspace, tmp_path, name="batch-doomed")
+    fine = make_asset(workspace, tmp_path, name="batch-fine")
+
+    real_create = effect_render.create_render_job
+
+    def explode(render_request, **kwargs):
+        if render_request.source_path.endswith("batch-doomed.mp4"):
+            raise OSError("the file is gone")
+        return real_create(render_request, **kwargs)
+
+    monkeypatch.setattr(
+        "trendrelay_api.integrations.effect_render.create_render_job", explode
+    )
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/render-batch",
+        json={
+            "asset_ids": [doomed, fine],
+            "steps": [{"effect": "speed", "values": {"rate": 1.25}}],
+            "confirm_external_action": True,
+        },
+    )
+
+    assert response.status_code == 202, response.text
+    body = response.json()
+    assert body["counts"] == {"queued": 1, "skipped": 0, "failed": 1, "missing": 0}
+    # Named, because "something went wrong" on one of seventy-seven items tells
+    # nobody which one or why.
+    assert "OSError" in body["results"][0]["detail"]
+    assert body["results"][1]["status"] == "queued"
+
+
 def test_a_batch_preserves_a_stack_for_every_compatible_asset(tmp_path, monkeypatch) -> None:
     from trendrelay_api.integrations import effect_render
 

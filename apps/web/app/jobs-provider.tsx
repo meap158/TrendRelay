@@ -35,6 +35,14 @@ function editTitle(t: Translate, job: any): string {
   // rather than to a blank.
   const named = steps.map((id) => effectLabel(t, id, id));
   const applied = named.length ? named.join(" + ") : "effects";
+  // A job that belongs to a batch is titled for the batch, not for itself.
+  // Every title below turns on this one job's status - so the row standing for
+  // seventy-seven of them read "Could not apply Face cover" whenever the most
+  // recent of the seventy-seven had failed, whatever the other seventy-six
+  // did. What the batch is doing is on the row already, in its own status and
+  // its own count.
+  const batchTotal = Number(job?.payload?.batch?.total ?? 0);
+  if (batchTotal > 1) return `${applied} · ${batchTotal.toLocaleString()} items`;
   if (job?.cancellation_requested && ["queued", "running"].includes(job?.status)) {
     return `Cancelling ${applied}`;
   }

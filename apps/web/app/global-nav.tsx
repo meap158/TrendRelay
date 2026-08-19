@@ -71,7 +71,51 @@ type NotificationGroup = {
  * rows rather than collapsing into a meaningless "2 jobs".
  */
 function groupKey(job: BaseJob): string {
+  // A batch is one thing somebody started, however many jobs carry it out.
+  // Keyed on the batch alone - not on the status - because the point is to
+  // watch it move from queued to done, and a key including the status would
+  // split it into three rows that each claim to be the batch.
+  const batch = batchOf(job);
+  if (batch) return `${job.category}batch${batch.id}`;
   return [job.category, job.status, job.error || job.title].join("");
+}
+
+/** The batch marker the API puts on every job it queues together. */
+function batchOf(job: BaseJob): { id: string; total: number } | null {
+  const batch = job.raw?.payload?.batch;
+  return batch?.id ? { id: String(batch.id), total: Number(batch.total) || 0 } : null;
+}
+
+/**
+ * What a batch of jobs adds up to.
+ *
+ * Its own state rather than its newest job's: "succeeded" on the latest of
+ * seventy-seven says nothing about the seventy-six behind it. Failures are
+ * counted rather than folded away, because a batch that finished with three
+ * casualties is not a batch that worked.
+ */
+function batchProgress(group: NotificationGroup): {
+  total: number; settled: number; failed: number; running: boolean; label: string;
+} | null {
+  const batch = batchOf(group.latest);
+  if (!batch) return null;
+  const settled = group.jobs.filter(
+    (job) => ["succeeded", "failed", "cancelled"].includes(job.status),
+  ).length;
+  const failed = group.jobs.filter(
+    (job) => ["failed", "cancelled"].includes(job.status),
+  ).length;
+  // The total the batch was queued with, not how many of its jobs this
+  // drawer happens to hold: the list is capped, and counting rows would
+  // report a batch of seventy-seven as a batch of fifteen.
+  const total = Math.max(batch.total, group.jobs.length);
+  const running = settled < total;
+  const label = running
+    ? `${settled} of ${total} done`
+    : failed
+      ? `${total - failed} of ${total} done · ${failed} failed`
+      : `All ${total} done`;
+  return { total, settled, failed, running, label };
 }
 
 /**
@@ -304,6 +348,7 @@ export function GlobalNav() {
                   {cancelError && <li className="notification-error" role="alert">{cancelError}</li>}
                   {groups.slice(0, 15).map((group) => {
                     const job = group.latest;
+                    const batch = batchProgress(group);
                     const read = group.jobs.every((item) => readKeys.has(notificationKey(item)));
                     return (
                       <li className={read ? "notification-item read" : "notification-item unread"} key={group.key}>
@@ -312,14 +357,25 @@ export function GlobalNav() {
                           {/* How many jobs this one message stands for. Shown
                               rather than repeated, so the count is information
                               instead of noise. */}
-                          {group.jobs.length > 1 && (
+                          {group.jobs.length > 1 && !batch && (
                             <span className="notification-repeat">×{group.jobs.length}</span>
+                          )}
+                          {batch && (
+                            <span className="notification-repeat">{batch.total} items</span>
                           )}
                           {/* "running" is what the row says; "paused" is what
                               is true when no worker holds its lease. */}
-                          {job.stalled
-                            ? <span className="notification-status status-paused">paused</span>
-                            : <span className={`notification-status status-${job.status.replace(/[^a-z0-9_-]/gi, "-")}`}>{statusLabel(job.status)}</span>}
+                          {/* A batch's own state, not its newest job's. */}
+                          {batch
+                            ? <span className={`notification-status status-${
+                                batch.running ? "running" : batch.failed ? "failed" : "succeeded"}`}>
+                                {batch.running
+                                  ? "running"
+                                  : batch.failed ? "finished with failures" : "succeeded"}
+                              </span>
+                            : job.stalled
+                              ? <span className="notification-status status-paused">paused</span>
+                              : <span className={`notification-status status-${job.status.replace(/[^a-z0-9_-]/gi, "-")}`}>{statusLabel(job.status)}</span>}
                         </div>
                         {/* Opened rather than merely read. A notification says
                             something finished, and the next thing anyone wants
@@ -340,7 +396,25 @@ export function GlobalNav() {
                             and "succeeded" there was nothing to distinguish it
                             from a job that had hung. Only while it is running:
                             a finished bar is a bar nobody needs. */}
-                        {typeof job.progress === "number"
+                        {/* How far through the selection it is. One clip's
+                            own percentage is not what somebody who queued
+                            seventy-seven of them wants to know. */}
+                        {batch && (
+                          <div className="notification-progress">
+                            <div
+                              className="notification-progress-track"
+                              role="progressbar"
+                              aria-valuemin={0}
+                              aria-valuemax={batch.total}
+                              aria-valuenow={batch.settled}
+                              aria-label={`${job.title}: ${batch.label}`}
+                            >
+                              <span style={{ width: `${Math.round((batch.settled / batch.total) * 100)}%` }} />
+                            </div>
+                            <small>{batch.label}</small>
+                          </div>
+                        )}
+                        {!batch && typeof job.progress === "number"
                           && ["running", "in_progress"].includes(job.status) && (
                           <div className={`notification-progress${job.stalled ? " stalled" : ""}`}>
                             <div
