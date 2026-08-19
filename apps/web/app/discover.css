@@ -31,7 +31,7 @@
 .discovery-idea-evidence > strong, .discovery-idea-angles > strong { font-size: 12px; }
 .discovery-idea-evidence ul { display: grid; gap: 7px; margin: 10px 0 0; padding: 0; list-style: none; }
 .discovery-idea-evidence li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: start; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
-.discovery-idea-evidence li > span { border-radius: 999px; padding: 2px 6px; color: #174ea6; background: #e8f0fe; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.discovery-idea-evidence li > span { border-radius: 999px; padding: 2px 6px; color: #174ea6; background: var(--link-bg); font-size: 9px; font-weight: 700; text-transform: uppercase; }
 .discovery-idea-evidence li div { display: grid; gap: 2px; min-width: 0; }
 .discovery-idea-evidence li strong, .discovery-idea-evidence li small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .discovery-idea-evidence li strong { font-size: 11px; }

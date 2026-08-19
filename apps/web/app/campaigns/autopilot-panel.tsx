@@ -164,6 +164,8 @@ type Autopilot = {
    * posting per account and then it is done.
    */
   remaining_outings: number | null;
+  /** How often a post goes to an account that is not currently leading. */
+  exploration_every: number;
 };
 
 type HeldExecution = {
@@ -690,7 +692,9 @@ function PostingStrategy({
       <li>
         <b>Which account</b>
         <span>{accounts > 1
-          ? `Each time goes to whichever of the ${accounts} accounts is performing best, and every 4th post goes to another one so the others can earn their way up. If the chosen account cannot take that time, the next one gets it.`
+          ? `Each time goes to whichever of the ${accounts} accounts is performing best, and every ${autopilot.exploration_every}${
+              autopilot.exploration_every === 2 ? "nd" : autopilot.exploration_every === 3 ? "rd" : "th"
+            } post goes to another one so the others can earn their way up. If the chosen account cannot take that time, the next one gets it.`
           : accounts === 1
             ? "Every posting time goes to the one account on this campaign."
             : "No accounts on this campaign yet."}</span>

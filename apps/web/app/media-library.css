@@ -10,12 +10,12 @@
 .library-status-dot { position: relative; display: grid; width: 20px; height: 20px; place-items: center; border-radius: var(--radius-sm); cursor: help; }
 .library-status-dot.ready { color: var(--green); background: var(--green-dark); }
 .library-status-dot.setup { color: var(--warn); background: var(--warn-bg); }
-.library-status-dot.warning { color: var(--red); background: #fde8e8; }
-.library-status-tooltip { position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: 220px; padding: 8px 10px; border-radius: var(--radius-sm); background: #1c2b33; color: var(--on-ink); font-size: 11px; font-weight: 500; line-height: 1.4; opacity: 0; visibility: hidden; transition: opacity 0.15s, visibility 0.15s; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.15); pointer-events: none; }
+.library-status-dot.warning { color: var(--red); background: var(--bad-bg); }
+.library-status-tooltip { position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: 220px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--text); color: var(--on-ink); font-size: 11px; font-weight: 500; line-height: 1.4; opacity: 0; visibility: hidden; transition: opacity 0.15s, visibility 0.15s; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.15); pointer-events: none; }
 .library-status-dot:hover .library-status-tooltip,
 .library-status-dot:focus .library-status-tooltip { opacity: 1; visibility: visible; }
 .library-status-dot:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
-.library-status-tooltip::before { content: ""; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); border: 5px solid transparent; border-bottom-color: #1c2b33; }
+.library-status-tooltip::before { content: ""; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); border: 5px solid transparent; border-bottom-color: var(--text); }
 .library-status-reason { display: block; margin-top: 4px; color: #91a0ae; font-size: 10px; }
 /* The transcription indicator is a button, not a tooltip: it has something the
    operator can do. The popover stays anchored to the dot rather than becoming a
@@ -53,14 +53,14 @@
    Two columns put the details on a second row, which the old grid of
    narrow cards hid because everything wrapped there anyway. */
 .library-list > button { display: grid; grid-template-columns: auto 92px minmax(0, 1fr); align-items: center; gap: 10px; width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 6px 7px; color: var(--text); background: var(--panel); text-align: start; cursor: pointer; }
-.library-list > button.selected { border-color: var(--link); background: #f0f3f8; }
+.library-list > button.selected { border-color: var(--link); background: var(--link-bg); }
 .library-list > button > span:not(.library-pick) { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; min-width: 0; }
 /* The title takes what it needs, the details take the far end. */
 .library-list > button > span:not(.library-pick) > strong { flex: 0 1 auto; }
 .library-list > button > span:not(.library-pick) > small { margin-inline-start: auto; }
 .library-list strong, .library-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .library-list small { color: var(--muted); font-size: 10px; }
-.library-thumbnail { width: 92px; height: 58px; border-radius: var(--radius-sm); object-fit: cover; background: #edf0f3; }
+.library-thumbnail { width: 92px; height: 58px; border-radius: var(--radius-sm); object-fit: cover; background: var(--panel-raised); }
 .library-thumbnail-empty { display: grid; place-items: center; color: var(--muted); font-size: 10px; text-transform: uppercase; }
 .library-import { border-top: 1px solid var(--line); padding-top: 12px; }
 .library-import summary { color: var(--link); font-weight: 600; cursor: pointer; }
@@ -84,17 +84,17 @@
    component rather than a stray input. */
 .library-preview-stage:has(.library-preview-audio) { aspect-ratio: auto; min-height: 96px; display: grid; place-items: center; padding: 16px; box-sizing: border-box; }
 .library-preview-audio { width: 100%; max-width: 460px; }
-.library-preview-stage > p { display: grid; place-items: center; width: 100%; height: 100%; box-sizing: border-box; margin: 0; padding: 14px; color: #d9e0e7; text-align: center; }
+.library-preview-stage > p { display: grid; place-items: center; width: 100%; height: 100%; box-sizing: border-box; margin: 0; padding: 14px; color: var(--line); text-align: center; }
 .library-preview-launch { position: relative; display: block; width: 100%; height: 100%; min-height: 0; overflow: hidden; border: 0; border-radius: 0; padding: 0; color: var(--on-ink); background: var(--ink); cursor: pointer; }
 .library-preview-launch .library-thumbnail-frame { width: 100%; height: 100%; border-radius: 0; }
 .library-preview-launch .library-thumbnail { width: 100%; height: 100%; border-radius: 0; object-fit: cover; }
 .library-preview-launch .library-play-indicator { display: none; }
 .library-preview-launch-overlay { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 7px; background: linear-gradient(180deg, rgba(10, 17, 24, 0.12), rgba(10, 17, 24, 0.66)); }
-.library-preview-launch-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; padding-inline-start: 3px; color: #111820; background: var(--panel); font-size: 17px; box-shadow: 0 5px 18px rgba(0, 0, 0, 0.24); }
+.library-preview-launch-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; padding-inline-start: 3px; color: var(--ink); background: var(--panel); font-size: 17px; box-shadow: 0 5px 18px rgba(0, 0, 0, 0.24); }
 .library-preview-launch strong { font-size: 14px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45); }
 .library-preview-launch small { color: #e2e8ee; font-size: 11px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45); }
 .library-preview-launch:hover .library-preview-launch-overlay { background: linear-gradient(180deg, rgba(10, 17, 24, 0.06), rgba(10, 17, 24, 0.52)); }
-.library-preview-navigation { display: grid; grid-template-columns: 38px 1fr 38px; align-items: center; gap: 8px; padding: 8px 10px; color: #d9e0e7; background: var(--ink); border-top: 1px solid #2a3541; }
+.library-preview-navigation { display: grid; grid-template-columns: 38px 1fr 38px; align-items: center; gap: 8px; padding: 8px 10px; color: var(--line); background: var(--ink); border-top: 1px solid #2a3541; }
 .library-preview-navigation span { text-align: center; font-size: 11px; }
 .library-preview-navigation button { min-height: 32px; border: 1px solid #43505e; color: var(--on-ink); background: #202b36; }
 .library-preview-navigation button:hover:not(:disabled) { background: #2b3946; }
@@ -159,14 +159,14 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .library-channel-link { text-decoration: none; border-bottom: 1px solid var(--line-strong); }
 .library-channel-link:hover { border-color: var(--link); color: var(--link); }
 .library-channel-link:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-color: transparent; }
-.library-actions a.douyin-source-link { position: relative; display: inline-grid; place-items: center; width: 36px; height: 36px; box-sizing: border-box; padding: 0; border-radius: 50%; color: #111820; background: var(--panel); }
-.library-actions a.douyin-source-link:hover { color: #111820; border-color: var(--text); transform: translateY(-1px); }
+.library-actions a.douyin-source-link { position: relative; display: inline-grid; place-items: center; width: 36px; height: 36px; box-sizing: border-box; padding: 0; border-radius: 50%; color: var(--ink); background: var(--panel); }
+.library-actions a.douyin-source-link:hover { color: var(--ink); border-color: var(--text); transform: translateY(-1px); }
 .library-actions a.douyin-source-link:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .douyin-mark { width: 21px; height: 21px; overflow: visible; }
 .douyin-mark path { fill: currentColor; }
 .douyin-mark-cyan { color: #25f4ee; transform: translate(-0.8px, 0.7px); }
 .douyin-mark-pink { color: #fe2c55; transform: translate(0.8px, -0.5px); }
-.douyin-mark-core { color: #111820; }
+.douyin-mark-core { color: var(--ink); }
 .library-detail-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); gap: 16px; }
 .library-detail h3 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
 .recipe-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin: 0; border: 1px solid var(--line); background: var(--line); }
@@ -229,7 +229,7 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .library-collection-toolbar > strong { color: var(--muted); font-size: 11px; font-weight: 600; }
 .library-collection-actions { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; }
 .library-collection { width: 100%; min-width: 0; box-sizing: border-box; }
-.library-thumbnail-frame { position: relative; width: 92px; height: 58px; overflow: hidden; border-radius: var(--radius-sm); background: #edf0f3; }
+.library-thumbnail-frame { position: relative; width: 92px; height: 58px; overflow: hidden; border-radius: var(--radius-sm); background: var(--panel-raised); }
 .library-thumbnail-frame .library-thumbnail { width: 100%; height: 100%; }
 .library-play-indicator { position: absolute; top: 50%; left: 50%; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: var(--on-ink); background: rgba(20, 28, 38, 0.68); font-size: 10px; transform: translate(-50%, -50%); }
 .library-duration-badge { position: absolute; inset-inline-end: 5px; bottom: 5px; border-radius: var(--radius-sm); padding: 2px 4px; color: var(--on-ink); background: rgba(20, 28, 38, 0.78); font-size: 9px; font-weight: 700; }
@@ -346,7 +346,7 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 /* The right-hand label is named after the effects in the cut, so it is as long
    as the recipe. Clipped rather than wrapped: the switch sits under the player
    and must keep its height, and the whole stack is one hover away. */
-.library-cut-switch button { flex: 1 1 0; min-width: 0; min-height: 30px; padding: 0 8px; border: 1px solid #43505e; border-radius: var(--radius-sm); color: #d9e0e7; background: #202b36; font: inherit; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.library-cut-switch button { flex: 1 1 0; min-width: 0; min-height: 30px; padding: 0 8px; border: 1px solid #43505e; border-radius: var(--radius-sm); color: var(--line); background: #202b36; font: inherit; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .library-cut-switch button:hover { background: #2b3946; }
 .library-cut-switch button.selected { border-color: var(--link); color: var(--on-ink); background: #2f4a7a; font-weight: 600; }
 .library-source-meta .blurred-tag { margin-inline-start: 2px; }
@@ -354,7 +354,7 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .effect-recovery-note { margin: 0; border: 1px solid #f2ce7e; border-radius: 8px; padding: 9px 11px; color: #6f4c00; background: #fff8e7; font-size: 12px; line-height: 1.45; }
 /* Names the effects in the rendered cut, so it grows with the recipe. Capped,
    because it sits in a list row next to a title that matters more. */
-.blurred-tag { justify-self: start; align-self: center; max-width: 100%; border-radius: 999px; padding: 2px 8px; color: #1a56c4; background: #e8f0fe; font-size: 10px; font-style: normal; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.blurred-tag { justify-self: start; align-self: center; max-width: 100%; border-radius: 999px; padding: 2px 8px; color: #1a56c4; background: var(--link-bg); font-size: 10px; font-style: normal; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Position sits with the heading; the action row holds only actions. */
 
 /* Metadata and the pager share one line, so browsing costs no extra height. */
@@ -415,7 +415,7 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .blur-controls input[type="range"] { width: 100%; accent-color: var(--link); }
 .blur-controls small { color: var(--muted); font-size: 11px; line-height: 1.45; }
 .blur-faces { margin: 0; color: var(--muted); font-size: 11px; }
-.blur-detector-note { display: grid; gap: 5px; padding: 9px 10px; border-inline-start: 3px solid var(--amber); background: #fdf9ec; }
+.blur-detector-note { display: grid; gap: 5px; padding: 9px 10px; border-inline-start: 3px solid var(--amber); background: var(--warn-bg); }
 .blur-detector-note p { margin: 0; font-size: 11px; line-height: 1.5; }
 @media (max-width: 720px) { .blur-settings { grid-template-columns: 1fr; } }
 
@@ -504,7 +504,7 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 /* The number is the order, and the order changes the result. */
 .effect-step-order { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 999px; background: var(--panel); color: var(--muted); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .effect-step-actions { display: flex; gap: 2px; }
-.effect-unavailable { margin: 0; color: #8c1d26; font-size: 11px; line-height: 1.45; }
+.effect-unavailable { margin: 0; color: var(--bad); font-size: 11px; line-height: 1.45; }
 
 .effect-params { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
 .effect-param { display: grid; gap: 4px; min-width: 0; }
@@ -550,7 +550,7 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .overlay-categories::-webkit-scrollbar { display: none; }
 .overlay-categories button { display: inline-flex; flex: none; align-items: center; gap: 5px; min-height: 28px; border: 1px solid var(--line); border-radius: 999px; padding: 4px 9px; background: var(--panel); color: var(--muted); font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
 .overlay-categories button:hover { border-color: var(--line-strong); color: var(--text); }
-.overlay-categories button.is-active { border-color: var(--link); background: #e8f0fe; color: #174ea6; }
+.overlay-categories button.is-active { border-color: var(--link); background: var(--link-bg); color: #174ea6; }
 .overlay-categories button span { color: inherit; font-size: 9px; font-variant-numeric: tabular-nums; opacity: .75; }
 .overlay-gallery { display: grid; align-content: start; gap: 12px; min-height: 0; padding-inline-end: 6px; overflow-y: auto; }
 .overlay-gallery h4 { position: sticky; top: 0; z-index: 1; margin: 0; padding: 2px 0 5px; background: var(--panel); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
@@ -575,7 +575,7 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .overlay-adjust { display: grid; align-content: start; gap: 10px; min-height: 0; border-top: 1px solid var(--line); padding: 10px 6px 0 0; overflow-y: auto; }
 .overlay-adjust input[type="range"] { accent-color: var(--link); }
 .overlay-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
-.overlay-warning { margin: 0; padding: 7px 9px; border-inline-start: 3px solid var(--amber); background: #fdf9ec; color: var(--text); font-size: 11px; line-height: 1.45; }
+.overlay-warning { margin: 0; padding: 7px 9px; border-inline-start: 3px solid var(--amber); background: var(--warn-bg); color: var(--text); font-size: 11px; line-height: 1.45; }
 .overlay-empty { margin: 0; color: var(--muted); font-size: 11px; }
 .overlay-folder { display: grid; gap: 6px; }
 /* Not a grid: the sentence has an inline `code` in the middle of it, and a grid
@@ -587,7 +587,7 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .overlay-import label { flex: 1; min-width: 0; }
 .overlay-import select { width: 100%; min-height: 30px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 5px 8px; background: var(--panel); color: var(--text); font: inherit; font-size: 12px; }
 .overlay-folder code { overflow-wrap: anywhere; font-size: 10px; }
-.overlay-skipped { display: block; margin-top: 3px; color: #8c1d26; }
+.overlay-skipped { display: block; margin-top: 3px; color: var(--bad); }
 
 /* The control that stands in for a dropdown in the recipe: what is on the face
    right now, and a way to change it. */

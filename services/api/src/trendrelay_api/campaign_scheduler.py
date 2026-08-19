@@ -32,6 +32,7 @@ from trendrelay_api.autopilot_models import (
     CampaignQueueItem,
 )
 from trendrelay_api.campaign_autopilot import (
+    EXPLORATION_EVERY,
     DisclosureMissing,
     choose_destination,
     compose_products,
@@ -1187,4 +1188,8 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
         "queue_approved": approved,
         "queue_ready": ready,
         "remaining_outings": remaining,
+        # The cadence the screen explains, from the constant that sets it. A
+        # rule written out in words is only worth writing if the number in it
+        # is the number the scheduler uses.
+        "exploration_every": EXPLORATION_EVERY,
     }
