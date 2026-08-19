@@ -60,6 +60,23 @@ function offsetLabel(zone: string): string {
   }
 }
 
+/** `Ho Chi Minh` from `Asia/Ho_Chi_Minh`: the part anybody actually reads. */
+function city(zone: string): string {
+  const tail = zone.split("/").pop() ?? zone;
+  return tail.replaceAll("_", " ");
+}
+
+/**
+ * What the closed control shows: the city and how far off it is.
+ *
+ * Deduplicated, because the zone actually called UTC would otherwise read
+ * "UTC · UTC" - the one entry where the name already is the offset.
+ */
+function caption(zone: string): string {
+  const parts = [city(zone), offsetLabel(zone)].filter(Boolean);
+  return [...new Set(parts)].join(" · ");
+}
+
 /** The time it is there now: the fastest way to recognise the right zone. */
 function clockIn(zone: string): string {
   try {
@@ -95,13 +112,14 @@ export function TimezonePicker({ compact = false }: { compact?: boolean }) {
   const options = useMemo(
     () => zoneNames(zone).map((name) => ({
       value: name,
-      // The offset rides in the label, not only in the description, because the
-      // label is what stays on screen once the list closes - and a place name
-      // alone does not say which clock it keeps. "Asia/Ho_Chi_Minh" and
-      // "Asia/Bangkok" are the same clock and neither name admits it.
-      label: [name.replaceAll("_", " "), offsetLabel(name)].filter(Boolean).join(" · "),
-      // What time it is there now, which is the fastest way to recognise the
-      // right one while the list is open.
+      // City and offset, not the whole path. The continent is half the width
+      // and none of the recognition - nobody scans for "Asia" - while the
+      // offset is the part that must stay on screen, since "Asia/Ho_Chi_Minh"
+      // and "Asia/Bangkok" are the same clock and neither name admits it.
+      // The full path stays searchable through `keywords`.
+      label: caption(name),
+      // What time it is there now: the fastest way to recognise the right one
+      // while the list is open, and beside the name rather than under it.
       description: clockIn(name),
       // Searchable by the city alone: nobody types the continent first.
       keywords: name.replaceAll("_", " ").replaceAll("/", " "),
@@ -120,6 +138,7 @@ export function TimezonePicker({ compact = false }: { compact?: boolean }) {
         value={zone}
         options={options}
         disabled={saving}
+        dense
         placeholder={t("nav.chooseTimezone")}
         searchPlaceholder={t("nav.searchTimezone")}
         onChange={(next) => {

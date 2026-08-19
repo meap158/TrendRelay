@@ -40,7 +40,7 @@ function clipBounds(node: HTMLElement | null): { top: number; bottom: number } {
 /** A compact, searchable replacement for selects with long operational lists. */
 export function SearchSelect({
   value, options, onChange, placeholder, searchPlaceholder = "Search…",
-  emptyLabel = "No matches", disabled, searchable = true,
+  emptyLabel = "No matches", disabled, searchable = true, dense = false,
 }: {
   value: string;
   options: SearchSelectOption[];
@@ -58,6 +58,15 @@ export function SearchSelect({
    * The list, the look and the keyboard behaviour are the same either way.
    */
   searchable?: boolean;
+  /**
+   * Put each row's description beside its label instead of beneath it.
+   *
+   * A second line per row is the difference between eight options visible and
+   * fourteen. Worth it where the description is a short qualifier - an offset,
+   * a count - and not where it is a sentence, which is why it is a choice
+   * rather than the default.
+   */
+  dense?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -217,7 +226,7 @@ export function SearchSelect({
               onChange={(event) => { setQuery(event.target.value); setActive(0); }}
               onKeyDown={onKeys} />
           )}
-          <div id={listId} className="search-select-list" role="listbox" ref={listNode}>
+          <div id={listId} className={`search-select-list${dense ? " dense" : ""}`} role="listbox" ref={listNode}>
             {rows.map((row, index) => (
               <button type="button" role="option" key={row.value || "__clear"}
                 id={`${listId}-${index}`}

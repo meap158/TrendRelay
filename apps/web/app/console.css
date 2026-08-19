@@ -133,8 +133,13 @@ button, a { -webkit-tap-highlight-color: transparent; }
 /* Sized to their contents: a zone name runs long, a language name does not, and
    the toolbar is not where anybody should discover how many zones Australia
    has. */
-.timezone-picker .search-select { width: clamp(150px, 18vw, 220px); }
-.language-picker .search-select { width: clamp(110px, 12vw, 150px); }
+/* Sized to what they now say, not to the longest thing they could. Dropping
+   the continent took "America/Argentina/Buenos Aires · UTC-3" down to
+   "Buenos Aires · UTC-3", so the reserve comes down with it - toolbar width is
+   the scarcest space on the page and it was being held for a string nobody
+   reads. */
+.timezone-picker .search-select { width: clamp(124px, 13vw, 168px); }
+.language-picker .search-select { width: clamp(96px, 10vw, 128px); }
 .notification-shell { position: relative; }
 .notification-trigger { position: relative; display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; padding: 0; color: var(--muted); background: var(--panel); cursor: pointer; }
 .notification-trigger:hover, .notification-trigger[aria-expanded="true"] { border-color: var(--line); color: var(--text); background: var(--panel-raised); }
@@ -861,6 +866,8 @@ html { scroll-behavior: smooth; }
 .campaign-strategy-times em { border-radius: 999px; padding: 1px 6px; color: var(--text); background: var(--panel-raised); font-size: 9px; font-style: normal; font-weight: 600; }
 .campaign-strategy-times em.zone { background: transparent; padding-inline: 2px; font-weight: 500; }
 .campaign-strategy-link { color: var(--link); font-weight: 600; white-space: nowrap; }
+/* A campaign with nothing left to send is not a detail in a sentence. */
+.autopilot-expansion-warn { color: #7a5c00; font-weight: 600; }
 
 @media (max-width: 620px) {
   .campaign-strategy > li { grid-template-columns: 1fr; gap: 2px; }
@@ -1176,7 +1183,9 @@ html { scroll-behavior: smooth; }
 .campaign-dialog-form label > small { color: var(--muted); font-weight: 400; line-height: 1.45; }
 /* The typed alternative sits under the list it belongs to. */
 .campaign-dialog-form textarea { resize: vertical; }
-.campaign-dialog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+/* Fits what it holds rather than always two: the caps below it are three,
+   and a fixed pair left the third alone on a row of its own. */
+.campaign-dialog-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .campaign-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
 @media (max-width: 1100px) { .campaign-media-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 900px) {

@@ -310,4 +310,10 @@ a.ui-button { text-decoration: none; }
 .search-select-list button:hover { background: var(--panel-raised); }
 .search-select-list strong { overflow-wrap: anywhere; font-size: 12px; font-weight: 600; }
 .search-select-list small { color: var(--muted); font-size: 11px; }
+/* Dense rows: the qualifier sits beside the name rather than under it, which
+   is the difference between eight rows visible and fourteen. The name takes
+   the space it needs and the qualifier is pushed to the end, so the column of
+   offsets or counts stays readable down the list. */
+.search-select-list.dense button { grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 8px; }
+.search-select-list.dense small { justify-self: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .search-select-empty { margin: 0; padding: 12px 8px; color: var(--muted); font-size: 12px; text-align: center; }
