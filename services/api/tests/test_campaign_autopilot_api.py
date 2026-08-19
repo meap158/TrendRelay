@@ -84,6 +84,118 @@ def campaign(workspace_id: str) -> str:
     return body.json()["campaign"]["id"]
 
 
+def _held(workspace_id: str, campaign_id: str, identifier: str, **overrides):
+    """A frozen post waiting in the inbox, ready to be approved."""
+    from trendrelay_api.publication_models import PublicationExecution
+
+    fields: dict = {
+        "state": "proposed",
+        "delivery": "schedule",
+        "platform": "youtube",
+        "provider": "buffer",
+        "integration_id": "acct-1",
+        "destination_label": "youtube account",
+        "caption": "Three ways to pull a better espresso.",
+        "media_path": r"S:\media\clip.mp4",
+        "image_paths": [],
+        "thread": [],
+        "offer_ids": [],
+        "tracking_links": [],
+        "held_reason": "Waiting for approval.",
+    }
+    fields.update(overrides)
+    with TestingSession.begin() as session:
+        session.add(PublicationExecution(
+            id=identifier, workspace_id=workspace_id, campaign_id=campaign_id,
+            created_by="owner-user", **fields,
+        ))
+    return identifier
+
+
+def test_approving_a_batch_needs_the_same_confirmation_one_post_does(workspace) -> None:
+    campaign_id = campaign(workspace)
+    _held(workspace, campaign_id, "exec-1")
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/executions/approve",
+        json={"execution_ids": ["exec-1"]},
+    )
+
+    assert response.status_code == 400
+    assert "confirmation" in response.json()["detail"]
+
+
+def test_one_unfinished_post_does_not_sink_the_batch(workspace, monkeypatch) -> None:
+    """The whole point of the batch, and the thing that would make it useless.
+
+    Failing all of them because one was unfinished would leave the operator
+    finding which one and doing the others again - more work than approving
+    them singly, which is what the batch exists to replace.
+    """
+    from trendrelay_api import campaign_runner
+
+    campaign_id = campaign(workspace)
+    _held(workspace, campaign_id, "exec-good")
+    # The placeholder is what `finalization_problems` refuses, and it refuses
+    # before anything is mutated.
+    from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
+    _held(workspace, campaign_id, "exec-unwritten", caption=PLACEHOLDER_BODY)
+
+    # The delivery itself is stubbed: this is about which posts get that far,
+    # not about what an engine does with them.
+    monkeypatch.setattr(
+        campaign_runner, "_publish_execution",
+        lambda session, autopilot, execution, **kwargs: {"id": f"job-{execution.id}"},
+    )
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/executions/approve",
+        json={
+            "execution_ids": ["exec-unwritten", "exec-good"],
+            "confirm_external_action": True,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["approved"] == 1
+    assert body["refused"] == 1
+    # Reported per post, in the order asked: "1 approved" over a list of two is
+    # not an answer to which one is still waiting.
+    assert [row["execution_id"] for row in body["results"]] == [
+        "exec-unwritten", "exec-good",
+    ]
+    assert body["results"][0]["approved"] is False
+    assert "not finished" in body["results"][0]["problem"]
+    assert body["results"][1]["approved"] is True
+
+
+def test_the_same_post_twice_in_one_request_is_one_post(workspace, monkeypatch) -> None:
+    from trendrelay_api import campaign_runner
+
+    campaign_id = campaign(workspace)
+    _held(workspace, campaign_id, "exec-1")
+    monkeypatch.setattr(
+        campaign_runner, "_publish_execution",
+        lambda session, autopilot, execution, **kwargs: {"id": f"job-{execution.id}"},
+    )
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/executions/approve",
+        json={
+            "execution_ids": ["exec-1", "exec-1"],
+            "confirm_external_action": True,
+        },
+    )
+
+    body = response.json()
+    assert body["approved"] == 1
+    assert len(body["results"]) == 1
+
+
 def test_a_campaign_starts_with_autopilot_off(workspace) -> None:
     """Nothing posts because a campaign was created."""
     campaign_id = campaign(workspace)

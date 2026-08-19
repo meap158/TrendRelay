@@ -1334,6 +1334,26 @@ class ExceptionDecision(BaseModel):
     publish_now: bool = False
 
 
+#: A ceiling on one request, not on a day's work. It is the runaway guard:
+#: a batch this size is already several days of posting for any real campaign,
+#: and each item is a separate delivery with its own engine call.
+MAX_APPROVALS_PER_REQUEST = 50
+
+
+class BatchApproval(BaseModel):
+    """Several held posts, approved in one decision.
+
+    Run by exception on two accounts and five posting times is ten
+    confirmations a day, each of them a dialog. The relief is one confirmation
+    over a list somebody has read - not a weaker promise about what reaches an
+    engine, which is why every post is still approved on its own terms below.
+    """
+
+    execution_ids: list[str] = Field(min_length=1, max_length=MAX_APPROVALS_PER_REQUEST)
+    confirm_external_action: bool = False
+    publish_now: bool = False
+
+
 class ExceptionEdit(BaseModel):
     """What an operator may rewrite on a held post before approving it.
 
@@ -1632,6 +1652,92 @@ def edit_autopilot_execution(
         {"execution_id": execution.id},
     )
     return {"execution": _execution_view(execution)}
+
+
+@router.post("/{campaign_id}/autopilot/executions/approve")
+def approve_autopilot_executions(
+    workspace_id: str,
+    campaign_id: str,
+    body: BatchApproval,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Approve several held posts, each judged on its own.
+
+    One refusal does not fail the batch. A post that is not finished -
+    placeholder copy, a missing affiliate link, a request its engine would
+    refuse - is reported and left held, exactly as it would be on its own,
+    while the rest go. Failing all of them because one was unfinished would
+    make the batch worth less than the single approvals it replaces: the
+    operator would have to find which one, and do the others again.
+
+    Ordered as asked, and reported per post, because "12 approved" over a list
+    of 14 is not an answer to which two are still waiting.
+    """
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    ensure_profile(session, user)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400, detail="Approving held posts requires confirmation."
+        )
+    _campaign(session, workspace_id, campaign_id)
+    autopilot = _autopilot(session, workspace_id, campaign_id, user_id=user.id)
+    from trendrelay_api.campaign_runner import approve_execution
+
+    results: list[dict[str, Any]] = []
+    approved = 0
+    # Deduplicated, because the same post twice in one request is one post -
+    # and the second attempt would report "only a held execution can be
+    # approved" about a post that had just succeeded.
+    for execution_id in dict.fromkeys(body.execution_ids):
+        try:
+            execution = _held_execution(
+                session, workspace_id, campaign_id, execution_id
+            )
+        except HTTPException as error:
+            results.append({
+                "execution_id": execution_id,
+                "approved": False,
+                "problem": str(error.detail),
+            })
+            continue
+        try:
+            approve_execution(
+                session, autopilot, execution, publish_now=body.publish_now
+            )
+        except ValueError as error:
+            results.append({
+                "execution_id": execution_id,
+                "approved": False,
+                "problem": str(error),
+            })
+            continue
+        approved += 1
+        results.append({
+            "execution_id": execution_id,
+            "approved": True,
+            "state": execution.state,
+            "destination_label": execution.destination_label,
+        })
+        # One audit line per post, as the single-post route writes: an
+        # approval is an approval however it was asked for, and a reader of
+        # the log should not have to know which button was used.
+        audit(
+            session, request, workspace_id, user.id,
+            "campaign.exception_approved", "campaign", campaign_id,
+            {
+                "execution_id": execution.id,
+                "state": execution.state,
+                "publish_now": body.publish_now,
+                "batch": True,
+            },
+        )
+    return {
+        "approved": approved,
+        "refused": len(results) - approved,
+        "results": results,
+    }
 
 
 @router.post("/{campaign_id}/autopilot/executions/{execution_id}/dismiss")

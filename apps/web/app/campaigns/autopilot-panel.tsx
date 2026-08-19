@@ -1113,6 +1113,12 @@ export function AutopilotPanel({
   const [calendarMonth, setCalendarMonth] = useState<string | null>(null);
   // The held post being rewritten before its decision, if any.
   const [editingHeld, setEditingHeld] = useState<HeldExecution | null>(null);
+  /** Held posts picked for one approval. Empty means nothing is selected. */
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  /** What the last batch did, per post, because a total is not an answer. */
+  const [batchResults, setBatchResults] = useState<
+    { execution_id: string; approved: boolean; problem?: string }[]
+  >([]);
 
   const base = `/api/workspaces/${workspaceId}/campaigns/${campaignId}`;
   /** The same media the Publish composer plays, streamed from the same roots. */
@@ -1362,6 +1368,46 @@ export function AutopilotPanel({
     // Switching on activates the campaign server-side; the parent's status
     // chip and list need to hear about it.
     if (turningOn) await onCampaignChanged();
+  }
+
+  /**
+   * Approve everything picked, in one confirmed decision.
+   *
+   * The confirmation is over a list somebody has read, not a weaker promise
+   * about what reaches an engine: each post is still approved on its own
+   * terms, and one that is unfinished is reported and left held rather than
+   * failing the others with it.
+   */
+  async function approvePicked() {
+    const ids = [...picked];
+    if (!ids.length) return;
+    if (!window.confirm(
+      `Approve ${ids.length} post${ids.length === 1 ? "" : "s"}? `
+      + "Each goes to its own account, exactly as shown."
+    )) return;
+    await run("approve-batch", async () => {
+      const body = await json<{
+        approved: number;
+        refused: number;
+        results: { execution_id: string; approved: boolean; problem?: string }[];
+      }>(await apiFetch(`${base}/autopilot/executions/approve`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          execution_ids: ids,
+          confirm_external_action: true,
+        }),
+      }));
+      setBatchResults(body.results.filter((row) => !row.approved));
+      // Only the ones that went; anything refused stays picked, because it is
+      // still there and still the thing to deal with.
+      setPicked(new Set(body.results.filter((row) => !row.approved)
+        .map((row) => row.execution_id)));
+      await refresh();
+      return body.refused
+        ? `${body.approved} approved, ${body.refused} left held.`
+        : `${body.approved} post${body.approved === 1 ? "" : "s"} approved.`;
+    });
   }
 
   async function loadDraftMatches() {
@@ -1859,7 +1905,30 @@ export function AutopilotPanel({
         <Card
           eyebrow="Approval"
           title="Needs your approval"
-          aside={<Badge tone="warn">{exceptions.length} held</Badge>}
+          aside={
+            <div className="campaign-approval-bar">
+              <Badge tone="warn">{exceptions.length} held</Badge>
+              {/* Offered only where it saves something. Two accounts and five
+                  posting times is ten confirmations a day, each its own
+                  dialog; one held post is one click either way. */}
+              {canEdit && exceptions.length > 1 && (
+                <>
+                  <Button variant="quiet" size="sm"
+                    onClick={() => setPicked(picked.size === exceptions.length
+                      ? new Set()
+                      : new Set(exceptions.map((item) => item.id)))}>
+                    {picked.size === exceptions.length ? "Clear" : "Select all"}
+                  </Button>
+                  <Button variant="primary" size="sm"
+                    disabled={!picked.size}
+                    busy={busy === "approve-batch"}
+                    onClick={() => void approvePicked()}>
+                    Approve {picked.size || ""}
+                  </Button>
+                </>
+              )}
+            </div>
+          }
         >
           <p className="autopilot-lede">Nothing is published until you approve it
             here, and what you see is exactly what will go out. A post that is
@@ -1886,14 +1955,49 @@ export function AutopilotPanel({
           <ul className="campaign-approval-list">
             {exceptions.map((item) => (
               <li key={item.id}>
-                <HeldPreview item={item} workspaceId={workspaceId} apiFetch={apiFetch} />
-                <div className="campaign-approval-facts">
-                  <small>
-                    {item.destination_label ?? item.platform ?? "destination"}
+                {/* Where this one lands, before the post itself. Several held
+                    posts are often the same video for different accounts -
+                    same thumbnail, same caption, different network, different
+                    time, and the link in a different place - so a reader
+                    scrolling them needs the difference at the top of each,
+                    not in a line of grey under the preview. */}
+                <header className="campaign-approval-where">
+                  {canEdit && (
+                    <input
+                      type="checkbox"
+                      checked={picked.has(item.id)}
+                      aria-label={`Select the post for ${item.destination_label ?? "this account"}`}
+                      onChange={() => setPicked((current) => {
+                        const next = new Set(current);
+                        if (next.has(item.id)) next.delete(item.id);
+                        else next.add(item.id);
+                        return next;
+                      })}
+                    />
+                  )}
+                  {item.platform && (
+                    <PlatformIcon platform={item.platform as PublishingPlatform} size={18} />
+                  )}
+                  <strong>{item.destination_label ?? item.platform ?? "destination"}</strong>
+                  <small>{item.platform
+                    ? platformLabels[item.platform as PublishingPlatform] : ""}
                     {item.scheduled_at
                       ? ` · ${new Date(item.scheduled_at).toLocaleString()}`
-                      : ""}
-                  </small>
+                      : ""}</small>
+                  {item.placement && (
+                    <Badge tone={placementTone(item.placement)}>
+                      {t(`autopilot.placement.${item.placement}`)}
+                    </Badge>
+                  )}
+                </header>
+                <HeldPreview item={item} workspaceId={workspaceId} apiFetch={apiFetch} />
+                <div className="campaign-approval-facts">
+                  {batchResults.find((row) => row.execution_id === item.id) && (
+                    <p className="autopilot-refusal" role="status">
+                      <strong>Left held.</strong>{" "}
+                      {batchResults.find((row) => row.execution_id === item.id)!.problem}
+                    </p>
+                  )}
                   {/* Where this held post came from, so it lines up with its
                       row in "What it posts" below rather than reading as a
                       separate, unexplained item. */}

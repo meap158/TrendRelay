@@ -40,8 +40,10 @@
    * it. Named rather than repeated so a dark mode has one place to start. */
   --ink: #111820;
   --on-ink: #ffffff;
-  /* Between --muted and --line: secondary text that must still be read, where
-   * --muted is too heavy and --line is not text at all. */
+  /* Secondary text that must still be read: lighter than the muted token,
+   * which is too heavy for it, and not a hairline, which is not text at all.
+   * Written without naming those tokens followed by a colon - inside a
+   * comment that still reads as a declaration to anything scanning for one. */
   --muted-soft: #7c8792;
   /* The mid green, for a border beside --green-dark's fill. */
   --green-line: #b7d9cd;
@@ -948,6 +950,15 @@ html { scroll-behavior: smooth; }
    decision. The preview column is the width Publish rehearses at. */
 .campaign-approval-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .campaign-approval-list > li { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: 14px; align-items: start; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+/* Where a held post lands, above the post itself. Several of them are often
+   the same video for different accounts - same thumbnail, same caption - so
+   the line that tells them apart leads rather than trails. */
+.campaign-approval-where { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; grid-column: 1 / -1; padding-block-end: 7px; border-block-end: 1px solid var(--line); }
+.campaign-approval-where > input { accent-color: var(--link); margin: 0; }
+.campaign-approval-where > strong { min-width: 0; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-approval-where > small { color: var(--muted); font-size: 10px; }
+.campaign-approval-where > .ui-badge { margin-inline-start: auto; }
+.campaign-approval-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .campaign-approval-facts { display: grid; gap: 8px; align-content: start; }
 .campaign-approval-facts pre { margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); font-size: 11px; white-space: pre-wrap; word-break: break-word; }
 .campaign-approval-facts > small { color: var(--muted); font-size: 11px; }
