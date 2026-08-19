@@ -1235,7 +1235,14 @@ html { scroll-behavior: smooth; }
 /* Its own grid rather than inheriting the form's, so the fields inside line up
    with each other and not with the four questions above them. */
 .campaign-dialog-more > :not(summary) { margin: 10px 12px; }
-.campaign-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+/* At the top of the form and pinned there while the body scrolls. Both of
+   these forms outgrew a screen - Campaign settings did it the moment it took
+   the posting policy on - so Save sat below the fold and the only way to reach
+   it was to scroll past every field you had already filled in.
+   `top: -2px` matches the 2px the dialog body pads itself by to keep focus
+   rings from clipping; at `0` a two-pixel sliver of scrolled content shows
+   above the bar. */
+.campaign-dialog-actions { position: sticky; top: -2px; z-index: 2; display: flex; justify-content: flex-end; gap: 8px; margin-inline: -2px; border-bottom: 1px solid var(--line); padding: 4px 2px 10px; background: var(--panel); }
 @media (max-width: 1100px) { .campaign-media-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 900px) {
   .campaign-page { width: min(100% - 20px, 1480px); }

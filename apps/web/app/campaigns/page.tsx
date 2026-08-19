@@ -650,6 +650,15 @@ export default function CampaignsPage() {
         onClose={closeNewCampaign}
       >
         <form className="campaign-dialog-form" onSubmit={createCampaign}>
+          {/* Above the fields, and first in the DOM rather than moved there by
+              `order`. Reordering visually would leave the keyboard tabbing to
+              a Create button that is no longer where it appears, which is the
+              one thing worse than scrolling for it. `autoFocus` below still
+              puts the caret in the name field, so typing starts where it did. */}
+          <div className="campaign-dialog-actions">
+            <Button type="button" variant="quiet" onClick={closeNewCampaign}>{t("common.cancel")}</Button>
+            <Button type="submit" variant="primary" busy={busy === "campaign"}>{t("campaigns.createButton")}</Button>
+          </div>
           <label>{t("campaigns.name")}<input name="name" required maxLength={160} autoFocus /></label>
           {/* Chosen rather than composed. Both of these are read by product
               matching, so what goes in them has to be a sentence about the
@@ -799,10 +808,6 @@ export default function CampaignsPage() {
               <small>Ranking uses an axis only once it has evidence.</small>
             </label>
           </details>
-          <div className="campaign-dialog-actions">
-            <Button type="button" variant="quiet" onClick={closeNewCampaign}>{t("common.cancel")}</Button>
-            <Button type="submit" variant="primary" busy={busy === "campaign"}>{t("campaigns.createButton")}</Button>
-          </div>
         </form>
       </Dialog>
       {/* The same questions the campaign was created with, answerable again.
@@ -818,6 +823,10 @@ export default function CampaignsPage() {
       >
         {settingsFor && (
           <form className="campaign-dialog-form" onSubmit={saveCampaignSettings}>
+            <div className="campaign-dialog-actions">
+              <Button type="button" variant="quiet" onClick={() => setSettingsFor(null)}>{t("common.cancel")}</Button>
+              <Button type="submit" variant="primary" busy={busy === "settings"}>{t("common.save")}</Button>
+            </div>
             <label>{t("campaigns.name")}
               <input name="name" required maxLength={160} defaultValue={settingsFor.name} />
             </label>
@@ -952,10 +961,6 @@ export default function CampaignsPage() {
                 <small>Ranking uses an axis only once it has evidence.</small>
               </label>
             </>}
-            <div className="campaign-dialog-actions">
-              <Button type="button" variant="quiet" onClick={() => setSettingsFor(null)}>{t("common.cancel")}</Button>
-              <Button type="submit" variant="primary" busy={busy === "settings"}>{t("common.save")}</Button>
-            </div>
           </form>
         )}
       </Dialog>
