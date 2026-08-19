@@ -365,7 +365,8 @@ export function OpportunityScoring({
               </label>
             )}
           </div>
-          <Button type="submit" variant="primary" busy={busy === "score"} disabled={!canScore}>
+          <Button type="submit" variant="primary" busy={busy === "score"} disabled={!canScore}
+            title={canScore ? undefined : "Only owners, editors and analysts can score an opportunity"}>
             {busy === "score" ? t("opportunities.scoring") : t("opportunities.saveScore")}
           </Button>
         </form>

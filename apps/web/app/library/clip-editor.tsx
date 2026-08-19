@@ -290,6 +290,9 @@ export function ClipEditor({
                     size="sm"
                     disabled={!canApprove}
                     busy={busy === `render-${production.id}`}
+                    /* The Approve button beside this one says why it is off;
+                       this one was the same rule and said nothing. */
+                    title={canApprove ? undefined : "Only owners and approvers can render a plan"}
                     onClick={() => void act(production.id, "render")}
                   >{t("clipEditor.render")}</Button>
                 )}
