@@ -108,5 +108,9 @@ than a 404 that reads as broken.
 | Server | `services/api/src/trendrelay_api/integrations/mcp/server.py` |
 | Supervisor + status | `services/api/src/trendrelay_api/integrations/mcp/service.py` |
 | Entry point | `scripts/mcp_server.py` |
+| Tunnel config & health | `services/api/src/trendrelay_api/integrations/mcp/tunnel.py` |
 | Tunnel supervisor | `scripts/tunnel.py`, started from `scripts/dev.py` |
 | Tools-tab wiring | `tool_setup.py` (`mcp-server` branch), `config/tool-catalog.json` |
+
+The full write-up of the design — the boundary, loopback, the tunnel and its
+supervision — is in [`docs/TUNNEL_AND_MCP.md`](../TUNNEL_AND_MCP.md).
