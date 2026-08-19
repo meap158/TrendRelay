@@ -88,10 +88,14 @@ export function TimezonePicker({ compact = false }: { compact?: boolean }) {
   const options = useMemo(
     () => zoneNames(zone).map((name) => ({
       value: name,
-      label: name.replaceAll("_", " "),
-      // The offset and the local time, because "Asia/Ho_Chi_Minh" and
-      // "Asia/Bangkok" are the same clock and the name does not say so.
-      description: [offsetLabel(name), clockIn(name)].filter(Boolean).join(" · "),
+      // The offset rides in the label, not only in the description, because the
+      // label is what stays on screen once the list closes - and a place name
+      // alone does not say which clock it keeps. "Asia/Ho_Chi_Minh" and
+      // "Asia/Bangkok" are the same clock and neither name admits it.
+      label: [name.replaceAll("_", " "), offsetLabel(name)].filter(Boolean).join(" · "),
+      // What time it is there now, which is the fastest way to recognise the
+      // right one while the list is open.
+      description: clockIn(name),
       // Searchable by the city alone: nobody types the continent first.
       keywords: name.replaceAll("_", " ").replaceAll("/", " "),
     })),
