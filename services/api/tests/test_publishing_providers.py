@@ -1081,6 +1081,14 @@ def test_a_single_video_stays_on_the_post_level_assets(
     assert 'assets: [{ video: { url: "https://cdn.example.com/clip.mp4"' in query
 
 
+def test_buffer_refuses_when_media_was_expected_but_not_hosted(media_file: Path) -> None:
+    """An empty media URL used to be sent as `video: { url: "" }`, which Buffer
+    accepts and posts without the video. A post that was meant to carry media now
+    fails loudly instead of going out media-less."""
+    with pytest.raises(RuntimeError, match="would be dropped"):
+        publishing._buffer_publish(request(media_file))  # video_path set, media_url None
+
+
 def test_blank_replies_are_dropped_rather_than_published_empty(media_file: Path) -> None:
     body = request(media_file, thread=["Real", "   ", ""])
 

@@ -2212,6 +2212,16 @@ def _buffer_publish(request: PublishRequest) -> dict[str, Any]:
         f"{_graphql_literal(request.media_url)}"
         " metadata: { thumbnailOffset: 1000 } } }"
     ) if request.media_url else None
+    if video_asset is None and (request.video_path or request.image_paths):
+        # Media was frozen for this post but no public URL reached delivery, so
+        # the hosting step did not run or failed. Sending anyway would publish
+        # the caption and silently drop the video - the very failure this guard
+        # turns into an honest error instead of a media-less post that reads as
+        # a success.
+        raise RuntimeError(
+            "Buffer needs a public media URL and none was produced, so the video "
+            "would be dropped. Check that media hosting is set up, then retry."
+        )
     post_ids: list[str] = []
     for target in request.targets:
         # A threaded post carries its media on the thread's root entry; a single
