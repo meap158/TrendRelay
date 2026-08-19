@@ -286,8 +286,18 @@ a.ui-button { text-decoration: none; }
 .search-select-popover > input { width: 100%; min-height: 36px; padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--text); font: inherit; }
 .search-select-list { display: grid; overflow-y: auto; overscroll-behavior: contain; }
 .search-select-list button { display: grid; gap: 2px; width: 100%; padding: 8px 9px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text); text-align: start; cursor: pointer; }
-.search-select-list button:hover, .search-select-list button.selected { background: var(--panel-raised); }
+/* Two different states, and they have to look different.
+ *
+ * Selected is what the field holds; active is where the keyboard is. Hover was
+ * doing duty for both, so arrowing down moved nothing anybody could see. The
+ * active row gets the fill, the chosen one keeps the rule down its edge, and a
+ * row that is both reads as both. */
+.search-select-list button[data-active="true"] { background: var(--panel-raised); }
 .search-select-list button.selected { box-shadow: inset 3px 0 var(--link); }
+.search-select-list button.selected strong { color: var(--link); }
+/* The pointer sets the active row on move, so this only matters before the
+ * mouse has travelled - a row under a resting cursor still looks reachable. */
+.search-select-list button:hover { background: var(--panel-raised); }
 .search-select-list strong { overflow-wrap: anywhere; font-size: 12px; font-weight: 600; }
 .search-select-list small { color: var(--muted); font-size: 11px; }
 .search-select-empty { margin: 0; padding: 12px 8px; color: var(--muted); font-size: 12px; text-align: center; }

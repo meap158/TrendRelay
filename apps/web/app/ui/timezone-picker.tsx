@@ -41,13 +41,20 @@ function zoneNames(current: string): string[] {
   return [...new Set([...lead, ...all])];
 }
 
-/** `GMT+7`, so a name nobody recognises still says how far off it is. */
+/**
+ * `UTC+7`, so a name nobody recognises still says how far off it is.
+ *
+ * `Intl` writes these as GMT. The two are the same offset, but everything else
+ * here - what the API stores, what the times are computed against - is spelled
+ * UTC, and one screen should not use two names for one thing.
+ */
 function offsetLabel(zone: string): string {
   try {
-    return new Intl.DateTimeFormat("en-US", {
+    const shown = new Intl.DateTimeFormat("en-US", {
       timeZone: zone, timeZoneName: "shortOffset",
     }).formatToParts(new Date())
       .find((part) => part.type === "timeZoneName")?.value ?? "";
+    return shown.replace("GMT", "UTC");
   } catch {
     return "";
   }

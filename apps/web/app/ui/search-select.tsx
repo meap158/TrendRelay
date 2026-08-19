@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
+import { comboboxIntent } from "../../lib/combobox-keys";
+
 export type SearchSelectOption = {
   value: string;
   label: string;
@@ -59,6 +61,17 @@ export function SearchSelect({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  /**
+   * Which row the keyboard is on, as an index rather than DOM focus.
+   *
+   * Focus stays in the search box - a combobox that moves focus into the list
+   * cannot be typed in - so the active row is tracked here and announced with
+   * `aria-activedescendant`. This component had Escape and nothing else: no
+   * arrows, no Enter, no Home or End, which is worse than the native `select`
+   * it replaces and is why it could not be spread any further.
+   */
+  const [active, setActive] = useState(0);
+  const listNode = useRef<HTMLDivElement>(null);
   const [placement, setPlacement] = useState<Placement>({ side: "below", maxHeight: 320 });
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -71,6 +84,64 @@ export function SearchSelect({
       `${option.label} ${option.description ?? ""} ${option.keywords ?? ""}`
         .toLocaleLowerCase().includes(needle));
   }, [options, query]);
+
+  /** Every row the arrows move through: the clear row, then the matches. */
+  const rows = useMemo(
+    () => [{ value: "", label: placeholder }, ...visible],
+    [placeholder, visible],
+  );
+
+  /**
+   * Open, with the cursor on whatever is already chosen.
+   *
+   * Set here rather than in an effect watching `open`: an effect that calls
+   * setState runs a second render for a value that was known at the moment of
+   * the click, and React says so.
+   */
+  function reveal() {
+    const chosen = rows.findIndex((row) => row.value === value);
+    setActive(chosen > 0 ? chosen : 0);
+    setOpen(true);
+  }
+
+  // Keep the active row in view when it moves by keyboard.
+  useEffect(() => {
+    if (!open) return;
+    listNode.current?.querySelector<HTMLElement>("[data-active='true']")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [active, open]);
+
+  function choose(index: number) {
+    const row = rows[index];
+    if (!row) return;
+    onChange(row.value);
+    setOpen(false);
+    setQuery("");
+    trigger.current?.focus();
+  }
+
+  /**
+   * The combobox keys, on whichever element has focus.
+   *
+   * Shared by the trigger and the search box so the same keys work before and
+   * after the list opens: down arrow opens it, and once open the arrows move
+   * the active row, Enter takes it, Home and End reach the ends, and Escape
+   * closes without changing anything.
+   */
+  function onKeys(event: React.KeyboardEvent) {
+    const intent = comboboxIntent(event.key, {
+      open, active, count: rows.length,
+    });
+    if (intent.type === "none") return;
+    // Everything the combobox claims, the browser must not also do: space
+    // scrolls the page, the arrows scroll the list behind the popover, and
+    // Enter inside a form submits it.
+    event.preventDefault();
+    if (intent.type === "open") reveal();
+    else if (intent.type === "close") { setOpen(false); trigger.current?.focus(); }
+    else if (intent.type === "move") setActive(intent.index);
+    else choose(intent.index);
+  }
 
   /**
    * Open on whichever side has room, and never ask for more height than there
@@ -116,9 +187,13 @@ export function SearchSelect({
 
   return (
     <div className="search-select" ref={root}>
-      <button type="button" className="search-select-trigger" aria-expanded={open}
+      <button type="button" className="search-select-trigger"
+        // The pattern this implements: a button that owns a listbox, saying so
+        // rather than leaving a screen reader to infer it from a div.
+        aria-haspopup="listbox" aria-expanded={open}
         aria-controls={listId} disabled={disabled} ref={trigger}
-        onClick={() => setOpen((current) => !current)}>
+        onKeyDown={onKeys}
+        onClick={() => (open ? setOpen(false) : reveal())}>
         <span>{selected?.label ?? placeholder}</span>
         <ChevronDown className={open ? "search-select-chevron open" : "search-select-chevron"}
           size={15} strokeWidth={2} aria-hidden="true" />
@@ -132,22 +207,31 @@ export function SearchSelect({
           {searchable && (
             <input type="search" value={query} placeholder={searchPlaceholder}
               aria-label={searchPlaceholder} autoFocus
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }} />
+              // Focus stays here while the arrows move the active row, so the
+              // row is named rather than focused - which is what lets somebody
+              // keep typing while choosing.
+              role="combobox" aria-expanded aria-controls={listId}
+              aria-activedescendant={`${listId}-${active}`}
+              // A new search is a new list, so the cursor goes back to the
+              // top rather than pointing at a row that no longer matches.
+              onChange={(event) => { setQuery(event.target.value); setActive(0); }}
+              onKeyDown={onKeys} />
           )}
-          <div id={listId} className="search-select-list" role="listbox">
-            <button type="button" role="option" aria-selected={!value}
-              className={!value ? "selected" : undefined}
-              onClick={() => { onChange(""); setOpen(false); setQuery(""); }}>
-              <strong>{placeholder}</strong>
-            </button>
-            {visible.map((option) => (
-              <button type="button" role="option" aria-selected={option.value === value}
-                className={option.value === value ? "selected" : undefined}
-                key={option.value}
-                onClick={() => { onChange(option.value); setOpen(false); setQuery(""); }}>
-                <strong>{option.label}</strong>
-                {option.description && <small>{option.description}</small>}
+          <div id={listId} className="search-select-list" role="listbox" ref={listNode}>
+            {rows.map((row, index) => (
+              <button type="button" role="option" key={row.value || "__clear"}
+                id={`${listId}-${index}`}
+                // Selected is what the field holds; active is where the
+                // keyboard is. They are different states and look different.
+                aria-selected={row.value === value}
+                data-active={index === active}
+                className={row.value === value ? "selected" : undefined}
+                // Pointer and keyboard agree on which row is active, so moving
+                // the mouse does not leave the highlight somewhere else.
+                onMouseMove={() => setActive(index)}
+                onClick={() => choose(index)}>
+                <strong>{row.label}</strong>
+                {"description" in row && row.description && <small>{row.description}</small>}
               </button>
             ))}
             {!visible.length && <p className="search-select-empty">{emptyLabel}</p>}
