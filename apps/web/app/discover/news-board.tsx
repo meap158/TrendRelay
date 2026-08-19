@@ -36,25 +36,13 @@ import {
   type NewsBoard as Board,
   type NewsStory,
 } from "../../lib/news-stories";
-import { seedFromNewsStory, type DiscoverySeed } from "../../lib/discovery-ideas";
+import { seedFromNewsStory, type DiscoverySeed, type SeedLabels } from "../../lib/discovery-ideas";
+import { useLocale } from "../i18n-provider";
 import { Button } from "../ui/button";
 import { SegmentedControl } from "../ui/segmented";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 
 type Density = "cards" | "rows" | "headlines";
-
-const DESK_OPTIONS = [
-  { value: "all" as const, label: "All", icon: <Newspaper size={13} />, title: "Every desk" },
-  { value: "general" as const, label: "World", icon: <Globe size={13} />, title: "General news" },
-  { value: "business" as const, label: "Business", icon: <Building2 size={13} />, title: "Business" },
-  { value: "technology" as const, label: "Tech", icon: <Cpu size={13} />, title: "Technology" },
-];
-
-const DENSITY_OPTIONS = [
-  { value: "cards" as const, label: "Cards", title: "Headline, summary and sources" },
-  { value: "rows" as const, label: "Rows", title: "Headline and sources" },
-  { value: "headlines" as const, label: "Headlines", title: "Headlines only" },
-];
 
 function Row({
   story,
@@ -67,7 +55,17 @@ function Row({
   added: boolean;
   onAdd: () => void;
 }) {
-  const since = sinceLabel(story.published_at);
+  const { t } = useLocale();
+  const since = sinceLabel(story.published_at, Date.now(), {
+    justNow: t("discover.news.sinceJustNow"),
+    minutes: t("discover.news.sinceMinutes"),
+    hours: t("discover.news.sinceHours"),
+    days: t("discover.news.sinceDays"),
+  });
+  const outlets = coverageLabel(story, {
+    pair: t("discover.news.coveragePair"),
+    many: t("discover.news.coverageMany"),
+  });
   return (
     <li className="news-row">
       {/* The text is one cell rather than three siblings the button has to
@@ -86,9 +84,11 @@ function Row({
             {story.coverage > 1 ? (
               // The count is the finding, so it is the part that is
               // emphasised. Without it this row is a link to a news site.
-              <span className="news-count">{story.coverage} newsrooms</span>
+              <span className="news-count">
+                {t("discover.news.newsrooms", { count: story.coverage })}
+              </span>
             ) : null}
-            <span>{coverageLabel(story)}</span>
+            <span>{outlets}</span>
             {since ? <span>{since}</span> : null}
           </p>
         )}
@@ -99,7 +99,7 @@ function Row({
         disabled={added}
         onClick={onAdd}
       >
-        {added ? "Added" : <><Plus size={13} aria-hidden="true" /> Add to idea</>}
+        {added ? t("discover.news.added") : <><Plus size={13} aria-hidden="true" /> {t("discover.news.add")}</>}
       </Button>
     </li>
   );
@@ -140,7 +140,8 @@ function Shelf({
             density={density}
             // Asked of the seed this row would create rather than of the
             // story, because the seed's id has its own shape and guessing it
-            // here would silently never match.
+            // here would silently never match. The id does not depend on the
+            // localized labels, so the default English seed is enough to test.
             added={chosen.has(seedFromNewsStory(story).id)}
             onAdd={() => onAdd(story)}
           />
@@ -157,6 +158,7 @@ export function NewsBoard({
   seeds: DiscoverySeed[];
   onSeed: (seed: DiscoverySeed) => void;
 }) {
+  const { t } = useLocale();
   const [desk, setDesk] = usePersistedState<Desk>(
     "discover.news.desk",
     "all",
@@ -180,6 +182,26 @@ export function NewsBoard({
   const [reload, setReload] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Built here rather than at module scope so the labels follow the current
+  // locale; the values are the API's desk names and never translate.
+  const deskOptions = useMemo(
+    () => [
+      { value: "all" as const, label: t("discover.news.deskAll"), icon: <Newspaper size={13} />, title: t("discover.news.deskAllTitle") },
+      { value: "general" as const, label: t("discover.news.deskWorld"), icon: <Globe size={13} />, title: t("discover.news.deskWorldTitle") },
+      { value: "business" as const, label: t("discover.news.deskBusiness"), icon: <Building2 size={13} />, title: t("discover.news.deskBusinessTitle") },
+      { value: "technology" as const, label: t("discover.news.deskTech"), icon: <Cpu size={13} />, title: t("discover.news.deskTechTitle") },
+    ],
+    [t],
+  );
+  const densityOptions = useMemo(
+    () => [
+      { value: "cards" as const, label: t("discover.news.densityCards"), title: t("discover.news.densityCardsTitle") },
+      { value: "rows" as const, label: t("discover.news.densityRows"), title: t("discover.news.densityRowsTitle") },
+      { value: "headlines" as const, label: t("discover.news.densityHeadlines"), title: t("discover.news.densityHeadlinesTitle") },
+    ],
+    [t],
+  );
+
   useEffect(() => {
     const controller = new AbortController();
 
@@ -190,7 +212,7 @@ export function NewsBoard({
       .then(async (response) => {
         const payload = (await response.json()) as Board & { detail?: string };
         if (!response.ok) {
-          throw new Error(payload.detail ?? "The newsrooms could not be read.");
+          throw new Error(payload.detail ?? t("discover.news.readError"));
         }
         setResult({ desk, board: payload, error: null });
       })
@@ -200,12 +222,13 @@ export function NewsBoard({
         setResult({
           desk,
           board: null,
-          error: problem instanceof Error ? problem.message : "The newsrooms could not be read.",
+          error: problem instanceof Error ? problem.message : t("discover.news.readError"),
         });
       })
       .finally(() => setRefreshing(false));
 
     return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desk, reload]);
 
   const current = result?.desk === desk ? result : null;
@@ -219,25 +242,32 @@ export function NewsBoard({
 
   const partial = board && !board.complete && board.outlets_read.length > 0;
 
+  // The seed an "add" stores carries an evidence line; localize it here so what
+  // lands in the idea tray reads in the same language as the board it came from.
+  const seedLabels: SeedLabels = {
+    carried: t("discover.news.seedCarried"),
+    only: t("discover.news.seedOnly"),
+  };
+
   return (
     <div className="news-board">
       <div className="news-board-head">
         <h2>
           <Newspaper size={15} aria-hidden="true" />
-          In the news
+          {t("discover.news.heading")}
         </h2>
         <div className="news-board-controls">
           <SegmentedControl
             value={desk}
-            options={DESK_OPTIONS}
+            options={deskOptions}
             onChange={setDesk}
-            label="News desk"
+            label={t("discover.news.deskLabel")}
           />
           <SegmentedControl
             value={density}
-            options={DENSITY_OPTIONS}
+            options={densityOptions}
             onChange={setDensity}
-            label="How much to show"
+            label={t("discover.news.densityLabel")}
           />
           <Button
             variant="quiet"
@@ -247,10 +277,10 @@ export function NewsBoard({
               setRefreshing(true);
               setReload((count) => count + 1);
             }}
-            title="Read the feeds again"
+            title={t("discover.news.refreshTitle")}
           >
             <RefreshCw size={13} aria-hidden="true" />
-            {loading ? "Reading…" : "Refresh"}
+            {loading ? t("discover.news.refreshing") : t("discover.news.refresh")}
           </Button>
         </div>
       </div>
@@ -264,42 +294,42 @@ export function NewsBoard({
         // newsrooms" is a different finding when four of the nine were
         // unreachable.
         <p className="news-note">
-          Read {board.outlets_read.length} of {board.outlets_requested.length} newsrooms.
-          Coverage counts are lower than they would otherwise be.
+          {t("discover.news.partial", {
+            read: board.outlets_read.length,
+            requested: board.outlets_requested.length,
+          })}
         </p>
       ) : null}
 
       {loading && !board ? (
-        <p className="news-empty">Reading the newsrooms…</p>
+        <p className="news-empty">{t("discover.news.loading")}</p>
       ) : null}
 
       {board && !board.covered.length && !board.breaking.length && !loading ? (
-        <p className="news-empty">
-          Nothing has broken across these desks in the last few hours.
-        </p>
+        <p className="news-empty">{t("discover.news.empty")}</p>
       ) : null}
 
       {board ? (
         <>
           <Shelf
-            title="Widely covered"
-            blurb="Several newsrooms are running this at once."
+            title={t("discover.news.covered")}
+            blurb={t("discover.news.coveredBlurb")}
             icon={Newspaper}
             tone="covered"
             stories={board.covered}
             density={density}
             chosen={chosen}
-            onAdd={(story) => onSeed(seedFromNewsStory(story))}
+            onAdd={(story) => onSeed(seedFromNewsStory(story, seedLabels))}
           />
           <Shelf
-            title="Just in"
-            blurb="Recent, and so far only one newsroom has it."
+            title={t("discover.news.breaking")}
+            blurb={t("discover.news.breakingBlurb")}
             icon={Zap}
             tone="breaking"
             stories={board.breaking}
             density={density}
             chosen={chosen}
-            onAdd={(story) => onSeed(seedFromNewsStory(story))}
+            onAdd={(story) => onSeed(seedFromNewsStory(story, seedLabels))}
           />
         </>
       ) : null}

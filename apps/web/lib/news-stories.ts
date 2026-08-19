@@ -43,7 +43,25 @@ export type Desk = (typeof DESKS)[number];
  * would be admitting it had nothing, and the reader that fills it drops
  * anything older than three days anyway.
  */
-export function sinceLabel(published: string | null, now = Date.now()): string {
+/**
+ * The four phrasings this label can take, as `{n}` templates. English by
+ * default so the callers that do not translate - and the unit tests - keep the
+ * same output; the news board passes its locale's versions instead.
+ */
+export type SinceLabels = { justNow: string; minutes: string; hours: string; days: string };
+
+const EN_SINCE: SinceLabels = {
+  justNow: "just now",
+  minutes: "{n}m ago",
+  hours: "{n}h ago",
+  days: "{n}d ago",
+};
+
+export function sinceLabel(
+  published: string | null,
+  now = Date.now(),
+  labels: SinceLabels = EN_SINCE,
+): string {
   if (!published) return "";
   const at = Date.parse(published);
   if (Number.isNaN(at)) return "";
@@ -51,12 +69,12 @@ export function sinceLabel(published: string | null, now = Date.now()): string {
   const minutes = Math.round((now - at) / 60_000);
   // A feed's clock can be a little ahead of ours, and "in 2 minutes" on a news
   // board reads as a bug rather than as a rounding difference.
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return labels.justNow;
+  if (minutes < 60) return labels.minutes.replace("{n}", String(minutes));
 
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
+  if (hours < 24) return labels.hours.replace("{n}", String(hours));
+  return labels.days.replace("{n}", String(Math.round(hours / 24)));
 }
 
 /**
@@ -65,9 +83,23 @@ export function sinceLabel(published: string | null, now = Date.now()): string {
  * Two names and a count: enough to show the story is corroborated and by
  * whom, without the row wrapping onto a third line.
  */
-export function coverageLabel(story: NewsStory): string {
+/**
+ * The two phrasings, as `{first}`/`{second}`/`{rest}` templates - English by
+ * default for the same reason {@link SinceLabels} is.
+ */
+export type CoverageLabels = { pair: string; many: string };
+
+const EN_COVERAGE: CoverageLabels = {
+  pair: "{first} and {second}",
+  many: "{first}, {second} +{rest}",
+};
+
+export function coverageLabel(story: NewsStory, labels: CoverageLabels = EN_COVERAGE): string {
   if (story.coverage <= 1) return story.outlet;
-  const [first, second, ...rest] = story.outlets;
-  if (!rest.length) return `${first} and ${second}`;
-  return `${first}, ${second} +${rest.length}`;
+  const [first = "", second = "", ...rest] = story.outlets;
+  if (!rest.length) return labels.pair.replace("{first}", first).replace("{second}", second);
+  return labels.many
+    .replace("{first}", first)
+    .replace("{second}", second)
+    .replace("{rest}", String(rest.length));
 }

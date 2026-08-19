@@ -104,7 +104,19 @@ export function seedFromEngagedPost(post: EngagedPost): DiscoverySeed {
  * something that happened, which several newsrooms thought worth reporting.
  * Calling it a post would put "3 newsrooms" in a sentence about reach.
  */
-export function seedFromNewsStory(story: NewsStory): DiscoverySeed {
+/**
+ * The evidence line, as `{count}`/`{outlets}`/`{outlet}` templates. English by
+ * default so a caller that does not translate keeps today's wording; the news
+ * board passes its locale's versions when it stores a seed.
+ */
+export type SeedLabels = { carried: string; only: string };
+
+const EN_SEED: SeedLabels = {
+  carried: "Carried by {count} newsrooms: {outlets}",
+  only: "{outlet} · only newsroom carrying it so far",
+};
+
+export function seedFromNewsStory(story: NewsStory, labels: SeedLabels = EN_SEED): DiscoverySeed {
   return {
     id: `story:news:${story.id}`,
     kind: "story",
@@ -116,8 +128,10 @@ export function seedFromNewsStory(story: NewsStory): DiscoverySeed {
     url: story.url,
     evidence:
       story.coverage > 1
-        ? `Carried by ${story.coverage} newsrooms: ${story.outlets.join(", ")}`
-        : `${story.outlet} · only newsroom carrying it so far`,
+        ? labels.carried
+            .replace("{count}", String(story.coverage))
+            .replace("{outlets}", story.outlets.join(", "))
+        : labels.only.replace("{outlet}", story.outlet),
     tags: ["news", ...story.outlets],
   };
 }
