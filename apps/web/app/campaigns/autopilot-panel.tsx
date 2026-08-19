@@ -1664,6 +1664,30 @@ export function AutopilotPanel({
 
   const selectedLibrary = Object.values(selectedAssets);
   /**
+   * Whether every clip on screen is ticked.
+   *
+   * "Loaded" rather than "matching", and the difference is stated in the bar
+   * beside it. The Library can offer a true select-all because its bulk
+   * actions work from ids alone, and its id endpoint answers with up to ten
+   * thousand of them. This picker hands whole assets to the composer, and the
+   * assets endpoint caps at a hundred with no offset to page past it - so
+   * there is no honest way to tick more than is here.
+   */
+  const allLoadedSelected = library.length > 0
+    && library.every((asset) => Boolean(selectedAssets[asset.id]));
+  const selectedPictures = selectedLibrary.filter(
+    (asset) => asset.media_kind === "image",
+  ).length;
+
+  /** Replace the selection with everything loaded, or clear it - as the Library does. */
+  function toggleAllLoaded() {
+    setSelectedAssets(
+      allLoadedSelected
+        ? {}
+        : Object.fromEntries(library.map((asset) => [asset.id, asset])),
+    );
+  }
+  /**
    * The kind row, and the counts beside it.
    *
    * Read from the facets rather than the page of results, because the API
@@ -2264,9 +2288,43 @@ export function AutopilotPanel({
               onChange={filterLibrary}
             />
             <div className="campaign-media-actions">
-              <span>{selectedLibrary.length
-                ? `${selectedLibrary.length} ready for campaign actions`
-                : "Select clips to edit or add to the campaign"}</span>
+              {/* The same control the Library page carries, in the same shape,
+                  so ticking everything works here the way it does there. */}
+              <span
+                className="library-pick"
+                role="checkbox"
+                tabIndex={0}
+                aria-checked={allLoadedSelected}
+                aria-label={allLoadedSelected
+                  ? "Clear selection"
+                  : `Select all ${library.length} loaded`}
+                onClick={toggleAllLoaded}
+                onKeyDown={(event) => {
+                  // A span is not a control, so it does not answer Space and
+                  // Enter by itself. Both, because a checkbox takes Space and
+                  // people reach for Enter anyway.
+                  if (event.key !== " " && event.key !== "Enter") return;
+                  event.preventDefault();
+                  toggleAllLoaded();
+                }}
+              >{allLoadedSelected && <ActionIcon name="confirm" size={12} />}</span>
+              <span className="campaign-media-summary">{selectedLibrary.length
+                ? [
+                    `${selectedLibrary.length} ready for campaign actions`,
+                    // Pictures post as one carousel, so how many there are is
+                    // the shape of the post rather than a count of files -
+                    // and after "select all" it is worth being able to see it
+                    // without counting ticks.
+                    selectedPictures > 1 ? `${selectedPictures} pictures as one carousel` : "",
+                    matchingCount > library.length
+                      ? `${library.length} of ${matchingCount.toLocaleString()} loaded — narrow the filter to reach the rest`
+                      : "",
+                  ].filter(Boolean).join(" · ")
+                : `Select clips to edit or add to the campaign${
+                    matchingCount > library.length
+                      ? ` · showing ${library.length} of ${matchingCount.toLocaleString()}`
+                      : ""
+                  }`}</span>
               <Button variant="secondary" size="sm" disabled={!selectedLibrary.length}
                 onClick={() => setEffectOpen(true)}>Apply effects</Button>
               <Button variant="primary" size="sm" disabled={!selectedLibrary.length}

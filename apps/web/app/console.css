@@ -1172,7 +1172,12 @@ html { scroll-behavior: smooth; }
 .campaign-media-kinds button span { margin-inline-start: 3px; color: inherit; opacity: 0.68; font-size: 9px; font-variant-numeric: tabular-nums; }
 .campaign-media-browser .asset-filters { margin: 0; border-block: 1px solid var(--line); padding: 9px 12px; background: var(--panel-raised); }
 .campaign-media-actions { flex-wrap: wrap; border-bottom: 1px solid var(--line); }
-.campaign-media-actions > span { margin-inline-end: auto; color: var(--muted); font-size: 11px; }
+/* Named rather than written as `span:not(.library-pick)`. The bar holds two
+   spans now - the select-all box and this summary - and only this one takes
+   the `auto` margin that pushes the buttons to the end; the checkbox taking it
+   would push them off. Naming it also keeps `library-pick` defined in one
+   stylesheet, which is what the scope check asks for. */
+.campaign-media-summary { margin-inline-end: auto; color: var(--muted); font-size: 11px; }
 .campaign-media-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; max-height: min(560px, calc(100vh - 260px)); margin: 0; padding: 12px; overflow-y: auto; overscroll-behavior: contain; list-style: none; }
 .campaign-media-grid label { position: relative; display: grid; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); cursor: pointer; transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease; }
 .campaign-media-grid label:hover { border-color: var(--link); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
