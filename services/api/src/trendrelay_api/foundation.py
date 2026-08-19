@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from secrets import token_urlsafe
 from typing import Annotated, Any, Literal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
@@ -90,6 +91,11 @@ def serialize_workspace(item: Workspace, role: str) -> dict[str, Any]:
         "name": item.name,
         "slug": item.slug,
         "role": role,
+        # The clock this workspace keeps. Posting slots are stored as a wall
+        # time and mean nothing without it, and every time the interface shows
+        # is read on it - so it travels with the workspace rather than being
+        # fetched from the corner of the app that happens to own slots.
+        "timezone": item.timezone or "UTC",
         "created_at": item.created_at,
     }
 
@@ -193,6 +199,57 @@ def create_workspace(
     session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="owner"))
     audit(session, request, workspace.id, user.id, "workspace.created", "workspace", workspace.id)
     return {"workspace": serialize_workspace(workspace, "owner")}
+
+
+class WorkspaceTimezone(BaseModel):
+    """The clock a workspace keeps, as an IANA name."""
+
+    timezone: str = Field(min_length=1, max_length=80)
+
+    @field_validator("timezone")
+    @classmethod
+    def known_zone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except Exception as error:
+            raise ValueError("Use an IANA timezone such as Asia/Bangkok.") from error
+        return value
+
+
+@router.put("/workspaces/{workspace_id}/timezone")
+def set_workspace_timezone(
+    workspace_id: str,
+    body: WorkspaceTimezone,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Set the clock every posting time in this workspace is written on.
+
+    Its own endpoint rather than a field on the slots editor, because it is not
+    a fact about slots: it decides what a stored hour means, what the campaign
+    timeline reads, and which day a post is filed under. Saving posting times
+    still carries it, so an operator who never opens this is not left on a
+    default they did not choose.
+
+    Changing it re-points every existing slot: hour 9 was 09:00 in the old zone
+    and is 09:00 in the new one, which is a different moment. That is the
+    intent - the slot says "nine in the morning" and this says whose morning -
+    but it does move a live schedule, so it is owner-level and audited.
+    """
+    membership_row = membership(session, workspace_id, user.id)
+    require_role(membership_row, {"owner", "approver"})
+    workspace = session.get(Workspace, workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="No such workspace.")
+    previous = workspace.timezone or "UTC"
+    workspace.timezone = body.timezone
+    session.flush()
+    audit(
+        session, request, workspace_id, user.id, "workspace.timezone_changed",
+        "workspace", workspace_id, {"from": previous, "to": body.timezone},
+    )
+    return {"workspace": serialize_workspace(workspace, membership_row.role)}
 
 
 @router.get("/workspaces/{workspace_id}/members")

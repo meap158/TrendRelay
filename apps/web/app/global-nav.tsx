@@ -10,6 +10,7 @@ import { useT } from "./i18n-provider";
 import { Button } from "./ui/button";
 import { ActionIcon } from "./ui/action-icons";
 import { LanguagePicker } from "./ui/language-picker";
+import { TimezonePicker } from "./ui/timezone-picker";
 
 const READ_NOTIFICATIONS_KEY = "trendrelay:read-notifications:";
 const MAX_STORED_READ_KEYS = 300;
@@ -262,6 +263,10 @@ export function GlobalNav() {
       </nav>
 
       <div className="toolbar-actions">
+        {/* Beside the language, because they are the same kind of setting:
+            one says what the workspace reads in, the other what clock it
+            keeps. Both decide how everything else is presented. */}
+        <TimezonePicker compact />
         <LanguagePicker compact />
         <div className="notification-shell" ref={notificationShellRef}>
           <button

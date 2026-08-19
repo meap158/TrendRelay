@@ -872,18 +872,16 @@ export function AutopilotPanel({
   const [slots, setSlots] = useState<Slot[]>([]);
   const [scheduleTimezone, setScheduleTimezone] = useState("UTC");
   /**
-   * Every moment on this page is shown on the reader's own clock.
+   * Every moment on this page is read on the workspace's clock.
    *
-   * It used to be shown on the workspace's, which is the clock a posting
-   * *slot* is written on - a different thing from the moment a post goes
-   * out. With a UTC workspace and a reader seven hours ahead, a post that
-   * fired at four in the morning read "9:00 PM the previous day", and the
-   * day headings grouped it under a day the reader never saw it on.
-   *
-   * The workspace zone is still shown beside the posting times, because
-   * that is where it is the answer: those hours are defined in it.
+   * One clock, chosen in the toolbar, so a slot's hour and the time a post
+   * appears at are the same kind of thing. This briefly read on the browser's
+   * clock instead, which was the right answer while the workspace zone was a
+   * column nobody could set: it defaulted to UTC, and an operator seven hours
+   * away could only be shown their own. Now that it is a visible setting, the
+   * two agree by being one.
    */
-  const readerZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const readerZone = scheduleTimezone;
   const [preview, setPreview] = useState<
     { note: string; posts: PreviewPost[]; deployed: DeployedPost[]; problems: number } | null
   >(null);
@@ -3005,14 +3003,6 @@ export function AutopilotPanel({
       }>
         <p className="autopilot-lede">
           Shared by every campaign in this workspace; Publish owns them.
-          {/* Said only when the two clocks disagree. A slot's hour is written
-              on the workspace's clock, while every time on this page is shown
-              on yours - which is the same number until the workspace is set to
-              somewhere else, and then silently is not. */}
-          {scheduleTimezone !== readerZone && (
-            <> These hours are {scheduleTimezone}; times elsewhere on this page
-            are shown in your own {readerZone}.</>
-          )}
         </p>
         <div className="campaign-schedule-readonly">
           <Badge tone="neutral">{scheduleTimezone}</Badge>
