@@ -583,7 +583,7 @@ export default function CampaignsPage() {
                   <p className="section-kicker">{selectedCampaign.status}</p>
                   <h2>{selectedCampaign.name}</h2>
                   <p>{selectedCampaign.objective}</p>
-                  <small>Audience: {selectedCampaign.audience}</small>
+                  <small>Audience: {selectedCampaign.audience} · {t("attribution.productCount", { count: selectedCampaign.tagged_products ?? 0 })}</small>
                 </div>
                 <div className="campaign-status-actions">
                   <Link href={`/attribution?campaign=${encodeURIComponent(selectedCampaign.id)}`}><ActionIcon name="link" />{t("campaigns.measureRevenue")}</Link>
