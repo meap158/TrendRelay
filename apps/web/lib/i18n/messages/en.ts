@@ -915,6 +915,10 @@ export const en = {
   },
 
   tools: {
+    assistant: "Assistant",
+    runsLocal: "on this machine",
+    runsNetwork: "reaches a service",
+    toolsCounted: "tools",
     loading: "Loading local tool registry…",
     signInPrompt: "Sign in to manage tools.",
     eyebrow: "LOCAL TOOLBOX",

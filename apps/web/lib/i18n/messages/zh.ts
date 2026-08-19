@@ -895,6 +895,10 @@ export const zh: Messages = {
   },
 
   tools: {
+    assistant: "助手",
+    runsLocal: "在本机运行",
+    runsNetwork: "需访问外部服务",
+    toolsCounted: "个工具",
     loading: "正在加载本机工具清单…",
     signInPrompt: "登录后即可管理工具。",
     eyebrow: "本地工具箱",

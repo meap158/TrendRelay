@@ -931,6 +931,10 @@ export const ru: Messages = {
   },
 
   tools: {
+    assistant: "Ассистент",
+    runsLocal: "на этой машине",
+    runsNetwork: "обращается к сервису",
+    toolsCounted: "инструментов",
     loading: "Загружаем локальный список инструментов…",
     signInPrompt: "Войдите, чтобы управлять инструментами.",
     eyebrow: "ЛОКАЛЬНЫЙ НАБОР ИНСТРУМЕНТОВ",

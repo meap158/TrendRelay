@@ -912,6 +912,10 @@ export const vi: Messages = {
   },
 
   tools: {
+    assistant: "Trợ lý",
+    runsLocal: "trên máy này",
+    runsNetwork: "gọi dịch vụ ngoài",
+    toolsCounted: "công cụ",
     loading: "Đang tải danh sách công cụ trên máy…",
     signInPrompt: "Đăng nhập để quản lý công cụ.",
     eyebrow: "HỘP CÔNG CỤ CỤC BỘ",

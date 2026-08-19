@@ -919,6 +919,10 @@ export const ar: Messages = {
   },
 
   tools: {
+    assistant: "المساعد",
+    runsLocal: "على هذا الجهاز",
+    runsNetwork: "يتصل بخدمة خارجية",
+    toolsCounted: "أدوات",
     loading: "جارٍ تحميل سجل الأدوات المحلي…",
     signInPrompt: "سجّل الدخول لإدارة الأدوات.",
     eyebrow: "صندوق الأدوات المحلي",

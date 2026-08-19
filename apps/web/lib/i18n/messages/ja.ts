@@ -909,6 +909,10 @@ export const ja: Messages = {
   },
 
   tools: {
+    assistant: "アシスタント",
+    runsLocal: "この端末で動作",
+    runsNetwork: "外部サービスに接続",
+    toolsCounted: "個のツール",
     loading: "ローカルのツール一覧を読み込み中…",
     signInPrompt: "ツールを管理するにはログインしてください。",
     eyebrow: "ローカルツールボックス",

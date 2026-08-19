@@ -7,6 +7,7 @@ import { useAuth } from "../auth-provider";
 import { useLocale } from "../i18n-provider";
 import { buttonClass } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
+import { Badge } from "../ui/primitives";
 
 type Tool = {
   id: string;
@@ -417,9 +418,18 @@ export default function ToolsPage() {
         return (
           <section className="tool-surface" key={surface.id} aria-label={t(surface.label)}>
             <header className="tool-surface-head">
-              <h2>{t(surface.label)}</h2>
+              {/* The count belongs to the heading, so it sits in it. Pushed to
+                  the far end it read as a stray number with no owner, and a
+                  bare "9" is nothing at all to a screen reader - hence the
+                  word, said once, for whoever is listening. */}
+              <h2>
+                {t(surface.label)}
+                <Badge tone="neutral">
+                  {inSurface.length}
+                  <span className="sr-only"> {t("tools.toolsCounted")}</span>
+                </Badge>
+              </h2>
               <p>{surface.blurb}</p>
-              <span>{inSurface.length}</span>
             </header>
             <div className="tool-grid">
               {inSurface.map((tool) => (

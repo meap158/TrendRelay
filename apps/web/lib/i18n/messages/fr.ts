@@ -929,6 +929,10 @@ export const fr: Messages = {
   },
 
   tools: {
+    assistant: "Assistant",
+    runsLocal: "sur cette machine",
+    runsNetwork: "appelle un service",
+    toolsCounted: "outils",
     loading: "Chargement du registre local des outils…",
     signInPrompt: "Connectez-vous pour gérer les outils.",
     eyebrow: "BOÎTE À OUTILS LOCALE",
