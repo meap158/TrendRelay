@@ -2121,6 +2121,11 @@ def submit_batch_render(
                     confirm_external_action=True,
                 ),
                 batch={"id": batch_id, "position": position, "total": len(wanted)},
+                # The request's own transaction. Queueing on a second
+                # connection made every asset after the first recipe write wait
+                # out the busy timeout and then fail: the whole selection
+                # blocked on this request's own uncommitted rows.
+                session=session,
             )
         except (EffectError, PermissionError, ValidationError, ValueError) as error:
             results.append({

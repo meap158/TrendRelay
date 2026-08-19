@@ -92,12 +92,14 @@ export function EffectEditor({
   /**
    * How many assets one request queues.
    *
-   * Smaller than it was. Two hundred is a single silent request that either
-   * queues everything or, on one unexpected failure, nothing - and no progress
-   * can be reported inside it. Twenty-five keeps each request short enough to
-   * report between, and keeps what one failure can cost to twenty-five.
+   * The server's own limit, so a selection under it goes in one request and
+   * one transaction. Chunking smaller was a workaround for queueing being
+   * slow, and it was slow because each asset opened its own connection and
+   * waited out the busy timeout behind this request's uncommitted writes -
+   * measured at fifteen seconds an asset, then "database is locked". Queueing
+   * writes a row; it should take a moment, and now does.
    */
-  const CHUNK = 25;
+  const CHUNK = 200;
   const batch = targetIds.length > 1;
   const primary = targets[0]!;
 
@@ -231,7 +233,9 @@ export function EffectEditor({
         // the screen said nothing had happened and the queue disagreed.
         let interrupted = "";
         for (let at = 0; at < targetIds.length; at += CHUNK) {
-          setBusyDetail(`Queueing ${Math.min(at + CHUNK, targetIds.length)} of ${targetIds.length}…`);
+          setBusyDetail(targetIds.length > CHUNK
+            ? `Queueing ${Math.min(at + CHUNK, targetIds.length)} of ${targetIds.length}…`
+            : `Queueing ${targetIds.length}…`);
           try {
             const response = await apiFetch(`${base}/effects/render-batch`, {
               method: "POST",

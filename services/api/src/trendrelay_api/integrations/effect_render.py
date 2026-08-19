@@ -28,6 +28,7 @@ from threading import Event, Thread
 from typing import Any
 
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from trendrelay_api.database import SessionFactory
 from trendrelay_api.integrations import (
@@ -968,8 +969,19 @@ def render_output_path(workspace_id: str, source: Path, preview: bool) -> Path:
 
 
 def create_render_job(
-    request: EffectRenderRequest, *, batch: dict[str, Any] | None = None
+    request: EffectRenderRequest,
+    *,
+    batch: dict[str, Any] | None = None,
+    session: Session | None = None,
 ) -> dict[str, Any]:
+    """Queue one render.
+
+    `session` is the caller's open transaction, and a batch must pass it.
+    Without it this opens its own connection per asset, which queues behind
+    whatever the caller has already written - measured at the full 15-second
+    busy timeout per asset, then "database is locked". A selection of
+    seventy-one took minutes and queued two.
+    """
     if not request.confirm_external_action:
         raise PermissionError("Rendering writes a new media file and needs confirmation.")
     # Validated before anything is queued, so a bad recipe fails at the request
@@ -986,13 +998,15 @@ def create_render_job(
 
     from trendrelay_api.media_models import MediaAsset
 
-    with JOB_SESSION_FACTORY() as session:
-        asset_id = session.scalar(
-            select(MediaAsset.id).where(
-                MediaAsset.workspace_id == request.workspace_id,
-                MediaAsset.original_path == str(source),
-            )
-        )
+    lookup = select(MediaAsset.id).where(
+        MediaAsset.workspace_id == request.workspace_id,
+        MediaAsset.original_path == str(source),
+    )
+    if session is not None:
+        asset_id = session.scalar(lookup)
+    else:
+        with JOB_SESSION_FACTORY() as owned:
+            asset_id = owned.scalar(lookup)
     create_job_record(
         job_id,
         request.workspace_id,
@@ -1013,8 +1027,9 @@ def create_render_job(
         # Rendering restarts safely from the immutable source when reclaimed.
         max_attempts=RENDER_MAX_ATTEMPTS,
         factory=JOB_SESSION_FACTORY,
+        session=session,
     )
-    return get_job_record(job_id, factory=JOB_SESSION_FACTORY)
+    return get_job_record(job_id, factory=JOB_SESSION_FACTORY, session=session)
 
 
 @contextmanager

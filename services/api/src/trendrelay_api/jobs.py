@@ -118,9 +118,26 @@ def create_job_record(
     return serialize_job(item)
 
 
-def get_job_record(job_id: str, *, factory: SessionMaker = SessionFactory) -> dict[str, Any]:
-    with factory() as session:
+def get_job_record(
+    job_id: str,
+    *,
+    factory: SessionMaker = SessionFactory,
+    session: Session | None = None,
+) -> dict[str, Any]:
+    """Read a job back.
+
+    Takes `session` for the same reason `create_job_record` does: a caller
+    inside a transaction that has just written this row cannot see it from
+    another connection, and opening one to look would queue behind its own
+    uncommitted write.
+    """
+    if session is not None:
         item = session.get(DurableJob, job_id)
+        if not item:
+            raise FileNotFoundError(job_id)
+        return serialize_job(item)
+    with factory() as owned:
+        item = owned.get(DurableJob, job_id)
         if not item:
             raise FileNotFoundError(job_id)
         return serialize_job(item)

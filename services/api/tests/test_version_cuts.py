@@ -613,6 +613,54 @@ def test_a_batch_queues_the_same_stack_and_skips_incompatible_media(
         assert queued.max_attempts == effect_render.RENDER_MAX_ATTEMPTS
 
 
+def test_a_batch_queues_inside_the_request_transaction(tmp_path, monkeypatch) -> None:
+    """Every job row is written on the caller's session, not a new connection.
+
+    On SQLite a second connection cannot write while this request holds the
+    write lock - which it does from the first stored recipe onward. Measured on
+    a file database: fifteen seconds of waiting per asset and then "database is
+    locked". A selection of seventy-one queued two and appeared to hang.
+
+    The in-memory database here has no such contention, so the test asserts the
+    thing that prevents it rather than the symptom: the session goes through.
+    """
+    from trendrelay_api.integrations import effect_render
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    monkeypatch.setattr(effect_render, "approved_source", lambda path: Path(path))
+    monkeypatch.setattr(effect_render, "run_render_job", lambda _job_id: None)
+    workspace = create_workspace()
+    assets = [
+        make_asset(workspace, tmp_path, name=f"batch-shared-{index}")
+        for index in range(3)
+    ]
+
+    seen: list[bool] = []
+    real_create = effect_render.create_render_job
+
+    def watch(render_request, **kwargs):
+        seen.append(kwargs.get("session") is not None)
+        return real_create(render_request, **kwargs)
+
+    monkeypatch.setattr(
+        "trendrelay_api.integrations.effect_render.create_render_job", watch
+    )
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/render-batch",
+        json={
+            "asset_ids": assets,
+            "steps": [{"effect": "speed", "values": {"rate": 1.25}}],
+            "confirm_external_action": True,
+        },
+    )
+
+    assert response.status_code == 202, response.text
+    assert response.json()["counts"]["queued"] == 3
+    assert seen == [True, True, True], "every asset must queue on the request's session"
+
+
 def test_one_asset_failing_unexpectedly_does_not_lose_the_batch(
     tmp_path, monkeypatch
 ) -> None:
