@@ -27,6 +27,7 @@ export const ru: Messages = {
     chooseLanguage: "Выберите язык",
     timezone: "Часовой пояс",
     chooseTimezone: "Выберите часовой пояс рабочего пространства",
+    searchTimezone: "Найдите город или регион…",
   },
 
   common: {
@@ -503,8 +504,7 @@ export const ru: Messages = {
     removeDestination: "Удалить {label}",
     destinationRemoved: "{label} удалён.",
     queueEyebrow: "Что публикует",
-    queue: "{ready} из {total} готовы к публикации",
-    queueHelp: "Публикации повторяются: вышедшая уходит в конец очереди, а не расходуется. Публикация без текста пропускается в любом состоянии.",
+    queue: "{ready} из {total} готовы к публикации",
     noQueue: "Очередь пуста. Добавьте ролик и текст к нему.",
     approve: "В ротацию",
     itemApproved: "Теперь в ротации.",

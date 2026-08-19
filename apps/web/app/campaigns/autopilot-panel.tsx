@@ -620,6 +620,77 @@ function namedFormat(configured: string | null | undefined, item: QueueItem): st
 
 
 /**
+ * The rules this campaign posts by, in its own numbers.
+ *
+ * Every one of these was decided somewhere - a setting, a rank, a constant in
+ * the scheduler - and none of them was written down where the person watching
+ * the queue could read it. So a campaign that posted nothing looked broken
+ * rather than governed, and a campaign that posted looked arbitrary. The
+ * numbers are the campaign's own rather than an example: a rest interval
+ * described as "a few weeks" is not a rule anybody can predict from.
+ *
+ * Deliberately not a summary of what happened - the run note says that. This
+ * says what will happen, which is the half a schedule cannot show.
+ */
+function PostingStrategy({
+  autopilot,
+  destinations,
+  slots,
+}: {
+  autopilot: Autopilot;
+  destinations: Destination[];
+  slots: Slot[];
+}) {
+  const accounts = destinations.length;
+  const perDay = slots.length;
+  return (
+    <ol className="campaign-strategy">
+      <li>
+        <b>When</b>
+        <span>{perDay
+          ? `${perDay} posting ${perDay === 1 ? "time" : "times"} a day, shared by every campaign in this workspace.`
+          : "No posting times set, so nothing is scheduled."}</span>
+      </li>
+      <li>
+        <b>Which account</b>
+        <span>{accounts > 1
+          ? `Each time goes to whichever of the ${accounts} accounts is performing best, and every 4th post goes to another one so the others can earn their way up. If the chosen account cannot take that time, the next one gets it.`
+          : accounts === 1
+            ? "Every posting time goes to the one account on this campaign."
+            : "No accounts on this campaign yet."}</span>
+      </li>
+      <li>
+        <b>Which post</b>
+        <span>The first in the queue that is ready for that account: in
+          rotation, copy written, and media the network accepts.</span>
+      </li>
+      <li>
+        <b>Repeats</b>
+        <span>A post that goes out returns to the back of the queue rather
+          than being used up. It will not go to the <em>same</em> account again
+          for {autopilot.min_recycle_days} days, though another account can
+          take it sooner - the same clip on two accounts is two audiences.</span>
+      </li>
+      <li>
+        <b>Limits</b>
+        <span>At most {autopilot.daily_cap_per_account} post
+          {autopilot.daily_cap_per_account === 1 ? "" : "s"} a day per account,
+          counting what other campaigns send there
+          {autopilot.weekly_post_cap
+            ? `, and ${autopilot.weekly_post_cap} a week across the campaign.`
+            : "."}</span>
+      </li>
+      <li>
+        <b>Before it sends</b>
+        <span>{autopilot.authority === "autonomous"
+          ? "Posts go out without you, except any carrying a weakly matched product - those always wait."
+          : "Every post waits in Approval, exactly as it will be sent. Nothing reaches an engine before you approve it."}</span>
+      </li>
+    </ol>
+  );
+}
+
+/**
  * A held post, shown as the post it is rather than as a grey rectangle.
  *
  * The player is gated - the clip is read only when somebody presses play, so
@@ -1931,7 +2002,10 @@ export function AutopilotPanel({
             onClick={() => void loadLibrary()}><ActionIcon name="clip" />{t("autopilot.addFromLibrary")}</Button>
         ) : undefined}
       >
-        <p className="autopilot-lede">{t("autopilot.queueHelp")}</p>
+        {/* The rules moved to "How this campaign posts", beside this card.
+            Two sentences of them here restated the two the card states in
+            order and in the campaign's own numbers, which is the version
+            somebody can predict from. */}
 
         {/* Choosing media is a temporary action, not another section in the
             campaign workspace. Keep the full multi-select and effects tools,
@@ -2996,6 +3070,13 @@ export function AutopilotPanel({
               the accounts, the product matching, and the words the posts
               are scaffolded with. */}
         </div>}
+      {<Card title="How this campaign posts">
+        <PostingStrategy
+          autopilot={autopilot}
+          destinations={destinations}
+          slots={slots}
+        />
+      </Card>}
       {<Card title="Posting times" aside={
         <Link className="ui-button ui-button-secondary ui-button-sm" href="/publish">
           Edit in Publish

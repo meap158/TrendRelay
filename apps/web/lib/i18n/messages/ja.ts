@@ -26,6 +26,7 @@ export const ja: Messages = {
     chooseLanguage: "言語を選択",
     timezone: "タイムゾーン",
     chooseTimezone: "ワークスペースのタイムゾーンを選ぶ",
+    searchTimezone: "都市や地域を検索…",
   },
 
   common: {
@@ -496,8 +497,7 @@ export const ja: Messages = {
     removeDestination: "{label} を削除",
     destinationRemoved: "{label} を削除しました。",
     queueEyebrow: "投稿内容",
-    queue: "{total} 件中 {ready} 件が投稿できます",
-    queueHelp: "投稿は繰り返し使われます。配信済みの投稿は消費されず、最後尾に回ります。本文が書かれていない投稿は、状態にかかわらず飛ばされます。",
+    queue: "{total} 件中 {ready} 件が投稿できます",
     noQueue: "キューは空です。クリップと本文を追加してください。",
     approve: "ローテーションに追加",
     itemApproved: "ローテーションに入りました。",

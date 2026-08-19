@@ -26,6 +26,7 @@ export const zh: Messages = {
     chooseLanguage: "选择语言",
     timezone: "时区",
     chooseTimezone: "选择工作区时区",
+    searchTimezone: "搜索城市或地区…",
   },
 
   common: {
@@ -486,8 +487,7 @@ export const zh: Messages = {
     removeDestination: "删除 {label}",
     destinationRemoved: "已移除 {label}。",
     queueEyebrow: "发布什么",
-    queue: "{total} 条中 {ready} 条可以发布",
-    queueHelp: "帖子会循环使用：已发布的帖子回到队列末尾，而不是被用掉。没有写文案的帖子会被跳过，无论处于什么状态。",
+    queue: "{total} 条中 {ready} 条可以发布",
     noQueue: "队列是空的。添加一个视频和配套文案。",
     approve: "加入轮换",
     itemApproved: "已加入轮换。",

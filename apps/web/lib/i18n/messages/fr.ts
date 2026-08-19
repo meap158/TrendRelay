@@ -26,6 +26,7 @@ export const fr: Messages = {
     chooseLanguage: "Choisir une langue",
     timezone: "Fuseau horaire",
     chooseTimezone: "Choisir le fuseau horaire de l'espace de travail",
+    searchTimezone: "Rechercher une ville ou une région…",
   },
 
   common: {
@@ -504,8 +505,7 @@ export const fr: Messages = {
     removeDestination: "Supprimer {label}",
     destinationRemoved: "{label} retiré.",
     queueEyebrow: "Ce qu’il publie",
-    queue: "{ready} sur {total} prêtes à publier",
-    queueHelp: "Les publications se répètent : une publication déjà diffusée repasse en fin de file au lieu d'être consommée. Une publication sans texte est ignorée, quel que soit son état.",
+    queue: "{ready} sur {total} prêtes à publier",
     noQueue: "La file est vide. Ajoutez un clip et le texte qui l'accompagne.",
     approve: "Mettre en rotation",
     itemApproved: "En rotation désormais.",

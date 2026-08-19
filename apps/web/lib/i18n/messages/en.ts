@@ -32,6 +32,7 @@ export const en = {
     chooseLanguage: "Choose a language",
     timezone: "Timezone",
     chooseTimezone: "Choose the workspace timezone",
+    searchTimezone: "Search a city or region…",
   },
 
   common: {
@@ -500,8 +501,7 @@ export const en = {
     removeDestination: "Remove {label}",
     destinationRemoved: "{label} removed.",
     queueEyebrow: "What it posts",
-    queue: "{ready} of {total} ready to post",
-    queueHelp: "Posts repeat: one that has gone out moves to the back rather than being used up. A post with no copy written is skipped, whatever its state.",
+    queue: "{ready} of {total} ready to post",
     noQueue: "Nothing queued yet. Add a clip and the copy to go with it.",
     approve: "Add to rotation",
     itemApproved: "In the rotation now.",

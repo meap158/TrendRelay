@@ -75,6 +75,20 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .workspace-section-links small { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-section-links a:focus-visible { z-index: 1; outline: 2px solid var(--link); outline-offset: -3px; }
 .toolbar-actions { display: flex; align-items: center; gap: 12px; min-width: 0; }
+/* The toolbar's pickers - language, timezone - as one rule, because two
+   adjacent dropdowns that differ by a few pixels read as two different kinds of
+   thing. They were a native select with hardcoded greys beside an app-styled
+   one, which is exactly how that looks. */
+.toolbar-picker { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); font-size: 12px; }
+.toolbar-picker .search-select-trigger { min-height: 30px; padding: 4px 8px; font-size: 12px; }
+/* Compact hides the word, not the label: an unlabelled control announces only
+   its current value to a screen reader. */
+.toolbar-picker.compact > span { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* Sized to their contents: a zone name runs long, a language name does not, and
+   the toolbar is not where anybody should discover how many zones Australia
+   has. */
+.timezone-picker .search-select { width: clamp(150px, 18vw, 220px); }
+.language-picker .search-select { width: clamp(110px, 12vw, 150px); }
 .notification-shell { position: relative; }
 .notification-trigger { position: relative; display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; padding: 0; color: var(--muted); background: var(--panel); cursor: pointer; }
 .notification-trigger:hover, .notification-trigger[aria-expanded="true"] { border-color: var(--line); color: var(--text); background: var(--panel-raised); }
@@ -478,6 +492,21 @@ html { scroll-behavior: smooth; }
 .connection-callout.warning { border-color: #f1d490; background: #fffaf0; }
 .connection-callout.connected { border-color: #b7d9cd; background: #f5fbf8; }
 .connection-callout .ui-button { flex: 0 0 auto; }
+/* An (i), and the reasoning on hover. A callout is one line by design, and the
+   paragraph behind this answers one question for the few who ask it.
+   `:focus-visible` as well as `:hover`, or it would be a keyboard dead end. */
+.connection-line { display: inline-flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.connection-info { position: relative; display: inline-grid; place-items: center; color: var(--muted); cursor: help; }
+.connection-info:hover, .connection-info:focus { color: var(--link); }
+.connection-info:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 50%; }
+/* Anchored to the icon's leading edge, not centred on it. Centred, a 290px
+   tooltip on an icon 51px from the left started at -94px - off the screen
+   entirely. Growing rightward from a control that is always on the left of
+   this callout cannot do that. */
+.connection-tooltip { position: absolute; top: calc(100% + 8px); inset-inline-start: -6px; z-index: 100; inline-size: min(290px, 70vw); padding: 8px 10px; border-radius: var(--radius-sm); background: #1c2b33; color: #fff; font-size: 11px; font-weight: 500; line-height: 1.45; text-align: start; opacity: 0; visibility: hidden; transition: opacity .15s, visibility .15s; box-shadow: 0 4px 12px rgb(0 0 0 / 15%); pointer-events: none; }
+.connection-info:hover .connection-tooltip,
+.connection-info:focus .connection-tooltip { opacity: 1; visibility: visible; }
+.connection-tooltip::before { content: ""; position: absolute; bottom: 100%; inset-inline-start: 10px; border: 5px solid transparent; border-bottom-color: #1c2b33; }
 
 .download-options { border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
 .download-options summary { display: flex; justify-content: space-between; gap: 16px; padding: 12px 2px; color: var(--text); font-weight: 600; cursor: pointer; }
@@ -760,6 +789,20 @@ html { scroll-behavior: smooth; }
 .campaign-match-marks { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 /* Standing out without shouting: the same badge, ringed. */
 .campaign-match-chosen { box-shadow: 0 0 0 1px var(--green); }
+
+/* The rules the campaign posts by. A numbered list because they apply in
+   order - which time, which account, which post - and reading them out of
+   order is how somebody concludes the queue order decides the account. */
+.campaign-strategy { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; counter-reset: rule; }
+.campaign-strategy > li { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 9px; align-items: baseline; }
+.campaign-strategy > li > b { counter-increment: rule; font-size: 10px; }
+.campaign-strategy > li > b::before { content: counter(rule) ". "; color: var(--muted); }
+.campaign-strategy > li > span { color: var(--muted); font-size: 10px; line-height: 1.5; }
+.campaign-strategy em { font-style: normal; font-weight: 600; }
+
+@media (max-width: 620px) {
+  .campaign-strategy > li { grid-template-columns: 1fr; gap: 2px; }
+}
 
 /* What the campaign adds to the copy above, and where it lands. The form only
    edits two thirds of a post; this is the third somebody could not see. */

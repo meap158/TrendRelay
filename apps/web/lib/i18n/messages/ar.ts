@@ -28,6 +28,7 @@ export const ar: Messages = {
     chooseLanguage: "اختر اللغة",
     timezone: "المنطقة الزمنية",
     chooseTimezone: "اختر المنطقة الزمنية لمساحة العمل",
+    searchTimezone: "ابحث عن مدينة أو منطقة…",
   },
 
   common: {
@@ -494,8 +495,7 @@ export const ar: Messages = {
     removeDestination: "إزالة {label}",
     destinationRemoved: "أُزيل {label}.",
     queueEyebrow: "ماذا ينشر",
-    queue: "{ready} من {total} جاهزة للنشر",
-    queueHelp: "تتكرّر المنشورات: المنشور الذي نُشر ينتقل إلى آخر القائمة بدل أن يُستهلك. والمنشور الذي لم يُكتب نصه يُتخطّى مهما كانت حالته.",
+    queue: "{ready} من {total} جاهزة للنشر",
     noQueue: "القائمة فارغة. أضف مقطعًا والنص المرافق له.",
     approve: "أضِف إلى الدورة",
     itemApproved: "أصبح ضمن الدورة الآن.",

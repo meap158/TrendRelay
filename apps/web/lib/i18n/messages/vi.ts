@@ -26,6 +26,7 @@ export const vi: Messages = {
     chooseLanguage: "Chọn ngôn ngữ",
     timezone: "Múi giờ",
     chooseTimezone: "Chọn múi giờ của không gian làm việc",
+    searchTimezone: "Tìm thành phố hoặc khu vực…",
   },
 
   common: {
@@ -496,8 +497,7 @@ export const vi: Messages = {
     removeDestination: "Xoá {label}",
     destinationRemoved: "Đã xoá {label}.",
     queueEyebrow: "Đăng gì",
-    queue: "{ready}/{total} bài sẵn sàng đăng",
-    queueHelp: "Bài đăng được dùng lại: bài đã đăng chuyển xuống cuối thay vì bị bỏ đi. Bài chưa có nội dung sẽ bị bỏ qua, dù ở trạng thái nào.",
+    queue: "{ready}/{total} bài sẵn sàng đăng",
     noQueue: "Chưa có gì trong hàng đợi. Thêm một video và nội dung đi kèm.",
     approve: "Đưa vào luân phiên",
     itemApproved: "Đã đưa vào luân phiên.",
