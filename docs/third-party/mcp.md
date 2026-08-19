@@ -62,8 +62,9 @@ caller names one directly.
 
 ## Running it
 
-The server ships as an optional extra so a machine that never exposes its
-workspace does not carry it:
+The server ships as an optional extra, but the setup that every launcher runs
+installs it — `bootstrap.py` installs `services/api[dev,mcp]`, so a machine that
+has run setup already carries it. To add it to an environment set up by hand:
 
 ```
 pip install -e services/api[mcp]

@@ -25,6 +25,7 @@ REQUIRED_MODULES = {
     "fastapi": "FastAPI",
     "httpx": "HTTPX",
     "jwt": "PyJWT",
+    "mcp": "MCP",
     "psycopg": "Psycopg",
     "pydantic_settings": "Pydantic Settings",
     "pytest": "Pytest",
@@ -121,7 +122,10 @@ def install_api_dependencies() -> int:
         "--retries",
         "2",
         "-e",
-        f"{API_PROJECT}[dev]",
+        # `mcp` alongside `dev`: Assistant Access serves the workspace to an
+        # outside assistant, and a setup that installed everything but that would
+        # report the capability unavailable on a machine that just ran setup.
+        f"{API_PROJECT}[dev,mcp]",
     ]
     print(
         "[API setup] Installing required packages. "

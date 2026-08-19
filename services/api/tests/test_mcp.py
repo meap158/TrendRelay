@@ -269,3 +269,47 @@ def test_tunnel_status_is_disabled_without_config(monkeypatch) -> None:
     monkeypatch.delenv("CONTROL_PLANE_TUNNEL_ID", raising=False)
     monkeypatch.delenv("CONTROL_PLANE_API_KEY", raising=False)
     assert tunnel.status()["state"] == "disabled"
+
+
+# --- discovery and the Tools tab ---------------------------------------------
+
+
+def test_the_server_answers_rfc_9728_resource_metadata() -> None:
+    from starlette.testclient import TestClient
+
+    app = server.build_server("ws").streamable_http_app()
+    with TestClient(app) as client:
+        for path in (
+            "/.well-known/oauth-protected-resource",
+            "/.well-known/oauth-protected-resource/mcp",
+        ):
+            response = client.get(path)
+            assert response.status_code == 200, path
+            body = response.json()
+            assert body["resource"].endswith("/mcp")
+            # No authorization server is named, because there is none.
+            assert "authorization_servers" not in body
+
+
+def test_the_tools_tab_report_covers_the_server_and_the_tunnel(monkeypatch) -> None:
+    monkeypatch.delenv("CONTROL_PLANE_TUNNEL_ID", raising=False)
+    monkeypatch.delenv("CONTROL_PLANE_API_KEY", raising=False)
+    from trendrelay_api.tool_setup import setup_report
+
+    report = setup_report("mcp-server")
+    requirement_ids = {row["id"] for row in report["requirements"]}
+    assert {"installation", "server", "tunnel", "boundary", "tools"} <= requirement_ids
+    action_ids = {action["id"] for action in report["actions"]}
+    # Unconfigured: start is offered, the tunnel test is not.
+    assert "start-mcp" in action_ids
+    assert "test-tunnel" not in action_ids
+
+
+def test_the_tools_tab_offers_the_tunnel_test_once_configured(monkeypatch) -> None:
+    _tunnel_env(monkeypatch)
+    from trendrelay_api.tool_setup import setup_report
+
+    report = setup_report("mcp-server")
+    assert "test-tunnel" in {action["id"] for action in report["actions"]}
+    # The credentials are surfaced the way every other key on the page is.
+    assert "CONTROL_PLANE_API_KEY" in report["supported_secret_names"]
