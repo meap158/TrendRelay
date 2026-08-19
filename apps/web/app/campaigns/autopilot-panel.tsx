@@ -2691,10 +2691,15 @@ export function AutopilotPanel({
                           // long product name and read as a verdict on the row
                           // rather than on the product.
                           <span key={match.offer_id} className="campaign-queue-product">
-                            <em className="product">
-                              {match.product_name} · {match.score}%
-                              {commissionLabel(match) && ` · ${commissionLabel(match)}`}
-                            </em>
+                            {/* The name truncates, the rate does not. In one
+                                chip the commission was the tail of a long
+                                product name and the first thing an ellipsis
+                                ate - which is the half of it worth reading:
+                                the name says which product, the rate says
+                                whether the post is worth making. */}
+                            <em className="product">{match.product_name}</em>
+                            <em className="rate">{match.score}%
+                              {commissionLabel(match) && ` · ${commissionLabel(match)}`}</em>
                             {/* Said rather than left to the percentage. Nothing
                                 here cleared the evidence bar, and the best of a
                                 weak field is still what goes out. */}

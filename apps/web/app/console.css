@@ -1345,6 +1345,10 @@ html { scroll-behavior: smooth; }
 .campaign-queue-facts em { max-inline-size: 320px; overflow: hidden; border-radius: 999px; padding: 2px 7px; color: var(--muted); background: var(--panel-raised); font-size: 9px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
 /* The product is the one fact here worth the reader's full attention. */
 .campaign-queue-facts em.product { color: var(--text); }
+/* Never truncated: what the post pays is the half of the pair that decides
+   whether it is worth making, and it sat at the end of a product name long
+   enough to be eaten by the ellipsis. */
+.campaign-queue-facts em.rate { flex: none; color: var(--text); }
 /* A product and its caveat wrap as one, so "weak fit" cannot end up alone on
    a line under a long product name, reading as a verdict on the whole row. */
 .campaign-queue-product { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-inline-size: 100%; }
