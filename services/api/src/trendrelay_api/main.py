@@ -44,6 +44,7 @@ from trendrelay_api.integrations.meta_ads_kit import (
 from trendrelay_api.integrations.meta_ads_kit import (
     run_briefing as run_meta_ads_briefing,
 )
+from trendrelay_api.integrations.news_feeds import DESKS, collect_news
 from trendrelay_api.integrations.popular_posts import PERIODS as POST_PERIODS
 from trendrelay_api.integrations.popular_posts import (
     collect_posts,
@@ -427,6 +428,31 @@ async def popular_posts(
     result["providers"] = providers
     if not result["posts"] and not result["complete"]:
         # Nothing answered, which is a provider state rather than a quiet week.
+        raise HTTPException(status_code=503, detail=" ".join(result["notes"]))
+    return result
+
+
+@app.get("/api/research/news", tags=["research"])
+async def research_news(
+    request: Request,
+    desk: str = Query(default="all"),
+    limit: int = Query(default=6, ge=1, le=20),
+) -> dict[str, object]:
+    """What is happening, and how many newsrooms agree that it is.
+
+    No key and no session: these are public syndication feeds, which is why
+    this source is always available where most of the others are not.
+    """
+    require_local_mutation(request)
+    if desk != "all" and desk not in DESKS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown desk {desk}. Expected one of all, {', '.join(DESKS)}.",
+        )
+    result = await asyncio.to_thread(collect_news, desk=desk, limit=limit)
+    if not result["covered"] and not result["breaking"] and not result["complete"]:
+        # Every newsroom refused, which is a provider state rather than a
+        # quiet news day. A quiet day still answers, with empty shelves.
         raise HTTPException(status_code=503, detail=" ".join(result["notes"]))
     return result
 

@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
@@ -56,8 +57,8 @@ USER_AGENT = "TrendRelay/1.0 (+https://github.com/meap158/TrendRelay) feed reade
 #: feed - the largest of the defaults below is under three hundred kilobytes.
 MAX_FEED_BYTES = 2 * 1024 * 1024
 
-#: Per-feed timeout. Feeds are read in sequence, so this bounds the whole board
-#: at roughly `len(feeds) * REQUEST_TIMEOUT` in the worst case.
+#: Per-feed timeout. Feeds are read concurrently, so this is very nearly the
+#: worst case for the whole board rather than the worst case per newsroom.
 REQUEST_TIMEOUT = 10.0
 
 #: How recent a story must be to count as "just in".
@@ -519,18 +520,31 @@ def collect_news(
     read: list[str] = []
     failures: list[str] = []
 
-    for _feed_id, label, url, _desk in wanted:
+    def one(row: tuple[str, str, str, str]) -> tuple[str, list[Headline] | str]:
+        _feed_id, label, url, _desk = row
         try:
-            found = read_feed(url, outlet=label, opener=opener)
+            return label, read_feed(url, outlet=label, opener=opener)
         except NewsUnavailable as error:
-            failures.append(f"{label} could not be read: {error}")
-            continue
+            return label, str(error)
         except Exception as error:  # noqa: BLE001 - a provider state, not a bug
-            failures.append(f"{label} could not be read: {error}")
-            continue
-        if found:
+            return label, str(error)
+
+    # Nine independent reads took three seconds in sequence, and one newsroom
+    # timing out would have cost its whole ten on top. They share nothing, so
+    # they overlap: the board now costs about as long as its slowest feed.
+    with ThreadPoolExecutor(max_workers=min(8, max(1, len(wanted)))) as pool:
+        # Mapped back onto the requested order rather than taken as they
+        # finish, so the same feeds always produce the same board. Completion
+        # order is a race, and a board that reshuffles between two identical
+        # requests is one nobody can trust.
+        outcomes = list(pool.map(one, wanted)) if wanted else []
+
+    for label, outcome in outcomes:
+        if isinstance(outcome, str):
+            failures.append(f"{label} could not be read: {outcome}")
+        elif outcome:
             read.append(label)
-            headlines.extend(found)
+            headlines.extend(outcome)
 
     board = news_board(headlines, limit=limit, now=now)
     return {
