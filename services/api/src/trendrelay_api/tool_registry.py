@@ -86,10 +86,63 @@ def _run(command: list[str], cwd: Path = PROJECT_ROOT) -> subprocess.CompletedPr
     return result
 
 
+def _media_ai_runtime() -> Path:
+    """Where the shared media-analysis runtime lives.
+
+    Imported inside the function on purpose: `media_ai` reads this registry to
+    decide whether a provider is allowed to run, so importing it at the top
+    would make the two modules import each other.
+    """
+    from trendrelay_api.media_ai import RUNTIME_ROOT
+
+    return RUNTIME_ROOT
+
+
+def _runtime_distribution_version(distribution: str) -> str | None:
+    """The version of a distribution in the shared runtime, or None.
+
+    Read from the directory name rather than by importing the package. This is
+    called to build a status page, and importing a machine-learning library to
+    ask it its own version costs seconds and can fail outright on a machine
+    missing a system library it wants - which would read as "not installed".
+    """
+    normalized = distribution.replace("-", "_").lower()
+    runtime = _media_ai_runtime()
+    if not runtime.is_dir():
+        return None
+    for item in runtime.glob("*.dist-info"):
+        name, _, version = item.name.removesuffix(".dist-info").rpartition("-")
+        if name.replace("-", "_").lower() == normalized:
+            return version
+    return None
+
+
+def _api_distribution_version(distribution: str) -> str | None:
+    """The version of a package importable in the API's own interpreter, or None.
+
+    Unlike the media-AI runtime read above, an internal capability ships in the
+    API's environment, so its presence is answered by the metadata already
+    loaded rather than by a directory under `.tools`.
+    """
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version(distribution)
+    except PackageNotFoundError:
+        return None
+
+
 def _installed_revision(tool: dict[str, Any]) -> str | None:
-    # Not every catalogued tool is a git checkout. A tool installed as a Python
-    # extra has no source directory to read a revision from, and demanding one
-    # would mean inventing a path that is never going to exist.
+    # A first-party capability that ships in the API's own environment: its
+    # "revision" is the version of the package it needs, read from that
+    # environment rather than a checkout.
+    if tool.get("install_strategy") == "internal" and tool.get("distribution"):
+        return _api_distribution_version(tool["distribution"])
+    # A tool distributed on PyPI has no checkout to read a revision from. Its
+    # pinned version in the shared runtime is the same fact in the other form,
+    # and reporting it is what lets such a tool be activated at all.
+    if tool.get("install_strategy") == "pypi" and tool.get("distribution"):
+        return _runtime_distribution_version(tool["distribution"])
     if not tool.get("source_path"):
         return None
     source = _project_path(tool["source_path"])
@@ -114,10 +167,16 @@ def list_tools() -> list[dict[str, Any]]:
     for catalog_tool in _catalog():
         tool = deepcopy(catalog_tool)
         installed_revision = _installed_revision(tool)
-        tool["present"] = bool(
-            tool.get("root_path") and _project_path(tool["root_path"]).exists()
-        )
-        tool["installed"] = installed_revision == tool["revision"]
+        if tool.get("install_strategy") == "internal":
+            # A first-party capability: any importable version is installed. It
+            # is pinned by the API's own dependency constraint, not a revision.
+            tool["present"] = installed_revision is not None
+            tool["installed"] = installed_revision is not None
+        else:
+            tool["present"] = bool(
+                tool.get("root_path") and _project_path(tool["root_path"]).exists()
+            ) or (tool.get("install_strategy") == "pypi" and installed_revision is not None)
+            tool["installed"] = installed_revision == tool["revision"]
         tool["installed_revision"] = installed_revision
         requested_active = active_state.get(tool["id"], tool.get("default_active", False))
         tool["active"] = bool(requested_active and tool["installed"] and tool["activation_allowed"])
@@ -155,6 +214,16 @@ def install_tool(tool_id: str) -> dict[str, Any]:
             if root.exists():
                 _remove_tree(root)
             raise
+    elif strategy == "pypi":
+        distribution = tool.get("distribution")
+        if not distribution:
+            raise ToolRegistryError("This tool does not name a distribution to install.")
+        from trendrelay_api.media_ai import pip_install
+
+        # Into the shared media-analysis runtime rather than the API's own
+        # environment, so a tool the operator never asked for costs nothing and
+        # removing one cannot break the interpreter running this.
+        pip_install([f"{distribution}=={tool['revision']}"])
     else:
         raise ToolRegistryError(f"Unsupported install strategy: {strategy}")
 
@@ -163,8 +232,44 @@ def install_tool(tool_id: str) -> dict[str, Any]:
     return next(item for item in list_tools() if item["id"] == tool_id)
 
 
+def _remove_runtime_distribution(distribution: str) -> None:
+    """Delete exactly the files pip recorded for one distribution.
+
+    The runtime is shared, so removing the directory would take the other
+    providers with it. pip writes a RECORD of everything it wrote, and following
+    that leaves a dependency two tools share in place - which is also what pip
+    itself would do.
+    """
+    runtime = _media_ai_runtime()
+    normalized = distribution.replace("-", "_").lower()
+    for info in list(runtime.glob("*.dist-info")):
+        name = info.name.removesuffix(".dist-info").rpartition("-")[0]
+        if name.replace("-", "_").lower() != normalized:
+            continue
+        record = info / "RECORD"
+        if record.is_file():
+            for line in record.read_text(encoding="utf-8").splitlines():
+                relative = line.split(",", 1)[0].strip()
+                if not relative:
+                    continue
+                target = (runtime / relative).resolve()
+                # A RECORD is written by pip, but it is still a file on disk
+                # naming paths to delete. Anything outside the runtime is
+                # ignored rather than followed.
+                if runtime.resolve() not in target.parents:
+                    continue
+                target.unlink(missing_ok=True)
+        if info.is_dir():
+            _remove_tree(info)
+    for directory in sorted(runtime.rglob("*"), key=lambda item: len(item.parts), reverse=True):
+        if directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
+
+
 def uninstall_tool(tool_id: str) -> dict[str, Any]:
     tool = _tool(tool_id)
+    if tool.get("install_strategy") == "pypi" and tool.get("distribution"):
+        _remove_runtime_distribution(tool["distribution"])
     root = _project_path(tool["root_path"])
     if root.exists():
         _remove_tree(root)
