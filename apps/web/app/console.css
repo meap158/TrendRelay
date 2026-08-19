@@ -867,7 +867,7 @@ html { scroll-behavior: smooth; }
 .campaign-strategy-times em.zone { background: transparent; padding-inline: 2px; font-weight: 500; }
 .campaign-strategy-link { color: var(--link); font-weight: 600; white-space: nowrap; }
 /* A campaign with nothing left to send is not a detail in a sentence. */
-.autopilot-expansion-warn { color: #7a5c00; font-weight: 600; }
+.autopilot-expansion-warn { color: var(--warn); font-weight: 600; }
 
 @media (max-width: 620px) {
   .campaign-strategy > li { grid-template-columns: 1fr; gap: 2px; }

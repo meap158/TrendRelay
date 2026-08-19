@@ -157,6 +157,13 @@ type Autopilot = {
    * than a form's - so `queue_approved` says only that nobody has parked it.
    */
   queue_ready: number;
+  /**
+   * Postings the queue still holds, or null when repeats make it endless.
+   *
+   * A campaign that does not repeat spends itself: each written post has one
+   * posting per account and then it is done.
+   */
+  remaining_outings: number | null;
 };
 
 type HeldExecution = {
@@ -1851,6 +1858,32 @@ export function AutopilotPanel({
                   {autopilot.offer_mode === "none"
                     ? " No affiliate link is attached."
                     : " Each post carries its affiliate link where that link can be clicked."}
+                  {/* The ceiling is true and, on a queue that does not repeat,
+                      beside the point: "up to 10 a day" against three postings
+                      in total describes a rate nothing can sustain. What runs
+                      out first is what somebody needs to know. */}
+                  {autopilot.remaining_outings !== null && (
+                    <>
+                      {" "}
+                      {autopilot.remaining_outings === 0 ? (
+                        <b className="autopilot-expansion-warn">
+                          The queue is spent: every post has been to every account.
+                          Add posts, or allow repeats.
+                        </b>
+                      ) : (
+                        <>Repeats are off, so{" "}
+                          <strong>{autopilot.remaining_outings}{" "}
+                            {autopilot.remaining_outings === 1 ? "posting" : "postings"}</strong>
+                          {" "}remain before the queue is spent
+                          {perDay > 0 && autopilot.remaining_outings < perDay
+                            ? " - under a day at that rate."
+                            : perDay > 0
+                              ? ` - about ${Math.floor(autopilot.remaining_outings / perDay)} day(s) at that rate.`
+                              : "."}
+                        </>
+                      )}
+                    </>
+                  )}
                 </>
               );
             })()}

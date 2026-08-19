@@ -655,9 +655,8 @@ export default function CampaignsPage() {
                     where the rule it belongs to is written out. Set in two
                     places it was also *stated* in only one of them, and the
                     number here governed nothing at all on a campaign that
-                    posts each item once. */}
-              </div>
-              <div className="campaign-dialog-grid">
+                    posts each item once. The three caps share one grid rather
+                    than leaving the hole its departure opened. */}
                 <label>Posts per account per day
                   <input type="number" name="daily_cap_per_account" min={1} max={24}
                     defaultValue={policy.daily_cap_per_account} />

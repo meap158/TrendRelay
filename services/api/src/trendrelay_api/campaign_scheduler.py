@@ -1140,6 +1140,29 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
             CampaignQueueItem.campaign_id == autopilot.campaign_id
         )
     ) or 0
+    # What the queue still has in it, when it has a finite amount.
+    #
+    # A campaign that does not repeat spends itself: each written post has one
+    # posting per account and then it is done. "Up to 10 posts a day" is a true
+    # ceiling and a useless one against a queue holding three postings in
+    # total, and running dry silently is the failure this number exists to see
+    # coming. None when repeats are on, because then there is no such number -
+    # the queue supplies posts for as long as the rest interval allows.
+    remaining: int | None = None
+    if not autopilot.repeat_posts:
+        written = session.scalars(
+            select(CampaignQueueItem).where(
+                CampaignQueueItem.campaign_id == autopilot.campaign_id,
+                CampaignQueueItem.state == "approved",
+                CampaignQueueItem.body != PLACEHOLDER_BODY,
+            )
+        ).all()
+        account_ids = {item.id for item in destinations if item.enabled}
+        remaining = sum(
+            len(account_ids - set((item.last_posted_by_destination or {}).keys()))
+            for item in written
+        )
+
     return {
         "enabled": autopilot.enabled,
         "delivery": autopilot.delivery,
@@ -1163,4 +1186,5 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
         "queue_total": total,
         "queue_approved": approved,
         "queue_ready": ready,
+        "remaining_outings": remaining,
     }
