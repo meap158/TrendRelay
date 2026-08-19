@@ -56,6 +56,53 @@ export const POSTABLE_KINDS = ["video", "image"] as const;
 // re-exported because this file uses them too.
 export { clipLength, fileName, handoffPath, isBlurred };
 
+/**
+ * A Library asset's still, as an object URL.
+ *
+ * Read through `apiFetch` rather than pointed at with a `src`, because the
+ * endpoint wants the workspace identity that a bare `<img>` does not send. Any
+ * panel that shows a clip before it plays wants this: the alternative is the
+ * grey rectangle a poster-less player draws, which says nothing about which
+ * video is about to go out.
+ *
+ * Returns "" while it loads and if there is nothing to load, so a caller can
+ * treat both the same - there is no still to show either way.
+ */
+export function useAssetPoster(
+  assetId: string | null | undefined,
+  workspaceId: string,
+  apiFetch: Fetcher,
+): string {
+  // The id travels with the URL rather than the effect clearing it first.
+  // Clearing meant a setState in the effect body - a cascading render for
+  // every poster on the page - where all that is wanted is to not show the
+  // previous clip's frame under the next clip's name.
+  const [loaded, setLoaded] = useState<{ id: string; url: string } | null>(null);
+
+  useEffect(() => {
+    if (!assetId) return;
+    let active = true;
+    let objectUrl = "";
+    apiFetch(`/api/workspaces/${workspaceId}/media/library/assets/${assetId}/content/thumbnail`)
+      .then((response) => {
+        if (!response.ok) throw new Error("unavailable");
+        return response.blob();
+      })
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        if (active) setLoaded({ id: assetId, url: objectUrl });
+        else URL.revokeObjectURL(objectUrl);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [apiFetch, assetId, workspaceId]);
+
+  return loaded && loaded.id === assetId ? loaded.url : "";
+}
+
 export function AssetThumbnail({
   asset,
   workspaceId,
@@ -65,28 +112,8 @@ export function AssetThumbnail({
   workspaceId: string;
   apiFetch: Fetcher;
 }) {
-  const [source, setSource] = useState("");
   const hasThumbnail = asset.versions.some((version) => version.kind === "thumbnail");
-
-  useEffect(() => {
-    if (!hasThumbnail) return;
-    let active = true;
-    let objectUrl = "";
-    apiFetch(`/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/content/thumbnail`)
-      .then((response) => {
-        if (!response.ok) throw new Error("unavailable");
-        return response.blob();
-      })
-      .then((blob) => {
-        objectUrl = URL.createObjectURL(blob);
-        if (active) setSource(objectUrl);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [apiFetch, asset.id, hasThumbnail, workspaceId]);
+  const source = useAssetPoster(hasThumbnail ? asset.id : null, workspaceId, apiFetch);
 
   return (
     <span className="picker-thumb">

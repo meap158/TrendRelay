@@ -52,6 +52,7 @@ import {
 import {
   AssetThumbnail,
   PostPreview,
+  useAssetPoster,
   type Slot,
 } from "../publish/composer";
 import {
@@ -172,6 +173,8 @@ type HeldExecution = {
   image_paths: string[];
   post_type: string | null;
   placement: string | null;
+  /** The exact Library version this was frozen against, for its still. */
+  asset_id?: string | null;
 };
 
 type PreviewPost = {
@@ -592,6 +595,46 @@ function namedFormat(configured: string | null | undefined, item: QueueItem): st
 
 
 /**
+ * A held post, shown as the post it is rather than as a grey rectangle.
+ *
+ * The player is gated - the clip is read only when somebody presses play, so
+ * a page of held posts does not pull a dozen videos off disk - and a gated
+ * player with no poster draws nothing at all. Which is the one thing an
+ * approval screen cannot afford: the question being asked is "is this the
+ * right video", and the answer was a blank.
+ *
+ * Its own component because the still is fetched by a hook, and a hook cannot
+ * be called from inside the list's map.
+ */
+function HeldPreview({
+  item,
+  workspaceId,
+  apiFetch,
+}: {
+  item: HeldExecution;
+  workspaceId: string;
+  apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
+}) {
+  const poster = useAssetPoster(item.asset_id, workspaceId, apiFetch);
+  const media = (path: string) =>
+    `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview`
+    + `?path=${encodeURIComponent(path)}`;
+  return (
+    <PostPreview
+      platform={(item.platform ?? "tiktok") as PublishingPlatform}
+      postTypeLabel={item.post_type ?? "Post"}
+      handle={item.destination_label ?? ""}
+      caption={item.caption}
+      title={item.title ?? ""}
+      thumbnail={poster}
+      source={item.media_path ? media(item.media_path) : undefined}
+      carousel={item.image_paths.length ? item.image_paths.map(media) : undefined}
+      sourceIsImage={!item.media_path && item.image_paths.length > 0}
+    />
+  );
+}
+
+/**
  * Every outing a queued post has ahead of it, rehearsed.
  *
  * The row used to say "Next Thu 09:00 on halcyonbooks" and stop, which answers
@@ -606,6 +649,7 @@ function QueueRehearsal({
   item,
   outings,
   workspaceId,
+  apiFetch,
   noPlanReason,
   destinations,
   slots,
@@ -613,6 +657,7 @@ function QueueRehearsal({
   item: QueueItem;
   outings: PreviewPost[];
   workspaceId: string;
+  apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   /** Why this post has no outings, when it has none. */
   noPlanReason: string;
   /** The campaign's accounts, for a row the plan has not reached. */
@@ -620,6 +665,9 @@ function QueueRehearsal({
   /** The campaign's posting times, for the same reason. */
   slots: Slot[];
 }) {
+  // The clip's own frame, for the gated player below. Read here rather than in
+  // the branch that uses it, because a hook cannot run only sometimes.
+  const poster = useAssetPoster(item.asset_id, workspaceId, apiFetch);
   // Where and when, even with nothing scheduled. A row with no plan used to
   // say only why, and the two questions somebody actually has - which accounts
   // is this for, and when does this campaign post - are answered by the
@@ -717,7 +765,7 @@ function QueueRehearsal({
                   handle={post.destination?.label ?? ""}
                   caption={post.caption}
                   title={post.title ?? ""}
-                  thumbnail=""
+                  thumbnail={poster}
                   source={item.video_path
                     ? media(item.video_path)
                     : item.image_paths[0] ? media(item.image_paths[0]) : undefined}
@@ -1671,21 +1719,7 @@ export function AutopilotPanel({
           <ul className="campaign-approval-list">
             {exceptions.map((item) => (
               <li key={item.id}>
-                <PostPreview
-                  platform={(item.platform ?? "tiktok") as PublishingPlatform}
-                  postTypeLabel={item.post_type ?? "Post"}
-                  handle={item.destination_label ?? ""}
-                  caption={item.caption}
-                  title={item.title ?? ""}
-                  thumbnail=""
-                  source={item.media_path
-                    ? previewMediaUrl(item.media_path)
-                    : undefined}
-                  carousel={item.image_paths.length
-                    ? item.image_paths.map(previewMediaUrl)
-                    : undefined}
-                  sourceIsImage={!item.media_path && item.image_paths.length > 0}
-                />
+                <HeldPreview item={item} workspaceId={workspaceId} apiFetch={apiFetch} />
                 <div className="campaign-approval-facts">
                   <small>
                     {item.destination_label ?? item.platform ?? "destination"}
@@ -2306,6 +2340,7 @@ export function AutopilotPanel({
                     item={item}
                     outings={outings.get(item.id) ?? []}
                     workspaceId={workspaceId}
+                    apiFetch={apiFetch}
                     destinations={destinations}
                     slots={slots}
                     /* In the order the scheduler applies them. Copy comes
