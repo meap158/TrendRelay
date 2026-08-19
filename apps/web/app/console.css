@@ -701,6 +701,10 @@ html { scroll-behavior: smooth; }
    post, where, what, and what exactly happens next. */
 .autopilot { display: grid; gap: 12px; margin-top: 12px; }
 .autopilot-lede { margin: 0 0 10px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+/* The approval pipeline in one line: muted around the figures, which carry the
+   colour so the three buckets read at a glance above the held posts. */
+.autopilot-approval-summary { margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.autopilot-approval-summary strong { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .autopilot-empty { margin: 0; padding: 12px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 12px; }
 .autopilot-note { margin: 10px 0 0; padding: 8px 10px; border-inline-start: 3px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--text); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
 

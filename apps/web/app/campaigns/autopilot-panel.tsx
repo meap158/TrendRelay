@@ -1713,9 +1713,28 @@ export function AutopilotPanel({
           title="Needs your approval"
           aside={<Badge tone="warn">{exceptions.length} held</Badge>}
         >
-          <p className="autopilot-lede">Nothing reaches an engine before it is
-            approved here, exactly as frozen — and a post that is not finished
-            refuses with the list of what to fix.</p>
+          <p className="autopilot-lede">Nothing is published until you approve it
+            here, and what you see is exactly what will go out. A post that is
+            not finished can’t be approved — it shows what to fix first.</p>
+          {/* One line that reconciles the scattered counts into the operator's
+              own three buckets: what needs them now, what is ready to go, and
+              what is still unfinished. All from authoritative figures, so it
+              never disagrees with the rows below. */}
+          {(() => {
+            const waiting = exceptions.length;
+            const ready = autopilot.queue_ready;
+            const needsCopy = queue.filter((item) => item.needs_copy).length;
+            return (
+              <p className="autopilot-approval-summary" role="status">
+                <strong>{waiting}</strong> waiting for you
+                {ready > 0 && <> · <strong>{ready}</strong> ready to post</>}
+                {needsCopy > 0 && (
+                  <> · <strong>{needsCopy}</strong>{" "}
+                    {needsCopy === 1 ? "still needs copy" : "still need copy"}</>
+                )}
+              </p>
+            );
+          })()}
           <ul className="campaign-approval-list">
             {exceptions.map((item) => (
               <li key={item.id}>
