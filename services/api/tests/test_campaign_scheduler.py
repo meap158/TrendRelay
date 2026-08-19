@@ -936,3 +936,114 @@ def test_rested_but_committed_elsewhere_is_its_own_answer() -> None:
 
     assert "already spoken for" in note
     assert "rested 30 days" not in note
+
+
+# --- a cap that is per account, not per account per campaign ------------------
+
+
+def other_campaigns_execution(session, *, integration_id: str, at, **overrides) -> None:
+    """A post another campaign in this workspace has already put on an account.
+
+    Written as an execution because that is the workspace-wide record of a post
+    reaching an account. A queue item belongs to one campaign and cannot see the
+    others, which is exactly how the cap came to be enforced per campaign.
+    """
+    fields = dict(
+        id=f"exec-{integration_id}-{at.isoformat()}",
+        workspace_id="ws",
+        campaign_id="other-camp",
+        destination_id="other-dest",
+        provider="buffer",
+        integration_id=integration_id,
+        platform="youtube",
+        destination_label="Their account",
+        state="published",
+        scheduled_at=at,
+        media_path=r"S:\media	heirs.mp4",
+        caption="Theirs.",
+        created_by="user-1",
+    )
+    fields.update(overrides)
+    session.add(PublicationExecution(**fields))
+    session.commit()
+
+
+def test_the_daily_cap_counts_the_account_not_the_campaign(session) -> None:
+    """Two campaigns on one account must not each be granted the full allowance.
+
+    The cap is called "posts per account per day". A destination is unique per
+    (campaign, provider, integration_id), so the same account can sit in any
+    number of campaigns - and each one used to count only its own posts.
+    """
+    slot(session, 9)
+    target = destination(session, "d1", "youtube")
+    queue_item(session, "q1")
+    other_campaigns_execution(
+        session, integration_id=target.integration_id, at=NOW.replace(hour=6),
+    )
+
+    posts, note = plan_campaign(
+        session, autopilot(session, daily_cap_per_account=1), now=NOW, link_for=None,
+    )
+
+    # Today is spent - the other campaign used the single allowed post. The
+    # horizon reaches tomorrow's slot, which is a different day and genuinely
+    # free, so the item lands there instead of being dropped.
+    assert all(post.at.date() != NOW.date() for post in posts), posts
+    assert "daily cap" in note
+    assert "another campaign" in note, note
+
+
+def test_a_post_on_a_different_account_does_not_count(session) -> None:
+    # The cap is per account. Another campaign posting somewhere else entirely
+    # is not this account's business.
+    slot(session, 9)
+    destination(session, "d1", "youtube")
+    queue_item(session, "q1")
+    other_campaigns_execution(
+        session, integration_id="somebody-elses-account", at=NOW.replace(hour=6),
+    )
+
+    posts, _ = plan_campaign(
+        session, autopilot(session, daily_cap_per_account=1), now=NOW, link_for=None,
+    )
+
+    assert len(posts) == 1
+
+
+def test_rest_days_remember_the_account_across_campaigns(session) -> None:
+    """The audience does not know which campaign sent a clip twice."""
+    slot(session, 9)
+    target = destination(session, "d1", "youtube")
+    queue_item(session, "q1", asset_id="asset-7")
+    other_campaigns_execution(
+        session,
+        integration_id=target.integration_id,
+        at=NOW - timedelta(days=3),
+        asset_id="asset-7",
+    )
+
+    posts, note = plan_campaign(
+        session, autopilot(session, min_recycle_days=30), now=NOW, link_for=None,
+    )
+
+    assert posts == []
+    assert "rested" in note
+
+
+def test_a_different_clip_on_that_account_is_still_free_to_post(session) -> None:
+    slot(session, 9)
+    target = destination(session, "d1", "youtube")
+    queue_item(session, "q1", asset_id="asset-7")
+    other_campaigns_execution(
+        session,
+        integration_id=target.integration_id,
+        at=NOW - timedelta(days=3),
+        asset_id="a-different-clip",
+    )
+
+    posts, _ = plan_campaign(
+        session, autopilot(session, min_recycle_days=30), now=NOW, link_for=None,
+    )
+
+    assert len(posts) == 1

@@ -338,6 +338,85 @@ def _eligible_items(
     return rested
 
 
+def _account_load_elsewhere(
+    session: Session,
+    autopilot: CampaignAutopilot,
+    destination: CampaignDestination,
+    now: datetime,
+) -> int:
+    """Posts this account already has today from the workspace's other campaigns.
+
+    The cap is called "posts per account per day" and until this it was not one.
+    Everything it counted - the queue's own stamps, this campaign's pending
+    executions - is scoped to a single campaign, while a destination is only
+    unique per `(campaign_id, provider, integration_id)`. So the same TikTok
+    account could sit in three campaigns and be handed the full allowance by
+    each of them, and the number the operator set was quietly multiplied by the
+    number of campaigns pointing at it.
+
+    Counted from executions rather than queue stamps because an execution is the
+    workspace-wide record of a post reaching an account; a queue item belongs to
+    one campaign and cannot see the others. Pending states count as well as
+    published ones - a post already committed to a slot today is spend, whether
+    or not the engine has confirmed it yet.
+    """
+    start = datetime(now.year, now.month, now.day, tzinfo=UTC)
+    end = start + timedelta(days=1)
+    return session.scalar(
+        select(func.count(PublicationExecution.id)).where(
+            PublicationExecution.workspace_id == autopilot.workspace_id,
+            PublicationExecution.campaign_id != autopilot.campaign_id,
+            PublicationExecution.provider == destination.provider,
+            PublicationExecution.integration_id == destination.integration_id,
+            PublicationExecution.state.in_(
+                sorted(HOLDING_STATES | {"published", "measured"})
+            ),
+            PublicationExecution.scheduled_at >= start,
+            PublicationExecution.scheduled_at < end,
+        )
+    ) or 0
+
+
+def _rested_elsewhere(
+    session: Session,
+    autopilot: CampaignAutopilot,
+    destination: CampaignDestination,
+    asset_id: str | None,
+    now: datetime,
+    min_recycle_days: int,
+) -> bool:
+    """Whether this media has stayed off this account long enough, campaigns aside.
+
+    Rest days protect the account's audience from seeing the same thing twice,
+    and an audience does not know which campaign sent it. The stamps the rest
+    check reads live on the queue item, which is one campaign's row - so the
+    same clip queued in two campaigns had two independent histories and could go
+    to one account twice inside a thirty-day window.
+
+    Identity is the Library asset. A queue item is per campaign; the asset is
+    the thing the audience would recognise. An item carrying no asset - a raw
+    path - cannot be matched across campaigns and is left to the per-campaign
+    check alone rather than being blocked on a guess.
+    """
+    if not asset_id:
+        return True
+    since = now - timedelta(days=min_recycle_days)
+    seen = session.scalar(
+        select(func.count(PublicationExecution.id)).where(
+            PublicationExecution.workspace_id == autopilot.workspace_id,
+            PublicationExecution.campaign_id != autopilot.campaign_id,
+            PublicationExecution.provider == destination.provider,
+            PublicationExecution.integration_id == destination.integration_id,
+            PublicationExecution.asset_id == asset_id,
+            PublicationExecution.state.in_(
+                sorted(HOLDING_STATES | {"published", "measured"})
+            ),
+            PublicationExecution.scheduled_at >= since,
+        )
+    ) or 0
+    return seen == 0
+
+
 def _posted_today(
     items: list[CampaignQueueItem], destination: CampaignDestination, now: datetime
 ) -> int:
@@ -544,13 +623,22 @@ def plan_campaign(
         destination = by_id[rank.destination_id]
         day_key = (destination.id, moment.date())
         already_planned = planned_per_day.get(day_key, 0)
+        # This campaign's own load, plus what every other campaign has already
+        # put on the same account today. Without the second term the cap is per
+        # account *per campaign*, which is neither what it says nor what stops
+        # an account being posted to twice as often as intended.
+        elsewhere = _account_load_elsewhere(session, autopilot, destination, moment)
         if (
             _posted_today(queue, destination, moment)
             + pending_per_day.get(day_key, 0)
             + already_planned
+            + elsewhere
             >= autopilot.daily_cap_per_account
         ):
-            notes.append(f"{destination.label} is at its daily cap.")
+            notes.append(
+                f"{destination.label} is at its daily cap."
+                + (f" {elsewhere} of them from another campaign." if elsewhere else "")
+            )
             continue
         if (destination.id, moment) in held_slots or _already_planned_for_slot(
             queue, destination.id, moment
@@ -576,6 +664,19 @@ def plan_campaign(
             if (item.id, destination.id) not in reserved
             or moment - reserved[(item.id, destination.id)]
             >= timedelta(days=autopilot.min_recycle_days)
+        ]
+        # The same question asked of the account rather than of this campaign's
+        # own history. An audience does not know which campaign sent a clip, so
+        # a rest window that remembers only one of them is not a rest window.
+        # Matched on the Library asset, the identity that survives being queued
+        # in two places.
+        eligible = [
+            item
+            for item in eligible
+            if _rested_elsewhere(
+                session, autopilot, destination, item.asset_id, moment,
+                autopilot.min_recycle_days,
+            )
         ]
         if not eligible:
             notes.append(_why_nothing_eligible(
