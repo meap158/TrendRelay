@@ -7,12 +7,12 @@
  * nothing until something says where that hour is. That was a column with no
  * way to set it: it defaulted to UTC and was only ever written as a side effect
  * of saving posting times, so a workspace run from Bangkok scheduled its posts
- * in London and every time on every screen read seven hours off. A setting that
- * decides when posts go out should be visible, not inferred.
+ * in London. A setting that decides when posts go out should be visible.
  *
- * Beside the language picker, and built the same way: a native `<select>`, so
- * it is keyboard-navigable and screen-reader-correct for free and opens as the
- * platform's own picker on a phone.
+ * A `SearchSelect` rather than the native control the language picker uses.
+ * Seven languages are a list you read; four hundred zones are a list you search,
+ * and scrolling to `Asia/Ho_Chi_Minh` past every other continent is not a
+ * choice anybody should have to make twice.
  *
  * The list is the browser's own - `Intl.supportedValuesOf("timeZone")` - rather
  * than a table shipped here, which would be correct on the day it was typed and
@@ -21,30 +21,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { SearchSelect } from "./search-select";
 import { useAuth } from "../auth-provider";
 import { useJobs } from "../jobs-provider";
 import { useLocale } from "../i18n-provider";
 
-const SR_ONLY: React.CSSProperties = {
-  position: "absolute",
-  width: 1,
-  height: 1,
-  padding: 0,
-  margin: -1,
-  overflow: "hidden",
-  clip: "rect(0 0 0 0)",
-  whiteSpace: "nowrap",
-  border: 0,
-};
-
-/** Every zone this browser knows, with the reader's own first. */
-function zoneOptions(current: string): string[] {
+/** Every zone this browser knows, with the reader's own and the current first. */
+function zoneNames(current: string): string[] {
   const here = Intl.DateTimeFormat().resolvedOptions().timeZone;
   let all: string[] = [];
   try {
     all = Intl.supportedValuesOf("timeZone");
   } catch {
-    // Older engines do not publish the list. The two that matter are still
+    // Older engines do not publish the list. What is already in play is still
     // offered, so the control never becomes a dead end.
     all = ["UTC"];
   }
@@ -52,13 +41,24 @@ function zoneOptions(current: string): string[] {
   return [...new Set([...lead, ...all])];
 }
 
-/** `+07:00`, so a name nobody recognises still says how far off it is. */
+/** `GMT+7`, so a name nobody recognises still says how far off it is. */
 function offsetLabel(zone: string): string {
   try {
-    const parts = new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat("en-US", {
       timeZone: zone, timeZoneName: "shortOffset",
-    }).formatToParts(new Date());
-    return parts.find((part) => part.type === "timeZoneName")?.value ?? "";
+    }).formatToParts(new Date())
+      .find((part) => part.type === "timeZoneName")?.value ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/** The time it is there now: the fastest way to recognise the right zone. */
+function clockIn(zone: string): string {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      timeZone: zone, hour: "numeric", minute: "2-digit",
+    }).format(new Date());
   } catch {
     return "";
   }
@@ -85,26 +85,34 @@ export function TimezonePicker({ compact = false }: { compact?: boolean }) {
     return () => { cancelled = true; };
   }, [apiFetch, activeWorkspaceId, user]);
 
-  const options = useMemo(() => zoneOptions(zone), [zone]);
+  const options = useMemo(
+    () => zoneNames(zone).map((name) => ({
+      value: name,
+      label: name.replaceAll("_", " "),
+      // The offset and the local time, because "Asia/Ho_Chi_Minh" and
+      // "Asia/Bangkok" are the same clock and the name does not say so.
+      description: [offsetLabel(name), clockIn(name)].filter(Boolean).join(" · "),
+      // Searchable by the city alone: nobody types the continent first.
+      keywords: name.replaceAll("_", " ").replaceAll("/", " "),
+    })),
+    [zone],
+  );
 
-  // Nothing to choose for until a workspace is in view. Rendering an empty
-  // control that silently does nothing is worse than not rendering one.
+  // Nothing to choose for until a workspace is in view. An empty control that
+  // silently does nothing is worse than no control.
   if (!activeWorkspaceId || !zone) return null;
 
   return (
-    <label
-      style={{
-        display: "inline-flex", alignItems: "center", gap: 6,
-        fontSize: 12, color: "#5f6368",
-      }}
-    >
-      <span style={compact ? SR_ONLY : undefined}>{t("nav.timezone")}</span>
-      <select
+    <label className={`toolbar-picker timezone-picker${compact ? " compact" : ""}`}>
+      <span>{t("nav.timezone")}</span>
+      <SearchSelect
         value={zone}
+        options={options}
         disabled={saving}
-        aria-label={t("nav.chooseTimezone")}
-        onChange={(event) => {
-          const next = event.target.value;
+        placeholder={t("nav.chooseTimezone")}
+        searchPlaceholder={t("nav.searchTimezone")}
+        onChange={(next) => {
+          if (next === zone) return;
           const previous = zone;
           setZone(next);
           setSaving(true);
@@ -115,27 +123,15 @@ export function TimezonePicker({ compact = false }: { compact?: boolean }) {
           })
             .then((response) => {
               if (!response.ok) throw new Error("rejected");
-              // Every screen reads times off this, and they were rendered
-              // before it changed. Re-reading the app is cheaper than
-              // threading the new zone through each of them, and it is a
-              // deliberate action rather than something happening on a timer.
+              // Every screen reads its times off this and they were rendered
+              // before it changed. Re-reading the app is cheaper than threading
+              // the new zone through each of them.
               window.location.reload();
             })
             .catch(() => { setZone(previous); })
             .finally(() => setSaving(false));
         }}
-        style={{
-          borderRadius: 6, border: "1px solid #dadce0", padding: "4px 6px",
-          background: "#fff", color: "#1c2b33", font: "inherit", fontSize: 12,
-          maxWidth: 190,
-        }}
-      >
-        {options.map((item) => (
-          <option key={item} value={item}>
-            {item.replaceAll("_", " ")}{offsetLabel(item) ? ` (${offsetLabel(item)})` : ""}
-          </option>
-        ))}
-      </select>
+      />
     </label>
   );
 }

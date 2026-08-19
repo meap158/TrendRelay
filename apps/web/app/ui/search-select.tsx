@@ -38,7 +38,7 @@ function clipBounds(node: HTMLElement | null): { top: number; bottom: number } {
 /** A compact, searchable replacement for selects with long operational lists. */
 export function SearchSelect({
   value, options, onChange, placeholder, searchPlaceholder = "Search…",
-  emptyLabel = "No matches", disabled,
+  emptyLabel = "No matches", disabled, searchable = true,
 }: {
   value: string;
   options: SearchSelectOption[];
@@ -47,6 +47,15 @@ export function SearchSelect({
   searchPlaceholder?: string;
   emptyLabel?: string;
   disabled?: boolean;
+  /**
+   * Whether to offer the search box.
+   *
+   * On for the long operational lists this was built for. Off for a list short
+   * enough to read at a glance - seven languages - where a search field is a
+   * box asking to be typed in before an answer that was already on screen.
+   * The list, the look and the keyboard behaviour are the same either way.
+   */
+  searchable?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -120,10 +129,12 @@ export function SearchSelect({
           data-side={placement.side}
           style={{ maxHeight: placement.maxHeight }}
         >
-          <input type="search" value={query} placeholder={searchPlaceholder}
-            aria-label={searchPlaceholder} autoFocus
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }} />
+          {searchable && (
+            <input type="search" value={query} placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder} autoFocus
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }} />
+          )}
           <div id={listId} className="search-select-list" role="listbox">
             <button type="button" role="option" aria-selected={!value}
               className={!value ? "selected" : undefined}
