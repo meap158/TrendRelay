@@ -211,6 +211,7 @@ class CampaignUpdate(BaseModel):
     #: reset them by leaving them out.
     min_recycle_days: int | None = Field(default=None, ge=1, le=365)
     repeat_posts: bool | None = None
+    rotate_products: bool | None = None
     daily_cap_per_account: int | None = Field(default=None, ge=1, le=24)
     weekly_post_cap: int | None = Field(default=None, ge=1, le=200)
     #: Explicitly nullable and distinguishable from "not sent": no cap is a
@@ -617,6 +618,7 @@ def update_campaign(
             "max_products_per_post": body.max_products_per_post,
             "min_recycle_days": body.min_recycle_days,
             "repeat_posts": body.repeat_posts,
+            "rotate_products": body.rotate_products,
             "daily_cap_per_account": body.daily_cap_per_account,
             "authority": body.authority,
             "priority": body.priority,
@@ -728,6 +730,187 @@ def update_campaign_status(
         },
     )
     return {"campaign": _campaign(item)}
+
+
+class CampaignDuplicate(BaseModel):
+    """What to call the copy. Everything else is taken from the original."""
+
+    name: str | None = Field(default=None, min_length=2, max_length=200)
+
+
+#: Runtime state a copy must not inherit, by the table it lives on.
+#:
+#: The split is not "which columns look boring". It is: would carrying this
+#: forward make the copy claim something that never happened to it. A queue item
+#: saying it has been posted four times is held back by the recycle window for
+#: work the copy never did, and an autopilot saying it ran an hour ago is a lie
+#: about a campaign that has never run.
+_COPY_RESETS: dict[str, dict[str, Any]] = {
+    "autopilot": {"posts_scheduled": 0, "last_run_at": None, "last_note": None},
+    "destination": {"last_posted_at": None, "tracking_link_id": None},
+    "queue": {
+        "state": "draft",
+        "times_posted": 0,
+        "last_posted_at": None,
+        "last_posted_by_destination": None,
+    },
+}
+
+
+def _copied(
+    source: Any,
+    model: Any,
+    workspace_id: str,
+    campaign_id: str,
+    actor_user_id: str,
+    resets: dict[str, Any],
+) -> Any:
+    """One row again, under a new campaign, with the named fields reset.
+
+    Column-driven rather than field-by-field: a copy written as a list of
+    assignments silently stops copying whatever is added to the table next, and
+    that failure looks like a setting that just does not come across.
+    """
+    values: dict[str, Any] = {}
+    for column in model.__table__.columns:
+        name = column.name
+        # Identity, ownership and timekeeping belong to the new row.
+        if name in {"id", "workspace_id", "campaign_id", "created_at", "updated_at"}:
+            continue
+        values[name] = actor_user_id if name == "created_by" else getattr(source, name)
+    values.update(resets)
+    return model(workspace_id=workspace_id, campaign_id=campaign_id, **values)
+
+
+@router.post("/{campaign_id}/duplicate", status_code=201)
+def duplicate_campaign(
+    workspace_id: str,
+    campaign_id: str,
+    body: CampaignDuplicate,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Copy a campaign's setup, and none of what it has done.
+
+    The setup is the expensive part - destinations, posting policy, disclosure
+    text, the queue somebody assembled. The history belongs to the original and
+    to nothing else: what posted, what it earned, what was said about it.
+
+    Two resets matter more than they look:
+
+    *Switched off.* The copy is a draft with autopilot disabled, whatever the
+    original was doing. Duplicating an active campaign and having the copy start
+    posting to the same accounts before anybody opened it would be the worst
+    available reading of the button.
+
+    *Its own tracking links.* A destination's `tracking_link_id` is dropped
+    rather than copied. Two campaigns pointing at one tracking link report their
+    clicks and conversions into the same row, and the attribution they exist to
+    produce becomes a merge of the two with no way to separate it afterwards.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor"})
+    ensure_profile(session, user)
+    original = _campaign_record(session, workspace_id, campaign_id)
+
+    from trendrelay_api.autopilot_models import (
+        CampaignDestination,
+        CampaignDestinationOfferLink,
+        CampaignQueueItem,
+    )
+
+    copy = Campaign(
+        workspace_id=workspace_id,
+        name=(body.name or f"{original.name} (copy)")[:200],
+        objective=original.objective,
+        audience=original.audience,
+        markets=list(original.markets or []),
+        languages=list(original.languages or []),
+        affiliate_url=original.affiliate_url,
+        # A draft however the original was left: anything else puts a campaign
+        # nobody has read into the posting rotation.
+        status="draft",
+        created_by=user.id,
+    )
+    session.add(copy)
+    session.flush()
+
+    autopilot = session.scalar(
+        select(CampaignAutopilot).where(
+            CampaignAutopilot.campaign_id == original.id,
+            CampaignAutopilot.workspace_id == workspace_id,
+        )
+    )
+    if autopilot:
+        session.add(_copied(
+            autopilot, CampaignAutopilot, workspace_id, copy.id, user.id,
+            {**_COPY_RESETS["autopilot"], "enabled": False},
+        ))
+
+    # Kept in step, because an offer link names a destination by id and the copy
+    # has new ones. Without the map those links point back at the original's
+    # destinations - the same attribution merge in another form.
+    destination_ids: dict[str, str] = {}
+    destinations = list(session.scalars(
+        select(CampaignDestination).where(
+            CampaignDestination.campaign_id == original.id,
+            CampaignDestination.workspace_id == workspace_id,
+        )
+    ).all())
+    for destination in destinations:
+        made = _copied(
+            destination, CampaignDestination, workspace_id, copy.id, user.id,
+            _COPY_RESETS["destination"],
+        )
+        session.add(made)
+        session.flush()
+        destination_ids[destination.id] = made.id
+
+    queue = list(session.scalars(
+        select(CampaignQueueItem).where(
+            CampaignQueueItem.campaign_id == original.id,
+            CampaignQueueItem.workspace_id == workspace_id,
+        )
+    ).all())
+    for entry in queue:
+        session.add(_copied(
+            entry, CampaignQueueItem, workspace_id, copy.id, user.id,
+            _COPY_RESETS["queue"],
+        ))
+
+    for link in session.scalars(
+        select(CampaignDestinationOfferLink).where(
+            CampaignDestinationOfferLink.campaign_id == original.id,
+            CampaignDestinationOfferLink.workspace_id == workspace_id,
+        )
+    ).all():
+        moved = destination_ids.get(link.destination_id)
+        if not moved:
+            continue
+        session.add(_copied(
+            link, CampaignDestinationOfferLink, workspace_id, copy.id, user.id,
+            {"destination_id": moved, "tracking_link_id": None},
+        ))
+
+    session.flush()
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "campaign.duplicated",
+        "campaign",
+        copy.id,
+        {
+            "from": original.id,
+            "destinations": len(destinations),
+            "queue_items": len(queue),
+            # In the record, so "why is the copy switched off" is answerable
+            # from the audit log rather than from this docstring.
+            "carried_history": False,
+        },
+    )
+    return {"campaign": _campaign(copy)}
 
 
 @router.get("/calendar")

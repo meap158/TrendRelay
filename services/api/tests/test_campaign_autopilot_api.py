@@ -543,6 +543,7 @@ def test_the_preview_explains_a_campaign_that_would_post_nothing(workspace) -> N
 
 def test_preview_rows_carry_media_account_and_product_routes(workspace) -> None:
     campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
     base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
     request("POST", f"{base}/destinations", json={
         "provider": "buffer", "integration_id": "acct-1",
@@ -1211,6 +1212,7 @@ def test_review_says_which_matches_would_be_posted(workspace) -> None:
 
 def test_a_pin_is_what_would_post_whatever_the_scores_say(workspace) -> None:
     campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
     item = request(
         "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
         json={"video_path": r"S:\media\x.mp4", "body": "Anything at all."},

@@ -102,6 +102,8 @@ class AutopilotSettings(BaseModel):
     #: Whether a post may go out more than once on the same account at all.
     #: The interval above only applies when it may.
     repeat_posts: bool = False
+    #: Whether smart matching spreads itself across the tagged products.
+    rotate_products: bool = True
     daily_cap_per_account: int = Field(default=2, ge=1, le=24)
     delivery: str = Field(default="schedule", pattern=r"^(draft|schedule|now)$")
     #: How much the campaign may do alone. Run by exception is the recommended
@@ -450,6 +452,7 @@ def save_autopilot(
     )
     autopilot.min_recycle_days = body.min_recycle_days
     autopilot.repeat_posts = body.repeat_posts
+    autopilot.rotate_products = body.rotate_products
     autopilot.daily_cap_per_account = body.daily_cap_per_account
     if body.authority == "autonomous" and autopilot.authority != "autonomous":
         blocked = graduation_block(session, campaign_id)
@@ -621,7 +624,11 @@ def add_queue_item(
             CampaignQueueItem.campaign_id == campaign_id
         )
     ) or 0
-    _require_offer_ids(session, workspace_id, body.offer_ids)
+    _require_offer_ids(
+        session, workspace_id, body.offer_ids,
+        campaign_id=campaign_id,
+        autopilot=_existing_autopilot(session, campaign_id),
+    )
     item = CampaignQueueItem(
         workspace_id=workspace_id, campaign_id=campaign_id, asset_id=body.asset_id,
         video_path=body.video_path.strip(),
@@ -703,7 +710,11 @@ def apply_queue_item_edits(
     if body.thread is not None:
         item.thread = [part.strip() for part in body.thread if part.strip()]
     if body.offer_ids is not None:
-        _require_offer_ids(session, workspace_id, body.offer_ids)
+        _require_offer_ids(
+            session, workspace_id, body.offer_ids,
+            campaign_id=campaign_id,
+            autopilot=_existing_autopilot(session, campaign_id),
+        )
         item.offer_ids = list(dict.fromkeys(body.offer_ids))
     if body.body is not None or body.hashtags is not None or body.offer_ids is not None:
         _refresh_item_match(session, campaign_id, item)
@@ -737,8 +748,26 @@ def _refresh_item_match(
     }
 
 
+def _existing_autopilot(
+    session: Session, campaign_id: str
+) -> CampaignAutopilot | None:
+    """This campaign's policy, if it has one.
+
+    Read rather than created: asking what the limit is should not bring a
+    policy row into being, and a campaign without one has no limit to enforce.
+    """
+    return session.scalar(
+        select(CampaignAutopilot).where(CampaignAutopilot.campaign_id == campaign_id)
+    )
+
+
 def _require_offer_ids(
-    session: Session, workspace_id: str, offer_ids: list[str]
+    session: Session,
+    workspace_id: str,
+    offer_ids: list[str],
+    *,
+    campaign_id: str | None = None,
+    autopilot: CampaignAutopilot | None = None,
 ) -> None:
     wanted = list(dict.fromkeys(offer_ids))
     if not wanted:
@@ -752,6 +781,33 @@ def _require_offer_ids(
         raise HTTPException(
             status_code=422,
             detail="Every pinned product must be a usable offer in this workspace.",
+        )
+    # Only what this campaign may promote. A pin is a way of choosing among the
+    # campaign's products, not a way around the choice of which products it has.
+    if campaign_id is not None:
+        from trendrelay_api import campaign_offer_tags
+
+        allowed = set(campaign_offer_tags.tagged_offer_ids(session, campaign_id))
+        stray = [offer_id for offer_id in wanted if offer_id not in allowed]
+        if stray:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "That product is not on this campaign. Add it to the "
+                    "campaign's products first, here or in Attribution."
+                ),
+            )
+    # The campaign's own ceiling, refused rather than silently trimmed. The
+    # scheduler takes the first N when it posts, so pinning five against a cap
+    # of two used to store five and send two, with nothing saying which.
+    if autopilot is not None and len(wanted) > autopilot.max_products_per_post:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"This campaign attaches at most {autopilot.max_products_per_post} "
+                f"product(s) to a post; {len(wanted)} were pinned. Change the "
+                "limit in campaign settings, or pin fewer."
+            ),
         )
 
 

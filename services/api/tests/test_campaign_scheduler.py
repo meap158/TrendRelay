@@ -559,6 +559,97 @@ def test_link_friendly_descriptions_can_hold_multiple_products(session) -> None:
     )
 
 
+def test_a_run_of_many_posts_spends_many_products(session) -> None:
+    """The reason rotation exists.
+
+    Ranking is deterministic, so without it the best-fitting product wins every
+    post in a run: five posts, five slots, and one product on all of them while
+    four others are never seen. Every one of those posts really did get its
+    best match, which is why it goes unnoticed.
+    """
+    destination(session, "d1", "youtube")
+    for hour in (9, 12, 15, 18, 21):
+        slot(session, hour)
+    # Five posts, because that is the case: a queue emptied into a day of
+    # slots. One clip cannot fill five, since a post goes out once per account.
+    for index in range(5):
+        queue_item(
+            session, f"q{index}", position=index,
+            body="Coffee gear for a better morning.",
+        )
+        offer(session, f"offer-{index}", f"Coffee thing {index}")
+
+    posts, _ = plan_campaign(
+        session,
+        autopilot(session, offer_mode="smart", daily_cap_per_account=5),
+        now=NOW,
+        link_for=lambda _destination, offer_id: f"https://tr.example/{offer_id}",
+    )
+
+    assert len(posts) == 5
+    chosen = [post.offer_ids[0] for post in posts if post.offer_ids]
+    assert len(chosen) == 5
+    # Once each: a round spends every product before any product repeats.
+    assert len(set(chosen)) == 5
+
+
+def test_rotation_can_be_switched_off_for_one_hero_product(session) -> None:
+    """A campaign built around one product is a real campaign."""
+    destination(session, "d1", "youtube")
+    for hour in (9, 12, 15):
+        slot(session, hour)
+    for index in range(3):
+        queue_item(
+            session, f"q{index}", position=index,
+            body="Coffee gear for a better morning.",
+        )
+        offer(session, f"offer-{index}", f"Coffee thing {index}")
+
+    posts, _ = plan_campaign(
+        session,
+        autopilot(
+            session, offer_mode="smart", daily_cap_per_account=3,
+            rotate_products=False,
+        ),
+        now=NOW,
+        link_for=lambda _destination, offer_id: f"https://tr.example/{offer_id}",
+    )
+
+    chosen = {post.offer_ids[0] for post in posts if post.offer_ids}
+    assert len(posts) == 3
+    assert len(chosen) == 1
+
+
+def test_a_product_that_went_out_yesterday_waits_behind_one_that_did_not() -> None:
+    """Rotation outlives the run it was made in.
+
+    A run that plans one post would otherwise start every day with the same
+    best match, and the rotation would never get past its first product.
+    """
+    from trendrelay_api.campaign_offer_matcher import OfferMatch, take_turns
+
+    def match(offer_id: str, score: int) -> OfferMatch:
+        return OfferMatch(
+            offer_id=offer_id, product_id=f"p-{offer_id}", product_name=offer_id,
+            score=score, confidence="high", matched_terms=(), reasons=(),
+            evidence_sources=(), affiliate_url="https://example.test",
+            network="affiliate", availability="available", commission_bps=500,
+            commission_flat_cents=None, currency="USD",
+        )
+
+    ranked = [match("best", 90), match("second", 80), match("third", 70)]
+    order = take_turns(
+        ranked,
+        last_used={
+            "best": datetime(2026, 8, 19, tzinfo=UTC),
+            "second": datetime(2026, 8, 18, tzinfo=UTC),
+        },
+    )
+
+    # Never promoted first, then longest-waiting, then fit.
+    assert [item.offer_id for item in order] == ["third", "second", "best"]
+
+
 def test_bio_only_posts_rotate_one_product_instead_of_claiming_many_links(session) -> None:
     destination(session, "d1", "tiktok")
     slot(session, 12)

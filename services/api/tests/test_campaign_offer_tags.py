@@ -243,3 +243,67 @@ def test_an_import_can_tag_what_it_files(workspace) -> None:
         "GET", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/products"
     ).json()["products"]
     assert [p["name"] for p in products] == ["A pyjama set"]
+
+
+def queue_one(workspace_id: str, campaign_id: str) -> str:
+    body = request(
+        "POST", f"/api/workspaces/{workspace_id}/campaigns/{campaign_id}/queue",
+        json={"video_path": "S:\\media\\x.mp4", "body": "Anything at all."},
+    )
+    assert body.status_code == 201, body.text
+    return body.json()["item"]["id"]
+
+
+def test_a_pin_must_be_a_product_the_campaign_may_promote(workspace) -> None:
+    """A pin chooses among the campaign's products, not around them."""
+    campaign_id = campaign(workspace)
+    item_id = queue_one(workspace, campaign_id)
+
+    refused = request(
+        "PATCH",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/{item_id}",
+        json={"offer_ids": ["offer-1"]},
+    )
+
+    assert refused.status_code == 422
+    assert "not on this campaign" in refused.json()["detail"]
+
+    request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/products",
+        json={"offer_ids": ["offer-1"]},
+    )
+    allowed = request(
+        "PATCH",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/{item_id}",
+        json={"offer_ids": ["offer-1"]},
+    )
+
+    assert allowed.status_code == 200, allowed.text
+
+
+def test_pinning_more_than_a_post_carries_is_refused_not_trimmed(workspace) -> None:
+    """Storing five and sending two, with nothing saying which, is the worse half."""
+    campaign_id = campaign(workspace)
+    request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/products",
+        json={"offer_ids": ["offer-1", "offer-2"]},
+    )
+    settings = request(
+        "PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
+        json={
+            "max_products_per_post": 1,
+            "disclosure": "#ad",
+            "confirm_external_action": True,
+        },
+    )
+    assert settings.status_code == 200, settings.text
+    item_id = queue_one(workspace, campaign_id)
+
+    refused = request(
+        "PATCH",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/{item_id}",
+        json={"offer_ids": ["offer-1", "offer-2"]},
+    )
+
+    assert refused.status_code == 422
+    assert "at most 1 product" in refused.json()["detail"]

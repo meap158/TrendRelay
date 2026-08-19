@@ -129,6 +129,13 @@ class CampaignAutopilot(Base):
     #: returned to the same audience on a timer nobody set. Recycling a small
     #: library is a real strategy; it is now a decision.
     repeat_posts: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: Whether smart matching spreads itself across the tagged products.
+    #:
+    #: On by default. Ranking is deterministic, so without it the best-fitting
+    #: product wins every post in a run and a catalogue of forty promotes two.
+    #: Rotation takes the best product that has not had its turn, which is the
+    #: same ranking asked a fairer question.
+    rotate_products: Mapped[bool] = mapped_column(Boolean, default=True)
     daily_cap_per_account: Mapped[int] = mapped_column(Integer, default=2)
     #: The whole campaign's ceiling for a rolling week, counted across every
     #: destination. None means the per-account caps are the only limit. This is

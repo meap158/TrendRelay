@@ -38,7 +38,11 @@ from trendrelay_api.campaign_autopilot import (
     compose_products,
     rank_destinations,
 )
-from trendrelay_api.campaign_offer_matcher import OfferMatch, chosen_matches
+from trendrelay_api.campaign_offer_matcher import (
+    OfferMatch,
+    chosen_matches,
+    last_promoted,
+)
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 from trendrelay_api.models import Campaign, PublishingSlot, Workspace
 from trendrelay_api.publication_models import HOLDING_STATES, PublicationExecution
@@ -645,7 +649,16 @@ def plan_campaign(
     # The same queue item can fill several slots in one horizon. Its content,
     # campaign context and offer catalogue do not change while this plan is
     # being assembled, so score it once and reuse the explainable result.
+    #
+    # The *choice* is no longer cached with it. Rotation makes the choice
+    # depend on what the run has already used, so a cached selection would give
+    # the same product to every post of an item - which is the thing rotation
+    # exists to stop.
     match_cache: dict[str, tuple[list[OfferMatch], dict[str, Any]]] = {}
+    # Which products this run has already sent out, and when each last went out
+    # before it. Together they are whose turn it is.
+    used_in_run: list[str] = []
+    promoted_before = last_promoted(session, autopilot.campaign_id)
     frozen_cache: dict[str, FrozenMedia] = {}
     for moment in upcoming:
         if weekly_cap and week_used + len(scheduled) >= weekly_cap:
@@ -817,11 +830,13 @@ def plan_campaign(
                     )
                 continue
             frozen = frozen_cache[item.id]
-            if item.id not in match_cache:
-                match_cache[item.id] = chosen_matches(
-                    session, campaign, autopilot, item, destinations
-                )
-            cached_matches, match_strategy = match_cache[item.id]
+            # Chosen per post rather than per item: the ranking is the same
+            # every time, and which of it goes out is not.
+            cached_matches, match_strategy = chosen_matches(
+                session, campaign, autopilot, item, destinations,
+                used_in_run=used_in_run,
+                last_used=promoted_before,
+            )
             matched = list(cached_matches)
             # An offer that went unavailable after matching is replaced by the next
             # match, or the post goes on organic. The redirect layer would refuse
@@ -844,9 +859,16 @@ def plan_campaign(
                 comment_deliverable=comment_ok,
             )
             if effective.placement == "bio" and len(matched) > 1:
-                # A bio exposes one destination. Rotate the primary recommendation
-                # across posts rather than pretending several links are behind it.
-                matched = [matched[counter % len(matched)]]
+                # A bio exposes one destination, so one product goes on it.
+                #
+                # Which one is the rotation's business when the campaign
+                # rotates: the list arrives with whoever has waited longest at
+                # the front, and indexing into it by a counter as well meant
+                # two rotations fighting - the second post reordering the list
+                # and then picking the item the first post had just used.
+                matched = [matched[0]] if autopilot.rotate_products else [
+                    matched[counter % len(matched)]
+                ]
             product_links: list[tuple[str, str]] = []
             linked_matches = []
             if not matched and link_for:
@@ -949,6 +971,10 @@ def plan_campaign(
                 offer_confidences=tuple(match.confidence for match in linked_matches),
                 offer_selection=str(match_strategy.get("selection", "")),
             ))
+            # Their turn is taken. Recorded before the next slot is
+            # considered, so a run of ten posts spends ten different products
+            # where it has ten to spend.
+            used_in_run.extend(match.offer_id for match in linked_matches)
             reserved[(item.id, destination.id)] = moment
             planned_per_day[day_key] = already_planned + 1
             counter += 1
@@ -1178,6 +1204,7 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
         "bio_hint": autopilot.bio_hint,
         "min_recycle_days": autopilot.min_recycle_days,
         "repeat_posts": autopilot.repeat_posts,
+        "rotate_products": autopilot.rotate_products,
         "daily_cap_per_account": autopilot.daily_cap_per_account,
         "weekly_post_cap": autopilot.weekly_post_cap,
         "posts_scheduled": autopilot.posts_scheduled,

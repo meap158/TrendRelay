@@ -140,6 +140,8 @@ type Autopilot = {
   min_recycle_days: number;
   /** Whether a post may go out more than once on the same account at all. */
   repeat_posts: boolean;
+  /** Whether smart matching spreads itself across the tagged products. */
+  rotate_products: boolean;
   daily_cap_per_account: number;
   weekly_post_cap: number | null;
   /** The language the composed scaffolding speaks. */
@@ -719,6 +721,31 @@ function PostingStrategy({
         <b>Which post</b>
         <span>The first in the queue that is ready for that account: in
           rotation, copy written, and media the network accepts.</span>
+      </li>
+      <li>
+        <b>Which product</b>
+        {/* The rule that decides what a post earns from, next to the one that
+            decides what it says. Ranking alone is deterministic, so without a
+            rotation the best-fitting product wins every post in a run and a
+            campaign with forty tagged products promotes two. */}
+        <span>
+          {autopilot.rotate_products
+            ? <>Each post takes the best-fitting product that has not had its
+                turn, up to {autopilot.max_products_per_post} per post. Once
+                every product has had one, the round starts again.</>
+            : <>Each post takes its best-fitting product, up to{" "}
+                {autopilot.max_products_per_post} per post - which is usually
+                the same one every time, since the ranking does not change.</>}
+          {canEdit && (
+            <button type="button" className="campaign-strategy-toggle"
+              disabled={busy}
+              onClick={() => onChange({ rotate_products: !autopilot.rotate_products })}>
+              {autopilot.rotate_products
+                ? "Always use the best fit instead"
+                : "Take turns between products"}
+            </button>
+          )}
+        </span>
       </li>
       <li>
         <b>Repeats</b>
@@ -1404,6 +1431,7 @@ export function AutopilotPanel({
           bio_hint: next.bio_hint,
           min_recycle_days: next.min_recycle_days,
           repeat_posts: next.repeat_posts,
+          rotate_products: next.rotate_products,
           daily_cap_per_account: next.daily_cap_per_account,
           weekly_post_cap: next.weekly_post_cap,
           delivery: next.delivery,

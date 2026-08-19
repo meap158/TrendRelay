@@ -27,6 +27,7 @@ from trendrelay_api.autopilot_models import (
 from trendrelay_api.media_models import CreativeAnalysis, MediaAsset, MediaTranscript
 from trendrelay_api.models import Campaign, PublicationPlan, PublishingSlot
 from trendrelay_api.opportunity_models import Product, ProductOffer
+from trendrelay_api.publication_models import PublicationExecution
 
 WORD = re.compile(r"[^\W_]{2,}", re.UNICODE)
 HAN = re.compile(r"[\u3400-\u9fff]+")
@@ -488,17 +489,97 @@ def match_offers(
     return ranked, strategy
 
 
+def last_promoted(session: Session, campaign_id: str) -> dict[str, Any]:
+    """When each product was last attached to a post of this campaign.
+
+    Read from the executions rather than from a counter, because the executions
+    are what actually went out - and a counter would have to be right about
+    cancellations, failures, and every post written before it existed.
+    """
+    seen: dict[str, Any] = {}
+    rows = session.execute(
+        select(PublicationExecution.offer_ids, PublicationExecution.scheduled_at)
+        .where(
+            PublicationExecution.campaign_id == campaign_id,
+            PublicationExecution.state.notin_(("failed", "cancelled")),
+        )
+        .order_by(PublicationExecution.scheduled_at)
+    ).all()
+    for offer_ids, moment in rows:
+        if moment is None:
+            continue
+        for offer_id in offer_ids or []:
+            seen[str(offer_id)] = moment
+    return seen
+
+
+def take_turns(
+    ranked: list[OfferMatch],
+    *,
+    used_in_run: Iterable[str] = (),
+    last_used: dict[str, Any] | None = None,
+) -> list[OfferMatch]:
+    """The same ranking, asked which product has waited longest for its turn.
+
+    Ranking alone is deterministic, so the best-fitting product wins every post
+    in a run: a campaign with forty tagged products promotes two of them and
+    never shows the rest. Every one of those posts really did get its best
+    match, which is why it goes unnoticed.
+
+    Three keys, in order. Whether this product has already gone out in this
+    planning run - so a round uses each product once. Then how long ago it last
+    went out at all, with never-promoted first - so the next round starts with
+    whatever has waited longest. Then fit, which decides between equals rather
+    than deciding everything.
+    """
+    # Counted, not flagged. As a yes/no the first round rotated and every
+    # round after it did not: once each product had been used the key was equal
+    # for all of them, and the fit score - which is the same every time - chose
+    # the same product again and again.
+    from collections import Counter
+
+    used = Counter(used_in_run)
+    history = last_used or {}
+    # Positions rather than timestamps: comparing a datetime against the None
+    # of a product nobody has promoted is a key that works until the first new
+    # product arrives.
+    order = {
+        offer_id: index
+        for index, offer_id in enumerate(
+            sorted(history, key=lambda offer_id: history[offer_id]), start=1
+        )
+    }
+    # Sorted, not filtered: a run with more posts than products must still fill
+    # every post, and the next round should begin where the last one began.
+    return sorted(
+        ranked,
+        key=lambda match: (
+            used[match.offer_id],
+            order.get(match.offer_id, 0),
+            -match.score,
+        ),
+    )
+
+
 def chosen_matches(
     session: Session,
     campaign: Campaign,
     autopilot: CampaignAutopilot,
     item: CampaignQueueItem,
     destinations: Iterable[CampaignDestination],
+    *,
+    used_in_run: Iterable[str] = (),
+    last_used: dict[str, Any] | None = None,
 ) -> tuple[list[OfferMatch], dict[str, Any]]:
     """Resolve manual pins, manual campaign mode, or current smart matches."""
     ranked, strategy = match_offers(
         session, campaign, autopilot, item=item, destinations=destinations, limit=20
     )
+    # Whose turn it is, before anything is chosen. Pins and the campaign's one
+    # product are named outright and do not rotate; only smart matching does,
+    # which is the only branch where the choice was the ranking's to make.
+    if autopilot.rotate_products:
+        ranked = take_turns(ranked, used_in_run=used_in_run, last_used=last_used)
     by_id = {match.offer_id: match for match in ranked}
     if item.offer_ids:
         selected = [by_id[offer_id] for offer_id in item.offer_ids if offer_id in by_id]
