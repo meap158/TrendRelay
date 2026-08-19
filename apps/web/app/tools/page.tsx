@@ -52,7 +52,9 @@ const SURFACES: { id: string; label: string; blurb: string }[] = [
   },
   {
     id: "download",
-    label: "nav.download",
+    // In the common block, not nav: `nav.download` does not exist, and asking
+    // for a key that is not there prints the key.
+    label: "common.download",
     blurb: "Bringing media in from a platform.",
   },
   {
@@ -426,7 +428,9 @@ export default function ToolsPage() {
                 {t(surface.label)}
                 <Badge tone="neutral">
                   {inSurface.length}
-                  <span className="sr-only"> {t("tools.toolsCounted")}</span>
+                  {/* The space is written out: JSX drops leading whitespace
+                      inside an element, so this read "1tools". */}
+                  <span className="sr-only">{" "}{t("tools.toolsCounted")}</span>
                 </Badge>
               </h2>
               <p>{surface.blurb}</p>
