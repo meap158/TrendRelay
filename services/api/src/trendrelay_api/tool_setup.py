@@ -263,9 +263,9 @@ def setup_report(tool_id: str) -> dict[str, Any]:
             actions=[
                 {
                     "id": "open-studio",
-                    "label": "Open Studio",
+                    "label": "Open Library",
                     "kind": "navigate",
-                    "href": "/studio",
+                    "href": "/library",
                 }
             ],
         )

@@ -20,6 +20,10 @@ type Tool = {
   license: string;
   license_url: string;
   category: string;
+  /** Which tab this tool's work shows up in. */
+  surface: "discover" | "download" | "library" | "assistant";
+  /** Whether it stays on this machine or reaches a third party. */
+  runs: "local" | "network";
   summary: string;
   capabilities: string[];
   integration_status: string;
@@ -32,14 +36,53 @@ type Tool = {
   block_reason?: string;
 };
 
+/**
+ * The tabs a tool's work shows up in, in the order the navigation lists them.
+ *
+ * The heading reuses the tab's own name from the navigation rather than
+ * inventing a second one - a group called "Media intelligence" sitting above
+ * tools that power the Library is a name nobody can act on.
+ */
+const SURFACES: { id: string; label: string; blurb: string }[] = [
+  {
+    id: "discover",
+    label: "nav.discover",
+    blurb: "Research: everything here reaches a third party for data.",
+  },
+  {
+    id: "download",
+    label: "nav.download",
+    blurb: "Bringing media in from a platform.",
+  },
+  {
+    id: "library",
+    label: "nav.library",
+    blurb: "Models that read and edit your media, on this machine.",
+  },
+  {
+    id: "assistant",
+    label: "tools.assistant",
+    blurb: "What an assistant can do on your behalf.",
+  },
+];
+
 type Workspace = { id: string; name: string; role: string };
 type SetupRequirement = { id: string; label: string; status: "ready" | "setup-required" | "optional" | "blocked"; detail: string };
 type SetupAction = {
   id: string;
   label: string;
-  kind: "workspace-action" | "local-launch" | "diagnostics" | "navigate";
+  kind: "workspace-action" | "local-launch" | "diagnostics" | "navigate" | "prepare-media-ai";
   href?: string;
+  provider?: string;
   requires_confirmation?: boolean;
+};
+type MediaAiJob = {
+  status: string;
+  stalled: boolean;
+  progress: number | null;
+  progress_stage: string | null;
+  error: string | null;
+  result: { skipped?: string[] } | null;
 };
 type SetupReport = {
   tool_id: string;
@@ -53,6 +96,8 @@ type SetupReport = {
   secret_previews?: Record<string, string | null>;
   supported_secret_names?: string[];
   connection?: { state?: string; message?: string; service_ready?: boolean; authenticated?: boolean };
+  /** Present for the local media-analysis providers: what is downloading, and how far. */
+  media_ai?: { provider: string; job: MediaAiJob | null };
 };
 type ReachDiagnostics = {
   mode: string;
@@ -61,7 +106,23 @@ type ReachDiagnostics = {
   channels: Array<{ id: string; status: string }>;
 };
 
-const guidedSetup = new Set(["douyin-downloader", "last30days-skill", "agent-reach", "meta-ads-kit"]);
+const guidedSetup = new Set([
+  "douyin-downloader",
+  "last30days-skill",
+  "agent-reach",
+  "meta-ads-kit",
+  // The local media-analysis providers. Their setup used to be a command in the
+  // documentation; it is a button on this page now, so they belong here.
+  "faster-whisper",
+  "rapidocr",
+  "argos-translate",
+  // The MCP server: Setup starts and stops it and shows where an assistant
+  // connects and what it may do.
+  "mcp-server",
+]);
+
+/** How often to re-read a setup report while its download is running. */
+const MEDIA_AI_WATCH_MS = 2000;
 
 async function responseJson<T>(response: Response): Promise<T> {
   const payload = (await response.json()) as T & { detail?: string };
@@ -113,6 +174,29 @@ export default function ToolsPage() {
       .catch(() => { if (!cancelled) setWorkspaces([]); });
     return () => { cancelled = true; };
   }, [apiFetch, loading, user]);
+
+  // A runtime download runs in the worker, so this page has to ask how it is
+  // going. Only while one is actually in flight: a settled report is read once,
+  // when the card is opened.
+  const downloading = Boolean(
+    setup?.media_ai?.job
+    && !setup.media_ai.job.stalled
+    && ["queued", "running"].includes(setup.media_ai.job.status),
+  );
+  const watchedTool = downloading ? setup?.tool_id : null;
+  useEffect(() => {
+    if (!watchedTool) return;
+    const timer = window.setInterval(() => {
+      apiFetch(`/api/tools/${watchedTool}/setup`)
+        .then((response) => responseJson<{ setup: SetupReport }>(response))
+        .then((payload) => setSetup(payload.setup))
+        .catch(() => {
+          // The download is in another process; a failed poll is not its
+          // failure, and the last report stays on screen.
+        });
+    }, MEDIA_AI_WATCH_MS);
+    return () => window.clearInterval(timer);
+  }, [apiFetch, watchedTool]);
 
   async function mutate(tool: Tool, action: "install" | "uninstall" | "activation") {
     const enabling = action === "activation" && !tool.active;
@@ -190,6 +274,30 @@ export default function ToolsPage() {
       }
       return;
     }
+    if (action.kind === "prepare-media-ai" && action.provider) {
+      if (!window.confirm(
+        `Download the ${setup.title.replace("Set up ", "")} runtime and switch it on?\n\n`
+        + "This fetches a few hundred megabytes once. Nothing leaves the machine "
+        + "afterwards.",
+      )) return;
+      setBusy(`${setup.tool_id}-${action.id}`);
+      setError(null);
+      try {
+        await responseJson(await apiFetch(`/api/media-ai/providers/${action.provider}/prepare`, {
+          method: "POST",
+          body: JSON.stringify({ confirm_external_action: true }),
+        }));
+        // The report is what carries the progress, so reloading it is what
+        // starts the watch below.
+        await loadSetup(setup.tool_id);
+        await refresh();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "The download could not be started.");
+      } finally {
+        setBusy(null);
+      }
+      return;
+    }
     if (action.kind === "local-launch") {
       if (!window.confirm(`Open the guided ${setup.title.replace("Set up ", "")} setup step?`)) return;
       setBusy(`${setup.tool_id}-${action.id}`);
@@ -202,6 +310,9 @@ export default function ToolsPage() {
           }),
         );
         setMessage(payload.result.message);
+        // Re-read the report so a start/stop flips the button and the
+        // connection line reflects what the action just did.
+        await loadSetup(setup.tool_id);
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Authentication launcher failed.");
       } finally {
@@ -294,12 +405,34 @@ export default function ToolsPage() {
       </section>
       {error && <p className="registry-error" role="alert">{error}</p>}
       {message && <p className="registry-message" role="status">{message}</p>}
-      <section className="tool-grid" aria-label={t("tools.thirdParty")}>
-        {tools.map((tool) => (
+      {/* Grouped by where the work shows up, because that is the question
+          somebody arrives with - "what powers my captions", not "what is a
+          media intelligence tool". Sixteen tools carried eleven categories
+          between them, which is nearly one each and so grouped nothing. The
+          old category survives on the card as the finer description it always
+          was. */}
+      {SURFACES.filter((surface) => tools.some((tool) => tool.surface === surface.id))
+        .map((surface) => {
+        const inSurface = tools.filter((tool) => tool.surface === surface.id);
+        return (
+          <section className="tool-surface" key={surface.id} aria-label={t(surface.label)}>
+            <header className="tool-surface-head">
+              <h2>{t(surface.label)}</h2>
+              <p>{surface.blurb}</p>
+              <span>{inSurface.length}</span>
+            </header>
+            <div className="tool-grid">
+              {inSurface.map((tool) => (
           <article className="tool-card" key={tool.id}>
             <div className="tool-card-top">
               <span className={`license-state ${tool.commercial_use}`}>{tool.commercial_use}</span>
-              <span>{tool.category}</span>
+              {/* The line that decides privacy, cost and what breaks when the
+                  wi-fi does. A local model and a service called with your key
+                  were presented identically before this. */}
+              <span className={`tool-runs ${tool.runs}`}>
+                {t(tool.runs === "local" ? "tools.runsLocal" : "tools.runsNetwork")}
+              </span>
+              <span className="tool-category">{tool.category}</span>
             </div>
             <h2>{tool.name}</h2>
             <p>{tool.summary}</p>
@@ -339,8 +472,11 @@ export default function ToolsPage() {
               </div>
             </div>
           </article>
-        ))}
-      </section>
+              ))}
+            </div>
+          </section>
+        );
+      })}
 
       {setup && (
         <section className="setup-wizard" aria-labelledby="setup-title">
@@ -384,6 +520,30 @@ export default function ToolsPage() {
             </div>
           )}
           {setup.tool_id === "douyin-downloader" && setup.connection && <p className="connection-note">{t("tools.douyinConnection")} <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
+          {setup.tool_id === "mcp-server" && setup.connection && <p className="connection-note">Assistant access: <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
+          {setup.media_ai?.job && (
+            /* The download's own words. A job that failed after twenty minutes
+               of pip output has a reason, and this is the only place the
+               operator can be shown it — they never saw the console. */
+            <div className="setup-progress" aria-live="polite">
+              {downloading ? (
+                <>
+                  <progress max={1} value={setup.media_ai.job.progress ?? undefined} />
+                  <span>{setup.media_ai.job.progress_stage ?? "Starting…"}</span>
+                </>
+              ) : setup.media_ai.job.status === "failed" ? (
+                <span className="setup-progress-problem" role="alert">
+                  {setup.media_ai.job.error ?? "The download failed."}
+                </span>
+              ) : setup.media_ai.job.result?.skipped?.length ? (
+                <span className="setup-progress-problem">
+                  Installed, except: {setup.media_ai.job.result.skipped.join(", ")}
+                </span>
+              ) : (
+                <span>Ready.</span>
+              )}
+            </div>
+          )}
           <div className="setup-actions">
             {setup.actions.map((action) => action.kind === "navigate" && action.href ? (
               <Link className={buttonClass({ variant: "primary" })} href={action.href} key={action.id}>{action.label}</Link>
@@ -393,7 +553,7 @@ export default function ToolsPage() {
                 disabled={busy === `${setup.tool_id}-${action.id}` || busy === "agent-reach-diagnostics"}
                 key={action.id}
                 onClick={() => void runSetupAction(action)}
-              ><ActionIcon name={action.kind === "diagnostics" ? "search" : action.kind === "navigate" ? "link" : "play"} />{action.label}</button>
+              ><ActionIcon name={action.kind === "diagnostics" ? "search" : action.kind === "prepare-media-ai" ? "download" : action.kind === "navigate" ? "link" : "play"} />{action.label}</button>
             ))}
           </div>
           <p className="privacy-note">{t("tools.localOnlyNote")}</p>
