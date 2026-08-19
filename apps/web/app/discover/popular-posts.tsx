@@ -250,7 +250,8 @@ export function PopularPosts({
     "trendrelay.discover.research-posts.sort",
     "balanced",
     (value): value is EngagedPostSort =>
-      ["balanced", "comments", "interactions"].includes(String(value)),
+      ["balanced", "comments", "interactions", "discussion", "staying-power"]
+        .includes(String(value)),
   );
   const [engagementSource, setEngagementSource] = usePersistedState<string>(
     "trendrelay.discover.research-posts.source",
@@ -355,6 +356,10 @@ export function PopularPosts({
                 <option value="balanced">Top in each source</option>
                 <option value="comments">Most comments</option>
                 <option value="interactions">Most interactions</option>
+                {/* Two questions the counts above cannot answer: what the
+                    reaction is made of, and how long it took to arrive. */}
+                <option value="discussion">Most discussed for its reach</option>
+                <option value="staying-power">Slowest burn</option>
               </select>
             </label>
             <label style={S.control}>

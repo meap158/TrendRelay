@@ -15,7 +15,58 @@ export type ResearchPostJob = {
   observations?: ResearchObservation[];
 };
 
-export type EngagedPostSort = "balanced" | "comments" | "interactions";
+export type EngagedPostSort =
+  | "balanced"
+  | "comments"
+  | "interactions"
+  | "discussion"
+  | "staying-power";
+
+/**
+ * Below this much reach a ratio is noise rather than a signal.
+ *
+ * Three comments on forty views is a hundred-times better discussion rate than
+ * anything else on the board and means nothing. A floor is cruder than a
+ * confidence interval and honest about being one.
+ */
+const RATIO_FLOOR = 500;
+
+/**
+ * How much of this post's reaction is people talking rather than passing it on.
+ *
+ * The count alone re-finds the biggest post, which the board already ranks by.
+ * The ratio finds the different one: for affiliate work a thread of questions
+ * under a modest video is worth more than silent shares under a large one,
+ * because a question is somebody deciding whether to buy.
+ *
+ * Null where there is not enough reach to divide by - see `RATIO_FLOOR`.
+ */
+export function discussionRate(post: EngagedPost): number | null {
+  const reach = post.views ?? post.interactions;
+  if (!reach || reach < RATIO_FLOOR || post.comments === null) return null;
+  return post.comments / reach;
+}
+
+/**
+ * Reaction per day of age: a spike and a slow burner told apart.
+ *
+ * Not an evergreen score. Those are built from a series - the same post
+ * measured repeatedly over months - and this app deliberately keeps no metric
+ * store (see `signal_models`), so the honest version of the question from a
+ * single observation is "how long did these numbers take to arrive". Five
+ * thousand interactions in twelve hours and five thousand over three months are
+ * different opportunities, and only the second is worth a package a campaign
+ * will recycle for thirty days.
+ *
+ * Null when the post does not say when it was published, which is most of
+ * TikTok's board - absence is reported rather than guessed at.
+ */
+export function dailyReaction(post: EngagedPost, now = Date.now()): number | null {
+  const published = dateValue(post.publishedAt);
+  if (!published || !post.interactions) return null;
+  const days = Math.max(1, (now - published) / 86_400_000);
+  return post.interactions / days;
+}
 
 export type EngagedPost = {
   id: string;
@@ -154,6 +205,23 @@ export function rankEngagedPosts(
       (right.comments ?? 0) - (left.comments ?? 0) || compareNative(left, right));
   }
   if (sort === "interactions") return posts.sort(compareNative);
+  if (sort === "discussion") {
+    // Posts with too little reach to judge fall to the bottom rather than the
+    // top, which is where dividing by a small number would otherwise put them.
+    return posts.sort((left, right) =>
+      (discussionRate(right) ?? -1) - (discussionRate(left) ?? -1)
+      || compareNative(left, right));
+  }
+  if (sort === "staying-power") {
+    // Lowest daily rate first: these are the posts that took their time to
+    // gather the numbers they have, which is the opposite end from a spike.
+    const ranked = posts.filter((post) => dailyReaction(post) !== null);
+    const undated = posts.filter((post) => dailyReaction(post) === null);
+    ranked.sort((left, right) =>
+      (dailyReaction(left) ?? 0) - (dailyReaction(right) ?? 0)
+      || compareNative(left, right));
+    return [...ranked, ...undated];
+  }
   return posts.sort((left, right) =>
     left.sourceRank - right.sourceRank
     || dateValue(right.publishedAt) - dateValue(left.publishedAt)
