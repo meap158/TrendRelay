@@ -277,7 +277,26 @@ def test_an_unwritten_package_is_skipped_not_posted(session) -> None:
     posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
 
     assert [post.queue_item_id for post in posts] == ["q-written"]
-    assert "no copy written yet" in note
+    assert "still needs its copy written" in note
+
+
+def test_the_unwritten_post_note_trims_a_long_filename_title(session) -> None:
+    # An imported clip's title is often its whole filename; naming all hundred
+    # characters of it in a status note buries the note. It is trimmed and its
+    # extension dropped, so the note stays legible and still names the post.
+    from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
+
+    long_title = "2025-07-08_" + ("军队文职备考" * 8) + "_752.mp4"
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(session, "q-unwritten", body=PLACEHOLDER_BODY, title=long_title)
+
+    _, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert ".mp4" not in note
+    assert "…" in note
+    # The trimmed name stays short; the whole title never lands in the note.
+    assert long_title not in note
 
 
 def test_an_unwritten_post_counts_as_approved_but_not_as_ready(session) -> None:

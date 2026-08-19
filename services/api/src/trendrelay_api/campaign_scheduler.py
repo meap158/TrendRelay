@@ -53,6 +53,30 @@ GRACE = timedelta(minutes=20)
 
 RENDERED_MEDIA_KINDS = ("blurred", "edited")
 
+#: File extensions worth trimming off a media title before it goes into a note:
+#: ".mp4" names the file, not the post, and reads like a path in a sentence.
+_MEDIA_SUFFIXES = (".mp4", ".mov", ".webm", ".mkv", ".avi", ".jpg", ".jpeg", ".png", ".webp")
+
+
+def _short_source_name(title: str, *, limit: int = 42) -> str:
+    """A media title fit to drop into a sentence: no extension, not a wall.
+
+    An imported clip's title is often its original filename, which can be a
+    hundred characters of hashtags. Naming the whole thing in a status note
+    buries the note; naming a trimmed, extension-free version keeps it legible
+    while still pointing at the one post the reader has to go and write.
+    """
+    name = title.strip()
+    lowered = name.lower()
+    for suffix in _MEDIA_SUFFIXES:
+        if lowered.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    name = name.strip()
+    if len(name) > limit:
+        name = name[: limit - 1].rstrip() + "…"
+    return name
+
 
 @dataclass(frozen=True)
 class ScheduledPost:
@@ -712,8 +736,9 @@ def plan_campaign(
                 # An unwritten package never reaches an engine, and holding a
                 # slot for it would block the content that is ready.
                 notes.append(
-                    f"A post has no copy written yet ({candidate.title or candidate.id}); "
-                    "it is skipped until somebody writes it."
+                    "A post still needs its copy written "
+                    f"({_short_source_name(candidate.title or candidate.id)}); "
+                    "it is skipped until you write it."
                 )
                 continue
             if candidate.id not in frozen_cache:
