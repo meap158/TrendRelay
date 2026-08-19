@@ -67,9 +67,10 @@ nav strong { color: var(--text); }
 /* The state reads as a word, not a badge: there is one row here, so it needs
    no colour to be found. */
 .tool-compact-meta b { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: capitalize; }
-.tool-compact-actions { display: flex; gap: 4px; align-items: center; }
-.tool-compact-actions a { display: inline-flex; gap: 4px; align-items: center; border-radius: var(--radius-sm); padding: 4px 8px; color: var(--muted); font-size: 11px; }
-.tool-compact-actions a:hover { color: var(--text); background: var(--panel-raised); }
+/* Layout only: the buttons and links inside carry the shared .ui-button
+   styling now, rather than a second set of rules that had drifted into a
+   dated bordered-pill look of their own. */
+.tool-compact-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 @media (max-width: 640px) {
   /* Three columns become one before the name starts truncating. */
   .tool-compact { grid-template-columns: 1fr; }
@@ -89,12 +90,10 @@ nav strong { color: var(--text); }
 .capabilities span { border-radius: var(--radius); }
 .tool-footer { justify-content: space-between; margin-top: 10px; border-top: 1px solid var(--line); padding-top: 9px; }
 .status-stack { color: var(--green); font-size: 0.68rem; font-weight: 800; text-transform: uppercase; }
+/* Layout only. Each action is a shared .ui-button now - the bordered-pill
+   rules that used to live here were a parallel button style the app had
+   otherwise retired. */
 .tool-actions { justify-content: flex-end; }
-.tool-actions a, .tool-actions button { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 5px 7px; background: transparent; color: var(--text); font: inherit; font-size: 0.72rem; text-decoration: none; cursor: pointer; }
-.tool-actions svg { width: 13px; height: 13px; }
-.tool-actions button:hover, .tool-actions a:hover { border-color: var(--green); color: var(--green); }
-.tool-actions button.danger:hover { border-color: var(--red); color: var(--red); }
-.tool-actions button:disabled { cursor: wait; opacity: 0.5; }
 .registry-note { margin-top: 32px; color: var(--muted); font-size: 0.8rem; }
 @media (max-width: 600px) { main { width: min(100% - 24px, 1080px); } nav { margin-bottom: 48px; } .tool-card { min-height: 0; } .tool-footer { align-items: flex-start; } }
 .research-page { padding-top: 6vh; }

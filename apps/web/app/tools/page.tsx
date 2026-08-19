@@ -497,21 +497,25 @@ export default function ToolsPage() {
                           Setup - the MCP server - offered no way in from the
                           list somebody is actually reading. */}
                       {guidedSetup.has(tool.id) && (
-                        <button type="button" disabled={busy === `${tool.id}-setup`}
+                        <button type="button" className={buttonClass({ variant: "secondary", size: "sm" })}
+                          disabled={busy === `${tool.id}-setup`}
                           onClick={() => void loadSetup(tool.id)}>
                           <ActionIcon name="setup" />{t("tools.setup")}
                         </button>
                       )}
-                      <a href={tool.repository} target="_blank" rel="noreferrer">
+                      <a className={buttonClass({ variant: "quiet", size: "sm" })}
+                        href={tool.repository} target="_blank" rel="noreferrer">
                         <ActionIcon name="link" />GitHub
                       </a>
                       {tool.documentation ? (
-                        <button type="button" disabled={busy === `${tool.id}-docs`}
+                        <button type="button" className={buttonClass({ variant: "quiet", size: "sm" })}
+                          disabled={busy === `${tool.id}-docs`}
                           onClick={() => void openDocs(tool.id, tool.name)}>
                           <ActionIcon name="clip" />{t("publish.docs")}
                         </button>
                       ) : (
-                        <a href={tool.repository} target="_blank" rel="noreferrer">
+                        <a className={buttonClass({ variant: "quiet", size: "sm" })}
+                          href={tool.repository} target="_blank" rel="noreferrer">
                           <ActionIcon name="clip" />{t("publish.docs")}
                         </a>
                       )}
@@ -550,29 +554,29 @@ export default function ToolsPage() {
                 <span>{tool.active ? "Active" : tool.integration_status}</span>
               </div>
               <div className="tool-actions">
-                <a href={tool.repository} target="_blank" rel="noreferrer"><ActionIcon name="link" />GitHub</a>
+                <a className={buttonClass({ variant: "quiet", size: "sm" })} href={tool.repository} target="_blank" rel="noreferrer"><ActionIcon name="link" />GitHub</a>
                 {tool.documentation && (
-                  <button type="button" disabled={busy === `${tool.id}-docs`}
+                  <button type="button" className={buttonClass({ variant: "quiet", size: "sm" })} disabled={busy === `${tool.id}-docs`}
                     onClick={() => void openDocs(tool.id, tool.name)}>
                     <ActionIcon name="clip" />{t("publish.docs")}
                   </button>
                 )}
-                {tool.service_repository && <a href={tool.service_repository} target="_blank" rel="noreferrer"><ActionIcon name="link" />{t("tools.selfHost")}</a>}
-                {tool.id === "meta-ads-kit" && <a href="#meta-access-guide"><ActionIcon name="setup" />{t("tools.accessGuide")}</a>}
+                {tool.service_repository && <a className={buttonClass({ variant: "quiet", size: "sm" })} href={tool.service_repository} target="_blank" rel="noreferrer"><ActionIcon name="link" />{t("tools.selfHost")}</a>}
+                {tool.id === "meta-ads-kit" && <a className={buttonClass({ variant: "quiet", size: "sm" })} href="#meta-access-guide"><ActionIcon name="setup" />{t("tools.accessGuide")}</a>}
                 {guidedSetup.has(tool.id) && (
-                  <button disabled={busy === `${tool.id}-setup`} onClick={() => void loadSetup(tool.id)}><ActionIcon name="setup" />{t("tools.setup")}</button>
+                  <button className={buttonClass({ variant: "secondary", size: "sm" })} disabled={busy === `${tool.id}-setup`} onClick={() => void loadSetup(tool.id)}><ActionIcon name="setup" />{t("tools.setup")}</button>
                 )}
-                {tool.id === "openmontage" && tool.installed && <Link href="/library"><ActionIcon name="grid" />{t("tools.openLibrary")}</Link>}
+                {tool.id === "openmontage" && tool.installed && <Link className={buttonClass({ variant: "quiet", size: "sm" })} href="/library"><ActionIcon name="grid" />{t("tools.openLibrary")}</Link>}
                 {!tool.present && tool.install_allowed && (
-                  <button disabled={busy === tool.id} onClick={() => void mutate(tool, "install")}><ActionIcon name="download" />{t("tools.install")}</button>
+                  <button className={buttonClass({ variant: "secondary", size: "sm" })} disabled={busy === tool.id} onClick={() => void mutate(tool, "install")}><ActionIcon name="download" />{t("tools.install")}</button>
                 )}
                 {tool.installed && tool.activation_allowed && (
-                  <button disabled={busy === tool.id} onClick={() => void mutate(tool, "activation")}>
+                  <button className={buttonClass({ variant: "secondary", size: "sm" })} disabled={busy === tool.id} onClick={() => void mutate(tool, "activation")}>
                     <ActionIcon name={tool.active ? "dismiss" : "play"} />{tool.active ? "Deactivate" : "Activate"}
                   </button>
                 )}
                 {tool.present && (
-                  <button className="danger" disabled={busy === tool.id} onClick={() => void mutate(tool, "uninstall")}><ActionIcon name="delete" />{t("tools.uninstall")}</button>
+                  <button className={buttonClass({ variant: "danger", size: "sm" })} disabled={busy === tool.id} onClick={() => void mutate(tool, "uninstall")}><ActionIcon name="delete" />{t("tools.uninstall")}</button>
                 )}
               </div>
             </div>
