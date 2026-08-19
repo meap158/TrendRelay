@@ -35,6 +35,10 @@ type Campaign = {
   languages: string[];
   affiliate_url?: string | null;
   status: "draft" | "active" | "archived";
+  // How many products this campaign may promote. One product can be tagged to
+  // several campaigns, so this counts what is tagged here, not a share of some
+  // total. Optional because only the list endpoint fills it in.
+  tagged_products?: number;
 };
 /** How hard a campaign is run. Stored on its autopilot, set from its settings. */
 type CampaignPolicy = {
@@ -559,7 +563,7 @@ export default function CampaignsPage() {
                   POST_LANGUAGES.find((item) => item.value === campaign.languages[0])?.label
                   ?? campaign.languages[0]
                   ?? "English"
-                }</span>
+                } · {t("attribution.productCount", { count: campaign.tagged_products ?? 0 })}</span>
               </button>
             ))}
             {!campaigns.length && <p>{t("campaigns.empty")}</p>}

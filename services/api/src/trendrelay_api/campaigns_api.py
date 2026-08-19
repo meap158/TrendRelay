@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from trendrelay_api.auth import CurrentUser, current_user, require_governed_assurance
 from trendrelay_api.autopilot_models import CampaignAutopilot
+from trendrelay_api.campaign_offer_tags import offer_counts
 from trendrelay_api.config import get_settings
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, ensure_profile, membership, require_role
@@ -396,7 +397,16 @@ def list_campaigns(
         .where(Campaign.workspace_id == workspace_id)
         .order_by(Campaign.updated_at.desc())
     ).all()
-    return {"campaigns": [_campaign(item) for item in items]}
+    # One grouped query for the whole list rather than a count per row. An offer
+    # can be tagged to several campaigns, so these counts overlap and do not sum
+    # to a distinct-product total - each is only what that campaign may promote.
+    counts = offer_counts(session, workspace_id)
+    return {
+        "campaigns": [
+            {**_campaign(item), "tagged_products": counts.get(item.id, 0)}
+            for item in items
+        ]
+    }
 
 
 @router.post("", status_code=201)

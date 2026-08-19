@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from trendrelay_api import campaigns_api
+from trendrelay_api import campaign_offer_tags, campaigns_api
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.autopilot_models import CampaignAutopilot
 from trendrelay_api.campaign_autopilot import localised_text
@@ -140,6 +140,37 @@ def test_campaign_plans_cover_every_publish_platform() -> None:
 
     assert publish_platforms <= campaign_platforms
     assert "threads" in campaign_platforms
+
+
+def test_the_list_reports_how_many_products_each_campaign_may_promote() -> None:
+    """The count is what a reader scans the list for; an untagged campaign must
+    still say zero rather than omit the number, and a shared product is counted
+    by every campaign that promotes it, not shared out between them."""
+    workspace_id = create_workspace()
+    offer_id = create_offer(workspace_id)
+    tagged = create_campaign(workspace_id)
+    also_tagged = create_campaign(workspace_id)
+    untagged = create_campaign(workspace_id)
+
+    with TestingSession.begin() as session:
+        for campaign in (tagged, also_tagged):
+            campaign_offer_tags.tag(
+                session,
+                workspace_id=workspace_id,
+                campaign_id=campaign["id"],
+                offer_ids=[offer_id],
+                user_id="campaign-owner",
+            )
+
+    listing = asyncio.run(
+        request("GET", f"/api/workspaces/{workspace_id}/campaigns")
+    )
+    assert listing.status_code == 200
+    counts = {c["id"]: c["tagged_products"] for c in listing.json()["campaigns"]}
+    # The one product is counted by both campaigns that promote it.
+    assert counts[tagged["id"]] == 1
+    assert counts[also_tagged["id"]] == 1
+    assert counts[untagged["id"]] == 0
 
 
 def test_campaign_plan_keeps_publish_destination_and_attribution_offer(
