@@ -1034,7 +1034,14 @@ html { scroll-behavior: smooth; }
 .autopilot-preview small { color: var(--muted); font-size: 11px; line-height: 1.4; }
 
 @media (max-width: 700px) {
-  .autopilot-destinations > li, .autopilot-queue > li { grid-template-columns: minmax(0, 1fr) auto; }
+  .autopilot-destinations > li { grid-template-columns: minmax(0, 1fr) auto; }
+  /* The still keeps its column. This rule predates the thumbnail, and with
+     four children in two columns the clip was squeezed into a sliver beside
+     its own title - which is the one thing a row about a video should not
+     lose when the screen narrows. */
+  .autopilot-queue > li { grid-template-columns: auto minmax(0, 1fr); }
+  .autopilot-queue > li > .ui-badge { grid-column: 1 / -1; justify-self: start; }
+  .autopilot-queue > li > .campaign-queue-actions { grid-column: 1 / -1; }
   .campaign-mode-options { grid-template-columns: 1fr; }
   .campaign-product-matches > li { grid-template-columns: auto minmax(0, 1fr) auto; }
   .campaign-product-matches > li > .ui-button { grid-column: 2 / -1; justify-self: start; }
@@ -1052,8 +1059,6 @@ html { scroll-behavior: smooth; }
 .campaign-reply-editor legend { padding-inline: 4px; color: var(--text); font-size: 11px; font-weight: 700; }
 .campaign-reply-editor > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 6px; }
 .campaign-reply-editor > .ui-button { justify-self: start; }
-.campaign-schedule-readonly { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.campaign-schedule-readonly > span { border: 1px solid var(--line); border-radius: 999px; padding: 5px 8px; color: var(--text); background: var(--panel-raised); font-size: 10px; }
 .campaign-one-off-handoff { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-block-start: 1px solid var(--line); padding: 14px; background: var(--panel-raised); }
 .campaign-one-off-handoff > div { display: grid; gap: 3px; }
 .campaign-one-off-handoff p { margin: 0; color: var(--muted); font-size: 11px; }
