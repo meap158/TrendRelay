@@ -8,6 +8,7 @@ import { useLocale } from "../i18n-provider";
 import { buttonClass } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
 import { Badge } from "../ui/primitives";
+import { Dialog } from "../ui/dialog";
 
 type Tool = {
   id: string;
@@ -583,35 +584,27 @@ export default function ToolsPage() {
         );
       })}
 
-      {docs && (
-        /* The notes as they are written. Rendering markdown properly would be
-           a dependency for five reference files; kept as text, the headings and
-           lists still read in order, which is what these are for. */
-        <section className="tool-docs" aria-labelledby="tool-docs-title">
-          <div className="setup-wizard-heading">
-            <div>
-              <p className="eyebrow">{docs.path}</p>
-              <h2 id="tool-docs-title">{docs.title}</h2>
-            </div>
-            <button type="button" className="setup-close" onClick={() => setDocs(null)}
-              aria-label={t("tools.closeSetup")}>
-              <ActionIcon name="dismiss" />{t("common.close")}
-            </button>
-          </div>
-          <pre>{docs.markdown}</pre>
-        </section>
-      )}
+      {/* The notes as they are written. Rendering markdown properly would be a
+          dependency for five reference files; kept as text, the headings and
+          lists still read in order, which is what these are for. */}
+      <Dialog
+        open={!!docs}
+        title={docs?.title ?? ""}
+        description={docs?.path}
+        onClose={() => setDocs(null)}
+        size="wide"
+      >
+        {docs && <pre className="tool-docs-body">{docs.markdown}</pre>}
+      </Dialog>
 
-      {setup && (
-        <section className="setup-wizard" aria-labelledby="setup-title">
-          <div className="setup-wizard-heading">
-            <div>
-              <p className="eyebrow">{t("tools.guidedSetup")}</p>
-              <h2 id="setup-title">{setup.title}</h2>
-              <p>{setup.summary}</p>
-            </div>
-            <button type="button" className="setup-close" onClick={() => setSetup(null)} aria-label={t("tools.closeSetup")}><ActionIcon name="dismiss" />{t("common.close")}</button>
-          </div>
+      <Dialog
+        open={!!setup}
+        title={setup?.title ?? ""}
+        description={setup?.summary}
+        onClose={() => setSetup(null)}
+        size="wide"
+      >
+        {setup && <>
           <div className="setup-steps">
             {setup.requirements.map((requirement, index) => (
               <article key={requirement.id} className={`setup-step ${requirement.status}`}>
@@ -644,7 +637,7 @@ export default function ToolsPage() {
             </div>
           )}
           {setup.tool_id === "douyin-downloader" && setup.connection && <p className="connection-note">{t("tools.douyinConnection")} <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
-          {setup.tool_id === "mcp-server" && setup.connection && <p className="connection-note">{t("tools.mcpConnection")} <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
+          {setup.tool_id === "mcp-server" && setup.connection && <p className="connection-note">Assistant access: <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
           {setup.media_ai?.job && (
             /* The download's own words. A job that failed after twenty minutes
                of pip output has a reason, and this is the only place the
@@ -681,24 +674,28 @@ export default function ToolsPage() {
             ))}
           </div>
           <p className="privacy-note">{t("tools.localOnlyNote")}</p>
-        </section>
-      )}
+        </>}
+      </Dialog>
 
-      {reachDiagnostics && (
-        <section className="diagnostic-panel" aria-live="polite">
-          <div>
-            <p className="eyebrow">{t("tools.reachEyebrow")}</p>
-            <h2>{reachDiagnostics.summary.ready} of {reachDiagnostics.summary.total} channels ready</h2>
-            <p>{reachDiagnostics.summary.setup_required} need setup; {reachDiagnostics.summary.unavailable} lack a local dependency.</p>
-          </div>
+      <Dialog
+        open={!!reachDiagnostics}
+        title={reachDiagnostics
+          ? `${reachDiagnostics.summary.ready} of ${reachDiagnostics.summary.total} channels ready`
+          : ""}
+        description={reachDiagnostics
+          ? `${reachDiagnostics.summary.setup_required} need setup; ${reachDiagnostics.summary.unavailable} lack a local dependency.`
+          : undefined}
+        onClose={() => setReachDiagnostics(null)}
+      >
+        {reachDiagnostics && <>
           <div className="diagnostic-channels">
             {reachDiagnostics.channels.map((channel) => (
               <span key={channel.id} className={channel.status}>{channel.id}: {channel.status}</span>
             ))}
           </div>
           <p>{t("tools.noProbes")}</p>
-        </section>
-      )}
+        </>}
+      </Dialog>
       <p className="registry-note">{t("tools.launchersLocal")}</p>
     </main>
   );

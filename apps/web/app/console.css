@@ -1010,6 +1010,9 @@ html { scroll-behavior: smooth; }
 .campaign-approval-list .post-preview-frame {
   inline-size: min(100%, calc(min(34vh, 260px) * var(--preview-ratio, 0.8)));
 }
+/* A tool's notes, read inside the modal now: the dialog carries the panel
+   chrome and scrolls the body, so only the text itself is styled here. */
+.tool-docs-body { margin: 0; padding: 14px 16px; border-radius: var(--radius); background: var(--panel-raised); font: 12px/1.65 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .campaign-approval-edit { display: grid; gap: 8px; }
 .campaign-approval-edit label { display: grid; gap: 3px; color: var(--muted); font-size: 11px; }
 .campaign-approval-edit input, .campaign-approval-edit textarea { inline-size: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; font-size: 12px; }
