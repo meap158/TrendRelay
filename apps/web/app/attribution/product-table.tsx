@@ -260,7 +260,11 @@ export function ProductTable({
     <Card
       eyebrow={t("attribution.productsEyebrow")}
       title={t("attribution.productCount", {
-        count: query.trim() ? shown.length : products.length,
+        // Reflect any narrowing - the text search or any of the filters - so a
+        // filtered-down list reports what it is showing, not the whole catalogue.
+        count: (query.trim() || filterCampaign || filterFile || filterFrom || filterTo)
+          ? shown.length
+          : products.length,
       })}
     >
       {/* Search and selection are one stable toolbar. Selecting a row changes
