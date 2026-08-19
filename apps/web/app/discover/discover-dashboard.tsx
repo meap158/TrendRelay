@@ -19,6 +19,8 @@ import { DiscoveryFeed } from "./discovery-feed";
 import { PopularPosts } from "./popular-posts";
 import { TrendingTopics } from "./trending-topics";
 import { CampaignIdeaComposer } from "./campaign-idea-composer";
+import { StandoutBoard } from "./standout-board";
+import { rankEngagedPosts, type ResearchPostJob } from "../../lib/engaged-posts";
 
 type Workspace = { id: string; name: string; role: string };
 type ReachChannel = {
@@ -859,6 +861,21 @@ export default function ResearchDashboard() {
     "trendrelay.discover.topicCount", 5, numberIn(...TOPIC_COUNTS),
   );
   const [ideaSeeds, setIdeaSeeds] = useState<DiscoverySeed[]>([]);
+  /**
+   * Every post research has turned up, ranked for the shelves above.
+   *
+   * The same jobs "Winning posts" reads further down, so the two can never
+   * disagree about what was found - they disagree only about what is worth
+   * leading with.
+   */
+  const standoutPosts = useMemo(
+    () => rankEngagedPosts(
+      allJobs
+        .filter((job) => job.category === "research")
+        .map((job) => job.raw as ResearchPostJob),
+    ),
+    [allJobs],
+  );
   const ideaSeedIds = useMemo(() => new Set(ideaSeeds.map((seed) => seed.id)), [ideaSeeds]);
 
   function toggleIdeaSeed(seed: DiscoverySeed) {
@@ -1548,6 +1565,11 @@ export default function ResearchDashboard() {
           </span>
           <ChevronDown className={sourceBoardsOpen ? "open" : ""} size={18} aria-hidden="true" />
         </summary>
+
+      {/* Findings before machinery. Everything below this is how research is
+          run; this is what it found, and the only part somebody arriving with
+          "what should I make today" can act on. */}
+      <StandoutBoard posts={standoutPosts} seeds={ideaSeeds} onSeed={toggleIdeaSeed} />
 
       <div style={S.section}>
         <div style={S.tiktokHead}>

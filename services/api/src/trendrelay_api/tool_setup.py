@@ -108,6 +108,83 @@ def setup_report(tool_id: str) -> dict[str, Any]:
             ],
             connection=status["connection"],
         )
+    elif tool_id == "mcp-server":
+        from trendrelay_api.integrations.mcp import service, tunnel
+
+        status = service.server_status()
+        tunnel_state = tunnel.status()
+        running = bool(status["running"])
+        available = bool(status["available"])
+        tunnel_keys = ("CONTROL_PLANE_TUNNEL_ID", "CONTROL_PLANE_API_KEY")
+        configured_tunnel = _configured_names(tunnel_keys)
+        report.update(
+            summary=(
+                "Serve this workspace to an outside assistant over MCP. It reads the "
+                "posts that still need copy and writes the caption, first comment and "
+                "thread replies - drafts only, never an approval or a publish."
+            ),
+            requirements=[
+                _requirement(
+                    "installation",
+                    "MCP package installed",
+                    "ready" if available else "setup-required",
+                    "The server can run in this environment."
+                    if available
+                    else "Install it with: pip install -e services/api[mcp].",
+                ),
+                _requirement(
+                    "server",
+                    "Server running",
+                    "ready" if running else "setup-required",
+                    f"Listening on {status['url']}."
+                    if running
+                    else "Start the server to let an assistant connect.",
+                ),
+                _requirement(
+                    "tunnel",
+                    "Assistant tunnel",
+                    "ready" if tunnel_state["state"] == "running" else "optional",
+                    tunnel_state["message"],
+                ),
+                _requirement(
+                    "boundary",
+                    "What a caller may do",
+                    "optional",
+                    status["boundary"],
+                ),
+                _requirement(
+                    "tools",
+                    "Tools exposed",
+                    "optional",
+                    ", ".join(status["tools"]),
+                ),
+            ],
+            actions=[
+                {
+                    "id": "stop-mcp" if running else "start-mcp",
+                    "label": "Stop server" if running else "Start server",
+                    "kind": "local-launch",
+                    "requires_confirmation": False,
+                },
+                *(
+                    [{
+                        "id": "test-tunnel",
+                        "label": "Test tunnel connection",
+                        "kind": "local-launch",
+                        "requires_confirmation": False,
+                    }]
+                    if tunnel.configured()
+                    else []
+                ),
+            ],
+            connection={"state": status["state"], "message": status["message"]},
+            # The tunnel's own credentials, shown the way every other key on this
+            # page is: which are set, masked, with the instruction to add them to
+            # .env. There is no field here - a key is added by hand, deliberately.
+            configured_secret_names=configured_tunnel,
+            supported_secret_names=list(tunnel_keys),
+            secret_previews={name: masked_value(name) for name in configured_tunnel},
+        )
     elif tool_id == "last30days-skill":
         configured = _configured_names(LAST30DAYS_KEYS)
         report.update(
@@ -287,7 +364,35 @@ def setup_report(tool_id: str) -> dict[str, Any]:
     return report
 
 
+def _launch_mcp_action(action_id: str) -> dict[str, str]:
+    """Start or stop the loopback MCP server, or test the tunnel, from the Tools tab."""
+    from trendrelay_api.integrations.mcp import service, tunnel
+
+    if not service.mcp_available():
+        raise RuntimeError(
+            "The MCP package is not installed. Install it with: "
+            "pip install -e services/api[mcp]."
+        )
+    if action_id == "test-tunnel":
+        # tunnel-client's own doctor check: reading its answer beats restating
+        # its rules, and it runs without connecting for real.
+        outcome = tunnel.run_doctor()
+        return {
+            "status": "ok" if outcome["ok"] else "problem",
+            "message": outcome["detail"],
+        }
+    if action_id == "start-mcp":
+        status = service.start_server()
+    elif action_id == "stop-mcp":
+        status = service.stop_server()
+    else:
+        raise KeyError(f"mcp-server:{action_id}")
+    return {"status": status["state"], "message": status["message"]}
+
+
 def launch_setup_action(tool_id: str, action_id: str) -> dict[str, str]:
+    if tool_id == "mcp-server":
+        return _launch_mcp_action(action_id)
     allowed_actions = {
         "meta-ads-kit": {"launch-auth"},
     }

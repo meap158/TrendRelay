@@ -129,3 +129,34 @@
   .discovery-feed-rows > li { grid-template-columns: 36px minmax(0, 1fr) auto; }
   .discovery-feed-metric { grid-column: 2 / -1; }
 }
+
+/* The standout board: what to make today, above the machinery that finds it.
+ *
+ * Written in classes and tokens, unlike the rest of this page, which is built
+ * from inline style objects and its own colours. Two shelves side by side while
+ * there is room, stacked when there is not. */
+.standout-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 12px; margin-bottom: 18px; }
+.standout-shelf { display: grid; align-content: start; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow-sm); }
+/* The two shelves are different questions, so they are told apart by a rule of
+   colour down the edge rather than by two different card shapes. */
+.standout-shelf.hot { border-inline-start: 3px solid var(--red); }
+.standout-shelf.emerging { border-inline-start: 3px solid var(--green); }
+.standout-shelf > header { display: grid; grid-template-columns: auto 1fr; gap: 2px 7px; align-items: center; }
+.standout-shelf > header h3 { margin: 0; font-size: 13px; font-weight: 700; }
+.standout-shelf > header p { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; }
+.standout-shelf.hot > header svg { color: var(--red); }
+.standout-shelf.emerging > header svg { color: var(--green); }
+.standout-shelf ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+/* Name, reason, action - in that order, and the action last so the row reads
+   before it asks for a decision. */
+.standout-shelf li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 7px 8px; border-radius: var(--radius-sm); }
+.standout-shelf li:hover { background: var(--panel-raised); }
+.standout-shelf li a { min-width: 0; overflow: hidden; color: var(--text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.standout-shelf li a:hover strong { color: var(--link); }
+.standout-shelf li small { grid-column: 1; display: flex; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: 10px; }
+.standout-shelf li > button { grid-row: 1 / span 2; }
+/* The reason carries the shelf's colour: it is the answer to "why is this
+   here", which is the only thing the shelf is claiming. */
+.standout-shelf.hot .standout-reason { color: var(--red); font-weight: 600; }
+.standout-shelf.emerging .standout-reason { color: var(--green); font-weight: 600; }
+.standout-empty { margin: 0; padding: 10px 8px; color: var(--muted); font-size: 11px; }

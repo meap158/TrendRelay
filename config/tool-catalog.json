@@ -378,6 +378,33 @@
       "notes": "AGPL-3.0, so it runs as a separate program in its own virtualenv and TrendRelay never imports it - using a program rather than linking a library. Stills only: the model generates each face independently, so video would flicker between invented faces, and video is refused rather than mangled. Weights come from hkung/face-anon-simple, stable-diffusion-2-1 and CLIP.",
       "surface": "library",
       "runs": "local"
+    },
+    {
+      "id": "mcp-server",
+      "name": "Assistant Access (MCP)",
+      "repository": "https://github.com/modelcontextprotocol/python-sdk",
+      "revision": "internal",
+      "version": "MCP server",
+      "license": "MIT",
+      "license_url": "https://github.com/modelcontextprotocol/python-sdk/blob/main/LICENSE",
+      "category": "Assistant access",
+      "summary": "Let an outside assistant read the campaign posts that still need copy and write the caption, first comment and thread replies - over MCP, on loopback, reads and drafts only.",
+      "capabilities": [
+        "Write captions for posts that have none",
+        "Write first comments and thread replies",
+        "Reads and drafts only; never approves or publishes"
+      ],
+      "integration_status": "internal",
+      "commercial_use": "allowed",
+      "install_strategy": "internal",
+      "distribution": "mcp",
+      "install_allowed": false,
+      "activation_allowed": false,
+      "default_active": false,
+      "documentation": "docs/third-party/mcp.md",
+      "block_reason": "Ships in the API environment as an extra: pip install -e services/api[mcp]. Start and stop the server from Setup; it serves one workspace on loopback, and a tunnel you configure reaches it from outside.",
+      "surface": "assistant",
+      "runs": "local"
     }
   ]
 }
