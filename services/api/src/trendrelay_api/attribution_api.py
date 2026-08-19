@@ -1103,6 +1103,9 @@ class ShopeeImport(ShopeeImportSource):
     #: use. Empty imports them untagged, which is a choice rather than an
     #: oversight when it is offered on the same screen.
     campaign_ids: list[str] = Field(default_factory=list, max_length=50)
+    #: The workbook or export this batch was read from, recorded on each product
+    #: so the catalogue can be filtered to one import. A paste has none.
+    filename: str | None = Field(default=None, max_length=260)
 
 
 class ShopeeOfferPageOpen(BaseModel):
@@ -1265,6 +1268,7 @@ def import_shopee_offers(
         workspace_id,
         user.id,
         rows,
+        filename=body.filename,
     )
     # Tagged as they land, to the campaigns the import named. Every offer the
     # batch touched, not only the new ones: re-importing an export to refresh

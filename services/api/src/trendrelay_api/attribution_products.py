@@ -208,6 +208,13 @@ def products_payload(session: Session, workspace_id: str) -> dict[str, Any]:
             "identifier": product.identifier,
             "product_url": product.product_url,
             "image_url": product.image_url,
+            # The batch this came from and when, so the table can filter by
+            # source file and import date. Null for rows imported before these
+            # were recorded, or pasted with no file name.
+            "import_filename": product.import_filename,
+            "imported_at": (
+                product.imported_at.isoformat() if product.imported_at else None
+            ),
             # Shopee calls this the shop; other affiliate feeds call it the
             # merchant. It is the creator/seller identity people recognise in
             # the product table, and several are retained when a product is

@@ -21,7 +21,7 @@ from trendrelay_api.catalog_identifiers import identifier_from_url, parse_identi
 from trendrelay_api.database import get_session
 from trendrelay_api.foundation import audit, ensure_profile, membership, require_role
 from trendrelay_api.integrations.last30days import get_job
-from trendrelay_api.models import Campaign
+from trendrelay_api.models import Campaign, utc_now
 from trendrelay_api.money import to_minor
 from trendrelay_api.opportunity_models import (
     Opportunity,
@@ -132,6 +132,9 @@ def _commission_bps(value: str | None) -> int | None:
 
 class CsvImport(BaseModel):
     csv_text: str = Field(min_length=1, max_length=2_000_000)
+    #: The file the CSV was read from, recorded on each product so the catalogue
+    #: can be filtered to one import. A paste into the box has none.
+    filename: str | None = Field(default=None, max_length=260)
 
 
 class Evidence(BaseModel):
@@ -463,13 +466,20 @@ def import_offers(
                     product_url=_clean(row.get("product_url"), 2000),
                     image_url=_clean(row.get("image_url"), 2000),
                     created_by=user.id,
+                    import_filename=body.filename[:260] if body.filename else None,
+                    imported_at=utc_now(),
                 )
                 session.add(product)
                 session.flush()
-            elif identifier and not product.identifier:
-                # Backfill only. A later import that omits the identifier must
-                # not erase one an earlier import supplied.
-                product.identifier = identifier
+            else:
+                # Most-recent import wins for the timestamp; the file name is
+                # only replaced when this batch had one. Identifier is backfill
+                # only - a later import that omits it must not erase one.
+                product.imported_at = utc_now()
+                if body.filename:
+                    product.import_filename = body.filename[:260]
+                if identifier and not product.identifier:
+                    product.identifier = identifier
             fingerprint = _key(network, affiliate_url)
             if session.scalar(
                 select(ProductOffer.id).where(

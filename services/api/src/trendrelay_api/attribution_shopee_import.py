@@ -28,6 +28,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from trendrelay_api import attribution_shopee
+from trendrelay_api.models import utc_now
 from trendrelay_api.money import to_minor
 from trendrelay_api.opportunity_models import Product, ProductOffer
 
@@ -124,13 +125,18 @@ def import_rows(
     workspace_id: str,
     user_id: str,
     rows: list[Any],
+    filename: str | None = None,
 ) -> ImportOutcome:
-    """File each row and return Shopee's own ready-to-publish links."""
+    """File each row and return Shopee's own ready-to-publish links.
+
+    `filename` is the batch this came from, recorded on every product it files
+    so the catalogue can later be filtered to one import.
+    """
     outcome = ImportOutcome()
     for row in rows:
         if not row.affiliate_url:
             continue
-        product = _upsert_product(session, workspace_id, user_id, row)
+        product = _upsert_product(session, workspace_id, user_id, row, filename)
         if product not in outcome.products:
             outcome.products.append(product)
         fingerprint = content_key(NETWORK, row.affiliate_url)
@@ -200,7 +206,9 @@ def _backfill_offer(offer: ProductOffer, row: Any) -> None:
         offer.commission_flat_cents = to_minor(row.commission_dong, CURRENCY)
 
 
-def _upsert_product(session: Session, workspace_id: str, user_id: str, row: Any) -> Product:
+def _upsert_product(
+    session: Session, workspace_id: str, user_id: str, row: Any, filename: str | None = None
+) -> Product:
     """The product this offer sells, created once and found thereafter.
 
     Keyed on shop and item so the same product imported from two exports is one
@@ -226,6 +234,12 @@ def _upsert_product(session: Session, workspace_id: str, user_id: str, row: Any)
             product.product_url = row.product_url
         if row.image_url and not product.image_url and row.image_url.startswith("https://"):
             product.image_url = row.image_url[:2000]
+        # Most-recent import wins for the timestamp; the file name is only
+        # replaced when this batch had one, so a later paste refresh does not
+        # erase the workbook an earlier batch recorded.
+        product.imported_at = utc_now()
+        if filename:
+            product.import_filename = filename[:260]
         return product
 
     product = Product(
@@ -241,6 +255,8 @@ def _upsert_product(session: Session, workspace_id: str, user_id: str, row: Any)
             else None
         ),
         created_by=user_id,
+        import_filename=filename[:260] if filename else None,
+        imported_at=utc_now(),
     )
     session.add(product)
     session.flush()

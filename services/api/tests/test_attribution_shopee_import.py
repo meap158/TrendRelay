@@ -60,6 +60,28 @@ def test_an_export_row_becomes_a_product_and_offer_with_shopees_link(session) ->
     }]
 
 
+def test_an_import_records_the_file_it_came_from_and_when(session) -> None:
+    """So the catalogue can later be filtered to one batch, or one day's imports."""
+    importer.import_rows(session, "workspace-1", "user-1", export_rows(), filename="october.xlsx")
+
+    product = session.scalar(select(Product))
+    assert product.import_filename == "october.xlsx"
+    assert product.imported_at is not None
+
+
+def test_reimporting_updates_the_file_but_a_paste_keeps_the_last_one(session) -> None:
+    """Most-recent import wins for the name it had; a pasted refresh with no file
+    name does not erase the workbook an earlier batch recorded."""
+    importer.import_rows(session, "workspace-1", "user-1", export_rows(), filename="october.xlsx")
+    importer.import_rows(session, "workspace-1", "user-1", export_rows(), filename="november.xlsx")
+    product = session.scalar(select(Product))
+    assert product.import_filename == "november.xlsx"
+
+    importer.import_rows(session, "workspace-1", "user-1", export_rows(), filename=None)
+    product = session.scalar(select(Product))
+    assert product.import_filename == "november.xlsx"
+
+
 def test_the_price_is_stored_in_dong_rather_than_dong_times_a_hundred(session) -> None:
     """The whole reason `money` exists.
 

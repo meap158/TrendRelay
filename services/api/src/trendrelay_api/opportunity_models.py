@@ -38,6 +38,14 @@ class Product(Base):
     created_by: Mapped[str] = mapped_column(ForeignKey("user_profiles.id"))
     created_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
     updated_at: Mapped[datetime] = mapped_column(default=utc_now)
+    #: The batch this product was last imported from, so a filter can gather
+    #: everything filed from one workbook. Null for rows imported before this
+    #: was tracked, or from a paste with no file name.
+    import_filename: Mapped[str | None] = mapped_column(String(260), index=True)
+    #: When it was last imported, refreshed on every re-import - distinct from
+    #: `created_at`, which under upsert stays the first-seen time. Null for rows
+    #: that predate the column.
+    imported_at: Mapped[datetime | None] = mapped_column(index=True)
 
 
 class ProductOffer(Base):
