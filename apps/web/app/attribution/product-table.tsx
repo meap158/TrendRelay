@@ -281,10 +281,10 @@ export function ProductTable({
               <select
                 className="product-filter"
                 value={filterCampaign}
-                aria-label="Filter by campaign"
+                aria-label={t("attribution.filterByCampaign")}
                 onChange={(event) => setFilterCampaign(event.target.value)}
               >
-                <option value="">All campaigns</option>
+                <option value="">{t("attribution.allCampaigns")}</option>
                 {campaigns.map((campaign) => (
                   <option key={campaign.id} value={campaign.id}>{campaign.name}</option>
                 ))}
@@ -294,10 +294,10 @@ export function ProductTable({
               <select
                 className="product-filter"
                 value={filterFile}
-                aria-label="Filter by import file"
+                aria-label={t("attribution.filterByFile")}
                 onChange={(event) => setFilterFile(event.target.value)}
               >
-                <option value="">All imports</option>
+                <option value="">{t("attribution.allImports")}</option>
                 {fileNames.map((name) => (
                   <option key={name} value={name}>{name}</option>
                 ))}
@@ -310,7 +310,7 @@ export function ProductTable({
                   className="product-filter"
                   value={filterFrom}
                   max={filterTo || undefined}
-                  aria-label="Imported on or after"
+                  aria-label={t("attribution.importedAfter")}
                   onChange={(event) => setFilterFrom(event.target.value)}
                 />
                 <span aria-hidden="true">–</span>
@@ -319,7 +319,7 @@ export function ProductTable({
                   className="product-filter"
                   value={filterTo}
                   min={filterFrom || undefined}
-                  aria-label="Imported on or before"
+                  aria-label={t("attribution.importedBefore")}
                   onChange={(event) => setFilterTo(event.target.value)}
                 />
               </span>
@@ -335,7 +335,7 @@ export function ProductTable({
                   setFilterTo("");
                 }}
               >
-                Clear filters
+                {t("attribution.clearFilters")}
               </Button>
             )}
           </div>
@@ -363,10 +363,10 @@ export function ProductTable({
               <select
                 className="product-tag-campaign"
                 value={tagCampaign}
-                aria-label="Campaign to tag the selection to"
+                aria-label={t("attribution.tagSelectionAria")}
                 onChange={(event) => setTagCampaign(event.target.value)}
               >
-                <option value="">Choose a campaign…</option>
+                <option value="">{t("attribution.chooseCampaign")}</option>
                 {campaigns.map((campaign) => (
                   <option key={campaign.id} value={campaign.id}>
                     {campaign.name} ({campaign.tagged_products})
@@ -378,17 +378,17 @@ export function ProductTable({
                 size="sm"
                 busy={tagging}
                 disabled={picked.size === 0 || !tagCampaign}
-                title={!tagCampaign ? "Choose a campaign first." : undefined}
+                title={!tagCampaign ? t("attribution.chooseCampaignFirst") : undefined}
                 onClick={() => void tagPicked(true)}
-              >Add to campaign</Button>
+              >{t("attribution.addToCampaign")}</Button>
               <Button
                 variant="quiet"
                 size="sm"
                 busy={tagging}
                 disabled={picked.size === 0 || !tagCampaign}
-                title={!tagCampaign ? "Choose a campaign first." : undefined}
+                title={!tagCampaign ? t("attribution.chooseCampaignFirst") : undefined}
                 onClick={() => void tagPicked(false)}
-              >Remove from it</Button>
+              >{t("attribution.removeFromCampaign")}</Button>
             </>
           )}
           <Button
@@ -426,7 +426,7 @@ export function ProductTable({
                 sort={sort} onSort={changeSort} className="numeric" />
               {/* Not sortable: a list of names does not order, and a column
                   that pretends to is a control that does nothing. */}
-              {onTagOffers && <th scope="col" className="product-campaigns">Campaigns</th>}
+              {onTagOffers && <th scope="col" className="product-campaigns">{t("attribution.campaignsColumn")}</th>}
               <SortableHeader column="offers" label={t("attribution.offers")}
                 sort={sort} onSort={changeSort} className="product-count" />
               <SortableHeader column="links" label={t("attribution.links")}
@@ -511,7 +511,7 @@ export function ProductTable({
                           /* Said rather than left blank: no campaign can use
                              this product, which is a state to notice on a page
                              about products that earn. */
-                          <small className="product-campaigns-none">Not in a campaign</small>
+                          <small className="product-campaigns-none">{t("attribution.notInCampaign")}</small>
                         )}
                       </td>
                     );
