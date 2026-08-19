@@ -218,6 +218,42 @@ EXPORT = (
 )
 
 
+#: The same export with Shopee's English headings, which is what the affiliate
+#: console produces for an account set to English. Same nine columns in the
+#: same order and the same Vietnamese number formats - only the headings are
+#: translated, and only one of them, "Item Name", had never been seen.
+ENGLISH_EXPORT = (
+    "Item Id,Item Name,Price,Sales,Shop Name,"
+    "Commission Rate,Commission,Product Link,Offer Link\n"
+    "6092444835,Đồ Ngủ Mặc Nhà Bộ Đồ Ngủ Lụa Satin,\"89,0k\",10k+,AMAKA.VN,"
+    "10%,₫8.900,https://shopee.vn/product/36706472/6092444835,https://s.shopee.vn/19ioLXYrR\n"
+    "58007561710,Quần Bom Thụng Nữ Ông Rộng Cạp Chun,\"118,7k\",40k+,Thu Thảo Store97,"
+    "10%,₫11.868,https://shopee.vn/product/1364436377/58007561710,https://s.shopee.vn/W5zPGVeqY\n"
+)
+
+
+def test_the_english_headed_export_reads_the_same_way() -> None:
+    """One untranslated alias refused a hundred products.
+
+    "Item Id" was already known and "Item Name" was not, though they arrive in
+    the same file - so an export from an English console failed the check for a
+    name column, which is the one column the reader will not do without.
+    """
+    from trendrelay_api.attribution_shopee import read_export
+
+    products, problems = read_export(ENGLISH_EXPORT)
+
+    assert problems == []
+    assert [p.item_id for p in products] == ["6092444835", "58007561710"]
+    assert products[0].name.startswith("Đồ Ngủ Mặc Nhà")
+    # The rest of the row reads as it does in the Vietnamese export: the money
+    # is Vietnamese either way.
+    assert products[0].price_dong == 89_000
+    assert products[0].commission_dong == 8_900
+    assert products[0].commission_bps == 1_000
+    assert products[0].shop_id == "36706472"
+
+
 def test_the_real_export_reads_without_complaint() -> None:
     from trendrelay_api.attribution_shopee import read_export
 

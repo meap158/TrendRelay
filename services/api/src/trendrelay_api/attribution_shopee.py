@@ -197,7 +197,11 @@ def resolve_short_link(url: str, *, timeout: float = RESOLVE_TIMEOUT_SECONDS) ->
 #: are accepted too so an account in another language imports the same way.
 EXPORT_COLUMNS: dict[str, tuple[str, ...]] = {
     "item_id": ("mã sản phẩm", "product id", "item id"),
-    "name": ("tên sản phẩm", "product name", "product"),
+    # "Item Name" is what Shopee's English export calls it, beside "Item Id"
+    # which was already here - the pair comes from the same file, and only one
+    # of them had been seen. Without it a whole export is refused for having no
+    # name column, which is the one column the reader insists on.
+    "name": ("tên sản phẩm", "product name", "item name", "product"),
     "price": ("giá", "price", "price (vnd)"),
     "sales": ("doanh thu", "sales", "revenue"),
     "shop": ("tên cửa hàng", "shop name", "store name", "shop"),
