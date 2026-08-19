@@ -841,31 +841,31 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 /* The catalogue in a dialog. It borrows `.product-table` from Attribution
    deliberately: it is the same table answering the same question, and two that
    differ by a few pixels read as two different things. */
-.offer-picker { display: grid; gap: 10px; min-height: 0; }
-.offer-picker-toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.product-picker { display: grid; gap: 10px; min-height: 0; }
+.product-picker-toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
 /* The magnifier sits inside the field rather than beside it, so the toolbar is
    one object and not a row of loose parts. */
-.offer-picker-search { display: flex; flex: 1; gap: 6px; align-items: center; min-width: 0; padding: 0 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--muted); }
-.offer-picker-search:focus-within { border-color: var(--line-strong); }
-.offer-picker-search input { flex: 1; min-width: 0; border: 0; padding: 7px 0; background: none; color: var(--text); font: inherit; font-size: 12px; }
-.offer-picker-search input:focus { outline: none; }
-.offer-picker-count { flex: none; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-.offer-picker-empty { margin: 0; padding: 28px 0; color: var(--muted); font-size: 12px; text-align: center; }
+.product-picker-search { display: flex; flex: 1; gap: 6px; align-items: center; min-width: 0; padding: 0 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--muted); }
+.product-picker-search:focus-within { border-color: var(--line-strong); }
+.product-picker-search input { flex: 1; min-width: 0; border: 0; padding: 7px 0; background: none; color: var(--text); font: inherit; font-size: 12px; }
+.product-picker-search input:focus { outline: none; }
+.product-picker-count { flex: none; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.product-picker-empty { margin: 0; padding: 28px 0; color: var(--muted); font-size: 12px; text-align: center; }
 /* Scrolls itself so the dialog does not, which is what lets the header row stay
    put while a long catalogue moves under it. */
-.offer-picker-scroll { max-height: min(56vh, 460px); overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); }
-.offer-picker-table thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); }
-.offer-picker-table thead th button { display: inline-flex; gap: 4px; align-items: center; border: 0; padding: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
-.offer-picker-table thead th button[data-active] { color: var(--text); }
-.offer-picker-row { cursor: pointer; }
-.offer-picker-row:hover { background: var(--panel-raised); }
-.offer-picker-row[aria-selected="true"] { background: var(--panel-raised); box-shadow: inset 2px 0 0 var(--link); }
-.offer-picker-product { display: flex; gap: 9px; align-items: center; min-width: 0; }
-.offer-picker-named { display: grid; min-width: 0; gap: 1px; }
-.offer-picker-named > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.offer-picker-named small { color: var(--muted); font-size: 10px; }
-.offer-picker-tick { flex: none; color: var(--link); }
-.offer-picker-rate { font-weight: 700; }
+.product-picker-scroll { max-height: min(56vh, 460px); overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.product-picker-table thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); }
+.product-picker-table thead th button { display: inline-flex; gap: 4px; align-items: center; border: 0; padding: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.product-picker-table thead th button[data-active] { color: var(--text); }
+.product-picker-row { cursor: pointer; }
+.product-picker-row:hover { background: var(--panel-raised); }
+.product-picker-row[aria-selected="true"] { background: var(--panel-raised); box-shadow: inset 2px 0 0 var(--link); }
+.product-picker-product { display: flex; gap: 9px; align-items: center; min-width: 0; }
+.product-picker-named { display: grid; min-width: 0; gap: 1px; }
+.product-picker-named > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.product-picker-named small { color: var(--muted); font-size: 10px; }
+.product-picker-tick { flex: none; color: var(--link); }
+.product-picker-rate { font-weight: 700; }
 
 /* The heading and the button that explains what is under it. */
 .engine-setup-title { display: flex; gap: 4px; align-items: center; }

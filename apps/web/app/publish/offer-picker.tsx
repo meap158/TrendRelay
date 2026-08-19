@@ -107,9 +107,9 @@ export function OfferPicker({
       description="Its own affiliate link goes in the post. Sorted by what each offer pays."
       onClose={onClose}
     >
-      <div className="offer-picker">
-        <div className="offer-picker-toolbar">
-          <span className="offer-picker-search">
+      <div className="product-picker">
+        <div className="product-picker-toolbar">
+          <span className="product-picker-search">
             <Search size={14} aria-hidden="true" />
             <input
               type="search"
@@ -119,7 +119,7 @@ export function OfferPicker({
               onChange={(event) => setQuery(event.target.value)}
             />
           </span>
-          <span className="offer-picker-count">
+          <span className="product-picker-count">
             {query.trim() && rows.length !== all.length
               ? `${rows.length} of ${all.length}`
               : t("attribution.productCount", { count: rows.length })}
@@ -127,14 +127,14 @@ export function OfferPicker({
         </div>
 
         {rows.length === 0 ? (
-          <p className="offer-picker-empty">
+          <p className="product-picker-empty">
             {all.length
               ? t("attribution.noProductMatches")
               : t("publish.noProductsToLink")}
           </p>
         ) : (
-          <div className="offer-picker-scroll">
-            <table className="product-table offer-picker-table">
+          <div className="product-picker-scroll">
+            <table className="product-table product-picker-table">
               <thead>
                 <tr>
                   {COLUMNS.map((column) => {
@@ -171,12 +171,12 @@ export function OfferPicker({
                       // The row is the button. `aria-selected` rather than a
                       // checkbox column: exactly one of these ends up on the
                       // post, and a checkbox implies otherwise.
-                      className="offer-picker-row"
+                      className="product-picker-row"
                       aria-selected={picked}
                       onClick={() => onChoose(row)}
                     >
                       <th scope="row">
-                        <span className="offer-picker-product">
+                        <span className="product-picker-product">
                           {showThumbnails && (row.image_url
                             // eslint-disable-next-line @next/next/no-img-element
                             ? <img className="product-thumb" src={row.image_url} alt="" loading="lazy" />
@@ -184,11 +184,11 @@ export function OfferPicker({
                             // worth its space, and then only to keep the names
                             // on one line down the column.
                             : <span className="product-thumb product-thumb-empty" aria-hidden="true" />)}
-                          <span className="offer-picker-named">
+                          <span className="product-picker-named">
                             <span>{row.name}</span>
                             <small>{[row.brand, row.marketplace].filter(Boolean).join(" · ")}</small>
                           </span>
-                          {picked && <Check className="offer-picker-tick" size={15} aria-label="Chosen" />}
+                          {picked && <Check className="product-picker-tick" size={15} aria-label="Chosen" />}
                         </span>
                       </th>
                       <td>{row.network}</td>
@@ -197,7 +197,7 @@ export function OfferPicker({
                       </td>
                       {/* The rate carries the emphasis: it is the column this
                           table opens sorted by, and the reason for the choice. */}
-                      <td className="numeric offer-picker-rate">
+                      <td className="numeric product-picker-rate">
                         {commissionRate(row) || "—"}
                       </td>
                       <td className="numeric">
