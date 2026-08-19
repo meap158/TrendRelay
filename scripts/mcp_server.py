@@ -8,7 +8,6 @@ address; a tunnel the operator configures is what reaches it from outside.
 
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
 
@@ -21,14 +20,7 @@ from trendrelay_api.integrations.mcp import service  # noqa: E402
 from trendrelay_api.integrations.mcp.server import build_server, exposed_tool_names  # noqa: E402
 
 
-def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(description=__doc__)
-    result.add_argument("--status", type=Path, default=service.STATUS_FILE)
-    return result
-
-
 def main() -> int:
-    args = parser().parse_args()
     with SessionFactory() as session:
         workspace_id = service.resolve_workspace_id(session)
     if not workspace_id:
@@ -44,7 +36,7 @@ def main() -> int:
         f"Serving workspace {workspace_id} to assistants over MCP on loopback.",
         workspace_id=workspace_id,
         url=service.server_url(),
-        port=service._port(),
+        port=service.port(),
         tools=exposed_tool_names(),
     )
     try:

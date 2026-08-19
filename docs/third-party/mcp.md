@@ -92,6 +92,12 @@ PATH). The supervisor names it clearly when it is missing rather than failing
 silently. What a caller may do is still the server's policy, not whoever reaches
 the tunnel.
 
+The server also answers RFC 9728 resource metadata at both
+`/.well-known/oauth-protected-resource` paths, advertising no authorization
+server because there is none. `tunnel-client` asks on every connection; answering
+turns a per-connection warning into a deliberate "no auth server here" rather
+than a 404 that reads as broken.
+
 ## Files
 
 | Piece | File |

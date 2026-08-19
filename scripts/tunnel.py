@@ -18,6 +18,7 @@ arguments - an argument list is readable by every process listing on the machine
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -75,13 +76,11 @@ def process_is_alive(pid: int) -> bool:
 
 
 def _status(state: str, message: str) -> None:
-    import json
-
     service.MCP_DIR.mkdir(parents=True, exist_ok=True)
     payload = {
         "state": state,
         "message": message,
-        "updated_at": service._now(),
+        "updated_at": service.now(),
     }
     temporary = TUNNEL_STATUS_FILE.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

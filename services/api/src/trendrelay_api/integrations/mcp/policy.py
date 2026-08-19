@@ -22,10 +22,10 @@ tool it likes - including one it was never offered.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class Access(str, Enum):
+class Access(StrEnum):
     """Why an operation is or is not reachable over MCP."""
 
     #: A read of the workspace. Always safe to expose.

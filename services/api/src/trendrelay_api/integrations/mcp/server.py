@@ -47,26 +47,46 @@ def build_server(workspace_id: str) -> FastMCP:
 
     from trendrelay_api.config import get_settings
 
-    settings = get_settings()
+    mcp_port = int(get_settings().mcp_port or 8765)
     server = FastMCP(
         name="TrendRelay",
         instructions=INSTRUCTIONS,
         host="127.0.0.1",
-        port=int(getattr(settings, "mcp_port", 0) or 8765),
+        port=mcp_port,
         # Stateful Streamable HTTP, the mode a standard MCP client and the tunnel
         # expect: the session is negotiated on initialize and carried by header.
         # Stateless mode terminates the handshake a normal client makes.
         stateless_http=False,
     )
 
-    def _read(operation: str, fn) -> Any:
-        from trendrelay_api.database import SessionFactory
+    # RFC 9728 resource metadata, at both paths a client looks for it. Answered
+    # rather than left to 404 so a caller can tell "this resource advertises no
+    # authorization server" from "this resource did not answer": tunnel-client
+    # asks on every connection, and the difference is whether its warning
+    # describes a deliberate configuration or a broken one. No authorization
+    # server is named, because there is none - saying so is the point.
+    async def _resource_metadata(_request):
+        from starlette.responses import JSONResponse
 
-        _guard(operation)
-        with SessionFactory() as session:
-            return fn(session)
+        return JSONResponse(
+            {
+                "resource": f"http://127.0.0.1:{mcp_port}/mcp",
+                "resource_name": "TrendRelay workspace",
+            },
+            headers={"Cache-Control": "no-store"},
+        )
 
-    def _write(operation: str, fn) -> Any:
+    _well_known = (
+        "/.well-known/oauth-protected-resource",
+        "/.well-known/oauth-protected-resource/mcp",
+    )
+    for _path in _well_known:
+        server.custom_route(_path, methods=["GET"])(_resource_metadata)
+
+    def _call(operation: str, fn) -> Any:
+        """Run one tool: refuse it if the policy does not allow it, then hand it
+        a session. Reads and writes share this - a write commits its own session
+        inside `fn` - so the boundary check has one home."""
         from trendrelay_api.database import SessionFactory
 
         _guard(operation)
@@ -78,7 +98,7 @@ def build_server(workspace_id: str) -> FastMCP:
         description="Every campaign in the workspace, with how many posts still need a caption.",
     )
     def list_campaigns() -> list[dict[str, Any]]:
-        return _read("list_campaigns", lambda s: context.list_campaigns(s, workspace_id))
+        return _call("list_campaigns", lambda s: context.list_campaigns(s, workspace_id))
 
     @server.tool(
         name="list_posts_needing_copy",
@@ -88,7 +108,7 @@ def build_server(workspace_id: str) -> FastMCP:
         ),
     )
     def list_posts_needing_copy(campaign_id: str | None = None) -> list[dict[str, Any]]:
-        return _read(
+        return _call(
             "list_posts_needing_copy",
             lambda s: context.list_posts_needing_copy(s, workspace_id, campaign_id),
         )
@@ -102,7 +122,7 @@ def build_server(workspace_id: str) -> FastMCP:
         ),
     )
     def get_post_context(item_id: str) -> dict[str, Any]:
-        return _read(
+        return _call(
             "get_post_context",
             lambda s: context.get_post_context(s, workspace_id, item_id),
         )
@@ -115,7 +135,7 @@ def build_server(workspace_id: str) -> FastMCP:
         ),
     )
     def get_campaign_config(campaign_id: str) -> dict[str, Any]:
-        return _read(
+        return _call(
             "get_campaign_config",
             lambda s: context.get_campaign_config(s, workspace_id, campaign_id),
         )
@@ -130,7 +150,7 @@ def build_server(workspace_id: str) -> FastMCP:
     def write_caption(
         item_id: str, caption: str, hashtags: list[str] | None = None
     ) -> dict[str, Any]:
-        return _write(
+        return _call(
             "write_caption",
             lambda s: writes.write_post_copy(
                 s, workspace_id, item_id, caption=caption, hashtags=hashtags
@@ -146,7 +166,7 @@ def build_server(workspace_id: str) -> FastMCP:
         ),
     )
     def write_first_comment(item_id: str, first_comment: str) -> dict[str, Any]:
-        return _write(
+        return _call(
             "write_first_comment",
             lambda s: writes.write_post_copy(
                 s, workspace_id, item_id, first_comment=first_comment
@@ -161,7 +181,7 @@ def build_server(workspace_id: str) -> FastMCP:
         ),
     )
     def write_thread(item_id: str, replies: list[str]) -> dict[str, Any]:
-        return _write(
+        return _call(
             "write_thread",
             lambda s: writes.write_post_copy(s, workspace_id, item_id, thread=replies),
         )
@@ -181,7 +201,7 @@ def build_server(workspace_id: str) -> FastMCP:
         hashtags: list[str] | None = None,
         title: str | None = None,
     ) -> dict[str, Any]:
-        return _write(
+        return _call(
             "write_post_copy",
             lambda s: writes.write_post_copy(
                 s, workspace_id, item_id,

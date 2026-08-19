@@ -14,7 +14,6 @@ import subprocess
 import sys
 import threading
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
@@ -37,7 +36,7 @@ BOUNDARY_NOTE = (
 )
 
 
-def _now() -> str:
+def now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
@@ -48,14 +47,14 @@ def mcp_available() -> bool:
     return find_spec("mcp") is not None
 
 
-def _port() -> int:
+def port() -> int:
     from trendrelay_api.config import get_settings
 
-    return int(getattr(get_settings(), "mcp_port", 0) or 8765)
+    return int(get_settings().mcp_port or 8765)
 
 
 def server_url() -> str:
-    return f"http://127.0.0.1:{_port()}/mcp"
+    return f"http://127.0.0.1:{port()}/mcp"
 
 
 def resolve_workspace_id(session) -> str | None:
@@ -65,7 +64,7 @@ def resolve_workspace_id(session) -> str | None:
     from trendrelay_api.config import get_settings
     from trendrelay_api.models import Workspace, WorkspaceMember
 
-    configured = (getattr(get_settings(), "mcp_workspace_id", "") or "").strip()
+    configured = (get_settings().mcp_workspace_id or "").strip()
     if configured:
         exists = session.scalar(select(Workspace.id).where(Workspace.id == configured))
         return exists
@@ -88,7 +87,7 @@ def resolve_workspace_id(session) -> str | None:
 
 def write_status(state: str, message: str, **extra: Any) -> None:
     MCP_DIR.mkdir(parents=True, exist_ok=True)
-    payload: dict[str, Any] = {"state": state, "message": message, "updated_at": _now()}
+    payload: dict[str, Any] = {"state": state, "message": message, "updated_at": now()}
     payload.update(extra)
     temporary = STATUS_FILE.with_suffix(f"{STATUS_FILE.suffix}.tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -135,7 +134,7 @@ def start_server(force: bool = False) -> dict[str, Any]:
         MCP_DIR.mkdir(parents=True, exist_ok=True)
         log = open(LOG_FILE, "a", encoding="utf-8")  # noqa: SIM115 - lives with the child
         SERVER_PROCESS = subprocess.Popen(
-            [sys.executable, str(MCP_SCRIPT), "--status", str(STATUS_FILE)],
+            [sys.executable, str(MCP_SCRIPT)],
             cwd=PROJECT_ROOT,
             env=_environment(),
             stdout=log,
@@ -173,7 +172,7 @@ def server_status() -> dict[str, Any]:
         "available": mcp_available(),
         "message": status.get("message", "The MCP server is stopped."),
         "url": server_url(),
-        "port": _port(),
+        "port": port(),
         "workspace_id": status.get("workspace_id"),
         "tools": exposed_tool_names(),
         "boundary": BOUNDARY_NOTE,
