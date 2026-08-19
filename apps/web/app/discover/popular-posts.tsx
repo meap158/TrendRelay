@@ -129,8 +129,8 @@ const S: Record<string, React.CSSProperties> = {
   },
   coverage: { fontSize: "12px", color: "var(--muted)", margin: "16px 0 0" },
   notes: { margin: "8px 0 0", padding: "0 0 0 18px", fontSize: "12px", color: "var(--muted)" },
-  notesWarn: { color: "var(--warn, #9a6700)" },
-  error: { fontSize: "13px", color: "var(--danger, #b42318)", margin: "12px 0 0" },
+  notesWarn: { color: "var(--warn)" },
+  error: { fontSize: "13px", color: "var(--bad)", margin: "12px 0 0" },
   list: { listStyle: "none", margin: "14px 0 0", padding: 0, display: "grid", gap: "8px" },
   row: {
     display: "flex",

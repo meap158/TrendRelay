@@ -11,6 +11,16 @@
   --amber: #f5c33b;
   --red: #e13333;
   --link: #385898;
+  /* The tint behind the link colour, completing the last state family. Each
+   * one now reads foreground / background / hairline, so a note, a chip and a
+   * bordered panel in the same state cannot be three different colours. */
+  --link-bg: #eef2fb;
+  /* A categorical palette, which is not a state: these say *which series*, not
+   * whether something is well. Named because a chart legend and a chart line
+   * have to agree, and because two of the three were literals while the third
+   * was already a token. */
+  --series-trend: #1a73e8;
+  --series-ad: #e37400;
   /* The two states that had no tokens and so were mixed by hand at every use.
    *
    * Warning was #fff8e1 in eleven places and #fdf5db in five, over #8a6302 in

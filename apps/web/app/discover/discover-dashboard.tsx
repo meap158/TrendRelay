@@ -396,7 +396,7 @@ const S: Record<string, React.CSSProperties> = {
   boardMeta: { color: "var(--muted)", fontSize: 10 } as const,
   boardAction: {
     justifySelf: "start", marginTop: 2, borderRadius: 4, padding: "3px 8px",
-    background: "#eef2fb", color: "var(--link)", fontSize: 11, fontWeight: 600,
+    background: "var(--link-bg)", color: "var(--link)", fontSize: 11, fontWeight: 600,
     textDecoration: "none",
   } as const,
   // Taking a topic and looking at one sit together, with the download given the
@@ -418,7 +418,7 @@ const S: Record<string, React.CSSProperties> = {
   } as const,
   // The same note frame as a failure, turned green. A queued download and a
   // refused one land in the same place, so the colour is what tells them apart.
-  topicNoteGood: { borderLeftColor: "var(--green)", background: "#f4faf5" } as const,
+  topicNoteGood: { borderLeftColor: "var(--green)", background: "var(--green-dark)" } as const,
   topicNoteLink: { color: "var(--link)", fontWeight: 600 } as const,
   tiktokList: {
     display: "grid",
@@ -556,8 +556,8 @@ const S: Record<string, React.CSSProperties> = {
     fontFamily: "inherit",
   },
   error: {
-    background: "#fce8e6",
-    color: "#c5221f",
+    background: "var(--bad-bg)",
+    color: "var(--bad)",
     padding: "12px 24px",
     fontSize: "14px",
     textAlign: "center",
@@ -597,7 +597,7 @@ const S: Record<string, React.CSSProperties> = {
     transition: "all 0.15s",
   },
   filterBtnActive: {
-    background: "#f1f8f5",
+    background: "var(--green-dark)",
     border: "1px solid var(--green)",
     color: "var(--green)",
   },
@@ -685,8 +685,8 @@ const S: Record<string, React.CSSProperties> = {
     border: "1px solid transparent",
     borderRadius: "15px",
     padding: "0 14px",
-    background: "#e8f0fe",
-    color: "#1a56c4",
+    background: "var(--link-bg)",
+    color: "var(--link)",
     fontSize: "12px",
     fontWeight: 500,
     fontFamily: "inherit",
@@ -746,8 +746,8 @@ const S: Record<string, React.CSSProperties> = {
 };
 
 const COLORS_BY_KIND: Record<string, string> = {
-  trend: "#1a73e8",
-  ad: "#e37400",
+  trend: "var(--series-trend)",
+  ad: "var(--series-ad)",
   account: "var(--green)",
 };
 

@@ -81,9 +81,9 @@ const PLATFORMS: ReadonlyArray<readonly [string, string]> = [
 ];
 
 const TONE_COLOUR: Record<string, string> = {
-  good: "var(--good, #1a7f37)",
-  info: "var(--info, #0969da)",
-  warn: "var(--warn, #9a6700)",
+  good: "var(--green)",
+  info: "var(--link)",
+  warn: "var(--warn)",
   muted: "var(--muted)",
 };
 
@@ -118,10 +118,10 @@ const S: Record<string, React.CSSProperties> = {
   },
   lensRow: { display: "flex", gap: "6px", flexWrap: "wrap" },
   hint: { fontSize: "12px", color: "var(--muted)", margin: "10px 0 0" },
-  error: { fontSize: "13px", color: "var(--danger, #b42318)", margin: "12px 0 0" },
+  error: { fontSize: "13px", color: "var(--bad)", margin: "12px 0 0" },
   coverage: { fontSize: "12px", color: "var(--muted)", margin: "16px 0 0" },
   notes: { margin: "8px 0 0", padding: "0 0 0 18px", fontSize: "12px", color: "var(--muted)" },
-  notesWarn: { color: "var(--warn, #9a6700)" },
+  notesWarn: { color: "var(--warn)" },
   note: { margin: "2px 0" },
   empty: { fontSize: "13px", color: "var(--muted)", margin: "16px 0 0" },
   list: { listStyle: "none", margin: "16px 0 0", padding: 0, display: "grid", gap: "10px" },
