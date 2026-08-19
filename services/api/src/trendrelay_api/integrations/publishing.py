@@ -2100,7 +2100,9 @@ def _buffer_platform(service: str | None) -> str:
     return {"x": "twitter", "google_business": "googlebusiness"}.get(normalized, normalized)
 
 
-def _buffer_metadata(platform: str, request: PublishRequest, kind: PostType) -> str:
+def _buffer_metadata(
+    platform: str, request: PublishRequest, kind: PostType, root_asset: str | None = None
+) -> str:
     """Per-network metadata Buffer requires before it will accept a post.
 
     Each field here is one Buffer's schema declares for that network, and only
@@ -2140,11 +2142,17 @@ def _buffer_metadata(platform: str, request: PublishRequest, kind: PostType) -> 
         if request.first_comment:
             following.append(request.first_comment)
         if following:
-            parts = ", ".join(
-                f"{{ text: {_graphql_literal(part)} }}"
-                for part in [request.caption, *following]
-            )
-            thread = f" thread: [{parts}]"
+            # The media rides the thread's root entry, not the post-level
+            # assets: Buffer builds a threaded post from this array and ignores
+            # the top-level assets once it is present, which is how a threaded
+            # video came to publish as text only. `ThreadedPostInput` declares
+            # its own `assets`, so the root carries the clip and the replies do
+            # not.
+            entries = []
+            for index, part in enumerate([request.caption, *following]):
+                media = f" assets: [{root_asset}]" if index == 0 and root_asset else ""
+                entries.append(f"{{ text: {_graphql_literal(part)}{media} }}")
+            thread = f" thread: [{', '.join(entries)}]"
     fields = {
         "instagram": (
             f"instagram: {{ type: {kind.id} shouldShareToFeed: {share_to_feed} "
@@ -2176,6 +2184,18 @@ def _buffer_metadata(platform: str, request: PublishRequest, kind: PostType) -> 
     return f" metadata: {{ {entry} }}" if entry else ""
 
 
+def _buffer_threaded(platform: str, request: PublishRequest) -> bool:
+    """Whether this post becomes a thread on Buffer rather than a single post.
+
+    True only on a thread network and only when there is a follow-up to make
+    the second post - the exact condition `_buffer_metadata` builds its thread
+    array under, kept beside it so the media lands where the thread is.
+    """
+    if platform not in THREAD_PLATFORMS:
+        return False
+    return bool(request.thread or request.first_comment)
+
+
 def _buffer_publish(request: PublishRequest) -> dict[str, Any]:
     due_at = request.date.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     scheduling = (
@@ -2187,19 +2207,27 @@ def _buffer_publish(request: PublishRequest) -> dict[str, Any]:
     # Only ever sent alongside a draft, which validation has already enforced.
     if request.needs_approval:
         scheduling += " needsApproval: true"
-    assets = (
-        "assets: [{ video: { url: "
-        f"{_graphql_literal(request.media_url or '')}"
-        " metadata: { thumbnailOffset: 1000 } } }]"
-    )
+    video_asset = (
+        "{ video: { url: "
+        f"{_graphql_literal(request.media_url)}"
+        " metadata: { thumbnailOffset: 1000 } } }"
+    ) if request.media_url else None
     post_ids: list[str] = []
     for target in request.targets:
-        metadata = _buffer_metadata(target.platform, request, target.kind)
+        # A threaded post carries its media on the thread's root entry; a single
+        # post carries it at the top level. Buffer ignores the post-level assets
+        # once a thread array is present, so the two are mutually exclusive.
+        threaded = _buffer_threaded(target.platform, request)
+        metadata = _buffer_metadata(
+            target.platform, request, target.kind,
+            root_asset=video_asset if threaded else None,
+        )
+        assets = f" assets: [{video_asset}]" if video_asset and not threaded else ""
         mutation = (
             "mutation { createPost(input: { text: "
             f"{_graphql_literal(request.caption)} "
             f"channelId: {_graphql_literal(target.integration_id)} "
-            f"schedulingType: automatic {scheduling} {assets}{metadata} }}) "
+            f"schedulingType: automatic {scheduling}{assets}{metadata} }}) "
             "{ ... on PostActionSuccess { post { id status dueAt } } "
             "... on MutationError { message } } }"
         )

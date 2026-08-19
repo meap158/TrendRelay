@@ -11,6 +11,22 @@ from trendrelay_api.integrations import publishing
 from trendrelay_api.models import Base
 
 
+@pytest.fixture(autouse=True)
+def engines_only(monkeypatch):
+    """The four engines, and no second login for any of them.
+
+    This module is about engines, and an engine is static. Connections are not:
+    they live in the developer's own `.env`, and adding a second Zernio login on
+    the machine running the tests used to change what these assert against -
+    another row in the engine list, another suffixed key to document. Both are
+    correct behaviour and neither is this module's subject, so the local
+    registry is emptied for the duration.
+    """
+    from trendrelay_api import publishing_connections
+
+    monkeypatch.setenv(publishing_connections.REGISTRY_KEY, "[]")
+
+
 @pytest.fixture
 def job_factory(monkeypatch):
     engine = create_engine(
@@ -1011,6 +1027,58 @@ def test_a_network_without_a_thread_field_is_not_sent_one(media_file: Path) -> N
     for platform in ("instagram", "facebook", "youtube", "tiktok", "pinterest"):
         meta = _buffer_meta(media_file, platform, thread=["Reply"])
         assert "thread:" not in meta, platform
+
+
+def _buffer_query(monkeypatch, tmp_path: Path, body: publishing.PublishRequest) -> str:
+    """The GraphQL mutation `_buffer_publish` sends for a one-target request."""
+    use_provider(monkeypatch, tmp_path, "buffer")
+    queries: list[str] = []
+    monkeypatch.setattr(
+        publishing,
+        "_buffer_graphql",
+        lambda query, **kwargs: (
+            queries.append(query),
+            {"createPost": {"post": {"id": "p1"}}},
+        )[1],
+    )
+    publishing._buffer_publish(body)
+    return queries[0]
+
+
+def test_a_threaded_video_rides_the_thread_root_not_the_post_level(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    """A Threads post with a follow-up becomes a thread, and Buffer ignores the
+    post-level assets once a thread array is present - so the video has to sit on
+    the thread's root entry or it publishes as text only."""
+    query = _buffer_query(monkeypatch, tmp_path, request(
+        media_file,
+        media_url="https://cdn.example.com/clip.mp4",
+        first_comment="Buy it: https://s.shopee.vn/x",
+        targets=[publishing.PublishTarget(platform="threads", integration_id="chan-1")],
+    ))
+
+    assert (
+        'thread: [{ text: "Launch clip" '
+        'assets: [{ video: { url: "https://cdn.example.com/clip.mp4"'
+    ) in query
+    # Exactly once, on the root: not also duplicated as a post-level asset.
+    assert query.count("assets:") == 1
+
+
+def test_a_single_video_stays_on_the_post_level_assets(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    """With no follow-up there is no thread, and the media rides the post-level
+    assets as it does on every non-threaded network."""
+    query = _buffer_query(monkeypatch, tmp_path, request(
+        media_file,
+        media_url="https://cdn.example.com/clip.mp4",
+        targets=[publishing.PublishTarget(platform="threads", integration_id="chan-1")],
+    ))
+
+    assert "thread:" not in query
+    assert 'assets: [{ video: { url: "https://cdn.example.com/clip.mp4"' in query
 
 
 def test_blank_replies_are_dropped_rather_than_published_empty(media_file: Path) -> None:
