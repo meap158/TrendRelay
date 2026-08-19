@@ -1003,9 +1003,13 @@ html { scroll-behavior: smooth; }
    as a footnote to one post. */
 .campaign-approval-actions-hint { display: block; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .campaign-approval-actions-hint strong { color: var(--text); font-weight: 600; }
-/* Without a poster the frame has no intrinsic width and collapses to
-   nothing; here the column is its width, and the aspect ratio its height. */
-.campaign-approval-list .post-preview-frame { inline-size: 100%; }
+/* The width follows the capped height and the clip's own ratio, so a vertical
+   video shows in full at its shape - as the composer's preview does - rather
+   than forced to the column's width and letterboxed to a thin strip. The ratio
+   fallback also keeps a frame with no poster yet from collapsing to nothing. */
+.campaign-approval-list .post-preview-frame {
+  inline-size: min(100%, calc(min(34vh, 260px) * var(--preview-ratio, 0.8)));
+}
 .campaign-approval-edit { display: grid; gap: 8px; }
 .campaign-approval-edit label { display: grid; gap: 3px; color: var(--muted); font-size: 11px; }
 .campaign-approval-edit input, .campaign-approval-edit textarea { inline-size: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--text); background: var(--panel); font: inherit; font-size: 12px; }
