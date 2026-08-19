@@ -3303,6 +3303,10 @@ export default function PublishPage() {
                 caption={caption}
                 title={title}
                 thumbnail={thumbnail}
+                // From the engines' own limits, which is what decides it:
+                // a network has a title when it has a title limit.
+                showsTitle={chosenLimits.some((entry) =>
+                  entry.platform === previewPlatform && entry.title !== null)}
                 source={previewSource}
                 sourceIsImage={wantsCarousel}
                 carousel={carouselSources}

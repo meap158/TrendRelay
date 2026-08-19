@@ -264,6 +264,7 @@ export function PostPreview({
   sourceIsImage,
   carousel,
   wantsCarousel,
+  showsTitle: showsTitleProp,
 }: {
   platform: PublishingPlatform;
   postTypeLabel: string;
@@ -277,6 +278,15 @@ export function PostPreview({
   sourceIsImage?: boolean;
   /** Every frame of a carousel, in swipe order, so the preview can be swiped. */
   carousel?: string[];
+  /**
+   * Whether this network displays a title, when the caller knows.
+   *
+   * The engines' own limits table is the authority - a network has a title if
+   * it has a title limit - and a caller holding those limits should say so
+   * rather than let this file keep a second list that can drift from it. The
+   * hardcoded fallback is for callers that have no limits to hand.
+   */
+  showsTitle?: boolean;
   /**
    * Whether this post is a carousel, which is not the same as having frames.
    *
@@ -317,7 +327,8 @@ export function PostPreview({
     // rather than bouncing through a default nobody chose.
     if (width && height) setMeasured(width / height);
   };
-  const showsTitle = platform === "youtube" || platform === "reddit" || platform === "pinterest";
+  const showsTitle = showsTitleProp
+    ?? (platform === "youtube" || platform === "reddit" || platform === "pinterest");
 
   return (
     <figure className={`post-preview${story ? " story" : ""}`}>

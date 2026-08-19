@@ -551,9 +551,17 @@ function placementSummary(post: PreviewPost): { label: string; detail: string } 
     };
   }
   if (post.placement === "first_comment") {
+    // The network's own word for it. On Threads and the other thread networks
+    // there is no comment box separate from the thread - the reply *is* the
+    // next post - so a heading reading "First comment" over a link that will
+    // arrive as a reply describes something the reader never sees. The chips
+    // beside it already said the right thing, which made this the one line on
+    // the entry that disagreed with the rest.
+    const kind = followUpKind(post.destination?.platform);
     return {
-      label: "First comment",
-      detail: "The post publishes first, then the tracked product link is added as its first comment.",
+      label: followUpLabel(post.destination?.platform, 0),
+      detail: `The post publishes first, then the tracked product link follows it as ${
+        kind === "reply in the thread" ? "a reply in the thread" : "its first comment"}.`,
     };
   }
   if (post.thread.length) {
@@ -778,6 +786,9 @@ function QueueRehearsal({
               {platform && (
                 <PostPreview
                   platform={platform}
+                  // The destination's own answer, from the engines' limits.
+                  showsTitle={destinations.find(
+                    (account) => account.id === post.destination_id)?.takes_title}
                   postTypeLabel={formatName(post, item)}
                   handle={post.destination?.label ?? ""}
                   caption={post.caption}
