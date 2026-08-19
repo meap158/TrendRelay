@@ -934,6 +934,7 @@ export const ja: Messages = {
     addToEnvFile:
       "プロジェクトのローカル {file} ファイルにこれらの項目を追加または更新し、TrendRelay を再起動してください。",
     douyinConnection: "Douyin の接続:",
+    mcpConnection: "アシスタントの接続:",
     localOnlyNote:
       "ローカル限定のセットアップ · 外部ウィンドウは明示的な確認が必要 · 認証情報の値は表示しません",
     reachEyebrow: "AGENT REACH · ローカル確認のみ",

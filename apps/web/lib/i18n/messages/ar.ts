@@ -944,6 +944,7 @@ export const ar: Messages = {
     addToEnvFile:
       "أضف هذه المدخلات أو حدّثها في ملف {file} المحلي الخاص بالمشروع، ثم أعد تشغيل TrendRelay.",
     douyinConnection: "اتصال Douyin:",
+    mcpConnection: "وصول المساعد:",
     localOnlyNote:
       "إعداد محلي فقط · تأكيد صريح للنوافذ الخارجية · لا تُعرض قيم بيانات الاعتماد",
     reachEyebrow: "AGENT REACH · حضور محلي فقط",

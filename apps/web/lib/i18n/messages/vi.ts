@@ -937,6 +937,7 @@ export const vi: Messages = {
     addToEnvFile:
       "Thêm hoặc cập nhật các mục này trong tệp {file} cục bộ của dự án, rồi khởi động lại TrendRelay.",
     douyinConnection: "Kết nối Douyin:",
+    mcpConnection: "Truy cập trợ lý:",
     localOnlyNote:
       "Thiết lập chỉ trên máy · xác nhận rõ ràng khi mở cửa sổ bên ngoài · không lộ giá trị thông tin xác thực",
     reachEyebrow: "AGENT REACH · CHỈ HIỆN DIỆN CỤC BỘ",

@@ -940,6 +940,7 @@ export const en = {
     addToEnvFile:
       "Add or update these entries in the project's local {file} file, then restart TrendRelay.",
     douyinConnection: "Douyin connection:",
+    mcpConnection: "Assistant access:",
     localOnlyNote:
       "Local-only setup · explicit confirmation for external windows · no credential values exposed",
     reachEyebrow: "AGENT REACH · LOCAL PRESENCE ONLY",

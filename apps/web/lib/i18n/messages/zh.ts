@@ -920,6 +920,7 @@ export const zh: Messages = {
     addToEnvFile:
       "在项目本地的 {file} 文件中添加或更新这些条目，然后重启 TrendRelay。",
     douyinConnection: "抖音连接：",
+    mcpConnection: "助手访问：",
     localOnlyNote:
       "仅在本机配置 · 打开外部窗口需明确确认 · 不会暴露任何凭据内容",
     reachEyebrow: "AGENT REACH · 仅本地存在",
