@@ -1497,10 +1497,18 @@ export function AutopilotPanel({
    * so this is the answer to "why did nothing attach" as much as it is a list.
    */
   const loadTagged = useCallback(async () => {
-    const body = await json<{ products: TaggedProduct[] }>(
-      await apiFetch(`${base}/products`),
-    );
-    setTagged(body.products);
+    // Soft, like every other loader on this panel. A tag list that cannot be
+    // read is a missing list, not a broken screen - and thrown from an effect
+    // it took the whole campaign down behind a runtime error, which is a
+    // worse answer to "the API is not up" than showing the rest of the page.
+    try {
+      const body = await json<{ products: TaggedProduct[] }>(
+        await apiFetch(`${base}/products`),
+      );
+      setTagged(body.products);
+    } catch {
+      setTagged([]);
+    }
   }, [apiFetch, base]);
 
   async function tagProducts(offerIds: string[]) {

@@ -10,8 +10,8 @@ its turn yet. Once every product has had one, the round starts again. On by
 default, because a catalogue that promotes two of forty is nobody's intent,
 and off is a real choice for a campaign built around one hero product.
 
-Revision ID: 20260820_0040
-Revises: 20260820_0039
+Revision ID: 20260820_0041
+Revises: 20260820_0040
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "20260820_0040"
-down_revision: str | None = "20260820_0039"
+revision: str = "20260820_0041"
+down_revision: str | None = "20260820_0040"
 branch_labels: str | None = None
 depends_on: str | None = None
 
