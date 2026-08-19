@@ -75,9 +75,22 @@ serves one workspace on `http://127.0.0.1:8765/mcp` (the port is
 that is empty). Setup shows whether it is running, the endpoint, the tools it
 exposes and the boundary. **Stop server** ends it.
 
-Reaching it from outside is a tunnel the operator configures, dialing outward to
-a control plane - the AdRelay note describes the shape. Nothing in TrendRelay
-binds a public hostname.
+## Reaching it from outside
+
+A tunnel dials a control plane outward and forwards inbound MCP requests to the
+loopback server; nothing binds a public hostname. Set both `CONTROL_PLANE_TUNNEL_ID`
+and `CONTROL_PLANE_API_KEY` (a runtime key with Tunnels Read and Use, from
+platform.openai.com) in `.env`, and every launcher starts the tunnel and the MCP
+server together - `dev.py` adds a supervised `Tunnel` service, and `scripts/tunnel.py`
+runs `tunnel-client` with the arguments AdRelay verified, the API key in the
+child's environment rather than its arguments, restarting it with rising backoff.
+Leave either credential empty and nothing starts; the server stays on loopback
+until you press Start in the Tools tab.
+
+`tunnel-client` itself is the operator's to install (`TUNNEL_CLIENT_BIN`, or on
+PATH). The supervisor names it clearly when it is missing rather than failing
+silently. What a caller may do is still the server's policy, not whoever reaches
+the tunnel.
 
 ## Files
 
@@ -89,4 +102,5 @@ binds a public hostname.
 | Server | `services/api/src/trendrelay_api/integrations/mcp/server.py` |
 | Supervisor + status | `services/api/src/trendrelay_api/integrations/mcp/service.py` |
 | Entry point | `scripts/mcp_server.py` |
+| Tunnel supervisor | `scripts/tunnel.py`, started from `scripts/dev.py` |
 | Tools-tab wiring | `tool_setup.py` (`mcp-server` branch), `config/tool-catalog.json` |

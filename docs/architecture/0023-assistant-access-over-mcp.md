@@ -71,7 +71,13 @@ vision and face extras.
   machine, and the tunnel client has nowhere to carry an `Authorization` header,
   so what holds the boundary is the loopback bind, the outward-dialing tunnel and
   the policy - the same conclusion AdRelay reached the hard way.
-- Not yet built: the tunnel supervisor itself, and surfaces beyond copy. The
-  transport is proven end to end on loopback - a client connects, lists the
-  allowed tools and calls them - and the outward tunnel is the operator's to
-  configure, following the AdRelay note.
+- The outward tunnel is built and started by the launcher. `scripts/tunnel.py`
+  ensures the server is up, runs `tunnel-client` with the arguments AdRelay
+  verified (the API key in the child's environment, never its arguments), and
+  restarts it with rising backoff; `scripts/dev.py` adds it as a supervised
+  service only when `CONTROL_PLANE_TUNNEL_ID` and `CONTROL_PLANE_API_KEY` are both
+  set, so an unconfigured machine starts nothing and keeps the server on loopback.
+- Not yet built: surfaces beyond copy, and the Tools-tab reading of the tunnel's
+  own status. The transport is proven end to end on loopback - a client connects,
+  lists the allowed tools and calls them - and the supervisor's spawn, backoff and
+  parent-watch are exercised with a stubbed client.
