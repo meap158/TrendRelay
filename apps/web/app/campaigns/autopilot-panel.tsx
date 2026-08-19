@@ -159,6 +159,8 @@ type Autopilot = {
 
 type HeldExecution = {
   id: string;
+  /** The queue package this was frozen from, to reach its products from here. */
+  queue_item_id: string | null;
   scheduled_at: string | null;
   destination_label: string | null;
   platform: string | null;
@@ -1065,10 +1067,10 @@ export function AutopilotPanel({
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.detail ?? "The decision was refused.");
       succeed(action === "dismiss"
-        ? "Dismissed. Its slot and its clip are free again."
+        ? "Skipped this cycle. Its slot and clip are free, and the post returns next cycle."
         : publishNow
           ? "Approved and publishing now."
-          : "Approved. The post is queued exactly as it was frozen.");
+          : "Approved. The post is queued exactly as you approved it.");
       await loadExceptions();
     } catch (reason) {
       fail(explainFailure(reason, "The decision was refused."));
@@ -1832,27 +1834,53 @@ export function AutopilotPanel({
                       ))}
                       <p className="autopilot-note" role="status">{item.held_reason}</p>
                       {canEdit && (
-                        <span className="campaign-exception-actions">
-                          <Button variant="primary" size="sm"
-                            busy={busy === `approve-${item.id}`}
-                            onClick={() => void decideException(item.id, "approve")}
-                          >Approve</Button>
-                          <Button variant="secondary" size="sm"
-                            busy={busy === `approve-${item.id}`}
-                            onClick={() => {
-                              if (!window.confirm(
-                                `Publishes to ${item.destination_label ?? item.platform} immediately instead of waiting for the slot. Continue?`,
-                              )) return;
-                              void decideException(item.id, "approve", { publishNow: true });
-                            }}
-                          >Publish now</Button>
-                          <Button variant="quiet" size="sm"
-                            onClick={() => setEditingHeld(item)}>Edit</Button>
-                          <Button variant="quiet" size="sm"
-                            busy={busy === `dismiss-${item.id}`}
-                            onClick={() => void decideException(item.id, "dismiss")}
-                          >Dismiss</Button>
-                        </span>
+                        <>
+                          <span className="campaign-exception-actions">
+                            <Button variant="primary" size="sm"
+                              busy={busy === `approve-${item.id}`}
+                              onClick={() => void decideException(item.id, "approve")}
+                            >Approve</Button>
+                            <Button variant="secondary" size="sm"
+                              busy={busy === `approve-${item.id}`}
+                              onClick={() => {
+                                if (!window.confirm(
+                                  `Publishes to ${item.destination_label ?? item.platform} immediately instead of waiting for the slot. Continue?`,
+                                )) return;
+                                void decideException(item.id, "approve", { publishNow: true });
+                              }}
+                            >Publish now</Button>
+                            <Button variant="quiet" size="sm"
+                              onClick={() => setEditingHeld(item)}>Edit</Button>
+                            {/* The hold reason often points at a weak product
+                                match; this opens that post's products so the
+                                advice has a control beside it rather than
+                                sending the operator to hunt for the row. */}
+                            {item.queue_item_id
+                              && queue.some((row) => row.id === item.queue_item_id) && (
+                              <Button variant="quiet" size="sm"
+                                onClick={() => {
+                                  const row = queue.find((entry) => entry.id === item.queue_item_id);
+                                  if (!row) return;
+                                  jumpTo("media");
+                                  void loadRecommendations(row);
+                                }}
+                              >Review products</Button>
+                            )}
+                            <Button variant="quiet" size="sm"
+                              busy={busy === `dismiss-${item.id}`}
+                              onClick={() => void decideException(item.id, "dismiss")}
+                            >Skip this cycle</Button>
+                          </span>
+                          {/* What each button does, once, where the choice is
+                              made — "Skip" especially, which frees the slot
+                              rather than deleting the post. */}
+                          <small className="campaign-approval-actions-hint">
+                            <strong>Approve</strong> sends it on the campaign’s
+                            schedule · <strong>Publish now</strong> sends it
+                            immediately · <strong>Skip</strong> frees the slot and
+                            clip; the post returns next cycle.
+                          </small>
+                        </>
                       )}
                     </>
                   )}
