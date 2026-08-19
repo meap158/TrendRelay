@@ -316,8 +316,9 @@ export default function AttributionPage() {
             succeed={succeed}
             fail={fail}
             campaigns={tagChoices.campaigns}
-            // Keep the outcome visible so skipped rows remain actionable.
-            onImported={() => { void refresh(); }}
+            // Close on a clean import - the toast already reports the count.
+            // Only a skipped row keeps the dialog open, so it stays actionable.
+            onImported={(clean) => { void refresh(); if (clean) setPanel(""); }}
           />
         )}
       </Dialog>

@@ -37,7 +37,9 @@ export function ShopeeImport({
   apiFetch: Fetcher;
   succeed: (message: string) => void;
   fail: (message: string) => void;
-  onImported: () => void;
+  /** `clean` is true when nothing was skipped, so the caller can close the
+      dialog on a tidy import and keep it open when there are problems to read. */
+  onImported: (clean: boolean) => void;
   /** Campaigns these products could be imported for. */
   campaigns?: { id: string; name: string; tagged_products: number }[];
 }) {
@@ -169,7 +171,9 @@ export function ShopeeImport({
       setLinks("");
       setPreview(null);
       setFileKey((value) => value + 1);
-      onImported();
+      // A clean import has nothing left to read here, so let the caller close
+      // the dialog; leave it open when there are problems worth acting on.
+      onImported((payload.problems ?? []).length === 0);
     } catch (problem) {
       fail(problem instanceof Error ? problem.message : String(problem));
     } finally {
