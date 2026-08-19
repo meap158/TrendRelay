@@ -152,6 +152,9 @@ export function ShopeeImport({
             ...source,
             confirm_external_action: true,
             campaign_ids: [...importFor],
+            // The file this batch came from, so the catalogue can be filtered
+            // back to it. A pasted export or links have no name to record.
+            filename: workbookName || null,
           }),
         },
       );

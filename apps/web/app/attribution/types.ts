@@ -51,6 +51,10 @@ export type ProductRow = {
    */
   work_ids: string[];
   product_form: string | null;
+  /** The batch this came from and when it was last imported, for the filters.
+      Null on rows imported before these were recorded, or pasted with no file. */
+  import_filename: string | null;
+  imported_at: string | null;
 };
 
 export type WorkCurrency = {

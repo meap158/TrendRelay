@@ -38,6 +38,8 @@ function product(id: string, offers: ProductOffer[], name = id): ProductRow {
     earnings: [],
     work_ids: [],
     product_form: null,
+    import_filename: null,
+    imported_at: null,
   };
 }
 

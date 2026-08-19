@@ -123,6 +123,12 @@ export function ProductTable({
   const [sort, setSort] = useState<ProductSort>({ key: "product", direction: "asc" });
   /** Which campaign the tag controls are pointed at, for a batch. */
   const [tagCampaign, setTagCampaign] = useState("");
+  /** Filters layered on top of the text search: by campaign membership, by the
+      file a batch was imported from, and by the date range it was imported in. */
+  const [filterCampaign, setFilterCampaign] = useState("");
+  const [filterFile, setFilterFile] = useState("");
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
   /** The table's own width, so a spanning row cannot fall out of step with it. */
   const columnCount = onTagOffers ? 9 : 8;
   const [tagging, setTagging] = useState(false);
@@ -153,17 +159,49 @@ export function ProductTable({
    * An import brings in a batch at a time, so a list that can only be scrolled
    * stops being usable at about the second import.
    */
+  /** The distinct import files present, for the file filter's options. */
+  const fileNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const product of products) {
+      if (product.import_filename) names.add(product.import_filename);
+    }
+    return [...names].sort();
+  }, [products]);
+  const hasImportDates = useMemo(
+    () => products.some((product) => product.imported_at),
+    [products],
+  );
+
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const filtered = !needle ? products : products.filter((product) => [
-      product.name,
-      product.brand,
-      product.marketplace,
-      ...product.creators,
-      ...product.offers.map((offer) => offer.merchant),
-    ].some((field) => (field || "").toLowerCase().includes(needle)));
+    const from = filterFrom ? Date.parse(filterFrom) : null;
+    // The "to" bound is inclusive of its whole day, so treat it as up to the
+    // next midnight rather than the instant midnight begins.
+    const until = filterTo ? Date.parse(filterTo) + 86_400_000 : null;
+    const filtered = products.filter((product) => {
+      if (needle && ![
+        product.name,
+        product.brand,
+        product.marketplace,
+        ...product.creators,
+        ...product.offers.map((offer) => offer.merchant),
+      ].some((field) => (field || "").toLowerCase().includes(needle))) return false;
+      if (filterCampaign && !product.offers.some(
+        (offer) => (campaignsByOffer[offer.id] || []).includes(filterCampaign),
+      )) return false;
+      if (filterFile && product.import_filename !== filterFile) return false;
+      if (from !== null || until !== null) {
+        if (!product.imported_at) return false;
+        const at = Date.parse(product.imported_at);
+        if (from !== null && at < from) return false;
+        if (until !== null && at >= until) return false;
+      }
+      return true;
+    });
     return sortProducts(filtered, sort);
-  }, [products, query, sort]);
+  }, [
+    products, query, sort, filterCampaign, filterFile, filterFrom, filterTo, campaignsByOffer,
+  ]);
 
   function changeSort(column: ProductSortKey) {
     setSort((current) => current.key === column
@@ -237,6 +275,71 @@ export function ProductTable({
           placeholder={t("attribution.searchProducts")}
           aria-label={t("attribution.searchProducts")}
         />
+        {(campaigns.length > 0 || fileNames.length > 0 || hasImportDates) && (
+          <div className="product-filters">
+            {campaigns.length > 0 && (
+              <select
+                className="product-filter"
+                value={filterCampaign}
+                aria-label="Filter by campaign"
+                onChange={(event) => setFilterCampaign(event.target.value)}
+              >
+                <option value="">All campaigns</option>
+                {campaigns.map((campaign) => (
+                  <option key={campaign.id} value={campaign.id}>{campaign.name}</option>
+                ))}
+              </select>
+            )}
+            {fileNames.length > 0 && (
+              <select
+                className="product-filter"
+                value={filterFile}
+                aria-label="Filter by import file"
+                onChange={(event) => setFilterFile(event.target.value)}
+              >
+                <option value="">All imports</option>
+                {fileNames.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            )}
+            {hasImportDates && (
+              <span className="product-filter-dates">
+                <input
+                  type="date"
+                  className="product-filter"
+                  value={filterFrom}
+                  max={filterTo || undefined}
+                  aria-label="Imported on or after"
+                  onChange={(event) => setFilterFrom(event.target.value)}
+                />
+                <span aria-hidden="true">–</span>
+                <input
+                  type="date"
+                  className="product-filter"
+                  value={filterTo}
+                  min={filterFrom || undefined}
+                  aria-label="Imported on or before"
+                  onChange={(event) => setFilterTo(event.target.value)}
+                />
+              </span>
+            )}
+            {(filterCampaign || filterFile || filterFrom || filterTo) && (
+              <Button
+                variant="quiet"
+                size="sm"
+                onClick={() => {
+                  setFilterCampaign("");
+                  setFilterFile("");
+                  setFilterFrom("");
+                  setFilterTo("");
+                }}
+              >
+                Clear filters
+              </Button>
+            )}
+          </div>
+        )}
         <div className="product-bulk" data-active={picked.size > 0 || undefined}>
           <span className="product-bulk-count" aria-live="polite">
             <strong>{picked.size}</strong>

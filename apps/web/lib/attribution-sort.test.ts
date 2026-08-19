@@ -21,6 +21,8 @@ function product(id: string, overrides: Partial<ProductRow> = {}): ProductRow {
     earnings: [],
     work_ids: [],
     product_form: null,
+    import_filename: null,
+    imported_at: null,
     ...overrides,
   };
 }
