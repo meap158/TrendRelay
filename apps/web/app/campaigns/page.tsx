@@ -214,6 +214,11 @@ export default function CampaignsPage() {
   const [offerMode, setOfferMode] = useState<"smart" | "manual" | "none">("smart");
   /** SearchSelect is controlled, so the chosen offer cannot ride the form. */
   const [offerChoice, setOfferChoice] = useState("");
+  /** The settings dialog's copy of the two strings the post language rewrites,
+      for the same reason the create dialog holds its own. */
+  const [settingsScaffolding, setSettingsScaffolding] = useState(
+    { disclosure: "", bioHint: "" },
+  );
   const [offers, setOffers] = useState<CampaignOffer[]>([]);
   const [newCampaignOfferId, setNewCampaignOfferId] = useState("");
   /** The create dialog's own copies of the three fields a form cannot carry:
@@ -433,6 +438,10 @@ export default function CampaignsPage() {
         setPolicy(body.autopilot);
         setOfferMode(body.autopilot.offer_mode);
         setOfferChoice(body.autopilot.offer_id ?? "");
+        setSettingsScaffolding({
+          disclosure: body.autopilot.disclosure,
+          bioHint: body.autopilot.bio_hint,
+        });
       } catch {
         // The identity half of the dialog still works without it, and a
         // campaign with no autopilot yet has no policy to show.
@@ -821,7 +830,16 @@ export default function CampaignsPage() {
                 defaultValue={settingsFor.audience} />
             </label>
             <label>{t("campaigns.postLanguage")}
-              <select name="language" defaultValue={settingsFor.languages[0] ?? "en"}>
+              <select name="language" defaultValue={settingsFor.languages[0] ?? "en"}
+                onChange={(event) => setSettingsScaffolding((current) => {
+                  const fresh = scaffoldingFor(event.target.value);
+                  return {
+                    disclosure: isDefaultScaffolding("disclosure", current.disclosure)
+                      ? fresh.disclosure : current.disclosure,
+                    bioHint: isDefaultScaffolding("bioHint", current.bioHint)
+                      ? fresh.bioHint : current.bioHint,
+                  };
+                })}>
                 {POST_LANGUAGES.map((item) => (
                   <option key={item.value} value={item.value}>{item.label}</option>
                 ))}
@@ -905,15 +923,24 @@ export default function CampaignsPage() {
               {/* The words every caption is scaffolded with. They live beside
                   the language above, which rewrites them when it changes
                   unless they have been edited. */}
+              {/* Controlled, so changing the language above rewrites these on
+                  screen. The API already did it on save, which meant the field
+                  showed the old language until the dialog was reopened. */}
               <label>Disclosure
                 <input name="disclosure" maxLength={280}
-                  defaultValue={policy.disclosure} />
+                  value={settingsScaffolding.disclosure}
+                  onChange={(event) => setSettingsScaffolding((current) => ({
+                    ...current, disclosure: event.target.value,
+                  }))} />
                 <small>Leads every caption, on every network. Not optional:
                   each post is its own advertisement.</small>
               </label>
               <label>Profile-link wording
                 <input name="bio_hint" maxLength={120}
-                  defaultValue={policy.bio_hint} />
+                  value={settingsScaffolding.bioHint}
+                  onChange={(event) => setSettingsScaffolding((current) => ({
+                    ...current, bioHint: event.target.value,
+                  }))} />
                 <small>Used where a link in a post is not clickable.</small>
               </label>
               <label>Optimise for
