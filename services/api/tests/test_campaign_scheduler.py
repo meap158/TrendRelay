@@ -299,6 +299,37 @@ def test_the_unwritten_post_note_trims_a_long_filename_title(session) -> None:
     assert long_title not in note
 
 
+def test_the_status_counts_the_postings_a_finite_queue_has_left(session) -> None:
+    """A queue that does not repeat spends itself, and says how much is left.
+
+    One posting per written post per account, minus the ones already sent.
+    Null while repeats are on, because then there is no such number.
+    """
+    from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
+    from trendrelay_api.campaign_scheduler import campaign_status
+
+    destination(session, "d1", "threads")
+    destination(session, "d2", "tiktok")
+    slot(session, 12)
+    # Written, and already out on one of the two accounts.
+    queue_item(
+        session, "q-half",
+        last_posted_by_destination={"d1": (NOW - timedelta(days=1)).isoformat()},
+    )
+    # Written, never posted: one posting on each account.
+    queue_item(session, "q-fresh", position=1)
+    # Unwritten posts are not postings anybody has.
+    queue_item(session, "q-blank", position=2, body=PLACEHOLDER_BODY)
+    pilot = autopilot(session)
+
+    assert campaign_status(session, pilot)["remaining_outings"] == 3
+
+    pilot.repeat_posts = True
+    session.commit()
+
+    assert campaign_status(session, pilot)["remaining_outings"] is None
+
+
 def test_an_unwritten_post_counts_as_approved_but_not_as_ready(session) -> None:
     """Approved says nobody parked it; ready says it can go out.
 
