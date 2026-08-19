@@ -638,6 +638,7 @@ function PostingStrategy({
   autopilot,
   destinations,
   slots,
+  timezone,
   canEdit,
   busy,
   onChange,
@@ -645,6 +646,8 @@ function PostingStrategy({
   autopilot: Autopilot;
   destinations: Destination[];
   slots: Slot[];
+  /** Named beside the times, because "09:00" is not a time without one. */
+  timezone: string;
   canEdit: boolean;
   busy: boolean;
   onChange: (changes: Partial<Autopilot>) => void;
@@ -655,9 +658,27 @@ function PostingStrategy({
     <ol className="campaign-strategy">
       <li>
         <b>When</b>
-        <span>{perDay
-          ? `${perDay} posting ${perDay === 1 ? "time" : "times"} a day, shared by every campaign in this workspace.`
-          : "No posting times set, so nothing is scheduled."}</span>
+        {/* The times themselves, not a count of them. They had a card of their
+            own directly below this one, which said "shared by every campaign
+            in this workspace" underneath a rule that had just said it - two
+            headers and two ledes to list five times. */}
+        <span>
+          {perDay ? (
+            <>
+              <span className="campaign-strategy-times">
+                {slots.map((slot) => (
+                  <em key={slot.id}>{slot.weekday_label} {slot.time}</em>
+                ))}
+                <em className="zone">{timezone}</em>
+              </span>
+              Shared by every campaign in this workspace; Publish owns them.{" "}
+              <Link className="campaign-strategy-link" href="/publish">Edit in Publish</Link>
+            </>
+          ) : (
+            <>No posting times set, so nothing is scheduled.{" "}
+              <Link className="campaign-strategy-link" href="/publish">Add them in Publish</Link></>
+          )}
+        </span>
       </li>
       <li>
         <b>Which account</b>
@@ -1930,9 +1951,12 @@ export function AutopilotPanel({
             </div>
           }
         >
-          <p className="autopilot-lede">Nothing is published until you approve it
-            here, and what you see is exactly what will go out. A post that is
-            not finished can’t be approved — it shows what to fix first.</p>
+          {/* "Nothing is published until you approve it" is rule 6 of the
+              posting strategy, on the same screen. What is left is the part
+              that is not written there. */}
+          <p className="autopilot-lede">What you see is exactly what will go
+            out. A post that is not finished can’t be approved — it shows what
+            to fix first.</p>
           {/* One line that reconciles the scattered counts into the operator's
               own three buckets: what needs them now, what is ready to go, and
               what is still unfinished. All from authoritative figures, so it
@@ -1952,6 +1976,18 @@ export function AutopilotPanel({
               </p>
             );
           })()}
+          {/* What the buttons do, once above the list rather than under every
+              post in it. The same four sentences repeated down a page of ten
+              held posts is forty lines of instruction for four controls. */}
+          {canEdit && exceptions.length > 0 && (
+            <small className="campaign-approval-actions-hint">
+              <strong>Approve</strong> sends it on the campaign’s schedule ·{" "}
+              <strong>Publish now</strong> sends it immediately ·{" "}
+              <strong>Edit</strong> changes what it says, media stays frozen ·{" "}
+              <strong>Skip</strong> frees the slot and clip; the post returns
+              next cycle.
+            </small>
+          )}
           <ul className="campaign-approval-list">
             {exceptions.map((item) => (
               <li key={item.id}>
@@ -2106,15 +2142,6 @@ export function AutopilotPanel({
                               onClick={() => void decideException(item.id, "dismiss")}
                             >Skip this cycle</Button>
                           </span>
-                          {/* What each button does, once, where the choice is
-                              made — "Skip" especially, which frees the slot
-                              rather than deleting the post. */}
-                          <small className="campaign-approval-actions-hint">
-                            <strong>Approve</strong> sends it on the campaign’s
-                            schedule · <strong>Publish now</strong> sends it
-                            immediately · <strong>Skip</strong> frees the slot and
-                            clip; the post returns next cycle.
-                          </small>
                         </>
                       )}
                     </>
@@ -3217,26 +3244,11 @@ export function AutopilotPanel({
           autopilot={autopilot}
           destinations={destinations}
           slots={slots}
+          timezone={scheduleTimezone}
           canEdit={canEdit}
           busy={busy === "settings"}
           onChange={(changes) => void save(changes)}
         />
-      </Card>}
-      {<Card title="Posting times" aside={
-        <Link className="ui-button ui-button-secondary ui-button-sm" href="/publish">
-          Edit in Publish
-        </Link>
-      }>
-        <p className="autopilot-lede">
-          Shared by every campaign in this workspace; Publish owns them.
-        </p>
-        <div className="campaign-schedule-readonly">
-          <Badge tone="neutral">{scheduleTimezone}</Badge>
-          {slots.map((slot) => (
-            <span key={slot.id}>{slot.weekday_label} · {slot.time}</span>
-          ))}
-          {!slots.length && <span>No posting times configured.</span>}
-        </div>
       </Card>}
           </aside>
         </div>

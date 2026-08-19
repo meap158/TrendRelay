@@ -854,6 +854,13 @@ html { scroll-behavior: smooth; }
    makes the reader work out which state the words describe. */
 .campaign-strategy-toggle { display: block; margin-block-start: 3px; border: 0; padding: 0; color: var(--link); background: none; font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
 .campaign-strategy-toggle:disabled { color: var(--muted); cursor: default; }
+/* The posting times, listed where the rule that uses them is written. */
+.campaign-strategy-times { display: flex; flex-wrap: wrap; gap: 3px; margin-block-end: 4px; }
+/* Raised, not `--panel`: the card is already that colour, so a chip painted
+   in it is a chip nobody can see. */
+.campaign-strategy-times em { border-radius: 999px; padding: 1px 6px; color: var(--text); background: var(--panel-raised); font-size: 9px; font-style: normal; font-weight: 600; }
+.campaign-strategy-times em.zone { background: transparent; padding-inline: 2px; font-weight: 500; }
+.campaign-strategy-link { color: var(--link); font-weight: 600; white-space: nowrap; }
 
 @media (max-width: 620px) {
   .campaign-strategy > li { grid-template-columns: 1fr; gap: 2px; }
@@ -968,7 +975,9 @@ html { scroll-behavior: smooth; }
 .campaign-approval-source strong { color: var(--text); font-weight: 600; }
 /* One quiet line under the buttons saying what each does. Muted and roomy so
    it reads as guidance, not another control. */
-.campaign-approval-actions-hint { color: var(--muted); font-size: 11px; line-height: 1.5; }
+/* Above the list now, so it reads as a legend for the controls rather than
+   as a footnote to one post. */
+.campaign-approval-actions-hint { display: block; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .campaign-approval-actions-hint strong { color: var(--text); font-weight: 600; }
 /* Without a poster the frame has no intrinsic width and collapses to
    nothing; here the column is its width, and the aspect ratio its height. */
