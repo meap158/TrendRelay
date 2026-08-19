@@ -87,12 +87,28 @@
 /* Not a footnote. It sits where the two figures it is about are read. */
 .attribution-note { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-inline-start: 3px solid var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 12px; line-height: 1.5; }
 
+/* The table's own frame, which used to live in the catalog sheet. That sheet
+   was written for a page that is now a redirect into this one, and the five
+   classes this table still used went with it when it was deleted - so they are
+   declared here, beside the only markup that renders them. */
+.product-table-scroll { margin-top: 12px; overflow-x: auto; }
+.product-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.product-table th, .product-table td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: start; vertical-align: top; }
+.product-table thead th { border-bottom: 1px solid var(--line-strong); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+/* Figures line up on the right and share one glyph width, so a column of
+   amounts can be compared by eye instead of read one row at a time. */
+.product-table .numeric { text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.product-empty { margin: 12px 0 0; max-width: 70ch; color: var(--muted); line-height: 1.5; }
+.product-no-data { color: var(--muted); font-style: italic; text-align: start; }
+.product-detail-row > td { padding: 0 10px 12px; background: var(--panel-raised); }
 .product-table th[scope="row"] { min-width: 220px; }
 .product-earning { display: grid; gap: 2px; }
 .product-earning + .product-earning { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
 .product-earning small { color: var(--muted); font-size: 10px; }
 .product-detail { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; padding: 6px 2px 10px; }
-.product-detail h4 { margin: 0 0 8px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+/* Label and source link on one line. Neither is long enough to earn its own. */
+.product-detail-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.product-detail h4 { margin: 0; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
 .product-offers, .product-links { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .product-offers li, .product-links li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .product-offers li > div, .product-links li > div { display: grid; gap: 2px; flex: 1 1 160px; min-width: 0; }
@@ -176,7 +192,7 @@
    row or moves the table. The selection controls remain visible but disabled
    at zero: their location and the 100-item boundary are always predictable. */
 .product-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-block-end: 12px; }
-.product-toolbar + .catalog-table-scroll { margin-top: 0; }
+.product-toolbar + .product-table-scroll { margin-top: 0; }
 .product-bulk { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; min-block-size: 34px; padding-inline-start: 12px; border-inline-start: 1px solid var(--line); font-size: 12px; }
 .product-bulk-count { display: inline-flex; align-items: baseline; gap: 3px; min-inline-size: 92px; color: var(--muted); white-space: nowrap; }
 .product-bulk-count strong { color: var(--text); font-size: 14px; font-variant-numeric: tabular-nums; }
@@ -187,10 +203,10 @@
    to top alignment for long book metadata, but here that left checkboxes,
    titles, and single-value metrics sitting on different vertical baselines. */
 .product-table > thead > tr > th,
-.product-table > tbody > tr:not(.catalog-edition-row) > th,
-.product-table > tbody > tr:not(.catalog-edition-row) > td { vertical-align: middle; }
-.product-table > tbody > tr:not(.catalog-edition-row) > th,
-.product-table > tbody > tr:not(.catalog-edition-row) > td { block-size: 52px; }
+.product-table > tbody > tr:not(.product-detail-row) > th,
+.product-table > tbody > tr:not(.product-detail-row) > td { vertical-align: middle; }
+.product-table > tbody > tr:not(.product-detail-row) > th,
+.product-table > tbody > tr:not(.product-detail-row) > td { block-size: 52px; }
 .product-table .product-choose { vertical-align: middle; }
 .product-table .ui-selection-checkbox { display: grid; margin-inline: auto; }
 .product-table .product-count { text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -205,7 +221,7 @@
 .product-table th[aria-sort="descending"] .product-sort-button svg { opacity: 1; }
 .product-table th.numeric .product-sort-button { justify-content: flex-end; }
 .product-table th.product-count .product-sort-button { justify-content: center; }
-.product-table > tbody > tr:not(.catalog-edition-row):hover > * { background: color-mix(in srgb, var(--link) 5%, var(--panel)); }
+.product-table > tbody > tr:not(.product-detail-row):hover > * { background: color-mix(in srgb, var(--link) 5%, var(--panel)); }
 .product-table > tbody > tr[data-chosen] > *,
 .product-table > tbody > tr[data-expanded] > * { background: var(--panel-raised); }
 .product-table > tbody > tr[data-expanded] > * { border-block-end-color: transparent; }
@@ -223,12 +239,25 @@
    in does not jump as images arrive. */
 .product-thumb { inline-size: 32px; block-size: 32px; flex: none; border-radius: var(--radius-sm); object-fit: cover; background: var(--panel-raised); }
 .product-thumb-empty { display: inline-block; box-shadow: inset 0 0 0 1px var(--line); }
-.catalog-work-toggle { position: relative; display: flex; align-items: center; gap: 9px; inline-size: 100%; min-inline-size: 0; padding-inline-end: 24px; border-radius: var(--radius-sm); text-align: start; }
-.catalog-work-toggle:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; }
+/* The row's disclosure button, named for this table and reset here.
+ *
+ * Both this sheet and a catalog one used to declare `.catalog-work-toggle`, and
+ * the catalog sheet was imported second - so its `padding: 0`, written for a
+ * different table, cancelled the space reserved here for the arrow and a long
+ * product name ran underneath it. That sheet is gone now, which means its
+ * button reset is gone too: without the four properties below the browser draws
+ * its own button, and a product name comes out centred in a grey bordered box.
+ *
+ * The end padding clears the arrow (16px, 1px from the edge) with enough left
+ * over that a name stopping at the limit reads as ending rather than as cut. */
+.product-toggle { position: relative; display: flex; align-items: center; gap: 9px; inline-size: 100%; min-inline-size: 0; padding: 0; padding-inline-end: 26px; border: 0; border-radius: var(--radius-sm); color: inherit; background: none; font: inherit; text-align: start; cursor: pointer; }
+.product-toggle:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; }
+.product-toggle:hover .product-named > span { color: var(--link); }
 .product-named { display: grid; gap: 2px; min-width: 0; }
-.product-named > span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.3; }
+.product-named > span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-weight: 600; line-height: 1.3; }
+.product-named small { color: var(--muted); font-weight: 400; }
 .product-disclosure { position: absolute; inset-block-start: 50%; inset-inline-end: 1px; display: grid; place-items: center; color: var(--muted); line-height: 1; transform: translateY(-50%); transition: transform 140ms ease, color 140ms ease; }
-.catalog-work-toggle:hover .product-disclosure { color: var(--link); }
+.product-toggle:hover .product-disclosure { color: var(--link); }
 .product-disclosure[data-open] { transform: translateY(-50%) rotate(90deg); color: var(--link); }
 .product-no-results { padding-block: 36px !important; color: var(--muted); text-align: center !important; }
 .product-row-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; }
@@ -297,7 +326,7 @@
 }
 
 /* The column headers stay put while the rows move.
-   `.catalog-table-scroll` sets `overflow-x: auto` for wide tables, and the spec
+   `.product-table-scroll` sets `overflow-x: auto` for wide tables, and the spec
    turns the other axis into `auto` with it - which makes that element the
    scroll container a sticky header would stick to, not the viewport. Since the
    container is as tall as its content it never scrolls, so a sticky header in
@@ -305,7 +334,7 @@
    rows scroll inside the region and the header holds at its top.
    Scoped to this page, because the same class is used by tables that are short
    enough not to want an inner scrollbar. */
-.attribution-page .catalog-table-scroll {
+.attribution-page .product-table-scroll {
   /* 128px of sticky chrome above it - the toolbar and this page's own header -
      plus room for the card's padding and the search above the table. */
   max-height: calc(100vh - 240px);
@@ -326,3 +355,20 @@
    sticky downward: scrolling a wide table should not lose which product a row
    is. The corner cell needs to win both. */
 .attribution-page .product-table thead th:first-child { z-index: 3; }
+
+/* Which campaigns a product may be promoted by, in its own row and in the
+   selection bar above the table. */
+.product-campaigns { max-inline-size: 180px; }
+.product-campaign-tags { display: flex; flex-wrap: wrap; gap: 3px; }
+.product-campaign-tags em { max-inline-size: 100%; overflow: hidden; border-radius: 999px; padding: 1px 7px; color: var(--text); background: var(--panel-raised); font-size: 10px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+/* A product no campaign can use is a state worth noticing on a page about
+   products that earn, so it is said rather than left blank. */
+.product-campaigns-none { color: var(--muted); font-size: 10px; font-style: italic; }
+.product-tag-campaign { max-inline-size: 190px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 5px 7px; color: var(--text); background: var(--panel); font: inherit; font-size: 11px; }
+/* What an import is for, asked where the batch arrives. */
+.shopee-import-campaigns { display: grid; gap: 6px; margin: 12px 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; }
+.shopee-import-campaigns legend { padding-inline: 4px; color: var(--muted); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.shopee-import-campaigns > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.shopee-import-campaigns label { display: inline-flex; align-items: baseline; gap: 5px; font-size: 11px; }
+.shopee-import-campaigns label small { color: var(--muted); font-size: 10px; }
+.shopee-import-campaigns > small { color: var(--muted); font-size: 10px; line-height: 1.45; }

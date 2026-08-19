@@ -31,12 +31,15 @@ export function ShopeeImport({
   succeed,
   fail,
   onImported,
+  campaigns = [],
 }: {
   workspaceId: string;
   apiFetch: Fetcher;
   succeed: (message: string) => void;
   fail: (message: string) => void;
   onImported: () => void;
+  /** Campaigns these products could be imported for. */
+  campaigns?: { id: string; name: string; tagged_products: number }[];
 }) {
   const t = useT();
   const [mode, setMode] = useState<Mode>("export");
@@ -48,6 +51,15 @@ export function ShopeeImport({
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState<"" | "open" | "preview" | "import">("");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  /**
+   * Campaigns these products will be allowed to promote.
+   *
+   * Asked here because importing a batch is nearly always importing it *for*
+   * something, and tagging it afterwards is the same decision made twice - the
+   * second one being the pass people forget, leaving a catalogue of products
+   * no campaign can use.
+   */
+  const [importFor, setImportFor] = useState<Set<string>>(new Set());
 
   const source = mode === "export"
     ? { xlsx_base64: xlsxBase64, csv_text: csvText, links: "" }
@@ -137,13 +149,20 @@ export function ShopeeImport({
           body: JSON.stringify({
             ...source,
             confirm_external_action: true,
+            campaign_ids: [...importFor],
           }),
         },
       );
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.detail ?? t("attribution.shopee.importRefused"));
       setOutcome(payload as Outcome);
-      succeed(t("attribution.shopee.importedCount", { count: payload.created }));
+      const tagged = Object.values(
+        (payload.tagged_to_campaigns ?? {}) as Record<string, { tagged: number }>,
+      ).reduce((total, item) => total + (item?.tagged ?? 0), 0);
+      succeed(tagged
+        ? `${t("attribution.shopee.importedCount", { count: payload.created })} `
+          + `${tagged} tagged to ${importFor.size} campaign${importFor.size === 1 ? "" : "s"}.`
+        : t("attribution.shopee.importedCount", { count: payload.created }));
       setXlsxBase64("");
       setCsvText("");
       setWorkbookName("");
@@ -243,6 +262,35 @@ export function ShopeeImport({
       )}
 
       <p className="attribution-note">{t("attribution.shopee.directLinkNote")}</p>
+      {/* What this batch is for. A product no campaign may promote is filed
+          and unusable, so the question is asked where the batch arrives rather
+          than left to a second pass on another screen. */}
+      {campaigns.length > 0 && (
+        <fieldset className="shopee-import-campaigns">
+          <legend>Import these for</legend>
+          <div>
+            {campaigns.map((campaign) => (
+              <label key={campaign.id}>
+                <input
+                  type="checkbox"
+                  checked={importFor.has(campaign.id)}
+                  onChange={() => setImportFor((current) => {
+                    const next = new Set(current);
+                    if (next.has(campaign.id)) next.delete(campaign.id);
+                    else next.add(campaign.id);
+                    return next;
+                  })}
+                />
+                <span>{campaign.name}</span>
+                <small>{campaign.tagged_products} tagged</small>
+              </label>
+            ))}
+          </div>
+          <small>{importFor.size
+            ? "Imported products can be promoted by the campaigns ticked above."
+            : "Tick none and the products are filed untagged - no campaign will be able to use them until you tag them."}</small>
+        </fieldset>
+      )}
       <form onSubmit={submit}>
         <button
           className="ui-button ui-button-primary ui-button-md"

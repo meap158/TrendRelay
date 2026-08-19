@@ -78,6 +78,11 @@ export default function AttributionPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [products, setProducts] = useState<ProductRow[]>([]);
+  /** Which campaigns may promote which products, for the table's own column. */
+  const [tagChoices, setTagChoices] = useState<{
+    campaigns: { id: string; name: string; status: string; tagged_products: number }[];
+    by_offer: Record<string, string[]>;
+  }>({ campaigns: [], by_offer: {} });
   const [campaignFocus, setCampaignFocus] = useState("");
   // Opened deliberately, closed when done: bringing rows in is something you do
   // to the table, not another screen to read.
@@ -102,6 +107,9 @@ export default function AttributionPage() {
       json<Summary>(await apiFetch(`${base}/attribution/summary`)),
       json<ProductsPayload>(await apiFetch(`${base}/attribution/products`)),
     ]);
+    // Read with the products, not per row: the tag column on two hundred
+    // products is one question about the workspace.
+    setTagChoices(await json(await apiFetch(`${base}/attribution/campaign-tags`)));
     setCampaigns(campaignBody.campaigns);
     setPlans(planBody.plans);
     setSummary(summaryBody);
@@ -112,6 +120,38 @@ export default function AttributionPage() {
     ));
     setCampaignFocus(requestedExists ? requested! : "");
   }, [apiFetch, workspaceId]);
+
+  /**
+   * Add or remove products from a campaign, from the product's side.
+   *
+   * The same rows the campaign writes, so a tag made here shows there without
+   * either screen knowing about the other.
+   */
+  const tagOffers = useCallback(async (
+    offerIds: string[], campaignId: string, tag: boolean,
+  ) => {
+    if (!workspaceId || !offerIds.length) return;
+    const base = `/api/workspaces/${workspaceId}/attribution/campaign-tags`;
+    try {
+      await json(await apiFetch(tag ? base : `${base}/remove`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ offer_ids: offerIds, campaign_ids: [campaignId] }),
+      }));
+      const refreshed = await json<{
+        campaigns: { id: string; name: string; status: string; tagged_products: number }[];
+        by_offer: Record<string, string[]>;
+      }>(await apiFetch(`/api/workspaces/${workspaceId}/attribution/campaign-tags`));
+      setTagChoices(refreshed);
+      const name = refreshed.campaigns.find((item) => item.id === campaignId)?.name
+        ?? "the campaign";
+      succeed(tag
+        ? `${offerIds.length} product${offerIds.length === 1 ? "" : "s"} added to ${name}.`
+        : `${offerIds.length} product${offerIds.length === 1 ? "" : "s"} removed from ${name}.`);
+    } catch (reason) {
+      fail(reason instanceof Error ? reason.message : "Those tags could not be saved.");
+    }
+  }, [apiFetch, fail, succeed, workspaceId]);
 
   useEffect(() => {
     if (!user) return;
@@ -258,6 +298,9 @@ export default function AttributionPage() {
           products={products}
           onCopyAffiliateLink={copyAffiliateLink}
           onCopySelected={copySelectedLinks}
+          campaigns={tagChoices.campaigns}
+          campaignsByOffer={tagChoices.by_offer}
+          onTagOffers={tagOffers}
         />
       </section>
 
@@ -272,6 +315,7 @@ export default function AttributionPage() {
             apiFetch={apiFetch}
             succeed={succeed}
             fail={fail}
+            campaigns={tagChoices.campaigns}
             // Keep the outcome visible so skipped rows remain actionable.
             onImported={() => { void refresh(); }}
           />

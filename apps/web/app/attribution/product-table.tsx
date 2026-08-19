@@ -96,17 +96,56 @@ export function ProductTable({
   products,
   onCopyAffiliateLink,
   onCopySelected,
+  campaigns = [],
+  campaignsByOffer = {},
+  onTagOffers,
 }: {
   products: ProductRow[];
   onCopyAffiliateLink: (url: string) => void;
   /** Asked to copy the affiliate link of every one of these products, at once. */
   onCopySelected?: (productIds: string[]) => void;
+  /** Campaigns a product can be promoted by. */
+  campaigns?: { id: string; name: string; status: string; tagged_products: number }[];
+  /** Which campaigns already promote each offer, keyed by offer id. */
+  campaignsByOffer?: Record<string, string[]>;
+  /**
+   * Add or remove a set of products from one campaign.
+   *
+   * The page owns the request because it owns the workspace; this table owns
+   * the selection, and the two meet here.
+   */
+  onTagOffers?: (offerIds: string[], campaignId: string, tag: boolean) => Promise<void>;
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<ProductSort>({ key: "product", direction: "asc" });
+  /** Which campaign the tag controls are pointed at, for a batch. */
+  const [tagCampaign, setTagCampaign] = useState("");
+  /** The table's own width, so a spanning row cannot fall out of step with it. */
+  const columnCount = onTagOffers ? 9 : 8;
+  const [tagging, setTagging] = useState(false);
+
+  /** Every offer belonging to these products: the tag is on the offer. */
+  const offersOf = (productIds: Iterable<string>) => {
+    const wanted = new Set(productIds);
+    return products
+      .filter((product) => wanted.has(product.id))
+      .flatMap((product) => product.offers.map((offer) => offer.id));
+  };
+
+  async function tagPicked(tag: boolean) {
+    if (!tagCampaign || !onTagOffers) return;
+    const offerIds = offersOf(picked);
+    if (!offerIds.length) return;
+    setTagging(true);
+    try {
+      await onTagOffers(offerIds, tagCampaign, tag);
+    } finally {
+      setTagging(false);
+    }
+  }
 
   /**
    * Name, brand, shop or marketplace - whatever somebody half-remembers.
@@ -212,6 +251,43 @@ export function ProductTable({
           >
             <ActionIcon name="copy" /> {t("attribution.copyLinks")}
           </Button>
+          {/* Tagging a selection to a campaign, where the selection already
+              is. A hundred products imported for one campaign is one decision,
+              and making it a hundred times is how a catalogue ends up full of
+              products no campaign can use. */}
+          {onTagOffers && campaigns.length > 0 && (
+            <>
+              <select
+                className="product-tag-campaign"
+                value={tagCampaign}
+                aria-label="Campaign to tag the selection to"
+                onChange={(event) => setTagCampaign(event.target.value)}
+              >
+                <option value="">Choose a campaign…</option>
+                {campaigns.map((campaign) => (
+                  <option key={campaign.id} value={campaign.id}>
+                    {campaign.name} ({campaign.tagged_products})
+                  </option>
+                ))}
+              </select>
+              <Button
+                variant="secondary"
+                size="sm"
+                busy={tagging}
+                disabled={picked.size === 0 || !tagCampaign}
+                title={!tagCampaign ? "Choose a campaign first." : undefined}
+                onClick={() => void tagPicked(true)}
+              >Add to campaign</Button>
+              <Button
+                variant="quiet"
+                size="sm"
+                busy={tagging}
+                disabled={picked.size === 0 || !tagCampaign}
+                title={!tagCampaign ? "Choose a campaign first." : undefined}
+                onClick={() => void tagPicked(false)}
+              >Remove from it</Button>
+            </>
+          )}
           <Button
             variant="quiet"
             size="sm"
@@ -245,6 +321,9 @@ export function ProductTable({
                 sort={sort} onSort={changeSort} className="numeric" />
               <SortableHeader column="commission" label={t("attribution.commission")}
                 sort={sort} onSort={changeSort} className="numeric" />
+              {/* Not sortable: a list of names does not order, and a column
+                  that pretends to is a control that does nothing. */}
+              {onTagOffers && <th scope="col" className="product-campaigns">Campaigns</th>}
               <SortableHeader column="offers" label={t("attribution.offers")}
                 sort={sort} onSort={changeSort} className="product-count" />
               <SortableHeader column="links" label={t("attribution.links")}
@@ -308,6 +387,32 @@ export function ProductTable({
                       ><ActionIcon name="expand" size={16} /></span>
                     </button>
                   </th>
+                  {onTagOffers && (() => {
+                    // A product can carry several offers; the tag lives on the
+                    // offer, so the row shows the union of its offers' tags.
+                    const on = [...new Set(
+                      product.offers.flatMap((offer) => campaignsByOffer[offer.id] ?? []),
+                    )];
+                    const named = campaigns.filter((campaign) => on.includes(campaign.id));
+                    return (
+                      <td className="product-campaigns">
+                        {named.length ? (
+                          <span className="product-campaign-tags">
+                            {named.map((campaign) => (
+                              <em key={campaign.id} title={`Promoted by ${campaign.name}`}>
+                                {campaign.name}
+                              </em>
+                            ))}
+                          </span>
+                        ) : (
+                          /* Said rather than left blank: no campaign can use
+                             this product, which is a state to notice on a page
+                             about products that earn. */
+                          <small className="product-campaigns-none">Not in a campaign</small>
+                        )}
+                      </td>
+                    );
+                  })()}
                   <td className="product-creator" title={product.creators.join(" · ")}>
                     {product.creators.length
                       ? product.creators.join(" · ")
@@ -335,7 +440,7 @@ export function ProductTable({
                     id={detailId}
                     className="product-detail-row"
                   >
-                    <td colSpan={8}>
+                    <td colSpan={columnCount}>
                       {/* No section wrapper: there was a second one here once,
                           and the last of them held nothing the panel itself
                           does not. */}
@@ -400,7 +505,7 @@ export function ProductTable({
             })}
             {shown.length === 0 && (
               <tr>
-                <td className="product-no-results" colSpan={8}>
+                <td className="product-no-results" colSpan={columnCount}>
                   {t("attribution.noProductMatches")}
                 </td>
               </tr>
