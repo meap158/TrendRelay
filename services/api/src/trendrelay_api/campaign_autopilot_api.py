@@ -674,6 +674,24 @@ def update_queue_item(
                 session, request, workspace_id, user.id,
                 "campaign.queue_item_approved", "campaign_queue_item", item.id, {},
             )
+    apply_queue_item_edits(session, workspace_id, campaign_id, item, body)
+    return {"item": _queue_view(item)}
+
+
+def apply_queue_item_edits(
+    session: Session,
+    workspace_id: str,
+    campaign_id: str,
+    item: CampaignQueueItem,
+    body: QueueItemUpdate,
+) -> None:
+    """Apply a queue item's copy and product edits, from whichever surface.
+
+    The HTTP route and the MCP writer both call this, so the two cannot drift
+    the way a hand-kept second copy would. State transitions stay with the
+    caller: they can carry an audit event and, for MCP, are refused outright -
+    the boundary is that a model may write copy, never approve it.
+    """
     if "title" in body.model_fields_set:
         item.title = (body.title or "").strip() or None
     if body.body is not None:
@@ -690,7 +708,6 @@ def update_queue_item(
     if body.body is not None or body.hashtags is not None or body.offer_ids is not None:
         _refresh_item_match(session, campaign_id, item)
     item.updated_at = datetime.now(UTC)
-    return {"item": _queue_view(item)}
 
 
 def _refresh_item_match(
