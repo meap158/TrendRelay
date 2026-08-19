@@ -20,6 +20,7 @@ import { PopularPosts } from "./popular-posts";
 import { TrendingTopics } from "./trending-topics";
 import { CampaignIdeaComposer } from "./campaign-idea-composer";
 import { StandoutBoard } from "./standout-board";
+import { NewsBoard } from "./news-board";
 import { rankEngagedPosts, type ResearchPostJob } from "../../lib/engaged-posts";
 
 type Workspace = { id: string; name: string; role: string };
@@ -1081,6 +1082,13 @@ export default function ResearchDashboard() {
       {/* Findings before machinery. Everything below this is how research is
           run; this is what it found, and the only part somebody arriving with
           "what should I make today" can act on. */}
+      {/* Above the post board on purpose. The post board needs research to
+          have been run before it can say anything, and on a first visit it is
+          empty; the news board always has something, because it reads public
+          feeds rather than this workspace's history. Leading with the shelf
+          that is reliably full is what stops Discover opening as a form. */}
+      <NewsBoard seeds={ideaSeeds} onSeed={toggleIdeaSeed} />
+
       <StandoutBoard posts={standoutPosts} seeds={ideaSeeds} onSeed={toggleIdeaSeed} />
 
       <div className="dsc-section">

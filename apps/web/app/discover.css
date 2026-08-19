@@ -135,6 +135,11 @@
  * Written in classes and tokens, unlike the rest of this page, which is built
  * from inline style objects and its own colours. Two shelves side by side while
  * there is room, stacked when there is not. */
+/* Aligned with its siblings rather than with the window. Every other block on
+   this page is centred at the page measure and inset by 24px; these two boards
+   were neither, so they ran edge to edge and their cards started 24px to the
+   left of every heading above and below them. */
+.standout-board, .news-board { max-width: var(--dsc-measure); margin-inline: auto; padding-inline: var(--dsc-inset); }
 .standout-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 12px; margin-bottom: 18px; }
 .standout-shelf { display: grid; align-content: start; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow-sm); }
 /* The two shelves are different questions, so they are told apart by a rule of
@@ -167,8 +172,8 @@
  * the app built that way. Copied value for value, so nothing moves; what
  * changes is that they are now where the tokens are and can be swept with
  * the rest. */
-.dsc-page { font-family: 'Google Sans', 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-.dsc-hero { display: flex; flex-direction: column; align-items: stretch; justify-content: center; max-width: 960px; margin: 0 auto; padding: 18px 24px 14px; text-align: left; }
+.dsc-page { --dsc-measure: 960px; --dsc-inset: 24px; font-family: 'Google Sans', 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+.dsc-hero { display: flex; flex-direction: column; align-items: stretch; justify-content: center; max-width: var(--dsc-measure); margin: 0 auto; padding: 18px 24px 14px; text-align: left; }
 .dsc-logo { font-size: 24px; font-weight: 600; letter-spacing: -0.5px; color: var(--text); margin: 0 0 3px; }
 .dsc-tagline { font-size: 15px; color: var(--muted); margin: 0 0 12px; font-weight: 400; }
 .dsc-search-form { display: flex; align-items: center; width: 100%; max-width: none; background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 6px 8px 6px 16px; box-shadow: 0 1px 6px rgba(32,33,36,0.08); transition: box-shadow 0.2s; }
@@ -212,10 +217,10 @@
 .dsc-mode-row { display: flex; gap: 8px; margin-top: 8px; }
 .dsc-mode-btn { background: transparent; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 6px 16px; font-size: 13px; cursor: pointer; color: var(--muted); font-family: inherit; font-weight: 500; transition: all 0.15s; }
 .dsc-mode-btn-active { background: var(--green-dark); border: 1px solid var(--green); color: var(--green); }
-.dsc-top-bar { display: flex; align-items: center; justify-content: space-between; max-width: 960px; margin: 0 auto; padding: 10px 24px; border-bottom: 1px solid var(--panel-raised); font-size: 13px; color: var(--muted); }
+.dsc-top-bar { display: flex; align-items: center; justify-content: space-between; max-width: var(--dsc-measure); margin: 0 auto; padding: 10px 24px; border-bottom: 1px solid var(--panel-raised); font-size: 13px; color: var(--muted); }
 .dsc-ws-select { border: 1px solid var(--line-strong); border-radius: 8px; padding: 4px 8px; font-size: 13px; background: var(--panel); color: var(--text); font-family: inherit; }
 .dsc-error { background: var(--bad-bg); color: var(--bad); padding: 12px 24px; font-size: 14px; text-align: center; margin: 0px; }
-.dsc-section { max-width: 960px; margin: 0 auto; padding: 16px 24px; }
+.dsc-section { max-width: var(--dsc-measure); margin: 0 auto; padding: 16px 24px; }
 .dsc-section-title { font-size: 20px; font-weight: 400; color: var(--text); margin: 0 0 4px; }
 .dsc-section-sub { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
 .dsc-filter-row { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
@@ -233,7 +238,7 @@
 .dsc-card-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .dsc-card-action { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; border: 1px solid transparent; border-radius: 15px; padding: 0 14px; background: var(--link-bg); color: var(--link); font-size: 12px; font-weight: 500; font-family: inherit; cursor: pointer; transition: background 150ms, border-color 150ms; }
 .dsc-link { display: inline-flex; align-items: center; min-height: 30px; padding: 0 4px; color: var(--green); text-decoration: none; font-size: 12px; font-weight: 500; white-space: nowrap; }
-.dsc-jobs-section { max-width: 960px; margin: 0 auto; padding: 0 24px 48px; }
+.dsc-jobs-section { max-width: var(--dsc-measure); margin: 0 auto; padding: 0 24px 48px; }
 .dsc-job-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--panel-raised); font-size: 13px; }
 .dsc-empty { text-align: center; padding: 40px 24px; color: var(--muted); font-size: 14px; }
 .dsc-account-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; padding: 16px 0; }
@@ -266,3 +271,58 @@
 .dsc-note-lead { margin: 0 0 6px; color: var(--muted); font-size: 15px; }
 .dsc-strong { color: var(--text); font-weight: 500; }
 
+
+/* The news board: what is happening, above what did well.
+ *
+ * Same shelf shape as the standout board deliberately - two questions, told
+ * apart by a rule of colour down the edge rather than by two card designs -
+ * because they are read the same way and a second visual language here would
+ * only be a second thing to learn.
+ *
+ * Density is the reason this board can afford to lead the page. It sits above
+ * everything else, so what it spends is spent by every section below it: at
+ * "headlines" a shelf of six costs about a third of what it costs as cards. */
+.news-board { display: grid; gap: 10px; margin-bottom: 18px; }
+.news-board-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.news-board-head h2 { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
+.news-board-head h2 svg { color: var(--link); }
+.news-board-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+.news-shelf { display: grid; align-content: start; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow-sm); }
+.news-shelf.covered { border-inline-start: 3px solid var(--link); }
+.news-shelf.breaking { border-inline-start: 3px solid var(--amber); }
+.news-shelf > header { display: grid; grid-template-columns: auto 1fr; gap: 2px 7px; align-items: center; }
+.news-shelf > header h3 { margin: 0; font-size: 13px; font-weight: 700; }
+.news-shelf > header p { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; }
+.news-shelf.covered > header svg { color: var(--link); }
+.news-shelf.breaking > header svg { color: var(--amber); }
+
+.news-shelf ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.news-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 8px; border-radius: var(--radius-sm); }
+.news-row:hover { background: var(--panel-raised); }
+/* The text is one cell, so the action centres against however many lines it
+   has. Spanning rows instead meant knowing the line count, which changes with
+   density - at "cards" a summary appears and the button sank to the bottom. */
+.news-row-text { display: grid; gap: 2px; min-width: 0; }
+.news-headline { min-width: 0; overflow: hidden; color: var(--text); font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.news-headline:hover { color: var(--link); }
+.news-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; color: var(--muted); font-size: 10px; }
+.news-count { color: var(--link); font-weight: 600; }
+.news-summary { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.news-note { margin: 0; padding: 8px 12px; border-left: 3px solid var(--amber); background: var(--warn-bg); color: var(--muted); font-size: 11px; line-height: 1.5; border-radius: var(--radius-sm); }
+.news-empty { margin: 0; padding: 10px 8px; color: var(--muted); font-size: 11px; }
+
+/* Three levels, the way a browser's new-tab feed offers them. Cards when
+   browsing, rows normally, headlines when you want ten on screen. The summary
+   row spans the full width, so it has to come back before the action button. */
+.news-shelf ul[data-density="cards"] .news-row { padding: 9px 8px; grid-template-columns: minmax(0, 1fr) auto; }
+.news-shelf ul[data-density="cards"] .news-headline { white-space: normal; }
+.news-shelf ul[data-density="headlines"] .news-row { padding: 4px 8px; }
+
+@media (max-width: 560px) {
+  /* The action drops beneath the headline rather than squeezing it to a few
+     characters; a truncated headline is not worth keeping a button beside. */
+  .news-row { grid-template-columns: minmax(0, 1fr); }
+  .news-row > button { justify-self: start; }
+  .news-headline { white-space: normal; }
+}

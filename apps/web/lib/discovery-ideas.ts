@@ -1,12 +1,13 @@
 import type { PopularPost } from "./post-board.ts";
 import { compactCount } from "./post-board.ts";
 import type { EngagedPost } from "./engaged-posts.ts";
+import type { NewsStory } from "./news-stories.ts";
 import type { Topic } from "./trend-shapes.ts";
 import { searchTerm } from "./trend-shapes.ts";
 
 export type DiscoverySeed = {
   id: string;
-  kind: "topic" | "post";
+  kind: "topic" | "post" | "story";
   label: string;
   source: string;
   region: string;
@@ -96,6 +97,32 @@ export function seedFromEngagedPost(post: EngagedPost): DiscoverySeed {
 }
 
 /**
+ * A news story as evidence.
+ *
+ * Its own kind rather than a topic or a post, because what it offers is
+ * different: not a term that is trending and not a post that did well, but
+ * something that happened, which several newsrooms thought worth reporting.
+ * Calling it a post would put "3 newsrooms" in a sentence about reach.
+ */
+export function seedFromNewsStory(story: NewsStory): DiscoverySeed {
+  return {
+    id: `story:news:${story.id}`,
+    kind: "story",
+    label: story.title,
+    source: story.outlet,
+    // Feeds are read by desk rather than by country, and most of these
+    // newsrooms report worldwide. Claiming a region would be inventing one.
+    region: "global",
+    url: story.url,
+    evidence:
+      story.coverage > 1
+        ? `Carried by ${story.coverage} newsrooms: ${story.outlets.join(", ")}`
+        : `${story.outlet} · only newsroom carrying it so far`,
+    tags: ["news", ...story.outlets],
+  };
+}
+
+/**
  * Turn selected evidence into an editable first draft.
  *
  * This is intentionally deterministic. TrendRelay has no general-purpose LLM
@@ -110,6 +137,7 @@ export function buildCampaignIdea(seeds: DiscoverySeed[]): CampaignIdea {
   const sources = unique(selected.map((seed) => seed.source));
   const topics = selected.filter((seed) => seed.kind === "topic");
   const posts = selected.filter((seed) => seed.kind === "post");
+  const stories = selected.filter((seed) => seed.kind === "story");
   const focus = labels.slice(0, 3);
   const focusText = list(focus);
   const sourceText = list(sources);
@@ -117,6 +145,7 @@ export function buildCampaignIdea(seeds: DiscoverySeed[]): CampaignIdea {
   const evidenceShape = [
     topics.length ? `${topics.length} ranked ${topics.length === 1 ? "topic" : "topics"}` : "",
     posts.length ? `${posts.length} popular ${posts.length === 1 ? "post" : "posts"}` : "",
+    stories.length ? `${stories.length} news ${stories.length === 1 ? "story" : "stories"}` : "",
   ].filter(Boolean).join(" and ") || "selected trend evidence";
 
   const objective = clipped(
