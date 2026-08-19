@@ -172,10 +172,10 @@
  * the app built that way. Copied value for value, so nothing moves; what
  * changes is that they are now where the tokens are and can be swept with
  * the rest. */
-.dsc-page { --dsc-measure: 960px; --dsc-inset: 24px; font-family: 'Google Sans', 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-.dsc-hero { display: flex; flex-direction: column; align-items: stretch; justify-content: center; max-width: var(--dsc-measure); margin: 0 auto; padding: 18px 24px 14px; text-align: left; }
-.dsc-logo { font-size: 24px; font-weight: 600; letter-spacing: -0.5px; color: var(--text); margin: 0 0 3px; }
-.dsc-tagline { font-size: 15px; color: var(--muted); margin: 0 0 12px; font-weight: 400; }
+.dsc-page { --dsc-measure: 960px; --dsc-inset: 24px; --dsc-space-1: 4px; --dsc-space-2: 8px; --dsc-space-3: 12px; --dsc-space-4: 16px; --dsc-space-6: 24px; font-family: 'Google Sans', 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+.dsc-hero { display: flex; flex-direction: column; align-items: stretch; justify-content: center; max-width: var(--dsc-measure); margin: 0 auto; padding: var(--dsc-space-3) var(--dsc-inset) var(--dsc-space-2); text-align: left; }
+.dsc-logo { font-size: 20px; font-weight: 600; letter-spacing: -0.5px; color: var(--text); margin: 0 0 2px; }
+.dsc-tagline { font-size: 13px; color: var(--muted); margin: 0 0 var(--dsc-space-2); font-weight: 400; }
 .dsc-search-form { display: flex; align-items: center; width: 100%; max-width: none; background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 6px 8px 6px 16px; box-shadow: 0 1px 6px rgba(32,33,36,0.08); transition: box-shadow 0.2s; }
 .dsc-search-input { flex: 1; border: none; outline: none; font-size: 16px; padding: 10px 8px; background: transparent; color: var(--text); font-family: inherit; }
 .dsc-tiktok-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
@@ -220,10 +220,10 @@
 .dsc-top-bar { display: flex; align-items: center; justify-content: space-between; max-width: var(--dsc-measure); margin: 0 auto; padding: 10px 24px; border-bottom: 1px solid var(--panel-raised); font-size: 13px; color: var(--muted); }
 .dsc-ws-select { border: 1px solid var(--line-strong); border-radius: 8px; padding: 4px 8px; font-size: 13px; background: var(--panel); color: var(--text); font-family: inherit; }
 .dsc-error { background: var(--bad-bg); color: var(--bad); padding: 12px 24px; font-size: 14px; text-align: center; margin: 0px; }
-.dsc-section { max-width: var(--dsc-measure); margin: 0 auto; padding: 16px 24px; }
+.dsc-section { max-width: var(--dsc-measure); margin: 0 auto; padding: var(--dsc-space-3) var(--dsc-inset); }
 .dsc-section-title { font-size: 20px; font-weight: 400; color: var(--text); margin: 0 0 4px; }
-.dsc-section-sub { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
-.dsc-filter-row { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+.dsc-section-sub { font-size: 13px; color: var(--muted); margin: 0 0 var(--dsc-space-3); }
+.dsc-filter-row { display: flex; gap: var(--dsc-space-2); margin-bottom: var(--dsc-space-4); flex-wrap: wrap; }
 .dsc-filter-btn { background: transparent; border: 1px solid var(--line-strong); border-radius: 16px; padding: 5px 14px; font-size: 13px; cursor: pointer; color: var(--muted); font-family: inherit; transition: all 0.15s; }
 .dsc-filter-btn-active { background: var(--green-dark); border: 1px solid var(--green); color: var(--green); }
 .dsc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
@@ -238,7 +238,7 @@
 .dsc-card-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .dsc-card-action { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; border: 1px solid transparent; border-radius: 15px; padding: 0 14px; background: var(--link-bg); color: var(--link); font-size: 12px; font-weight: 500; font-family: inherit; cursor: pointer; transition: background 150ms, border-color 150ms; }
 .dsc-link { display: inline-flex; align-items: center; min-height: 30px; padding: 0 4px; color: var(--green); text-decoration: none; font-size: 12px; font-weight: 500; white-space: nowrap; }
-.dsc-jobs-section { max-width: var(--dsc-measure); margin: 0 auto; padding: 0 24px 48px; }
+.dsc-jobs-section { max-width: var(--dsc-measure); margin: 0 auto; padding: 0 var(--dsc-inset) 32px; }
 .dsc-job-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--panel-raised); font-size: 13px; }
 .dsc-empty { text-align: center; padding: 40px 24px; color: var(--muted); font-size: 14px; }
 .dsc-account-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; padding: 16px 0; }
