@@ -9,6 +9,8 @@ launch; this file holds the boundary and the handlers.
 from __future__ import annotations
 
 import asyncio
+import json
+import sys
 
 import pytest
 from sqlalchemy import create_engine
@@ -21,7 +23,7 @@ from trendrelay_api.autopilot_models import (
     CampaignQueueItem,
 )
 from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
-from trendrelay_api.integrations.mcp import context, policy, server, service, writes
+from trendrelay_api.integrations.mcp import context, policy, server, service, tunnel, writes
 from trendrelay_api.models import Base, Campaign, UserProfile, Workspace, WorkspaceMember
 from trendrelay_api.opportunity_models import Product, ProductOffer
 
@@ -179,3 +181,91 @@ def test_a_missing_post_is_a_clear_error(session) -> None:
 
 def test_the_server_resolves_the_local_operators_workspace(session) -> None:
     assert service.resolve_workspace_id(session) == "ws"
+
+
+# --- the tunnel ---------------------------------------------------------------
+
+
+def _tunnel_env(monkeypatch, **overrides) -> None:
+    monkeypatch.setenv("CONTROL_PLANE_TUNNEL_ID", "tunnel_" + "a1b2c3d4" * 4)
+    monkeypatch.setenv("CONTROL_PLANE_API_KEY", "k" * 40)
+    monkeypatch.setenv("TUNNEL_CLIENT_BIN", sys.executable)
+    for key, value in overrides.items():
+        if value is None:
+            monkeypatch.delenv(key, raising=False)
+        else:
+            monkeypatch.setenv(key, value)
+
+
+def test_tunnel_config_resolves_from_the_environment(monkeypatch) -> None:
+    _tunnel_env(monkeypatch)
+    config, reason = tunnel.resolve_config()
+    assert reason is None
+    assert config["log_level"] == "warn"
+
+
+def test_the_tunnel_is_off_without_both_credentials(monkeypatch) -> None:
+    _tunnel_env(monkeypatch, CONTROL_PLANE_API_KEY=None)
+    config, reason = tunnel.resolve_config()
+    assert config is None
+    assert "CONTROL_PLANE" in reason
+
+
+def test_a_malformed_tunnel_id_is_named(monkeypatch) -> None:
+    _tunnel_env(monkeypatch, CONTROL_PLANE_TUNNEL_ID="nope")
+    assert tunnel.resolve_config()[1].startswith("CONTROL_PLANE_TUNNEL_ID is not")
+
+
+def test_the_run_command_matches_the_reference_and_hides_the_key(monkeypatch) -> None:
+    _tunnel_env(monkeypatch)
+    config, _ = tunnel.resolve_config()
+    command = tunnel.run_command(config, "http://127.0.0.1:8765/mcp", 8791)
+    # The key is in the environment, never the arguments any process can read.
+    assert "k" * 40 not in command
+    assert tunnel.child_env(config)["CONTROL_PLANE_API_KEY"] == "k" * 40
+    # `run` takes a bare url; only `doctor` takes it in url= form.
+    assert "url=" not in " ".join(command)
+    for token in (
+        "run", "--control-plane.tunnel-id", "--mcp.server-url", "struct-text",
+        "127.0.0.1:8791", "--mcp.connection-max-ttl", "30m", "--control-plane.poll-timeout",
+    ):
+        assert token in command, token
+
+
+def test_doctor_takes_the_server_url_in_url_form(monkeypatch) -> None:
+    _tunnel_env(monkeypatch)
+    config, _ = tunnel.resolve_config()
+    doctor = tunnel._doctor_command(config, "http://127.0.0.1:8765/mcp", 8791)
+    assert "url=http://127.0.0.1:8765/mcp" in doctor
+
+
+def test_run_doctor_reads_the_clients_own_checks(monkeypatch) -> None:
+    _tunnel_env(monkeypatch)
+
+    class _Result:
+        returncode = 0
+        stdout = json.dumps({"checks": [{"id": "control_plane", "status": "PASS"}]})
+        stderr = ""
+
+    monkeypatch.setattr(tunnel.subprocess, "run", lambda *a, **k: _Result())
+    outcome = tunnel.run_doctor()
+    assert outcome["ok"]
+    assert outcome["checks"][0]["id"] == "control_plane"
+
+
+def test_run_doctor_surfaces_a_failing_check(monkeypatch) -> None:
+    _tunnel_env(monkeypatch)
+
+    class _Result:
+        returncode = 1
+        stdout = json.dumps({"checks": [{"id": "health", "status": "FAIL"}]})
+        stderr = ""
+
+    monkeypatch.setattr(tunnel.subprocess, "run", lambda *a, **k: _Result())
+    assert not tunnel.run_doctor()["ok"]
+
+
+def test_tunnel_status_is_disabled_without_config(monkeypatch) -> None:
+    monkeypatch.delenv("CONTROL_PLANE_TUNNEL_ID", raising=False)
+    monkeypatch.delenv("CONTROL_PLANE_API_KEY", raising=False)
+    assert tunnel.status()["state"] == "disabled"
