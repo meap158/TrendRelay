@@ -52,7 +52,7 @@
       "activation_allowed": false,
       "default_active": false,
       "documentation": "docs/third-party/news-feeds.md",
-      "block_reason": "Ships with the API and needs nothing installed: it is written against the Python standard library, so there is no dependency to add and nothing to activate. Feeds are public syndication endpoints, so it needs no key.",
+      "block_reason": "Nothing to install: it ships with the API, needs only the Python standard library, and reads public feeds, so there is no key either.",
       "surface": "discover",
       "runs": "network"
     },
@@ -80,7 +80,7 @@
       "activation_allowed": false,
       "default_active": false,
       "documentation": "docs/third-party/news-feeds.md",
-      "block_reason": "Not used by the news board, by choice. It fetches every article page, so a board of forty headlines would be forty requests against forty newsrooms, and what it returns is the article's prose - which belongs to whoever wrote it. Feeds carry the headline, outlet, link and time that a board needs, and publishers offer them for exactly this. Recorded here for the day someone wants the body of one chosen article, which is a different job.",
+      "block_reason": "Deliberately not used by the news board: it fetches every article page, and what it returns is the article's own prose. Docs has the reasoning.",
       "surface": "discover",
       "runs": "network"
     },

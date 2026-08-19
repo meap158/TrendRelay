@@ -29,7 +29,18 @@ nav strong { color: var(--text); }
 .registry-summary { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
 .registry-summary span, .tool-meta span, .tool-meta a, .capabilities span { border: 1px solid var(--line); border-radius: 999px; padding: 3px 7px; color: var(--muted); font-size: 0.7rem; text-decoration: none; }
 /* Deep red on the pink wash: ~8.6:1, so a failure message stays readable. */
-.registry-error, .block-reason { border-inline-start: 3px solid var(--red); padding: 12px 16px; color: var(--bad); background: var(--bad-bg); overflow-wrap: anywhere; line-height: 1.5; }
+.registry-error { border-inline-start: 3px solid var(--red); padding: 12px 16px; color: var(--bad); background: var(--bad-bg); overflow-wrap: anywhere; line-height: 1.5; }
+/* Why an action is switched off - which is guidance, not a failure.
+ *
+ * This shared the error style above, and so every one of them arrived in
+ * alarm red. Not one is an error: they say a tool ships with the API and needs
+ * no install, that another is deliberately not used, or which pip extra
+ * carries a third. `.registry-error` is the real thing, raised with
+ * role="alert" when something has actually gone wrong, and it keeps the red.
+ *
+ * Amber on a warning ground, the same treatment `.publish-blocked` already
+ * gives the same idea - an action unavailable, and the reason beside it. */
+.block-reason { border-inline-start: 3px solid var(--amber); border-radius: var(--radius-sm); padding: 9px 12px; color: var(--text); background: var(--warn-bg); font-size: 0.78rem; overflow-wrap: anywhere; line-height: 1.5; }
 /* Tools, grouped by the tab their work shows up in.
  *
  * A heading, a line saying what the group is for, and a count - so the page
@@ -80,7 +91,11 @@ nav strong { color: var(--text); }
 .tool-card-top, .tool-meta, .capabilities, .tool-footer, .tool-actions, .status-stack { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .tool-card-top { justify-content: space-between; color: var(--muted); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
 .tool-card h2 { margin: 10px 0 4px; font-size: 1.25rem; letter-spacing: -.01em; }
-.tool-card > p { display: -webkit-box; min-height: 2.8em; overflow: hidden; margin: 0; color: var(--muted); line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+/* The summary by name, not "any paragraph in a card". The clamp is there to
+   keep summaries of different lengths on one baseline, and as `.tool-card > p`
+   it also caught the note below the capabilities and cut it off mid-sentence -
+   a message written to be read, truncated with no way to expand it. */
+.tool-summary { display: -webkit-box; min-height: 2.8em; overflow: hidden; margin: 0; color: var(--muted); line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .license-state { padding: 5px 8px; border-radius: var(--radius-sm); font-weight: 800; }
 .license-state.allowed { color: var(--green); background: var(--green-dark); }
 .license-state.conditional { color: var(--warn); background: var(--warn-bg); }

@@ -538,7 +538,7 @@ export default function ToolsPage() {
               <span className="tool-category">{tool.category}</span>
             </div>
             <h2>{tool.name}</h2>
-            <p>{tool.summary}</p>
+            <p className="tool-summary">{tool.summary}</p>
             <div className="tool-meta">
               <span>{tool.version === "revision-pinned" ? tool.version : `v${tool.version}`}</span>
               <span>{tool.revision.slice(0, 12)}</span>
@@ -575,7 +575,12 @@ export default function ToolsPage() {
                     <ActionIcon name={tool.active ? "dismiss" : "play"} />{tool.active ? "Deactivate" : "Activate"}
                   </button>
                 )}
-                {tool.present && (
+                {/* The same permission Install is gated on. A tool this app
+                    did not install is not one it can remove: the first
+                    first-party capability to report itself present offered an
+                    Uninstall button that had no checkout to delete and failed
+                    on a missing root_path. */}
+                {tool.present && tool.install_allowed && (
                   <button className={buttonClass({ variant: "danger", size: "sm" })} disabled={busy === tool.id} onClick={() => void mutate(tool, "uninstall")}><ActionIcon name="delete" />{t("tools.uninstall")}</button>
                 )}
               </div>
