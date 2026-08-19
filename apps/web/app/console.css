@@ -301,7 +301,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 
 .local-admin-badge {
-  border: 1px solid var(--green-line);
+  border: 1px solid #b7d9cd;
   border-radius: 999px;
   padding: 5px 9px;
   color: var(--green);
@@ -380,7 +380,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .account-validation > summary::-webkit-details-marker, .research-activity > summary::-webkit-details-marker { display: none; }
 .account-validation > summary > span:first-child, .research-activity > summary > span:first-child { display: grid; gap: 3px; }
 .account-validation summary small, .research-activity summary small { color: var(--muted); font-size: 10px; font-weight: 400; }
-.source-ready, .source-setup { border: 1px solid var(--green-line); border-radius: 999px; padding: 4px 7px; color: var(--green); background: var(--green-dark); font-size: 9px; font-weight: 700; }
+.source-ready, .source-setup { border: 1px solid #b7d9cd; border-radius: 999px; padding: 4px 7px; color: var(--green); background: var(--green-dark); font-size: 9px; font-weight: 700; }
 .source-setup { border-color: #e4d4a2; color: var(--warn); background: #fff9e8; }
 .account-validation-form { display: grid; grid-template-columns: minmax(0, 1fr) 140px auto; gap: 9px; align-items: end; border-top: 1px solid var(--line); padding: 15px; }
 .research-activity-list { display: grid; border-top: 1px solid var(--line); padding: 5px 15px 10px; }
@@ -419,7 +419,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .campaign-page { padding-top: 24px; }
 .campaign-heading { display: flex; justify-content: space-between; gap: 32px; align-items: end; margin-bottom: 20px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .campaign-heading p:last-child { margin: 0; color: var(--muted); font-size: 13px; }
-.campaign-message { padding: 11px 14px; border: 1px solid var(--green-line); border-radius: var(--radius-sm); color: var(--green); background: var(--green-dark); }
+.campaign-message { padding: 11px 14px; border: 1px solid #b7d9cd; border-radius: var(--radius-sm); color: var(--green); background: var(--green-dark); }
 .campaign-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start; }
 .campaign-sidebar, .campaign-summary, .plan-create { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .campaign-sidebar { position: sticky; top: 76px; padding: 16px; }
@@ -470,7 +470,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .plan-state.needs_approval { color: var(--warn); background: var(--warn-bg); }
 .plan-state.approved { color: var(--green); background: var(--green-dark); }
 .plan-state.rejected, .plan-state.cancelled { color: var(--bad); background: var(--bad-bg); }
-.package-result { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-top: 10px; padding: 10px; border: 1px solid var(--green-line); border-radius: var(--radius-sm); background: var(--green-dark); }
+.package-result { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-top: 10px; padding: 10px; border: 1px solid #b7d9cd; border-radius: var(--radius-sm); background: var(--green-dark); }
 .package-result > div { display: grid; gap: 3px; min-width: 0; }
 .package-result strong { overflow: hidden; font-family: ui-monospace, monospace; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .package-result small { color: var(--muted); font-size: 10px; }
@@ -499,8 +499,8 @@ html { scroll-behavior: smooth; }
 .console-messages:empty { display: none; }
 .console-messages { display: grid; gap: 8px; margin-bottom: 16px; }
 .console-messages p { display: grid; grid-template-columns: auto 1fr; gap: 8px; margin: 0; padding: 11px 14px; border-radius: var(--radius-sm); line-height: 1.4; }
-.console-messages .inline-error { border-color: var(--bad-line); background: var(--bad-bg); color: var(--bad); }
-.inline-notice { border: 1px solid var(--green-line); background: var(--green-dark); color: var(--green); }
+.console-messages .inline-error { border-color: #f1b7bb; background: var(--bad-bg); color: var(--bad); }
+.inline-notice { border: 1px solid #b7d9cd; background: var(--green-dark); color: var(--green); }
 
 .downloader-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
 .download-composer, .download-guide, .download-queue-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: 0 1px 2px rgba(0, 0, 0, .05); }
@@ -537,7 +537,11 @@ html { scroll-behavior: smooth; }
 .detected-sources li button:hover { color: var(--red); text-decoration: underline; }
 
 .connection-callout { display: flex; justify-content: space-between; gap: 16px; align-items: center; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
-.connection-callout > div { display: grid; gap: 3px; min-width: 0; }
+/* The positioning context for the (i)'s explanation: anchored to the block of
+   text rather than to the icon, so it cannot run out of the card when the icon
+   falls at the end of a line - which, now that the icon flows with the text,
+   is wherever the sentence happens to end. */
+.connection-callout > div { position: relative; display: grid; gap: 3px; min-width: 0; }
 .connection-callout strong { font-weight: 600; }
 .connection-callout span { color: var(--muted); line-height: 1.4; }
 .connection-callout.warning { border-color: var(--warn-line); background: #fffaf0; }
@@ -546,18 +550,24 @@ html { scroll-behavior: smooth; }
 /* An (i), and the reasoning on hover. A callout is one line by design, and the
    paragraph behind this answers one question for the few who ask it.
    `:focus-visible` as well as `:hover`, or it would be a keyboard dead end. */
-.connection-line { display: inline-flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.connection-info { position: relative; display: inline-grid; place-items: center; color: var(--muted); cursor: help; }
+/* Part of the sentence, not a box beside it. As a flex sibling with wrapping,
+   a thirteen-pixel icon took a whole line to itself the moment the message
+   needed two - a row of vertical space to hold one glyph. Inline, it sits
+   after the last word wherever that falls. */
+.connection-line { display: inline; }
+/* Not a positioning context. The explanation is anchored to the block of text
+   instead, so leaving relative here would make the icon the containing block
+   and "as wide as the text" resolve to the width of the icon. */
+.connection-info { display: inline-flex; align-items: center; margin-inline-start: 4px; vertical-align: -2px; color: var(--muted); cursor: help; }
 .connection-info:hover, .connection-info:focus { color: var(--link); }
 .connection-info:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 50%; }
 /* Anchored to the icon's leading edge, not centred on it. Centred, a 290px
    tooltip on an icon 51px from the left started at -94px - off the screen
    entirely. Growing rightward from a control that is always on the left of
    this callout cannot do that. */
-.connection-tooltip { position: absolute; top: calc(100% + 8px); inset-inline-start: -6px; z-index: 100; inline-size: min(290px, 70vw); padding: 8px 10px; border-radius: var(--radius-sm); background: var(--text); color: var(--on-ink); font-size: 11px; font-weight: 500; line-height: 1.45; text-align: start; opacity: 0; visibility: hidden; transition: opacity .15s, visibility .15s; box-shadow: 0 4px 12px rgb(0 0 0 / 15%); pointer-events: none; }
+.connection-tooltip { position: absolute; top: calc(100% + 6px); inset-inline-start: 0; z-index: 100; inline-size: min(290px, 100%); padding: 8px 10px; border-radius: var(--radius-sm); background: var(--text); color: var(--on-ink); font-size: 11px; font-weight: 500; line-height: 1.45; text-align: start; opacity: 0; visibility: hidden; transition: opacity .15s, visibility .15s; box-shadow: 0 4px 12px rgb(0 0 0 / 15%); pointer-events: none; }
 .connection-info:hover .connection-tooltip,
 .connection-info:focus .connection-tooltip { opacity: 1; visibility: visible; }
-.connection-tooltip::before { content: ""; position: absolute; bottom: 100%; inset-inline-start: 10px; border: 5px solid transparent; border-bottom-color: var(--text); }
 
 .download-options { border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
 .download-options summary { display: flex; justify-content: space-between; gap: 16px; padding: 12px 2px; color: var(--text); font-weight: 600; cursor: pointer; }
