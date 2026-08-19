@@ -2398,14 +2398,14 @@ export function AutopilotPanel({
                   {" "}
                   {carouselReach.accepting.map((item) => item.label).join(", ")}
                   {carouselReach.refusing.length > 0 && <>
-                    {" "}The rest take video only, and this package will be
+                    {" "}The rest take video only, and this post will be
                     skipped on them: {carouselReach.refusing.map((item) => item.label).join(", ")}.
                   </>}
                 </> : <>
                   <strong>No account on this campaign can post a photo carousel.</strong>
                   {" "}
                   {carouselReach.refusing.map((item) => item.label).join(", ")} take
-                  video only, so this package would never be posted. Add a
+                  video only, so this post would never be posted. Add a
                   destination on an engine that carries carousels, or choose a
                   video instead.
                 </>}
@@ -2522,7 +2522,7 @@ export function AutopilotPanel({
                     wording only mentioned this when products were switched
                     off, which is when it was most surprising and least
                     useful. */}
-                <small>Pinning here overrides the campaign for this package.
+                <small>Pinning here overrides the campaign for this post.
                   The affiliate link follows the product, per network.</small>
               </div>
               <div className="campaign-mode-options" role="radiogroup"
