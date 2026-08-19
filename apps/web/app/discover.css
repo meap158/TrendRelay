@@ -172,11 +172,17 @@
  * the app built that way. Copied value for value, so nothing moves; what
  * changes is that they are now where the tokens are and can be swept with
  * the rest. */
-.dsc-page { --dsc-measure: 960px; --dsc-inset: 24px; --dsc-space-1: 4px; --dsc-space-2: 8px; --dsc-space-3: 12px; --dsc-space-4: 16px; --dsc-space-6: 24px; font-family: 'Google Sans', 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+/* One measure for the whole page, wider than before so the widget grid has
+   room for more than one column - and every block below inherits it, so the
+   boards that used to run edge to edge now align with the hero and each other.
+   The Google Sans override is gone: Discover reads in the app's own Roboto like
+   every other tab, rather than in a second typeface that made it a place apart. */
+.dsc-page { --dsc-measure: 1180px; --dsc-inset: 18px; --dsc-space-1: 4px; --dsc-space-2: 8px; --dsc-space-3: 12px; --dsc-space-4: 16px; --dsc-space-6: 24px; background: var(--bg); color: var(--text); min-height: 100vh; }
 .dsc-hero { display: flex; flex-direction: column; align-items: stretch; justify-content: center; max-width: var(--dsc-measure); margin: 0 auto; padding: var(--dsc-space-3) var(--dsc-inset) var(--dsc-space-2); text-align: left; }
 .dsc-logo { font-size: 20px; font-weight: 600; letter-spacing: -0.5px; color: var(--text); margin: 0 0 2px; }
 .dsc-tagline { font-size: 13px; color: var(--muted); margin: 0 0 var(--dsc-space-2); font-weight: 400; }
-.dsc-search-form { display: flex; align-items: center; width: 100%; max-width: none; background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 6px 8px 6px 16px; box-shadow: 0 1px 6px rgba(32,33,36,0.08); transition: box-shadow 0.2s; }
+.dsc-search-form { display: flex; align-items: center; width: 100%; max-width: 620px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 999px; padding: 6px 8px 6px 16px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; }
+.dsc-search-form:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-line); }
 .dsc-search-input { flex: 1; border: none; outline: none; font-size: 16px; padding: 10px 8px; background: transparent; color: var(--text); font-family: inherit; }
 .dsc-tiktok-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .dsc-tiktok-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

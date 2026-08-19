@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Crown, Download, Flame, Hash, Music2, RefreshCw, type LucideIcon } from "lucide-react";
+import { Crown, Download, Flame, Hash, Music2, RefreshCw, type LucideIcon } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import type { DiscoverySeed } from "../../lib/discovery-ideas";
@@ -371,7 +371,6 @@ export default function ResearchDashboard() {
   const [douyinView, setDouyinView] = usePersistedState<"gallery" | "list">(
     "trendrelay.discover.douyinView", "gallery", isBoardView,
   );
-  const [sourceBoardsOpen, setSourceBoardsOpen] = useState(false);
   /** Read once per visit; the ref is what stops a re-render asking again. */
   const douyinAutoRead = useRef(false);
   /** Which term is being fetched, so only that card shows the wait. */
@@ -1005,10 +1004,7 @@ export default function ResearchDashboard() {
               type="button"
               disabled={!category.available || busy === "tiktok"}
               title={category.available ? category.description : category.unavailable_reason}
-              onClick={() => {
-                setSourceBoardsOpen(true);
-                void fetchTiktokDiscovery(category.id);
-              }}
+              onClick={() => void fetchTiktokDiscovery(category.id)}
               className={`dsc-quick-link-btn${category.available ? "" : " is-disabled"}`}
             >
               <TikTokCategoryIcon id={category.id} />{category.label}
@@ -1023,37 +1019,32 @@ export default function ResearchDashboard() {
           boards is fourteen answers to read before knowing anything. */}
       <DiscoveryFeed selectedIds={ideaSeedIds} onToggle={toggleIdeaSeed} />
 
+      {/* News leads. It reads public feeds rather than this workspace's own
+          history, so it is reliably full on a first visit before any research
+          has run - which is what stops Discover opening as an empty form. */}
+      <NewsBoard seeds={ideaSeeds} onSeed={toggleIdeaSeed} />
+
       {/* Folded, not deleted. A hashtag and a video are different evidence,
           and these two boards answer what the merged list cannot: what shape a
           topic has over time, which posts earn their engagement, and what the
           research jobs found. A summary that replaces its own detail is one
           nobody can check. */}
-      <details className="discovery-source-boards">
-        <summary>
-          <span>
-            <strong>Dig into the evidence</strong>
-            <small>Trend shapes over time, engagement ranking, and research jobs</small>
-          </span>
-          <ChevronDown size={18} aria-hidden="true" />
-        </summary>
+      <div className="dsc-section">
+        <TrendingTopics
+          onResearch={exploreTopic}
+          onScore={scoreTopic}
+          selectedIds={ideaSeedIds}
+          onToggle={toggleIdeaSeed}
+        />
+      </div>
 
-        <div className="dsc-section">
-          <TrendingTopics
-            onResearch={exploreTopic}
-            onScore={scoreTopic}
-            selectedIds={ideaSeedIds}
-            onToggle={toggleIdeaSeed}
-          />
-        </div>
-
-        <div className="dsc-section">
-          <PopularPosts
-            onResearch={exploreTopic}
-            selectedIds={ideaSeedIds}
-            onToggle={toggleIdeaSeed}
-          />
-        </div>
-      </details>
+      <div className="dsc-section">
+        <PopularPosts
+          onResearch={exploreTopic}
+          selectedIds={ideaSeedIds}
+          onToggle={toggleIdeaSeed}
+        />
+      </div>
 
       <CampaignIdeaComposer
         seeds={ideaSeeds}
@@ -1066,29 +1057,8 @@ export default function ResearchDashboard() {
         onClear={() => setIdeaSeeds([])}
       />
 
-      <details
-        className="discovery-source-boards"
-        open={sourceBoardsOpen}
-        onToggle={(event) => setSourceBoardsOpen(event.currentTarget.open)}
-      >
-        <summary>
-          <span>
-            <strong>Explore raw source boards</strong>
-            <small>Douyin hot search and TikTok Creative Center, before consolidation</small>
-          </span>
-          <ChevronDown className={sourceBoardsOpen ? "open" : ""} size={18} aria-hidden="true" />
-        </summary>
-
-      {/* Findings before machinery. Everything below this is how research is
-          run; this is what it found, and the only part somebody arriving with
-          "what should I make today" can act on. */}
-      {/* Above the post board on purpose. The post board needs research to
-          have been run before it can say anything, and on a first visit it is
-          empty; the news board always has something, because it reads public
-          feeds rather than this workspace's history. Leading with the shelf
-          that is reliably full is what stops Discover opening as a form. */}
-      <NewsBoard seeds={ideaSeeds} onSeed={toggleIdeaSeed} />
-
+      {/* The raw source boards, no longer hidden behind a disclosure. Douyin
+          hot search and TikTok Creative Center, before consolidation. */}
       <StandoutBoard posts={standoutPosts} seeds={ideaSeeds} onSeed={toggleIdeaSeed} />
 
       <div className="dsc-section">
@@ -1398,7 +1368,6 @@ export default function ResearchDashboard() {
           )}
         </div>
       )}
-      </details>
 
       {visibleInspirations.length > 0 && (
         <div className="dsc-section">
