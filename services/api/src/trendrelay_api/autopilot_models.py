@@ -118,7 +118,17 @@ class CampaignAutopilot(Base):
     bio_hint: Mapped[str] = mapped_column(String(120), default="Link in bio")
     #: How long before a queue item may be posted to the same account again.
     #: Reposting identical media too soon is what gets an account flagged.
+    #: How long before the same post may return to the same account, when
+    #: the campaign allows it to return at all.
     min_recycle_days: Mapped[int] = mapped_column(Integer, default=30)
+    #: Whether a post may go out more than once on the same account.
+    #:
+    #: Off by default. The queue used to be a carousel - every item came back
+    #: once it had rested - which is one legitimate way to run a campaign, but
+    #: it was the only way and nobody chose it, so the same video and caption
+    #: returned to the same audience on a timer nobody set. Recycling a small
+    #: library is a real strategy; it is now a decision.
+    repeat_posts: Mapped[bool] = mapped_column(Boolean, default=False)
     daily_cap_per_account: Mapped[int] = mapped_column(Integer, default=2)
     #: The whole campaign's ceiling for a rolling week, counted across every
     #: destination. None means the per-account caps are the only limit. This is

@@ -332,14 +332,19 @@ def _performance(session: Session, workspace_id: str, destinations: list[Campaig
 
 def _eligible_items(
     items: list[CampaignQueueItem], *, destination_id: str, now: datetime,
-    min_recycle_days: int,
+    min_recycle_days: int, repeat_posts: bool,
 ) -> list[CampaignQueueItem]:
-    """Approved items that have rested long enough on this destination.
+    """Approved items this destination can still be given.
 
-    Rest is per destination, not per item: the same clip on two accounts is two
-    audiences, and holding it back everywhere because one account saw it last
-    week empties the queue for no reason. Reposting it to the *same* account too
-    soon is the thing that gets an account flagged, and that is what this stops.
+    Anything that has already gone out on this account is finished there unless
+    the campaign asks for repeats, in which case it may come back once it has
+    rested `min_recycle_days`.
+
+    Either way the question is asked per destination, not per item: the same
+    clip on two accounts is two audiences, and holding it back everywhere
+    because one account has had it empties the queue for no reason. Sending it
+    to the *same* account again is the thing that reads as a repeat, and that
+    is what this governs.
 
     Takes the queue rather than fetching it: this is asked once per slot, and
     re-reading every approved item from the database for each one turned a
@@ -350,6 +355,10 @@ def _eligible_items(
         stamp = (item.last_posted_by_destination or {}).get(destination_id)
         if not stamp:
             rested.append(item)
+            continue
+        if not repeat_posts:
+            # It has been here. Without repeats there is no interval that
+            # brings it back.
             continue
         try:
             last = datetime.fromisoformat(str(stamp))
@@ -694,6 +703,7 @@ def plan_campaign(
                 destination_id=destination.id,
                 now=moment,
                 min_recycle_days=autopilot.min_recycle_days,
+                repeat_posts=autopilot.repeat_posts,
             )
             # An item already riding an unsettled execution on this account is
             # spoken for until that execution settles, however long it rested.
@@ -738,9 +748,11 @@ def plan_campaign(
                         destination_id=destination.id,
                         now=moment,
                         min_recycle_days=autopilot.min_recycle_days,
+                        repeat_posts=autopilot.repeat_posts,
                     ),
                     label=destination.label,
                     min_recycle_days=autopilot.min_recycle_days,
+                    repeat_posts=autopilot.repeat_posts,
                 ))
                 continue
             # The first eligible item whose media this network will accept: a
@@ -954,6 +966,7 @@ def _why_nothing_eligible(
     rested: list[CampaignQueueItem],
     label: str,
     min_recycle_days: int,
+    repeat_posts: bool,
 ) -> str:
     """Why this destination had nothing to post, told apart from its neighbours.
 
@@ -970,8 +983,15 @@ def _why_nothing_eligible(
     if not approved:
         return f"{len(queue)} queued post(s), none approved yet."
     if not rested:
+        # Two different situations, and the fix for one is not the fix for the
+        # other. Told to shorten a rest interval, somebody on a campaign that
+        # does not repeat at all would go looking for a control that is not
+        # governing anything.
         return (
             f"Nothing approved has rested {min_recycle_days} days on {label}."
+            if repeat_posts
+            else f"Everything approved has already gone out on {label}, and this "
+            "campaign does not repeat posts. Add a post, or turn repeats on."
         )
     # Rested, and still unavailable: every candidate is either mid-flight on
     # this account or already promised to an earlier slot in this same plan.
@@ -1133,6 +1153,7 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
         "disclosure": autopilot.disclosure,
         "bio_hint": autopilot.bio_hint,
         "min_recycle_days": autopilot.min_recycle_days,
+        "repeat_posts": autopilot.repeat_posts,
         "daily_cap_per_account": autopilot.daily_cap_per_account,
         "weekly_post_cap": autopilot.weekly_post_cap,
         "posts_scheduled": autopilot.posts_scheduled,

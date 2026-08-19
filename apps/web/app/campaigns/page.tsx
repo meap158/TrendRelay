@@ -364,7 +364,6 @@ export default function CampaignsPage() {
             // created yet corrects its wording without inventing a policy.
             ...(policy ? {
               max_products_per_post: Number(form.get("max_products_per_post")),
-              min_recycle_days: Number(form.get("min_recycle_days")),
               daily_cap_per_account: Number(form.get("daily_cap_per_account")),
               authority: form.get("authority"),
               priority: form.get("priority"),
@@ -652,11 +651,11 @@ export default function CampaignsPage() {
                     defaultValue={policy.max_products_per_post} />
                   <small>Bio-only networks still use one and rotate across posts.</small>
                 </label>
-                <label>Rest days
-                  <input type="number" name="min_recycle_days" min={1} max={365}
-                    defaultValue={policy.min_recycle_days} />
-                  <small>Before the same item may go to the same account again.</small>
-                </label>
+                {/* The rest interval moved to "How this campaign posts",
+                    where the rule it belongs to is written out. Set in two
+                    places it was also *stated* in only one of them, and the
+                    number here governed nothing at all on a campaign that
+                    posts each item once. */}
               </div>
               <div className="campaign-dialog-grid">
                 <label>Posts per account per day

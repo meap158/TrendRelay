@@ -397,10 +397,14 @@ def _linked_campaign(session, tmp_path, platform: str):
 
     run_campaign(session, pilot, now=NOW)
     # Free the first day's execution so the item is eligible again, then run a
-    # second day with the recycle window shrunk out of the way.
+    # second day with the recycle window shrunk out of the way. Repeats have to
+    # be asked for: a campaign posts each item once per account by default, and
+    # this test is about what a second posting carries, not about whether one
+    # happens.
     for execution in executions(session):
         settle_job(session, execution.job_id, "succeeded", result={"post_ids": []})
     reconcile_executions(session, now=NOW)
+    pilot.repeat_posts = True
     pilot.min_recycle_days = 1
     session.commit()
     run_campaign(session, pilot, now=NOW.replace(day=NOW.day + 1))

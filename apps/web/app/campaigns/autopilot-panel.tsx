@@ -138,6 +138,8 @@ type Autopilot = {
   disclosure: string;
   bio_hint: string;
   min_recycle_days: number;
+  /** Whether a post may go out more than once on the same account at all. */
+  repeat_posts: boolean;
   daily_cap_per_account: number;
   weekly_post_cap: number | null;
   /** The language the composed scaffolding speaks. */
@@ -636,10 +638,16 @@ function PostingStrategy({
   autopilot,
   destinations,
   slots,
+  canEdit,
+  busy,
+  onChange,
 }: {
   autopilot: Autopilot;
   destinations: Destination[];
   slots: Slot[];
+  canEdit: boolean;
+  busy: boolean;
+  onChange: (changes: Partial<Autopilot>) => void;
 }) {
   const accounts = destinations.length;
   const perDay = slots.length;
@@ -666,10 +674,39 @@ function PostingStrategy({
       </li>
       <li>
         <b>Repeats</b>
-        <span>A post that goes out returns to the back of the queue rather
-          than being used up. It will not go to the <em>same</em> account again
-          for {autopilot.min_recycle_days} days, though another account can
-          take it sooner - the same clip on two accounts is two audiences.</span>
+        {/* The one rule people want to change while reading it. It decides
+            whether an audience sees the same video twice, and reading it in a
+            card and setting it in a dialog two clicks away is how somebody
+            ends up unsure which of the two they actually did. */}
+        <span>
+          {autopilot.repeat_posts
+            ? <>A post that goes out returns to the back of the queue. It will
+                not go to the <em>same</em> account again for{" "}
+                <input
+                  className="campaign-strategy-days"
+                  type="number" min={1} max={365}
+                  defaultValue={autopilot.min_recycle_days}
+                  disabled={!canEdit || busy}
+                  aria-label="Days before a post may return to the same account"
+                  onBlur={(event) => {
+                    const days = Number(event.currentTarget.value);
+                    if (days >= 1 && days <= 365 && days !== autopilot.min_recycle_days) {
+                      onChange({ min_recycle_days: days });
+                    }
+                  }}
+                /> days, though another account can take it sooner - the same
+                clip on two accounts is two audiences.</>
+            : <>Each post goes out <em>once per account</em>. The same video
+                and caption never reach the same audience twice unless you turn
+                repeats on, though another account can still take it.</>}
+          {canEdit && (
+            <button type="button" className="campaign-strategy-toggle"
+              disabled={busy}
+              onClick={() => onChange({ repeat_posts: !autopilot.repeat_posts })}>
+              {autopilot.repeat_posts ? "Post each once instead" : "Allow repeats"}
+            </button>
+          )}
+        </span>
       </li>
       <li>
         <b>Limits</b>
@@ -1308,6 +1345,7 @@ export function AutopilotPanel({
           disclosure: next.disclosure,
           bio_hint: next.bio_hint,
           min_recycle_days: next.min_recycle_days,
+          repeat_posts: next.repeat_posts,
           daily_cap_per_account: next.daily_cap_per_account,
           weekly_post_cap: next.weekly_post_cap,
           delivery: next.delivery,
@@ -3075,6 +3113,9 @@ export function AutopilotPanel({
           autopilot={autopilot}
           destinations={destinations}
           slots={slots}
+          canEdit={canEdit}
+          busy={busy === "settings"}
+          onChange={(changes) => void save(changes)}
         />
       </Card>}
       {<Card title="Posting times" aside={

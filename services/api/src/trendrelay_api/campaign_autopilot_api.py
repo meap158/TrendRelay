@@ -99,6 +99,9 @@ class AutopilotSettings(BaseModel):
     disclosure: str = Field(default="Affiliate link; we may earn a commission.", max_length=500)
     bio_hint: str = Field(default="Link in bio", max_length=120)
     min_recycle_days: int = Field(default=30, ge=1, le=365)
+    #: Whether a post may go out more than once on the same account at all.
+    #: The interval above only applies when it may.
+    repeat_posts: bool = False
     daily_cap_per_account: int = Field(default=2, ge=1, le=24)
     delivery: str = Field(default="schedule", pattern=r"^(draft|schedule|now)$")
     #: How much the campaign may do alone. Run by exception is the recommended
@@ -446,6 +449,7 @@ def save_autopilot(
         body.post_language, "bio_hint"
     )
     autopilot.min_recycle_days = body.min_recycle_days
+    autopilot.repeat_posts = body.repeat_posts
     autopilot.daily_cap_per_account = body.daily_cap_per_account
     if body.authority == "autonomous" and autopilot.authority != "autonomous":
         blocked = graduation_block(session, campaign_id)

@@ -177,6 +177,7 @@ class CampaignUpdate(BaseModel):
     #: correcting the audience must not have to restate the caps, and must not
     #: reset them by leaving them out.
     min_recycle_days: int | None = Field(default=None, ge=1, le=365)
+    repeat_posts: bool | None = None
     daily_cap_per_account: int | None = Field(default=None, ge=1, le=24)
     weekly_post_cap: int | None = Field(default=None, ge=1, le=200)
     #: Explicitly nullable and distinguishable from "not sent": no cap is a
@@ -551,6 +552,7 @@ def update_campaign(
         policy = {
             "max_products_per_post": body.max_products_per_post,
             "min_recycle_days": body.min_recycle_days,
+            "repeat_posts": body.repeat_posts,
             "daily_cap_per_account": body.daily_cap_per_account,
             "authority": body.authority,
             "priority": body.priority,

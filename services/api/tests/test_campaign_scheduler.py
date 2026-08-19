@@ -554,8 +554,8 @@ def test_bio_only_posts_rotate_one_product_instead_of_claiming_many_links(sessio
     assert all("https://tr.example" not in post.caption for post in posts)
 
 
-def test_an_item_posted_recently_to_this_account_is_held_back(session) -> None:
-    """Reposting the same clip to the same account too soon is what gets flagged."""
+def test_an_item_already_posted_to_this_account_does_not_go_again(session) -> None:
+    """A post goes out once per account unless the campaign asks for repeats."""
     destination(session, "d1", "youtube")
     slot(session, 12)
     queue_item(
@@ -564,7 +564,35 @@ def test_an_item_posted_recently_to_this_account_is_held_back(session) -> None:
     )
     posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert posts == []
+    assert "does not repeat" in note
+
+
+def test_a_repeating_campaign_holds_an_item_until_it_has_rested(session) -> None:
+    """With repeats on, the rest interval is what governs - and it says so."""
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(
+        session, "q1",
+        last_posted_by_destination={"d1": (NOW - timedelta(days=3)).isoformat()},
+    )
+    posts, note = plan_campaign(
+        session, autopilot(session, repeat_posts=True), now=NOW, link_for=None,
+    )
+    assert posts == []
     assert "rested 30 days" in note
+
+
+def test_a_repeating_campaign_sends_an_item_again_once_it_has_rested(session) -> None:
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(
+        session, "q1",
+        last_posted_by_destination={"d1": (NOW - timedelta(days=31)).isoformat()},
+    )
+    posts, _ = plan_campaign(
+        session, autopilot(session, repeat_posts=True), now=NOW, link_for=None,
+    )
+    assert [post.queue_item_id for post in posts] == ["q1"]
 
 
 def test_rest_is_per_destination_not_per_item(session) -> None:
@@ -943,10 +971,15 @@ class _Item:
     """Stands in for a queue row; the helper only counts them."""
 
 
-def _why(queue, approved, rested):
+def _why(queue, approved, rested, *, repeat_posts: bool = True):
+    """The four states, asked of a campaign that repeats unless told otherwise.
+
+    Repeating is the case the rest interval governs, so it stays the default
+    here; the campaign that never repeats has its own test below.
+    """
     return scheduler._why_nothing_eligible(
         queue, approved, rested=rested, label="halcyonbooks.official",
-        min_recycle_days=30,
+        min_recycle_days=30, repeat_posts=repeat_posts,
     )
 
 
@@ -975,6 +1008,20 @@ def test_approved_but_unrested_keeps_the_sentence_that_was_always_right() -> Non
     note = _why([_Item()], [_Item()], [])
 
     assert note == "Nothing approved has rested 30 days on halcyonbooks.official."
+
+
+def test_a_campaign_that_never_repeats_is_not_sent_to_the_rest_interval() -> None:
+    """The interval governs nothing when nothing comes back.
+
+    Told "nothing has rested 30 days", somebody on a campaign that posts each
+    item once would go looking for a control that is not the one holding
+    anything back.
+    """
+    said = _why([_Item()], [_Item()], [], repeat_posts=False)
+
+    assert "rested" not in said
+    assert "already gone out" in said
+    assert "does not repeat" in said
 
 
 def test_rested_but_committed_elsewhere_is_its_own_answer() -> None:
