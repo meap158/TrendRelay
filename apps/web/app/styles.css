@@ -50,6 +50,30 @@ nav strong { color: var(--text); }
 .tool-runs.local { color: var(--muted); background: var(--panel-raised); }
 .tool-runs.network { color: var(--link); background: var(--link-bg); }
 .tool-category { color: var(--muted); font-size: 10px; }
+
+/* The assistant group, shaped like the platform-access rows above it rather
+   than like a tool card.
+ *
+ * It is the same kind of thing as those: not a model that does work, but a way
+ * in. A full card would give one way-in the visual weight of nine models, and
+ * it sits directly under them so the two should read as one idea. */
+.tool-surface-compact { margin-top: 12px; }
+.tool-compact-list { display: grid; gap: 6px; }
+.tool-compact { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px 14px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); }
+.tool-compact > span:first-child { display: grid; gap: 3px; min-width: 0; }
+.tool-compact strong { font-size: 12px; font-weight: 700; }
+.tool-compact small { color: var(--muted); font-size: 11px; }
+.tool-compact-meta { display: flex; gap: 6px; align-items: center; }
+/* The state reads as a word, not a badge: there is one row here, so it needs
+   no colour to be found. */
+.tool-compact-meta b { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: capitalize; }
+.tool-compact-actions { display: flex; gap: 4px; align-items: center; }
+.tool-compact-actions a { display: inline-flex; gap: 4px; align-items: center; border-radius: var(--radius-sm); padding: 4px 8px; color: var(--muted); font-size: 11px; }
+.tool-compact-actions a:hover { color: var(--text); background: var(--panel-raised); }
+@media (max-width: 640px) {
+  /* Three columns become one before the name starts truncating. */
+  .tool-compact { grid-template-columns: 1fr; }
+}
 .tool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 10px; }
 .tool-card { display: flex; flex-direction: column; min-height: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .tool-card-top, .tool-meta, .capabilities, .tool-footer, .tool-actions, .status-stack { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
@@ -291,7 +315,7 @@ nav strong { color: var(--text); }
 /* Ready engines carry their accent; the rest are visibly not carrying posts.
    The state is on the card itself, not only in a word beside the title. */
 .engine-card.engine-ready { border-color: var(--engine-accent, var(--green)); background: var(--panel); box-shadow: inset 3px 0 0 var(--engine-accent, var(--green)); }
-.engine-card.engine-rejected, .engine-card.engine-unreachable { box-shadow: inset 3px 0 0 #c0392b; }
+.engine-card.engine-rejected, .engine-card.engine-unreachable { box-shadow: inset 3px 0 0 var(--bad); }
 .engine-card.engine-no-accounts { box-shadow: inset 3px 0 0 var(--amber); }
 .engine-card.engine-no-key { opacity: .82; }
 /* Detail then remedy, always in that order: a state with no next step is a
@@ -390,7 +414,7 @@ nav strong { color: var(--text); }
 .hosting-probe li::marker { color: var(--muted); font-variant-numeric: tabular-nums; }
 .hosting-probe li b { display: block; font-weight: 600; }
 .hosting-probe li.ok b { color: var(--green); }
-.hosting-probe li.bad b { color: var(--bad); }
+.hosting-probe li.bad b { color: #c0392b; }
 .hosting-probe li span { color: var(--muted); }
 .hosting-status { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .hosting-status b { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }

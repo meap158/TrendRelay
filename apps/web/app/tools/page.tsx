@@ -21,6 +21,8 @@ type Tool = {
   license: string;
   license_url: string;
   category: string;
+  /** A path into `docs/`, where the catalogue records one. */
+  documentation?: string;
   /** Which tab this tool's work shows up in. */
   surface: "discover" | "download" | "library" | "assistant";
   /** Whether it stays on this machine or reaches a third party. */
@@ -44,7 +46,16 @@ type Tool = {
  * inventing a second one - a group called "Media intelligence" sitting above
  * tools that power the Library is a name nobody can act on.
  */
-const SURFACES: { id: string; label: string; blurb: string }[] = [
+const SURFACES: { id: string; label: string; blurb: string; compact?: boolean }[] = [
+  {
+    // First, and directly under platform access, because it is the same kind
+    // of thing: not a model that does work, but a way in. It reads as one of
+    // those rows rather than as a third-party tool card.
+    id: "assistant",
+    label: "tools.assistant",
+    blurb: "What an assistant can do on your behalf.",
+    compact: true,
+  },
   {
     id: "discover",
     label: "nav.discover",
@@ -61,11 +72,6 @@ const SURFACES: { id: string; label: string; blurb: string }[] = [
     id: "library",
     label: "nav.library",
     blurb: "Models that read and edit your media, on this machine.",
-  },
-  {
-    id: "assistant",
-    label: "tools.assistant",
-    blurb: "What an assistant can do on your behalf.",
   },
 ];
 
@@ -418,7 +424,11 @@ export default function ToolsPage() {
         .map((surface) => {
         const inSurface = tools.filter((tool) => tool.surface === surface.id);
         return (
-          <section className="tool-surface" key={surface.id} aria-label={t(surface.label)}>
+          <section
+            className={`tool-surface${surface.compact ? " tool-surface-compact" : ""}`}
+            key={surface.id}
+            aria-label={t(surface.label)}
+          >
             <header className="tool-surface-head">
               {/* The count belongs to the heading, so it sits in it. Pushed to
                   the far end it read as a stray number with no owner, and a
@@ -435,6 +445,36 @@ export default function ToolsPage() {
               </h2>
               <p>{surface.blurb}</p>
             </header>
+            {surface.compact ? (
+              /* The same row the platform-access guides use: a name, what it
+                 is, how it connects, and the way in. A full tool card here
+                 would give a single way-in the weight of nine models. */
+              <div className="tool-compact-list">
+                {inSurface.map((tool) => (
+                  <div className="tool-compact" key={tool.id}>
+                    <span>
+                      <strong>{tool.name}</strong>
+                      <small>{tool.summary}</small>
+                    </span>
+                    <span className="tool-compact-meta">
+                      <span className={`tool-runs ${tool.runs}`}>
+                        {t(tool.runs === "local" ? "tools.runsLocal" : "tools.runsNetwork")}
+                      </span>
+                      <b>{tool.active ? "Active" : tool.installed ? "Installed" : tool.integration_status}</b>
+                    </span>
+                    <span className="tool-compact-actions">
+                      <a href={tool.repository} target="_blank" rel="noreferrer">
+                        <ActionIcon name="link" />GitHub
+                      </a>
+                      <a href={tool.documentation ? `/${tool.documentation}` : tool.repository}
+                        target="_blank" rel="noreferrer">
+                        <ActionIcon name="setup" />{t("publish.docs")}
+                      </a>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
             <div className="tool-grid">
               {inSurface.map((tool) => (
           <article className="tool-card" key={tool.id}>
@@ -488,6 +528,7 @@ export default function ToolsPage() {
           </article>
               ))}
             </div>
+            )}
           </section>
         );
       })}
