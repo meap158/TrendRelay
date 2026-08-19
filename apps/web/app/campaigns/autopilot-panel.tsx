@@ -513,6 +513,21 @@ function displayTitle(value: string | null): string | null {
   return value ? value.replace(/\.(mp4|mov|webm|mkv|avi|jpg|jpeg|png|webp)$/i, "") : value;
 }
 
+/* Which queue package a held post was frozen from, so approval traces back to
+   the row in "What it posts" instead of floating free of it. The frozen title
+   matches that row's own name; its clip's filename is the fallback when the
+   post carries no title (a Threads post, say). */
+function heldSourceName(item: HeldExecution): string | null {
+  const titled = displayTitle(item.title);
+  if (titled && titled.trim()) return titled.trim();
+  if (item.media_path) {
+    const base = item.media_path.split(/[\\/]/).pop() ?? "";
+    const trimmed = displayTitle(base);
+    if (trimmed && trimmed.trim()) return trimmed.trim();
+  }
+  return null;
+}
+
 /* The browser reports a dead connection as the subjectless "Failed to
    fetch"; the person reading the toast needs to know it was the local API
    that did not answer, not which browser API gave up. */
@@ -1746,6 +1761,14 @@ export function AutopilotPanel({
                       ? ` · ${new Date(item.scheduled_at).toLocaleString()}`
                       : ""}
                   </small>
+                  {/* Where this held post came from, so it lines up with its
+                      row in "What it posts" below rather than reading as a
+                      separate, unexplained item. */}
+                  {heldSourceName(item) && (
+                    <small className="campaign-approval-source">
+                      From <strong>{heldSourceName(item)}</strong> in your queue
+                    </small>
+                  )}
                   {editingHeld?.id === item.id ? (
                     /* The rewrite: everything the post says is the
                        operator's to change; the media stays frozen. The
