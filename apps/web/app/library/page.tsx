@@ -1127,20 +1127,35 @@ export default function LibraryPage() {
     setMessage("");
     try {
       const totals = { queued: 0, skipped: 0, failed: 0, missing: 0 };
+      // Kept rather than thrown. A batch that fails used to abandon the whole
+      // run, so everything the earlier batches had queued vanished from the
+      // report while their jobs went on working - the screen said the action
+      // had not started and the queue disagreed.
+      let interrupted = "";
+      let handled = 0;
       for (const [index, batch] of batches.entries()) {
         if (batches.length > 1) {
           setMessage(`${action.verb}: batch ${index + 1} of ${batches.length}…`);
         }
-        const response = await apiFetch(`/api/workspaces/${workspaceId}/media/library/bulk`, {
-          method: "POST",
-          body: JSON.stringify({
-            action: action.id, asset_ids: batch, confirm_external_action: true,
-          }),
-        });
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.detail ?? `${action.label} could not start.`);
-        for (const key of ["queued", "skipped", "failed", "missing"] as const) {
-          totals[key] += body.counts[key] ?? 0;
+        try {
+          const response = await apiFetch(`/api/workspaces/${workspaceId}/media/library/bulk`, {
+            method: "POST",
+            body: JSON.stringify({
+              action: action.id, asset_ids: batch, confirm_external_action: true,
+            }),
+          });
+          const body = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(body.detail ?? `${action.label} could not start.`);
+          }
+          for (const key of ["queued", "skipped", "failed", "missing"] as const) {
+            totals[key] += body.counts?.[key] ?? 0;
+          }
+          handled += batch.length;
+        } catch (reason) {
+          interrupted = reason instanceof Error
+            ? reason.message : `${action.label} could not start.`;
+          break;
         }
       }
       const { queued, skipped, failed, missing } = totals;
@@ -1150,9 +1165,18 @@ export default function LibraryPage() {
       if (skipped) parts.push(`${skipped} skipped`);
       if (failed) parts.push(`${failed} failed`);
       if (missing) parts.push(`${missing} missing`);
-      setMessage(`${action.verb}: ${parts.join(" · ")}.`);
+      if (interrupted) {
+        fail(`${interrupted} ${handled} of ${ids.length} were handled `
+          + `(${parts.join(" · ")}); the rest were not.`);
+      } else {
+        setMessage(`${action.verb}: ${parts.join(" · ")}.`);
+      }
       if (queued) {
-        setSelection(new Set());
+        // Only what went through, so anything left behind stays picked and can
+        // be run again without finding it in the grid a second time.
+        setSelection((current) => new Set(
+          [...current].filter((id) => !ids.slice(0, handled).includes(id)),
+        ));
         // Deleting changes the list itself, so it has to be read again.
         if (action.id === "delete") await refresh(workspaceId);
       }

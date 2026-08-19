@@ -2013,7 +2013,12 @@ def submit_render(
         # avoids a render and its editable stack ever disagreeing about values
         # filled from defaults or normalised from form input.
         request.steps = normalised
-        job = create_render_job(request)
+        # On the request's own session. `ensure_profile` above writes a row for
+        # a user acting for the first time, and a job queued on a second
+        # connection would then wait out the busy timeout behind it. Sharing
+        # the transaction also means the queued job and the recipe it renders
+        # arrive together or not at all.
+        job = create_render_job(request, session=session)
     except PermissionError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except (EffectError, ValidationError, ValueError) as error:
