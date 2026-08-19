@@ -214,6 +214,22 @@ type PreviewPost = {
   problem: string | null;
 };
 
+/** A product this campaign is allowed to promote. */
+type TaggedProduct = {
+  offer_id: string;
+  product_id: string;
+  name: string;
+  brand?: string | null;
+  category?: string | null;
+  marketplace?: string | null;
+  network: string;
+  availability: string;
+  commission_bps?: number | null;
+  commission_flat_cents?: number | null;
+  currency?: string | null;
+  price_cents?: number | null;
+};
+
 type Offer = {
   id: string;
   network: string;
@@ -1008,6 +1024,10 @@ export function AutopilotPanel({
   const [offers, setOffers] = useState<Offer[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendations | null>(null);
   const [productItem, setProductItem] = useState<QueueItem | null>(null);
+  /** The products this campaign may promote, and whether the picker is open. */
+  const [tagged, setTagged] = useState<TaggedProduct[]>([]);
+  const [addingProducts, setAddingProducts] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
   const [pinnedOffers, setPinnedOffers] = useState<Set<string>>(new Set());
   const [slots, setSlots] = useState<Slot[]>([]);
   const [scheduleTimezone, setScheduleTimezone] = useState("UTC");
@@ -1442,6 +1462,53 @@ export function AutopilotPanel({
     });
   }
 
+  /**
+   * What this campaign may promote.
+   *
+   * Its own list, not the workspace's: matching ranks these and nothing else,
+   * so this is the answer to "why did nothing attach" as much as it is a list.
+   */
+  const loadTagged = useCallback(async () => {
+    const body = await json<{ products: TaggedProduct[] }>(
+      await apiFetch(`${base}/products`),
+    );
+    setTagged(body.products);
+  }, [apiFetch, base]);
+
+  async function tagProducts(offerIds: string[]) {
+    if (!offerIds.length) return;
+    await run("tag-products", async () => {
+      const body = await json<{ tagged: number; already: number; products: TaggedProduct[] }>(
+        await apiFetch(`${base}/products`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ offer_ids: offerIds }),
+        }),
+      );
+      setTagged(body.products);
+      // Refreshed because what may be attached has changed, and the queue rows
+      // show what each post would carry.
+      await refresh();
+      return body.tagged
+        ? `${body.tagged} product${body.tagged === 1 ? "" : "s"} added.`
+        : "Already on this campaign.";
+    });
+  }
+
+  async function untagProduct(offerId: string, name: string) {
+    if (!window.confirm(
+      `Stop this campaign promoting ${name}? Posts already sent keep their links.`
+    )) return;
+    await run("tag-products", async () => {
+      const body = await json<{ products: TaggedProduct[] }>(
+        await apiFetch(`${base}/products/${offerId}`, { method: "DELETE" }),
+      );
+      setTagged(body.products);
+      await refresh();
+      return `${name} removed.`;
+    });
+  }
+
   async function loadDraftMatches() {
     setDraftProductMode("manual");
     if (draftMatches) return;
@@ -1573,6 +1640,16 @@ export function AutopilotPanel({
     automaticPreview.current = true;
     void loadPreview(false);
   }, [campaignStatus, loadPreview, preview, ready.configured]);
+
+  // What this campaign may promote, read once the panel knows which campaign
+  // it is. Nothing else on the screen can be judged without it: an empty
+  // ranking means one thing when the list is empty and another when it is not.
+  const loadedTags = useRef(false);
+  useEffect(() => {
+    if (loadedTags.current) return;
+    loadedTags.current = true;
+    void loadTagged();
+  }, [loadTagged]);
 
   if (!autopilot) return null;
 
@@ -3265,40 +3342,153 @@ export function AutopilotPanel({
 
           {autopilot.offer_mode === "smart" && (
             <div className="campaign-product-intelligence">
-              {/* Named for the one thing this block does that nothing else
-                  does. It used to be headed "Best-fit products" over a
-                  description of how ranking works - which the queue rows now
-                  answer per post, and Review products answers per post in
-                  detail. Narrowing the pool smart matching may draw from is
-                  the decision that lives only here. */}
+              {/* What this campaign may promote, which is now a fact rather
+                  than a hint. Nothing here means nothing is attached: smart
+                  matching ranks these products and no others, and a pin can
+                  only name one of them. The list used to be a "shortlist" that
+                  narrowed an otherwise unlimited pool, which nobody filled in
+                  - so campaigns ranked the whole catalogue. */}
               <div className="campaign-product-heading">
                 <div>
-                  <strong>Which products this campaign may use</strong>
-                  <small>Smart matching draws from every imported offer.
-                    Shortlist to narrow it to a few.</small>
+                  <strong>Products this campaign may promote</strong>
+                  <small>{tagged.length
+                    ? `Smart matching chooses from these ${tagged.length}. Nothing else is offered, here or on a post.`
+                    : "None yet. Until one is added, posts go out with no product attached."}</small>
                 </div>
-                <Button variant="secondary" size="sm" busy={busy === "recommendations"}
-                  onClick={() => void loadRecommendations()}>Rank all products</Button>
+                {canEdit && (
+                  <Button variant={tagged.length ? "secondary" : "primary"} size="sm"
+                    busy={busy === "offers"}
+                    onClick={() => setAddingProducts(true)}>
+                    <ActionIcon name="add" />Add products
+                  </Button>
+                )}
               </div>
-              {autopilot.candidate_offer_ids.length > 0 && (
-                <div className="campaign-shortlist-note">
-                  Matching is limited to {autopilot.candidate_offer_ids.length} shortlisted product{autopilot.candidate_offer_ids.length === 1 ? "" : "s"}.
-                  <Button variant="quiet" size="sm" onClick={() => void save({ candidate_offer_ids: [] })}>Use all offers</Button>
+
+              {tagged.length > 0 && (
+                <ul className="campaign-tagged-products">
+                  {tagged.map((product) => (
+                    <li key={product.offer_id}>
+                      <span>
+                        <strong>{product.name}</strong>
+                        <small>{[
+                          product.brand,
+                          product.category,
+                          product.marketplace ?? product.network,
+                          commissionLabel(product),
+                        ].filter(Boolean).join(" · ")}</small>
+                      </span>
+                      {/* Said where it matters: an unavailable product stays
+                          tagged and stops being attached, which is a different
+                          thing from having been removed. */}
+                      {product.availability === "unavailable" && (
+                        <Badge tone="warn">unavailable</Badge>
+                      )}
+                      {canEdit && (
+                        <Button variant="quiet" size="sm" busy={busy === "tag-products"}
+                          onClick={() => void untagProduct(product.offer_id, product.name)}>
+                          Remove
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {addingProducts && (
+                <div className="campaign-product-picker">
+                  <div className="autopilot-picker-head">
+                    <span>
+                      <strong>Add products</strong>
+                      <small>Imported offers from Attribution. Adding one here
+                        is the same as tagging it to this campaign there.</small>
+                    </span>
+                    <Button variant="quiet" size="sm"
+                      onClick={() => { setAddingProducts(false); setProductSearch(""); }}>
+                      {t("common.close")}
+                    </Button>
+                  </div>
+                  <input
+                    className="campaign-product-search"
+                    value={productSearch}
+                    placeholder="Search imported products…"
+                    aria-label="Search imported products"
+                    onChange={(event) => setProductSearch(event.target.value)}
+                  />
+                  {(() => {
+                    const held = new Set(tagged.map((product) => product.offer_id));
+                    const term = productSearch.trim().toLowerCase();
+                    const available = offers
+                      .filter((offer) => !held.has(offer.id))
+                      .filter((offer) => !term
+                        || offer.product.name.toLowerCase().includes(term)
+                        || (offer.product.brand ?? "").toLowerCase().includes(term));
+                    if (!offers.length) {
+                      return <p className="autopilot-empty">
+                        No products imported yet. Import them in Attribution.
+                      </p>;
+                    }
+                    if (!available.length) {
+                      return <p className="autopilot-empty">{term
+                        ? "No imported product matches that."
+                        : "Every imported product is already on this campaign."}</p>;
+                    }
+                    return (
+                      <>
+                        {/* Everything matching, in one action. Tagging forty
+                            products one at a time is the reason people give up
+                            and leave the campaign empty. */}
+                        {term && available.length > 1 && (
+                          <Button variant="secondary" size="sm" busy={busy === "tag-products"}
+                            onClick={() => void tagProducts(available.map((offer) => offer.id))}>
+                            Add all {available.length} matching
+                          </Button>
+                        )}
+                        <ul className="campaign-product-choices">
+                          {available.slice(0, 60).map((offer) => (
+                            <li key={offer.id}>
+                              <span>
+                                <strong>{offer.product.name}</strong>
+                                <small>{[
+                                  offer.product.brand,
+                                  offer.product.marketplace ?? offer.network,
+                                  commissionLabel(offer),
+                                ].filter(Boolean).join(" · ")}</small>
+                              </span>
+                              <Button variant="secondary" size="sm"
+                                busy={busy === "tag-products"}
+                                onClick={() => void tagProducts([offer.id])}>Add</Button>
+                            </li>
+                          ))}
+                        </ul>
+                        {available.length > 60 && (
+                          <p className="autopilot-empty">
+                            {available.length - 60} more. Search to narrow them.
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
+
+              {/* The ranking, on demand. It explains which of the tagged
+                  products would be chosen and why, which is a different
+                  question from which ones are allowed. */}
+              <div className="campaign-product-heading">
+                <div>
+                  <small>See how these rank against this campaign\u2019s content.</small>
+                </div>
+                <Button variant="quiet" size="sm" busy={busy === "recommendations"}
+                  disabled={!tagged.length}
+                  title={tagged.length ? undefined : "Add a product first."}
+                  onClick={() => void loadRecommendations()}>Rank them</Button>
+              </div>
               {recommendations && !recommendations.item_id && (
                 <>
-                  {/* The four-number strip is gone. Posting times are listed
-                      in full in the card below it, platforms are the accounts
-                      card above it, products per post is in Campaign settings,
-                      and "4 evidence sources" was a number nobody could act
-                      on. How products rotate across posts is not said anywhere
-                      else, so it stays. */}
                   <p className="campaign-rotation-note">{recommendations.strategy.rotation}</p>
                   <ul className="campaign-product-matches">
-                    {recommendations.matches.map((match) => {
-                      const shortlisted = autopilot.candidate_offer_ids.includes(match.offer_id);
-                      return <li key={match.offer_id}>
+                    {recommendations.matches.map((match) => (
+                      <li key={match.offer_id}>
                         <div className="campaign-match-score" data-confidence={match.confidence}>
                           <strong>{match.score}</strong><small>% fit</small>
                         </div>
@@ -3308,22 +3498,19 @@ export function AutopilotPanel({
                           <span>{match.matched_terms.slice(0, 5).map((term) => <em key={term}>{term}</em>)}</span>
                         </div>
                         <Badge
-                        tone={match.confidence === "high" ? "good"
-                          : match.confidence === "medium" ? "warn" : "neutral"}
-                        title={t(`autopilot.matchConfidence.${match.confidence}`)}
-                      >
+                          tone={match.confidence === "high" ? "good"
+                            : match.confidence === "medium" ? "warn" : "neutral"}
+                          title={t(`autopilot.matchConfidence.${match.confidence}`)}
+                        >
                           {match.confidence}
                         </Badge>
-                        <Button variant={shortlisted ? "secondary" : "quiet"} size="sm" disabled={!canEdit}
-                          onClick={() => {
-                            const next = shortlisted
-                              ? autopilot.candidate_offer_ids.filter((id) => id !== match.offer_id)
-                              : [...autopilot.candidate_offer_ids, match.offer_id];
-                            void save({ candidate_offer_ids: next });
-                          }}>{shortlisted ? "Shortlisted" : "Shortlist"}</Button>
-                      </li>;
-                    })}
-                    {!recommendations.matches.length && <li className="autopilot-empty">No usable imported offers match this campaign yet.</li>}
+                      </li>
+                    ))}
+                    {!recommendations.matches.length && (
+                      <li className="autopilot-empty">
+                        Nothing here matches this campaign\u2019s content yet.
+                      </li>
+                    )}
                   </ul>
                 </>
               )}
