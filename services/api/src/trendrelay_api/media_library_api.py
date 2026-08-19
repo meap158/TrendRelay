@@ -2167,6 +2167,33 @@ def submit_batch_render(
         status: sum(1 for item in results if item["status"] == status)
         for status in ("queued", "skipped", "failed", "missing")
     }
+    # What the batch is, now that it is known.
+    #
+    # Each job was stamped with the size of the selection, because that is all
+    # there was to stamp it with while the loop was still running. Anything
+    # skipped or refused then never became a job, so a progress bar counting
+    # towards that number could not finish - a batch of twenty-five that
+    # queued three sat at "3 of 25" and called itself running for ever. The
+    # denominator is how many jobs exist to watch.
+    if jobs:
+        from sqlalchemy.orm.attributes import flag_modified
+
+        queued_ids = [job["id"] for job in jobs]
+        for record in session.scalars(
+            select(DurableJob).where(DurableJob.id.in_(queued_ids))
+        ).all():
+            payload = dict(record.payload or {})
+            marker = dict(payload.get("batch") or {})
+            marker["total"] = len(queued_ids)
+            marker["selected"] = len(wanted)
+            payload["batch"] = marker
+            record.payload = payload
+            flag_modified(record, "payload")
+        for job in jobs:
+            marker = dict(job.get("payload", {}).get("batch") or {})
+            marker["total"] = len(queued_ids)
+            marker["selected"] = len(wanted)
+            job.setdefault("payload", {})["batch"] = marker
     audit(
         session,
         request,

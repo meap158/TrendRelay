@@ -613,6 +613,44 @@ def test_a_batch_queues_the_same_stack_and_skips_incompatible_media(
         assert queued.max_attempts == effect_render.RENDER_MAX_ATTEMPTS
 
 
+def test_a_batch_counts_what_it_queued_not_what_it_was_given(
+    tmp_path, monkeypatch
+) -> None:
+    """The denominator has to be reachable.
+
+    Each job was stamped with the size of the selection, so a batch that
+    skipped an incompatible item counted towards a total it could never reach:
+    the notification sat at "1 of 2" and called itself running for ever.
+    """
+    from trendrelay_api.integrations import effect_render
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    monkeypatch.setattr(effect_render, "approved_source", lambda path: Path(path))
+    monkeypatch.setattr(effect_render, "run_render_job", lambda _job_id: None)
+    workspace = create_workspace()
+    clip = make_asset(workspace, tmp_path, name="counted-clip")
+    picture = make_asset(workspace, tmp_path, name="counted-picture", kind="image")
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/render-batch",
+        json={
+            "asset_ids": [clip, picture],
+            "steps": [{"effect": "speed", "values": {"rate": 1.25}}],
+            "confirm_external_action": True,
+        },
+    )
+
+    assert response.status_code == 202, response.text
+    assert response.json()["counts"]["queued"] == 1
+    with TestingSession() as session:
+        job = session.query(DurableJob).filter_by(kind="media_effect_render").one()
+        # One job exists, so one is what the progress counts towards; the two
+        # that were selected stay on the record as what was asked for.
+        assert job.payload["batch"]["total"] == 1
+        assert job.payload["batch"]["selected"] == 2
+
+
 def test_a_batch_queues_inside_the_request_transaction(tmp_path, monkeypatch) -> None:
     """Every job row is written on the caller's session, not a new connection.
 

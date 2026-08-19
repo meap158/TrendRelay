@@ -96,7 +96,7 @@ function batchOf(job: BaseJob): { id: string; total: number } | null {
  */
 function batchProgress(group: NotificationGroup): {
   total: number; settled: number; failed: number; stalled: number;
-  running: boolean; label: string;
+  running: boolean; short: boolean; label: string;
 } | null {
   const batch = batchOf(group.latest);
   if (!batch) return null;
@@ -114,14 +114,29 @@ function batchProgress(group: NotificationGroup): {
   // because "running" over a batch where three items are stuck is the report
   // somebody watches for twenty minutes before working out that it is wrong.
   const stalled = group.jobs.filter((job) => job.stalled).length;
-  const running = settled < total;
+  // Running means something is still to happen, not that the arithmetic has
+  // not reached the total. A batch whose jobs were never all created - the
+  // rest refused at queueing time - can never reach it, and called itself
+  // running for ever while nothing on the machine was doing anything.
+  const live = group.jobs.filter(
+    (job) => ["queued", "running", "in_progress"].includes(job.status),
+  ).length;
+  const running = live > 0;
+  // Fewer jobs than the batch set out to make. Said rather than hidden: the
+  // difference is work that was asked for and never started.
+  const short = !running && settled < total;
   const label = [
-    running ? `${settled} of ${total} done` : failed
-      ? `${total - failed} of ${total} done` : `All ${total} done`,
+    running
+      ? `${settled} of ${total} done`
+      : short
+        ? `${settled} of ${total} ran · the rest were never queued`
+        : failed
+          ? `${total - failed} of ${total} done`
+          : `All ${total} done`,
     failed ? `${failed} failed` : "",
     stalled ? `${stalled} paused` : "",
   ].filter(Boolean).join(" · ");
-  return { total, settled, failed, stalled, running, label };
+  return { total, settled, failed, stalled, running, short, label };
 }
 
 /**
@@ -171,21 +186,54 @@ export function GlobalNav() {
     ? groups.filter((group) => group.jobs.some((job) => !readKeys.has(notificationKey(job)))).length
     : 0;
 
-  async function cancelEditJob(job: BaseJob) {
-    const workspaceId = job.raw?.workspace_id;
+  /**
+   * Stop what is left of a batch.
+   *
+   * One row stands for every job in it, so its Cancel has to mean the same
+   * thing the row does. Cancelling the newest job of seventy-one and leaving
+   * seventy running is not what anybody pressing it is asking for.
+   *
+   * Only the unfinished ones: a finished render has nothing to stop, and
+   * asking the API to cancel it would report an error about something that
+   * went right.
+   */
+  async function cancelEditBatch(group: NotificationGroup) {
+    const live = group.jobs.filter(
+      (job) => ["queued", "running", "in_progress"].includes(job.status),
+    );
+    if (!live.length) return;
+    const workspaceId = group.latest.raw?.workspace_id;
     if (!workspaceId) return;
-    setCancellingJobId(job.id);
+    if (live.length > 1 && !window.confirm(
+      `Stop the ${live.length} items of this batch that have not finished?`
+    )) return;
+    setCancellingJobId(group.latest.id);
     setCancelError("");
+    const failures: string[] = [];
     try {
-      const response = await apiFetch(
-        `/api/workspaces/${workspaceId}/media/library/effects/jobs/${job.id}/cancel`,
-        { method: "POST" },
-      );
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.detail ?? "The effect job could not be cancelled.");
+      for (const job of live) {
+        try {
+          const response = await apiFetch(
+            `/api/workspaces/${workspaceId}/media/library/effects/jobs/${job.id}/cancel`,
+            { method: "POST" },
+          );
+          if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            failures.push(body.detail ?? `${job.id} could not be stopped.`);
+          }
+        } catch {
+          failures.push(`${job.id} could not be stopped.`);
+        }
+      }
+      // Reported as a count, because a batch that could not stop three of
+      // seventy is one message, not three.
+      if (failures.length) {
+        setCancelError(
+          `${live.length - failures.length} of ${live.length} stopped. `
+          + `${failures[0]}`,
+        );
+      }
       await refreshJobs();
-    } catch (reason) {
-      setCancelError(reason instanceof Error ? reason.message : "The effect job could not be cancelled.");
     } finally {
       setCancellingJobId("");
     }
@@ -376,10 +424,11 @@ export function GlobalNav() {
                             ? <span className={`notification-status status-${
                                 batch.stalled ? "paused"
                                   : batch.running ? "running"
-                                    : batch.failed ? "failed" : "succeeded"}`}>
+                                    : batch.short || batch.failed ? "failed" : "succeeded"}`}>
                                 {batch.stalled ? "part paused"
                                   : batch.running ? "running"
-                                    : batch.failed ? "finished with failures" : "succeeded"}
+                                    : batch.short ? "stopped short"
+                                      : batch.failed ? "finished with failures" : "succeeded"}
                               </span>
                             : job.stalled
                               ? <span className="notification-status status-paused">paused</span>
@@ -461,13 +510,23 @@ export function GlobalNav() {
                         {job.error && <p className="notification-error">{job.error}</p>}
                         <footer>
                           <time dateTime={job.created_at}>{new Date(job.created_at).toLocaleString()}</time>
-                          {job.category === "edit" && ["queued", "running"].includes(job.status) && (
+                          {/* Offered while the batch has something to stop,
+                              not while its newest job happens to be unfinished.
+                              A batch row said "running" with no way to stop it
+                              whenever the latest of its jobs had already
+                              succeeded - and no way to stop it is the correct
+                              answer only when there is nothing left running. */}
+                          {job.category === "edit" && (batch
+                            ? batch.running
+                            : ["queued", "running"].includes(job.status)) && (
                             <Button
                               variant="quiet"
                               size="sm"
                               busy={cancellingJobId === job.id}
-                              onClick={() => void cancelEditJob(job)}
-                            >{t("common.cancel")}</Button>
+                              onClick={() => void cancelEditBatch(group)}
+                            >{batch && batch.running
+                              ? `Cancel the rest`
+                              : t("common.cancel")}</Button>
                           )}
                           {read
                             ? <span className="notification-read-label">{t("notifications.read")}</span>
