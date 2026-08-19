@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     buffer_api_key: str = ""
     buffer_organization_id: str = ""
     youtube_data_api_key: SecretStr = SecretStr("")
+    #: The MCP server binds this loopback port. Not 8080: that is the API's, and
+    #: a contested port besides. Re-declared here so the status surface and the
+    #: server agree on where it is.
+    mcp_port: int = 8765
+    #: Which workspace an MCP caller reaches. Empty resolves to the local
+    #: workspace at launch - the one the operator on this machine owns.
+    mcp_workspace_id: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

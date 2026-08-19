@@ -1,0 +1,198 @@
+"""The MCP server: the allowed operations, and nothing else, over Streamable HTTP.
+
+Built for one workspace and served on loopback. Every tool re-checks the policy
+at the moment it runs rather than trusting that it was only registered because
+it is allowed - a caller may name any tool it likes, and the boundary is the
+check, not the listing. The refused operations in the policy are never
+registered here, so they are absent from the listing and refused by name.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from trendrelay_api.integrations.mcp import context, policy, writes
+
+if TYPE_CHECKING:
+    from mcp.server.fastmcp import FastMCP
+
+INSTRUCTIONS = (
+    "This is a TrendRelay workspace. Help write copy for campaign posts that are "
+    "queued without a caption yet.\n\n"
+    "Start with `list_posts_needing_copy` to see what needs writing, then "
+    "`get_post_context` for one post: it gives the video, the attached product and "
+    "what it pays, every destination the post reaches and where a first comment or "
+    "thread reply lands there, and the campaign's brief. Write with "
+    "`write_caption`, `write_first_comment` and `write_thread` (or `write_post_copy` "
+    "for several at once).\n\n"
+    "You write drafts only. You cannot approve, publish, deploy, connect an account "
+    "or sign in - those stay a person's decision in the app."
+)
+
+
+def _guard(operation: str) -> None:
+    """Refuse an operation the policy does not allow, at call time.
+
+    Every tool below is allowed, so this never fires in normal use. It is here
+    because the boundary must be the check and not the registration: if a
+    refused operation were ever wired up by mistake, it still would not run.
+    """
+    if not policy.is_allowed(operation):
+        raise PermissionError(policy.refusal_reason(operation))
+
+
+def build_server(workspace_id: str) -> FastMCP:
+    """A Streamable-HTTP MCP server scoped to one workspace."""
+    from mcp.server.fastmcp import FastMCP
+
+    from trendrelay_api.config import get_settings
+
+    settings = get_settings()
+    server = FastMCP(
+        name="TrendRelay",
+        instructions=INSTRUCTIONS,
+        host="127.0.0.1",
+        port=int(getattr(settings, "mcp_port", 0) or 8765),
+        # Stateful Streamable HTTP, the mode a standard MCP client and the tunnel
+        # expect: the session is negotiated on initialize and carried by header.
+        # Stateless mode terminates the handshake a normal client makes.
+        stateless_http=False,
+    )
+
+    def _read(operation: str, fn) -> Any:
+        from trendrelay_api.database import SessionFactory
+
+        _guard(operation)
+        with SessionFactory() as session:
+            return fn(session)
+
+    def _write(operation: str, fn) -> Any:
+        from trendrelay_api.database import SessionFactory
+
+        _guard(operation)
+        with SessionFactory() as session:
+            return fn(session)
+
+    @server.tool(
+        name="list_campaigns",
+        description="Every campaign in the workspace, with how many posts still need a caption.",
+    )
+    def list_campaigns() -> list[dict[str, Any]]:
+        return _read("list_campaigns", lambda s: context.list_campaigns(s, workspace_id))
+
+    @server.tool(
+        name="list_posts_needing_copy",
+        description=(
+            "Posts that are queued but have no caption written yet. Pass a "
+            "campaign_id to narrow it. Each entry says what the clip is and what it sells."
+        ),
+    )
+    def list_posts_needing_copy(campaign_id: str | None = None) -> list[dict[str, Any]]:
+        return _read(
+            "list_posts_needing_copy",
+            lambda s: context.list_posts_needing_copy(s, workspace_id, campaign_id),
+        )
+
+    @server.tool(
+        name="get_post_context",
+        description=(
+            "Everything needed to write one post's copy: the video, the attached "
+            "product and its commission, every destination and where a follow-up "
+            "lands there, the campaign brief, and any copy already written."
+        ),
+    )
+    def get_post_context(item_id: str) -> dict[str, Any]:
+        return _read(
+            "get_post_context",
+            lambda s: context.get_post_context(s, workspace_id, item_id),
+        )
+
+    @server.tool(
+        name="get_campaign_config",
+        description=(
+            "A campaign's brief and posting configuration: objective, audience, "
+            "markets, languages, disclosure line, product mode and cadence."
+        ),
+    )
+    def get_campaign_config(campaign_id: str) -> dict[str, Any]:
+        return _read(
+            "get_campaign_config",
+            lambda s: context.get_campaign_config(s, workspace_id, campaign_id),
+        )
+
+    @server.tool(
+        name="write_caption",
+        description=(
+            "Write the caption (main post text) for a queued post. This is what "
+            "flips it from needing copy to ready for the operator to approve."
+        ),
+    )
+    def write_caption(
+        item_id: str, caption: str, hashtags: list[str] | None = None
+    ) -> dict[str, Any]:
+        return _write(
+            "write_caption",
+            lambda s: writes.write_post_copy(
+                s, workspace_id, item_id, caption=caption, hashtags=hashtags
+            ),
+        )
+
+    @server.tool(
+        name="write_first_comment",
+        description=(
+            "Write the first comment for a post - the reply that carries the "
+            "affiliate link on networks that hide a link in the caption. Check "
+            "get_post_context first for where it will land."
+        ),
+    )
+    def write_first_comment(item_id: str, first_comment: str) -> dict[str, Any]:
+        return _write(
+            "write_first_comment",
+            lambda s: writes.write_post_copy(
+                s, workspace_id, item_id, first_comment=first_comment
+            ),
+        )
+
+    @server.tool(
+        name="write_thread",
+        description=(
+            "Write the thread replies for a post - the follow-up posts on Threads, "
+            "X, Mastodon and Bluesky. Each list entry is one reply, in order."
+        ),
+    )
+    def write_thread(item_id: str, replies: list[str]) -> dict[str, Any]:
+        return _write(
+            "write_thread",
+            lambda s: writes.write_post_copy(s, workspace_id, item_id, thread=replies),
+        )
+
+    @server.tool(
+        name="write_post_copy",
+        description=(
+            "Write several copy fields for a post at once - any of caption, "
+            "first_comment, thread, hashtags, title. A field left unset is not changed."
+        ),
+    )
+    def write_post_copy(
+        item_id: str,
+        caption: str | None = None,
+        first_comment: str | None = None,
+        thread: list[str] | None = None,
+        hashtags: list[str] | None = None,
+        title: str | None = None,
+    ) -> dict[str, Any]:
+        return _write(
+            "write_post_copy",
+            lambda s: writes.write_post_copy(
+                s, workspace_id, item_id,
+                caption=caption, first_comment=first_comment,
+                thread=thread, hashtags=hashtags, title=title,
+            ),
+        )
+
+    return server
+
+
+def exposed_tool_names() -> list[str]:
+    """The tool names a caller will be offered - the allowed operations."""
+    return policy.allowed_operations()

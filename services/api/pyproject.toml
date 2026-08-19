@@ -70,6 +70,13 @@ faces = [
 faces-gpu = [
   "onnxruntime-directml>=1.24,<2",
 ]
+# Assistant access over MCP. Optional so a machine that never exposes its
+# workspace to an outside assistant does not carry the server and its transport.
+# The Tools tab reports it unavailable until installed: pip install -e
+# services/api[mcp].
+mcp = [
+  "mcp>=1.12,<2",
+]
 dev = [
   "httpx>=0.28,<1",
   "pytest>=8.3,<10",
