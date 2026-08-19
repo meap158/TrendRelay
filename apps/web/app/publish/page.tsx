@@ -388,6 +388,9 @@ export default function PublishPage() {
   // This held minted tracking links until ADR 0022 retired them; a post now
   // carries the network's own affiliate URL, which lives on the offer.
   const [linkableProducts, setLinkableProducts] = useState<ProductRow[]>([]);
+  // The workspace's posting clock, not the reader's. Slots are stored as a
+  // wall time and mean nothing without it.
+  const [workspaceZone, setWorkspaceZone] = useState("UTC");
   const [disclosure, setDisclosure] = useState(DEFAULT_DISCLOSURE);
   /**
    * The Pinterest boards of the account this post is going to.
@@ -815,7 +818,10 @@ export default function PublishPage() {
   const hostsLocalMedia = needsPublicMedia && (hosting?.configured ?? false);
   const checking = !connection && !error;
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  const quickSlots = useMemo(() => upcomingSlots(slots, now), [slots, now]);
+  const quickSlots = useMemo(
+    () => upcomingSlots(slots, now, workspaceZone),
+    [slots, now, workspaceZone],
+  );
   // Only work that is still going to happen belongs on a calendar. A draft has
   // no time to keep, and a failed post is history rather than a commitment -
   // showing either would make the week look busier than it is.
@@ -1065,11 +1071,18 @@ export default function PublishPage() {
     if (!workspaceId) return;
     let cancelled = false;
     apiFetch(`/api/workspaces/${workspaceId}/publishing/slots`)
-      .then((response) => json<{ slots: Slot[]; presets: SlotPreset[] }>(response))
+      .then((response) => json<{
+        slots: Slot[]; presets: SlotPreset[]; timezone?: string;
+      }>(response))
       .then((body) => {
         if (cancelled) return;
         setSlots(body.slots);
         setSlotPresets(body.presets);
+        // The clock a slot's hour is written on. It was in this response all
+        // along and thrown away, while the times beside it were built from the
+        // reader's zone instead - which is a different moment whenever the two
+        // disagree.
+        if (body.timezone) setWorkspaceZone(body.timezone);
       })
       .catch(() => undefined);
     return () => { cancelled = true; };

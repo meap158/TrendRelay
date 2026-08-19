@@ -1,5 +1,6 @@
 "use client";
 
+import { zonedInstant, zonedParts } from "../../lib/schedule-time";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { clipLength, fileName, handoffPath, isBlurred } from "../../lib/media-rules";
 import { useEffect, useMemo, useState } from "react";
@@ -485,17 +486,30 @@ export function localValue(value: Date) {
   return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
 }
 
-/** The next occurrences of the configured slots, for a one-click row. */
-export function upcomingSlots(slots: Slot[], now: Date, count = 5) {
+/**
+ * The next occurrences of the configured slots, for a one-click row.
+ *
+ * `timeZone` is the workspace's, because that is the clock a slot's hour is
+ * written on. This used to call `at.setHours(slot.hour, ...)`, which reads the
+ * stored hour as the *reader's* wall clock - so a UTC workspace read from
+ * Bangkok offered every slot seven hours before the scheduler would fire it,
+ * and booking from the row put the post at a time no slot described. The
+ * resulting moment is still shown in the reader's own zone; it is which moment
+ * that was wrong, not how it was displayed.
+ */
+export function upcomingSlots(slots: Slot[], now: Date, timeZone: string, count = 5) {
   const found: { value: string; label: string; day: string }[] = [];
   for (let ahead = 0; ahead < 8 && found.length < count; ahead += 1) {
-    const day = new Date(now);
-    day.setDate(day.getDate() + ahead);
+    const day = new Date(now.getTime() + ahead * 86_400_000);
+    // Which day it is, and which weekday, in the workspace's zone rather than
+    // the reader's - near midnight those disagree.
+    const there = zonedParts(day, timeZone);
     for (const slot of slots) {
       if (found.length >= count) break;
-      if (slot.weekday !== EVERY_DAY && slot.weekday !== weekdayIndex(day)) continue;
-      const at = new Date(day);
-      at.setHours(slot.hour, slot.minute, 0, 0);
+      if (slot.weekday !== EVERY_DAY && slot.weekday !== there.weekday) continue;
+      const at = zonedInstant(
+        there.year, there.month, there.day, slot.hour, slot.minute, timeZone,
+      );
       if (at.getTime() <= now.getTime()) continue;
       found.push({
         value: localValue(at),

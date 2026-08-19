@@ -871,6 +871,19 @@ export function AutopilotPanel({
   const [pinnedOffers, setPinnedOffers] = useState<Set<string>>(new Set());
   const [slots, setSlots] = useState<Slot[]>([]);
   const [scheduleTimezone, setScheduleTimezone] = useState("UTC");
+  /**
+   * Every moment on this page is shown on the reader's own clock.
+   *
+   * It used to be shown on the workspace's, which is the clock a posting
+   * *slot* is written on - a different thing from the moment a post goes
+   * out. With a UTC workspace and a reader seven hours ahead, a post that
+   * fired at four in the morning read "9:00 PM the previous day", and the
+   * day headings grouped it under a day the reader never saw it on.
+   *
+   * The workspace zone is still shown beside the posting times, because
+   * that is where it is the answer: those hours are defined in it.
+   */
+  const readerZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const [preview, setPreview] = useState<
     { note: string; posts: PreviewPost[]; deployed: DeployedPost[]; problems: number } | null
   >(null);
@@ -1562,7 +1575,7 @@ export function AutopilotPanel({
   ].sort((left, right) => left.at.localeCompare(right.at)) : [];
   const timelineDays = Object.entries(
     timeline.reduce<Record<string, TimelineEntry[]>>((days, entry) => {
-      const key = new Date(entry.at).toLocaleDateString("en-CA", { timeZone: scheduleTimezone });
+      const key = new Date(entry.at).toLocaleDateString("en-CA", { timeZone: readerZone });
       (days[key] ??= []).push(entry);
       return days;
     }, {}),
@@ -2992,6 +3005,14 @@ export function AutopilotPanel({
       }>
         <p className="autopilot-lede">
           Shared by every campaign in this workspace; Publish owns them.
+          {/* Said only when the two clocks disagree. A slot's hour is written
+              on the workspace's clock, while every time on this page is shown
+              on yours - which is the same number until the workspace is set to
+              somewhere else, and then silently is not. */}
+          {scheduleTimezone !== readerZone && (
+            <> These hours are {scheduleTimezone}; times elsewhere on this page
+            are shown in your own {readerZone}.</>
+          )}
         </p>
         <div className="campaign-schedule-readonly">
           <Badge tone="neutral">{scheduleTimezone}</Badge>
@@ -3085,10 +3106,10 @@ export function AutopilotPanel({
         {timeline.length > 0 && timelineView === "calendar" && (
           <TimelineCalendar
             entries={timeline}
-            timezone={scheduleTimezone}
+            timezone={readerZone}
             month={calendarMonth
               ?? new Date().toLocaleDateString("en-CA", {
-                timeZone: scheduleTimezone,
+                timeZone: readerZone,
               }).slice(0, 7)}
             onMonthChange={setCalendarMonth}
           />
@@ -3098,7 +3119,7 @@ export function AutopilotPanel({
             {timelineDays.map(([day, entries]) => (
               <section className="campaign-pipeline-day" key={day}>
                 <header>
-                  <strong>{dayHeading(entries[0].at, scheduleTimezone)}</strong>
+                  <strong>{dayHeading(entries[0].at, readerZone)}</strong>
                   <span>{entries.length} {entries.length === 1 ? "post" : "posts"}</span>
                 </header>
                 <ol>
@@ -3128,7 +3149,7 @@ export function AutopilotPanel({
                       >
                         <div className="campaign-pipeline-time">
                           <time dateTime={entry.at}>{new Date(entry.at).toLocaleTimeString(undefined, {
-                            hour: "numeric", minute: "2-digit", timeZone: scheduleTimezone,
+                            hour: "numeric", minute: "2-digit", timeZone: readerZone,
                           })}</time>
                           <i aria-hidden="true" />
                         </div>
