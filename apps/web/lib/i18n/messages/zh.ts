@@ -24,6 +24,8 @@ export const zh: Messages = {
     signOut: "退出登录",
     language: "语言",
     chooseLanguage: "选择语言",
+    timezone: "时区",
+    chooseTimezone: "选择工作区时区",
   },
 
   common: {

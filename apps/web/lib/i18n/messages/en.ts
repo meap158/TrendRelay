@@ -30,6 +30,8 @@ export const en = {
     signOut: "Sign out",
     language: "Language",
     chooseLanguage: "Choose a language",
+    timezone: "Timezone",
+    chooseTimezone: "Choose the workspace timezone",
   },
 
   common: {

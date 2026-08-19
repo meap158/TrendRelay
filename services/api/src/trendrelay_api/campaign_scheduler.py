@@ -641,268 +641,308 @@ def plan_campaign(
         if weekly_cap and week_used + len(scheduled) >= weekly_cap:
             notes.append(f"The weekly cap of {weekly_cap} post(s) is reached.")
             break
-        rank = choose_destination(ranks, posts_so_far=counter)
-        if rank is None:
+        # The cadence's choice first, then the rest in rank order. Falling
+        # through matters more than it sounds: the counter that drives the
+        # cadence only advances when something is scheduled, so an account
+        # that could not take one slot was offered every remaining slot as
+        # well - and a campaign whose leading account was resting posted
+        # nothing at all, while the account beside it sat idle and eligible.
+        chosen = choose_destination(ranks, posts_so_far=counter)
+        if chosen is None:
             break
-        destination = by_id[rank.destination_id]
-        day_key = (destination.id, moment.date())
-        already_planned = planned_per_day.get(day_key, 0)
-        # This campaign's own load, plus what every other campaign has already
-        # put on the same account today. Without the second term the cap is per
-        # account *per campaign*, which is neither what it says nor what stops
-        # an account being posted to twice as often as intended.
-        elsewhere = _account_load_elsewhere(session, autopilot, destination, moment)
-        if (
-            _posted_today(queue, destination, moment)
-            + pending_per_day.get(day_key, 0)
-            + already_planned
-            + elsewhere
-            >= autopilot.daily_cap_per_account
-        ):
-            notes.append(
-                f"{destination.label} is at its daily cap."
-                + (f" {elsewhere} of them from another campaign." if elsewhere else "")
-            )
-            continue
-        if (destination.id, moment) in held_slots or _already_planned_for_slot(
-            queue, destination.id, moment
-        ):
-            notes.append(f"{destination.label} already has a post at this time.")
-            continue
-        eligible = _eligible_items(
-            approved,
-            destination_id=destination.id,
-            now=moment,
-            min_recycle_days=autopilot.min_recycle_days,
-        )
-        eligible = [
-            item
-            for item in eligible
-            # An item already riding an unsettled execution on this account is
-            # spoken for until that execution settles, however long it rested.
-            if (item.id, destination.id) not in held_items
+        candidates = [chosen] + [
+            rank for rank in ranks if rank.destination_id != chosen.destination_id
         ]
-        eligible = [
-            item
-            for item in eligible
-            if (item.id, destination.id) not in reserved
-            or moment - reserved[(item.id, destination.id)]
-            >= timedelta(days=autopilot.min_recycle_days)
-        ]
-        # The same question asked of the account rather than of this campaign's
-        # own history. An audience does not know which campaign sent a clip, so
-        # a rest window that remembers only one of them is not a rest window.
-        # Matched on the Library asset, the identity that survives being queued
-        # in two places.
-        eligible = [
-            item
-            for item in eligible
-            if _rested_elsewhere(
-                session, autopilot, destination, item.asset_id, moment,
-                autopilot.min_recycle_days,
-            )
-        ]
-        if not eligible:
-            notes.append(_why_nothing_eligible(
-                queue,
-                approved,
-                rested=_eligible_items(
-                    approved,
-                    destination_id=destination.id,
-                    now=moment,
-                    min_recycle_days=autopilot.min_recycle_days,
-                ),
-                label=destination.label,
-                min_recycle_days=autopilot.min_recycle_days,
-            ))
-            continue
-        # The first eligible item whose media this network will accept: a
-        # 2160px-wide video is fine on TikTok and refused by Threads, and
-        # routing around the refusal here is what lets one queue feed both
-        # instead of manufacturing the same failed job every tick.
-        # Frozen before composing, because the links minted below carry the
-        # content hash in their sub IDs and the hash comes from the version
-        # being frozen. Once per item per plan: the resolution cannot change
-        # while this plan is being assembled.
-        from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
-        from trendrelay_api.integrations.publishing import (
-            carousel_fits_destination,
-            video_fits_platform,
-        )
-
-        item = None
-        for candidate in eligible:
-            if candidate.body == PLACEHOLDER_BODY:
-                # An unwritten package never reaches an engine, and holding a
-                # slot for it would block the content that is ready.
-                notes.append(
-                    "A post still needs its copy written "
-                    f"({_short_source_name(candidate.title or candidate.id)}); "
-                    "it is skipped until you write it."
+        # Two buffers, both flushed once the slot is settled, because the run
+        # note counts a reason as "N of M slots" and a slot now tries several
+        # accounts - appending as they were found counted one slot as many.
+        #
+        # Why an account could not take this slot is dropped entirely when
+        # another account takes it: that is not a reason anything went
+        # unposted. Why a queue item could not be used is kept either way -
+        # it names something to fix rather than a slot that went empty.
+        slot_notes: list[str] = []
+        item_notes: list[str] = []
+        for rank in candidates:
+            destination = by_id[rank.destination_id]
+            day_key = (destination.id, moment.date())
+            already_planned = planned_per_day.get(day_key, 0)
+            # This campaign's own load, plus what every other campaign has already
+            # put on the same account today. Without the second term the cap is per
+            # account *per campaign*, which is neither what it says nor what stops
+            # an account being posted to twice as often as intended.
+            elsewhere = _account_load_elsewhere(session, autopilot, destination, moment)
+            if (
+                _posted_today(queue, destination, moment)
+                + pending_per_day.get(day_key, 0)
+                + already_planned
+                + elsewhere
+                >= autopilot.daily_cap_per_account
+            ):
+                slot_notes.append(
+                    f"{destination.label} is at its daily cap."
+                    + (f" {elsewhere} of them from another campaign." if elsewhere else "")
                 )
                 continue
-            if candidate.id not in frozen_cache:
-                frozen_cache[candidate.id] = resolve_frozen_media(session, candidate)
-            if candidate.image_paths:
-                # Asked the same question a video is asked, and for the same
-                # reason. A carousel used to be taken by any destination at all:
-                # only Zernio and WoopSocial post one, only to TikTok, so a
-                # workspace whose networks run through Buffer had its pictures
-                # paired with a destination that could never carry them and
-                # found out from the engine after the post was built.
-                fits, why = carousel_fits_destination(
-                    destination.provider, destination.platform, len(candidate.image_paths),
+            if (destination.id, moment) in held_slots or _already_planned_for_slot(
+                queue, destination.id, moment
+            ):
+                slot_notes.append(f"{destination.label} already has a post at this time.")
+                continue
+            eligible = _eligible_items(
+                approved,
+                destination_id=destination.id,
+                now=moment,
+                min_recycle_days=autopilot.min_recycle_days,
+            )
+            # An item already riding an unsettled execution on this account is
+            # spoken for until that execution settles, however long it rested.
+            #
+            # Worth saying out loud when it is the reason a slot went empty. A
+            # campaign whose only written post sits in the approval inbox reads
+            # as a campaign that has stopped, and the run note used to leave
+            # that to be inferred from the one post that was mentioned.
+            spoken_for = [
+                item for item in eligible if (item.id, destination.id) in held_items
+            ]
+            eligible = [
+                item for item in eligible if (item.id, destination.id) not in held_items
+            ]
+
+            eligible = [
+                item
+                for item in eligible
+                if (item.id, destination.id) not in reserved
+                or moment - reserved[(item.id, destination.id)]
+                >= timedelta(days=autopilot.min_recycle_days)
+            ]
+            # The same question asked of the account rather than of this campaign's
+            # own history. An audience does not know which campaign sent a clip, so
+            # a rest window that remembers only one of them is not a rest window.
+            # Matched on the Library asset, the identity that survives being queued
+            # in two places.
+            eligible = [
+                item
+                for item in eligible
+                if _rested_elsewhere(
+                    session, autopilot, destination, item.asset_id, moment,
+                    autopilot.min_recycle_days,
+                )
+            ]
+            if not eligible:
+                slot_notes.append(_why_nothing_eligible(
+                    queue,
+                    approved,
+                    rested=_eligible_items(
+                        approved,
+                        destination_id=destination.id,
+                        now=moment,
+                        min_recycle_days=autopilot.min_recycle_days,
+                    ),
+                    label=destination.label,
+                    min_recycle_days=autopilot.min_recycle_days,
+                ))
+                continue
+            # The first eligible item whose media this network will accept: a
+            # 2160px-wide video is fine on TikTok and refused by Threads, and
+            # routing around the refusal here is what lets one queue feed both
+            # instead of manufacturing the same failed job every tick.
+            # Frozen before composing, because the links minted below carry the
+            # content hash in their sub IDs and the hash comes from the version
+            # being frozen. Once per item per plan: the resolution cannot change
+            # while this plan is being assembled.
+            from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
+            from trendrelay_api.integrations.publishing import (
+                carousel_fits_destination,
+                video_fits_platform,
+            )
+
+            item = None
+            for candidate in eligible:
+                if candidate.body == PLACEHOLDER_BODY:
+                    # An unwritten package never reaches an engine, and holding a
+                    # slot for it would block the content that is ready.
+                    item_notes.append(
+                        "A post still needs its copy written "
+                        f"({_short_source_name(candidate.title or candidate.id)}); "
+                        "it is skipped until you write it."
+                    )
+                    continue
+                if candidate.id not in frozen_cache:
+                    frozen_cache[candidate.id] = resolve_frozen_media(session, candidate)
+                if candidate.image_paths:
+                    # Asked the same question a video is asked, and for the same
+                    # reason. A carousel used to be taken by any destination at all:
+                    # only Zernio and WoopSocial post one, only to TikTok, so a
+                    # workspace whose networks run through Buffer had its pictures
+                    # paired with a destination that could never carry them and
+                    # found out from the engine after the post was built.
+                    fits, why = carousel_fits_destination(
+                        destination.provider, destination.platform, len(candidate.image_paths),
+                    )
+                    if fits:
+                        item = candidate
+                        break
+                    item_notes.append(f"Skipped on {destination.label}: {why}")
+                    continue
+                fits, why = video_fits_platform(
+                    destination.platform, frozen_cache[candidate.id].path
                 )
                 if fits:
                     item = candidate
                     break
-                notes.append(f"Skipped on {destination.label}: {why}")
+                item_notes.append(f"Skipped on {destination.label}: {why}")
+            if item is None:
+                # Said here, where we know nothing usable was found, rather
+                # than at the filter: a post held back for an unsettled
+                # execution only matters as a reason when its absence is what
+                # left the slot empty.
+                if spoken_for:
+                    slot_notes.append(
+                        f"{len(spoken_for)} post(s) for {destination.label} are "
+                        "waiting on an earlier one to be approved or sent."
+                    )
                 continue
-            fits, why = video_fits_platform(
-                destination.platform, frozen_cache[candidate.id].path
-            )
-            if fits:
-                item = candidate
-                break
-            notes.append(f"Skipped on {destination.label}: {why}")
-        if item is None:
-            continue
-        frozen = frozen_cache[item.id]
-        if item.id not in match_cache:
-            match_cache[item.id] = chosen_matches(
-                session, campaign, autopilot, item, destinations
-            )
-        cached_matches, match_strategy = match_cache[item.id]
-        matched = list(cached_matches)
-        # An offer that went unavailable after matching is replaced by the next
-        # match, or the post goes on organic. The redirect layer would refuse
-        # its link anyway; leaving it out here refuses it before it is posted.
-        usable = [match for match in matched if match.availability != "unavailable"]
-        if len(usable) < len(matched):
-            notes.append(
-                "An unavailable offer was left out; its post continues without it."
-            )
-        matched = usable
-        from trendrelay_api.campaign_autopilot import resolve_placement
-        from trendrelay_api.integrations.publishing import first_comment_deliverable
-
-        comment_ok = first_comment_deliverable(
-            destination.provider, destination.platform
-        )
-        effective = resolve_placement(
-            destination.platform,
-            override=destination.link_placement,
-            comment_deliverable=comment_ok,
-        )
-        if effective.placement == "bio" and len(matched) > 1:
-            # A bio exposes one destination. Rotate the primary recommendation
-            # across posts rather than pretending several links are behind it.
-            matched = [matched[counter % len(matched)]]
-        product_links: list[tuple[str, str]] = []
-        linked_matches = []
-        if not matched and link_for:
-            # Compatibility for the original scheduler contract: a caller
-            # could provide one already-resolved campaign link without an
-            # offer catalogue. The production callback requires offer_id and
-            # therefore cleanly skips this branch.
-            try:
-                legacy_link = link_for(destination.id)
-            except TypeError:
-                legacy_link = None
-            if legacy_link:
-                from trendrelay_api.campaign_autopilot import localised_text
-
-                product_links.append((
-                    localised_text(autopilot.post_language, "recommended"),
-                    legacy_link,
-                ))
-        for match in matched:
-            if not link_for:
-                continue
-            try:
-                # The full contract carries the frozen content hash, so a
-                # per-post link can fill the sub-ID slot that answers "which
-                # video sells". Older callbacks simply take fewer arguments.
-                link = link_for(
-                    destination.id, match.offer_id, content_sha256=frozen.sha256
+            frozen = frozen_cache[item.id]
+            if item.id not in match_cache:
+                match_cache[item.id] = chosen_matches(
+                    session, campaign, autopilot, item, destinations
                 )
-            except TypeError:
-                try:
-                    link = link_for(destination.id, match.offer_id)
-                except TypeError:
-                    # Backwards-compatible test/integration callback from the
-                    # single-offer scheduler contract.
-                    link = link_for(destination.id)
-            if link:
-                product_links.append((match.product_name, link))
-                linked_matches.append(match)
-        try:
-            post = compose_products(
-                platform=destination.platform,
-                body=item.body,
-                hashtags=list(item.hashtags or []),
-                products=product_links,
-                disclosure=autopilot.disclosure if product_links else "",
-                bio_hint=autopilot.bio_hint,
-                placement_override=destination.link_placement,
+            cached_matches, match_strategy = match_cache[item.id]
+            matched = list(cached_matches)
+            # An offer that went unavailable after matching is replaced by the next
+            # match, or the post goes on organic. The redirect layer would refuse
+            # its link anyway; leaving it out here refuses it before it is posted.
+            usable = [match for match in matched if match.availability != "unavailable"]
+            if len(usable) < len(matched):
+                item_notes.append(
+                    "An unavailable offer was left out; its post continues without it."
+                )
+            matched = usable
+            from trendrelay_api.campaign_autopilot import resolve_placement
+            from trendrelay_api.integrations.publishing import first_comment_deliverable
+
+            comment_ok = first_comment_deliverable(
+                destination.provider, destination.platform
+            )
+            effective = resolve_placement(
+                destination.platform,
+                override=destination.link_placement,
                 comment_deliverable=comment_ok,
             )
-        except DisclosureMissing as error:
-            return [], str(error)
-        match_reason = (
-            "; ".join(
-                f"{match.product_name} {match.score}% ({match.confidence})"
-                for match in linked_matches
+            if effective.placement == "bio" and len(matched) > 1:
+                # A bio exposes one destination. Rotate the primary recommendation
+                # across posts rather than pretending several links are behind it.
+                matched = [matched[counter % len(matched)]]
+            product_links: list[tuple[str, str]] = []
+            linked_matches = []
+            if not matched and link_for:
+                # Compatibility for the original scheduler contract: a caller
+                # could provide one already-resolved campaign link without an
+                # offer catalogue. The production callback requires offer_id and
+                # therefore cleanly skips this branch.
+                try:
+                    legacy_link = link_for(destination.id)
+                except TypeError:
+                    legacy_link = None
+                if legacy_link:
+                    from trendrelay_api.campaign_autopilot import localised_text
+
+                    product_links.append((
+                        localised_text(autopilot.post_language, "recommended"),
+                        legacy_link,
+                    ))
+            for match in matched:
+                if not link_for:
+                    continue
+                try:
+                    # The full contract carries the frozen content hash, so a
+                    # per-post link can fill the sub-ID slot that answers "which
+                    # video sells". Older callbacks simply take fewer arguments.
+                    link = link_for(
+                        destination.id, match.offer_id, content_sha256=frozen.sha256
+                    )
+                except TypeError:
+                    try:
+                        link = link_for(destination.id, match.offer_id)
+                    except TypeError:
+                        # Backwards-compatible test/integration callback from the
+                        # single-offer scheduler contract.
+                        link = link_for(destination.id)
+                if link:
+                    product_links.append((match.product_name, link))
+                    linked_matches.append(match)
+            try:
+                post = compose_products(
+                    platform=destination.platform,
+                    body=item.body,
+                    hashtags=list(item.hashtags or []),
+                    products=product_links,
+                    disclosure=autopilot.disclosure if product_links else "",
+                    bio_hint=autopilot.bio_hint,
+                    placement_override=destination.link_placement,
+                    comment_deliverable=comment_ok,
+                )
+            except DisclosureMissing as error:
+                return [], str(error)
+            match_reason = (
+                "; ".join(
+                    f"{match.product_name} {match.score}% ({match.confidence})"
+                    for match in linked_matches
+                )
+                or f"No affiliate product attached ({match_strategy['selection']})."
             )
-            or f"No affiliate product attached ({match_strategy['selection']})."
-        )
-        # Operator-authored comments and replies form one persistent content
-        # package with the base caption. Generated affiliate replies are added
-        # afterwards, so the timeline can show and validate the exact sequence.
-        #
-        # Both, when both exist. This used to be `written or generated`, which
-        # meant that on a first-comment network - where the comment *is* where
-        # the link lives - anyone who wrote a comment silently deleted the
-        # link, and the post went out selling nothing with no sign anything had
-        # been dropped. The words lead and the link follows them, one comment,
-        # because the network only takes one.
-        written = (item.first_comment or "").strip()
-        generated = (post.first_comment or "").strip()
-        first_comment = (
-            f"{written}\n\n{generated}" if written and generated
-            else written or post.first_comment
-        )
-        custom_thread = tuple(
-            part.strip() for part in (item.thread or []) if part.strip()
-        )
-        scheduled.append(ScheduledPost(
-            campaign_id=autopilot.campaign_id,
-            destination_id=destination.id,
-            queue_item_id=item.id,
-            at=moment,
-            video_path=frozen.path,
-            image_paths=tuple(item.image_paths or ()),
-            asset_id=frozen.asset_id,
-            asset_version_id=frozen.version_id,
-            media_sha256=frozen.sha256,
-            effect_ids=frozen.effect_ids,
-            title=item.title,
-            caption=post.caption,
-            first_comment=first_comment,
-            placement=post.placement.placement,
-            reason=(
-                f"{'Ranked' if rank.ranked else 'Unranked'}: {rank.reason} "
-                f"{post.placement.reason} Product match: {match_reason}"
-            ),
-            thread=(*custom_thread, *post.thread),
-            offer_ids=tuple(match.offer_id for match in linked_matches),
-            product_names=tuple(match.product_name for match in linked_matches),
-            offer_confidences=tuple(match.confidence for match in linked_matches),
-            offer_selection=str(match_strategy.get("selection", "")),
-        ))
-        reserved[(item.id, destination.id)] = moment
-        planned_per_day[day_key] = already_planned + 1
-        counter += 1
+            # Operator-authored comments and replies form one persistent content
+            # package with the base caption. Generated affiliate replies are added
+            # afterwards, so the timeline can show and validate the exact sequence.
+            #
+            # Both, when both exist. This used to be `written or generated`, which
+            # meant that on a first-comment network - where the comment *is* where
+            # the link lives - anyone who wrote a comment silently deleted the
+            # link, and the post went out selling nothing with no sign anything had
+            # been dropped. The words lead and the link follows them, one comment,
+            # because the network only takes one.
+            written = (item.first_comment or "").strip()
+            generated = (post.first_comment or "").strip()
+            first_comment = (
+                f"{written}\n\n{generated}" if written and generated
+                else written or post.first_comment
+            )
+            custom_thread = tuple(
+                part.strip() for part in (item.thread or []) if part.strip()
+            )
+            scheduled.append(ScheduledPost(
+                campaign_id=autopilot.campaign_id,
+                destination_id=destination.id,
+                queue_item_id=item.id,
+                at=moment,
+                video_path=frozen.path,
+                image_paths=tuple(item.image_paths or ()),
+                asset_id=frozen.asset_id,
+                asset_version_id=frozen.version_id,
+                media_sha256=frozen.sha256,
+                effect_ids=frozen.effect_ids,
+                title=item.title,
+                caption=post.caption,
+                first_comment=first_comment,
+                placement=post.placement.placement,
+                reason=(
+                    f"{'Ranked' if rank.ranked else 'Unranked'}: {rank.reason} "
+                    f"{post.placement.reason} Product match: {match_reason}"
+                ),
+                thread=(*custom_thread, *post.thread),
+                offer_ids=tuple(match.offer_id for match in linked_matches),
+                product_names=tuple(match.product_name for match in linked_matches),
+                offer_confidences=tuple(match.confidence for match in linked_matches),
+                offer_selection=str(match_strategy.get("selection", "")),
+            ))
+            reserved[(item.id, destination.id)] = moment
+            planned_per_day[day_key] = already_planned + 1
+            counter += 1
+            break
+        else:
+            notes.extend(dict.fromkeys(slot_notes))
+        notes.extend(dict.fromkeys(item_notes))
 
     return scheduled, _explain_run(scheduled, notes, len(upcoming))
 

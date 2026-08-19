@@ -26,6 +26,8 @@ export const ar: Messages = {
     signOut: "تسجيل الخروج",
     language: "اللغة",
     chooseLanguage: "اختر اللغة",
+    timezone: "المنطقة الزمنية",
+    chooseTimezone: "اختر المنطقة الزمنية لمساحة العمل",
   },
 
   common: {

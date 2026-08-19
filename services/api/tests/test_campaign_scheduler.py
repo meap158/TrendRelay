@@ -323,6 +323,35 @@ def test_an_unwritten_post_counts_as_approved_but_not_as_ready(session) -> None:
     assert status["queue_ready"] == 1
 
 
+def test_a_resting_account_hands_its_slot_to_the_next_one(session) -> None:
+    """One blocked account must not empty the whole horizon.
+
+    The rotation is driven by a counter that only advances when something is
+    scheduled, so the leading account was offered every slot in the horizon -
+    and if it could take none of them, neither did anyone else. A campaign
+    whose leading account was resting posted nothing at all while the account
+    beside it sat idle and eligible.
+    """
+    leader = destination(session, "d1", "threads")
+    destination(session, "d2", "tiktok")
+    slot(session, 12)
+    slot(session, 18)
+    # Posted to the leader an hour ago; the rest interval is thirty days.
+    queue_item(
+        session,
+        "q1",
+        last_posted_by_destination={"d1": (NOW - timedelta(hours=1)).isoformat()},
+    )
+
+    posts, note = plan_campaign(
+        session, autopilot(session, min_recycle_days=30), now=NOW, link_for=None,
+    )
+
+    assert posts, note
+    assert {post.destination_id for post in posts} == {"d2"}
+    assert leader.id not in {post.destination_id for post in posts}
+
+
 def test_a_video_the_network_refuses_is_routed_around_not_posted_into(
     session, monkeypatch
 ) -> None:

@@ -24,6 +24,8 @@ export const fr: Messages = {
     signOut: "Se déconnecter",
     language: "Langue",
     chooseLanguage: "Choisir une langue",
+    timezone: "Fuseau horaire",
+    chooseTimezone: "Choisir le fuseau horaire de l'espace de travail",
   },
 
   common: {

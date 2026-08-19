@@ -25,6 +25,8 @@ export const ru: Messages = {
     signOut: "Выйти",
     language: "Язык",
     chooseLanguage: "Выберите язык",
+    timezone: "Часовой пояс",
+    chooseTimezone: "Выберите часовой пояс рабочего пространства",
   },
 
   common: {

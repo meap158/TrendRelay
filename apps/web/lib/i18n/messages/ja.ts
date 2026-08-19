@@ -24,6 +24,8 @@ export const ja: Messages = {
     signOut: "ログアウト",
     language: "言語",
     chooseLanguage: "言語を選択",
+    timezone: "タイムゾーン",
+    chooseTimezone: "ワークスペースのタイムゾーンを選ぶ",
   },
 
   common: {

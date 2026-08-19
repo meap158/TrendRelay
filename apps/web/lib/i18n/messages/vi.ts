@@ -24,6 +24,8 @@ export const vi: Messages = {
     signOut: "Đăng xuất",
     language: "Ngôn ngữ",
     chooseLanguage: "Chọn ngôn ngữ",
+    timezone: "Múi giờ",
+    chooseTimezone: "Chọn múi giờ của không gian làm việc",
   },
 
   common: {
