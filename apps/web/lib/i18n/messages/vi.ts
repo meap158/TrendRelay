@@ -529,12 +529,24 @@ export const vi: Messages = {
       bio: "liên kết ở tiểu sử",
       none: "không có liên kết",
     },
+    matchConfidence: {
+      high: "Nội dung bài viết khớp mạnh với sản phẩm này. Chỉ đo trên nội dung - hoa hồng nằm ở điểm số bên cạnh, không nằm ở đây.",
+      medium: "Một phần bài viết khớp với sản phẩm này. Đủ để đăng tự động, nhưng nên xem lại.",
+      low: "Rất ít nội dung khớp với sản phẩm này. Nó giữ bài lại chờ bạn duyệt ở mọi mức thẩm quyền, kể cả tự trị, và không bao giờ được chọn tự động.",
+    },
     state: {
       draft: "đang giữ lại",
       approved: "đang luân phiên",
       needsCopy: "chưa có nội dung",
       paused: "tạm dừng",
       retired: "ngừng dùng",
+      help: {
+        draft: "Được giữ ngoài vòng xoay có chủ đích. Không có gì đăng nó cho đến khi bạn duyệt.",
+        approved: "Sẵn sàng cho bộ lập lịch. Nó có thể lấp bất kỳ khung giờ nào đến hạn, sau khi đã nghỉ đủ số ngày và tài khoản chưa chạm giới hạn mỗi ngày.",
+        needsCopy: "Đã duyệt, nhưng chưa viết nội dung - một đoạn giữ chỗ đang thay thế. Nó bị bỏ qua ở mọi khung giờ cho đến khi có người viết.",
+        paused: "Bị đưa ra khỏi vòng xoay sau một sự cố đăng bài, thường là tệp đã bị di chuyển hoặc thay đổi. Hãy duyệt lại khi tệp đã sẵn sàng.",
+        retired: "Đã kết thúc. Giữ lại để lưu hồ sơ, không bao giờ đăng lại, và bỏ qua khi ghép sản phẩm.",
+      },
     },
   },
   campaigns: {

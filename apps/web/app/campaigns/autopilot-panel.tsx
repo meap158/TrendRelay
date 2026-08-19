@@ -2171,7 +2171,11 @@ export function AutopilotPanel({
                         <strong>{match.product_name}</strong>
                         <small>{match.reasons.join(" ")}</small>
                       </span>
-                      <Badge tone={match.confidence === "high" ? "good" : match.confidence === "medium" ? "warn" : "neutral"}>
+                      <Badge
+                        tone={match.confidence === "high" ? "good"
+                          : match.confidence === "medium" ? "warn" : "neutral"}
+                        title={t(`autopilot.matchConfidence.${match.confidence}`)}
+                      >
                         {match.confidence}
                       </Badge>
                     </label>
@@ -2327,8 +2331,17 @@ export function AutopilotPanel({
                     arrives approved, so an unwritten one wore a green
                     "approved" badge above a warning that it could not be sent -
                     and the badge is the part people read. */}
-                <Badge tone={item.needs_copy
-                  ? "warn" : item.state === "approved" ? "good" : "neutral"}>
+                {/* The word, and what follows from it. "In rotation" and
+                    "needs copy" each name a state without saying whether the
+                    scheduler will pick the item up or what has to happen first,
+                    which is the only thing the reader wants from them. */}
+                <Badge
+                  tone={item.needs_copy
+                    ? "warn" : item.state === "approved" ? "good" : "neutral"}
+                  title={item.needs_copy
+                    ? t("autopilot.state.help.needsCopy")
+                    : t(`autopilot.state.help.${item.state}`)}
+                >
                   {item.needs_copy
                     ? t("autopilot.state.needsCopy")
                     : t(`autopilot.state.${item.state}`)}
@@ -2430,7 +2443,11 @@ export function AutopilotPanel({
                         && recommendations.chosen_offer_ids?.includes(match.offer_id) && (
                         <Badge tone="good" className="campaign-match-chosen">would post</Badge>
                       )}
-                      <Badge tone={match.confidence === "high" ? "good" : match.confidence === "medium" ? "warn" : "neutral"}>
+                      <Badge
+                        tone={match.confidence === "high" ? "good"
+                          : match.confidence === "medium" ? "warn" : "neutral"}
+                        title={t(`autopilot.matchConfidence.${match.confidence}`)}
+                      >
                         {match.confidence}
                       </Badge>
                     </span>
@@ -2820,7 +2837,11 @@ export function AutopilotPanel({
                           <small>{match.reasons[0]}</small>
                           <span>{match.matched_terms.slice(0, 5).map((term) => <em key={term}>{term}</em>)}</span>
                         </div>
-                        <Badge tone={match.confidence === "high" ? "good" : match.confidence === "medium" ? "warn" : "neutral"}>
+                        <Badge
+                        tone={match.confidence === "high" ? "good"
+                          : match.confidence === "medium" ? "warn" : "neutral"}
+                        title={t(`autopilot.matchConfidence.${match.confidence}`)}
+                      >
                           {match.confidence}
                         </Badge>
                         <Button variant={shortlisted ? "secondary" : "quiet"} size="sm" disabled={!canEdit}

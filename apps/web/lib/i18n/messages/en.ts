@@ -533,12 +533,24 @@ export const en = {
       bio: "link in bio",
       none: "no link",
     },
+    matchConfidence: {
+      high: "The post's own words match this product strongly. Measured on content alone - the commission is in the score beside it, not in this.",
+      medium: "Some of the post matches this product. Enough to post unattended, but worth a look.",
+      low: "Little in the post matches this product. It holds the post for your approval at every authority level, autonomous included, and is never chosen automatically.",
+    },
     state: {
       draft: "held back",
       approved: "in rotation",
       needsCopy: "needs copy",
       paused: "paused",
       retired: "retired",
+      help: {
+        draft: "Kept out of the rotation on purpose. Nothing posts it until you approve it.",
+        approved: "Available to the scheduler. It can fill any due slot, once it has rested the required days and the account is under its daily cap.",
+        needsCopy: "Approved, but the caption was never written - a placeholder stands in. It is skipped at every slot until somebody writes one.",
+        paused: "Taken out of the rotation after a delivery problem, usually a file that moved or changed. Approve it again once the media is back.",
+        retired: "Finished with. Kept for the record, never posted again, and ignored when products are matched.",
+      },
     },
   },
   campaigns: {

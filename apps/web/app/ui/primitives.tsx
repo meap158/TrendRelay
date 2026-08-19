@@ -6,14 +6,32 @@ import type { ReactNode } from "react";
 export function Badge({
   tone = "neutral",
   className,
+  title,
   children,
 }: {
   tone?: "neutral" | "good" | "warn" | "bad" | "accent";
   /** For a badge one screen needs to single out among its siblings. */
   className?: string;
+  /**
+   * What the word means, for a badge whose label is a term of art.
+   *
+   * "In rotation" and "needs copy" are two words each and neither says what
+   * follows from it - whether the scheduler will pick this up, and what has to
+   * happen before it will. A badge that states a state without explaining its
+   * consequence makes the reader guess.
+   */
+  title?: string;
   children: ReactNode;
 }) {
-  return <b className={`ui-badge ui-badge-${tone}${className ? ` ${className}` : ""}`}>{children}</b>;
+  return (
+    <b
+      className={`ui-badge ui-badge-${tone}${className ? ` ${className}` : ""}`}
+      title={title}
+      // Marked as having a description so the hint is not sighted-only: the
+      // native tooltip is a hover, and a badge is not focusable on its own.
+      aria-description={title}
+    >{children}</b>
+  );
 }
 
 /**

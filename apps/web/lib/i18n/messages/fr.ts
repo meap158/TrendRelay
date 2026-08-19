@@ -537,12 +537,24 @@ export const fr: Messages = {
       bio: "lien dans la bio",
       none: "aucun lien",
     },
+    matchConfidence: {
+      high: "Le texte du post correspond fortement à ce produit. Mesuré sur le contenu seul - la commission est dans le score à côté, pas ici.",
+      medium: "Une partie du post correspond à ce produit. Suffisant pour publier sans surveillance, mais à vérifier.",
+      low: "Peu de choses dans le post correspondent à ce produit. Il retient le post pour votre approbation à tous les niveaux d'autorité, y compris autonome, et n'est jamais choisi automatiquement.",
+    },
     state: {
       draft: "mise de côté",
       approved: "en rotation",
       needsCopy: "texte à écrire",
       paused: "en pause",
       retired: "retiré",
+      help: {
+        draft: "Volontairement hors rotation. Rien ne le publie tant que vous ne l'approuvez pas.",
+        approved: "Disponible pour le planificateur. Il peut occuper tout créneau dû, une fois le repos requis écoulé et si le compte reste sous son plafond quotidien.",
+        needsCopy: "Approuvé, mais la légende n'a jamais été écrite - un texte provisoire la remplace. Il est ignoré à chaque créneau jusqu'à ce que quelqu'un l'écrive.",
+        paused: "Retiré de la rotation après un incident de publication, souvent un fichier déplacé ou modifié. Approuvez-le à nouveau une fois le média rétabli.",
+        retired: "Terminé. Conservé pour l'historique, jamais republié, et ignoré lors de l'association des produits.",
+      },
     },
   },
   campaigns: {
