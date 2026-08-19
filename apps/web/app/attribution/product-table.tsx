@@ -502,9 +502,7 @@ export function ProductTable({
                         {named.length ? (
                           <span className="product-campaign-tags">
                             {named.map((campaign) => (
-                              <em key={campaign.id} title={`Promoted by ${campaign.name}`}>
-                                {campaign.name}
-                              </em>
+                              <em key={campaign.id}>{campaign.name}</em>
                             ))}
                           </span>
                         ) : (

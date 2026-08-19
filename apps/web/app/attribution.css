@@ -359,6 +359,10 @@
 /* Which campaigns a product may be promoted by, in its own row and in the
    selection bar above the table. */
 .product-campaigns { max-inline-size: 180px; }
+/* The campaigns a product is tagged to, as chips rather than a run of italics,
+   so at a glance you can see which products a batch belongs to. */
+.product-campaign-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.product-campaign-tags em { display: inline-flex; align-items: center; padding: 1px 8px; border: 1px solid var(--green-line); border-radius: 999px; color: var(--green-dark); font-size: 10px; font-style: normal; font-weight: 600; white-space: nowrap; }
 .product-campaign-tags { display: flex; flex-wrap: wrap; gap: 3px; }
 .product-campaign-tags em { max-inline-size: 100%; overflow: hidden; border-radius: 999px; padding: 1px 7px; color: var(--text); background: var(--panel-raised); font-size: 10px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
 /* A product no campaign can use is a state worth noticing on a page about
