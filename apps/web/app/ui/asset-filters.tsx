@@ -2,6 +2,7 @@
 
 import { Button } from "./button";
 import { useT } from "../i18n-provider";
+import { SearchSelect } from "./search-select";
 import {
   EMPTY_FACETS,
   activeFilterCount,
@@ -99,20 +100,26 @@ export function AssetFilters({
       )}
 
       {shown.has("channel") && (
-        <label>{t("filters.channel")}
-          <select
-            aria-label={t("filters.byChannel")}
+        // Searchable, alone among these filters, because it is the only one
+        // whose length is the workspace's rather than ours: fifty-nine
+        // creators here already, one per person whose clip was ever
+        // downloaded, and it only grows. The rest are short fixed lists where
+        // a native control is the better one - a search box over four regions
+        // is a box asking to be typed in before an answer already on screen.
+        <label className="asset-filter-wide">{t("filters.channel")}
+          <SearchSelect
             value={values.channel ?? ""}
-            onChange={(event) => set({ channel: event.target.value })}
-          >
-            <option value="">{t("filters.allChannels")}</option>
-            {facets.channels.map((facet) => (
-              <option
-                key={facet.value || "__unassigned__"}
-                value={facet.value || "__unassigned__"}
-              >{label(facet, "Unassigned channel")}</option>
-            ))}
-          </select>
+            placeholder={t("filters.allChannels")}
+            searchPlaceholder={t("filters.byChannel")}
+            options={facets.channels.map((facet) => ({
+              value: facet.value || "__unassigned__",
+              label: facet.label || "Unassigned channel",
+              // The count rides beside the name rather than inside it: it is
+              // how many, not part of what the channel is called.
+              description: `${facet.count}`,
+            }))}
+            onChange={(next) => set({ channel: next })}
+          />
         </label>
       )}
 
