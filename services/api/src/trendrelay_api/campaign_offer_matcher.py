@@ -21,6 +21,7 @@ from trendrelay_api.attribution_models import ClickEvent, Conversion, TrackingLi
 from trendrelay_api.autopilot_models import (
     CampaignAutopilot,
     CampaignDestination,
+    CampaignOffer,
     CampaignQueueItem,
 )
 from trendrelay_api.media_models import CreativeAnalysis, MediaAsset, MediaTranscript
@@ -309,22 +310,39 @@ def match_offers(
     context: dict[str, tuple[float, set[str]]] = {
         source.label: (source.weight, tokens(source.text)) for source in evidence
     }
-    candidate_ids = set(autopilot.candidate_offer_ids or [])
+    # What this campaign may promote at all: the products tagged to it.
+    #
+    # This used to be a narrowing that most campaigns left empty, and empty
+    # meant the whole workspace - so a campaign about one thing ranked every
+    # product anybody had ever imported and attached whichever scored least
+    # badly. A tag is a permission now: nothing untagged is ranked.
+    candidate_ids = set(
+        session.scalars(
+            select(CampaignOffer.offer_id).where(
+                CampaignOffer.campaign_id == campaign.id
+            )
+        ).all()
+    )
+    # A pin on the post names a product outright, and the campaign's single
+    # chosen offer is the same act at campaign level. Both are tagged when they
+    # are set, so reading them here is belt and braces rather than a way in.
     if item:
         candidate_ids.update(item.offer_ids or [])
     if autopilot.offer_id:
         candidate_ids.add(autopilot.offer_id)
-    query = (
-        select(ProductOffer, Product)
-        .join(Product, Product.id == ProductOffer.product_id)
-        .where(
-            ProductOffer.workspace_id == campaign.workspace_id,
-            ProductOffer.availability != "unavailable",
-        )
+    rows = (
+        session.execute(
+            select(ProductOffer, Product)
+            .join(Product, Product.id == ProductOffer.product_id)
+            .where(
+                ProductOffer.workspace_id == campaign.workspace_id,
+                ProductOffer.availability != "unavailable",
+                ProductOffer.id.in_(candidate_ids),
+            )
+        ).all()
+        if candidate_ids
+        else []
     )
-    if candidate_ids:
-        query = query.where(ProductOffer.id.in_(candidate_ids))
-    rows = session.execute(query).all()
     platforms = {item.platform for item in destinations if item.enabled}
     performance = _offer_performance(session, campaign.id)
     matches: list[OfferMatch] = []
@@ -433,7 +451,14 @@ def match_offers(
     )
     strategy = {
         "offer_mode": autopilot.offer_mode,
-        "candidate_scope": "shortlist" if candidate_ids else "all usable workspace offers",
+        # Said as a count, because "how many products may this campaign use"
+        # is now the question, and "all usable workspace offers" is never the
+        # answer.
+        "candidate_scope": (
+            f"{len(candidate_ids)} product(s) tagged to this campaign"
+            if candidate_ids
+            else "no products tagged to this campaign"
+        ),
         "evidence_sources": [source.label for source in evidence],
         "media": media,
         "platforms": sorted(platforms),

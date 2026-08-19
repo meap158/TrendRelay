@@ -51,6 +51,12 @@ def required_keys() -> list[str]:
     wanted: list[str] = []
     for effect in effects.describe():
         wanted += [f"{effect['id']}.label", f"{effect['id']}.summary"]
+        # A declared short tag must be translated wherever the label is: the
+        # frontend falls back from tag to label, so a locale missing the tag
+        # would quietly untag the card - "Blur faces" beside "Faces covered",
+        # which is the exact split the shared tag exists to close.
+        if effect.get("tag") and effect["tag"] != effect["label"]:
+            wanted.append(f"{effect['id']}.tag")
         for param in effect["params"]:
             wanted.append(f"{effect['id']}.{param['id']}")
             if param["help"]:

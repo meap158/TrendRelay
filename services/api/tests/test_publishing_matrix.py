@@ -8,6 +8,7 @@ fails here rather than in somebody's account.
 
 from __future__ import annotations
 
+from trendrelay_api.integrations import engine_limits
 from trendrelay_api.integrations.publishing import (
     PLATFORM_LABELS,
     PROVIDERS,
@@ -114,3 +115,71 @@ def test_an_engine_that_cannot_fetch_a_url_says_so() -> None:
 
     assert engines["woopsocial"]["ingests_media_url"] is False
     assert engines["buffer"]["requires_public_media"] is True
+
+
+# --- published prices, and the honesty they need -------------------------------
+
+
+def test_every_engine_publishes_a_plan_ladder_with_a_free_tier() -> None:
+    """Somebody comparing tiers needs the whole ladder, not just what they have.
+
+    `FREE_PLAN` answers "what does this account probably allow". This answers
+    "what would the next one cost", which is a different question and the reason
+    quoting paid tiers is safe here: nothing in it claims to be the plan in
+    force.
+    """
+    for row in capability_matrix()["engines"]:
+        plans = row["plans"]
+        assert plans["tiers"], f"{row['id']} lists no plans"
+        free = [tier for tier in plans["tiers"] if tier["free"]]
+        assert len(free) == 1, f"{row['id']} should have exactly one free tier"
+        assert plans["tiers"][0]["free"], f"{row['id']} should list the free tier first"
+
+
+def test_no_price_is_shown_without_a_date_and_a_source() -> None:
+    """A figure nobody can verify from inside the app is the one most likely to
+    be believed after it stops being true.
+
+    So every tier carries the page it was read from and the day it was read. A
+    price with neither is worse than no price.
+    """
+    for row in capability_matrix()["engines"]:
+        plans = row["plans"]
+        assert plans["checked_on"], f"{row['id']} does not say when it was checked"
+        assert str(plans["source"] or "").startswith("https://"), (
+            f"{row['id']} does not link the pricing page it was read from"
+        )
+
+
+def test_the_ladder_agrees_with_the_free_terms_already_enforced() -> None:
+    """Two records of the free tier must not drift.
+
+    `FREE_PLAN` is what the allowance logic reads; the ladder is what the
+    operator reads. If they disagree, the interface is quoting a limit the app
+    does not apply.
+    """
+    for engine_id, terms in engine_limits.FREE_PLAN.items():
+        free = next(
+            tier for tier in engine_limits.plan_ladder_payload(engine_id)["tiers"]
+            if tier["free"]
+        )
+        assert str(terms["accounts"]) in free["accounts"], (
+            f"{engine_id}: ladder says {free['accounts']!r} accounts, "
+            f"free terms say {terms['accounts']!r}"
+        )
+
+
+def test_a_plan_says_what_it_means_for_publishing() -> None:
+    """A pricing page sells the whole product, and most of it is not publishing.
+
+    WoopSocial's credits are the case that matters: they meter AI generation,
+    TrendRelay never spends one, and reading them as a posting allowance would
+    make a free account look capped when it is not.
+    """
+    caveats = {
+        row["id"]: row["plans"]["caveat"] for row in capability_matrix()["engines"]
+    }
+
+    assert all(caveats.values()), f"no caveat for: {[k for k, v in caveats.items() if not v]}"
+    assert "not publishing" in caveats["woopsocial"]
+    assert "queue depth" in caveats["buffer"]

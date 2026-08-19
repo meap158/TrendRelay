@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 from trendrelay_api import campaign_scheduler as scheduler
 from trendrelay_api.attribution_models import ClickEvent, Conversion, TrackingLink
 from trendrelay_api.autopilot_models import (
+    CampaignOffer,
     CampaignAutopilot,
     CampaignDestination,
     CampaignQueueItem,
@@ -848,6 +849,13 @@ def offer(session, identifier: str, name: str, category: str = "Coffee") -> str:
         currency="USD",
         availability="available",
         commission_bps=500,
+        created_by="user-1",
+    ))
+    # Tagged to the campaign, because that is what makes a product available
+    # to it. An offer nobody has tagged is not a product this campaign may
+    # promote, which is the whole point of the tag.
+    session.add(CampaignOffer(
+        workspace_id="ws", campaign_id="camp", offer_id=identifier,
         created_by="user-1",
     ))
     session.commit()

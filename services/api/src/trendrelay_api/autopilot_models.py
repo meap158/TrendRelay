@@ -282,6 +282,44 @@ class CampaignQueueItem(Base):
     updated_at: Mapped[datetime] = mapped_column(default=utc_now)
 
 
+class CampaignOffer(Base):
+    """A product this campaign is allowed to promote.
+
+    Kept as a link rather than a list on the campaign, because the question is
+    asked from both ends and only one of those is cheap against a list. The
+    campaign asks "what may I attach"; Attribution asks "which campaigns is
+    this product in", and answering that from a JSON column on every autopilot
+    means reading every autopilot.
+
+    The tag is also a permission, not a hint: an untagged product is not
+    offered to smart matching and cannot be pinned by hand. A campaign with no
+    tags attaches nothing, which is a state worth being able to see rather than
+    one to be inferred from an empty ranking.
+    """
+
+    __tablename__ = "campaign_offers"
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "offer_id", name="unique_campaign_offer"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: new_id("campoffer")
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    campaign_id: Mapped[str] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), index=True
+    )
+    offer_id: Mapped[str] = mapped_column(
+        ForeignKey("product_offers.id", ondelete="CASCADE"), index=True
+    )
+    created_by: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.id", ondelete="CASCADE")
+    )
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+
+
 class CampaignDestinationOfferLink(Base):
     """One measurable affiliate link for a destination/product pairing."""
 

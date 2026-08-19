@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from trendrelay_api import env_store
@@ -56,3 +58,59 @@ def test_configured_keys_reports_booleans_not_values(monkeypatch, env_file) -> N
         "BUNDLE_SOCIAL_API_KEY": True,
         "ZERNIO_API_KEY": False,
     }
+
+
+def test_a_json_value_survives_the_round_trip(monkeypatch, env_file) -> None:
+    """The bug that made a second engine login disappear.
+
+    `_quote` escapes a quote on the way in - it has to, or the line could not be
+    read back - and `_unquote` only ever stripped the wrapping, so the escapes
+    came back as part of the value. Nothing noticed until something JSON-shaped
+    went through. `PUBLISHING_CONNECTIONS` is a JSON list; it came back with a
+    backslash before every quote, the parse failed, and the registry read as
+    empty. A connection saved perfectly was invisible on the next request, and
+    the engine card it belonged to reported itself unreachable because nothing
+    on the server knew it existed.
+    """
+    monkeypatch.delenv("PUBLISHING_CONNECTIONS", raising=False)
+    registry = '[{"id": "zernio-2", "provider": "zernio", "label": "Zernio 2"}]'
+
+    env_store.write_env_values({"PUBLISHING_CONNECTIONS": registry})
+
+    assert env_store.read_env_file()["PUBLISHING_CONNECTIONS"] == registry
+    # And as JSON, which is the form every caller actually wants.
+    assert json.loads(env_store.read_env_file()["PUBLISHING_CONNECTIONS"])[0]["id"] == "zernio-2"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        'a quote " inside',
+        "a back \\ slash",
+        'both \\ and "',
+        "ends with a backslash \\",
+        'an escaped-looking \\" pair',
+        '{"nested": {"json": "with \\"inner\\" quotes"}}',
+        "spaces and a # hash",
+        "it's got an apostrophe",
+        "C:\\Users\\someone\\.env",
+    ],
+)
+def test_every_awkward_value_reads_back_exactly_as_written(
+    monkeypatch, env_file, value: str
+) -> None:
+    """Round trip, not appearance. Getting the same string out is the whole job."""
+    monkeypatch.delenv("BUFFER_API_KEY", raising=False)
+
+    env_store.write_env_values({"BUFFER_API_KEY": value})
+
+    assert env_store.read_env_file()["BUFFER_API_KEY"] == value
+
+
+def test_a_hand_written_single_quoted_value_keeps_its_backslashes(env_file) -> None:
+    """A shell does not expand escapes inside single quotes, and neither does
+    this - somebody hand-editing the file should get back what they typed."""
+    env_file.write_text("SOME_PATH='C:\\Users\\me'\n", encoding="utf-8")
+
+    assert env_store.read_env_file()["SOME_PATH"] == "C:\\Users\\me"
+

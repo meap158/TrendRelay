@@ -252,3 +252,45 @@ def test_removing_one_login_does_not_disturb_another_s_line() -> None:
     text = env_store.ENV_PATH.read_text(encoding="utf-8")
     assert keep.key_for("ZERNIO_API_KEY") in text
     assert drop.key_for("ZERNIO_API_KEY") not in text
+
+
+def test_a_connection_is_still_there_after_a_restart() -> None:
+    """The failure that looked like a broken engine.
+
+    Every test above passes without reading the file. `write_env_values` also
+    sets the value in this process's environment and `effective_value` prefers
+    that, so the registry never made the round trip through `.env` where it was
+    being corrupted - the escaping `_quote` applies was not undone on the way
+    back, the JSON would not parse, and the registry read as empty.
+
+    Nothing noticed until the API was restarted. Then the second login was gone
+    from every list, its card had no connection behind it, and the page could
+    only report the engine as unreachable. Dropping the environment copy is what
+    reproduces that, so this is the one test here that reads from disk.
+    """
+    import os
+
+    added = connections.add(PROVIDERS, "zernio", "Zernio 2")
+    os.environ.pop(connections.REGISTRY_KEY, None)
+
+    found = [row for row in connections.connections(PROVIDERS) if row.provider == "zernio"]
+
+    assert [row.id for row in found] == ["zernio", added.id]
+    assert [row.label for row in found] == ["Zernio", "Zernio 2"]
+    # And it still points at the key its credentials were written under, or the
+    # connection would come back as one with no key saved.
+    assert found[1].key_for("ZERNIO_API_KEY") == added.key_for("ZERNIO_API_KEY")
+
+
+def test_several_connections_all_survive_a_restart() -> None:
+    """One surviving by luck is not the same as the registry being readable."""
+    import os
+
+    first = connections.add(PROVIDERS, "zernio", "Second login")
+    second = connections.add(PROVIDERS, "buffer", "Brand B")
+    third = connections.add(PROVIDERS, "zernio", "Third login")
+    os.environ.pop(connections.REGISTRY_KEY, None)
+
+    ids = {row.id for row in connections.connections(PROVIDERS)}
+
+    assert {first.id, second.id, third.id} <= ids

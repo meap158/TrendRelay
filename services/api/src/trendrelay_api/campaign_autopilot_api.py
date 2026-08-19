@@ -1671,6 +1671,94 @@ def edit_autopilot_execution(
     return {"execution": _execution_view(execution)}
 
 
+class ProductTagRequest(BaseModel):
+    """Products a campaign may promote, added or removed together."""
+
+    offer_ids: list[str] = Field(min_length=1, max_length=500)
+
+
+@router.get("/{campaign_id}/products")
+def list_campaign_products(
+    workspace_id: str,
+    campaign_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """What this campaign may promote.
+
+    Its own list rather than the workspace's: a campaign matches against these
+    and nothing else, so this is the answer to "why did nothing attach" as much
+    as it is a list of products.
+    """
+    membership(session, workspace_id, user.id)
+    _campaign(session, workspace_id, campaign_id)
+    from trendrelay_api import campaign_offer_tags
+
+    return {"products": campaign_offer_tags.tagged_products(
+        session, workspace_id, campaign_id
+    )}
+
+
+@router.post("/{campaign_id}/products")
+def tag_campaign_products(
+    workspace_id: str,
+    campaign_id: str,
+    body: ProductTagRequest,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Let this campaign promote these products."""
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    ensure_profile(session, user)
+    _campaign(session, workspace_id, campaign_id)
+    from trendrelay_api import campaign_offer_tags
+
+    outcome = campaign_offer_tags.tag(
+        session, workspace_id, campaign_id, body.offer_ids, user_id=user.id
+    )
+    audit(
+        session, request, workspace_id, user.id,
+        "campaign.products_tagged", "campaign", campaign_id, outcome,
+    )
+    return {
+        **outcome,
+        "products": campaign_offer_tags.tagged_products(
+            session, workspace_id, campaign_id
+        ),
+    }
+
+
+# A path per product, as the destinations and queue items do it: the thing
+# being removed is named in the URL rather than in a body, which is what makes
+# it a plain DELETE.
+@router.delete("/{campaign_id}/products/{offer_id}")
+def untag_campaign_product(
+    workspace_id: str,
+    campaign_id: str,
+    offer_id: str,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Stop this campaign promoting this product."""
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    _campaign(session, workspace_id, campaign_id)
+    from trendrelay_api import campaign_offer_tags
+
+    outcome = campaign_offer_tags.untag(session, campaign_id, [offer_id])
+    audit(
+        session, request, workspace_id, user.id,
+        "campaign.products_untagged", "campaign", campaign_id, outcome,
+    )
+    return {
+        **outcome,
+        "products": campaign_offer_tags.tagged_products(
+            session, workspace_id, campaign_id
+        ),
+    }
+
+
 @router.post("/{campaign_id}/autopilot/executions/approve")
 def approve_autopilot_executions(
     workspace_id: str,

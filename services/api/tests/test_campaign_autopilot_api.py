@@ -72,6 +72,25 @@ def workspace():
     app.dependency_overrides.clear()
 
 
+def tag_offer(workspace_id: str, campaign_id: str, offer_id: str = "offer-1") -> None:
+    """Let this campaign promote this product.
+
+    A campaign matches against the products tagged to it and nothing else, so
+    a test about matching has to say which product is on the table. Written
+    out per test rather than folded into `campaign()`, because "everything in
+    the workspace is available" is the assumption the tag exists to remove.
+    """
+    from trendrelay_api.autopilot_models import CampaignOffer
+
+    with TestingSession.begin() as session:
+        session.add(CampaignOffer(
+            workspace_id=workspace_id,
+            campaign_id=campaign_id,
+            offer_id=offer_id,
+            created_by="owner-user",
+        ))
+
+
 def campaign(workspace_id: str) -> str:
     body = request(
         "POST", f"/api/workspaces/{workspace_id}/campaigns",
@@ -299,6 +318,7 @@ def test_smart_offer_settings_round_trip(workspace) -> None:
 
 def test_campaign_recommendations_explain_content_and_delivery_signals(workspace) -> None:
     campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
     item = request(
         "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
         json={
@@ -324,6 +344,7 @@ def test_campaign_recommendations_explain_content_and_delivery_signals(workspace
 
 def test_weak_matches_are_explicitly_review_only(workspace) -> None:
     campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
     with TestingSession.begin() as session:
         product = session.get(Product, "prod-1")
         product.name = "Unrelated garden hose"
@@ -340,6 +361,7 @@ def test_weak_matches_are_explicitly_review_only(workspace) -> None:
 
 def test_campaign_recommendations_roll_up_queued_image_evidence(workspace) -> None:
     campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id, "offer-dress")
     with TestingSession.begin() as session:
         session.add(Product(
             id="prod-dress", workspace_id=workspace, catalog_key="dress-key",
@@ -1057,6 +1079,7 @@ def _draft_asset(workspace, asset_id, title, caption, hashtags):
 
 def test_a_clip_is_matched_before_it_reaches_the_queue(workspace) -> None:
     campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
     _draft_asset(
         workspace, "asset-draft", "Portable espresso setup",
         "Make espresso anywhere with this compact coffee kit", ["coffee"],
@@ -1164,6 +1187,7 @@ def test_review_says_which_matches_would_be_posted(workspace) -> None:
     than reapplying the rule and drifting from the scheduler.
     """
     campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
     item = request(
         "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
         json={
@@ -1210,6 +1234,7 @@ def test_asking_about_the_campaign_forecasts_nothing(workspace) -> None:
     # Without an item there is no post to attach anything to, so the ranking
     # stands alone rather than pretending to predict one.
     campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
 
     body = request(
         "GET",

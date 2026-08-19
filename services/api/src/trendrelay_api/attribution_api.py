@@ -766,6 +766,114 @@ def attribution_products(
     }
 
 
+class ProductCampaignTags(BaseModel):
+    """Products and the campaigns that may promote them.
+
+    Both sides are lists, because the useful action is rarely one to one:
+    tagging forty imported products to one campaign, or one product to the two
+    campaigns that will run it, are the same request with different shapes.
+    """
+
+    offer_ids: list[str] = Field(min_length=1, max_length=500)
+    campaign_ids: list[str] = Field(min_length=1, max_length=50)
+
+
+@workspace_router.get("/campaign-tags")
+def list_campaign_tags(
+    workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
+) -> dict[str, Any]:
+    """The campaigns a product can be tagged to, and what each already holds.
+
+    Read once for the whole table rather than per row: the tag column on two
+    hundred products is one question about the workspace, not two hundred
+    questions about products.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api import campaign_offer_tags
+
+    offer_ids = list(
+        session.scalars(
+            select(ProductOffer.id).where(ProductOffer.workspace_id == workspace_id)
+        ).all()
+    )
+    return {
+        "campaigns": campaign_offer_tags.campaign_choices(session, workspace_id),
+        "by_offer": campaign_offer_tags.campaigns_for_offers(
+            session, workspace_id, offer_ids
+        ),
+    }
+
+
+@workspace_router.post("/campaign-tags")
+def tag_products_to_campaigns(
+    workspace_id: str,
+    body: ProductCampaignTags,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Let these campaigns promote these products."""
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    ensure_profile(session, user)
+    from trendrelay_api import campaign_offer_tags
+
+    known = {
+        campaign.id
+        for campaign in session.scalars(
+            select(Campaign).where(
+                Campaign.workspace_id == workspace_id,
+                Campaign.id.in_(body.campaign_ids),
+            )
+        ).all()
+    }
+    unknown = [item for item in body.campaign_ids if item not in known]
+    if unknown:
+        raise HTTPException(
+            status_code=404, detail=f"No such campaign in this workspace: {unknown[0]}"
+        )
+    results = {
+        campaign_id: campaign_offer_tags.tag(
+            session, workspace_id, campaign_id, body.offer_ids, user_id=user.id
+        )
+        for campaign_id in dict.fromkeys(body.campaign_ids)
+    }
+    audit(
+        session, request, workspace_id, user.id,
+        "attribution.products_tagged", "workspace", workspace_id,
+        {"campaigns": len(results), "offers": len(body.offer_ids)},
+    )
+    return {"results": results}
+
+
+@workspace_router.post("/campaign-tags/remove")
+def untag_products_from_campaigns(
+    workspace_id: str,
+    body: ProductCampaignTags,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Stop these campaigns promoting these products.
+
+    A POST rather than a DELETE because the request is a pair of lists, and a
+    body on a DELETE is the sort of thing that works until something in the
+    middle drops it.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    from trendrelay_api import campaign_offer_tags
+
+    results = {
+        campaign_id: campaign_offer_tags.untag(session, campaign_id, body.offer_ids)
+        for campaign_id in dict.fromkeys(body.campaign_ids)
+    }
+    audit(
+        session, request, workspace_id, user.id,
+        "attribution.products_untagged", "workspace", workspace_id,
+        {"campaigns": len(results), "offers": len(body.offer_ids)},
+    )
+    return {"results": results}
+
+
 @workspace_router.get("/summary")
 def attribution_summary(
     workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
@@ -987,6 +1095,14 @@ class ShopeeImport(ShopeeImportSource):
     #: Importing changes the catalogue, so it remains explicit even though it
     #: no longer creates public TrendRelay redirects.
     confirm_external_action: bool = False
+    #: Campaigns these products may be promoted by, applied as they land.
+    #:
+    #: Importing a hundred products for one campaign and then tagging them in a
+    #: second pass is the same decision made twice, and the second pass is the
+    #: one people forget - leaving a catalogue full of products no campaign can
+    #: use. Empty imports them untagged, which is a choice rather than an
+    #: oversight when it is offered on the same screen.
+    campaign_ids: list[str] = Field(default_factory=list, max_length=50)
 
 
 class ShopeeOfferPageOpen(BaseModel):
@@ -1150,6 +1266,32 @@ def import_shopee_offers(
         user.id,
         rows,
     )
+    # Tagged as they land, to the campaigns the import named. Every offer the
+    # batch touched, not only the new ones: re-importing an export to refresh
+    # prices is a normal thing to do, and it should not quietly leave the
+    # products it refreshed out of the campaign it was imported for.
+    tagged_to_campaigns: dict[str, Any] = {}
+    if body.campaign_ids:
+        from trendrelay_api import campaign_offer_tags
+
+        touched = [
+            str(link["offer_id"])
+            for link in outcome.affiliate_links
+            if link.get("offer_id")
+        ]
+        tagged: dict[str, Any] = {}
+        for campaign_id in dict.fromkeys(body.campaign_ids):
+            found = session.scalar(
+                select(Campaign).where(
+                    Campaign.id == campaign_id, Campaign.workspace_id == workspace_id
+                )
+            )
+            if not found:
+                continue
+            tagged[campaign_id] = campaign_offer_tags.tag(
+                session, workspace_id, campaign_id, touched, user_id=user.id
+            )
+        tagged_to_campaigns = tagged
     audit(
         session,
         request,
@@ -1171,6 +1313,10 @@ def import_shopee_offers(
         "created": outcome.created,
         "already_present": outcome.already_present,
         "affiliate_links": outcome.affiliate_links,
+        # Which campaigns may now promote what was imported, per campaign, so
+        # the screen can say "100 imported, 100 tagged to Launch" rather than
+        # leaving the second half to be found elsewhere.
+        "tagged_to_campaigns": tagged_to_campaigns,
         # Reported rather than raised: an export of one hundred with three odd
         # rows should file ninety-seven and name the three.
         "problems": problems + outcome.problems,

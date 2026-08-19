@@ -280,3 +280,78 @@ def test_volume_touches_only_the_audio_chain() -> None:
 
 def test_mute_overrides_whatever_gain_was_set() -> None:
     assert audio_of(("volume", {"gain": 3.0, "mute": True})) == ["volume=0"]
+
+
+# --- the repurposing frame tools ----------------------------------------------
+
+
+def test_a_zoom_scales_up_and_crops_back_to_size() -> None:
+    filters = video_of(("zoom", {"factor": 1.2, "anchor": "centre"}))
+
+    assert filters == [
+        "scale=trunc(iw*1.2/2)*2:trunc(ih*1.2/2)*2",
+        "crop=trunc(iw/1.2/2)*2:trunc(ih/1.2/2)*2:(iw-ow)/2:(ih-oh)/2",
+    ]
+
+
+def test_a_zoom_anchor_decides_which_part_survives() -> None:
+    top = video_of(("zoom", {"factor": 1.1, "anchor": "top"}))
+
+    assert top[1].endswith(":(iw-ow)/2:0")
+
+
+def test_fit_is_one_labelled_fragment_that_still_composes() -> None:
+    """The split and overlay are labelled chains, joined to neighbours by the
+    plain comma the filtergraph builder uses - so the fragment must be one list
+    item, opening and closing unlabelled."""
+    filters = video_of(("flip", {"axis": "horizontal"}), ("fit", {"ratio": "9:16"}))
+
+    assert filters[0] == "hflip"
+    assert len(filters) == 2
+    fragment = filters[1]
+    assert fragment.startswith("split=2[")
+    assert fragment.endswith("overlay=(W-w)/2:(H-h)/2")
+    assert r"max(iw\,ih*0.562500)" in fragment
+    assert "boxblur=" in fragment
+
+
+def test_two_labelled_steps_cannot_collide() -> None:
+    # Labels are numbered per use; a recipe holding a fit and a region blur
+    # must not reuse a name, or ffmpeg refuses the whole graph.
+    fit_fragment, region_fragment = video_of(
+        ("fit", {"ratio": "1:1"}), ("region_blur", {}),
+    )
+
+    import re
+
+    fit_labels = set(re.findall(r"\[[a-z]+\d+\]", fit_fragment))
+    region_labels = set(re.findall(r"\[[a-z]+\d+\]", region_fragment))
+    assert not fit_labels & region_labels
+
+
+def test_a_region_blur_covers_the_rectangle_it_was_given() -> None:
+    fragment = video_of(
+        ("region_blur", {"x": 0.5, "y": 0.8, "width": 0.4, "height": 0.15}),
+    )[0]
+
+    # Split only to stay inside the line limit; it is one filter string.
+    assert (
+        "crop=trunc(iw*0.4000/2)*2:trunc(ih*0.1500/2)*2"
+        ":trunc(iw*0.5000):trunc(ih*0.8000)"
+    ) in fragment
+    assert fragment.endswith("overlay=trunc(W*0.5000):trunc(H*0.8000)")
+
+
+def test_a_region_nudged_past_the_edge_is_clamped_not_refused() -> None:
+    # A slip of a slider, and the visible result - blur stopping at the edge -
+    # is exactly what was meant.
+    fragment = video_of(
+        ("region_blur", {"x": 0.9, "y": 0.9, "width": 0.5, "height": 0.5}),
+    )[0]
+
+    assert "crop=trunc(iw*0.1000/2)*2:trunc(ih*0.1000/2)*2" in fragment
+
+
+def test_the_new_tools_leave_time_alone() -> None:
+    steps = recipe(("zoom", {}), ("fit", {}), ("region_blur", {}))
+    assert duration_after(steps, 12.0) == 12.0

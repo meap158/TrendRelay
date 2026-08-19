@@ -828,6 +828,68 @@ def test_an_object_that_claims_to_hide_a_face_is_actually_solid() -> None:
         assert (alpha > 200).mean() > 0.4, overlay.id
 
 
+def _composited_over_the_whole_canvas(cv2, numpy, overlay, width: int):
+    """`render_sprite`, written the slow and obvious way.
+
+    The fast version blends each shape only over the rectangle
+    `_shape_bounds` says it can reach, and a rectangle that is short of what
+    OpenCV actually drew would clip an edge off a sticker so quietly that no
+    other test here would notice. This is the reference it is measured against.
+    """
+    width = max(8, min(int(width), overlay_catalogue.MAX_SPRITE_WIDTH))
+    height = max(8, int(round(width * overlay.aspect)))
+    factor = max(1, min(overlay_catalogue.SUPERSAMPLE, overlay_catalogue.MAX_DRAW_WIDTH // width))
+    big_width, big_height = width * factor, height * factor
+    canvas = numpy.zeros((big_height, big_width, 4), dtype=numpy.float32)
+    for shape in overlay.shapes:
+        layer = numpy.zeros((big_height, big_width, 4), dtype=numpy.uint8)
+        overlay_catalogue._draw(cv2, numpy, layer, shape, big_width, big_height)
+        overlay_catalogue._over(canvas, overlay_catalogue.premultiply(numpy, layer))
+    return overlay_catalogue.unpremultiply(
+        numpy, cv2.resize(canvas, (width, height), interpolation=cv2.INTER_AREA)
+    )
+
+
+@pytest.mark.parametrize("width", [48, 192])
+def test_blending_only_where_a_shape_lands_draws_the_same_sprite(width: int) -> None:
+    cv2, numpy = _vision()
+    for overlay in overlay_catalogue.BUILT_IN:
+        assert numpy.array_equal(
+            overlay_catalogue.render_sprite(cv2, numpy, overlay, width),
+            _composited_over_the_whole_canvas(cv2, numpy, overlay, width),
+        ), f"{overlay.id} at {width} is missing something its bounds cut off"
+
+
+def test_a_shape_nowhere_near_the_canvas_is_skipped_rather_than_clamped() -> None:
+    off = overlay_catalogue.Shape(kind="rect", fill=(255, 0, 0, 255), centre=(4.0, 0.5))
+    assert overlay_catalogue._shape_bounds(off, 100, 100) is None
+    on = overlay_catalogue.Shape(kind="rect", fill=(255, 0, 0, 255), size=(0.2, 0.2))
+    assert overlay_catalogue._shape_bounds(on, 100, 100) == (37, 37, 63, 63)
+
+
+def test_a_built_in_sprite_is_encoded_once_and_a_drop_in_every_time(tmp_path) -> None:
+    """A built-in cannot change while the process runs; a drop-in is a live file.
+
+    Handing somebody a stale copy of a PNG they are still editing, with nothing
+    on screen to say why, is worse than paying for the encode again.
+    """
+    cv2, numpy = _vision()
+    overlay_catalogue._SPRITE_CACHE.clear()
+    built_in = overlay_catalogue.BUILT_IN[0]
+    first = overlay_catalogue.sprite_png(built_in, 96)
+    assert overlay_catalogue.sprite_png(built_in, 96) is first
+    # A different size is a different picture, not a cache hit.
+    assert overlay_catalogue.sprite_png(built_in, 128) is not first
+
+    picture = tmp_path / "sticker.png"
+    _blank_png(cv2, numpy, picture, size=(8, 8))
+    drop_in = Overlay(id="sticker", label="Sticker", group="Drop-ins", image=picture)
+    assert overlay_catalogue.sprite_png(drop_in, 96) is not overlay_catalogue.sprite_png(
+        drop_in, 96
+    )
+    assert ("sticker", 96) not in overlay_catalogue._SPRITE_CACHE
+
+
 def test_premultiplying_and_undoing_it_returns_the_same_picture() -> None:
     cv2, numpy = _vision()
     del cv2
