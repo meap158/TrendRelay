@@ -96,6 +96,7 @@ function batchOf(job: BaseJob): { id: string; total: number } | null {
  */
 function batchProgress(group: NotificationGroup): {
   total: number; settled: number; failed: number; stalled: number;
+  retrying: number; spent: number; working: number;
   running: boolean; short: boolean; label: string;
 } | null {
   const batch = batchOf(group.latest);
@@ -114,6 +115,21 @@ function batchProgress(group: NotificationGroup): {
   // because "running" over a batch where three items are stuck is the report
   // somebody watches for twenty minutes before working out that it is wrong.
   const stalled = group.jobs.filter((job) => job.stalled).length;
+  // Actually being worked on: running, and with a worker still holding it.
+  // A batch of seventy-one is a queue with a few in flight, so some of its
+  // jobs having lost their worker says nothing about whether the batch is
+  // moving - and it was moving that mattered to whoever queued it.
+  const working = group.jobs.filter(
+    (job) => ["running", "in_progress"].includes(job.status) && !job.stalled,
+  ).length;
+  // A job that lost its worker gets picked up again - until it has used its
+  // attempts, after which the queue gives up on it and records a failure.
+  // Counting both as "to retry" promises a recovery that is not coming.
+  const spent = group.jobs.filter(
+    (job) => job.stalled
+      && Number(job.raw?.attempt_count ?? 0) >= Number(job.raw?.max_attempts ?? 0),
+  ).length;
+  const retrying = stalled - spent;
   // Running means something is still to happen, not that the arithmetic has
   // not reached the total. A batch whose jobs were never all created - the
   // rest refused at queueing time - can never reach it, and called itself
@@ -134,9 +150,16 @@ function batchProgress(group: NotificationGroup): {
           ? `${total - failed} of ${total} done`
           : `All ${total} done`,
     failed ? `${failed} failed` : "",
-    stalled ? `${stalled} paused` : "",
+    // Named for what will happen to them. "Paused" beside a batch that is
+    // visibly working reads as a fault; these are picked up again as the
+    // batch reaches them, and only mean nothing-is-happening when nothing
+    // else is running either.
+    retrying ? (working ? `${retrying} to retry` : `${retrying} paused`) : "",
+    spent ? `${spent} giving up` : "",
   ].filter(Boolean).join(" · ");
-  return { total, settled, failed, stalled, running, short, label };
+  return {
+    total, settled, failed, stalled, retrying, spent, working, running, short, label,
+  };
 }
 
 /**
@@ -420,15 +443,21 @@ export function GlobalNav() {
                           {/* "running" is what the row says; "paused" is what
                               is true when no worker holds its lease. */}
                           {/* A batch's own state, not its newest job's. */}
+                          {/* Working beats waiting. A batch with one clip
+                              being rendered and three to retry is running, and
+                              calling it paused sent somebody to look for a
+                              worker that was already there. */}
                           {batch
                             ? <span className={`notification-status status-${
-                                batch.stalled ? "paused"
-                                  : batch.running ? "running"
-                                    : batch.short || batch.failed ? "failed" : "succeeded"}`}>
-                                {batch.stalled ? "part paused"
-                                  : batch.running ? "running"
-                                    : batch.short ? "stopped short"
-                                      : batch.failed ? "finished with failures" : "succeeded"}
+                                batch.working ? "running"
+                                  : batch.stalled ? "paused"
+                                    : batch.running ? "running"
+                                      : batch.short || batch.failed ? "failed" : "succeeded"}`}>
+                                {batch.working ? "running"
+                                  : batch.stalled ? "paused"
+                                    : batch.running ? "waiting"
+                                      : batch.short ? "stopped short"
+                                        : batch.failed ? "finished with failures" : "succeeded"}
                               </span>
                             : job.stalled
                               ? <span className="notification-status status-paused">paused</span>
@@ -471,8 +500,19 @@ export function GlobalNav() {
                             <small>{batch.label}</small>
                             {batch.stalled > 0 && (
                               <small className="notification-stalled">
-                                {batch.stalled === 1 ? "One item is" : `${batch.stalled} items are`}
-                                {" "}waiting on a worker. They resume on their own once one runs.
+                                {[
+                                  batch.retrying && batch.working
+                                    ? `${batch.retrying === 1 ? "One item" : `${batch.retrying} items`} lost `
+                                      + "a worker and go back in the queue; the batch is still running."
+                                    : batch.retrying
+                                      ? `${batch.retrying === 1 ? "One item is" : `${batch.retrying} items are`} `
+                                        + "waiting on a worker. They resume on their own once one runs."
+                                      : "",
+                                  batch.spent
+                                    ? `${batch.spent === 1 ? "One item has" : `${batch.spent} items have`} `
+                                      + "used every attempt and will be recorded as failed."
+                                    : "",
+                                ].filter(Boolean).join(" ")}
                               </small>
                             )}
                           </div>
