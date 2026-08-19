@@ -15,6 +15,7 @@ import { Dialog } from "../ui/dialog";
 import { SearchSelect } from "../ui/search-select";
 import { ActionIcon } from "../ui/action-icons";
 import { handoffPath } from "../../lib/media-rules";
+import { isDefaultScaffolding, scaffoldingFor } from "../../lib/campaign-scaffolding";
 import {
   upcomingSlots,
   type Slot,
@@ -133,6 +134,41 @@ const CAMPAIGN_AUDIENCES = [
  */
 const POST_LANGUAGES = LOCALES.map((item) => ({ value: item.code, label: item.label }));
 
+/** What a post attaches when it does not pin its own product. */
+type OfferMode = "smart" | "manual" | "none";
+
+const OFFER_MODES: readonly (readonly [OfferMode, string, string])[] = [
+  ["smart", "Smart match", "Fit content automatically"],
+  ["manual", "One product", "Use one offer everywhere"],
+  ["none", "No products", "Organic posts only"],
+];
+
+const AUTHORITIES: readonly (readonly [string, string])[] = [
+  ["assist", "Assist — draft everything for review"],
+  ["auto_draft", "Auto draft — prepare, never send"],
+  ["run_by_exception", "Run by exception (recommended)"],
+  ["autonomous", "Autonomous — send without approval"],
+];
+
+const PRIORITIES: readonly (readonly [string, string])[] = [
+  ["balanced", "Balanced — blend measured axes"],
+  ["revenue", "Revenue — earnings per click"],
+  ["reach", "Reach — views per post"],
+  ["discussion", "Discussion — comments per post"],
+];
+
+/**
+ * What the campaign posts in, when nobody has said yet.
+ *
+ * The interface's own language, if a campaign can be posted in it. Somebody
+ * running TrendRelay in Vietnamese is far more likely to be posting in
+ * Vietnamese than in English, and this is the one default that decides the
+ * disclosure, the profile-link wording and the product labels.
+ */
+function defaultLanguage(locale: string): string {
+  return POST_LANGUAGES.some((item) => item.value === locale) ? locale : "en";
+}
+
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
   if (!response.ok) throw new Error(body.detail ?? "Campaign request failed.");
@@ -180,6 +216,14 @@ export default function CampaignsPage() {
   const [offerChoice, setOfferChoice] = useState("");
   const [offers, setOffers] = useState<CampaignOffer[]>([]);
   const [newCampaignOfferId, setNewCampaignOfferId] = useState("");
+  /** The create dialog's own copies of the three fields a form cannot carry:
+      a mode that decides whether another field exists, and two strings that
+      are rewritten when the post language changes. */
+  const [newOfferMode, setNewOfferMode] = useState<OfferMode>("smart");
+  const [newLanguage, setNewLanguage] = useState<string>(defaultLanguage(locale));
+  const [newScaffolding, setNewScaffolding] = useState(
+    () => scaffoldingFor(defaultLanguage(locale)),
+  );
   // Reported over the page. Rendered in flow, these shifted everything below
   // them whenever an action finished, which reads as the interface flinching.
   const { messages: statusMessages, succeed, fail, dismiss } = useStatus();
@@ -280,6 +324,45 @@ export default function CampaignsPage() {
     return () => { cancelled = true; };
   }, [apiFetch, workspaceId]);
 
+  function closeNewCampaign() {
+    setNewCampaignOpen(false);
+    resetNewCampaign();
+  }
+
+  /** Back to what a fresh dialog shows, so an abandoned draft is not the
+      starting point of the next campaign. */
+  function resetNewCampaign() {
+    const language = defaultLanguage(locale);
+    setNewCampaignOfferId("");
+    setNewOfferMode("smart");
+    setNewLanguage(language);
+    setNewScaffolding(scaffoldingFor(language));
+    setObjectiveChoice(CAMPAIGN_GOALS[0]);
+    setAudienceChoice(CAMPAIGN_AUDIENCES[0]);
+  }
+
+  /**
+   * Follow the post language, unless the wording has been written by hand.
+   *
+   * The API does this on save; doing it here too is what makes the default
+   * visible while the campaign is still being described, rather than a
+   * surprise discovered in the settings dialog afterwards. The test for
+   * "still ours" asks every language, not just the one being left, so
+   * en -> vi -> fr ends in French.
+   */
+  function changeNewLanguage(language: string) {
+    setNewLanguage(language);
+    setNewScaffolding((current) => {
+      const fresh = scaffoldingFor(language);
+      return {
+        disclosure: isDefaultScaffolding("disclosure", current.disclosure)
+          ? fresh.disclosure : current.disclosure,
+        bioHint: isDefaultScaffolding("bioHint", current.bioHint)
+          ? fresh.bioHint : current.bioHint,
+      };
+    });
+  }
+
   async function createCampaign(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy("campaign");
@@ -299,7 +382,22 @@ export default function CampaignsPage() {
             // no longer asked for: nothing scored it, and a free-text country
             // list was a question with no consequence.
             languages: [form.get("language")].filter(Boolean),
-            offer_id: newCampaignOfferId || null,
+            // Only pinned when the mode pins one, so switching away from
+            // "One product" does not leave a stale offer behind it. The same
+            // rule the settings dialog applies.
+            offer_id: newOfferMode === "manual" ? (newCampaignOfferId || null) : null,
+            offer_mode: newOfferMode,
+            // How it posts. Every one optional at the API, so an untouched
+            // section sends the values it was showing and a campaign created
+            // without opening it gets exactly the defaults it always did.
+            max_products_per_post: Number(form.get("max_products_per_post")),
+            daily_cap_per_account: Number(form.get("daily_cap_per_account")),
+            weekly_post_cap: form.get("weekly_post_cap")
+              ? Number(form.get("weekly_post_cap")) : null,
+            authority: form.get("authority"),
+            priority: form.get("priority"),
+            disclosure: newScaffolding.disclosure,
+            bio_hint: newScaffolding.bioHint,
           }),
         }),
       );
@@ -307,7 +405,7 @@ export default function CampaignsPage() {
       await refresh(workspaceId);
       setCampaignId(body.campaign.id);
       setNewCampaignOpen(false);
-      setNewCampaignOfferId("");
+      resetNewCampaign();
       succeed("Campaign created. Add approved media to its campaign queue.");
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "Campaign creation failed.");
@@ -540,7 +638,7 @@ export default function CampaignsPage() {
         open={newCampaignOpen}
         title={t("campaigns.create")}
         description="Set the campaign goal once. Media, accounts, schedule, and deployment come next in this workspace."
-        onClose={() => setNewCampaignOpen(false)}
+        onClose={closeNewCampaign}
       >
         <form className="campaign-dialog-form" onSubmit={createCampaign}>
           <label>{t("campaigns.name")}<input name="name" required maxLength={160} autoFocus /></label>
@@ -579,32 +677,121 @@ export default function CampaignsPage() {
               )}
             </label>
           </div>
+          {/* Controlled, because the disclosure and the profile-link wording
+              below are rewritten when it changes. */}
           <label>{t("campaigns.postLanguage")}
-            <select name="language" defaultValue={POST_LANGUAGES.some((item) => item.value === locale) ? locale : "en"}>
+            <select name="language" value={newLanguage}
+              onChange={(event) => changeNewLanguage(event.target.value)}>
               {POST_LANGUAGES.map((item) => (
                 <option key={item.value} value={item.value}>{item.label}</option>
               ))}
             </select>
             <small>The language the disclosure, bio hint and product labels are written in. Your own copy is always your own.</small>
           </label>
-          <label>Affiliate offer from Attribution
-            <SearchSelect
-              value={newCampaignOfferId}
-              options={offers.map((offer) => ({
-                value: offer.id,
-                label: offer.product.name,
-                description: offerDescription(offer),
-                keywords: `${offer.product.brand ?? ""} ${offer.product.marketplace ?? ""} ${offer.network} ${offer.affiliate_url}`,
-              }))}
-              onChange={setNewCampaignOfferId}
-              placeholder="Let smart matching choose"
-              searchPlaceholder="Search imported offers…"
-              emptyLabel="No offers imported in Attribution"
-            />
-            <small>Optional. Pin one product to every post, or leave this clear for automatic matching from Attribution.</small>
-          </label>
+          {/* The same three modes the settings dialog offers, in the same
+              shape. This was a bare offer picker, which could say "pin this
+              one" and "match automatically" but had no way at all to say "no
+              products" - so an organic campaign could not be created, only
+              created wrongly and then corrected. */}
+          <div className="campaign-product-mode">
+            <div>
+              <strong>Products</strong>
+              <small>What a post attaches when it does not pin its own.
+                Pinning in the composer overrides this for that post.</small>
+            </div>
+            <div className="campaign-mode-options" role="radiogroup"
+              aria-label="Affiliate product matching">
+              {OFFER_MODES.map(([mode, title, hint]) => (
+                <button key={mode} type="button" role="radio"
+                  aria-checked={newOfferMode === mode}
+                  className={newOfferMode === mode ? "active" : ""}
+                  onClick={() => setNewOfferMode(mode)}>
+                  <strong>{title}</strong><small>{hint}</small>
+                </button>
+              ))}
+            </div>
+          </div>
+          {newOfferMode === "manual" && (
+            <label>Offer
+              <SearchSelect
+                value={newCampaignOfferId}
+                options={offers.map((offer) => ({
+                  value: offer.id,
+                  label: offer.product.name,
+                  description: offerDescription(offer),
+                  keywords: `${offer.product.brand ?? ""} ${offer.product.marketplace ?? ""} ${offer.network} ${offer.affiliate_url}`,
+                }))}
+                onChange={setNewCampaignOfferId}
+                placeholder="Choose an imported offer"
+                searchPlaceholder="Search imported offers…"
+                emptyLabel="No offers imported in Attribution"
+              />
+              <small>Source: imported offers in Attribution.</small>
+            </label>
+          )}
+          {/* Folded away rather than left out. These are the same settings, in
+              the same order and with the same wording, as the settings dialog
+              - but every one has a working default, and a first-run form that
+              opens with nine of them asks somebody to decide things they have
+              no basis to decide yet. Open it and they are all here; ignore it
+              and the campaign is created exactly as it always was. */}
+          <details className="campaign-dialog-more">
+            <summary>
+              <strong>How it posts</strong>
+              <small>Caps, authority, disclosure. Sensible defaults already set.</small>
+            </summary>
+            <div className="campaign-dialog-grid">
+              <label>Products per post
+                <input type="number" name="max_products_per_post" min={1} max={5} defaultValue={2} />
+                <small>Bio-only networks still use one and rotate across posts.</small>
+              </label>
+              <label>Posts per account per day
+                <input type="number" name="daily_cap_per_account" min={1} max={24} defaultValue={2} />
+                <small>A ceiling, not a target.</small>
+              </label>
+              <label>Weekly post cap
+                <input type="number" name="weekly_post_cap" min={1} max={200} placeholder="No cap" />
+                <small>Across every destination. Empty leaves the per-account caps.</small>
+              </label>
+            </div>
+            <label>Authority
+              <select name="authority" defaultValue="run_by_exception">
+                {AUTHORITIES.map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              <small>How much of the posting runs without you.</small>
+            </label>
+            {/* Written in the campaign's language and rewritten when it
+                changes, until somebody types their own. The API has always
+                chosen these; showing them here is what makes them editable
+                before the campaign exists rather than after. */}
+            <label>Disclosure
+              <input name="disclosure" maxLength={280} value={newScaffolding.disclosure}
+                onChange={(event) => setNewScaffolding((current) => ({
+                  ...current, disclosure: event.target.value,
+                }))} />
+              <small>Leads every caption, on every network. Not optional:
+                each post is its own advertisement.</small>
+            </label>
+            <label>Profile-link wording
+              <input name="bio_hint" maxLength={120} value={newScaffolding.bioHint}
+                onChange={(event) => setNewScaffolding((current) => ({
+                  ...current, bioHint: event.target.value,
+                }))} />
+              <small>Used where a link in a post is not clickable.</small>
+            </label>
+            <label>Optimise for
+              <select name="priority" defaultValue="balanced">
+                {PRIORITIES.map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              <small>Ranking uses an axis only once it has evidence.</small>
+            </label>
+          </details>
           <div className="campaign-dialog-actions">
-            <Button type="button" variant="quiet" onClick={() => setNewCampaignOpen(false)}>{t("common.cancel")}</Button>
+            <Button type="button" variant="quiet" onClick={closeNewCampaign}>{t("common.cancel")}</Button>
             <Button type="submit" variant="primary" busy={busy === "campaign"}>{t("campaigns.createButton")}</Button>
           </div>
         </form>
@@ -646,8 +833,13 @@ export default function CampaignsPage() {
                 beside the queue somebody works in every day. */}
             {policy && <>
               <div className="campaign-dialog-grid">
+                {/* One to five, which is what the table accepts. This said 0
+                    to 10, so both ends passed the form and the API and then
+                    broke on valid_autopilot_product_count - asking for six
+                    products returned a 500 rather than a limit. Zero was never
+                    how to ask for no products; that is the mode below. */}
                 <label>Products per post
-                  <input type="number" name="max_products_per_post" min={0} max={10}
+                  <input type="number" name="max_products_per_post" min={1} max={5}
                     defaultValue={policy.max_products_per_post} />
                   <small>Bio-only networks still use one and rotate across posts.</small>
                 </label>
@@ -670,10 +862,9 @@ export default function CampaignsPage() {
               </div>
               <label>Authority
                 <select name="authority" defaultValue={policy.authority}>
-                  <option value="assist">Assist — draft everything for review</option>
-                  <option value="auto_draft">Auto draft — prepare, never send</option>
-                  <option value="run_by_exception">Run by exception (recommended)</option>
-                  <option value="autonomous">Autonomous — send without approval</option>
+                  {AUTHORITIES.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
                 </select>
                 <small>How much of the posting runs without you.</small>
               </label>
@@ -685,11 +876,7 @@ export default function CampaignsPage() {
                 </div>
                 <div className="campaign-mode-options" role="radiogroup"
                   aria-label="Affiliate product matching">
-                  {([
-                    ["smart", "Smart match", "Fit content automatically"],
-                    ["manual", "One product", "Use one offer everywhere"],
-                    ["none", "No products", "Organic posts only"],
-                  ] as const).map(([mode, title, hint]) => (
+                  {OFFER_MODES.map(([mode, title, hint]) => (
                     <button key={mode} type="button" role="radio"
                       aria-checked={offerMode === mode}
                       className={offerMode === mode ? "active" : ""}
@@ -731,10 +918,9 @@ export default function CampaignsPage() {
               </label>
               <label>Optimise for
                 <select name="priority" defaultValue={policy.priority}>
-                  <option value="balanced">Balanced — blend measured axes</option>
-                  <option value="revenue">Revenue — earnings per click</option>
-                  <option value="reach">Reach — views per post</option>
-                  <option value="discussion">Discussion — comments per post</option>
+                  {PRIORITIES.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
                 </select>
                 <small>Ranking uses an axis only once it has evidence.</small>
               </label>

@@ -1215,6 +1215,26 @@ html { scroll-behavior: smooth; }
 /* Fits what it holds rather than always two: the caps below it are three,
    and a fixed pair left the third alone on a row of its own. */
 .campaign-dialog-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+/* The settings a new campaign rarely needs to argue with, folded away.
+ *
+ * Creating a campaign asked four questions where changing its settings offered
+ * thirteen, so describing one meant creating it and immediately reopening its
+ * settings. The rest are all here now - same fields, same order, same wording
+ * as that dialog - but every one has a working default, and a first-run form
+ * opening with nine more decisions is its own kind of unusable. */
+.campaign-dialog-more { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-raised); }
+.campaign-dialog-more > summary { display: grid; gap: 2px; padding: 10px 12px; cursor: pointer; list-style: none; }
+.campaign-dialog-more > summary::-webkit-details-marker { display: none; }
+/* A chevron of its own, since the marker is suppressed - without it the row
+   reads as a heading rather than as something that opens. */
+.campaign-dialog-more > summary strong { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.campaign-dialog-more > summary strong::before { content: "›"; color: var(--muted); font-size: 14px; line-height: 1; transition: transform 150ms ease; }
+.campaign-dialog-more[open] > summary strong::before { transform: rotate(90deg); }
+.campaign-dialog-more > summary small { color: var(--muted); font-size: 11px; font-weight: 400; }
+.campaign-dialog-more[open] > summary { border-bottom: 1px solid var(--line); }
+/* Its own grid rather than inheriting the form's, so the fields inside line up
+   with each other and not with the four questions above them. */
+.campaign-dialog-more > :not(summary) { margin: 10px 12px; }
 .campaign-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
 @media (max-width: 1100px) { .campaign-media-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 900px) {
