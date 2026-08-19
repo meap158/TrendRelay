@@ -267,485 +267,6 @@ function jobDot(status: string): React.CSSProperties {
   };
 }
 
-const S: Record<string, React.CSSProperties> = {
-  page: {
-    fontFamily: "'Google Sans', 'Segoe UI', system-ui, -apple-system, sans-serif",
-    background: "var(--bg)",
-    color: "var(--text)",
-    minHeight: "100vh",
-  },
-  hero: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "stretch",
-    justifyContent: "center",
-    maxWidth: "960px",
-    margin: "0 auto",
-    padding: "18px 24px 14px",
-    textAlign: "left",
-  },
-  logo: {
-    fontSize: "24px",
-    fontWeight: 600,
-    letterSpacing: "-0.5px",
-    color: "var(--text)",
-    margin: "0 0 3px",
-  },
-  tagline: {
-    fontSize: "15px",
-    color: "var(--muted)",
-    margin: "0 0 12px",
-    fontWeight: 400,
-  },
-  searchForm: {
-    display: "flex",
-    alignItems: "center",
-    width: "100%",
-    maxWidth: "none",
-    background: "var(--panel)",
-    border: "1px solid var(--line-strong)",
-    borderRadius: "var(--radius)",
-    padding: "6px 8px 6px 16px",
-    boxShadow: "0 1px 6px rgba(32,33,36,0.08)",
-    transition: "box-shadow 0.2s",
-  },
-  searchInput: {
-    flex: 1,
-    border: "none",
-    outline: "none",
-    fontSize: "16px",
-    padding: "10px 8px",
-    background: "transparent",
-    color: "var(--text)",
-    fontFamily: "inherit",
-  },
-  tiktokHead: {
-    display: "flex",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: "16px",
-    flexWrap: "wrap" as const,
-  },
-  tiktokControls: {
-    display: "flex",
-    gap: "8px",
-    alignItems: "center",
-    flexWrap: "wrap" as const,
-  },
-  tiktokSelect: {
-    border: "1px solid var(--line-strong)",
-    borderRadius: "16px",
-    padding: "6px 12px",
-    fontSize: "12px",
-    background: "var(--panel)",
-    color: "var(--text)",
-    fontFamily: "inherit",
-    cursor: "pointer",
-  },
-  tiktokNote: {
-    margin: "0 0 12px",
-    padding: "8px 12px",
-    borderLeft: "3px solid var(--amber)",
-    background: "var(--panel)df5",
-    color: "var(--muted)",
-    fontSize: "12px",
-    lineHeight: 1.5,
-  },
-  // --- Douyin board, gallery view -----------------------------------------
-  // A picture is what makes a trending term legible at a glance; the ranked
-  // list stays available for reading many of them quickly.
-  boardViewToggle: { display: "flex", gap: 2, padding: 2, borderRadius: 999, background: "var(--panel-raised)" } as const,
-  boardViewButton: {
-    minHeight: 24, padding: "3px 10px", border: 0, borderRadius: 999,
-    background: "transparent", color: "var(--muted)", font: "inherit", fontSize: 11,
-    fontWeight: 600, cursor: "pointer",
-  } as const,
-  boardViewButtonOn: { background: "var(--panel)", color: "var(--text)", boxShadow: "0 1px 2px rgb(28 43 51 / 18%)" } as const,
-  boardGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-    gap: 10,
-    marginTop: 12,
-  } as const,
-  boardCard: {
-    display: "grid", gridTemplateRows: "auto 1fr", overflow: "hidden",
-    border: "1px solid var(--line)", borderRadius: 8, background: "var(--panel)",
-  } as const,
-  boardThumb: {
-    position: "relative", aspectRatio: "3 / 4", overflow: "hidden", background: "var(--panel-raised)",
-  } as const,
-  boardImage: { width: "100%", height: "100%", objectFit: "cover", display: "block" } as const,
-  boardNoImage: {
-    position: "absolute", inset: 0, display: "grid", placeItems: "center",
-    color: "var(--muted)", fontSize: 11,
-  } as const,
-  boardRank: {
-    position: "absolute", top: 6, left: 6, display: "grid", placeItems: "center",
-    minWidth: 20, height: 20, padding: "0 5px", borderRadius: 999,
-    background: "rgb(0 0 0 / 62%)", color: "var(--panel)", fontSize: 10, fontWeight: 700,
-  } as const,
-  boardBody: { display: "grid", alignContent: "start", gap: 4, padding: "8px 9px 10px" } as const,
-  boardTerm: {
-    display: "-webkit-box", overflow: "hidden", WebkitBoxOrient: "vertical",
-    WebkitLineClamp: 2, fontSize: 12, fontWeight: 600, lineHeight: 1.35,
-    color: "var(--text)", textDecoration: "none",
-  } as const,
-  // The list already sizes its own name; this only makes it read as a link.
-  boardTermLink: {
-    overflow: "hidden", color: "var(--text)", fontSize: 13, fontWeight: 600,
-    textDecoration: "none", textOverflow: "ellipsis", whiteSpace: "nowrap",
-  } as const,
-  boardMeta: { color: "var(--muted)", fontSize: 10 } as const,
-  boardAction: {
-    justifySelf: "start", marginTop: 2, borderRadius: 4, padding: "3px 8px",
-    background: "var(--link-bg)", color: "var(--link)", fontSize: 11, fontWeight: 600,
-    textDecoration: "none",
-  } as const,
-  // Taking a topic and looking at one sit together, with the download given the
-  // solid treatment: it is the action the board exists to make possible.
-  boardActions: { display: "flex", alignItems: "center", gap: 6, marginTop: 2 } as const,
-  boardDownload: {
-    display: "inline-flex", alignItems: "center", gap: 4, border: 0,
-    borderRadius: 4, padding: "4px 9px", background: "var(--link)", color: "var(--panel)",
-    font: "inherit", fontSize: 11, fontWeight: 600, cursor: "pointer",
-    whiteSpace: "nowrap",
-  } as const,
-  topicCountLabel: {
-    display: "inline-flex", alignItems: "center", gap: 5,
-    color: "var(--muted)", fontSize: 11, whiteSpace: "nowrap",
-  } as const,
-  topicCountSelect: {
-    borderRadius: 6, border: "1px solid var(--line-strong)", padding: "3px 4px",
-    background: "var(--panel)", color: "var(--text)", font: "inherit", fontSize: 11,
-  } as const,
-  // The same note frame as a failure, turned green. A queued download and a
-  // refused one land in the same place, so the colour is what tells them apart.
-  topicNoteGood: { borderLeftColor: "var(--green)", background: "var(--green-dark)" } as const,
-  topicNoteLink: { color: "var(--link)", fontWeight: 600 } as const,
-  tiktokList: {
-    display: "grid",
-    gap: "1px",
-    background: "var(--line)",
-    border: "1px solid var(--line)",
-    borderRadius: "12px",
-    overflow: "hidden",
-  },
-  tiktokRow: {
-    display: "grid",
-    gridTemplateColumns: "28px minmax(0, 1fr) auto auto",
-    alignItems: "center",
-    gap: "12px",
-    padding: "12px 16px",
-    background: "var(--panel)",
-  },
-  tiktokRank: {
-    color: "var(--muted)",
-    fontSize: "12px",
-    fontVariantNumeric: "tabular-nums" as const,
-    textAlign: "center" as const,
-  },
-  tiktokBody: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    minWidth: 0,
-    flexWrap: "wrap" as const,
-  },
-  tiktokName: {
-    fontSize: "14px",
-    color: "var(--text)",
-    fontWeight: 500,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap" as const,
-    maxWidth: "100%",
-  },
-  tiktokTag: {
-    fontSize: "11px",
-    color: "var(--muted)",
-    background: "var(--panel-raised)",
-    borderRadius: "10px",
-    padding: "2px 8px",
-  },
-  tiktokMetrics: {
-    display: "flex",
-    gap: "14px",
-    color: "var(--muted)",
-    fontSize: "12px",
-    whiteSpace: "nowrap" as const,
-  },
-  tiktokMetric: {
-    fontVariantNumeric: "tabular-nums" as const,
-  },
-  tiktokExplore: {
-    border: "1px solid var(--line-strong)",
-    borderRadius: "14px",
-    background: "var(--panel)",
-    color: "var(--text)",
-    fontSize: "11px",
-    fontFamily: "inherit",
-    padding: "4px 10px",
-    cursor: "pointer",
-  },
-  tiktokSource: {
-    margin: "12px 0 0",
-    color: "var(--muted)",
-    fontSize: "11px",
-  },
-  quickLinksRow: {
-    display: "flex",
-    gap: "8px",
-    marginTop: "8px",
-    flexWrap: "wrap",
-    justifyContent: "flex-start",
-    maxWidth: "800px",
-  },
-  quickLinkBtn: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "6px",
-    background: "var(--panel-raised)",
-    border: "1px solid var(--line-strong)",
-    borderRadius: "var(--radius-sm)",
-    padding: "6px 14px",
-    fontSize: "12px",
-    cursor: "pointer",
-    color: "var(--text)",
-    textDecoration: "none",
-    fontWeight: 500,
-    transition: "all 0.15s",
-  },
-  modeRow: {
-    display: "flex",
-    gap: "8px",
-    marginTop: "8px",
-  },
-  modeBtn: {
-    background: "transparent",
-    border: "1px solid var(--line-strong)",
-    borderRadius: "var(--radius-sm)",
-    padding: "6px 16px",
-    fontSize: "13px",
-    cursor: "pointer",
-    color: "var(--muted)",
-    fontFamily: "inherit",
-    fontWeight: 500,
-    transition: "all 0.15s",
-  },
-  modeBtnActive: {
-    background: "var(--green-dark)",
-    border: "1px solid var(--green)",
-    color: "var(--green)",
-  },
-  topBar: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    maxWidth: "960px",
-    margin: "0 auto",
-    padding: "10px 24px",
-    borderBottom: "1px solid var(--panel-raised)",
-    fontSize: "13px",
-    color: "var(--muted)",
-  },
-  wsSelect: {
-    border: "1px solid var(--line-strong)",
-    borderRadius: "8px",
-    padding: "4px 8px",
-    fontSize: "13px",
-    background: "var(--panel)",
-    color: "var(--text)",
-    fontFamily: "inherit",
-  },
-  error: {
-    background: "var(--bad-bg)",
-    color: "var(--bad)",
-    padding: "12px 24px",
-    fontSize: "14px",
-    textAlign: "center",
-    margin: 0,
-  },
-  section: {
-    maxWidth: "960px",
-    margin: "0 auto",
-    padding: "16px 24px",
-  },
-  sectionTitle: {
-    fontSize: "20px",
-    fontWeight: 400,
-    color: "var(--text)",
-    margin: "0 0 4px",
-  },
-  sectionSub: {
-    fontSize: "13px",
-    color: "var(--muted)",
-    margin: "0 0 20px",
-  },
-  filterRow: {
-    display: "flex",
-    gap: "8px",
-    marginBottom: "24px",
-    flexWrap: "wrap",
-  },
-  filterBtn: {
-    background: "transparent",
-    border: "1px solid var(--line-strong)",
-    borderRadius: "16px",
-    padding: "5px 14px",
-    fontSize: "13px",
-    cursor: "pointer",
-    color: "var(--muted)",
-    fontFamily: "inherit",
-    transition: "all 0.15s",
-  },
-  filterBtnActive: {
-    background: "var(--green-dark)",
-    border: "1px solid var(--green)",
-    color: "var(--green)",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-    gap: "16px",
-  },
-  card: {
-    border: "1px solid var(--line)",
-    borderRadius: "12px",
-    padding: "20px",
-    background: "var(--panel)",
-    transition: "box-shadow 0.2s",
-    cursor: "default",
-    display: "flex",
-    flexDirection: "column",
-    gap: "12px",
-  },
-  cardLabel: {
-    fontSize: "11px",
-    fontWeight: 500,
-    textTransform: "uppercase" as const,
-    letterSpacing: "0.5px",
-    color: "var(--green)",
-  },
-  cardTitle: {
-    fontSize: "15px",
-    fontWeight: 500,
-    color: "var(--text)",
-    margin: 0,
-    lineHeight: 1.4,
-  },
-  cardSummary: {
-    fontSize: "13px",
-    color: "var(--muted)",
-    margin: 0,
-    lineHeight: 1.5,
-  },
-  cardImg: {
-    width: "100%",
-    height: "140px",
-    objectFit: "cover" as const,
-    borderRadius: "8px",
-    background: "var(--panel-raised)",
-  },
-  metricRow: {
-    display: "flex",
-    alignItems: "center",
-    flexWrap: "wrap" as const,
-    gap: "6px 8px",
-    fontSize: "12px",
-    color: "var(--muted)",
-  },
-  cardFooter: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    flexWrap: "wrap" as const,
-    gap: "8px 12px",
-    marginTop: "auto",
-    paddingTop: "10px",
-    borderTop: "1px solid var(--panel-raised)",
-    fontSize: "12px",
-    color: "var(--muted)",
-  },
-  cardSource: {
-    flex: "1 1 auto",
-    minWidth: 0,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap" as const,
-  },
-  cardActions: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    flex: "0 0 auto",
-  },
-  cardAction: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "6px",
-    minHeight: "30px",
-    border: "1px solid transparent",
-    borderRadius: "15px",
-    padding: "0 14px",
-    background: "var(--link-bg)",
-    color: "var(--link)",
-    fontSize: "12px",
-    fontWeight: 500,
-    fontFamily: "inherit",
-    cursor: "pointer",
-    transition: "background 150ms, border-color 150ms",
-  },
-  link: {
-    display: "inline-flex",
-    alignItems: "center",
-    minHeight: "30px",
-    padding: "0 4px",
-    color: "var(--green)",
-    textDecoration: "none",
-    fontSize: "12px",
-    fontWeight: 500,
-    whiteSpace: "nowrap" as const,
-  },
-  jobsSection: {
-    maxWidth: "960px",
-    margin: "0 auto",
-    padding: "0 24px 48px",
-  },
-  jobRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "12px 0",
-    borderBottom: "1px solid var(--panel-raised)",
-    fontSize: "13px",
-  },
-  empty: {
-    textAlign: "center",
-    padding: "40px 24px",
-    color: "var(--muted)",
-    fontSize: "14px",
-  },
-  accountRow: {
-    display: "flex",
-    gap: "12px",
-    alignItems: "flex-end",
-    flexWrap: "wrap",
-    padding: "16px 0",
-  },
-  inputSmall: {
-    border: "1px solid var(--line-strong)",
-    borderRadius: "8px",
-    padding: "6px 10px",
-    fontSize: "13px",
-    fontFamily: "inherit",
-    color: "var(--text)",
-  },
-  divider: {
-    border: "none",
-    borderTop: "1px solid var(--panel-raised)",
-    margin: "0",
-  },
-};
 
 const COLORS_BY_KIND: Record<string, string> = {
   trend: "var(--series-trend)",
@@ -1388,13 +909,13 @@ export default function ResearchDashboard() {
     workspaceId && busy === null && (queryMode === "trends" ? last30Ready : collectorReady);
 
   return (
-    <main style={S.page}>
+    <main className="dsc-page">
       <WorkspaceSectionNav area="discover" />
 
-      <div style={S.topBar}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+      <div className="dsc-top-bar">
+        <div className="dsc-row">
           <select
-            style={S.wsSelect}
+            className="dsc-ws-select"
             value={workspaceId}
             onChange={(event) => selectWorkspace(event.target.value)}
           >
@@ -1412,8 +933,7 @@ export default function ResearchDashboard() {
         {metaReady && (
           <button
             type="button"
-            className="secondary-link"
-            style={{ borderRadius: "20px", display: "inline-flex", alignItems: "center", gap: "6px" }}
+            className="secondary-link dsc-pill-row"
             disabled={busy !== null}
             onClick={() => void runAccountValidation()}
           >
@@ -1427,15 +947,15 @@ export default function ResearchDashboard() {
         )}
       </div>
 
-      {error && <p style={S.error} role="alert">{error}</p>}
+      {error && <p className="dsc-error" role="alert">{error}</p>}
 
-      <div style={S.hero}>
-        <h1 style={S.logo}>Discovery command center</h1>
-        <p style={S.tagline}>{t("app.tagline")}</p>
+      <div className="dsc-hero">
+        <h1 className="dsc-logo">Discovery command center</h1>
+        <p className="dsc-tagline">{t("app.tagline")}</p>
 
-        <form style={S.searchForm} onSubmit={runQuery}>
+        <form className="dsc-search-form" onSubmit={runQuery}>
           <input
-            style={S.searchInput}
+            className="dsc-search-input"
             required
             minLength={1}
             maxLength={300}
@@ -1456,7 +976,7 @@ export default function ResearchDashboard() {
           </button>
         </form>
 
-        <div style={S.modeRow}>
+        <div className="dsc-mode-row">
           {(
             [
               ["trends", "Trends"],
@@ -1466,11 +986,7 @@ export default function ResearchDashboard() {
             <button
               key={val}
               type="button"
-              style={
-                queryMode === val
-                  ? { ...S.modeBtn, ...S.modeBtnActive }
-                  : S.modeBtn
-              }
+              className={`dsc-mode-btn${queryMode === val ? " dsc-mode-btn-active" : ""}`}
               onClick={() => setQueryMode(val)}
             >
               {label}
@@ -1478,7 +994,7 @@ export default function ResearchDashboard() {
           ))}
         </div>
 
-        <div style={S.quickLinksRow}>
+        <div className="dsc-quick-links-row">
           {(tiktokCategories.length
             ? tiktokCategories
             : [{ id: "hashtag", label: "Hashtags", description: "", available: true, unavailable_reason: "" }]
@@ -1492,11 +1008,7 @@ export default function ResearchDashboard() {
                 setSourceBoardsOpen(true);
                 void fetchTiktokDiscovery(category.id);
               }}
-              style={
-                category.available
-                  ? S.quickLinkBtn
-                  : { ...S.quickLinkBtn, opacity: 0.45, cursor: "not-allowed" }
-              }
+              className={`dsc-quick-link-btn${category.available ? "" : " is-disabled"}`}
             >
               <TikTokCategoryIcon id={category.id} />{category.label}
               {category.available ? "" : " (retired)"}
@@ -1524,7 +1036,7 @@ export default function ResearchDashboard() {
           <ChevronDown size={18} aria-hidden="true" />
         </summary>
 
-        <div style={S.section}>
+        <div className="dsc-section">
           <TrendingTopics
             onResearch={exploreTopic}
             onScore={scoreTopic}
@@ -1533,7 +1045,7 @@ export default function ResearchDashboard() {
           />
         </div>
 
-        <div style={S.section}>
+        <div className="dsc-section">
           <PopularPosts
             onResearch={exploreTopic}
             selectedIds={ideaSeedIds}
@@ -1571,21 +1083,21 @@ export default function ResearchDashboard() {
           "what should I make today" can act on. */}
       <StandoutBoard posts={standoutPosts} seeds={ideaSeeds} onSeed={toggleIdeaSeed} />
 
-      <div style={S.section}>
-        <div style={S.tiktokHead}>
+      <div className="dsc-section">
+        <div className="dsc-tiktok-head">
           <div>
-            <h2 style={S.sectionTitle}>{t("discover.title")}</h2>
-            <p style={S.sectionSub}>
+            <h2 className="dsc-section-title">{t("discover.title")}</h2>
+            <p className="dsc-section-sub">
               {douyinBoard
                 ? `${douyinBoard.count} terms · read ${new Date(douyinBoard.fetched_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
                 : "What is trending on Douyin right now, from your connected session."}
             </p>
           </div>
-          <div style={S.tiktokControls}>
-            <label style={S.topicCountLabel}>
+          <div className="dsc-tiktok-controls">
+            <label className="dsc-topic-count-label">
               Download
               <select
-                style={S.topicCountSelect}
+                className="dsc-topic-count-select"
                 value={topicCount}
                 onChange={(event) => setTopicCount(Number(event.target.value))}
                 title={t("research.perTopicHelp")}
@@ -1596,23 +1108,20 @@ export default function ResearchDashboard() {
               </select>
               per topic
             </label>
-            <div style={S.boardViewToggle} role="group" aria-label={t("discover.boardLayout")}>
+            <div className="dsc-board-view-toggle" role="group" aria-label={t("discover.boardLayout")}>
               {(["gallery", "list"] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"
                   aria-pressed={douyinView === mode}
-                  style={{
-                    ...S.boardViewButton,
-                    ...(douyinView === mode ? S.boardViewButtonOn : null),
-                  }}
+                  className={`dsc-board-view-button${douyinView === mode ? " dsc-board-view-button-on" : ""}`}
                   onClick={() => setDouyinView(mode)}
                 >{mode === "gallery" ? "Gallery" : "List"}</button>
               ))}
             </div>
             <button
               type="button"
-              style={S.quickLinkBtn}
+              className="dsc-quick-link-btn"
               disabled={busy === "douyin" || !workspaceId}
               onClick={() => void loadDouyinBoard()}
             >
@@ -1622,11 +1131,11 @@ export default function ResearchDashboard() {
           </div>
         </div>
 
-        {douyinError && <p style={S.tiktokNote}>{douyinError}</p>}
+        {douyinError && <p className="dsc-tiktok-note">{douyinError}</p>}
 
         {topicNote && (
           <p
-            style={{ ...S.tiktokNote, ...(topicNote.tone === "good" ? S.topicNoteGood : null) }}
+            className={`dsc-tiktok-note${topicNote.tone === "good" ? " dsc-topic-note-good" : ""}`}
             role={topicNote.tone === "bad" ? "alert" : "status"}
           >
             {topicNote.text}
@@ -1634,7 +1143,7 @@ export default function ResearchDashboard() {
               <>
                 {" "}
                 Terms from the board above do not need one.{" "}
-                <Link href="/tools" style={S.topicNoteLink}>
+                <Link href="/tools" className="dsc-topic-note-link">
                   Connect an account in Tools
                 </Link>
               </>
@@ -1643,10 +1152,10 @@ export default function ResearchDashboard() {
         )}
 
         {douyinBoard && douyinBoard.items.length > 0 && douyinView === "gallery" && (
-          <div style={S.boardGrid}>
+          <div className="dsc-board-grid">
             {douyinBoard.items.map((item) => (
-              <article key={`${item.rank}-${item.term}`} style={S.boardCard}>
-                <div style={S.boardThumb}>
+              <article key={`${item.rank}-${item.term}`} className="dsc-board-card">
+                <div className="dsc-board-thumb">
                   {item.cover_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -1654,31 +1163,30 @@ export default function ResearchDashboard() {
                       alt=""
                       loading="lazy"
                       referrerPolicy="no-referrer"
-                      style={S.boardImage}
+                      className="dsc-board-image"
                     />
                   ) : (
-                    <span style={S.boardNoImage}>{t("research.noImage")}</span>
+                    <span className="dsc-board-no-image">{t("research.noImage")}</span>
                   )}
-                  <span style={S.boardRank}>{item.rank}</span>
+                  <span className="dsc-board-rank">{item.rank}</span>
                 </div>
-                <div style={S.boardBody}>
+                <div className="dsc-board-body">
                   <a
                     href={item.search_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="board-term-link"
-                    style={S.boardTerm}
+                    className="board-term-link dsc-board-term"
                     title={`Find "${item.term}" on Douyin`}
                   >{item.term}</a>
-                  <span style={S.boardMeta}>
+                  <span className="dsc-board-meta">
                     {item.hot_value > 0 && <>{t("discover.heat", { value: compactNumber(item.hot_value) })}</>}
                     {item.hot_value > 0 && item.view_count > 0 && " · "}
                     {item.view_count > 0 && <>{compactNumber(item.view_count)} views</>}
                   </span>
-                  <div style={S.boardActions}>
+                  <div className="dsc-board-actions">
                     <button
                       type="button"
-                      style={S.boardDownload}
+                      className="dsc-board-download"
                       disabled={topicBusy !== null || !workspaceId}
                       onClick={() => void downloadTopic(item.term, item.sentence_id)}
                       title={`Search this term and download its top ${topicCount} videos`}
@@ -1694,7 +1202,7 @@ export default function ResearchDashboard() {
                       href={item.search_url}
                       target="_blank"
                       rel="noreferrer"
-                      style={S.boardAction}
+                      className="dsc-board-action"
                       title={t("research.openTermOnDouyin")}
                     >{t("discover.browse")}</a>
                   </div>
@@ -1705,23 +1213,22 @@ export default function ResearchDashboard() {
         )}
 
         {douyinBoard && douyinBoard.items.length > 0 && douyinView === "list" && (
-          <div style={S.tiktokList}>
+          <div className="dsc-tiktok-list">
             {douyinBoard.items.map((item) => (
-              <div key={`${item.rank}-${item.term}`} style={S.tiktokRow}>
-                <span style={S.tiktokRank}>{item.rank}</span>
-                <div style={S.tiktokBody}>
+              <div key={`${item.rank}-${item.term}`} className="dsc-tiktok-row">
+                <span className="dsc-tiktok-rank">{item.rank}</span>
+                <div className="dsc-tiktok-body">
                   <a
                     href={item.search_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="board-term-link"
-                    style={S.boardTermLink}
+                    className="board-term-link dsc-board-term-link"
                     title={`Find "${item.term}" on Douyin`}
                   >{item.term}</a>
                 </div>
-                <div style={S.tiktokMetrics}>
+                <div className="dsc-tiktok-metrics">
                   {item.hot_value > 0 && (
-                    <span style={S.tiktokMetric}>
+                    <span className="dsc-tiktok-metric">
                       {rich("discover.heat", {
                         value: <b>{compactNumber(item.hot_value)}</b>,
                       })}
@@ -1731,10 +1238,10 @@ export default function ResearchDashboard() {
                 {/* A term names a topic, not a clip. The download searches it
                     first and queues the real videos it finds; the link is for
                     looking at the topic rather than taking it. */}
-                <div style={S.boardActions}>
+                <div className="dsc-board-actions">
                   <button
                     type="button"
-                    style={S.boardDownload}
+                    className="dsc-board-download"
                     disabled={topicBusy !== null || !workspaceId}
                     onClick={() => void downloadTopic(item.term, item.sentence_id)}
                     title={`Search this term and download its top ${topicCount} videos`}
@@ -1750,7 +1257,7 @@ export default function ResearchDashboard() {
                     href={item.search_url}
                     target="_blank"
                     rel="noreferrer"
-                    style={S.tiktokExplore}
+                    className="dsc-tiktok-explore"
                     title={t("research.openTermOnDouyin")}
                   >
                     Browse
@@ -1762,18 +1269,18 @@ export default function ResearchDashboard() {
         )}
 
         {douyinBoard && douyinBoard.items.length === 0 && !douyinError && (
-          <p style={S.tiktokNote}>{t("discover.emptyBoard")}</p>
+          <p className="dsc-tiktok-note">{t("discover.emptyBoard")}</p>
         )}
       </div>
 
       {(tiktokResult || busy === "tiktok") && (
-        <div style={S.section}>
-          <div style={S.tiktokHead}>
+        <div className="dsc-section">
+          <div className="dsc-tiktok-head">
             <div>
-              <h2 style={S.sectionTitle}>
+              <h2 className="dsc-section-title">
                 TikTok {tiktokResult?.category_label ?? "trends"}
               </h2>
-              <p style={S.sectionSub}>
+              <p className="dsc-section-sub">
                 {busy === "tiktok"
                   ? "Rendering TikTok Creative Center…"
                   : [
@@ -1786,10 +1293,10 @@ export default function ResearchDashboard() {
                     ].join(" · ")}
               </p>
             </div>
-            <div style={S.tiktokControls}>
+            <div className="dsc-tiktok-controls">
               <select
                 aria-label={t("research.tiktokRegion")}
-                style={S.tiktokSelect}
+                className="dsc-tiktok-select"
                 value={tiktokRegion}
                 disabled={busy === "tiktok"}
                 onChange={(event) => {
@@ -1806,7 +1313,7 @@ export default function ResearchDashboard() {
               </select>
               <select
                 aria-label={t("research.tiktokPeriod")}
-                style={S.tiktokSelect}
+                className="dsc-tiktok-select"
                 value={tiktokPeriod}
                 disabled={busy === "tiktok"}
                 onChange={(event) => {
@@ -1823,7 +1330,7 @@ export default function ResearchDashboard() {
               </select>
               <button
                 type="button"
-                style={S.quickLinkBtn}
+                className="dsc-quick-link-btn"
                 disabled={busy === "tiktok" || !tiktokResult}
                 onClick={() => {
                   if (tiktokResult) {
@@ -1838,28 +1345,28 @@ export default function ResearchDashboard() {
           </div>
 
           {tiktokResult?.notes.map((note) => (
-            <p key={note} style={S.tiktokNote}>{note}</p>
+            <p key={note} className="dsc-tiktok-note">{note}</p>
           ))}
 
           {tiktokResult && tiktokResult.items.length > 0 && (
-            <div style={S.tiktokList}>
+            <div className="dsc-tiktok-list">
               {tiktokResult.items.map((item, index) => (
-                <div key={`${item.name}-${index}`} style={S.tiktokRow}>
-                  <span style={S.tiktokRank}>{item.rank ?? index + 1}</span>
-                  <div style={S.tiktokBody}>
-                    <span style={S.tiktokName} title={item.name}>{item.name}</span>
-                    {item.category && <span style={S.tiktokTag}>{item.category}</span>}
+                <div key={`${item.name}-${index}`} className="dsc-tiktok-row">
+                  <span className="dsc-tiktok-rank">{item.rank ?? index + 1}</span>
+                  <div className="dsc-tiktok-body">
+                    <span className="dsc-tiktok-name" title={item.name}>{item.name}</span>
+                    {item.category && <span className="dsc-tiktok-tag">{item.category}</span>}
                   </div>
-                  <div style={S.tiktokMetrics}>
+                  <div className="dsc-tiktok-metrics">
                     {Object.entries(item.metrics).map(([key, value]) => (
-                      <span key={key} style={S.tiktokMetric}>
+                      <span key={key} className="dsc-tiktok-metric">
                         <b>{compactNumber(value)}</b> {key}
                       </span>
                     ))}
                   </div>
                   <button
                     type="button"
-                    style={S.tiktokExplore}
+                    className="dsc-tiktok-explore"
                     onClick={() => exploreTopic(item.name.replace(/^#/, ""))}
                   >
                     Research
@@ -1870,7 +1377,7 @@ export default function ResearchDashboard() {
           )}
 
           {tiktokResult && (
-            <p style={S.tiktokSource}>
+            <p className="dsc-tiktok-source">
               Read from{" "}
               <a href={tiktokResult.final_url} target="_blank" rel="noreferrer">
                 TikTok Creative Center
@@ -1886,13 +1393,13 @@ export default function ResearchDashboard() {
       </details>
 
       {visibleInspirations.length > 0 && (
-        <div style={S.section}>
-          <h2 style={S.sectionTitle}>{t("research.results")}</h2>
-          <p style={S.sectionSub}>
+        <div className="dsc-section">
+          <h2 className="dsc-section-title">{t("research.results")}</h2>
+          <p className="dsc-section-sub">
             {liveInspirations.length} signals from your research
           </p>
 
-          <div style={S.filterRow}>
+          <div className="dsc-filter-row">
             {(
               [
                 ["all", "All"],
@@ -1904,11 +1411,7 @@ export default function ResearchDashboard() {
               <button
                 key={val}
                 type="button"
-                style={
-                  feedFilter === val
-                    ? { ...S.filterBtn, ...S.filterBtnActive }
-                    : S.filterBtn
-                }
+                className={`dsc-filter-btn${feedFilter === val ? " dsc-filter-btn-active" : ""}`}
                 onClick={() => setFeedFilter(val)}
               >
                 {label}
@@ -1916,14 +1419,14 @@ export default function ResearchDashboard() {
             ))}
           </div>
 
-          <div style={S.grid}>
+          <div className="dsc-grid">
             {visibleInspirations.map((item) => {
               const color = COLORS_BY_KIND[item.kind] ?? "var(--muted)";
               const pct = item.relevance ?? 40;
               return (
                 <div
                   key={item.id}
-                  style={S.card}
+                  className="dsc-card"
                   onMouseEnter={(e) => {
                     (e.currentTarget as HTMLDivElement).style.boxShadow =
                       "0 1px 6px rgba(32,33,36,0.15)";
@@ -1932,7 +1435,7 @@ export default function ResearchDashboard() {
                     (e.currentTarget as HTMLDivElement).style.boxShadow = "none";
                   }}
                 >
-                  <span style={{ ...S.cardLabel, color }}>{item.label}</span>
+                  <span className="dsc-card-label" style={{ color }}>{item.label}</span>
                   {item.image && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -1940,15 +1443,15 @@ export default function ResearchDashboard() {
                       alt=""
                       loading="lazy"
                       referrerPolicy="no-referrer"
-                      style={S.cardImg}
+                      className="dsc-card-img"
                     />
                   )}
-                  <h3 style={S.cardTitle}>{item.title}</h3>
-                  <p style={S.cardSummary}>{item.summary}</p>
+                  <h3 className="dsc-card-title">{item.title}</h3>
+                  <p className="dsc-card-summary">{item.summary}</p>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <div style={{ ...S.metricRow, flexWrap: "nowrap" }}>
-                      <span style={{ flex: "0 0 56px" }}>{t("research.relevance")}</span>
+                  <div className="dsc-stack">
+                    <div className="dsc-metric-row dsc-metric-row-tight">
+                      <span className="dsc-metric-name">{t("research.relevance")}</span>
                       <div style={barTrack()}>
                         <div style={barFill(pct, color)} />
                       </div>
@@ -1959,7 +1462,7 @@ export default function ResearchDashboard() {
                       }}>{Math.round(pct)}%</span>
                     </div>
                     {item.metrics && item.metrics.length > 0 && (
-                      <div style={S.metricRow}>
+                      <div className="dsc-metric-row">
                         {item.metrics.map((m) => (
                           <span
                             key={m}
@@ -1977,13 +1480,13 @@ export default function ResearchDashboard() {
                     )}
                   </div>
 
-                  <div style={S.cardFooter}>
-                    <span style={S.cardSource} title={item.source}>{item.source}</span>
-                    <div style={S.cardActions}>
+                  <div className="dsc-card-footer">
+                    <span className="dsc-card-source" title={item.source}>{item.source}</span>
+                    <div className="dsc-card-actions">
                       {item.topic && (
                         <button
                           type="button"
-                          style={S.cardAction}
+                          className="dsc-card-action"
                           onClick={() => exploreTopic(item.topic!)}
                         >
                           <svg
@@ -2008,7 +1511,7 @@ export default function ResearchDashboard() {
                           href={item.href}
                           target="_blank"
                           rel="noreferrer"
-                          style={S.link}
+                          className="dsc-link"
                         >
                           Source
                         </a>
@@ -2023,7 +1526,7 @@ export default function ResearchDashboard() {
       )}
 
       {visibleInspirations.length === 0 && liveInspirations.length > 0 && (
-        <div style={{ ...S.empty, ...S.section }}>
+        <div className="dsc-empty dsc-section">
           <p>{t("research.noSignals")}</p>
           <button type="button" className={buttonClass({ variant: "quiet" })} onClick={() => setFeedFilter("all")}>
             Show all results
@@ -2032,11 +1535,11 @@ export default function ResearchDashboard() {
       )}
 
       {liveInspirations.length === 0 && !tiktokResult && !busy && (
-        <div style={{ ...S.empty, ...S.section }}>
-          <p style={{ color: "var(--muted)", fontSize: "15px", margin: "0 0 6px" }}>
+        <div className="dsc-empty dsc-section">
+          <p className="dsc-note-lead">
             Nothing collected yet.
           </p>
-          <p style={{ color: "var(--muted)", fontSize: "13px", margin: 0 }}>
+          <p className="dsc-note">
             Search a topic to run 30-day research, switch to Ads to read the public Meta Ad
             Library, or open a TikTok Creative Center list above. Every card below is read from
             a live source — TrendRelay does not seed the feed with examples.
@@ -2049,8 +1552,8 @@ export default function ResearchDashboard() {
           evidence and the job id in a query string - a hand-off that existed
           only because they were two pages. */}
       {workspaceId && (
-        <div style={S.jobsSection} id={SCORING_ANCHOR}>
-          <hr style={S.divider} />
+        <div className="dsc-jobs-section" id={SCORING_ANCHOR}>
+          <hr className="dsc-divider" />
           <OpportunityScoring
             key={`${workspaceId}:${scorePrefill.job}:${scorePrefill.trend}`}
             workspaceId={workspaceId}
@@ -2066,15 +1569,15 @@ export default function ResearchDashboard() {
           cards did not. What the log was carrying that nothing else did is kept:
           a run that failed, a run still going, and the way through to scoring. */}
       {(unfinished.length > 0 || scorable) && (
-        <div style={S.jobsSection}>
-          <hr style={S.divider} />
+        <div className="dsc-jobs-section">
+          <hr className="dsc-divider" />
           {unfinished.map((job) => (
-            <div key={job.id} style={S.jobRow}>
-              <div style={{ display: "flex", alignItems: "center" }}>
+            <div key={job.id} className="dsc-job-row">
+              <div className="dsc-row-tight">
                 <span style={jobDot(job.status)} />
                 <div>
-                  <span style={{ color: "var(--text)", fontWeight: 500 }}>{job.topic}</span>
-                  <span style={{ color: "var(--muted)", marginLeft: "8px" }}>
+                  <span className="dsc-strong">{job.topic}</span>
+                  <span className="dsc-muted dsc-muted-inline">
                     {job.status === "failed"
                       ? (job.error ?? t("research.runFailed"))
                       : t("research.stillResearching")}
@@ -2084,13 +1587,13 @@ export default function ResearchDashboard() {
             </div>
           ))}
           {scorable && (
-            <div style={S.jobRow}>
-              <span style={{ color: "var(--muted)" }}>
+            <div className="dsc-job-row">
+              <span className="dsc-muted">
                 {t("research.readyToScore", { topic: scorable.topic })}
               </span>
               <button
                 type="button"
-                style={{ ...S.link, border: 0, background: "transparent", cursor: "pointer" }}
+                className="dsc-link dsc-link-button"
                 onClick={() => {
                   setScorePrefill({ trend: scorable.topic, evidence: "", job: scorable.id });
                   document.querySelector(".opportunity-scoring")
