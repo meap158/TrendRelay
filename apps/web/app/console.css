@@ -301,7 +301,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 
 .local-admin-badge {
-  border: 1px solid #b7d9cd;
+  border: 1px solid var(--green-line);
   border-radius: 999px;
   padding: 5px 9px;
   color: var(--green);
@@ -380,7 +380,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .account-validation > summary::-webkit-details-marker, .research-activity > summary::-webkit-details-marker { display: none; }
 .account-validation > summary > span:first-child, .research-activity > summary > span:first-child { display: grid; gap: 3px; }
 .account-validation summary small, .research-activity summary small { color: var(--muted); font-size: 10px; font-weight: 400; }
-.source-ready, .source-setup { border: 1px solid #b7d9cd; border-radius: 999px; padding: 4px 7px; color: var(--green); background: var(--green-dark); font-size: 9px; font-weight: 700; }
+.source-ready, .source-setup { border: 1px solid var(--green-line); border-radius: 999px; padding: 4px 7px; color: var(--green); background: var(--green-dark); font-size: 9px; font-weight: 700; }
 .source-setup { border-color: #e4d4a2; color: var(--warn); background: #fff9e8; }
 .account-validation-form { display: grid; grid-template-columns: minmax(0, 1fr) 140px auto; gap: 9px; align-items: end; border-top: 1px solid var(--line); padding: 15px; }
 .research-activity-list { display: grid; border-top: 1px solid var(--line); padding: 5px 15px 10px; }
@@ -419,7 +419,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .campaign-page { padding-top: 24px; }
 .campaign-heading { display: flex; justify-content: space-between; gap: 32px; align-items: end; margin-bottom: 20px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .campaign-heading p:last-child { margin: 0; color: var(--muted); font-size: 13px; }
-.campaign-message { padding: 11px 14px; border: 1px solid #b7d9cd; border-radius: var(--radius-sm); color: var(--green); background: var(--green-dark); }
+.campaign-message { padding: 11px 14px; border: 1px solid var(--green-line); border-radius: var(--radius-sm); color: var(--green); background: var(--green-dark); }
 .campaign-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start; }
 .campaign-sidebar, .campaign-summary, .plan-create { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .campaign-sidebar { position: sticky; top: 76px; padding: 16px; }
@@ -470,7 +470,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .plan-state.needs_approval { color: var(--warn); background: var(--warn-bg); }
 .plan-state.approved { color: var(--green); background: var(--green-dark); }
 .plan-state.rejected, .plan-state.cancelled { color: var(--bad); background: var(--bad-bg); }
-.package-result { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-top: 10px; padding: 10px; border: 1px solid #b7d9cd; border-radius: var(--radius-sm); background: var(--green-dark); }
+.package-result { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-top: 10px; padding: 10px; border: 1px solid var(--green-line); border-radius: var(--radius-sm); background: var(--green-dark); }
 .package-result > div { display: grid; gap: 3px; min-width: 0; }
 .package-result strong { overflow: hidden; font-family: ui-monospace, monospace; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .package-result small { color: var(--muted); font-size: 10px; }
@@ -499,8 +499,8 @@ html { scroll-behavior: smooth; }
 .console-messages:empty { display: none; }
 .console-messages { display: grid; gap: 8px; margin-bottom: 16px; }
 .console-messages p { display: grid; grid-template-columns: auto 1fr; gap: 8px; margin: 0; padding: 11px 14px; border-radius: var(--radius-sm); line-height: 1.4; }
-.console-messages .inline-error { border-color: #f1b7bb; background: var(--bad-bg); color: var(--bad); }
-.inline-notice { border: 1px solid #b7d9cd; background: var(--green-dark); color: var(--green); }
+.console-messages .inline-error { border-color: var(--bad-line); background: var(--bad-bg); color: var(--bad); }
+.inline-notice { border: 1px solid var(--green-line); background: var(--green-dark); color: var(--green); }
 
 .downloader-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
 .download-composer, .download-guide, .download-queue-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: 0 1px 2px rgba(0, 0, 0, .05); }
@@ -634,7 +634,7 @@ html { scroll-behavior: smooth; }
 .download-live-status strong { font-weight: 650; }
 .download-live-status span { color: var(--muted); }
 .job-summary { margin: 0; color: var(--muted); line-height: 1.45; }
-.download-job .job-error { display: grid; gap: 5px; border: 1px solid #f1b7bb; border-radius: var(--radius-sm); padding: 11px 12px; color: var(--bad); background: var(--bad-bg); }
+.download-job .job-error { display: grid; gap: 5px; border: 1px solid var(--bad-line); border-radius: var(--radius-sm); padding: 11px 12px; color: var(--bad); background: var(--bad-bg); }
 .download-job .job-error strong { font-weight: 600; }
 .download-job .job-error span { max-height: 74px; overflow: auto; white-space: pre-wrap; }
 .download-job .job-error a { justify-self: start; color: var(--link); font-weight: 600; }
@@ -1087,7 +1087,7 @@ html { scroll-behavior: smooth; }
 }
 /* A previewed post the engine would refuse. The row is marked, not hidden:
    seeing the caption next to the reason is what makes the reason actionable. */
-.autopilot-preview li.refused { border-inline-start: 3px solid #c0392b; }
+.autopilot-preview li.refused { border-inline-start: 3px solid var(--bad); }
 .autopilot-refusal { margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--bad-bg); color: var(--bad); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
 
 /* Campaign command center. The layout follows the familiar Ads Manager

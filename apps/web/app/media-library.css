@@ -16,7 +16,7 @@
 .library-status-dot:focus .library-status-tooltip { opacity: 1; visibility: visible; }
 .library-status-dot:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .library-status-tooltip::before { content: ""; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); border: 5px solid transparent; border-bottom-color: var(--text); }
-.library-status-reason { display: block; margin-top: 4px; color: #91a0ae; font-size: 10px; }
+.library-status-reason { display: block; margin-top: 4px; color: var(--paused); font-size: 10px; }
 /* The transcription indicator is a button, not a tooltip: it has something the
    operator can do. The popover stays anchored to the dot rather than becoming a
    row of its own — this is chrome beside a heading, not a panel. */
@@ -92,7 +92,7 @@
 .library-preview-launch-overlay { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 7px; background: linear-gradient(180deg, rgba(10, 17, 24, 0.12), rgba(10, 17, 24, 0.66)); }
 .library-preview-launch-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; padding-inline-start: 3px; color: var(--ink); background: var(--panel); font-size: 17px; box-shadow: 0 5px 18px rgba(0, 0, 0, 0.24); }
 .library-preview-launch strong { font-size: 14px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45); }
-.library-preview-launch small { color: #e2e8ee; font-size: 11px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45); }
+.library-preview-launch small { color: var(--line); font-size: 11px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45); }
 .library-preview-launch:hover .library-preview-launch-overlay { background: linear-gradient(180deg, rgba(10, 17, 24, 0.06), rgba(10, 17, 24, 0.52)); }
 .library-preview-navigation { display: grid; grid-template-columns: 38px 1fr 38px; align-items: center; gap: 8px; padding: 8px 10px; color: var(--line); background: var(--ink); border-top: 1px solid #2a3541; }
 .library-preview-navigation span { text-align: center; font-size: 11px; }
@@ -100,7 +100,7 @@
 .library-preview-navigation button:hover:not(:disabled) { background: #2b3946; }
 .library-preview-navigation button:disabled { opacity: 0.35; }
 .library-preview-navigation button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.library-preview-navigation span small { margin-inline-start: 5px; color: #91a0ae; font-size: 9px; }
+.library-preview-navigation span small { margin-inline-start: 5px; color: var(--paused); font-size: 9px; }
 .library-summary { display: grid; gap: 18px; }
 .library-summary h2 { margin: 4px 0 8px; font-size: 20px; }
 .library-summary p { color: var(--muted); line-height: 1.5; }

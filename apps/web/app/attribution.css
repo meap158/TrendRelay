@@ -8,7 +8,7 @@
    than counted: a row that did not import is one somebody has to go and look
    at, and a number does not say which. */
 .attribution-import-outcome { margin-block-start: 12px; padding-block-start: 12px; border-block-start: 1px solid var(--line); font-size: 13px; }
-.attribution-import-problems { margin: 8px 0 0; padding-inline-start: 18px; color: var(--warn, #9a6700); font-size: 12px; }
+.attribution-import-problems { margin: 8px 0 0; padding-inline-start: 18px; color: var(--warn, var(--warn)); font-size: 12px; }
 .attribution-import-problems li { margin-block: 2px; }
 /* The flexible half of the stable table toolbar. */
 .product-search { min-inline-size: 220px; flex: 1 1 360px; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font: inherit; font-size: 13px; }
@@ -126,7 +126,7 @@
 .shopee-session-connect { display: grid; gap: 8px; }
 .shopee-session-connect code { font-family: ui-monospace, monospace; }
 .shopee-session-work { margin: 0; color: var(--muted); line-height: 1.5; }
-.shopee-session-problem { display: block; margin-block-start: 3px; color: var(--warn, #9a6700); }
+.shopee-session-problem { display: block; margin-block-start: 3px; color: var(--warn, var(--warn)); }
 
 /* The figures the page exists to produce, as one line under the title rather
    than a row of cards. They qualify the heading; they were competing with the
@@ -258,7 +258,7 @@
 .shopee-export-path > button { justify-self: start; }
 .shopee-import-preview { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 12px; border: 1px solid var(--line); border-inline-start: 3px solid var(--green); border-radius: var(--radius-sm); font-size: 12px; }
 .shopee-import-preview > span { color: var(--muted); }
-.shopee-import-preview ul { flex-basis: 100%; margin: 4px 0 0; padding-inline-start: 18px; color: var(--warn, #9a6700); }
+.shopee-import-preview ul { flex-basis: 100%; margin: 4px 0 0; padding-inline-start: 18px; color: var(--warn, var(--warn)); }
 .product-source-link { display: inline-flex; margin-block: 0 8px; color: var(--link); font-size: 12px; font-weight: 600; }
 
 /* Pasting a header is the rare fallback, so it is a quiet link rather than a

@@ -11,18 +11,36 @@
  * narrow: a flat hex sitting in a property whose whole job is colour.
  */
 
-/** Properties whose value is a colour and nothing else. */
+/**
+ * Properties that can carry a colour.
+ *
+ * Shorthands are here too, and they are where most of them hid: the first
+ * version of this checked only properties whose whole value is a colour, so
+ * `border-color: #cbd2d9` was caught and `border: 1px solid #cbd2d9` - the
+ * commoner spelling by three to one - was not. A hundred and four literals sat
+ * behind that gap while the check reported the sheet clean.
+ */
 const COLOUR_PROPERTIES = [
   "color",
   "background",
   "background-color",
+  "border",
   "border-color",
+  "border-top",
+  "border-bottom",
+  "border-left",
+  "border-right",
+  "border-block",
+  "border-inline",
+  "border-inline-start",
+  "border-inline-end",
   "border-top-color",
   "border-bottom-color",
   "border-left-color",
   "border-right-color",
   "border-inline-start-color",
   "border-inline-end-color",
+  "outline",
   "outline-color",
   "fill",
   "stroke",
@@ -46,8 +64,11 @@ export function hardcodedColours(sheets: Record<string, string>): Literal[] {
   // doubled because this is a string, not a literal - written through a shell
   // heredoc they collapse to a bare `s`, and the check then matches nothing
   // and reports a clean sheet. Which it did.
+  // Longest names first, so `border-inline-start-color` is not matched as
+  // `border` with a stray tail - alternation takes the first branch that fits.
+  const names = [...COLOUR_PROPERTIES].sort((a, b) => b.length - a.length);
   const pattern = new RegExp(
-    "(" + COLOUR_PROPERTIES.join("|") + ")\\s*:\\s*(#[0-9a-fA-F]{3,8})\\s*(?:;|})",
+    "(" + names.join("|") + ")\\s*:\\s*([^;{}]*#[0-9a-fA-F]{3,8}[^;{}]*)",
     "g",
   );
   for (const [file, css] of Object.entries(sheets)) {
@@ -56,7 +77,12 @@ export function hardcodedColours(sheets: Record<string, string>): Literal[] {
     for (const match of body.matchAll(pattern)) {
       const at = match.index ?? 0;
       if (palette.some(([start, end]) => at >= start && at < end)) continue;
-      found.push({ file, property: match[1], value: match[2].toLowerCase() });
+      // The literal itself, not the whole shorthand: `border: 1px solid #ccc`
+      // is reported as `#ccc`, so the baseline stays about colours rather than
+      // about how many pixels of border happened to sit beside one.
+      for (const [literal] of match[2].matchAll(/#[0-9a-fA-F]{3,8}\b/g)) {
+        found.push({ file, property: match[1], value: literal.toLowerCase() });
+      }
     }
   }
   return found;
