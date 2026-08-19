@@ -131,6 +131,32 @@ class CampaignCreate(BaseModel):
     #: still answer "why this?" a week later.
     signals: list[SignalInput] = Field(default_factory=list, max_length=40)
 
+    #: How the campaign posts, answerable at creation.
+    #:
+    #: Every one of these was already settable the moment the campaign existed,
+    #: through `CampaignUpdate` - just not while creating it, so describing a
+    #: campaign meant creating it and immediately reopening its settings to say
+    #: how it should run. They are the same fields with the same bounds, and
+    #: all optional: a caller that only wants a name and an objective still
+    #: gets the defaults this route has always applied.
+    #:
+    #: `offer_mode` matters most of the three. The autopilot row created below
+    #: could only ever be `manual` or `smart` depending on whether an offer was
+    #: pinned, so "no products at all" - an organic campaign - could not be
+    #: asked for at creation despite being one of the three modes the column
+    #: allows and the settings dialog offers.
+    max_products_per_post: int | None = Field(default=None, ge=1, le=5)
+    daily_cap_per_account: int | None = Field(default=None, ge=1, le=24)
+    weekly_post_cap: int | None = Field(default=None, ge=1, le=200)
+    authority: str | None = Field(default=None, pattern=r"^[a-z_]{4,20}$")
+    priority: str | None = Field(default=None, pattern=r"^[a-z]{4,12}$")
+    offer_mode: str | None = Field(default=None, pattern=r"^(smart|manual|none)$")
+    #: The caption scaffolding. Left unset these are written in the campaign's
+    #: own language, which is what the route already did and what keeps a
+    #: Vietnamese campaign from opening with an English disclosure.
+    disclosure: str | None = Field(default=None, max_length=280)
+    bio_hint: str | None = Field(default=None, max_length=120)
+
     @field_validator("name", "objective", "audience")
     @classmethod
     def normalize_text(cls, value: str) -> str:
@@ -167,7 +193,13 @@ class CampaignUpdate(BaseModel):
     #:
     #: Optional so a caller that only means to fix a typo in the audience does
     #: not have to restate it, and cannot reset it by omission.
-    max_products_per_post: int | None = Field(default=None, ge=0, le=10)
+    #: One to five, which is what the table actually accepts - the
+    #: `valid_autopilot_product_count` check is `BETWEEN 1 AND 5`. This said
+    #: `ge=0, le=10`, so 0 and anything past 5 passed validation and then broke
+    #: on the constraint: an operator asking for six products got a 500 rather
+    #: than being told the limit. "No products at all" is `offer_mode="none"`,
+    #: not a count of zero.
+    max_products_per_post: int | None = Field(default=None, ge=1, le=5)
     #: How hard the campaign is run, and how much of it is trusted to run
     #: itself. Set once when the campaign is described and rarely touched
     #: after, which is why they are asked here rather than beside the queue
@@ -406,20 +438,39 @@ def create_campaign(
     from trendrelay_api.campaign_autopilot import language_code, localised_text
 
     language = language_code(item.languages)
-    session.add(
-        CampaignAutopilot(
-            workspace_id=workspace_id,
-            campaign_id=item.id,
-            offer_id=offer.id if offer else None,
-            offer_mode="manual" if offer else "smart",
-            # The scaffolding speaks the campaign's own language from the
-            # first moment, not English until somebody notices.
-            post_language=language,
-            disclosure=localised_text(language, "disclosure"),
-            bio_hint=localised_text(language, "bio_hint"),
-            created_by=user.id,
-        )
+    # Asked for, or inferred from whether an offer was pinned - which is all
+    # this could do before, and why an organic campaign could not be created.
+    offer_mode = body.offer_mode or ("manual" if offer else "smart")
+    # The scaffolding speaks the campaign's own language from the first moment,
+    # not English until somebody notices. An explicit value wins, so an
+    # operator who wrote their own disclosure keeps it; blank falls back rather
+    # than creating a campaign whose captions open with nothing, because the
+    # disclosure leads every caption and is not optional.
+    disclosure = (body.disclosure or "").strip() or localised_text(language, "disclosure")
+    bio_hint = (body.bio_hint or "").strip() or localised_text(language, "bio_hint")
+    policy = CampaignAutopilot(
+        workspace_id=workspace_id,
+        campaign_id=item.id,
+        offer_id=offer.id if offer and offer_mode == "manual" else None,
+        offer_mode=offer_mode,
+        post_language=language,
+        disclosure=disclosure,
+        bio_hint=bio_hint,
+        created_by=user.id,
     )
+    # Set only when asked for, so the column defaults stay the single place
+    # each of these is decided.
+    for field in (
+        "max_products_per_post",
+        "daily_cap_per_account",
+        "weekly_post_cap",
+        "authority",
+        "priority",
+    ):
+        value = getattr(body, field)
+        if value is not None:
+            setattr(policy, field, value)
+    session.add(policy)
     stored_signals = _store_signals(session, workspace_id, item.id, body.signals, user.id)
     audit(
         session,
@@ -431,7 +482,10 @@ def create_campaign(
         item.id,
         {
             "status": item.status,
-            "offer_id": offer.id if offer else None,
+            # What was actually stored, not what was passed: an offer sent
+            # alongside a non-manual mode is not pinned to anything.
+            "offer_id": policy.offer_id,
+            "offer_mode": policy.offer_mode,
             # Recorded because a campaign started from evidence and one started
             # from a blank form are different acts, and the audit is where that
             # distinction has to survive.
