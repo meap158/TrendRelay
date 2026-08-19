@@ -187,14 +187,35 @@ def test_the_server_resolves_the_local_operators_workspace(session) -> None:
 
 
 def _tunnel_env(monkeypatch, **overrides) -> None:
-    monkeypatch.setenv("CONTROL_PLANE_TUNNEL_ID", "tunnel_" + "a1b2c3d4" * 4)
-    monkeypatch.setenv("CONTROL_PLANE_API_KEY", "k" * 40)
-    monkeypatch.setenv("TUNNEL_CLIENT_BIN", sys.executable)
+    """Point the tunnel at a controlled configuration, through Settings.
+
+    The tunnel reads its settings the way `mcp_port` does, so a test cannot just
+    set an env var - Settings are cached and also read .env. This replaces
+    `get_settings` with a fixed object, keyed by the same CONTROL_PLANE_* /
+    TUNNEL_* names the operator uses, mapped to their Settings fields.
+    """
+    from types import SimpleNamespace
+
+    import trendrelay_api.config as config
+
+    values = {
+        "control_plane_tunnel_id": "tunnel_" + "a1b2c3d4" * 4,
+        "control_plane_api_key": "k" * 40,
+        "tunnel_client_bin": sys.executable,
+        "tunnel_log_level": "warn",
+        "tunnel_health_port": "",
+        "mcp_port": 8765,
+        "mcp_workspace_id": "",
+    }
+    env_to_field = {
+        "CONTROL_PLANE_TUNNEL_ID": "control_plane_tunnel_id",
+        "CONTROL_PLANE_API_KEY": "control_plane_api_key",
+        "TUNNEL_CLIENT_BIN": "tunnel_client_bin",
+        "TUNNEL_HEALTH_PORT": "tunnel_health_port",
+    }
     for key, value in overrides.items():
-        if value is None:
-            monkeypatch.delenv(key, raising=False)
-        else:
-            monkeypatch.setenv(key, value)
+        values[env_to_field.get(key, key)] = "" if value is None else value
+    monkeypatch.setattr(config, "get_settings", lambda: SimpleNamespace(**values))
 
 
 def test_tunnel_config_resolves_from_the_environment(monkeypatch) -> None:
@@ -266,8 +287,7 @@ def test_run_doctor_surfaces_a_failing_check(monkeypatch) -> None:
 
 
 def test_tunnel_status_is_disabled_without_config(monkeypatch) -> None:
-    monkeypatch.delenv("CONTROL_PLANE_TUNNEL_ID", raising=False)
-    monkeypatch.delenv("CONTROL_PLANE_API_KEY", raising=False)
+    _tunnel_env(monkeypatch, CONTROL_PLANE_TUNNEL_ID=None, CONTROL_PLANE_API_KEY=None)
     assert tunnel.status()["state"] == "disabled"
 
 
@@ -292,8 +312,7 @@ def test_the_server_answers_rfc_9728_resource_metadata() -> None:
 
 
 def test_the_tools_tab_report_covers_the_server_and_the_tunnel(monkeypatch) -> None:
-    monkeypatch.delenv("CONTROL_PLANE_TUNNEL_ID", raising=False)
-    monkeypatch.delenv("CONTROL_PLANE_API_KEY", raising=False)
+    _tunnel_env(monkeypatch, CONTROL_PLANE_TUNNEL_ID=None, CONTROL_PLANE_API_KEY=None)
     from trendrelay_api.tool_setup import setup_report
 
     report = setup_report("mcp-server")

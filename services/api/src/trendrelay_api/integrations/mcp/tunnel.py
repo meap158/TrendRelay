@@ -34,22 +34,29 @@ STABLE_SECONDS = 60
 
 
 def configured() -> bool:
-    """Whether both credentials are present. The launcher checks this before it
-    starts the supervisor at all."""
+    """Whether both credentials are present, read through Settings so a value in
+    .env counts - the launcher and the Tools tab both ask this."""
+    from trendrelay_api.config import get_settings
+
+    settings = get_settings()
     return bool(
-        (os.environ.get("CONTROL_PLANE_TUNNEL_ID") or "").strip()
-        and (os.environ.get("CONTROL_PLANE_API_KEY") or "").strip()
+        (settings.control_plane_tunnel_id or "").strip()
+        and (settings.control_plane_api_key or "").strip()
     )
 
 
 def resolve_config() -> tuple[dict[str, str] | None, str | None]:
     """`(config, None)` when the tunnel can run, else `(None, reason)`.
 
-    The reason is the operator's, phrased for the Tools tab: which setting is
-    missing or wrong, and what to do about it.
+    Read through Settings, so `.env` is seen the way `mcp_port` is. The reason is
+    the operator's, phrased for the Tools tab: which setting is missing or wrong,
+    and what to do about it.
     """
-    tunnel_id = (os.environ.get("CONTROL_PLANE_TUNNEL_ID") or "").strip()
-    api_key = (os.environ.get("CONTROL_PLANE_API_KEY") or "").strip()
+    from trendrelay_api.config import get_settings
+
+    settings = get_settings()
+    tunnel_id = (settings.control_plane_tunnel_id or "").strip()
+    api_key = (settings.control_plane_api_key or "").strip()
     if not tunnel_id or not api_key:
         return None, (
             "Set CONTROL_PLANE_TUNNEL_ID and CONTROL_PLANE_API_KEY to let an "
@@ -63,7 +70,7 @@ def resolve_config() -> tuple[dict[str, str] | None, str | None]:
     if len(api_key) < 20:
         # A short key is a mistake; no key is a decision. They are not alike.
         return None, "CONTROL_PLANE_API_KEY looks too short to be a real key."
-    binary = shutil.which(os.environ.get("TUNNEL_CLIENT_BIN") or "tunnel-client")
+    binary = shutil.which((settings.tunnel_client_bin or "").strip() or "tunnel-client")
     if not binary:
         return None, (
             "tunnel-client is not on PATH. Install it, or set TUNNEL_CLIENT_BIN "
@@ -73,14 +80,16 @@ def resolve_config() -> tuple[dict[str, str] | None, str | None]:
         "tunnel_id": tunnel_id,
         "api_key": api_key,
         "binary": binary,
-        "log_level": (os.environ.get("TUNNEL_LOG_LEVEL") or "warn").strip(),
+        "log_level": (settings.tunnel_log_level or "warn").strip(),
     }, None
 
 
 def free_health_port() -> int:
     """A health port to bind and poll. Asked of the system rather than pinned to
     a contested default: the one polled has to be the one bound."""
-    configured_port = (os.environ.get("TUNNEL_HEALTH_PORT") or "").strip()
+    from trendrelay_api.config import get_settings
+
+    configured_port = (get_settings().tunnel_health_port or "").strip()
     if configured_port.isdigit():
         return int(configured_port)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:

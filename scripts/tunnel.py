@@ -114,8 +114,16 @@ def main() -> int:
     args = parser.parse_args()
     config, reason = tunnel.resolve_config()
     if config is None:
-        print(reason, flush=True)
-        tunnel.write_status("disabled", reason or "No tunnel configured.")
+        # An unconfigured machine is the default and stays quiet; a tunnel that
+        # was attempted but is wrong - a bad id, a missing binary - is worth a
+        # line, since the operator meant for it to work.
+        if tunnel.configured():
+            print(reason, flush=True)
+            tunnel.write_status("error", reason or "The tunnel is misconfigured.")
+        else:
+            tunnel.write_status(
+                "disabled", "No tunnel configured; the server stays on loopback."
+            )
         return 0
     return supervise(config, args.parent_pid)
 

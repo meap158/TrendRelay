@@ -48,6 +48,17 @@ class Settings(BaseSettings):
     #: Which workspace an MCP caller reaches. Empty resolves to the local
     #: workspace at launch - the one the operator on this machine owns.
     mcp_workspace_id: str = ""
+    #: The outward tunnel that lets an assistant reach the MCP server. Read here,
+    #: through Settings, so a value in .env is seen the same way `mcp_port` is -
+    #: reading os.environ alone would miss it, because .env is not exported there.
+    #: Both the id and the key, or neither: half a pair is a misconfiguration.
+    control_plane_tunnel_id: str = ""
+    control_plane_api_key: str = ""
+    #: Optional tunnel knobs. Empty binary means `tunnel-client` on PATH; empty
+    #: health port means a free one is chosen.
+    tunnel_client_bin: str = ""
+    tunnel_log_level: str = "warn"
+    tunnel_health_port: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

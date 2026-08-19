@@ -497,21 +497,22 @@ def build_services(include_desktop: bool, *, may_terminate: bool = True) -> list
             restart_on_exit=True,
         )
     )
-    # The assistant tunnel, only when one is configured. It dials a control plane
-    # outward and forwards to the MCP server on loopback, so an outside assistant
-    # can reach this workspace; an unconfigured machine starts nothing and keeps
-    # the server on loopback. `tunnel.py` supervises the client itself (rising
-    # backoff), so the runner does not restart it - it exits only when this
-    # launcher does, which it watches by pid.
-    if os.environ.get("CONTROL_PLANE_TUNNEL_ID") and os.environ.get("CONTROL_PLANE_API_KEY"):
-        services.append(
-            Service(
-                "Tunnel",
-                [str(python), "scripts/tunnel.py", "--parent-pid", str(os.getpid())],
-                "blue",
-                restart_on_exit=False,
-            )
+    # The assistant tunnel, added on every launch and left to decide for itself.
+    # It reads its settings through the app's config, so a tunnel configured in
+    # .env is seen (a check against os.environ here would not see it); with none
+    # configured it writes its status and exits quietly, and with one it dials a
+    # control plane outward and forwards to the MCP server on loopback so an
+    # outside assistant can reach this workspace. It supervises the client itself
+    # (rising backoff), so the runner does not restart it - it exits only when
+    # this launcher does, which it watches by pid.
+    services.append(
+        Service(
+            "Tunnel",
+            [str(python), "scripts/tunnel.py", "--parent-pid", str(os.getpid())],
+            "blue",
+            restart_on_exit=False,
         )
+    )
     if include_desktop:
         services.append(
             Service(
