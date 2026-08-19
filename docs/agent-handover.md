@@ -175,6 +175,16 @@ normalised into a flat `TimelineEntry` and grouped by day. Keep it that way -
 they were two lists with two designs, and the delivered half did not even name
 the engine.
 
+**Caps and rest days are per account, and that costs a cross-campaign query.**
+"Posts per account per day" and the rest window read `PublicationExecution`
+across the whole workspace, not just this campaign's queue. They have to: a
+destination is unique per `(campaign_id, provider, integration_id)`, so one
+account can sit in several campaigns, and counting only the campaign's own posts
+multiplied the operator's number by however many campaigns pointed at it. Rest
+is matched on `asset_id`, the identity that survives being queued twice; an item
+with only a raw path falls back to the per-campaign check rather than being
+blocked on a guess. If you add another cadence rule, ask it of the account.
+
 **Three separate levers, often confused:** the run switch (`enabled` - also the
 circuit breaker the runner trips after repeated auth failures or uncertain
 deliveries), `authority` (what needs a human), and `delivery` (draft, schedule
