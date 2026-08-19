@@ -160,6 +160,39 @@ def _installed_revision(tool: dict[str, Any]) -> str | None:
     return result.stdout.strip()
 
 
+def documentation_for(tool_id: str) -> dict[str, str]:
+    """The notes shipped with a tool, read from the repository.
+
+    The Tools tab links to `documentation` from the catalogue - a repository
+    path like `docs/third-party/mcp.md`. Nothing served it: the web app has no
+    public directory and no route of that shape, so every one of those links
+    was a 404 with the file sitting in the checkout all along.
+
+    The path is resolved and checked to be inside `docs/` before anything is
+    read. It comes from a file on disk rather than from a request, but a
+    catalogue entry is still data, and "read any file the API user can reach"
+    is not a thing to leave one edit away.
+    """
+    for tool in _catalog():
+        if tool.get("id") != tool_id:
+            continue
+        relative = str(tool.get("documentation") or "").strip()
+        if not relative:
+            raise FileNotFoundError(f"{tool_id} has no documentation.")
+        docs_root = (PROJECT_ROOT / "docs").resolve()
+        path = (PROJECT_ROOT / relative).resolve()
+        if not path.is_relative_to(docs_root) or path.suffix.lower() != ".md":
+            raise FileNotFoundError(f"{relative} is not a documentation file.")
+        if not path.is_file():
+            raise FileNotFoundError(f"{relative} is not in this checkout.")
+        return {
+            "tool_id": tool_id,
+            "path": relative,
+            "markdown": path.read_text(encoding="utf-8"),
+        }
+    raise KeyError(tool_id)
+
+
 def list_tools() -> list[dict[str, Any]]:
     state = _read_json(STATE_PATH, {"active": {}})
     active_state = state.get("active", {})

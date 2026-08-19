@@ -72,6 +72,7 @@ from trendrelay_api.production_api import router as production_router
 from trendrelay_api.publishing_api import router as publishing_router
 from trendrelay_api.signals_api import router as signals_router
 from trendrelay_api.tool_registry import (
+    documentation_for,
     PROJECT_ROOT,
     ToolRegistryError,
     install_tool,
@@ -171,6 +172,16 @@ async def tools() -> dict[str, object]:
     return {"tools": await asyncio.to_thread(list_tools)}
 
 
+@app.get("/api/tools/{tool_id}/documentation", tags=["tools"])
+async def tool_documentation(tool_id: str) -> dict[str, str]:
+    try:
+        return await asyncio.to_thread(documentation_for, tool_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Tool not found.") from error
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
 @app.get("/api/tools/{tool_id}/setup", tags=["tools"])
 async def tool_setup(tool_id: str) -> dict[str, object]:
     try:
@@ -265,6 +276,53 @@ async def activate(tool_id: str, body: Activation, request: Request) -> dict[str
         return {"tool": await asyncio.to_thread(set_active, tool_id, body.active)}
     except ToolRegistryError as error:
         raise registry_error(error) from error
+
+
+@app.get("/api/media-ai/providers", tags=["tools"])
+async def media_ai_providers() -> dict[str, object]:
+    """What can transcribe, translate or read a frame right now, and why not.
+
+    Read from two places - the Tools page and the Library, which needs the same
+    answer to say whether its transcription switch is a switch or a download -
+    so it is one endpoint rather than the same three checks written twice.
+    """
+    # The module rather than its names: `provider_status` is already bound at
+    # the top of this file by the research provider, which is a different thing
+    # entirely.
+    from trendrelay_api import media_ai
+
+    providers, jobs = await asyncio.gather(
+        asyncio.to_thread(media_ai.provider_status),
+        asyncio.to_thread(media_ai.latest_setup_jobs),
+    )
+    return {"providers": providers, "setup_jobs": jobs}
+
+
+@app.post("/api/media-ai/providers/{provider}/prepare", status_code=202, tags=["tools"])
+async def prepare_media_ai_provider(
+    provider: str, body: Confirmation, request: Request
+) -> dict[str, object]:
+    """Queue the download that makes a provider usable.
+
+    Deliberately not done inline. This fetches a pinned checkout, a few hundred
+    megabytes of wheels and a model, which is minutes of work - the interface
+    gets a job to watch instead of a request that appears to hang.
+    """
+    require_local_mutation(request)
+    if not body.confirm_external_action:
+        raise HTTPException(
+            status_code=400,
+            detail="Downloading a provider runtime requires explicit confirmation.",
+        )
+    from trendrelay_api.media_ai import create_setup_job
+
+    try:
+        job = await asyncio.to_thread(
+            create_setup_job, provider, actor_user_id="local-operator"
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return {"job": job}
 
 
 @app.get("/api/research/status", tags=["research"])

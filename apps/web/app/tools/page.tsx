@@ -148,11 +148,39 @@ export default function ToolsPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [setup, setSetup] = useState<SetupReport | null>(null);
+  /** The notes shipped with a tool, once somebody asks to read them. */
+  const [docs, setDocs] = useState<
+    { title: string; path: string; markdown: string } | null
+  >(null);
   const [reachDiagnostics, setReachDiagnostics] = useState<ReachDiagnostics | null>(null);
 
   const refresh = useCallback(async () => {
     const payload = await responseJson<{ tools: Tool[] }>(await apiFetch("/api/tools"));
     setTools(payload.tools);
+  }, [apiFetch]);
+
+  /**
+   * Read a tool's own notes.
+   *
+   * The link used to point at the catalogue's `documentation` value - a
+   * repository path, `docs/third-party/mcp.md` - as though the web app served
+   * the checkout. It does not: there is no public directory and no route of
+   * that shape, so every Docs link on this page was a 404 with the file
+   * present in the repository all along. The API reads it instead.
+   */
+  const openDocs = useCallback(async (toolId: string, title: string) => {
+    setBusy(`${toolId}-docs`);
+    setError(null);
+    try {
+      const payload = await responseJson<{ path: string; markdown: string }>(
+        await apiFetch(`/api/tools/${toolId}/documentation`),
+      );
+      setDocs({ title, path: payload.path, markdown: payload.markdown });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Those notes could not be read.");
+    } finally {
+      setBusy(null);
+    }
   }, [apiFetch]);
 
   const loadSetup = useCallback(async (toolId: string) => {
@@ -463,13 +491,29 @@ export default function ToolsPage() {
                       <b>{tool.active ? "Active" : tool.installed ? "Installed" : tool.integration_status}</b>
                     </span>
                     <span className="tool-compact-actions">
+                      {/* Setup belongs here too. It was on the card view only,
+                          so a tool whose whole point is being started from
+                          Setup - the MCP server - offered no way in from the
+                          list somebody is actually reading. */}
+                      {guidedSetup.has(tool.id) && (
+                        <button type="button" disabled={busy === `${tool.id}-setup`}
+                          onClick={() => void loadSetup(tool.id)}>
+                          <ActionIcon name="setup" />{t("tools.setup")}
+                        </button>
+                      )}
                       <a href={tool.repository} target="_blank" rel="noreferrer">
                         <ActionIcon name="link" />GitHub
                       </a>
-                      <a href={tool.documentation ? `/${tool.documentation}` : tool.repository}
-                        target="_blank" rel="noreferrer">
-                        <ActionIcon name="setup" />{t("publish.docs")}
-                      </a>
+                      {tool.documentation ? (
+                        <button type="button" disabled={busy === `${tool.id}-docs`}
+                          onClick={() => void openDocs(tool.id, tool.name)}>
+                          <ActionIcon name="clip" />{t("publish.docs")}
+                        </button>
+                      ) : (
+                        <a href={tool.repository} target="_blank" rel="noreferrer">
+                          <ActionIcon name="clip" />{t("publish.docs")}
+                        </a>
+                      )}
                     </span>
                   </div>
                 ))}
@@ -506,6 +550,12 @@ export default function ToolsPage() {
               </div>
               <div className="tool-actions">
                 <a href={tool.repository} target="_blank" rel="noreferrer"><ActionIcon name="link" />GitHub</a>
+                {tool.documentation && (
+                  <button type="button" disabled={busy === `${tool.id}-docs`}
+                    onClick={() => void openDocs(tool.id, tool.name)}>
+                    <ActionIcon name="clip" />{t("publish.docs")}
+                  </button>
+                )}
                 {tool.service_repository && <a href={tool.service_repository} target="_blank" rel="noreferrer"><ActionIcon name="link" />{t("tools.selfHost")}</a>}
                 {tool.id === "meta-ads-kit" && <a href="#meta-access-guide"><ActionIcon name="setup" />{t("tools.accessGuide")}</a>}
                 {guidedSetup.has(tool.id) && (
@@ -532,6 +582,25 @@ export default function ToolsPage() {
           </section>
         );
       })}
+
+      {docs && (
+        /* The notes as they are written. Rendering markdown properly would be
+           a dependency for five reference files; kept as text, the headings and
+           lists still read in order, which is what these are for. */
+        <section className="tool-docs" aria-labelledby="tool-docs-title">
+          <div className="setup-wizard-heading">
+            <div>
+              <p className="eyebrow">{docs.path}</p>
+              <h2 id="tool-docs-title">{docs.title}</h2>
+            </div>
+            <button type="button" className="setup-close" onClick={() => setDocs(null)}
+              aria-label={t("tools.closeSetup")}>
+              <ActionIcon name="dismiss" />{t("common.close")}
+            </button>
+          </div>
+          <pre>{docs.markdown}</pre>
+        </section>
+      )}
 
       {setup && (
         <section className="setup-wizard" aria-labelledby="setup-title">
@@ -575,7 +644,7 @@ export default function ToolsPage() {
             </div>
           )}
           {setup.tool_id === "douyin-downloader" && setup.connection && <p className="connection-note">{t("tools.douyinConnection")} <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
-          {setup.tool_id === "mcp-server" && setup.connection && <p className="connection-note">Assistant access: <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
+          {setup.tool_id === "mcp-server" && setup.connection && <p className="connection-note">{t("tools.mcpConnection")} <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
           {setup.media_ai?.job && (
             /* The download's own words. A job that failed after twenty minutes
                of pip output has a reason, and this is the only place the
