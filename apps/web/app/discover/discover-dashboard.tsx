@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Crown, Download, Flame, Hash, Music2, RefreshCw, type LucideIcon } from "lucide-react";
@@ -15,14 +16,19 @@ import { ActionIcon } from "../ui/action-icons";
 import { numberIn, oneOf, usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 import { useJobs } from "../jobs-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
-import { OpportunityScoring } from "./opportunity-scoring";
 import { DiscoveryFeed } from "./discovery-feed";
-import { PopularPosts } from "./popular-posts";
-import { TrendingTopics } from "./trending-topics";
 import { CampaignIdeaComposer } from "./campaign-idea-composer";
-import { StandoutBoard } from "./standout-board";
 import { NewsBoard } from "./news-board";
 import { rankEngagedPosts, type ResearchPostJob } from "../../lib/engaged-posts";
+
+// The secondary boards sit below the merged feed and the news lead, so their
+// code loads as its own chunk while the lead paints rather than in Discover's
+// first bundle. ssr:false - they are client-only. The feed, the news board and
+// the idea composer stay static, being the first thing on screen.
+const OpportunityScoring = dynamic(() => import("./opportunity-scoring").then((m) => m.OpportunityScoring), { ssr: false });
+const PopularPosts = dynamic(() => import("./popular-posts").then((m) => m.PopularPosts), { ssr: false });
+const TrendingTopics = dynamic(() => import("./trending-topics").then((m) => m.TrendingTopics), { ssr: false });
+const StandoutBoard = dynamic(() => import("./standout-board").then((m) => m.StandoutBoard), { ssr: false });
 
 type Workspace = { id: string; name: string; role: string };
 type ReachChannel = {
