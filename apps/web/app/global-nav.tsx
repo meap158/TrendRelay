@@ -314,8 +314,6 @@ export function GlobalNav() {
     };
   }, [drawerOpen]);
 
-  if (!user) return null;
-
   function saveReadKeys(next: Set<string>) {
     const bounded = new Set(Array.from(next).slice(-MAX_STORED_READ_KEYS));
     setReadKeys(bounded);
@@ -359,8 +357,11 @@ export function GlobalNav() {
     || pathname === "/catalog";
   const publishActive = pathname === "/publish" || pathname.startsWith("/publish/");
 
-  return (
-    <header className="app-toolbar">
+  // The frame renders with or without a session: the brand and the section
+  // links need only the path, so the app has structure on screen the instant it
+  // mounts rather than a blank bar while auth resolves.
+  const frame = (
+    <>
       <Link className="app-brand" href="/" aria-label={t("session.home")}>
         <span className="app-brand-mark" aria-hidden="true">
           <svg viewBox="0 0 32 32" focusable="false">
@@ -382,7 +383,16 @@ export function GlobalNav() {
         <Link className={pathname === "/campaigns" ? "active" : ""} href="/campaigns"><ActionIcon name="campaign" /><span>{t("nav.campaigns")}</span></Link>
         <Link className={pathname === "/tools" ? "active" : ""} href="/tools"><ActionIcon name="setup" /><span>{t("nav.tools")}</span></Link>
       </nav>
+    </>
+  );
 
+  // Until the session is known, the workspace chrome - pickers, notifications -
+  // is not ready; the frame alone still gives the toolbar its shape.
+  if (!user) return <header className="app-toolbar">{frame}</header>;
+
+  return (
+    <header className="app-toolbar">
+      {frame}
       <div className="toolbar-actions">
         {/* Beside the language, because they are the same kind of setting:
             one says what the workspace reads in, the other what clock it
