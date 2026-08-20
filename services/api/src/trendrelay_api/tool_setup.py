@@ -178,13 +178,24 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                 ),
             ],
             connection={"state": status["state"], "message": status["message"]},
-            # The tunnel's own credentials, shown the way every other key on this
-            # page is: which are set, masked, with the instruction to add them to
-            # .env. There is no field here - a key is added by hand, deliberately.
+            # The tunnel's own credentials, shown the way every other key on
+            # this page is: which are set, and masked.
             configured_secret_names=configured_tunnel,
             supported_secret_names=list(tunnel_keys),
             secret_previews={name: masked_value(name) for name in configured_tunnel},
-        )
+            # And now editable, along with the three knobs that were previously
+            # reachable only by knowing they existed. The credentials were
+            # by-hand on purpose, but the purpose was that a key should not be
+            # casually pasted - not that a path and a log level should be
+            # undiscoverable. Writing goes through `env_store`, which is what
+            # every other credential screen uses and what refreshes the cached
+            # settings, so a saved value takes effect without a restart.
+            settings=tunnel.settings_view(),
+            settings_title="Remote agent tunnel",
+            settings_blurb=(
+                "Lets an outside assistant reach this machine's MCP server without "
+                "exposing a port. The client dials out; nothing inbound is opened."
+            )
     elif tool_id == "last30days-skill":
         configured = _configured_names(LAST30DAYS_KEYS)
         report.update(

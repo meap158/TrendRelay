@@ -1291,3 +1291,27 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
   color: inherit;
   font: inherit;
 }
+
+/* A tool's own settings, written to the local .env from this panel.
+ *
+ * Only the assistant tunnel has any. Its two credentials were deliberately
+ * by-hand, but the purpose of that was that a key should not be casually
+ * pasted - not that the path and log-level knobs beside them should be
+ * reachable only by knowing they existed. */
+.tool-settings { display: grid; gap: 12px; margin: 18px 0; padding: 16px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel-raised); }
+.tool-settings > strong { font-size: 13px; }
+.tool-settings > p { margin: -6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.tool-setting { display: grid; gap: 5px; }
+.tool-setting > span { display: flex; align-items: baseline; gap: 7px; color: var(--text); font-size: 11px; font-weight: 600; }
+/* "optional" as a quiet aside rather than a badge: it qualifies the label, and
+   a badge here would compete with the field it is describing. */
+.tool-setting > span > em { color: var(--muted); font-size: 10px; font-style: normal; font-weight: 400; }
+.tool-setting > input { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; font-size: 12px; }
+.tool-setting > input:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+/* A masked key sits in the placeholder, so it has to read as a saved value
+   rather than as the usual hint about what to type. */
+.tool-setting > input::placeholder { color: var(--muted); font-variant-numeric: tabular-nums; }
+.tool-setting > small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.tool-setting > small > a { color: var(--link); }
+.tool-settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.tool-settings-actions > small { color: var(--muted); font-size: 11px; }

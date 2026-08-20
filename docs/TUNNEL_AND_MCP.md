@@ -110,9 +110,28 @@ deliberate configuration or a broken one.
 
 Everything is an environment variable, read from `.env` like every other key in
 TrendRelay — the tunnel credentials live where `buffer_api_key` and the rest do,
-rather than in a separate store. The Tools tab shows which are set (masked) and
-tells the operator to add them to `.env`; there is no field to type a key into,
-because a key is added by hand, deliberately.
+rather than in a separate store.
+
+The Tools tab edits all of them, writing through `env_store` the way the
+publishing credential screens do. Hand-editing `.env` still works and is still
+read; what changed is that it is no longer the only way. The credentials were
+by-hand on purpose, but the purpose was that a key should not be casually
+pasted — not that `TUNNEL_CLIENT_BIN` and `TUNNEL_LOG_LEVEL` should be
+reachable only by knowing they existed. An operator whose client was not on
+PATH got "tunnel-client could not be run" and no hint that a path setting was
+available anywhere.
+
+Two things follow from writing through `env_store`. It refreshes the cached
+settings, so a saved value takes effect without restarting the API. And the
+saved secret is described rather than returned: the key box starts empty with
+the masked value as its placeholder, so there is no path where a row of dots is
+submitted and stored over a working key. A field left untouched is omitted from
+the request entirely, which is what makes "keep the key that is saved" the
+default rather than something to remember.
+
+**Test tunnel connection saves first, then checks.** The doctor also calls
+`refresh_settings()` itself, so it answers for a `.env` edited by hand a moment
+ago rather than for whatever was configured when the API booted.
 
 | Variable | Notes |
 | --- | --- |

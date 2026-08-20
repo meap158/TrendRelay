@@ -9,6 +9,7 @@ import { buttonClass } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
 import { Badge } from "../ui/primitives";
 import { Dialog } from "../ui/dialog";
+import { SegmentedControl } from "../ui/segmented";
 
 type Tool = {
   id: string;
@@ -108,6 +109,27 @@ type SetupReport = {
   connection?: { state?: string; message?: string; service_ready?: boolean; authenticated?: boolean };
   /** Present for the local media-analysis providers: what is downloading, and how far. */
   media_ai?: { provider: string; job: MediaAiJob | null };
+  /** Settings this tool writes to the local .env itself. Only the tunnel has any. */
+  settings?: ToolSetting[];
+  settings_title?: string;
+  settings_blurb?: string;
+};
+type ToolSetting = {
+  key: string;
+  label: string;
+  kind: "text" | "choice";
+  secret: boolean;
+  required: boolean;
+  help: string;
+  help_url?: string;
+  placeholder?: string;
+  options?: string[];
+  default?: string;
+  configured: boolean;
+  /** Empty for a secret: the API describes those rather than returning them. */
+  value: string;
+  /** The saved secret masked to its last few characters, or null. */
+  preview?: string | null;
 };
 type ReachDiagnostics = {
   mode: string;
@@ -149,6 +171,16 @@ export default function ToolsPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [setup, setSetup] = useState<SetupReport | null>(null);
+  /**
+   * Only the fields that have been typed into.
+   *
+   * Not a copy of every value: an untouched key is left out of the request
+   * entirely, which is what lets the secret box submit nothing and mean "keep
+   * the key that is saved" rather than "clear it". A form that posted all five
+   * every time would overwrite a working key with an empty string the first
+   * time somebody changed the log level.
+   */
+  const [settingsDraft, setSettingsDraft] = useState<Record<string, string>>({});
   /** The notes shipped with a tool, once somebody asks to read them. */
   const [docs, setDocs] = useState<
     { title: string; path: string; markdown: string } | null
@@ -187,6 +219,10 @@ export default function ToolsPage() {
   const loadSetup = useCallback(async (toolId: string) => {
     setBusy(`${toolId}-setup`);
     setError(null);
+    // Opening a tool's setup starts from what is stored. Without this, a value
+    // typed and not saved would still be in the boxes after switching tools and
+    // coming back, looking exactly like something that had been saved.
+    setSettingsDraft({});
     try {
       const payload = await responseJson<{ setup: SetupReport }>(await apiFetch(`/api/tools/${toolId}/setup`));
       setSetup(payload.setup);
@@ -279,8 +315,46 @@ export default function ToolsPage() {
     }
   }
 
+  /**
+   * Write the edited settings, and redraw the form from what was stored.
+   *
+   * Returns whether it saved, because the tunnel test calls this first: testing
+   * the configuration that was on screen a moment ago, rather than the one on
+   * screen now, is how you get a red result for a value you have already fixed.
+   */
+  async function saveToolSettings(): Promise<boolean> {
+    if (!setup) return false;
+    if (!Object.keys(settingsDraft).length) return true;
+    setBusy(`${setup.tool_id}-settings`);
+    setError(null);
+    try {
+      const payload = await responseJson<{ written: string[]; setup: SetupReport }>(
+        await apiFetch(`/api/tools/${setup.tool_id}/settings`, {
+          method: "POST",
+          body: JSON.stringify({
+            values: settingsDraft,
+            confirm_external_action: true,
+          }),
+        }),
+      );
+      setSetup(payload.setup);
+      setSettingsDraft({});
+      setMessage(`Saved ${payload.written.length} setting${payload.written.length === 1 ? "" : "s"}.`);
+      return true;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The settings could not be saved.");
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function runSetupAction(action: SetupAction) {
     if (!setup) return;
+    // Saves first, then checks - so the doctor answers for what is configured
+    // now. If the save is refused there is nothing worth testing, and the
+    // reason for the refusal is already on screen.
+    if (action.id === "test-tunnel" && !(await saveToolSettings())) return;
     if (action.kind === "diagnostics") {
       await diagnoseReach();
       await loadSetup(setup.tool_id);
@@ -610,7 +684,7 @@ export default function ToolsPage() {
         open={!!setup}
         title={setup?.title ?? ""}
         description={setup?.summary}
-        onClose={() => setSetup(null)}
+        onClose={() => { setSetup(null); setSettingsDraft({}); }}
         size="wide"
       >
         {setup && <>
@@ -623,7 +697,11 @@ export default function ToolsPage() {
               </article>
             ))}
           </div>
-          {setup.configured_secret_names && (
+          {/* The read-only checklist is for tools whose keys are still added by
+              hand. A tool with editable settings shows the same keys in the
+              form below, and listing them twice only raises the question of
+              which of the two is the real one. */}
+          {setup.configured_secret_names && !setup.settings && (
             <div className="secret-checklist">
               <strong>{t("tools.providerKeys")}</strong>
               <p>Configured names are shown; secret values never leave the API process.</p>
@@ -668,6 +746,70 @@ export default function ToolsPage() {
               ) : (
                 <span>Ready.</span>
               )}
+            </div>
+          )}
+          {setup.settings && (
+            <div className="tool-settings">
+              <strong>{setup.settings_title}</strong>
+              {setup.settings_blurb && <p>{setup.settings_blurb}</p>}
+              {setup.settings.map((field) => {
+                const typed = settingsDraft[field.key];
+                return (
+                  <label className="tool-setting" key={field.key}>
+                    <span>
+                      {field.label}
+                      {field.required ? null : <em>optional</em>}
+                    </span>
+                    {field.kind === "choice" && field.options ? (
+                      <SegmentedControl
+                        value={typed ?? field.value ?? field.default ?? ""}
+                        options={field.options.map((option) => ({ value: option, label: option }))}
+                        onChange={(next) =>
+                          setSettingsDraft((draft) => ({ ...draft, [field.key]: next }))}
+                        label={field.label}
+                      />
+                    ) : (
+                      <input
+                        type={field.secret ? "password" : "text"}
+                        // A secret's box starts empty and its saved value shows
+                        // as a masked placeholder. Rendering the mask *inside*
+                        // the box would give a path where a row of dots is
+                        // submitted and saved over a working key.
+                        value={typed ?? (field.secret ? "" : field.value)}
+                        placeholder={
+                          field.secret && field.preview ? field.preview : field.placeholder
+                        }
+                        onChange={(event) =>
+                          setSettingsDraft((draft) => ({ ...draft, [field.key]: event.target.value }))}
+                        autoComplete="off"
+                        spellCheck={false}
+                      />
+                    )}
+                    <small>
+                      {field.help}
+                      {field.help_url && (
+                        <> <a href={field.help_url} target="_blank" rel="noreferrer">Open</a></>
+                      )}
+                    </small>
+                  </label>
+                );
+              })}
+              <div className="tool-settings-actions">
+                <button
+                  className={buttonClass({ variant: "secondary" })}
+                  disabled={
+                    !Object.keys(settingsDraft).length || busy === `${setup.tool_id}-settings`
+                  }
+                  onClick={() => void saveToolSettings()}
+                  type="button"
+                >
+                  <ActionIcon name="confirm" />
+                  {busy === `${setup.tool_id}-settings` ? "Saving…" : "Save settings"}
+                </button>
+                {Object.keys(settingsDraft).length > 0 && (
+                  <small>Unsaved changes. Testing the tunnel saves them first.</small>
+                )}
+              </div>
             </div>
           )}
           <div className="setup-actions">

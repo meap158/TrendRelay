@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from trendrelay_api import __version__
 from trendrelay_api.attribution_api import router as attribution_router
@@ -209,6 +209,51 @@ async def run_tool_setup_action(
         raise HTTPException(status_code=404, detail="Setup action not found.") from error
     except RuntimeError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+class ToolSettings(BaseModel):
+    """Settings to write, and the operator's word that they meant it."""
+
+    #: Partial by design. A key left out keeps whatever is saved, which is what
+    #: lets the secret field submit nothing and mean "leave the key alone"
+    #: rather than "clear it" - the same rule the credential rows follow.
+    values: dict[str, str] = Field(default_factory=dict, max_length=20)
+    confirm_external_action: bool = False
+
+
+@app.post("/api/tools/{tool_id}/settings", tags=["tools"])
+async def save_tool_settings(
+    tool_id: str,
+    body: ToolSettings,
+    request: Request,
+) -> dict[str, object]:
+    """Write a tool's own settings to the local .env.
+
+    Only the assistant tunnel has any, and only the keys it declares: without
+    that restriction this is "write any environment variable", behind a button
+    meant for a tunnel id.
+    """
+    require_local_mutation(request)
+    if tool_id != "mcp-server":
+        raise HTTPException(status_code=404, detail="This tool has no editable settings.")
+    if not body.confirm_external_action:
+        raise HTTPException(status_code=400, detail="Saving settings requires confirmation.")
+
+    from trendrelay_api.env_store import EnvWriteError
+    from trendrelay_api.integrations.mcp import tunnel
+
+    try:
+        written = await asyncio.to_thread(tunnel.save_settings, body.values)
+    except tunnel.TunnelSettingsError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except EnvWriteError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    # The refreshed report comes back with the save, so the form redraws from
+    # what is now stored rather than from what was typed into it.
+    return {
+        "written": written,
+        "setup": await asyncio.to_thread(setup_report, tool_id),
+    }
 
 
 @app.get("/api/tools/agent-reach/diagnostics", tags=["tools"])

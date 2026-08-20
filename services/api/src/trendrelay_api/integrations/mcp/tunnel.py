@@ -33,6 +33,154 @@ BACKOFF = (2, 5, 10, 30, 60)
 STABLE_SECONDS = 60
 
 
+#: What the client accepts. `warn` is the default because the two below it are
+#: noisy enough to bury the one line that matters.
+LOG_LEVELS = ("error", "warn", "info", "debug")
+
+
+class TunnelSettingsError(ValueError):
+    """A setting was rejected before anything was written."""
+
+
+#: The tunnel's settings, as the Tools tab renders and writes them.
+#:
+#: Declared once here rather than split between a form and a validator, because
+#: the pair that drifted apart is exactly how `TUNNEL_CLIENT_BIN` came to exist
+#: in configuration and nowhere in the interface: an operator whose client was
+#: not on PATH got "tunnel-client could not be run" and no hint that a path
+#: setting existed at all.
+SETTINGS: tuple[dict[str, Any], ...] = (
+    {
+        "key": "CONTROL_PLANE_TUNNEL_ID",
+        "label": "Tunnel ID",
+        "kind": "text",
+        "secret": False,
+        "required": True,
+        "placeholder": "tunnel_0123456789abcdef0123456789abcdef",
+        "help": "Get it from OpenAI → Tunnels.",
+        "help_url": "https://platform.openai.com/settings/organization/tunnels",
+    },
+    {
+        "key": "CONTROL_PLANE_API_KEY",
+        "label": "Runtime API Key",
+        "kind": "text",
+        "secret": True,
+        "required": True,
+        # Said where the key is typed, not only in a document nobody opens
+        # while pasting one. An admin key here would work, which is exactly
+        # why it is worth naming the narrower one.
+        "help": "Needs Tunnels Read + Use. Not an admin key.",
+        "help_url": "https://platform.openai.com/api-keys",
+    },
+    {
+        "key": "TUNNEL_CLIENT_BIN",
+        "label": "tunnel-client path",
+        "kind": "text",
+        "secret": False,
+        "required": False,
+        "placeholder": "tunnel-client on PATH",
+        "help": "Full path to the binary. Leave empty if it is already on PATH.",
+    },
+    {
+        "key": "TUNNEL_LOG_LEVEL",
+        "label": "Log verbosity",
+        "kind": "choice",
+        "options": list(LOG_LEVELS),
+        "secret": False,
+        "required": False,
+        "default": "warn",
+        "help": "Raise only while diagnosing; info and debug are noisy.",
+    },
+    {
+        "key": "TUNNEL_HEALTH_PORT",
+        "label": "Health port",
+        "kind": "text",
+        "secret": False,
+        "required": False,
+        "placeholder": "a free port is chosen",
+        "help": "Only worth setting if a fixed port must be reserved for it.",
+    },
+)
+
+SETTING_KEYS: tuple[str, ...] = tuple(field["key"] for field in SETTINGS)
+
+
+def _validate(key: str, value: str) -> str:
+    """One setting, checked the way the client would check it - but sooner.
+
+    Every message names what to do rather than what is wrong, because the
+    person reading it has a value on their clipboard and wants to know whether
+    to paste it again or fetch a different one.
+    """
+    if key == "CONTROL_PLANE_TUNNEL_ID":
+        if value and not TUNNEL_ID.fullmatch(value):
+            raise TunnelSettingsError(
+                "A tunnel id is 'tunnel_' followed by 32 hex characters. "
+                "Copy it from OpenAI → Tunnels."
+            )
+    elif key == "CONTROL_PLANE_API_KEY":
+        # A short key is a mistake; no key is a decision. They are not alike.
+        if value and len(value) < 20:
+            raise TunnelSettingsError("That key looks too short to be a real one.")
+    elif key == "TUNNEL_LOG_LEVEL":
+        if value and value not in LOG_LEVELS:
+            raise TunnelSettingsError(f"Log verbosity is one of: {', '.join(LOG_LEVELS)}.")
+    elif key == "TUNNEL_HEALTH_PORT":
+        if value and (not value.isdigit() or not 1 <= int(value) <= 65535):
+            raise TunnelSettingsError("A health port is a number between 1 and 65535.")
+    elif key == "TUNNEL_CLIENT_BIN":
+        # Resolved now rather than at launch. The failure this prevents is a
+        # saved path that looks right and only fails the next time the tunnel
+        # is started, by which time nobody is looking at this form.
+        if value and not shutil.which(value):
+            raise TunnelSettingsError(
+                "No runnable file at that path. Leave it empty to use PATH."
+            )
+    return value
+
+
+def save_settings(values: dict[str, str]) -> list[str]:
+    """Write the tunnel's settings to .env, after checking all of them.
+
+    All of them first: writing three and then rejecting the fourth leaves the
+    configuration half-changed and the operator guessing which half.
+
+    An omitted key is left alone, which is what lets a secret field submit
+    nothing and mean "keep what is saved" rather than "clear it".
+    """
+    from trendrelay_api.env_store import write_env_values
+
+    unknown = sorted(set(values) - set(SETTING_KEYS))
+    if unknown:
+        raise TunnelSettingsError(f"Not a tunnel setting: {', '.join(unknown)}.")
+
+    cleaned = {key: _validate(key, str(value).strip()) for key, value in values.items()}
+    return write_env_values(cleaned)
+
+
+def settings_view() -> list[dict[str, Any]]:
+    """The fields with what is stored in them, secrets masked."""
+    # Read from the file rather than from Settings: Settings is cached for the
+    # life of the process, so a value someone put in .env by hand would not
+    # appear here until the API restarted.
+    from trendrelay_api.env_store import effective_value, masked_value
+
+    view: list[dict[str, Any]] = []
+    for field in SETTINGS:
+        key = field["key"]
+        stored = (effective_value(key) or "").strip()
+        view.append({
+            **field,
+            "configured": bool(stored),
+            # A secret is described, never returned. Everything else is shown,
+            # because a path or a log level is not a credential and hiding it
+            # only means retyping it to see what it was.
+            "value": "" if field["secret"] else stored,
+            "preview": masked_value(key) if field["secret"] and stored else None,
+        })
+    return view
+
+
 def configured() -> bool:
     """Whether both credentials are present, read through Settings so a value in
     .env counts - the launcher and the Tools tab both ask this."""
@@ -138,6 +286,13 @@ def run_doctor(timeout: float = 30) -> dict[str, Any]:
     which flags it accepts and which checks it runs. Returns a normalized
     `{ok, checks, detail}` the Tools tab can render.
     """
+    # Settings is cached for the life of the process, and this is the one set of
+    # credentials an operator may well have typed straight into .env. Without
+    # this the test answers for whatever was configured when the API booted, and
+    # reports a failure that was fixed several minutes ago.
+    from trendrelay_api.config import refresh_settings
+
+    refresh_settings()
     config, reason = resolve_config()
     if config is None:
         return {"ok": False, "checks": [], "detail": reason or "Not configured."}
