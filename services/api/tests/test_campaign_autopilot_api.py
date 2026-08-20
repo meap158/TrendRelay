@@ -162,7 +162,7 @@ def test_skipping_a_held_post_leaves_it_in_the_rotation(workspace) -> None:
         "POST",
         f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
         "/autopilot/executions/exec-skip/dismiss",
-        json={"execution_ids": ["exec-skip"], "stop_proposing": False},
+        json={"stop_proposing": False},
     )
 
     assert response.status_code == 200, response.text
@@ -190,7 +190,7 @@ def test_declining_a_held_post_stops_it_coming_back(workspace) -> None:
         "POST",
         f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
         "/autopilot/executions/exec-no/dismiss",
-        json={"execution_ids": ["exec-no"], "stop_proposing": True},
+        json={"stop_proposing": True},
     )
 
     queue = request(
@@ -233,6 +233,27 @@ def test_one_unknown_post_does_not_sink_a_refused_batch(workspace) -> None:
     assert body["dismissed"] == 1
     assert body["refused"] == 1
     assert body["results"][1]["problem"]
+
+
+def test_refusing_one_post_needs_no_body_at_all(workspace) -> None:
+    """The shape this route has been posted in for its whole life.
+
+    It grew a body when refusing learnt a second answer, and sharing the
+    batch's model would have made `{}` fail on a list of ids the caller has no
+    reason to send - the id is in the path.
+    """
+    campaign_id = campaign(workspace)
+    _held(workspace, campaign_id, "exec-bare")
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/autopilot/executions/exec-bare/dismiss",
+        json={},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["execution"]["state"] == "cancelled"
 
 
 def test_refusing_needs_no_confirmation_the_way_approving_does(workspace) -> None:

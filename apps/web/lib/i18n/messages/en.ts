@@ -149,6 +149,21 @@ export const en = {
       seedCarried: "Carried by {count} newsrooms: {outlets}",
       seedOnly: "{outlet} · only newsroom carrying it so far",
     },
+    standout: {
+      hot: "Hot right now",
+      hotBlurb: "The largest reactions on this board. Widely seen, and widely made.",
+      emerging: "Emerging",
+      emergingBlurb:
+        "Punching above its weight: reacting faster, or drawing more discussion, than the board's usual.",
+      empty: "Nothing stands out here yet. Run research below to fill the board.",
+      add: "Add to idea",
+      added: "Added",
+      views: "{count} views",
+      reactions: "{count} reactions",
+      reasonFastAndTalked: "Moving fast and heavily discussed",
+      reasonFast: "Reacting faster than the board's usual pace",
+      reasonTalked: "Far more discussion than its reach",
+    },
   },
 
   downloads: {
@@ -592,7 +607,7 @@ export const en = {
         draft: "Kept out of the rotation on purpose. Nothing posts it until you approve it.",
         approved: "Available to the scheduler. It can fill any due slot, once it has rested the required days and the account is under its daily cap.",
         needsCopy: "Approved, but the caption was never written - a placeholder stands in. It is skipped at every slot until somebody writes one.",
-        paused: "Taken out of the rotation after a delivery problem, usually a file that moved or changed. Approve it again once the media is back.",
+        paused: "Out of the rotation: either you declined it in the approval inbox, or a delivery failed - usually a file that moved or changed. Approve it to put it back.",
         retired: "Finished with. Kept for the record, never posted again, and ignored when products are matched.",
       },
     },

@@ -1721,6 +1721,18 @@ class BatchApproval(BaseModel):
     publish_now: bool = False
 
 
+class Dismissal(BaseModel):
+    """What becomes of one refused post.
+
+    Its own model rather than the batch's, because the batch requires a list of
+    ids and this route already has one in its path. Sharing the batch model
+    meant `{}` - which is what this route was posted for its whole life -
+    failing validation on a field the caller had no reason to send.
+    """
+
+    stop_proposing: bool = False
+
+
 class BatchDismissal(BaseModel):
     """Several held posts, refused in one decision.
 
@@ -2268,7 +2280,7 @@ def dismiss_autopilot_execution(
     request: Request,
     user: AuthenticatedUser,
     session: DatabaseSession,
-    body: BatchDismissal | None = None,
+    body: Dismissal | None = None,
 ) -> dict[str, Any]:
     """Refuse a held post. Cancelling frees its slot and its queue item."""
     require_role(membership(session, workspace_id, user.id), EDITORS)

@@ -146,6 +146,21 @@ export const fr: Messages = {
       seedCarried: "Relayé par {count} rédactions : {outlets}",
       seedOnly: "{outlet} · seule rédaction à le relayer pour l'instant",
     },
+    standout: {
+      hot: "En vogue",
+      hotBlurb: "Les plus fortes réactions de ce tableau. Très vues, et très reprises.",
+      emerging: "Émergent",
+      emergingBlurb:
+        "Au-dessus de sa catégorie : réagit plus vite, ou suscite plus de discussion, que la normale du tableau.",
+      empty: "Rien ne ressort encore. Lancez une recherche ci-dessous pour remplir le tableau.",
+      add: "Ajouter à l'idée",
+      added: "Ajouté",
+      views: "{count} vues",
+      reactions: "{count} réactions",
+      reasonFastAndTalked: "Progresse vite et très commenté",
+      reasonFast: "Réagit plus vite que la normale du tableau",
+      reasonTalked: "Bien plus de discussion que sa portée",
+    },
   },
 
   downloads: {
@@ -598,7 +613,7 @@ export const fr: Messages = {
         draft: "Volontairement hors rotation. Rien ne le publie tant que vous ne l'approuvez pas.",
         approved: "Disponible pour le planificateur. Il peut occuper tout créneau dû, une fois le repos requis écoulé et si le compte reste sous son plafond quotidien.",
         needsCopy: "Approuvé, mais la légende n'a jamais été écrite - un texte provisoire la remplace. Il est ignoré à chaque créneau jusqu'à ce que quelqu'un l'écrive.",
-        paused: "Retiré de la rotation après un incident de publication, souvent un fichier déplacé ou modifié. Approuvez-le à nouveau une fois le média rétabli.",
+        paused: "Hors rotation : soit vous l'avez refusé dans la file d'approbation, soit une publication a échoué - souvent un fichier déplacé ou modifié. Approuvez-le pour le remettre en rotation.",
         retired: "Terminé. Conservé pour l'historique, jamais republié, et ignoré lors de l'association des produits.",
       },
     },

@@ -1343,7 +1343,7 @@ export function AutopilotPanel({
           body: JSON.stringify(
             action === "approve"
               ? { confirm_external_action: true, publish_now: publishNow }
-              : { execution_ids: [executionId], stop_proposing: stopProposing },
+              : { stop_proposing: stopProposing },
           ),
         },
       );

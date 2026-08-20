@@ -143,6 +143,21 @@ export const vi: Messages = {
       seedCarried: "Được {count} tòa soạn đưa tin: {outlets}",
       seedOnly: "{outlet} · tòa soạn duy nhất đưa tin đến giờ",
     },
+    standout: {
+      hot: "Đang nóng",
+      hotBlurb: "Lượng tương tác lớn nhất trên bảng này. Nhiều người thấy, và nhiều người đã làm.",
+      emerging: "Đang nổi lên",
+      emergingBlurb:
+        "Vượt trên tầm của nó: tương tác nhanh hơn, hoặc được bàn luận nhiều hơn mức thường thấy.",
+      empty: "Chưa có gì nổi bật. Chạy nghiên cứu bên dưới để lấp đầy bảng.",
+      add: "Thêm vào ý tưởng",
+      added: "Đã thêm",
+      views: "{count} lượt xem",
+      reactions: "{count} lượt tương tác",
+      reasonFastAndTalked: "Lan nhanh và được bàn luận nhiều",
+      reasonFast: "Tương tác nhanh hơn mức thường thấy của bảng",
+      reasonTalked: "Được bàn luận nhiều hơn so với lượng tiếp cận",
+    },
   },
 
   downloads: {
@@ -588,7 +603,7 @@ export const vi: Messages = {
         draft: "Được giữ ngoài vòng xoay có chủ đích. Không có gì đăng nó cho đến khi bạn duyệt.",
         approved: "Sẵn sàng cho bộ lập lịch. Nó có thể lấp bất kỳ khung giờ nào đến hạn, sau khi đã nghỉ đủ số ngày và tài khoản chưa chạm giới hạn mỗi ngày.",
         needsCopy: "Đã duyệt, nhưng chưa viết nội dung - một đoạn giữ chỗ đang thay thế. Nó bị bỏ qua ở mọi khung giờ cho đến khi có người viết.",
-        paused: "Bị đưa ra khỏi vòng xoay sau một sự cố đăng bài, thường là tệp đã bị di chuyển hoặc thay đổi. Hãy duyệt lại khi tệp đã sẵn sàng.",
+        paused: "Ngoài vòng xoay: hoặc bạn đã từ chối bài trong hộp duyệt, hoặc việc đăng đã lỗi - thường là tệp bị di chuyển hoặc thay đổi. Duyệt lại để đưa bài trở lại.",
         retired: "Đã kết thúc. Giữ lại để lưu hồ sơ, không bao giờ đăng lại, và bỏ qua khi ghép sản phẩm.",
       },
     },
