@@ -316,7 +316,12 @@ def run_doctor(timeout: float = 30) -> dict[str, Any]:
         checks = []
 
     def _passed(check: dict[str, Any]) -> bool:
-        return str(check.get("status", "")).upper() in {"PASS", "OK", "READY"}
+        # Only a failure is a failure. This once required every check to be a
+        # PASS, and tunnel-client returns SKIP for optional things it found no
+        # reason to run - an uninstalled Codex plugin, for one - so the Tools
+        # tab reported a problem over a configuration the client had just
+        # exited 0 on, with `result: ok`.
+        return str(check.get("status", "")).upper() not in {"FAIL", "ERROR"}
 
     ok = result.returncode == 0 and all(_passed(c) for c in checks)
     if ok:
@@ -327,9 +332,199 @@ def run_doctor(timeout: float = 30) -> dict[str, Any]:
     return {"ok": ok, "returncode": result.returncode, "checks": checks, "detail": detail}
 
 
-def write_status(state: str, message: str) -> None:
+def client_version() -> str | None:
+    """The tunnel-client's own version, or None if it cannot be run."""
+    from trendrelay_api.config import get_settings
+
+    binary = shutil.which((get_settings().tunnel_client_bin or "").strip() or "tunnel-client")
+    if not binary:
+        return None
+    try:
+        result = subprocess.run(
+            [binary, "--version"], capture_output=True, text=True, timeout=15
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    # "0.0.10+105e17a… (git sha: …)" - the version is the part before the build.
+    first = (result.stdout or result.stderr or "").strip().split()
+    return first[0].split("+")[0] if first else None
+
+
+def local_server_check() -> dict[str, Any]:
+    """Whether *this app's* MCP server is answering, not merely something.
+
+    tunnel-client's own `mcp_server_reachable` passes on any HTTP 200, which is
+    exactly what it got while another application held the port: an assistant
+    dialling this tunnel would have reached that application's web page. The
+    RFC 9728 metadata this server publishes names itself, and a name is the
+    difference between a reachable port and a reachable TrendRelay.
+    """
+    import urllib.error
+    import urllib.request
+
+    url = service.server_url()
+    metadata = url.removesuffix("/mcp") + "/.well-known/oauth-protected-resource/mcp"
+    port_number = service.port()
+    try:
+        with urllib.request.urlopen(metadata, timeout=4) as response:  # noqa: S310
+            body = response.read(4096)
+    except (urllib.error.URLError, OSError, ValueError):
+        return {
+            "ok": False,
+            "detail": (
+                f"Nothing is answering on port {port_number}. Start the server "
+                "above, or let the launcher start it with the tunnel."
+            ),
+        }
+    try:
+        described = json.loads(body)
+        name = str(described.get("resource_name", "")) if isinstance(described, dict) else ""
+    except (ValueError, TypeError):
+        name = ""
+    if not name.startswith("TrendRelay"):
+        return {
+            "ok": False,
+            "detail": (
+                f"Port {port_number} is answering, but not as TrendRelay - another "
+                "application is on it. Stop that program, or set MCP_PORT to a "
+                "port it does not use."
+            ),
+        }
+    return {"ok": True, "detail": f"Answering on port {port_number}."}
+
+
+def control_plane_check(timeout: float = 30) -> dict[str, Any]:
+    """Whether the control plane knows this tunnel, and by what name.
+
+    A read-only metadata lookup the client itself does at startup, and the one
+    check that proves the credentials work rather than merely being shaped
+    correctly - a well-formed id and a well-formed key can still be a key for
+    somebody else's organisation.
+    """
+    config, reason = resolve_config()
+    if config is None:
+        return {"ok": False, "detail": reason or "Not configured."}
+    try:
+        result = subprocess.run(
+            [config["binary"], "admin", "tunnels", "get", config["tunnel_id"], "--json"],
+            env=child_env(config), capture_output=True, text=True, timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {"ok": False, "detail": "The control plane could not be reached."}
+    if result.returncode != 0:
+        problem = (result.stderr or result.stdout or "").strip()
+        return {
+            "ok": False,
+            "detail": problem[:200] or "The control plane refused the lookup.",
+        }
+    try:
+        described = json.loads(result.stdout)
+        name = str(described.get("name") or "").strip()
+    except (ValueError, TypeError):
+        name = ""
+    return {
+        "ok": True,
+        "detail": f"Reachable, and this tunnel is known as \"{name}\"." if name
+        else "Reachable, and this tunnel exists.",
+    }
+
+
+def connector_check(timeout: float = 15) -> dict[str, Any]:
+    """Whether the running client is ready, asked of the client itself."""
+    live = status()
+    health_port = live.get("health_port")
+    if live.get("state") != "running" or not str(health_port or "").isdigit():
+        return {
+            "ok": False,
+            "skipped": True,
+            "detail": "Not running. It starts with the app, or on the next launch.",
+        }
+    config, _ = resolve_config()
+    if config is None:
+        return {"ok": False, "skipped": True, "detail": "Not configured."}
+    try:
+        result = subprocess.run(
+            [config["binary"], "health", "--port", str(health_port), "--json"],
+            env=child_env(config), capture_output=True, text=True, timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {"ok": False, "detail": "The running client did not answer."}
+    if result.returncode != 0:
+        return {"ok": False, "detail": "Running, but not ready to take requests yet."}
+    return {"ok": True, "detail": "Ready, and polling the control plane."}
+
+
+def run_test() -> dict[str, Any]:
+    """Everything worth knowing about this tunnel, in the order it can fail.
+
+    Each check answers one question a person can act on, because "the tunnel
+    does not work" has five different fixes and the message that only says it
+    failed picks none of them.
+    """
+    from trendrelay_api.config import refresh_settings
+
+    # The credentials are the one thing an operator may well have typed into
+    # .env by hand, and Settings is cached for the life of the process.
+    refresh_settings()
+    config, reason = resolve_config()
+    tunnel_id = (config or {}).get("tunnel_id", "")
+    shortened = f"{tunnel_id[:12]}…{tunnel_id[-4:]}" if tunnel_id else ""
+    version = client_version()
+    local = local_server_check()
+    plane = control_plane_check() if config else {"ok": False, "detail": reason or ""}
+    connector = connector_check() if config else {"ok": False, "skipped": True, "detail": ""}
+    checks = [
+        {
+            "id": "tunnel_id",
+            "label": "Tunnel ID",
+            "state": "pass" if config else "fail",
+            "detail": f"{shortened} with an API key set." if config
+            else reason or "Not configured.",
+        },
+        {
+            "id": "client",
+            "label": "tunnel-client",
+            "state": "pass" if version else "fail",
+            "detail": version or "Not on PATH. Install it, or set its full path above.",
+        },
+        {
+            "id": "local_server",
+            "label": "Local MCP server",
+            "state": "pass" if local["ok"] else "fail",
+            "detail": local["detail"],
+        },
+        {
+            "id": "control_plane",
+            "label": "OpenAI control plane",
+            "state": "pass" if plane["ok"] else "fail",
+            "detail": plane["detail"],
+        },
+        {
+            "id": "connector",
+            "label": "Tunnel connector",
+            "state": "pass" if connector["ok"] else
+            "skip" if connector.get("skipped") else "fail",
+            "detail": connector["detail"],
+        },
+    ]
+    failed = [check for check in checks if check["state"] == "fail"]
+    return {
+        "ok": not failed,
+        # Which check to read, not what it says: the detail is on its own line
+        # directly below, and a heading that repeats it verbatim is the same
+        # sentence twice. A count ("3 problems") would be worse still - a number
+        # to go and look up rather than a thing to go and fix.
+        "summary": "Tunnel is online and reachable." if not failed
+        else f"Not reachable yet - see {failed[0]['label']} below.",
+        "checks": checks,
+    }
+
+
+def write_status(state: str, message: str, **extra: Any) -> None:
     service.MCP_DIR.mkdir(parents=True, exist_ok=True)
-    payload = {"state": state, "message": message, "updated_at": service.now()}
+    payload = {
+        "state": state, "message": message, "updated_at": service.now(), **extra,
+    }
     temporary = STATUS_FILE.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     temporary.replace(STATUS_FILE)
@@ -353,4 +548,7 @@ def status() -> dict[str, Any]:
         or ("The tunnel has not started yet." if is_configured
             else "No tunnel configured; the server stays on loopback."),
         "updated_at": raw.get("updated_at"),
+        # Where the running client answers about itself. Recorded because the
+        # supervisor picks a free one per attempt, so nothing else can guess it.
+        "health_port": raw.get("health_port"),
     }

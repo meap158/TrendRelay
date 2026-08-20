@@ -195,7 +195,8 @@ def setup_report(tool_id: str) -> dict[str, Any]:
             settings_blurb=(
                 "Lets an outside assistant reach this machine's MCP server without "
                 "exposing a port. The client dials out; nothing inbound is opened."
-            )
+            ),
+        )
     elif tool_id == "last30days-skill":
         configured = _configured_names(LAST30DAYS_KEYS)
         report.update(
@@ -375,7 +376,7 @@ def setup_report(tool_id: str) -> dict[str, Any]:
     return report
 
 
-def _launch_mcp_action(action_id: str) -> dict[str, str]:
+def _launch_mcp_action(action_id: str) -> dict[str, Any]:
     """Start or stop the loopback MCP server, or test the tunnel, from the Tools tab."""
     from trendrelay_api.integrations.mcp import service, tunnel
 
@@ -385,12 +386,15 @@ def _launch_mcp_action(action_id: str) -> dict[str, str]:
             "pip install -e services/api[mcp]."
         )
     if action_id == "test-tunnel":
-        # tunnel-client's own doctor check: reading its answer beats restating
-        # its rules, and it runs without connecting for real.
-        outcome = tunnel.run_doctor()
+        # Five named checks rather than the doctor's raw JSON. The doctor still
+        # runs inside them where it is the authority - it knows its own flags -
+        # but "the tunnel does not work" has five different fixes, and one line
+        # of somebody else's output picks none of them.
+        outcome = tunnel.run_test()
         return {
             "status": "ok" if outcome["ok"] else "problem",
-            "message": outcome["detail"],
+            "message": outcome["summary"],
+            "checks": outcome["checks"],
         }
     if action_id == "start-mcp":
         status = service.start_server()
@@ -401,7 +405,7 @@ def _launch_mcp_action(action_id: str) -> dict[str, str]:
     return {"status": status["state"], "message": status["message"]}
 
 
-def launch_setup_action(tool_id: str, action_id: str) -> dict[str, str]:
+def launch_setup_action(tool_id: str, action_id: str) -> dict[str, Any]:
     if tool_id == "mcp-server":
         return _launch_mcp_action(action_id)
     allowed_actions = {

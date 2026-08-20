@@ -162,6 +162,13 @@ async function responseJson<T>(response: Response): Promise<T> {
   return payload;
 }
 
+/** What `test-tunnel` answers: a verdict, and the checks behind it. */
+type TunnelTest = {
+  status: "ok" | "problem";
+  message: string;
+  checks: { id: string; label: string; state: "pass" | "fail" | "skip"; detail: string }[];
+};
+
 export default function ToolsPage() {
   const { t, rich } = useLocale();
   const { loading, user, apiFetch } = useAuth();
@@ -170,6 +177,11 @@ export default function ToolsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  /* The tunnel test's own answer. Kept apart from `message` because it is
+     five findings rather than a sentence, and because it is dismissed on
+     purpose: it is a report somebody asked for, not a notice about
+     something that just happened to them. */
+  const [tunnelTest, setTunnelTest] = useState<TunnelTest | null>(null);
   const [setup, setSetup] = useState<SetupReport | null>(null);
   /**
    * Only the fields that have been typed into.
@@ -422,13 +434,18 @@ export default function ToolsPage() {
       setBusy(`${setup.tool_id}-${action.id}`);
       setError(null);
       try {
-        const payload = await responseJson<{ result: { message: string } }>(
+        const payload = await responseJson<{ result: TunnelTest }>(
           await apiFetch(`/api/tools/${setup.tool_id}/setup/${action.id}`, {
             method: "POST",
             body: JSON.stringify({ confirm_external_action: true }),
           }),
         );
-        setMessage(payload.result.message);
+        if (action.id === "test-tunnel" && payload.result.checks) {
+          // The panel says it, so the one-line notice would say it twice.
+          setTunnelTest(payload.result);
+        } else {
+          setMessage(payload.result.message);
+        }
         // Re-read the report so a start/stop flips the button and the
         // connection line reflects what the action just did.
         await loadSetup(setup.tool_id);
@@ -739,6 +756,26 @@ export default function ToolsPage() {
           )}
           {setup.tool_id === "douyin-downloader" && setup.connection && <p className="connection-note">{t("tools.douyinConnection")} <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
           {setup.tool_id === "mcp-server" && setup.connection && <p className="connection-note">Assistant access: <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
+          {/* The test's answer, where it was asked for. Five named checks
+              rather than a verdict: "the tunnel does not work" has five
+              different fixes, and each of these lines names one of them. */}
+          {setup.tool_id === "mcp-server" && tunnelTest && (
+            <section className={`tunnel-test tunnel-test-${tunnelTest.status}`} aria-live="polite">
+              <div className="tunnel-test-head">
+                <strong>{tunnelTest.message}</strong>
+                <button type="button" className={buttonClass({ variant: "quiet", size: "sm" })}
+                  onClick={() => setTunnelTest(null)}>Dismiss</button>
+              </div>
+              <dl>
+                {tunnelTest.checks.map((check) => (
+                  <div key={check.id} className={`tunnel-check tunnel-check-${check.state}`}>
+                    <dt>{check.label}</dt>
+                    <dd>{check.detail}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          )}
           {setup.media_ai?.job && (
             /* The download's own words. A job that failed after twenty minutes
                of pip output has a reason, and this is the only place the

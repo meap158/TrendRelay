@@ -45,9 +45,12 @@ def build_server(workspace_id: str) -> FastMCP:
     """A Streamable-HTTP MCP server scoped to one workspace."""
     from mcp.server.fastmcp import FastMCP
 
-    from trendrelay_api.config import get_settings
+    from trendrelay_api.integrations.mcp import service
 
-    mcp_port = int(get_settings().mcp_port or 8765)
+    # Whatever the supervisor settled on, which is not always the configured
+    # port: it hands this server's URL to the tunnel, so it picks a port it has
+    # checked is free rather than one this process would discover is taken.
+    mcp_port = service.port()
     server = FastMCP(
         name="TrendRelay",
         instructions=INSTRUCTIONS,

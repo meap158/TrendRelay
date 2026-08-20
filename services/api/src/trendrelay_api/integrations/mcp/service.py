@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -47,10 +48,61 @@ def mcp_available() -> bool:
     return find_spec("mcp") is not None
 
 
-def port() -> int:
+#: How the parent tells the child which port it chose. The child cannot work it
+#: out for itself: by the time it runs, the parent has already decided, and two
+#: processes asking "what is free?" separately would answer differently.
+PORT_ENV = "TRENDRELAY_MCP_PORT"
+
+
+def preferred_port() -> int:
+    """The port this server would like: the configured one, or 8765."""
     from trendrelay_api.config import get_settings
 
     return int(get_settings().mcp_port or 8765)
+
+
+def port_is_free(candidate: int) -> bool:
+    """Whether this port can be bound on loopback right now."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind(("127.0.0.1", candidate))
+        except OSError:
+            return False
+    return True
+
+
+def choose_port() -> int:
+    """A port to serve on: the preferred one when it is free, else any free one.
+
+    Pinned to 8765, the server could be stopped dead by any other program that
+    happened to want that port - and was: another application answered there,
+    every start failed with `[Errno 10048]`, and nothing noticed, because the
+    tunnel was launched pointing at 8765 regardless and forwarded assistants
+    to whatever was listening. A port is an implementation detail of a
+    loopback server whose address is handed to the one client that needs it.
+    """
+    wanted = preferred_port()
+    if port_is_free(wanted):
+        return wanted
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+
+
+def port() -> int:
+    """The port this server is on, as this process can best know it.
+
+    Three answers in order of authority: the child is told outright; anyone
+    else reads the port the running server recorded; and with nothing running,
+    the preferred one is what a start would try first.
+    """
+    told = (os.environ.get(PORT_ENV) or "").strip()
+    if told.isdigit():
+        return int(told)
+    live = _read_status()
+    if live.get("state") in {"starting", "running"} and str(live.get("port", "")).isdigit():
+        return int(live["port"])
+    return preferred_port()
 
 
 def server_url() -> str:
@@ -130,13 +182,19 @@ def start_server(force: bool = False) -> dict[str, Any]:
             return server_status()
         if SERVER_PROCESS is not None and SERVER_PROCESS.poll() is None:
             SERVER_PROCESS.terminate()
-        write_status("starting", "Starting the MCP server on loopback.")
+        # Chosen here rather than by the child: the parent hands the URL to
+        # the tunnel, so it has to know the answer before the child runs.
+        chosen = choose_port()
+        write_status(
+            "starting", f"Starting the MCP server on 127.0.0.1:{chosen}.",
+            port=chosen, url=f"http://127.0.0.1:{chosen}/mcp",
+        )
         MCP_DIR.mkdir(parents=True, exist_ok=True)
         log = open(LOG_FILE, "a", encoding="utf-8")  # noqa: SIM115 - lives with the child
         SERVER_PROCESS = subprocess.Popen(
             [sys.executable, str(MCP_SCRIPT)],
             cwd=PROJECT_ROOT,
-            env=_environment(),
+            env={**_environment(), PORT_ENV: str(chosen)},
             stdout=log,
             stderr=subprocess.STDOUT,
             text=True,

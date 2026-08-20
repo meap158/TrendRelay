@@ -58,10 +58,61 @@ def process_is_alive(pid: int) -> bool:
     return True
 
 
+def wait_for_local_server(seconds: float = 15) -> dict[str, object]:
+    """Give the server a moment to bind, and report what it did.
+
+    Asked before the client is launched at all. The client was once started
+    regardless: with the port taken by another application, it dutifully
+    forwarded to whatever was listening there, and the only sign was a line in
+    a log file nobody reads.
+    """
+    deadline = time.monotonic() + seconds
+    outcome = tunnel.local_server_check()
+    while not outcome["ok"] and time.monotonic() < deadline:
+        time.sleep(0.5)
+        outcome = tunnel.local_server_check()
+    return outcome
+
+
+def wait_for_connector(child: subprocess.Popen, health_port: int, seconds: float = 20) -> bool:
+    """Whether the client reports itself ready, on its own /readyz.
+
+    Polled rather than assumed, and given up on rather than waited out: a
+    client that is not ready in twenty seconds is usually one that will not be,
+    and the supervisor's job is to say so and keep watching, not to block.
+    """
+    import urllib.error
+    import urllib.request
+
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if child.poll() is not None:
+            return False
+        try:
+            with urllib.request.urlopen(  # noqa: S310 - loopback, our own child
+                f"http://127.0.0.1:{health_port}/readyz", timeout=2
+            ) as response:
+                if response.status == 200:
+                    return True
+        except (urllib.error.URLError, OSError):
+            pass
+        time.sleep(0.5)
+    return False
+
+
 def supervise(config: dict[str, str], parent_pid: int) -> int:
     # The server the tunnel forwards to: started here, so configuring a tunnel is
     # all it takes to serve the workspace, and stopped when this supervisor ends.
     service.start_server()
+    ready = wait_for_local_server()
+    if not ready["ok"]:
+        # Said once, on the console, in the words the Tools tab uses. A tunnel
+        # that cannot reach its own server has nothing to forward, and retrying
+        # it every few seconds would only fill the log with the same line.
+        print(f"[Tunnel] {ready['detail']}", flush=True)
+        tunnel.write_status("error", str(ready["detail"]))
+        service.stop_server()
+        return 0
     mcp_url = service.server_url()
     log = open(tunnel.LOG_FILE, "a", encoding="utf-8")  # noqa: SIM115 - the child's
     attempt = 0
@@ -83,7 +134,24 @@ def supervise(config: dict[str, str], parent_pid: int) -> int:
                 text=True,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
-            tunnel.write_status("running", f"tunnel-client is forwarding to {mcp_url}.")
+            # "Running" once the client says so, not once it has been started.
+            # This was written the moment the process existed, so the status
+            # read "running" while the client's own log recorded that it could
+            # not connect to anything - the one state a person checks, saying
+            # the one thing it could not know yet.
+            if wait_for_connector(child, health_port):
+                tunnel.write_status(
+                    "running",
+                    f"tunnel-client is forwarding to {mcp_url}.",
+                    health_port=health_port,
+                )
+            else:
+                tunnel.write_status(
+                    "degraded",
+                    "tunnel-client started but is not ready. The last lines of "
+                    ".data/mcp/tunnel.log say why.",
+                    health_port=health_port,
+                )
             while child.poll() is None:
                 if parent_pid and not process_is_alive(parent_pid):
                     child.terminate()

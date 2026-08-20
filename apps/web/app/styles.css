@@ -277,6 +277,28 @@ nav strong { color: var(--text); }
 .secret-checklist code.missing { color: var(--muted-soft); }
 .connection-note { padding: 11px 13px; border-inline-start: 3px solid var(--green); background: #f1f8f5; color: var(--muted); }
 .setup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+/* The tunnel test's answer: a verdict, then the checks behind it. Tinted by
+   outcome so the state is legible before a word is read, and dismissible,
+   because it is a report somebody asked for rather than a notice about
+   something that happened to them. */
+.tunnel-test { margin-top: 14px; padding: 12px 13px; border: 1px solid var(--line); border-inline-start-width: 3px; border-radius: var(--radius-sm); background: var(--panel); }
+.tunnel-test-ok { border-inline-start-color: var(--green); background: #f1f8f5; }
+.tunnel-test-problem { border-inline-start-color: var(--warn-line); background: var(--warn-bg); }
+.tunnel-test-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; justify-content: space-between; }
+.tunnel-test-head > strong { font-size: 0.82rem; }
+.tunnel-test dl { display: grid; gap: 4px; margin: 10px 0 0; }
+/* Label and detail on one row while there is room: five rows of two lines each
+   is a panel that pushes the buttons below it off the screen. */
+.tunnel-check { display: grid; grid-template-columns: minmax(0, 160px) minmax(0, 1fr); gap: 4px 10px; align-items: baseline; }
+.tunnel-check > dt { color: var(--muted); font-size: 0.76rem; }
+.tunnel-check > dd { margin: 0; font-size: 0.76rem; line-height: 1.45; overflow-wrap: anywhere; }
+.tunnel-check-pass > dt::before { content: "✓ "; color: var(--green); }
+.tunnel-check-fail > dt::before { content: "✕ "; color: var(--warn); }
+.tunnel-check-skip > dt::before { content: "– "; color: var(--muted-soft); }
+.tunnel-check-fail > dd { color: var(--warn); }
+@media (max-width: 620px) {
+  .tunnel-check { grid-template-columns: 1fr; }
+}
 /* A runtime download reports itself here: minutes of work in another process,
    and the only place its progress or its reason for failing can be seen. */
 .setup-progress { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; color: var(--muted); font-size: 0.78rem; }

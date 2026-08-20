@@ -77,6 +77,14 @@ def get_settings() -> Settings:
 
 
 def refresh_settings() -> Settings:
-    """Re-read configuration after the local .env file changed."""
-    get_settings.cache_clear()
+    """Re-read configuration after the local .env file changed.
+
+    A `get_settings` that has no cache is nothing to clear, not an error: tests
+    substitute a plain function for it, and this is called from paths - the
+    tunnel's doctor, its connection test - whose whole subject is configuration
+    somebody has just edited.
+    """
+    clear = getattr(get_settings, "cache_clear", None)
+    if clear is not None:
+        clear()
     return get_settings()
