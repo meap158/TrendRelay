@@ -24,6 +24,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
+import { fetchWorkspaces } from "../../lib/workspaces";
 import { ProductTable } from "./product-table";
 import { ShopeeImport } from "./shopee-import";
 import { buttonClass } from "../ui/button";
@@ -159,8 +160,7 @@ export default function AttributionPage() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    apiFetch("/api/workspaces")
-      .then((response) => json<{ workspaces: Workspace[] }>(response))
+    fetchWorkspaces(apiFetch)
       .then((body) => {
         if (cancelled) return;
         setWorkspaces(body.workspaces);

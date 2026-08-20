@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl } from "../../lib/api";
+import { fetchWorkspaces } from "../../lib/workspaces";
 import { channelUrl, displayHandle } from "../../lib/channel-links";
 import { useAuth } from "../auth-provider";
 import { useT } from "../i18n-provider";
@@ -1090,8 +1091,7 @@ export default function PublishPage() {
 
   useEffect(() => {
     if (!user) return;
-    apiFetch("/api/workspaces")
-      .then((response) => json<{ workspaces: Workspace[] }>(response))
+    fetchWorkspaces(apiFetch)
       .then((body) => {
         setWorkspaces(body.workspaces);
         setWorkspaceId(body.workspaces[0]?.id ?? "");

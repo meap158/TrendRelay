@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 
 import { useAuth } from "./auth-provider";
 import { useT } from "./i18n-provider";
+import { fetchWorkspaces } from "../lib/workspaces";
 import { Button, buttonClass } from "./ui/button";
 import { ActionIcon } from "./ui/action-icons";
 import { StatusToasts, useStatus } from "./ui/status";
@@ -358,8 +359,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!user) return;
-    apiFetch("/api/workspaces")
-      .then((response) => json<{ workspaces: Workspace[] }>(response))
+    fetchWorkspaces(apiFetch)
       .then((body) => {
         setWorkspaces(body.workspaces);
         setWorkspaceId((current) => current || body.workspaces[0]?.id || "");

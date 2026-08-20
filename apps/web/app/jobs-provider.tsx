@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 import { useAuth } from "./auth-provider";
 import { apiBaseUrl } from "../lib/api";
+import { fetchWorkspaces } from "../lib/workspaces";
 import { effectLabel } from "../lib/i18n/effects";
 import { assetHref } from "../lib/job-links";
 import { useT } from "./i18n-provider";
@@ -129,8 +130,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user || activeWorkspaceId) return;
     let cancelled = false;
-    void apiFetch("/api/workspaces")
-      .then((response) => response.json())
+    void fetchWorkspaces(apiFetch)
       .then((body) => {
         const first = body.workspaces?.[0]?.id;
         if (!cancelled && first) {

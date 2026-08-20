@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { Crown, Download, Flame, Hash, Music2, RefreshCw, type LucideIcon } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
+import { fetchWorkspaces } from "../../lib/workspaces";
 import type { DiscoverySeed } from "../../lib/discovery-ideas";
 import { searchTerm, type Topic } from "../../lib/trend-shapes";
 import { useAuth } from "../auth-provider";
@@ -543,8 +544,7 @@ export default function ResearchDashboard() {
 
   useEffect(() => {
     let cancelled = false;
-    apiFetch("/api/workspaces")
-      .then((response) => response.json() as Promise<{ workspaces: Workspace[] }>)
+    fetchWorkspaces(apiFetch)
       .then((body) => {
         if (cancelled) return;
         setWorkspaces(body.workspaces);
