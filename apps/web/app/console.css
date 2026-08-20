@@ -895,8 +895,34 @@ html { scroll-behavior: smooth; }
 .campaign-product-status > small { color: var(--muted); font-size: 10px; }
 .campaign-product-pager { display: flex; gap: 4px; align-items: center; margin-inline-start: auto; }
 .campaign-product-pager > small { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
-.campaign-tagged-full { max-height: min(52vh, 460px); overflow-y: auto; padding-inline-end: 2px; }
-.campaign-tagged-full > li { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+/* The whole list is a table now: the rows are columns of the same few facts,
+   and the headings are what orders them. It borrows the Attribution table's
+   own class for the shared parts - the sort button, the numeric alignment -
+   so a product reads the same in the campaign that promotes it as in the list
+   it came from. */
+.campaign-tagged-scroll { max-height: min(52vh, 460px); overflow-y: auto; overflow-x: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+/* Fixed columns, so the table fits the dialog rather than scrolling sideways.
+   Every column but the name is a short known thing - a marketplace, a price, a
+   date - and left to size itself each one claimed the width of its longest
+   value and pushed the last three off the edge. The name takes what is left
+   and truncates, which is the one column a reader can finish from its start. */
+.campaign-tagged-table { width: 100%; table-layout: fixed; font-size: 11px; }
+.campaign-tagged-table :is(th, td) { overflow: hidden; text-overflow: ellipsis; }
+.campaign-tagged-table :is(th, td):nth-child(1) { inline-size: 34px; }
+.campaign-tagged-table :is(th, td):nth-child(3) { inline-size: 88px; }
+.campaign-tagged-table :is(th, td):nth-child(4) { inline-size: 96px; }
+.campaign-tagged-table :is(th, td):nth-child(5) { inline-size: 112px; }
+.campaign-tagged-table :is(th, td):nth-child(6) { inline-size: 96px; }
+.campaign-tagged-table :is(th, td):nth-child(7) { inline-size: 92px; }
+.campaign-tagged-table :is(th, td):nth-child(8) { inline-size: 88px; }
+/* The head stays while the body scrolls: a column you cannot see the name of
+   is a column you have to scroll back up to read. */
+.campaign-tagged-table thead th { position: sticky; inset-block-start: 0; z-index: 1; background: var(--panel-raised); }
+.campaign-tagged-table td { padding: 6px 8px; border-block-start: 1px solid var(--line); vertical-align: middle; }
+.campaign-tagged-name { display: table-cell; }
+.campaign-tagged-name > strong { display: block; overflow: hidden; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-tagged-name > small { display: block; overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-tagged-fine { color: var(--muted); font-size: 10px; }
 .campaign-product-picker { display: grid; gap: 8px; margin-block-start: 8px; padding: 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); }
 .campaign-product-search { inline-size: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 6px 8px; font: inherit; font-size: 11px; }
 /* Scrolls rather than growing the panel: a workspace can hold hundreds, and

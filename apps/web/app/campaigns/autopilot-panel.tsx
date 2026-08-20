@@ -27,6 +27,8 @@ import { SegmentedControl } from "../ui/segmented";
 import { ActionIcon } from "../ui/action-icons";
 import { Dialog } from "../ui/dialog";
 import { SelectionCheckbox } from "../ui/selection-checkbox";
+import { SortableHeader, nextSort } from "../ui/sortable-header";
+import type { SortState } from "../ui/sortable-header";
 import { Badge, Card, Switch } from "../ui/primitives";
 import { SearchSelect } from "../ui/search-select";
 import { useT } from "../i18n-provider";
@@ -36,6 +38,9 @@ import { TimelineImage, TimelinePlayer } from "./timeline-player";
 import { accountIdentity, type EngineAccount } from "../publishing-account";
 import { profileUrl } from "../../lib/social-profile";
 import { commissionLabel, type CommissionBearing } from "../commission";
+// The same money the Attribution table prints, so a price reads the same
+// in the campaign that promotes the product as in the list it came from.
+import { money } from "../attribution/format";
 
 /**
  * One affiliate product attached to a post, as the post carries it.
@@ -278,6 +283,8 @@ type TaggedProduct = {
   commission_flat_cents?: number | null;
   currency?: string | null;
   price_cents?: number | null;
+  /** When it was tagged to this campaign, which is the list's own order. */
+  tagged_at?: string | null;
 };
 
 type Offer = {
@@ -435,6 +442,9 @@ function offerDescription(offer: Offer): string {
  * searched and ordered instead of scrolled.
  */
 const TAGGED_SHOWN = 6;
+
+/** The columns the tagged-product table can be ordered by. */
+type TaggedSortKey = "name" | "source" | "price" | "rate" | "availability" | "added";
 
 /** Rows per page in that dialog. */
 const TAGGED_PER_PAGE = 20;
@@ -1151,9 +1161,9 @@ export function AutopilotPanel({
    */
   const [reviewingProducts, setReviewingProducts] = useState(false);
   const [productQuery, setProductQuery] = useState("");
-  const [productSort, setProductSort] = useState<
-    "added" | "name" | "commission" | "price"
-  >("added");
+  const [productSort, setProductSort] = useState<SortState<TaggedSortKey>>({
+    key: "added", direction: "desc",
+  });
   const [productFilter, setProductFilter] = useState<"all" | "available" | "unavailable">("all");
   const [productPage, setProductPage] = useState(0);
   const [pickedProducts, setPickedProducts] = useState<Set<string>>(new Set());
@@ -1337,19 +1347,34 @@ export function AutopilotPanel({
         product.marketplace, product.network,
       ].some((field) => (field ?? "").toLowerCase().includes(needle));
     });
-    const rate = (product: TaggedProduct) => product.commission_bps ?? -1;
-    const price = (product: TaggedProduct) => product.price_cents ?? -1;
-    const ordered = [...matching];
-    if (productSort === "name") {
-      ordered.sort((left, right) => left.name.localeCompare(right.name));
-    } else if (productSort === "commission") {
-      ordered.sort((left, right) => rate(right) - rate(left));
-    } else if (productSort === "price") {
-      ordered.sort((left, right) => price(right) - price(left));
-    }
-    // "added" is the order the API sends, which is the order they were tagged.
+    // Compared as one type per column, so a missing figure sorts as absent
+    // rather than as zero - an offer with no commission recorded is not an
+    // offer that pays nothing.
+    const value = (product: TaggedProduct): string | number => {
+      switch (productSort.key) {
+        case "name": return product.name.toLowerCase();
+        case "source": return (product.marketplace ?? product.network ?? "").toLowerCase();
+        case "rate": return product.commission_bps ?? -1;
+        case "price": return product.price_cents ?? -1;
+        case "availability": return product.availability ?? "";
+        default: return product.tagged_at ?? "";
+      }
+    };
+    const ordered = [...matching].sort((left, right) => {
+      const a = value(left);
+      const b = value(right);
+      const order = typeof a === "number" && typeof b === "number"
+        ? a - b
+        : String(a).localeCompare(String(b));
+      return productSort.direction === "asc" ? order : -order;
+    });
     return ordered;
   }, [tagged, productQuery, productFilter, productSort]);
+
+  function changeProductSort(column: TaggedSortKey) {
+    setProductSort((current) => nextSort(current, column));
+    setProductPage(0);
+  }
 
   const productPages = Math.max(1, Math.ceil(shownProducts.length / TAGGED_PER_PAGE));
   const productPageSafe = Math.min(productPage, productPages - 1);
@@ -4175,19 +4200,6 @@ export function AutopilotPanel({
                       }}
                     />
                     <label>
-                      <span>Order</span>
-                      <select value={productSort}
-                        onChange={(event) => {
-                          setProductSort(event.target.value as typeof productSort);
-                          setProductPage(0);
-                        }}>
-                        <option value="added">Recently added</option>
-                        <option value="name">Name</option>
-                        <option value="commission">Commission</option>
-                        <option value="price">Price</option>
-                      </select>
-                    </label>
-                    <label>
                       <span>Show</span>
                       <select value={productFilter}
                         onChange={(event) => {
@@ -4204,22 +4216,6 @@ export function AutopilotPanel({
                       each of them is a few words about the list rather than a
                       section of its own. */}
                   <div className="campaign-product-status">
-                    <SelectionCheckbox
-                      aria-label="Select everything shown"
-                      checked={productSlice.length > 0
-                        && productSlice.every((row) => pickedProducts.has(row.offer_id))}
-                      indeterminate={productSlice.some((row) => pickedProducts.has(row.offer_id))
-                        && !productSlice.every((row) => pickedProducts.has(row.offer_id))}
-                      disabled={!productSlice.length}
-                      onChange={(event) => setPickedProducts((current) => {
-                        const next = new Set(current);
-                        for (const row of productSlice) {
-                          if (event.target.checked) next.add(row.offer_id);
-                          else next.delete(row.offer_id);
-                        }
-                        return next;
-                      })}
-                    />
                     <small>
                       {shownProducts.length === tagged.length
                         ? `${tagged.length} products`
@@ -4249,40 +4245,97 @@ export function AutopilotPanel({
                       {" "}{tagged.length}.
                     </p>
                   ) : (
-                    <ul className="campaign-tagged-products campaign-tagged-full">
-                      {productSlice.map((product) => (
-                        <li key={product.offer_id}>
-                          <SelectionCheckbox
-                            aria-label={`Select ${product.name}`}
-                            checked={pickedProducts.has(product.offer_id)}
-                            onChange={(event) => setPickedProducts((current) => {
-                              const next = new Set(current);
-                              if (event.target.checked) next.add(product.offer_id);
-                              else next.delete(product.offer_id);
-                              return next;
-                            })}
-                          />
-                          <span>
-                            <strong>{product.name}</strong>
-                            <small>{[
-                              product.brand,
-                              product.category,
-                              product.marketplace ?? product.network,
-                              commissionLabel(product),
-                            ].filter(Boolean).join(" · ")}</small>
-                          </span>
-                          {product.availability === "unavailable" && (
-                            <Badge tone="warn">unavailable</Badge>
-                          )}
-                          {canEdit && (
-                            <Button variant="quiet" size="sm" busy={busy === "tag-products"}
-                              onClick={() => void untagProduct(product.offer_id, product.name)}>
-                              Remove
-                            </Button>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
+                    /* A table, because these are columns: a name, where it
+                       came from, what it costs, what it pays. Sorted from the
+                       headings themselves - an "order by" dropdown beside a
+                       grid of values is a second way to say what the headings
+                       already are. */
+                    <div className="campaign-tagged-scroll">
+                      <table className="product-table campaign-tagged-table">
+                        <thead>
+                          <tr>
+                            <th scope="col" className="product-choose">
+                              <SelectionCheckbox
+                                aria-label="Select everything shown"
+                                checked={productSlice.length > 0
+                                  && productSlice.every((row) => pickedProducts.has(row.offer_id))}
+                                indeterminate={
+                                  productSlice.some((row) => pickedProducts.has(row.offer_id))
+                                  && !productSlice.every((row) => pickedProducts.has(row.offer_id))}
+                                disabled={!productSlice.length}
+                                onChange={(event) => setPickedProducts((current) => {
+                                  const next = new Set(current);
+                                  for (const row of productSlice) {
+                                    if (event.target.checked) next.add(row.offer_id);
+                                    else next.delete(row.offer_id);
+                                  }
+                                  return next;
+                                })}
+                              />
+                            </th>
+                            <SortableHeader<TaggedSortKey> column="name" label="Product"
+                              sort={productSort} onSort={changeProductSort} />
+                            <SortableHeader<TaggedSortKey> column="source" label="Source"
+                              sort={productSort} onSort={changeProductSort} />
+                            <SortableHeader<TaggedSortKey> column="price" label="Price"
+                              sort={productSort} onSort={changeProductSort} className="numeric" />
+                            <SortableHeader<TaggedSortKey> column="rate" label="Rate"
+                              sort={productSort} onSort={changeProductSort} className="numeric" />
+                            <SortableHeader<TaggedSortKey> column="availability" label="Status"
+                              sort={productSort} onSort={changeProductSort} />
+                            <SortableHeader<TaggedSortKey> column="added" label="Added"
+                              sort={productSort} onSort={changeProductSort} />
+                            {canEdit && <th scope="col"><span className="sr-only">Remove</span></th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {productSlice.map((product) => (
+                            <tr key={product.offer_id}>
+                              <td className="product-choose">
+                                <SelectionCheckbox
+                                  aria-label={`Select ${product.name}`}
+                                  checked={pickedProducts.has(product.offer_id)}
+                                  onChange={(event) => setPickedProducts((current) => {
+                                    const next = new Set(current);
+                                    if (event.target.checked) next.add(product.offer_id);
+                                    else next.delete(product.offer_id);
+                                    return next;
+                                  })}
+                                />
+                              </td>
+                              <td className="campaign-tagged-name">
+                                <strong>{product.name}</strong>
+                                {[product.brand, product.category].filter(Boolean).length > 0 && (
+                                  <small>{[product.brand, product.category]
+                                    .filter(Boolean).join(" · ")}</small>
+                                )}
+                              </td>
+                              <td>{product.marketplace ?? product.network ?? "—"}</td>
+                              <td className="numeric">{product.price_cents !== null && product.price_cents !== undefined
+                                ? money(product.price_cents, product.currency ?? "USD")
+                                : "—"}</td>
+                              <td className="numeric">{commissionLabel(product) || "—"}</td>
+                              <td>
+                                {product.availability === "unavailable"
+                                  ? <Badge tone="warn">unavailable</Badge>
+                                  : <span className="campaign-tagged-fine">available</span>}
+                              </td>
+                              <td>{product.tagged_at
+                                ? new Date(product.tagged_at).toLocaleDateString()
+                                : "—"}</td>
+                              {canEdit && (
+                                <td>
+                                  <Button variant="quiet" size="sm" busy={busy === "tag-products"}
+                                    onClick={() => void untagProduct(product.offer_id, product.name)}>
+                                    Remove
+                                  </Button>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </div>
               </Dialog>
@@ -4369,7 +4422,7 @@ export function AutopilotPanel({
                   question from which ones are allowed. */}
               <div className="campaign-product-heading">
                 <div>
-                  <small>See how these rank against this campaign\u2019s content.</small>
+                  <small>See how these rank against this campaign’s content.</small>
                 </div>
                 <Button variant="quiet" size="sm" busy={busy === "recommendations"}
                   disabled={!tagged.length}
@@ -4401,7 +4454,7 @@ export function AutopilotPanel({
                     ))}
                     {!recommendations.matches.length && (
                       <li className="autopilot-empty">
-                        Nothing here matches this campaign\u2019s content yet.
+                        Nothing here matches this campaign’s content yet.
                       </li>
                     )}
                   </ul>
