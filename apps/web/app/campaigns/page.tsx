@@ -11,7 +11,8 @@ import { LOCALES } from "../../lib/i18n/locales";
 import { apiBaseUrl } from "../../lib/api";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Badge } from "../ui/primitives";
-import { Button } from "../ui/button";
+import { Button, buttonClass } from "../ui/button";
+import { WaitingScreen } from "../ui/waiting-screen";
 import { Dialog } from "../ui/dialog";
 import { SearchSelect } from "../ui/search-select";
 import { ActionIcon } from "../ui/action-icons";
@@ -561,6 +562,23 @@ export default function CampaignsPage() {
     } finally {
       setBusy(null);
     }
+  }
+
+  // The same two gates every other tab has, and this one had until a refactor
+  // took them out with the hand-planned posts. Without them the page drew its
+  // whole chrome - an empty workspace picker, an empty campaign list, a panel
+  // with no campaign - while the session was still being checked, so arriving
+  // looked like a workspace with nothing in it.
+  if (loading) {
+    return <WaitingScreen className="campaign-page" message={t("campaigns.loading")} />;
+  }
+  if (!user) {
+    return (
+      <main className="campaign-page">
+        <Link className={buttonClass({ variant: "primary" })}
+          href="/sign-in?next=%2Fcampaigns">{t("campaigns.signInPrompt")}</Link>
+      </main>
+    );
   }
 
   return (
