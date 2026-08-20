@@ -164,6 +164,55 @@ def test_get_post_context_surfaces_link_disclosure_and_schedule(session) -> None
     assert " · " in ctx["destinations"][0]["posts_to"]
 
 
+def test_a_caption_carrying_the_link_is_refused(session) -> None:
+    """What went out for a week, and why nobody spotted it in the writing.
+
+    The context names the attached product and its affiliate URL - it has to,
+    or the copy sells something the post does not link to - and nothing said
+    the URL was not the assistant's to write. So it wrote it in, the campaign
+    appended its own, and every caption carried the link twice.
+    """
+    with pytest.raises(ValueError) as refusal:
+        writes.write_post_copy(
+            session, "ws", "q1",
+            caption="Meo hệ chị đại. 😍 https://s.shopee.vn/7ActLW6HKU",
+        )
+
+    assert "may not contain a link" in str(refusal.value)
+    assert "adds the affiliate link itself" in str(refusal.value)
+
+
+def test_the_same_rule_holds_for_a_comment_and_a_reply(session) -> None:
+    """Where the link lives on some networks, and after these words on all."""
+    with pytest.raises(ValueError):
+        writes.write_post_copy(
+            session, "ws", "q1", first_comment="Here: https://s.shopee.vn/abc",
+        )
+    with pytest.raises(ValueError):
+        writes.write_post_copy(
+            session, "ws", "q1", thread=["Fine", "https://s.shopee.vn/abc"],
+        )
+
+
+def test_naming_the_product_in_words_is_what_is_asked_for(session) -> None:
+    """The rule is about the URL, not about mentioning what is being sold."""
+    view = writes.write_post_copy(
+        session, "ws", "q1",
+        caption="The JUSTDUN body tee, if you want one thing that goes with everything.",
+    )
+
+    assert "JUSTDUN" in view["body"]
+
+
+def test_the_assistant_is_told_what_the_campaign_adds(session) -> None:
+    """Told, not only stopped. A refusal it could have avoided is a bad tool."""
+    ctx = context.get_post_context(session, "ws", "q1")
+
+    added = ctx["added_by_the_campaign"]
+    assert "Do not put" in added["note"]
+    assert added["disclosure"] == ctx["effective_disclosure"]
+
+
 def test_writing_a_disclosure_overrides_the_campaigns(session) -> None:
     writes.write_post_copy(session, "ws", "q1", disclosure="Paid partnership.")
     ctx = context.get_post_context(session, "ws", "q1")

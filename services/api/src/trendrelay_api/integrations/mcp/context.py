@@ -397,8 +397,23 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
         # The workspace's posting times, so the assistant knows the cadence the
         # copy is written for.
         "schedule": _posting_schedule(session, workspace_id),
-        # Resolved and surfaced on its own so it is never left off a caption.
+        # What this post carries, resolved once. Not for the caption: the
+        # campaign puts the disclosure at the head of it and the link where
+        # the network allows one, so copy that includes either duplicates it.
         "effective_disclosure": effective_disclosure,
+        "added_by_the_campaign": {
+            "disclosure": effective_disclosure,
+            "product_links": [
+                product["affiliate_link"]
+                for product in _resolve_products(session, item)
+                if product.get("affiliate_link")
+            ],
+            "note": (
+                "Written into the post by the campaign, per network. Do not put "
+                "these in the caption, first comment or replies - name the "
+                "product in words instead. Copy containing a link is refused."
+            ),
+        },
         "current_copy": {
             "caption": None if _needs_copy(item) else item.body,
             "hashtags": list(item.hashtags or []),
