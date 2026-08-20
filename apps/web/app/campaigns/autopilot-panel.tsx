@@ -1968,6 +1968,34 @@ export function AutopilotPanel({
     });
   }
 
+  /**
+   * Abandon the composition, and everything gathered for it.
+   *
+   * Distinct from "Choose another clip" beside the heading, which keeps the
+   * composition and goes back to the picker to change what is in it. This is
+   * the way out: the same reset a successful submit performs, without the
+   * posting - so the picker closes and nothing is left half-chosen behind it.
+   *
+   * Confirmed only when there is writing to lose. A dialog in front of an
+   * empty form is a dialog people learn to dismiss without reading, which is
+   * exactly when it stops protecting the case that matters.
+   */
+  function cancelDraft() {
+    const written = Object.values(draftCopy).some(
+      (copy) => copy.body.trim() || copy.hashtags.trim(),
+    );
+    if (written && !window.confirm(
+      "Discard these posts and the copy written for them?",
+    )) return;
+    setDrafting([]);
+    setSelectedAssets({});
+    setPicking(false);
+    setDraftCopy({});
+    setSplitPictures(false);
+    setRowMatches({});
+    resetDraftProducts();
+  }
+
   /** Replace the selection with everything loaded, or clear it - as the Library does. */
   function toggleAllLoaded() {
     setSelectedAssets(
@@ -2941,14 +2969,24 @@ export function AutopilotPanel({
                 )}
               </ul>
             )}
-            <Button type="submit" variant="primary" busy={busy === "queue"}>
-              {draftPosts.length > 1
-                ? `Add ${draftPosts.length} posts`
-                : t("autopilot.addToQueue")}
-              {draftProductMode === "manual" && draftPinned.size > 0
-                ? ` · ${draftPinned.size} ${draftPinned.size === 1 ? "product" : "products"}`
-                : ""}
-            </Button>
+            {/* A way out, not only a way on. The form offered Add and nothing
+                else, so a composition begun by mistake could be left only by
+                adding the posts and deleting them again, or by navigating away
+                and hoping. Cancel first and the action last, as the campaign
+                dialogs read. */}
+            <div className="autopilot-compose-actions">
+              <Button type="button" variant="quiet" onClick={cancelDraft}>
+                {t("common.cancel")}
+              </Button>
+              <Button type="submit" variant="primary" busy={busy === "queue"}>
+                {draftPosts.length > 1
+                  ? `Add ${draftPosts.length} posts`
+                  : t("autopilot.addToQueue")}
+                {draftProductMode === "manual" && draftPinned.size > 0
+                  ? ` · ${draftPinned.size} ${draftPinned.size === 1 ? "product" : "products"}`
+                  : ""}
+              </Button>
+            </div>
           </form>
         )}
         {queue.length === 0 ? (
