@@ -1443,19 +1443,6 @@ export function AutopilotPanel({
    * every time a plan loads - and every handler holding the old one would
    * be one render behind.
    */
-  /**
-   * How far the outlook looks, in days.
-   *
-   * A view control, not a campaign setting: nothing is created by looking, and
-   * the worker commits only to its own horizon whatever was previewed. Seven
-   * days was written into the preview call when the timeline was built and was
-   * never anybody's decision - a queue of seventy-seven posts has most of them
-   * outside a week, and no way to see when they land.
-   */
-  const [outlookDays, setOutlookDays] = usePersistedState<"7" | "14" | "30">(
-    "campaigns.outlookDays", "7", oneOf("7", "14", "30"),
-  );
-
   const showingPlan = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -1655,7 +1642,7 @@ export function AutopilotPanel({
       const body = await json<{
         note: string; posts: PreviewPost[]; deployed: DeployedPost[]; problems: number;
         horizon_days?: number;
-      }>(await apiFetch(`${base}/autopilot/preview?days=${outlookDays}`, { method: "POST" }));
+      }>(await apiFetch(`${base}/autopilot/preview`, { method: "POST" }));
       setPreview(body);
       showingPlan.current = true;
       if (announce) {
@@ -1668,7 +1655,7 @@ export function AutopilotPanel({
     } finally {
       setBusy("");
     }
-  }, [apiFetch, base, fail, succeed, t, outlookDays]);
+  }, [apiFetch, base, fail, succeed, t]);
 
   const run = useCallback(async (label: string, work: () => Promise<string>) => {
     setBusy(label);
@@ -4671,19 +4658,6 @@ export function AutopilotPanel({
             <Button variant="secondary" size="sm" busy={busy === "preview"}
               disabled={!ready.configured}
               onClick={() => void loadPreview()}><ActionIcon name="refresh" />Refresh outlook</Button>
-              {/* How far to look, beside the button that looks. Seven days
-                  showed a week of a queue that is months long, and every post
-                  past it reported having nowhere to go. */}
-              <SegmentedControl
-                value={outlookDays}
-                options={[
-                  { value: "7" as const, label: "7 days" },
-                  { value: "14" as const, label: "14 days" },
-                  { value: "30" as const, label: "30 days" },
-                ]}
-                onChange={(next) => setOutlookDays(next)}
-                label="How far the outlook looks"
-              />
           </span>
         }
       >
