@@ -315,25 +315,36 @@ COMPOSITION_SETTINGS = (
 )
 
 
-def held_posts(session: Session, campaign_id: str) -> dict[str, int]:
+def held_posts(
+    session: Session, campaign_id: str, *, destination_id: str | None = None
+) -> dict[str, int]:
     """How many posts a settings change would reach, and how many it would not.
 
     Read before saving so the operator is told the size of what they are about
     to change, and after, so they are told what happened. Delivered posts are
     not counted at all: they are a record of what went out.
+
+    Narrowed to one account for a setting that belongs to one - where a link
+    goes is a property of the destination, and counting the whole campaign
+    would promise to change posts the change cannot reach.
     """
-    rows = session.scalars(
-        select(PublicationExecution).where(
-            PublicationExecution.campaign_id == campaign_id,
-            PublicationExecution.state == "proposed",
-        )
-    ).all()
+    query = select(PublicationExecution).where(
+        PublicationExecution.campaign_id == campaign_id,
+        PublicationExecution.state == "proposed",
+    )
+    if destination_id:
+        query = query.where(PublicationExecution.destination_id == destination_id)
+    rows = session.scalars(query).all()
     edited = sum(1 for row in rows if row.edited_at is not None)
     return {"waiting": len(rows), "edited": edited, "recomposable": len(rows) - edited}
 
 
 def recompose_held(
-    session: Session, autopilot: CampaignAutopilot, *, now: datetime | None = None
+    session: Session,
+    autopilot: CampaignAutopilot,
+    *,
+    destination_id: str | None = None,
+    now: datetime | None = None,
 ) -> dict[str, int]:
     """Rewrite the posts still waiting so they say what the campaign says now.
 
@@ -361,12 +372,13 @@ def recompose_held(
     from trendrelay_api.integrations.publishing import first_comment_deliverable
 
     moment = now or datetime.now(UTC)
-    rows = session.scalars(
-        select(PublicationExecution).where(
-            PublicationExecution.campaign_id == autopilot.campaign_id,
-            PublicationExecution.state == "proposed",
-        )
-    ).all()
+    query = select(PublicationExecution).where(
+        PublicationExecution.campaign_id == autopilot.campaign_id,
+        PublicationExecution.state == "proposed",
+    )
+    if destination_id:
+        query = query.where(PublicationExecution.destination_id == destination_id)
+    rows = session.scalars(query).all()
     destinations = {
         item.id: item
         for item in session.scalars(

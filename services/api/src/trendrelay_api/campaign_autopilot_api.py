@@ -9,7 +9,7 @@ next day looks like before anything is created.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field, model_validator
@@ -66,10 +66,6 @@ GRADUATION_PUBLISHED_POSTS = 10
 #: is the page's view, long enough to show a week's shape without asking the
 #: scheduler to commit to it.
 OUTLOOK_HORIZON = timedelta(days=7)
-
-#: As far as the outlook will look on request. The preview is a full scheduling
-#: pass over every slot in the window, so this bounds work rather than taste.
-MAX_OUTLOOK_DAYS = 30
 
 
 def graduation_progress(session: Session, campaign_id: str) -> dict[str, Any]:
@@ -1386,26 +1382,12 @@ def _would_be_accepted(
 
 @router.post("/{campaign_id}/autopilot/preview")
 def preview_autopilot(
-    workspace_id: str,
-    campaign_id: str,
-    user: AuthenticatedUser,
-    session: DatabaseSession,
-    days: Annotated[int, Query(ge=1, le=MAX_OUTLOOK_DAYS)] = OUTLOOK_HORIZON.days,
+    workspace_id: str, campaign_id: str, user: AuthenticatedUser, session: DatabaseSession
 ) -> dict[str, Any]:
-    """What the coming days would look like, without creating any of it.
+    """What the next seven days would look like, without creating any of it.
 
     Switching this on hands over an account. Seeing the captions, the times and
     the link placement first is the difference between delegating and gambling.
-
-    `days` is how far to look, and it is a view control rather than a campaign
-    setting: nothing here is created, and the worker commits only to the next
-    `campaign_scheduler.HORIZON` regardless of what was previewed. A queue
-    larger than a week has most of its posts outside a week-long look, and the
-    only honest way to see when they land is to look further.
-
-    Capped because this is a real scheduling pass over every slot in the
-    window, not a read - a year-long look would be a year of slots computed to
-    fill a page nobody scrolls.
     """
     membership(session, workspace_id, user.id)
     _campaign(session, workspace_id, campaign_id)
@@ -1423,7 +1405,7 @@ def preview_autopilot(
         session, autopilot, now=datetime.now(UTC),
         link_for=lambda _destination_id, offer_id: offer_link_url(session, offer_id),
         allow_inactive=True,
-        horizon=timedelta(days=days),
+        horizon=OUTLOOK_HORIZON,
     )
     by_id = {item.id: item for item in destinations}
     queue_by_id = {
@@ -1585,7 +1567,7 @@ def preview_autopilot(
         # with no place in it, and saying so needs the number: "every slot is
         # taken" reads as a fault, while "the next seven days are full" is a
         # queue doing exactly what a queue does.
-        "horizon_days": days,
+        "horizon_days": OUTLOOK_HORIZON.days,
     }
 
 

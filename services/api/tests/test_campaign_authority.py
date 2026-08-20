@@ -414,6 +414,46 @@ def test_recomposing_moves_nothing_but_the_words(session, tmp_path, engine_stub)
     ) == before
 
 
+def test_only_the_account_whose_placement_changed_is_recomposed(
+    session, tmp_path, monkeypatch, engine_stub
+) -> None:
+    """Where a link goes belongs to one account, so it reaches one account's posts.
+
+    Counting the whole campaign would promise to change posts the change cannot
+    reach - a second destination's caption is composed against its own
+    placement and is not affected by this one.
+    """
+    from trendrelay_api.campaign_runner import held_posts, recompose_held
+
+    campaign_setup(session, tmp_path)
+    session.add(CampaignDestination(
+        id="d2", workspace_id="ws", campaign_id="camp", provider="buffer",
+        integration_id="acct-2", platform="threads", label="threads account",
+        enabled=True,
+    ))
+    session.add(CampaignQueueItem(
+        id="q2", workspace_id="ws", campaign_id="camp", state="approved",
+        video_path=str(tmp_path / "clip.mp4"), body="A second post to fill it.",
+        hashtags=["coffee"], position=1, last_posted_by_destination={},
+        created_by="user-1",
+    ))
+    session.add(PublishingSlot(
+        id="slot-15", workspace_id="ws", weekday=-1, hour=15, minute=0
+    ))
+    session.commit()
+    attached_product(session, monkeypatch)
+    # One each: the cadence offers the second slot to the other account once
+    # the first is at its cap, which is what puts a held post on each.
+    pilot = autopilot(session, authority="assist", daily_cap_per_account=1)
+    run_campaign(session, pilot, now=NOW)
+    assert held_posts(session, "camp")["waiting"] == 2
+
+    reached = recompose_held(session, pilot, destination_id="d1", now=NOW)
+
+    assert reached["recomposed"] == 1
+    assert held_posts(session, "camp", destination_id="d1")["waiting"] == 1
+
+
 def test_a_delivered_post_is_left_alone(session, tmp_path, engine_stub) -> None:
     """It is a record of what went out, not a draft of what will."""
     from trendrelay_api.campaign_runner import recompose_held
