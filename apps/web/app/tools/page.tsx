@@ -566,17 +566,6 @@ export default function ToolsPage() {
                       <b>{tool.active ? "Active" : tool.installed ? "Installed" : tool.integration_status}</b>
                     </span>
                     <span className="tool-compact-actions">
-                      {/* Setup belongs here too. It was on the card view only,
-                          so a tool whose whole point is being started from
-                          Setup - the MCP server - offered no way in from the
-                          list somebody is actually reading. */}
-                      {guidedSetup.has(tool.id) && (
-                        <button type="button" className={buttonClass({ variant: "secondary", size: "sm" })}
-                          disabled={busy === `${tool.id}-setup`}
-                          onClick={() => void loadSetup(tool.id)}>
-                          <ActionIcon name="setup" />{t("tools.setup")}
-                        </button>
-                      )}
                       <a className={buttonClass({ variant: "quiet", size: "sm" })}
                         href={tool.repository} target="_blank" rel="noreferrer">
                         <ActionIcon name="link" />GitHub
@@ -592,6 +581,24 @@ export default function ToolsPage() {
                           href={tool.repository} target="_blank" rel="noreferrer">
                           <ActionIcon name="clip" />{t("publish.docs")}
                         </a>
+                      )}
+                      {/* Setup belongs here at all because a tool whose whole
+                          point is being started from Setup - the MCP server -
+                          offered no way in from the list somebody is actually
+                          reading; it was on the card view only.
+
+                          Last, because the card view puts it last and because
+                          it is the only one of the three that does anything to
+                          this machine. Reading order ends on the action, the
+                          way the dialogs end on Save, and the two places that
+                          list the same three buttons now list them in the same
+                          order. */}
+                      {guidedSetup.has(tool.id) && (
+                        <button type="button" className={buttonClass({ variant: "secondary", size: "sm" })}
+                          disabled={busy === `${tool.id}-setup`}
+                          onClick={() => void loadSetup(tool.id)}>
+                          <ActionIcon name="setup" />{t("tools.setup")}
+                        </button>
                       )}
                     </span>
                   </div>
