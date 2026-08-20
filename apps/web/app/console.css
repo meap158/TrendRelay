@@ -66,6 +66,11 @@
   --radius-sm: 4px;
   --radius: 6px;
   --radius-lg: 10px;
+  /* The height of a small button, named so a row that has to reserve space
+   * for one can say so rather than hard-coding 28 and drifting when the
+   * button changes. `.ui-button-sm` is the definition; this is the same
+   * number where other rules need to reason about it. */
+  --control-sm: 28px;
 }
 
 body { background: var(--bg); color: var(--text); font-family: Roboto, Arial, sans-serif; font-size: 12px; }
@@ -1039,7 +1044,16 @@ html { scroll-behavior: smooth; }
 .autopilot-queue.selectable > li { grid-template-columns: auto auto minmax(0, 1fr) auto auto; }
 /* The same bar the Library carries above its grid, in the same shape: a
    two-state box, what is picked, and the actions the rows already offer. */
-.campaign-queue-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+/* Tall enough for the buttons before they are there.
+ *
+ * Unticked, the tallest thing in the row is the 18px checkbox; ticking it adds
+ * buttons that are `--control-sm` tall, so the bar grew ten pixels and shoved
+ * the whole queue down at the moment somebody clicked. Reserving the space
+ * costs nothing when empty and keeps the list still.
+ *
+ * The padding and border are added on because everything here is border-box,
+ * so `min-height` is the outer height rather than the content's. */
+.campaign-queue-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: calc(var(--control-sm) + 16px); margin-bottom: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .campaign-queue-bar.active { border-color: var(--link); background: var(--link-bg); }
 .campaign-queue-bar > strong { margin-inline-end: auto; font-size: 11px; font-weight: 600; }
 /* A carousel picture's slot, holding its place while the bytes arrive. The

@@ -382,7 +382,10 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .library-gallery .library-pick { position: absolute; top: 5px; inset-inline-start: 5px; z-index: 3;
   box-shadow: 0 1px 3px rgba(20, 28, 38, .35); }
 .library-gallery > button { position: relative; }
-.library-selection-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+/* Reserved the same way the campaign queue's bar is, and for the same reason:
+   the buttons only exist once something is ticked, so without this the bar
+   grew and moved the grid under the cursor that had just ticked it. */
+.library-selection-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: calc(var(--control-sm) + 16px); padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .library-selection-bar.active { border-color: var(--link); background: #f4f7fd; }
 .library-selection-bar > strong { font-size: 11px; font-weight: 600; }
 .library-selection-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-inline-start: auto; }

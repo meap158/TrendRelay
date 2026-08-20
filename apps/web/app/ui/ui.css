@@ -78,14 +78,14 @@
   white-space: nowrap;
   cursor: pointer;
 }
-.ui-button-sm { min-height: 28px; padding: 4px 10px; font-size: 11px; }
+.ui-button-sm { min-height: var(--control-sm); padding: 4px 10px; font-size: 11px; }
 .ui-button-md { min-height: 34px; padding: 7px 13px; font-size: 12px; }
 .ui-button-block { width: 100%; }
 a.ui-button { text-decoration: none; }
 /* Square regardless of size, so a padding rule elsewhere cannot squash it
  * to a sliver - which is exactly what happened to the refresh icon. */
 .ui-button-icon { flex: none; padding: 0; }
-.ui-button-icon.ui-button-sm { width: 28px; }
+.ui-button-icon.ui-button-sm { width: var(--control-sm); }
 .ui-button-icon.ui-button-md { width: 34px; }
 
 /* Primary is the app's --link blue, which dashboard, campaigns and library
