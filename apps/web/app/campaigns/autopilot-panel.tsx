@@ -32,6 +32,7 @@ import { LOCALES } from "../../lib/i18n/locales";
 import { EffectEditor } from "../library/effect-editor";
 import { TimelinePlayer } from "./timeline-player";
 import { accountIdentity, type EngineAccount } from "../publishing-account";
+import { profileUrl } from "../../lib/social-profile";
 import { commissionLabel, type CommissionBearing } from "../commission";
 
 /**
@@ -67,6 +68,8 @@ type Account = {
   id: string;
   platform: PublishingPlatform;
   label: string;
+  /** What the account is called on the network, where the engine reports one. */
+  handle?: string | null;
   provider: string;
   provider_label: string;
   /** Whose login this account is reached through, as the engine reports it. */
@@ -1920,6 +1923,22 @@ export function AutopilotPanel({
   ).length;
 
   /**
+   * The public page a destination posts as, where one can be worked out.
+   *
+   * The handle comes off the account list the picker already loads, matched on
+   * the id the destination stores - nothing new is fetched for this. A
+   * destination whose account has not been read yet, or whose network has no
+   * single address for a handle, keeps its name as plain text.
+   */
+  function destinationProfile(item: Destination): string | null {
+    const account = accounts.find(
+      (candidate) => candidate.id === item.integration_id
+        && candidate.provider === item.provider,
+    );
+    return profileUrl(item.platform, account?.handle);
+  }
+
+  /**
    * The ticked posts that are still in the queue.
    *
    * Filtered rather than pruned in an effect: a post removed underneath the
@@ -3584,7 +3603,24 @@ export function AutopilotPanel({
                 <div className="campaign-account-identity">
                   <PlatformIcon platform={item.platform} size={30} />
                   <span>
-                    <strong>{item.label}</strong>
+                    {/* The name opens the account it names, where the network
+                        has one address for the handle the engine reported.
+                        Where it does not, the name stays plain text rather
+                        than becoming a link that opens the wrong page. */}
+                    {destinationProfile(item) ? (
+                      <a
+                        className="campaign-account-link"
+                        href={destinationProfile(item) ?? undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={`Open ${item.label} on ${platformLabels[item.platform]}`}
+                      >
+                        <strong>{item.label}</strong>
+                        <ActionIcon name="link" size={12} />
+                      </a>
+                    ) : (
+                      <strong>{item.label}</strong>
+                    )}
                     <small>{platformLabels[item.platform]} · {item.provider_label ?? item.provider}
                       {accountIdentity({ account: item.connection_account })
                         ? ` · ${accountIdentity({ account: item.connection_account })}`

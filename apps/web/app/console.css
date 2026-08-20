@@ -950,6 +950,13 @@ html { scroll-behavior: smooth; }
 /* The composer's two ways out, on one line and right-aligned so the primary
    sits where every other form in the campaign puts it. */
 .autopilot-compose-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+/* The account name as a way to the account. The icon sits after the name and
+   inherits its colour, so the row still reads as a name rather than as a
+   button; only the hover says it opens something. */
+.campaign-account-link { display: inline-flex; align-items: center; gap: 5px; color: inherit; text-decoration: none; }
+.campaign-account-link:hover strong, .campaign-account-link:focus-visible strong { color: var(--link); text-decoration: underline; }
+.campaign-account-link svg { flex: none; color: var(--muted); }
+.campaign-account-link:hover svg { color: var(--link); }
 .autopilot-queue-thumb { display: grid; place-items: center; }
 .autopilot-queue-thumb .picker-thumb, .autopilot-queue-thumb .campaign-pipeline-thumb-empty { display: grid; place-items: center; inline-size: 84px; block-size: 64px; overflow: hidden; border-radius: var(--radius-sm); background: var(--line); color: var(--muted); }
 .autopilot-queue-thumb .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }
