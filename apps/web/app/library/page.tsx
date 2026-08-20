@@ -13,6 +13,7 @@ import { useT } from "../i18n-provider";
 import { blurredVersion, handoffPath, openingCut } from "../../lib/media-rules";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, buttonClass } from "../ui/button";
+import { WaitingScreen } from "../ui/waiting-screen";
 import { Dialog } from "../ui/dialog";
 import { SegmentedControl } from "../ui/segmented";
 import { ActionIcon, bulkActionIcon } from "../ui/action-icons";
@@ -1516,7 +1517,7 @@ export default function LibraryPage() {
     }
   }
 
-  if (loading) return <main className="library-page"><p>{t("library.opening")}</p></main>;
+  if (loading) return <WaitingScreen className="library-page" message={t("library.opening")} />;
   if (!user) return <main className="library-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Flibrary">{t("library.signInPrompt")}</Link></main>;
 
   return (

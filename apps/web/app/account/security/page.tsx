@@ -7,6 +7,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useAuth } from "../../auth-provider";
 import { supabaseBrowserClient } from "../../../lib/supabase";
 import { buttonClass } from "../../ui/button";
+import { WaitingScreen } from "../../ui/waiting-screen";
 import { useT } from "../../i18n-provider";
 
 type Factor = {
@@ -113,7 +114,7 @@ export default function AccountSecurityPage() {
     setBusy(false);
   }
 
-  if (loading) return <main className="auth-page"><p>{t("mfa.checking")}</p></main>;
+  if (loading) return <WaitingScreen className="auth-page" message={t("mfa.checking")} />;
   if (desktopAvailable) return <main className="auth-page"><section className="setup-card"><h1>{t("mfa.manageInBrowser")}</h1><p>{t("mfa.desktopNote")}</p><Link className={buttonClass({ variant: "primary" })} href="/workspaces">{t("mfa.returnToWorkspaces")}</Link></section></main>;
   if (!user) return <main className="auth-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Faccount%2Fsecurity">{t("mfa.signInPrompt")}</Link></main>;
 

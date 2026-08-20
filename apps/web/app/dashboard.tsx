@@ -8,6 +8,7 @@ import { useAuth } from "./auth-provider";
 import { useT } from "./i18n-provider";
 import { fetchWorkspaces } from "../lib/workspaces";
 import { Button, buttonClass } from "./ui/button";
+import { LoadingMark } from "./ui/loading-mark";
 import { ActionIcon } from "./ui/action-icons";
 import { StatusToasts, useStatus } from "./ui/status";
 import { numberIn, oneOf, subsetOf, usePersistedState } from "./ui/use-persisted-state";
@@ -553,18 +554,7 @@ export default function Dashboard() {
   // timers - which is what made this hang in the first place. A button that is
   // briefly redundant beats an escape hatch that shares the fault it escapes.
   if (loading) return <main className="console-page"><div className="loading-panel">
-    {/* The brand mark, drawing itself: the trend line traces in and the points
-        light along it, on a loop. Pure CSS/SVG - it adds nothing to the bundle
-        and holds up nothing, since it only ever shows while the probe is out. */}
-    <span className="loading-mark" aria-hidden="true">
-      <svg viewBox="0 0 32 32" focusable="false">
-        <path className="loading-mark-line" pathLength={1} d="M7.5 21.5 13 16l5 3 6.5-8.5" />
-        <circle cx="7.5" cy="21.5" r="2" />
-        <circle cx="13" cy="16" r="2" />
-        <circle cx="18" cy="19" r="2" />
-        <circle cx="24.5" cy="10.5" r="2" />
-      </svg>
-    </span>
+    <LoadingMark />
     <strong>{t("workspace.loading")}</strong>
     <span>Waiting on TrendRelay&apos;s local API. If it is restarting this can hang.</span>
     {/* What actually went wrong, rather than leaving a refused connection and

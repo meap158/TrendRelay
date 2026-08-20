@@ -28,6 +28,7 @@ import { fetchWorkspaces } from "../../lib/workspaces";
 import { ProductTable } from "./product-table";
 import { ShopeeImport } from "./shopee-import";
 import { buttonClass } from "../ui/button";
+import { WaitingScreen } from "../ui/waiting-screen";
 import { ActionIcon } from "../ui/action-icons";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Dialog } from "../ui/dialog";
@@ -208,7 +209,7 @@ export default function AttributionPage() {
   }, [succeed, t]);
 
 
-  if (loading) return <main className="attribution-page"><p>{t("attribution.opening")}</p></main>;
+  if (loading) return <WaitingScreen className="attribution-page" message={t("attribution.opening")} />;
   if (!user) return <main className="attribution-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Fattribution">{t("attribution.signInPrompt")}</Link></main>;
 
   const focusedCampaign = campaigns.find((item) => item.id === campaignFocus);

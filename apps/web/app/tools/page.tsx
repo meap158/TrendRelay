@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth-provider";
 import { useLocale } from "../i18n-provider";
 import { buttonClass } from "../ui/button";
+import { WaitingScreen } from "../ui/waiting-screen";
 import { ActionIcon } from "../ui/action-icons";
 import { Badge } from "../ui/primitives";
 import { Dialog } from "../ui/dialog";
@@ -484,7 +485,7 @@ export default function ToolsPage() {
     }
   }
 
-  if (loading) return <main className="tools-page"><p>{t("tools.loading")}</p></main>;
+  if (loading) return <WaitingScreen className="tools-page" message={t("tools.loading")} />;
   if (!user) return <main className="tools-page"><h1>{t("tools.signInPrompt")}</h1><Link href="/sign-in?next=%2Ftools">{t("nav.signIn")}</Link></main>;
 
   return (

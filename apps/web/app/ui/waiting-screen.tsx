@@ -3,6 +3,8 @@
 import { usePathname } from "next/navigation";
 
 import { useT } from "../i18n-provider";
+import { buttonClass } from "./button";
+import { LoadingMark } from "./loading-mark";
 
 /**
  * A waiting screen somebody can leave without JavaScript.
@@ -16,8 +18,13 @@ import { useT } from "../i18n-provider";
  * unreachable exactly when it is needed.
  *
  * An anchor is in that server HTML and works anyway, because following a link
- * is the browser's job rather than React's. It is deliberately not a button:
- * a button here would need the very thing that is broken.
+ * is the browser's job rather than React's. It is deliberately not a React
+ * button: a button with an onClick would need the very thing that is broken.
+ * The anchor is only styled as one - `buttonClass` is a class string, not a
+ * handler, so it stays a real link.
+ *
+ * The mark and card are shared with the workspace-loading gate on the console,
+ * so every "still working" screen in the app reads as the same thing.
  */
 export function WaitingScreen({
   className,
@@ -32,10 +39,15 @@ export function WaitingScreen({
   const here = usePathname();
   return (
     <main className={className}>
-      <p>{message}</p>
-      <p className="privacy-note">
-        <a href={here || "/"}>{t("common.reload")}</a>
-      </p>
+      <div className="loading-panel">
+        <LoadingMark />
+        <strong>{message}</strong>
+        <div className="loading-panel-actions">
+          <a className={buttonClass({ variant: "quiet", size: "sm" })} href={here || "/"}>
+            {t("common.reload")}
+          </a>
+        </div>
+      </div>
     </main>
   );
 }
