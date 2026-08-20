@@ -411,7 +411,14 @@ export default function ToolsPage() {
       return;
     }
     if (action.kind === "local-launch") {
-      if (!window.confirm(`Open the guided ${setup.title.replace("Set up ", "")} setup step?`)) return;
+      // Honour the action's own flag rather than always asking. The MCP server's
+      // start/stop and its tunnel test set requires_confirmation:false - they run
+      // a loopback server and a config check, nothing that reaches outward - so
+      // they should just run. Only an action that asks for a prompt gets one.
+      if (
+        action.requires_confirmation !== false
+        && !window.confirm(`Open the guided ${setup.title.replace("Set up ", "")} setup step?`)
+      ) return;
       setBusy(`${setup.tool_id}-${action.id}`);
       setError(null);
       try {
