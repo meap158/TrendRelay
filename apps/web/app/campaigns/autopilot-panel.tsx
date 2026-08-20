@@ -1352,6 +1352,10 @@ export function AutopilotPanel({
   // zone. The drawer lists that day in full; the calendar cell only has room
   // for the first few.
   const [openDay, setOpenDay] = useState<string | null>(null);
+  // The day drawer's checkbox selection, as queue-item ids. Only planned posts
+  // - the ones still ahead of the engine - can be picked, because deleting a
+  // post that has already gone out means nothing.
+  const [selectedDayPosts, setSelectedDayPosts] = useState<Set<string>>(new Set());
   // Where an edit was opened from, so closing the modal returns there. The
   // editor lives in the content view; opening it from the timeline switches
   // there under the overlay, and this is what sends the reader back to the
@@ -2096,6 +2100,37 @@ export function AutopilotPanel({
       return;
     }
     setOpenDay(new Date(entry.at).toLocaleDateString("en-CA", { timeZone: readerZone }));
+  }
+
+  /** Close the day drawer, dropping whatever was ticked with it. */
+  function closeDay() {
+    setOpenDay(null);
+    setSelectedDayPosts(new Set());
+  }
+
+  /** Tick or untick one planned post in the day drawer. */
+  function toggleDayPost(queueItemId: string) {
+    setSelectedDayPosts((current) => {
+      const next = new Set(current);
+      if (next.has(queueItemId)) next.delete(queueItemId);
+      else next.add(queueItemId);
+      return next;
+    });
+  }
+
+  /** Delete every ticked planned post, then let the timeline refresh. */
+  function deleteSelectedDayPosts() {
+    const ids = [...selectedDayPosts];
+    if (!ids.length) return;
+    void run("drop", async () => {
+      for (const id of ids) {
+        await json(await apiFetch(`${base}/queue/${id}`, { method: "DELETE" }));
+      }
+      setSelectedDayPosts(new Set());
+      return ids.length === 1
+        ? "Removed 1 planned post."
+        : `Removed ${ids.length} planned posts.`;
+    });
   }
 
   async function loadRecommendations(item: QueueItem | null = null) {
@@ -5016,33 +5051,65 @@ export function AutopilotPanel({
         <Dialog
           open
           size="wide"
-          onClose={() => setOpenDay(null)}
+          onClose={closeDay}
           title={new Date(`${openDay}T00:00:00`).toLocaleDateString(undefined, {
             weekday: "long", month: "long", day: "numeric", year: "numeric",
           })}
           description={`${openDayEntries.length} ${openDayEntries.length === 1 ? "post" : "posts"} this day`}
         >
+          {/* The selection bar keeps its own row whether anything is ticked or
+              not, so ticking the first post never shoves the list down. */}
+          <div className="campaign-day-tools" data-active={selectedDayPosts.size > 0 || undefined}>
+            {selectedDayPosts.size > 0 && (
+              <>
+                <strong>{selectedDayPosts.size} selected</strong>
+                <span className="campaign-day-tools-gap" />
+                <button type="button" className="campaign-day-clear"
+                  onClick={() => setSelectedDayPosts(new Set())}>Clear</button>
+                <Button variant="danger" size="sm" busy={busy === "drop"}
+                  onClick={deleteSelectedDayPosts}>Delete selected</Button>
+              </>
+            )}
+          </div>
           <ul className="campaign-day-list">
             {openDayEntries.map((entry) => {
               const destination = entry.destination ?? destinations.find(
                 (item) => item.id === entry.destination_id) ?? null;
               const platform = destination?.platform;
-              const editable = entry.kind === "planned" && Boolean(entry.queue_item_id)
+              const selectable = entry.kind === "planned" && Boolean(entry.queue_item_id)
                 && canEdit && queueById.has(entry.queue_item_id!);
+              const selected = selectable && selectedDayPosts.has(entry.queue_item_id!);
               return (
-                <li key={entry.key} className={[
-                  "campaign-day-row",
-                  entry.kind === "delivered" ? `delivered ${entry.status ?? ""}` : "",
-                  entry.problem ? "refused" : "",
-                ].filter(Boolean).join(" ")}>
-                  <time>{new Date(entry.at).toLocaleTimeString(undefined, {
-                    hour: "numeric", minute: "2-digit", timeZone: readerZone,
-                  })}</time>
-                  {platform && <PlatformIcon platform={platform} size={18} />}
-                  <div className="campaign-day-body">
-                    <strong>{displayTitle(entry.title) || entry.caption.slice(0, 80) || "Untitled post"}</strong>
-                    <small>{destination?.label ?? entry.destination_id ?? "Social account"}</small>
-                  </div>
+                <li key={entry.key}
+                  data-selected={selected || undefined}
+                  className={[
+                    "campaign-day-row",
+                    entry.kind === "delivered" ? `delivered ${entry.status ?? ""}` : "",
+                    entry.problem ? "refused" : "",
+                  ].filter(Boolean).join(" ")}>
+                  {/* The checkbox column is always present - empty on a
+                      delivered post, which cannot be deleted - so ticking one
+                      never nudges the row beside it. */}
+                  <span className="campaign-day-check">
+                    {selectable && (
+                      <input type="checkbox" checked={selected}
+                        aria-label="Select this post"
+                        onChange={() => toggleDayPost(entry.queue_item_id!)} />
+                    )}
+                  </span>
+                  {/* The row opens the post: the editor for a planned one, its
+                      permalink for a delivered one. */}
+                  <button type="button" className="campaign-day-main"
+                    onClick={() => selectTimelineEntry(entry)}>
+                    <time>{new Date(entry.at).toLocaleTimeString(undefined, {
+                      hour: "numeric", minute: "2-digit", timeZone: readerZone,
+                    })}</time>
+                    {platform && <PlatformIcon platform={platform} size={18} />}
+                    <span className="campaign-day-body">
+                      <strong>{displayTitle(entry.title) || entry.caption.slice(0, 80) || "Untitled post"}</strong>
+                      <small>{destination?.label ?? entry.destination_id ?? "Social account"}</small>
+                    </span>
+                  </button>
                   {entry.kind === "delivered" ? (
                     <Badge tone={entry.status === "succeeded" ? "good"
                       : entry.status === "failed" ? "warn" : "neutral"}>
@@ -5051,15 +5118,6 @@ export function AutopilotPanel({
                   ) : (
                     <Badge tone={entry.problem ? "warn" : "neutral"}>Planned</Badge>
                   )}
-                  {editable ? (
-                    <Button variant="secondary" size="sm"
-                      onClick={() => openPostEditor(queueById.get(entry.queue_item_id!)!, "posts")}>
-                      Edit
-                    </Button>
-                  ) : entry.post_url ? (
-                    <a className="campaign-grid-open" href={entry.post_url}
-                      target="_blank" rel="noreferrer">Open</a>
-                  ) : null}
                 </li>
               );
             })}

@@ -1163,10 +1163,23 @@ html { scroll-behavior: smooth; }
 .campaign-grid-open { color: var(--link); font-size: 12px; font-weight: 500; }
 
 /* Day drawer ("see more"): the whole day, one row per post. */
+/* The selection bar holds its own row height whether or not anything is
+   ticked, so selecting never reflows the list underneath it. */
+.campaign-day-tools { display: flex; align-items: center; gap: 10px; min-block-size: 40px; padding-block-end: 4px; }
+.campaign-day-tools > strong { font-size: 13px; font-weight: 600; }
+.campaign-day-tools-gap { flex: 1 1 auto; }
+.campaign-day-clear { appearance: none; padding: 4px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.campaign-day-clear:hover { color: var(--text); text-decoration: underline; }
 .campaign-day-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
-.campaign-day-row { display: flex; gap: 10px; align-items: center; padding: 8px 2px; border-block-end: 1px solid var(--line); }
+.campaign-day-row { display: flex; gap: 8px; align-items: center; padding: 4px 2px; border-block-end: 1px solid var(--line); }
 .campaign-day-row:last-child { border-block-end: 0; }
-.campaign-day-row > time { flex: 0 0 auto; inline-size: 68px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.campaign-day-row[data-selected] { background: color-mix(in srgb, var(--green) 12%, transparent); }
+/* Always here, empty on a delivered post, so a tick never shifts the row. */
+.campaign-day-check { flex: 0 0 auto; display: grid; place-items: center; inline-size: 22px; block-size: 22px; }
+.campaign-day-check input { inline-size: 15px; block-size: 15px; margin: 0; accent-color: var(--green); cursor: pointer; }
+.campaign-day-main { flex: 1 1 auto; min-inline-size: 0; display: flex; gap: 10px; align-items: center; appearance: none; padding: 5px 6px; border: 0; border-radius: var(--radius-sm); background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.campaign-day-main:hover { background: var(--panel-raised); }
+.campaign-day-main > time { flex: 0 0 auto; inline-size: 68px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .campaign-day-body { flex: 1 1 auto; min-inline-size: 0; display: grid; gap: 1px; }
 .campaign-day-body strong { overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-day-body small { color: var(--muted); font-size: 11px; }
