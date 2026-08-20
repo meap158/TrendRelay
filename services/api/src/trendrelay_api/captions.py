@@ -127,7 +127,55 @@ def resolve(
     return style, layout
 
 
+#: Fields written into the ASS header as text. A comma ends a field there and a
+#: newline ends the whole record, so either one turns a font name into a
+#: different style - or into an extra one. Braces open an override block.
+_TEXT_FIELDS = frozenset({"name", "font"})
+_TEXT_FORBIDDEN = frozenset(",{}\n\r\\")
+
+#: Fields that must be `#RRGGBB`, checked by the converter that has to read them.
+_COLOUR_FIELDS = frozenset({"colour", "outline_colour", "back_colour", "highlight_colour"})
+
+#: How far a number may be pushed. The ceilings are not taste - they are the
+#: points past which the output stops being a subtitle: a 400pt caption fills a
+#: 1080-wide frame with one word, and a zero reading speed is a division by
+#: zero in the fitting pass rather than a very patient subtitle.
+_LIMITS: dict[str, tuple[float, float]] = {
+    "size": (8, 400),
+    "outline": (0, 50),
+    "shadow": (0, 50),
+    "spacing": (-20, 60),
+    "outline_alpha": (0, 255),
+    "back_alpha": (0, 255),
+    "margin_h": (0, 2000),
+    "margin_v": (0, 2000),
+    "max_chars_per_line": (8, 200),
+    "max_lines": (1, 6),
+    "max_cps": (1, 100),
+    "min_duration_ms": (50, 30_000),
+    "max_duration_ms": (100, 60_000),
+    "min_gap_ms": (0, 5_000),
+    "pause_ms": (20, 10_000),
+    "max_words": (1, 40),
+}
+
+
 def _replace_checked(item: Any, changes: dict[str, Any], what: str) -> Any:
+    """Apply changes to a preset, refusing anything that is not a setting.
+
+    Both halves matter. An unknown *key* is refused because a misspelled field
+    that is quietly dropped looks exactly like a setting that does not work,
+    and the person who typed it has no way to tell the two apart.
+
+    An unknown *value* is refused because these are written into a file format
+    rather than used as numbers. `dataclasses.replace` will take anything, so
+    before this a font name containing a newline added a second `Style:` record
+    to the ASS header, a size of `"large"` was written where libass expects a
+    number, and a reading speed of zero divided by it. None of those are
+    hostile inputs particularly - they are what a form sends when it has not
+    been told what it may send - but all three end as a corrupt render or a 500
+    rather than as an answer somebody can act on.
+    """
     known = set(asdict(item))
     unknown = sorted(set(changes) - known)
     if unknown:
@@ -137,7 +185,87 @@ def _replace_checked(item: Any, changes: dict[str, Any], what: str) -> Any:
         )
     from dataclasses import replace
 
-    return replace(item, **changes)
+    checked = {key: _checked_value(item, key, value, what) for key, value in changes.items()}
+    merged = replace(item, **checked)
+    _checked_together(merged, what)
+    return merged
+
+
+def _checked_value(item: Any, key: str, value: Any, what: str) -> Any:
+    """One setting, made to be the kind of thing the format can carry."""
+    if key in _TEXT_FIELDS:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{what} {key} must be a name, not {value!r}.")
+        text = value.strip()
+        if len(text) > 64:
+            raise ValueError(f"{what} {key} must be 64 characters or fewer.")
+        if set(text) & _TEXT_FORBIDDEN:
+            raise ValueError(
+                f"{what} {key} cannot contain a comma, a brace, a backslash or a "
+                "line break - the subtitle format uses all of them itself."
+            )
+        return text
+    if key in _COLOUR_FIELDS:
+        if not isinstance(value, str):
+            raise ValueError(f"{what} {key} must be a colour like #RRGGBB, not {value!r}.")
+        fmt.ass_colour(value)  # Raises with the same wording the renderer would.
+        return value
+    if key == "alignment":
+        if value not in fmt.ALIGNMENT:
+            raise ValueError(
+                f"{value!r} is not a caption position. "
+                f"Available: {', '.join(sorted(fmt.ALIGNMENT))}."
+            )
+        return value
+    if key == "border":
+        if value not in (fmt.BORDER_OUTLINE, fmt.BORDER_BOX):
+            raise ValueError(
+                f"{what} border must be {fmt.BORDER_OUTLINE} for an outline or "
+                f"{fmt.BORDER_BOX} for a box, not {value!r}."
+            )
+        return value
+    # `max_words` is the one setting whose "off" is a value rather than a
+    # number, and off is how every reading style is configured.
+    if key == "max_words" and value is None:
+        return None
+
+    current = getattr(item, key)
+    # Before the int branch: a bool is an int in Python, and `bold=1` arriving
+    # as a size would be nonsense in the other direction too.
+    if isinstance(current, bool):
+        if not isinstance(value, bool):
+            raise ValueError(f"{what} {key} must be true or false, not {value!r}.")
+        return value
+    if isinstance(current, (int, float)) or key == "max_words":
+        return _checked_number(key, value, want_int=not isinstance(current, float), what=what)
+    raise ValueError(f"{what} {key} cannot be changed.")
+
+
+def _checked_number(key: str, value: Any, *, want_int: bool, what: str) -> Any:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{what} {key} must be a number, not {value!r}.")
+    number = float(value)
+    if number != number or number in (float("inf"), float("-inf")):
+        raise ValueError(f"{what} {key} must be a real number, not {value!r}.")
+    low, high = _LIMITS.get(key, (float("-inf"), float("inf")))
+    if not low <= number <= high:
+        raise ValueError(f"{what} {key} must be between {low:g} and {high:g}.")
+    if want_int:
+        if number != int(number):
+            raise ValueError(f"{what} {key} must be a whole number, not {value!r}.")
+        return int(number)
+    return number
+
+
+def _checked_together(item: Any, what: str) -> None:
+    """The pairs that are each fine alone and contradictory together."""
+    low = getattr(item, "min_duration_ms", None)
+    high = getattr(item, "max_duration_ms", None)
+    if low is not None and high is not None and low > high:
+        raise ValueError(
+            f"{what} min_duration_ms ({low}) cannot be longer than "
+            f"max_duration_ms ({high}) - no cue could satisfy both."
+        )
 
 
 def build(
