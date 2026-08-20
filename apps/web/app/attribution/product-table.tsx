@@ -420,6 +420,12 @@ export function ProductTable({
               </th>
               <SortableHeader column="product" label={t("attribution.product")}
                 sort={sort} onSort={changeSort} />
+              {/* Not sortable: a list of names does not order, and a column that
+                  pretends to is a control that does nothing. It sits right after
+                  the product, where the body renders its cell - the header had
+                  drifted to after Commission, which pushed every column between
+                  them under the wrong heading. */}
+              {onTagOffers && <th scope="col" className="product-campaigns">{t("attribution.campaignsColumn")}</th>}
               <SortableHeader column="creator" label={t("attribution.creator")}
                 sort={sort} onSort={changeSort} className="product-creator" />
               <SortableHeader column="price" label={t("attribution.price")}
@@ -428,9 +434,6 @@ export function ProductTable({
                 sort={sort} onSort={changeSort} className="numeric" />
               <SortableHeader column="commission" label={t("attribution.commission")}
                 sort={sort} onSort={changeSort} className="numeric" />
-              {/* Not sortable: a list of names does not order, and a column
-                  that pretends to is a control that does nothing. */}
-              {onTagOffers && <th scope="col" className="product-campaigns">{t("attribution.campaignsColumn")}</th>}
               <SortableHeader column="offers" label={t("attribution.offers")}
                 sort={sort} onSort={changeSort} className="product-count" />
               <SortableHeader column="links" label={t("attribution.links")}
