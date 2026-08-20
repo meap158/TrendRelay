@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, CircleAlert, CircleCheck, CirclePause, CircleX, Layers3, LoaderCircle, Undo2 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
@@ -17,11 +18,6 @@ import { SegmentedControl } from "../ui/segmented";
 import { ActionIcon, bulkActionIcon } from "../ui/action-icons";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Badge } from "../ui/primitives";
-import { CaptionEditor } from "./caption-editor";
-import { ClipEditor } from "./clip-editor";
-import { EffectEditor } from "./effect-editor";
-import { AutoTranscribe, TranscriptDraft } from "./auto-transcribe";
-import { TranscriptionSwitch } from "./transcription-setup";
 import {
   AssetFilters,
   EMPTY_FACETS,
@@ -31,6 +27,16 @@ import {
   type AssetFilterValues,
 } from "../ui/asset-filters";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
+
+// The editors are heavy and only render inside their dialogs, so their code is
+// loaded when one opens rather than in the Library page's first bundle. ssr:false
+// because they are client-only anyway - there is nothing to render on the server.
+const CaptionEditor = dynamic(() => import("./caption-editor").then((m) => m.CaptionEditor), { ssr: false });
+const ClipEditor = dynamic(() => import("./clip-editor").then((m) => m.ClipEditor), { ssr: false });
+const EffectEditor = dynamic(() => import("./effect-editor").then((m) => m.EffectEditor), { ssr: false });
+const AutoTranscribe = dynamic(() => import("./auto-transcribe").then((m) => m.AutoTranscribe), { ssr: false });
+const TranscriptDraft = dynamic(() => import("./auto-transcribe").then((m) => m.TranscriptDraft), { ssr: false });
+const TranscriptionSwitch = dynamic(() => import("./transcription-setup").then((m) => m.TranscriptionSwitch), { ssr: false });
 
 type Workspace = { id: string; name: string; role: string };
 type ViewMode = "gallery" | "list";

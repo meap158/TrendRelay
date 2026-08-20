@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
@@ -7,7 +8,6 @@ import { useAuth } from "../auth-provider";
 import { useLocale } from "../i18n-provider";
 import { LOCALES } from "../../lib/i18n/locales";
 import { apiBaseUrl } from "../../lib/api";
-import { AutopilotPanel } from "./autopilot-panel";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Badge } from "../ui/primitives";
 import { Button } from "../ui/button";
@@ -24,6 +24,14 @@ import {
   platformLabels,
   type PublishingPlatform,
 } from "../publishing-icons";
+
+// The autopilot panel is the largest view in the app and renders only for the
+// selected campaign, below the list. Load it as its own chunk so the campaign
+// list and chrome paint without waiting on it. Client-only, so ssr:false.
+const AutopilotPanel = dynamic(
+  () => import("./autopilot-panel").then((m) => m.AutopilotPanel),
+  { ssr: false },
+);
 
 type Workspace = { id: string; name: string; role: string };
 type Campaign = {
