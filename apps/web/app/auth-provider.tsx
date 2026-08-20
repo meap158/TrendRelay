@@ -1,10 +1,12 @@
 "use client";
 
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 import { apiBaseUrl } from "../lib/api";
-import { authConfiguration, supabaseBrowserClient } from "../lib/supabase";
+// Type only - erased at build, so importing it pulls no Supabase code. The SDK
+// itself is loaded dynamically below, and only when a hosted session needs it.
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type AuthUser = { id: string; email?: string | null };
 type DesktopStatus =
@@ -67,8 +69,25 @@ function identity(status: DesktopStatus): AuthUser | null {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const browserConfigured = authConfiguration().configured;
-  const client = useMemo(() => supabaseBrowserClient(), []);
+  // Computed inline from the env vars rather than through lib/supabase, so this
+  // provider - which mounts on every page - does not statically import the
+  // Supabase SDK. A workspace in local or desktop mode never loads it at all.
+  const browserConfigured = Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  );
+  // Null until the SDK chunk lands. Only fetched when auth is configured; the
+  // effects below already treat a null client as "no hosted session yet".
+  const [client, setClient] = useState<SupabaseClient | null>(null);
+  useEffect(() => {
+    if (!browserConfigured) return;
+    let live = true;
+    void import("../lib/supabase").then(({ supabaseBrowserClient }) => {
+      if (live) setClient(supabaseBrowserClient());
+    });
+    return () => {
+      live = false;
+    };
+  }, [browserConfigured]);
   const [session, setSession] = useState<Session | null>(null);
   const [desktopUser, setDesktopUser] = useState<AuthUser | null>(null);
   const [localUser, setLocalUser] = useState<AuthUser | null>(null);
@@ -234,8 +253,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       return () => window.clearTimeout(bridgeTimer);
     }
-    if (!client) {
+    if (!browserConfigured) {
+      // No hosted auth at all: nothing to wait for, stop loading.
       queueMicrotask(() => setLoading(false));
+      return;
+    }
+    if (!client) {
+      // Configured, but the SDK chunk has not arrived yet. This effect re-runs
+      // when `client` is set, so wait rather than declaring the session absent.
       return;
     }
     let sessionCheckComplete = false;
@@ -261,7 +286,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.clearTimeout(sessionTimer);
       data.subscription.unsubscribe();
     };
-  }, [client, localCheckComplete, localUser]);
+  }, [browserConfigured, client, localCheckComplete, localUser]);
 
   useEffect(() => {
     if (desktopAvailable || !client || !session) return;
