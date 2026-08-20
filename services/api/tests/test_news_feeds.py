@@ -102,6 +102,48 @@ def test_a_curated_label_beats_the_feed_s_own_title() -> None:
     assert found[0].outlet == "BBC World"
 
 
+def test_a_google_news_item_uses_its_own_source_as_the_outlet() -> None:
+    # Google News names the real publisher per item and suffixes the title with
+    # it; with no curated outlet passed, that publisher is the outlet and the
+    # suffix is dropped.
+    document = (
+        '<?xml version="1.0"?><rss version="2.0"><channel><title>Google News</title>'
+        "<item><title>Floods hit the delta - VnExpress</title>"
+        "<link>https://news.google.com/x</link>"
+        f"<pubDate>{format_datetime(NOW)}</pubDate>"
+        '<source url="https://vnexpress.net">VnExpress</source></item>'
+        "</channel></rss>"
+    )
+
+    _title, found = parse_feed(document)
+
+    assert found[0].outlet == "VnExpress"
+    assert found[0].title == "Floods hit the delta"
+
+
+def test_a_country_reads_google_news_for_that_country() -> None:
+    seen: list[str] = []
+
+    def opener(request, timeout=None):
+        seen.append(request.full_url)
+        return Response(
+            '<?xml version="1.0"?><rss version="2.0"><channel><title>Google News</title>'
+            "<item><title>A story - BBC</title><link>https://news.google.com/a</link>"
+            f"<pubDate>{format_datetime(NOW)}</pubDate>"
+            '<source url="https://bbc.com">BBC</source></item></channel></rss>'
+        )
+
+    board = collect_news(country="VN", desk="all", opener=opener, now=NOW)
+
+    # One Google News feed per topic section, every one for Vietnam.
+    assert len(seen) == 4
+    assert all("news.google.com" in url and "gl=VN" in url for url in seen)
+    # Each story carries its own publisher, not "Google News".
+    rows = board["covered"] + board["breaking"]
+    assert rows
+    assert all(row["outlet"] == "BBC" for row in rows)
+
+
 def test_an_undated_headline_is_kept_rather_than_guessed_at() -> None:
     document = (
         '<?xml version="1.0"?><rss version="2.0"><channel><title>N</title>'

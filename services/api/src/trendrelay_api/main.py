@@ -548,11 +548,14 @@ async def research_news(
     request: Request,
     desk: str = Query(default="all"),
     limit: int = Query(default=6, ge=1, le=20),
+    country: str = Query(default="", max_length=2),
 ) -> dict[str, object]:
     """What is happening, and how many newsrooms agree that it is.
 
     No key and no session: these are public syndication feeds, which is why
-    this source is always available where most of the others are not.
+    this source is always available where most of the others are not. A country
+    switches the source to that country's Google News; empty is the curated
+    global list.
     """
     require_local_mutation(request)
     if desk != "all" and desk not in DESKS:
@@ -560,7 +563,11 @@ async def research_news(
             status_code=422,
             detail=f"Unknown desk {desk}. Expected one of all, {', '.join(DESKS)}.",
         )
-    result = await asyncio.to_thread(collect_news, desk=desk, limit=limit)
+    if country and not country.isalpha():
+        raise HTTPException(status_code=422, detail="Country must be a two-letter code.")
+    result = await asyncio.to_thread(
+        collect_news, desk=desk, limit=limit, country=country.upper() or None
+    )
     if not result["covered"] and not result["breaking"] and not result["complete"]:
         # Every newsroom refused, which is a provider state rather than a
         # quiet news day. A quiet day still answers, with empty shelves.

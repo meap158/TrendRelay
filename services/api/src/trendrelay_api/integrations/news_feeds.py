@@ -95,6 +95,49 @@ DEFAULT_FEEDS: tuple[tuple[str, str, str, str], ...] = (
 
 DESKS: tuple[str, ...] = ("general", "business", "technology")
 
+#: The language Google News answers a country in, for the ones the picker
+#: offers. `hl` decides the language of the headlines, `gl` the country they are
+#: about. A country not listed asks in English, which Google still answers with
+#: that country's news, in English where it can.
+_COUNTRY_LANG: dict[str, str] = {
+    "US": "en", "GB": "en", "AU": "en", "CA": "en", "IN": "en", "SG": "en",
+    "PH": "en", "NG": "en", "ZA": "en", "VN": "vi", "TH": "th", "ID": "id",
+    "MY": "ms", "JP": "ja", "KR": "ko", "CN": "zh-CN", "TW": "zh-TW",
+    "FR": "fr", "DE": "de", "ES": "es", "IT": "it", "BR": "pt-BR", "MX": "es",
+    "RU": "ru", "SA": "ar", "AE": "ar",
+}
+
+#: Which Google News topic sections a desk reads. "all" reads several so a big
+#: story surfaces across them under different publishers - which is what still
+#: fills the "widely covered" shelf from an aggregator that has no single feed
+#: carrying the same story twice.
+_DESK_TOPICS: dict[str, tuple[str, ...]] = {
+    "all": ("WORLD", "NATION", "BUSINESS", "TECHNOLOGY"),
+    "general": ("WORLD", "NATION"),
+    "business": ("BUSINESS",),
+    "technology": ("TECHNOLOGY",),
+}
+
+
+def _google_news_feeds(country: str, desk: str) -> tuple[tuple[str, str, str, str], ...]:
+    """Google News RSS for one country, as feed rows the reader already takes.
+
+    One templated feed per topic section. The label is only for the read count;
+    each story's outlet is the item's own publisher, read from its `<source>`,
+    not "Google News".
+    """
+    from urllib.parse import quote
+
+    cc = country.upper()
+    lang = _COUNTRY_LANG.get(cc, "en")
+    ceid = quote(f"{cc}:{lang}", safe="")
+    query = f"hl={lang}&gl={cc}&ceid={ceid}"
+    rows: list[tuple[str, str, str, str]] = []
+    for topic in _DESK_TOPICS.get(desk, _DESK_TOPICS["all"]):
+        url = f"https://news.google.com/rss/headlines/section/topic/{topic}?{query}"
+        rows.append((f"gnews-{cc}-{topic.lower()}", f"Google News · {topic.title()}", url, desk))
+    return tuple(rows)
+
 
 class NewsUnavailable(RuntimeError):
     """A feed could not be read. A provider state, not a bug."""
@@ -289,12 +332,19 @@ def parse_feed(document: str, *, outlet: str = "") -> tuple[str, list[Headline]]
         fields: dict[str, str] = {}
         for node in entry:
             name = _tag(node)
-            if name in {"title", "description", "summary", "pubDate", "published", "updated"}:
+            if name in {"title", "description", "summary", "pubDate", "published", "updated", "source"}:
                 fields.setdefault(name, _text(node))
         title = fields.get("title", "")
         link = _entry_link(entry)
         if not title or not link:
             continue
+        # Google News names the real publisher in a per-item <source>, and
+        # suffixes the title with " - Publisher". Keep the publisher as the
+        # outlet - it is what makes corroboration mean something - and drop the
+        # suffix so the headline reads as a headline.
+        per_item_outlet = fields.get("source", "").strip()
+        if per_item_outlet and title.endswith(f" - {per_item_outlet}"):
+            title = title[: -(len(per_item_outlet) + 3)].strip()
         stamp = (
             fields.get("pubDate")
             or fields.get("published")
@@ -307,7 +357,7 @@ def parse_feed(document: str, *, outlet: str = "") -> tuple[str, list[Headline]]
             Headline(
                 title=title,
                 url=link,
-                outlet=outlet or _outlet(feed_title, link),
+                outlet=outlet or per_item_outlet or _outlet(feed_title, link),
                 published_at=_published(stamp),
                 summary=fields.get("description") or fields.get("summary") or "",
             )
@@ -503,6 +553,7 @@ def collect_news(
     *,
     desk: str = "all",
     limit: int = 6,
+    country: str | None = None,
     feeds: tuple[tuple[str, str, str, str], ...] = DEFAULT_FEEDS,
     opener: Any = urlopen,
     now: datetime | None = None,
@@ -515,15 +566,25 @@ def collect_news(
     outlets actually answered - a story on "3 newsrooms" means something
     different when four of the nine could not be reached.
     """
-    wanted = [row for row in feeds if desk == "all" or row[3] == desk]
+    # A country reads Google News for that country instead of the curated global
+    # list; the topic feeds are already built for the desk, so they are not
+    # filtered again.
+    wanted = (
+        list(_google_news_feeds(country, desk))
+        if country
+        else [row for row in feeds if desk == "all" or row[3] == desk]
+    )
     headlines: list[Headline] = []
     read: list[str] = []
     failures: list[str] = []
 
     def one(row: tuple[str, str, str, str]) -> tuple[str, list[Headline] | str]:
         _feed_id, label, url, _desk = row
+        # An aggregator names each story's own publisher per item; a curated feed
+        # is one newsroom, so its label is the outlet for everything it carries.
+        outlet = "" if "news.google.com" in url else label
         try:
-            return label, read_feed(url, outlet=label, opener=opener)
+            return label, read_feed(url, outlet=outlet, opener=opener)
         except NewsUnavailable as error:
             return label, str(error)
         except Exception as error:  # noqa: BLE001 - a provider state, not a bug
