@@ -2578,12 +2578,19 @@ def _identity_fingerprint(provider: ProviderDefinition, connection: Any) -> str:
     )
 
 
-def cached_identity(provider_id: str) -> dict[str, str]:
+def cached_identity(provider_id: str, *, probe: bool = True) -> dict[str, str]:
     """One login's identity, read once per key.
 
     Best-effort throughout: an engine that will not say who it is has told us
     nothing about whether its key works, so a failure here is an empty answer
     rather than an error anybody sees.
+
+    `probe=False` answers only from the cache and never makes the live login
+    call. It is for places that render a page and must not block on a provider:
+    the account handle each login carries is a live HTTP round-trip on a cold
+    cache (up to ten seconds), and one per destination serialised is what made
+    the campaign tab slow to first load. The Publish tab's account list warms
+    this cache with a real probe, so those callers see the handle once it has.
     """
     provider = resolve_provider(provider_id)
     connection = resolve_connection(provider_id)
@@ -2593,6 +2600,8 @@ def cached_identity(provider_id: str) -> dict[str, str]:
     cache_key = (connection.id, fingerprint)
     if cache_key in _IDENTITIES:
         return _IDENTITIES[cache_key]
+    if not probe:
+        return {}
     try:
         # Bound here rather than relying on the caller's context. Callers that
         # already hold the connection get the same answer, and one that does not

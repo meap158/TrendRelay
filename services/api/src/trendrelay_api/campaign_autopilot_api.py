@@ -265,7 +265,9 @@ def _destination_view(session: Session, item: CampaignDestination) -> dict[str, 
             else f"{engine.label} · {connection.label}" if connection and engine
             else item.provider
         ),
-        "connection_account": cached_identity(item.provider) if connection else {},
+        # probe=False: the tab must not stall on a per-destination provider login.
+        # The account handle appears once the Publish tab has warmed the cache.
+        "connection_account": cached_identity(item.provider, probe=False) if connection else {},
         # Whether pictures can go here at all, so the screen where media is
         # chosen can say so rather than the engine saying it after the fact.
         # Carousel support is narrow: only Zernio and WoopSocial post one, and
