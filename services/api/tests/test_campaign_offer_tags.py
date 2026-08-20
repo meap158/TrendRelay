@@ -307,3 +307,42 @@ def test_pinning_more_than_a_post_carries_is_refused_not_trimmed(workspace) -> N
 
     assert refused.status_code == 422
     assert "at most 1 product" in refused.json()["detail"]
+
+
+def test_several_products_are_removed_in_one_decision(workspace) -> None:
+    """The removing half of tagging.
+
+    A campaign curated down from a hundred imported products was a hundred
+    single deletes, each with its own confirmation, from a list that offers
+    them together.
+    """
+    campaign_id = campaign(workspace)
+    request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/products",
+        json={"offer_ids": ["offer-1", "offer-2"]},
+    )
+
+    body = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/products/remove",
+        json={"offer_ids": ["offer-1", "offer-2"]},
+    )
+
+    assert body.status_code == 200, body.text
+    assert body.json()["untagged"] == 2
+    assert body.json()["products"] == []
+
+
+def test_removing_a_product_that_is_not_tagged_is_not_an_error(workspace) -> None:
+    """Selecting a row somebody else just removed should not fail the batch."""
+    campaign_id = campaign(workspace)
+    request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/products",
+        json={"offer_ids": ["offer-1"]},
+    )
+
+    body = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/products/remove",
+        json={"offer_ids": ["offer-1", "offer-2"]},
+    ).json()
+
+    assert body["untagged"] == 1

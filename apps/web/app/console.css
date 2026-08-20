@@ -878,6 +878,25 @@ html { scroll-behavior: smooth; }
 .campaign-tagged-products > li > span { display: grid; gap: 1px; min-width: 0; }
 .campaign-tagged-products strong { overflow: hidden; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-tagged-products small { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+/* The end of a capped list, said in one line. Quieter than a row, because it
+   is not a product - it is the count of the ones not drawn. */
+.campaign-tagged-more { grid-template-columns: minmax(0, 1fr) auto !important; border-style: dashed !important; background: none !important; }
+.campaign-tagged-more > span { color: var(--muted); font-size: 10px; }
+/* The whole list, in a dialog. A checkbox column joins the row, and the rows
+   scroll inside the dialog rather than growing it. */
+.campaign-product-review { display: grid; gap: 10px; }
+.campaign-product-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.campaign-product-controls > input[type="search"] { flex: 1 1 220px; min-width: 0; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 7px 9px; font: inherit; font-size: 11px; }
+.campaign-product-controls > label { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 10px; font-weight: 600; }
+.campaign-product-controls select { border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 6px 8px; font: inherit; font-size: 11px; }
+/* Count, selection and paginator on one line: each is a few words about the
+   list, and none of them earns a row of its own. */
+.campaign-product-status { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-block-end: 2px; border-block-end: 1px solid var(--line); }
+.campaign-product-status > small { color: var(--muted); font-size: 10px; }
+.campaign-product-pager { display: flex; gap: 4px; align-items: center; margin-inline-start: auto; }
+.campaign-product-pager > small { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.campaign-tagged-full { max-height: min(52vh, 460px); overflow-y: auto; padding-inline-end: 2px; }
+.campaign-tagged-full > li { grid-template-columns: auto minmax(0, 1fr) auto auto; }
 .campaign-product-picker { display: grid; gap: 8px; margin-block-start: 8px; padding: 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); }
 .campaign-product-search { inline-size: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 6px 8px; font: inherit; font-size: 11px; }
 /* Scrolls rather than growing the panel: a workspace can hold hundreds, and

@@ -26,6 +26,7 @@ import { Button } from "../ui/button";
 import { SegmentedControl } from "../ui/segmented";
 import { ActionIcon } from "../ui/action-icons";
 import { Dialog } from "../ui/dialog";
+import { SelectionCheckbox } from "../ui/selection-checkbox";
 import { Badge, Card, Switch } from "../ui/primitives";
 import { SearchSelect } from "../ui/search-select";
 import { useT } from "../i18n-provider";
@@ -424,6 +425,20 @@ function offerDescription(offer: Offer): string {
 //: How many packages are sent at once. One SQLite file takes writes in series
 //: whatever the client does, so a hundred parallel posts only queue up inside
 //: the API; a small batch keeps the browser responsive and the database calm.
+/**
+ * How many tagged products the panel itself draws.
+ *
+ * Enough to recognise what the campaign is about; not so many that the setting
+ * below them is off the screen. A campaign curated from an import can hold a
+ * hundred, and a hundred rows between one heading and the next is a page
+ * nobody scrolls past - the rest is a click away, where a long list can be
+ * searched and ordered instead of scrolled.
+ */
+const TAGGED_SHOWN = 6;
+
+/** Rows per page in that dialog. */
+const TAGGED_PER_PAGE = 20;
+
 const QUEUE_BATCH = 8;
 
 /** What one queued package is written with, before it is sent. */
@@ -1125,6 +1140,23 @@ export function AutopilotPanel({
   /** The products this campaign may promote, and whether the picker is open. */
   const [tagged, setTagged] = useState<TaggedProduct[]>([]);
   const [addingProducts, setAddingProducts] = useState(false);
+  /**
+   * The whole tagged list, when somebody asks for it.
+   *
+   * The panel shows the first few. A campaign curated from an import can hold
+   * a hundred products, and a hundred rows between the heading and the next
+   * setting is a page nobody scrolls past - so the rest lives here, with the
+   * things a long list actually needs: a search, an order, and a way to remove
+   * more than one.
+   */
+  const [reviewingProducts, setReviewingProducts] = useState(false);
+  const [productQuery, setProductQuery] = useState("");
+  const [productSort, setProductSort] = useState<
+    "added" | "name" | "commission" | "price"
+  >("added");
+  const [productFilter, setProductFilter] = useState<"all" | "available" | "unavailable">("all");
+  const [productPage, setProductPage] = useState(0);
+  const [pickedProducts, setPickedProducts] = useState<Set<string>>(new Set());
   const [productSearch, setProductSearch] = useState("");
   const [pinnedOffers, setPinnedOffers] = useState<Set<string>>(new Set());
   const [slots, setSlots] = useState<Slot[]>([]);
@@ -1282,6 +1314,50 @@ export function AutopilotPanel({
   >([]);
 
   const base = `/api/workspaces/${workspaceId}/campaigns/${campaignId}`;
+  /**
+   * The tagged list as the dialog shows it: searched, filtered, ordered, paged.
+   *
+   * All of it in the browser, because all of it is already here - the campaign
+   * sends its products in one payload, and a hundred rows is nothing to sort.
+   * Asking the server would add a round trip per keystroke to answer a question
+   * the page can already answer.
+   */
+  const shownProducts = useMemo(() => {
+    const needle = productQuery.trim().toLowerCase();
+    const matching = tagged.filter((product) => {
+      if (productFilter === "available" && product.availability === "unavailable") {
+        return false;
+      }
+      if (productFilter === "unavailable" && product.availability !== "unavailable") {
+        return false;
+      }
+      if (!needle) return true;
+      return [
+        product.name, product.brand, product.category,
+        product.marketplace, product.network,
+      ].some((field) => (field ?? "").toLowerCase().includes(needle));
+    });
+    const rate = (product: TaggedProduct) => product.commission_bps ?? -1;
+    const price = (product: TaggedProduct) => product.price_cents ?? -1;
+    const ordered = [...matching];
+    if (productSort === "name") {
+      ordered.sort((left, right) => left.name.localeCompare(right.name));
+    } else if (productSort === "commission") {
+      ordered.sort((left, right) => rate(right) - rate(left));
+    } else if (productSort === "price") {
+      ordered.sort((left, right) => price(right) - price(left));
+    }
+    // "added" is the order the API sends, which is the order they were tagged.
+    return ordered;
+  }, [tagged, productQuery, productFilter, productSort]);
+
+  const productPages = Math.max(1, Math.ceil(shownProducts.length / TAGGED_PER_PAGE));
+  const productPageSafe = Math.min(productPage, productPages - 1);
+  const productSlice = shownProducts.slice(
+    productPageSafe * TAGGED_PER_PAGE, (productPageSafe + 1) * TAGGED_PER_PAGE,
+  );
+
+
   /** The same media the Publish composer plays, streamed from the same roots. */
   const previewMediaUrl = (path: string) =>
     `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview`
@@ -1721,6 +1797,34 @@ export function AutopilotPanel({
       setTagged(body.products);
       await refresh();
       return `${name} removed.`;
+    });
+  }
+
+  /**
+   * Remove several at once, from the list they were chosen in.
+   *
+   * Curating a hundred imported products down to the ones a campaign is
+   * actually about was a hundred confirmations otherwise.
+   */
+  async function untagPicked() {
+    const ids = [...pickedProducts];
+    if (!ids.length) return;
+    if (!window.confirm(
+      `Stop this campaign promoting ${ids.length} product${ids.length === 1 ? "" : "s"}? `
+      + "Posts already sent keep their links."
+    )) return;
+    await run("tag-products", async () => {
+      const body = await json<{ untagged: number; products: TaggedProduct[] }>(
+        await apiFetch(`${base}/products/remove`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ offer_ids: ids }),
+        }),
+      );
+      setTagged(body.products);
+      setPickedProducts(new Set());
+      await refresh();
+      return `${body.untagged} product${body.untagged === 1 ? "" : "s"} removed.`;
     });
   }
 
@@ -3981,6 +4085,15 @@ export function AutopilotPanel({
                     ? `Smart matching chooses from these ${tagged.length}. Nothing else is offered, here or on a post.`
                     : "None yet. Until one is added, posts go out with no product attached."}</small>
                 </div>
+                {/* Both doors, together. Reviewing is only offered once there
+                    is more here than the panel shows - a dialog over six rows
+                    is a click that changes nothing. */}
+                {tagged.length > TAGGED_SHOWN && (
+                  <Button variant="quiet" size="sm"
+                    onClick={() => setReviewingProducts(true)}>
+                    Review all {tagged.length}
+                  </Button>
+                )}
                 {canEdit && (
                   <Button variant={tagged.length ? "secondary" : "primary"} size="sm"
                     busy={busy === "offers"}
@@ -3992,7 +4105,7 @@ export function AutopilotPanel({
 
               {tagged.length > 0 && (
                 <ul className="campaign-tagged-products">
-                  {tagged.map((product) => (
+                  {tagged.slice(0, TAGGED_SHOWN).map((product) => (
                     <li key={product.offer_id}>
                       <span>
                         <strong>{product.name}</strong>
@@ -4017,8 +4130,162 @@ export function AutopilotPanel({
                       )}
                     </li>
                   ))}
+                  {/* The rest, said in one line rather than drawn in ninety.
+                      Inside the list, so it reads as the end of it rather than
+                      as a control that belongs to the section. */}
+                  {tagged.length > TAGGED_SHOWN && (
+                    <li className="campaign-tagged-more">
+                      <span>{tagged.length - TAGGED_SHOWN} more</span>
+                      <Button variant="quiet" size="sm"
+                        onClick={() => setReviewingProducts(true)}>Review all</Button>
+                    </li>
+                  )}
                 </ul>
               )}
+
+              {/* The whole list, where a long one can be worked with.
+                  A dialog rather than more rows: what the panel owes the
+                  reader is what this campaign is about, and ninety more rows
+                  answer that no better than six while pushing everything
+                  after them off the screen. */}
+              <Dialog
+                open={reviewingProducts}
+                title="Products this campaign may promote"
+                description={`${tagged.length} tagged. Smart matching chooses from these and nothing else.`}
+                size="wide"
+                onClose={() => {
+                  setReviewingProducts(false);
+                  setPickedProducts(new Set());
+                  setProductQuery("");
+                  setProductPage(0);
+                }}
+              >
+                <div className="campaign-product-review">
+                  {/* One row of controls, because they are one question asked
+                      four ways: which of these am I looking at. */}
+                  <div className="campaign-product-controls">
+                    <input
+                      type="search"
+                      value={productQuery}
+                      placeholder="Search name, brand, category"
+                      aria-label="Search tagged products"
+                      onChange={(event) => {
+                        setProductQuery(event.target.value);
+                        setProductPage(0);
+                      }}
+                    />
+                    <label>
+                      <span>Order</span>
+                      <select value={productSort}
+                        onChange={(event) => {
+                          setProductSort(event.target.value as typeof productSort);
+                          setProductPage(0);
+                        }}>
+                        <option value="added">Recently added</option>
+                        <option value="name">Name</option>
+                        <option value="commission">Commission</option>
+                        <option value="price">Price</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Show</span>
+                      <select value={productFilter}
+                        onChange={(event) => {
+                          setProductFilter(event.target.value as typeof productFilter);
+                          setProductPage(0);
+                        }}>
+                        <option value="all">All</option>
+                        <option value="available">Available</option>
+                        <option value="unavailable">Unavailable</option>
+                      </select>
+                    </label>
+                  </div>
+                  {/* The count, the selection and the paginator on one line -
+                      each of them is a few words about the list rather than a
+                      section of its own. */}
+                  <div className="campaign-product-status">
+                    <SelectionCheckbox
+                      aria-label="Select everything shown"
+                      checked={productSlice.length > 0
+                        && productSlice.every((row) => pickedProducts.has(row.offer_id))}
+                      indeterminate={productSlice.some((row) => pickedProducts.has(row.offer_id))
+                        && !productSlice.every((row) => pickedProducts.has(row.offer_id))}
+                      disabled={!productSlice.length}
+                      onChange={(event) => setPickedProducts((current) => {
+                        const next = new Set(current);
+                        for (const row of productSlice) {
+                          if (event.target.checked) next.add(row.offer_id);
+                          else next.delete(row.offer_id);
+                        }
+                        return next;
+                      })}
+                    />
+                    <small>
+                      {shownProducts.length === tagged.length
+                        ? `${tagged.length} products`
+                        : `${shownProducts.length} of ${tagged.length}`}
+                      {pickedProducts.size > 0 && ` · ${pickedProducts.size} selected`}
+                    </small>
+                    {canEdit && pickedProducts.size > 0 && (
+                      <Button variant="secondary" size="sm" busy={busy === "tag-products"}
+                        onClick={() => void untagPicked()}>
+                        Remove {pickedProducts.size}
+                      </Button>
+                    )}
+                    {productPages > 1 && (
+                      <span className="campaign-product-pager">
+                        <Button variant="quiet" size="sm" disabled={productPageSafe === 0}
+                          onClick={() => setProductPage(productPageSafe - 1)}>Back</Button>
+                        <small>{productPageSafe + 1} / {productPages}</small>
+                        <Button variant="quiet" size="sm"
+                          disabled={productPageSafe >= productPages - 1}
+                          onClick={() => setProductPage(productPageSafe + 1)}>Next</Button>
+                      </span>
+                    )}
+                  </div>
+                  {shownProducts.length === 0 ? (
+                    <p className="autopilot-empty">
+                      Nothing here matches that. Clear the search to see all
+                      {" "}{tagged.length}.
+                    </p>
+                  ) : (
+                    <ul className="campaign-tagged-products campaign-tagged-full">
+                      {productSlice.map((product) => (
+                        <li key={product.offer_id}>
+                          <SelectionCheckbox
+                            aria-label={`Select ${product.name}`}
+                            checked={pickedProducts.has(product.offer_id)}
+                            onChange={(event) => setPickedProducts((current) => {
+                              const next = new Set(current);
+                              if (event.target.checked) next.add(product.offer_id);
+                              else next.delete(product.offer_id);
+                              return next;
+                            })}
+                          />
+                          <span>
+                            <strong>{product.name}</strong>
+                            <small>{[
+                              product.brand,
+                              product.category,
+                              product.marketplace ?? product.network,
+                              commissionLabel(product),
+                            ].filter(Boolean).join(" · ")}</small>
+                          </span>
+                          {product.availability === "unavailable" && (
+                            <Badge tone="warn">unavailable</Badge>
+                          )}
+                          {canEdit && (
+                            <Button variant="quiet" size="sm" busy={busy === "tag-products"}
+                              onClick={() => void untagProduct(product.offer_id, product.name)}>
+                              Remove
+                            </Button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </Dialog>
 
               {addingProducts && (
                 <div className="campaign-product-picker">

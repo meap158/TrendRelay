@@ -2192,6 +2192,39 @@ def untag_campaign_product(
     }
 
 
+@router.post("/{campaign_id}/products/remove")
+def untag_campaign_products(
+    workspace_id: str,
+    campaign_id: str,
+    body: ProductTagRequest,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Stop this campaign promoting several products, in one decision.
+
+    The removing half of tagging. A campaign curated down from a hundred
+    imported products is a hundred single deletes otherwise, and the list they
+    are chosen from is the same list either way.
+    """
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    _campaign(session, workspace_id, campaign_id)
+    from trendrelay_api import campaign_offer_tags
+
+    outcome = campaign_offer_tags.untag(session, campaign_id, body.offer_ids)
+    audit(
+        session, request, workspace_id, user.id,
+        "campaign.products_untagged", "campaign", campaign_id,
+        {**outcome, "batch": True},
+    )
+    return {
+        **outcome,
+        "products": campaign_offer_tags.tagged_products(
+            session, workspace_id, campaign_id
+        ),
+    }
+
+
 @router.post("/{campaign_id}/autopilot/executions/approve")
 def approve_autopilot_executions(
     workspace_id: str,
