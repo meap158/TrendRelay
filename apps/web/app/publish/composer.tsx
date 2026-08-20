@@ -433,6 +433,9 @@ export type CalendarEntry = {
   /** Where it is going, so the rail can show it without opening the post. */
   platforms?: PublishingPlatform[];
   title?: string | null;
+  /** The campaign this post belongs to, when it is a campaign's rather than a
+      standalone one - so the rail can say which without opening it. */
+  campaign?: { id: string; name: string };
 };
 export type Slot = {
   id: string;
@@ -499,6 +502,7 @@ export function scheduleLabel(state: string): { label: string; tone: "good" | "w
     case "succeeded": return { label: "Published", tone: "good" };
     case "failed": return { label: "Failed", tone: "warn" };
     case "cancelled": return { label: "Cancelled", tone: "neutral" };
+    case "planned": return { label: "Planned", tone: "neutral" };
     default: return { label: "Scheduled", tone: "neutral" };
   }
 }
@@ -563,6 +567,7 @@ export function UpcomingPosts({
   days = 7,
   onPickDay,
   onOpenCalendar,
+  loadingCampaigns = false,
 }: {
   entries: CalendarEntry[];
   /** This workspace's posting times, so a new post lands on one of them. */
@@ -571,6 +576,9 @@ export function UpcomingPosts({
   days?: number;
   onPickDay: (at: Date) => void;
   onOpenCalendar?: () => void;
+  /** True while campaign posts are still being gathered, so the strip can say
+      it is not yet the whole picture rather than looking complete early. */
+  loadingCampaigns?: boolean;
 }) {
   const t = useT();
   const strip = useMemo(() => {
@@ -594,6 +602,11 @@ export function UpcomingPosts({
     <article className="upcoming">
       <header className="upcoming-head">
         <h2>{t("composer.upcoming")}</h2>
+        {/* Says the count is not final yet while the campaigns are still being
+            gathered, so a half-loaded strip does not read as the whole picture. */}
+        {loadingCampaigns && (
+          <span className="upcoming-loading" role="status">Adding campaigns…</span>
+        )}
         {onOpenCalendar && (
           <Button
             variant="quiet"
@@ -655,6 +668,13 @@ export function UpcomingPosts({
                   <Badge tone={scheduleLabel(entry.state).tone}>
                     {scheduleLabel(entry.state).label}
                   </Badge>
+                  {/* Which campaign this post belongs to, when it is one, so a
+                      campaign post is not mistaken for a standalone one. */}
+                  {entry.campaign && (
+                    <span className="upcoming-campaign" title={`Campaign: ${entry.campaign.name}`}>
+                      {entry.campaign.name}
+                    </span>
+                  )}
                 </span>
               </div>
             </li>

@@ -65,6 +65,7 @@ import {
   type Slot,
   type SlotPreset,
 } from "./composer";
+import { useCampaignUpcoming } from "./campaign-upcoming";
 
 type Delivery = "draft" | "schedule" | "now";
 const isDelivery = oneOf<Delivery>("draft", "schedule", "now");
@@ -281,6 +282,13 @@ export default function PublishPage() {
   const { jobs: allJobs, setActiveWorkspaceId, refresh: refreshJobs } = useJobs();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
+  // Every campaign's upcoming posts, gathered off the critical path. Deployed
+  // ones are named from `campaignNames`; planned ones arrive in `campaignPlanned`.
+  const {
+    names: campaignNames,
+    planned: campaignPlanned,
+    loading: campaignsLoading,
+  } = useCampaignUpcoming(apiFetch, workspaceId || null);
   const [videoPath, setVideoPath] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
   // Accounts from every engine at once, each carrying its own, so one post can
@@ -835,17 +843,33 @@ export default function PublishPage() {
           return request.delivery === "schedule"
             || (!request.delivery && request.schedule === true);
         })
-        .map((job) => ({
-          at: new Date(job.payload.request.date),
-          label: job.payload.request.caption ?? "Scheduled post",
-          state: job.status,
-          title: job.payload.request.title ?? null,
-          platforms: (job.payload.request.targets ?? [])
-            .map((target: { platform: PublishingPlatform }) => target.platform)
-            .filter(Boolean),
-        }))
+        .map((job) => {
+          // A campaign-created job carries its campaign's id; name it from the
+          // campaign list so a campaign post is not mistaken for a standalone.
+          const campaignId: string | undefined = job.payload.request.campaign_id ?? undefined;
+          const campaignName = campaignId ? campaignNames.get(campaignId) : undefined;
+          return {
+            at: new Date(job.payload.request.date),
+            label: job.payload.request.caption ?? "Scheduled post",
+            state: job.status,
+            title: job.payload.request.title ?? null,
+            platforms: (job.payload.request.targets ?? [])
+              .map((target: { platform: PublishingPlatform }) => target.platform)
+              .filter(Boolean),
+            ...(campaignId && campaignName
+              ? { campaign: { id: campaignId, name: campaignName } }
+              : {}),
+          };
+        })
         .filter((entry) => !Number.isNaN(entry.at.getTime())),
-    [jobs],
+    [jobs, campaignNames],
+  );
+  // The Upcoming rail shows this composer's scheduled jobs together with every
+  // campaign's planned posts; the week planner below keeps to the jobs alone,
+  // so its "taken" slots stay about what is being composed here.
+  const upcomingEntries = useMemo(
+    () => [...scheduled, ...campaignPlanned],
+    [scheduled, campaignPlanned],
   );
   const scheduledTimes = useMemo(
     () => scheduled.map((entry) => localValue(entry.at)),
@@ -3389,7 +3413,8 @@ export default function PublishPage() {
               with — what is already going out — before the composer's own
               rehearsal of what they are writing now. */}
           <UpcomingPosts
-            entries={scheduled}
+            entries={upcomingEntries}
+            loadingCampaigns={campaignsLoading}
             slots={slots}
             now={now}
             onPickDay={(at) => { setDelivery("schedule"); setDate(localValue(at)); }}
