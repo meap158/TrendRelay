@@ -1268,6 +1268,92 @@ def test_a_batch_spreads_across_products_rather_than_repeating_one(workspace) ->
     assert picked == ["offer-1", "offer-2"]
 
 
+def test_what_the_preview_spread_is_what_the_queue_holds(workspace) -> None:
+    """The preview and the posts it becomes, checked against each other.
+
+    The rotation lived only inside the previewing request. Adding those rows
+    was a request each, every one of them stored the top of a ranking that does
+    not change between posts, and a batch that previewed as twenty products
+    arrived as one.
+    """
+    campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
+    _second_product(workspace, campaign_id)
+    _campaign_setting(workspace, campaign_id, max_products_per_post=1)
+    for index in range(2):
+        _draft_asset(
+            workspace, f"asset-keep-{index}", "Portable espresso setup",
+            "Make espresso anywhere with this compact coffee kit", ["coffee"],
+        )
+
+    previewed = _drafted(
+        workspace, campaign_id, ["asset-keep-0", "asset-keep-1"]
+    )
+    # Added one at a time, the way the composer adds them.
+    queued = []
+    for index in range(2):
+        made = request(
+            "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+            json={
+                "asset_id": f"asset-keep-{index}", "video_path": r"S:\media\clip.mp4",
+                "body": "Make espresso anywhere with this compact coffee kit.",
+            },
+        )
+        assert made.status_code == 201, made.text
+        queued.append(made.json()["item"])
+
+    spread = [
+        previewed[f"asset-keep-{index}"]["matches"][0]["offer_id"] for index in range(2)
+    ]
+    kept = [item["offer_match"]["chosen_offer_ids"] for item in queued]
+    assert spread == ["offer-1", "offer-2"]
+    assert kept == [["offer-1"], ["offer-2"]]
+
+
+def test_a_post_records_what_it_would_carry_not_the_whole_ranking(workspace) -> None:
+    """The card, the assistant and the scheduler asked the same question.
+
+    Two of them used to answer it themselves off the stored ranking - the card
+    in the browser, the assistant by taking the first three - and neither knew
+    about the campaign's ceiling or its rotation.
+    """
+    campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
+    _second_product(workspace, campaign_id)
+    _campaign_setting(workspace, campaign_id, max_products_per_post=1)
+
+    item = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={"video_path": r"S:\media\clip.mp4", "body": "Espresso, anywhere."},
+    ).json()["item"]
+
+    # The ranking is still kept - which offers were considered, and how they
+    # scored - but what attaches is now one of them, not all of them.
+    assert len(item["offer_match"]["matches"]) >= 1
+    assert len(item["offer_match"]["chosen_offer_ids"]) == 1
+
+
+def test_a_preview_continues_the_rotation_the_queue_already_started(workspace) -> None:
+    """A preview that begins from nothing repeats what is already queued."""
+    campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
+    _second_product(workspace, campaign_id)
+    _campaign_setting(workspace, campaign_id, max_products_per_post=1)
+    request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={"video_path": r"S:\media\clip.mp4", "body": "Espresso, anywhere."},
+    )
+    _draft_asset(
+        workspace, "asset-next", "Portable espresso setup",
+        "Make espresso anywhere with this compact coffee kit", ["coffee"],
+    )
+
+    found = _drafted(workspace, campaign_id, ["asset-next"])
+
+    # The queued post took the leader, so the next one's turn is the other.
+    assert found["asset-next"]["matches"][0]["offer_id"] == "offer-2"
+
+
 def test_rotation_turned_off_previews_the_same_best_fit_every_row(workspace) -> None:
     """The preview follows the setting either way, including off."""
     campaign_id = campaign(workspace)
@@ -1615,4 +1701,3 @@ def test_an_empty_selection_is_refused(workspace) -> None:
     )
 
     assert response.status_code == 422
-

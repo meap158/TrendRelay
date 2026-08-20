@@ -124,6 +124,8 @@ type QueueItem = {
     matches?: OfferMatch[];
     strategy?: MatchStrategy;
     selected_offer_ids?: string[];
+    /** What this post would actually carry, resolved by the matcher. */
+    chosen_offer_ids?: string[];
   };
 };
 
@@ -3135,15 +3137,21 @@ export function AutopilotPanel({
                       like one nobody had analysed. */}
                   {(() => {
                     const ranked = item.offer_match?.matches ?? [];
-                    // Mirrors the matcher: pins win, then confident matches,
-                    // and failing both the best available still goes on rather
-                    // than the post going out bare.
-                    const confident = ranked.filter((match) => item.offer_ids.length
-                      ? item.offer_ids.includes(match.offer_id)
-                      : match.confidence !== "low");
-                    const attaching = (confident.length ? confident : ranked.slice(0, 1))
-                      .slice(0, autopilot.max_products_per_post);
-                    const weak = !confident.length && Boolean(ranked.length);
+                    // What the matcher resolved for this post, not a second
+                    // guess at it. This used to mirror the selection rules
+                    // here - pins, then confident matches, then the best
+                    // available - which meant reading them off a ranking that
+                    // is identical for every post: the rotation the preview
+                    // had just spread across twenty rows showed up as the same
+                    // product twenty times.
+                    const chosen = item.offer_match?.chosen_offer_ids ?? [];
+                    const attaching = chosen.length
+                      ? chosen
+                        .map((offerId) => ranked.find((match) => match.offer_id === offerId))
+                        .filter((match): match is OfferMatch => Boolean(match))
+                      : [];
+                    const weak = attaching.every((match) => match.confidence === "low")
+                      && Boolean(attaching.length);
                     return (
                       <>
                         {attaching.map((match) => (
@@ -3167,7 +3175,9 @@ export function AutopilotPanel({
                             {weak && <em className="soft">weak fit</em>}
                           </span>
                         ))}
-                        {!ranked.length && <em className="soft">analysis pending</em>}
+                        {!ranked.length
+                          ? <em className="soft">analysis pending</em>
+                          : !attaching.length && <em className="soft">no product attached</em>}
                       </>
                     );
                   })()}

@@ -593,6 +593,61 @@ def test_a_run_of_many_posts_spends_many_products(session) -> None:
     assert len(set(chosen)) == 5
 
 
+def test_a_post_goes_out_with_the_product_its_card_promised(session) -> None:
+    """The third place the same question was answered differently.
+
+    A rotation decided in the run and a rotation shown on the queue are two
+    rotations: the queue's is spread over every post in it, the run's over the
+    posts in that run, and they agree only by luck. The page said one product
+    and the post carried another.
+    """
+    destination(session, "d1", "youtube")
+    for hour in (9, 12):
+        slot(session, hour)
+    for index in range(2):
+        offer(session, f"offer-{index}", f"Coffee thing {index}")
+    # Queued in one order, recorded in the other: only honouring what was
+    # recorded can produce this, so the run's own ranking cannot fake it.
+    queue_item(
+        session, "q0", position=0, body="Coffee gear for a better morning.",
+        offer_match={"chosen_offer_ids": ["offer-1"]},
+    )
+    queue_item(
+        session, "q1", position=1, body="Coffee gear for a better morning.",
+        offer_match={"chosen_offer_ids": ["offer-0"]},
+    )
+
+    posts, _ = plan_campaign(
+        session,
+        autopilot(session, offer_mode="smart", daily_cap_per_account=2),
+        now=NOW,
+        link_for=lambda _destination, offer_id: f"https://tr.example/{offer_id}",
+    )
+
+    carried = {post.queue_item_id: post.offer_ids[0] for post in posts if post.offer_ids}
+    assert carried == {"q0": "offer-1", "q1": "offer-0"}
+
+
+def test_a_recorded_product_that_went_away_is_not_forced(session) -> None:
+    """Honoured, not obeyed: an untagged or unavailable product is gone."""
+    destination(session, "d1", "youtube")
+    slot(session, 9)
+    offer(session, "offer-real", "Coffee thing")
+    queue_item(
+        session, "q0", position=0, body="Coffee gear for a better morning.",
+        offer_match={"chosen_offer_ids": ["offer-deleted"]},
+    )
+
+    posts, _ = plan_campaign(
+        session,
+        autopilot(session, offer_mode="smart", daily_cap_per_account=1),
+        now=NOW,
+        link_for=lambda _destination, offer_id: f"https://tr.example/{offer_id}",
+    )
+
+    assert [post.offer_ids[0] for post in posts if post.offer_ids] == ["offer-real"]
+
+
 def test_rotation_can_be_switched_off_for_one_hero_product(session) -> None:
     """A campaign built around one product is a real campaign."""
     destination(session, "d1", "youtube")

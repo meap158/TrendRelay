@@ -561,6 +561,37 @@ def take_turns(
     )
 
 
+def spoken_for(
+    session: Session, campaign_id: str, *, exclude: str | None = None
+) -> list[str]:
+    """Which products this campaign's other queued posts have already claimed.
+
+    A rotation inside one request is easy; a rotation across twenty of them is
+    what adding twenty posts actually is, and each request begins with no
+    memory of the last. This is that memory, kept where it survives: every
+    other queue item's own resolved choice.
+
+    Without it the preview spread products across the rows and every post then
+    stored the top of the ranking, so a batch previewed as twenty products and
+    arrived as one.
+    """
+    rows = session.scalars(
+        select(CampaignQueueItem)
+        .where(
+            CampaignQueueItem.campaign_id == campaign_id,
+            CampaignQueueItem.state != "retired",
+        )
+        .order_by(CampaignQueueItem.position)
+    ).all()
+    claimed: list[str] = []
+    for row in rows:
+        if exclude and row.id == exclude:
+            continue
+        chosen = (row.offer_match or {}).get("chosen_offer_ids") or []
+        claimed.extend(offer_id for offer_id in chosen if offer_id)
+    return claimed
+
+
 def chosen_matches(
     session: Session,
     campaign: Campaign,
@@ -572,6 +603,29 @@ def chosen_matches(
     last_used: dict[str, Any] | None = None,
 ) -> tuple[list[OfferMatch], dict[str, Any]]:
     """Resolve manual pins, manual campaign mode, or current smart matches."""
+    selected, _ranked, strategy = resolve_matches(
+        session, campaign, autopilot, item, destinations,
+        used_in_run=used_in_run, last_used=last_used,
+    )
+    return selected, strategy
+
+
+def resolve_matches(
+    session: Session,
+    campaign: Campaign,
+    autopilot: CampaignAutopilot,
+    item: CampaignQueueItem,
+    destinations: Iterable[CampaignDestination],
+    *,
+    used_in_run: Iterable[str] = (),
+    last_used: dict[str, Any] | None = None,
+) -> tuple[list[OfferMatch], list[OfferMatch], dict[str, Any]]:
+    """What would attach, the ranking behind it, and how it was decided.
+
+    The ranking comes back too because it is worth keeping beside a post -
+    which offers were considered, and how well each scored - and computing it a
+    second time to store it would be a second answer to the same question.
+    """
     ranked, strategy = match_offers(
         session, campaign, autopilot, item=item, destinations=destinations, limit=20
     )
@@ -610,4 +664,4 @@ def chosen_matches(
                 "selection": "smart content match, best available",
                 "below_evidence_bar": True,
             }
-    return selected[: autopilot.max_products_per_post], strategy
+    return selected[: autopilot.max_products_per_post], ranked, strategy

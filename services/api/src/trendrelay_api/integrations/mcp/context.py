@@ -73,6 +73,13 @@ def _offer_ids_for(item: CampaignQueueItem) -> list[str]:
     selected = match.get("selected_offer_ids") or []
     if selected:
         return list(dict.fromkeys(selected))
+    # What the matcher resolved for this post, rather than the top of the
+    # ranking it resolved from: taking three off the front ignored both the
+    # campaign's ceiling on products per post and its rotation, so every post
+    # in a batch described the same product to the assistant.
+    chosen = match.get("chosen_offer_ids") or []
+    if chosen:
+        return list(dict.fromkeys(chosen))
     return [m.get("offer_id") for m in (match.get("matches") or []) if m.get("offer_id")][:3]
 
 

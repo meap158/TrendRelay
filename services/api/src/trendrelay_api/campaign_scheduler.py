@@ -42,8 +42,8 @@ from trendrelay_api.campaign_autopilot import (
 )
 from trendrelay_api.campaign_offer_matcher import (
     OfferMatch,
-    chosen_matches,
     last_promoted,
+    resolve_matches,
 )
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 from trendrelay_api.models import Campaign, PublishingSlot, Workspace
@@ -645,6 +645,9 @@ def plan_campaign(
 
     scheduled: list[ScheduledPost] = []
     notes: list[str] = []
+    #: Unwritten posts met during the run, by id, so each is counted once
+    #: however many slots considered it. Summarised into a single note below.
+    unwritten: dict[str, str] = {}
     counter = autopilot.posts_scheduled
     reserved: dict[tuple[str, str], datetime] = {}
     planned_per_day: dict[tuple[str, date], int] = {}
@@ -790,10 +793,14 @@ def plan_campaign(
                 if candidate.body == PLACEHOLDER_BODY:
                     # An unwritten package never reaches an engine, and holding a
                     # slot for it would block the content that is ready.
-                    item_notes.append(
-                        "A post still needs its copy written "
-                        f"({_short_source_name(candidate.title or candidate.id)}); "
-                        "it is skipped until you write it."
+                    #
+                    # Collected for one note at the end rather than written out
+                    # here. This said it once per unwritten post per slot, so a
+                    # queue holding eighty of them produced eighty sentences,
+                    # each repeated across five slots - a status line thousands
+                    # of characters long saying one thing.
+                    unwritten.setdefault(
+                        candidate.id, _short_source_name(candidate.title or candidate.id)
                     )
                     continue
                 if candidate.id not in frozen_cache:
@@ -834,12 +841,37 @@ def plan_campaign(
             frozen = frozen_cache[item.id]
             # Chosen per post rather than per item: the ranking is the same
             # every time, and which of it goes out is not.
-            cached_matches, match_strategy = chosen_matches(
+            cached_matches, ranked, match_strategy = resolve_matches(
                 session, campaign, autopilot, item, destinations,
                 used_in_run=used_in_run,
                 last_used=promoted_before,
             )
             matched = list(cached_matches)
+            # The product this post was queued with, where it still stands.
+            #
+            # A rotation decided here and a rotation shown in the queue are two
+            # rotations, and they agree only by luck: the queue's was spread
+            # over every post in it, this one over the posts in this run. The
+            # page said one product and the post carried another. The turn is
+            # taken when the post is written, and honoured here - unless the
+            # product has since gone untagged or unavailable, in which case it
+            # is not in the ranking any more and this falls through to a fresh
+            # choice. A pin outranks both; it was somebody's decision, not a
+            # rotation's.
+            recorded = list((item.offer_match or {}).get("chosen_offer_ids") or [])
+            if autopilot.rotate_products and recorded and not item.offer_ids:
+                ranked_by_id = {match.offer_id: match for match in ranked}
+                kept = [
+                    ranked_by_id[offer_id]
+                    for offer_id in recorded
+                    if offer_id in ranked_by_id
+                ]
+                if len(kept) == len(recorded):
+                    matched = kept[: autopilot.max_products_per_post]
+                    match_strategy = {
+                        **match_strategy,
+                        "selection": "the product this post was queued with",
+                    }
             # An offer that went unavailable after matching is replaced by the next
             # match, or the post goes on organic. The redirect layer would refuse
             # its link anyway; leaving it out here refuses it before it is posted.

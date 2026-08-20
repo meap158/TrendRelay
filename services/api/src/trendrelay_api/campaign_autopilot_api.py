@@ -743,8 +743,20 @@ def apply_queue_item_edits(
 def _refresh_item_match(
     session: Session, campaign_id: str, item: CampaignQueueItem
 ) -> None:
-    """Persist the current explainable result beside an approved queue item."""
-    from trendrelay_api.campaign_offer_matcher import match_offers
+    """Persist the current explainable result beside an approved queue item.
+
+    What would attach, not just what ranks. This stored the plain ranking and
+    left every reader to work out which of it a post would carry - the queue
+    card did it in the browser, the assistant took the first three - so the
+    rotation that the preview had just spread across twenty rows vanished the
+    moment those rows were added: the ranking does not change between items, so
+    every one of them showed the same leading product.
+    """
+    from trendrelay_api.campaign_offer_matcher import (
+        last_promoted,
+        resolve_matches,
+        spoken_for,
+    )
 
     campaign = session.get(Campaign, campaign_id)
     autopilot = session.scalar(select(CampaignAutopilot).where(
@@ -756,13 +768,21 @@ def _refresh_item_match(
         CampaignDestination.campaign_id == campaign_id,
         CampaignDestination.enabled.is_(True),
     )).all()
-    matches, strategy = match_offers(
-        session, campaign, autopilot, item=item, destinations=destinations, limit=8
+    chosen, ranked, strategy = resolve_matches(
+        session, campaign, autopilot, item, destinations,
+        # The rotation's memory, kept where it survives a request boundary:
+        # adding twenty posts is twenty requests, and each one begins knowing
+        # only what the queue already holds.
+        used_in_run=spoken_for(session, campaign_id, exclude=item.id),
+        last_used=last_promoted(session, campaign_id),
     )
     item.offer_match = {
-        "matches": [match.view() for match in matches],
+        "matches": [match.view() for match in ranked[:8]],
         "strategy": strategy,
         "selected_offer_ids": list(item.offer_ids or []),
+        # What this post would actually carry, decided here rather than by
+        # each reader in turn.
+        "chosen_offer_ids": [match.offer_id for match in chosen],
         "generated_at": datetime.now(UTC).isoformat(),
     }
 
@@ -877,7 +897,11 @@ def draft_offer_recommendations(
         CampaignDestination.campaign_id == campaign_id,
         CampaignDestination.enabled.is_(True),
     )).all()
-    from trendrelay_api.campaign_offer_matcher import chosen_matches, last_promoted
+    from trendrelay_api.campaign_offer_matcher import (
+        chosen_matches,
+        last_promoted,
+        spoken_for,
+    )
 
     wanted = list(dict.fromkeys(body.asset_ids))
     # The rotation's memory, exactly as a scheduler run keeps it: what this
@@ -886,7 +910,10 @@ def draft_offer_recommendations(
     # each one really is its best match, which is why nobody notices until the
     # posts go out promoting two products out of forty.
     promoted_before = last_promoted(session, campaign_id)
-    used_in_run: list[str] = []
+    # And what the queue already holds, so the preview continues the rotation
+    # rather than restarting it. A preview that begins from nothing shows the
+    # first rows taking products the posts above them already have.
+    used_in_run: list[str] = list(spoken_for(session, campaign_id))
     known = {
         asset.id: asset
         for asset in session.scalars(select(MediaAsset).where(
@@ -1006,7 +1033,11 @@ def compose_queue_item(
         bio_hint=body.bio_hint,
     )
     from trendrelay_api.campaign_autopilot import DisclosureMissing, compose_for_post
-    from trendrelay_api.campaign_offer_matcher import chosen_matches, last_promoted
+    from trendrelay_api.campaign_offer_matcher import (
+        chosen_matches,
+        last_promoted,
+        spoken_for,
+    )
     from trendrelay_api.integrations.publishing import (
         first_comment_deliverable,
         limits_for,
@@ -1014,6 +1045,9 @@ def compose_queue_item(
 
     matches, strategy = chosen_matches(
         session, campaign, autopilot, draft, destinations,
+        # This post's own turn, among the products the rest of the queue has
+        # taken - itself excluded, or it would be competing with itself.
+        used_in_run=spoken_for(session, campaign_id, exclude=body.item_id),
         last_used=last_promoted(session, campaign_id),
     )
     products: list[tuple[str, str]] = []
@@ -1159,6 +1193,7 @@ def remove_queue_item(
     session.delete(item)
     return {"removed": item_id}
 
+
 class QueueBatch(BaseModel):
     """One action, applied to the items the operator ticked."""
 
@@ -1217,7 +1252,6 @@ def batch_queue_items(
         "changed": sorted(found),
         "missing": sorted(set(wanted) - found),
     }
-
 
 
 def _would_be_accepted(

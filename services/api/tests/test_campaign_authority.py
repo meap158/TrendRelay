@@ -148,8 +148,11 @@ def low_confidence_match(
         commission_flat_cents=None, currency="USD",
     )
     monkeypatch.setattr(
-        campaign_scheduler, "chosen_matches",
-        lambda *args, **kwargs: ([match], {"selection": selection}),
+        campaign_scheduler, "resolve_matches",
+        # What attaches, the ranking behind it, and why - the ranking being the
+        # same single match, so the post's recorded choice resolves against it
+        # rather than falling through to a fresh one.
+        lambda *args, **kwargs: ([match], [match], {"selection": selection}),
     )
 
 
