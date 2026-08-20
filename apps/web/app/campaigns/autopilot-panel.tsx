@@ -4994,6 +4994,63 @@ export function AutopilotPanel({
             switching on activates the campaign and runs it, and this timeline
             is where what it did shows up. */}
       </Card>
+      {/* "See more": the calendar cell shows a day's first posts; this shows
+          the day in full. A planned row edits, a delivered one opens where it
+          went - the same door the chips use. */}
+      {openDay && (
+        <Dialog
+          open
+          size="wide"
+          onClose={() => setOpenDay(null)}
+          title={new Date(`${openDay}T00:00:00`).toLocaleDateString(undefined, {
+            weekday: "long", month: "long", day: "numeric", year: "numeric",
+          })}
+          description={`${openDayEntries.length} ${openDayEntries.length === 1 ? "post" : "posts"} this day`}
+        >
+          <ul className="campaign-day-list">
+            {openDayEntries.map((entry) => {
+              const destination = entry.destination ?? destinations.find(
+                (item) => item.id === entry.destination_id) ?? null;
+              const platform = destination?.platform;
+              const editable = entry.kind === "planned" && Boolean(entry.queue_item_id)
+                && canEdit && queueById.has(entry.queue_item_id!);
+              return (
+                <li key={entry.key} className={[
+                  "campaign-day-row",
+                  entry.kind === "delivered" ? `delivered ${entry.status ?? ""}` : "",
+                  entry.problem ? "refused" : "",
+                ].filter(Boolean).join(" ")}>
+                  <time>{new Date(entry.at).toLocaleTimeString(undefined, {
+                    hour: "numeric", minute: "2-digit", timeZone: readerZone,
+                  })}</time>
+                  {platform && <PlatformIcon platform={platform} size={18} />}
+                  <div className="campaign-day-body">
+                    <strong>{displayTitle(entry.title) || entry.caption.slice(0, 80) || "Untitled post"}</strong>
+                    <small>{destination?.label ?? entry.destination_id ?? "Social account"}</small>
+                  </div>
+                  {entry.kind === "delivered" ? (
+                    <Badge tone={entry.status === "succeeded" ? "good"
+                      : entry.status === "failed" ? "warn" : "neutral"}>
+                      {entry.status ?? "delivered"}
+                    </Badge>
+                  ) : (
+                    <Badge tone={entry.problem ? "warn" : "neutral"}>Planned</Badge>
+                  )}
+                  {editable ? (
+                    <Button variant="secondary" size="sm"
+                      onClick={() => openPostEditor(queueById.get(entry.queue_item_id!)!, "posts")}>
+                      Edit
+                    </Button>
+                  ) : entry.post_url ? (
+                    <a className="campaign-grid-open" href={entry.post_url}
+                      target="_blank" rel="noreferrer">Open</a>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </Dialog>
+      )}
       </>}
       {/* Configuration, so it lives in Setup: the times themselves are
           visible in the timeline where they matter. */}

@@ -1135,14 +1135,41 @@ html { scroll-behavior: smooth; }
 .campaign-calendar-cell.blank { background: var(--panel-raised); }
 .campaign-calendar-cell.today { box-shadow: inset 0 0 0 2px var(--green); }
 .campaign-calendar-cell > em { justify-self: end; color: var(--muted); font-size: 10px; font-style: normal; }
-.campaign-calendar-chip { display: flex; gap: 4px; align-items: center; overflow: hidden; padding: 2px 5px; border-inline-start: 3px solid var(--line-strong); border-radius: 3px; background: var(--panel-raised); font-size: 10px; line-height: 1.35; white-space: nowrap; }
+/* A button, not a label: a chip is what a reader points at to open its post. */
+.campaign-calendar-chip { display: flex; gap: 4px; align-items: center; inline-size: 100%; overflow: hidden; appearance: none; padding: 2px 5px; border: 0; border-inline-start: 3px solid var(--line-strong); border-radius: 3px; background: var(--panel-raised); color: inherit; font: inherit; font-size: 10px; line-height: 1.35; white-space: nowrap; text-align: start; cursor: pointer; }
+.campaign-calendar-chip:hover { box-shadow: inset 0 0 0 1px var(--line-strong); }
 .campaign-calendar-chip > b { flex: 0 0 auto; font-weight: 600; }
 .campaign-calendar-chip > span { overflow: hidden; text-overflow: ellipsis; }
 .campaign-calendar-chip.delivered.succeeded { border-inline-start-color: var(--green); }
 .campaign-calendar-chip.delivered.failed { border-inline-start-color: var(--bad); background: var(--bad-bg); }
 .campaign-calendar-chip.planned { border-inline-start-color: var(--link); }
 .campaign-calendar-chip.refused { border-inline-start-color: var(--warn); background: var(--warn-bg); }
-.campaign-calendar-more { color: var(--muted); font-size: 10px; }
+.campaign-calendar-more { appearance: none; justify-self: start; padding: 1px 4px; border: 0; border-radius: 3px; background: transparent; color: var(--muted); font: inherit; font-size: 10px; cursor: pointer; }
+.campaign-calendar-more:hover { color: var(--text); text-decoration: underline; }
+
+/* Grid view: one card per timeline post, several across, reflowing to one on
+   a narrow panel. The media is the button; the footer carries state + action. */
+.campaign-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.campaign-grid-card { display: grid; gap: 8px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.campaign-grid-card.delivered.failed, .campaign-grid-card.refused { border-color: var(--warn); }
+.campaign-grid-media { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 10; overflow: hidden; appearance: none; padding: 0; border: 0; background: var(--line); cursor: pointer; }
+.campaign-grid-media img, .campaign-grid-media video, .campaign-grid-media .picker-thumb { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.campaign-grid-media-empty { display: grid; place-items: center; color: var(--muted); }
+.campaign-grid-platform { position: absolute; inset-block-start: 6px; inset-inline-end: 6px; display: grid; place-items: center; padding: 3px; border-radius: 999px; background: var(--panel-raised); }
+.campaign-grid-body { display: grid; gap: 2px; padding: 0 10px; min-inline-size: 0; }
+.campaign-grid-body strong { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-grid-body small { color: var(--muted); font-size: 11px; }
+.campaign-grid-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px 10px; }
+.campaign-grid-open { color: var(--link); font-size: 12px; font-weight: 500; }
+
+/* Day drawer ("see more"): the whole day, one row per post. */
+.campaign-day-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.campaign-day-row { display: flex; gap: 10px; align-items: center; padding: 8px 2px; border-block-end: 1px solid var(--line); }
+.campaign-day-row:last-child { border-block-end: 0; }
+.campaign-day-row > time { flex: 0 0 auto; inline-size: 68px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.campaign-day-body { flex: 1 1 auto; min-inline-size: 0; display: grid; gap: 1px; }
+.campaign-day-body strong { overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-day-body small { color: var(--muted); font-size: 11px; }
 
 /* One approval row: the post as it will look beside the facts and the
    decision. The preview column is the width Publish rehearses at. */
