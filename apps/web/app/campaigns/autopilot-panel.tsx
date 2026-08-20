@@ -1248,9 +1248,14 @@ export function AutopilotPanel({
   const [editingHeld, setEditingHeld] = useState<HeldExecution | null>(null);
   /** Held posts picked for one approval. Empty means nothing is selected. */
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  /** What the last batch did, per post, because a total is not an answer. */
+  /**
+   * What the last batch did, per post, because a total is not an answer.
+   *
+   * Only the ones it could not do: whether the batch was approving or
+   * refusing, what a reader needs beside a row is why that row is still here.
+   */
   const [batchResults, setBatchResults] = useState<
-    { execution_id: string; approved: boolean; problem?: string }[]
+    { execution_id: string; problem?: string }[]
   >([]);
 
   const base = `/api/workspaces/${workspaceId}/campaigns/${campaignId}`;
@@ -1314,10 +1319,19 @@ export function AutopilotPanel({
     });
   }, [loadExceptions]);
 
+  /**
+   * One decision about one held post.
+   *
+   * Three answers rather than two. "Skip" and "Decline" are both no, and the
+   * difference is what becomes of the post: skipping frees this outing and
+   * the post is proposed again next pass, declining takes it out of the
+   * rotation. Only the second stops a post nobody wants returning to this
+   * inbox every cycle.
+   */
   async function decideException(
     executionId: string,
     action: "approve" | "dismiss",
-    { publishNow = false } = {},
+    { publishNow = false, stopProposing = false } = {},
   ) {
     setBusy(`${action}-${executionId}`);
     try {
@@ -1329,18 +1343,22 @@ export function AutopilotPanel({
           body: JSON.stringify(
             action === "approve"
               ? { confirm_external_action: true, publish_now: publishNow }
-              : {},
+              : { execution_ids: [executionId], stop_proposing: stopProposing },
           ),
         },
       );
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.detail ?? "The decision was refused.");
       succeed(action === "dismiss"
-        ? "Skipped this cycle. Its slot and clip are free, and the post returns next cycle."
+        ? stopProposing
+          ? "Declined. The post is paused, so it stops being proposed until you put it back."
+          : "Skipped this time. Its slot and clip are free, and the post returns next cycle."
         : publishNow
           ? "Approved and publishing now."
           : "Approved. The post is queued exactly as you approved it.");
       await loadExceptions();
+      // The queue shows the paused post, so it has to be re-read to show it.
+      if (stopProposing) await refresh();
     } catch (reason) {
       fail(explainFailure(reason, "The decision was refused."));
     } finally {
@@ -1505,6 +1523,45 @@ export function AutopilotPanel({
   }
 
   /**
+   * Refuse everything picked, in one decision.
+   *
+   * The half that was missing. Approving fourteen was one action and refusing
+   * the other twelve was twelve, so an inbox where two posts are worth having
+   * cost more to clear than to fill.
+   *
+   * No confirmation for the skip: nothing leaves the machine and the posts
+   * come straight back. Declining asks, because it changes the queue.
+   */
+  async function dismissPicked({ stopProposing = false } = {}) {
+    const ids = [...picked];
+    if (!ids.length) return;
+    if (stopProposing && !window.confirm(
+      `Decline ${ids.length} post${ids.length === 1 ? "" : "s"}? `
+      + "Each is cancelled and its post paused, so they stop being proposed "
+      + "until you put them back in the queue."
+    )) return;
+    await run("dismiss-batch", async () => {
+      const body = await json<{
+        dismissed: number;
+        refused: number;
+        results: { execution_id: string; dismissed: boolean; problem?: string }[];
+      }>(await apiFetch(`${base}/autopilot/executions/dismiss`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ execution_ids: ids, stop_proposing: stopProposing }),
+      }));
+      setBatchResults(body.results.filter((row) => !row.dismissed));
+      setPicked(new Set(body.results.filter((row) => !row.dismissed)
+        .map((row) => row.execution_id)));
+      await refresh();
+      const verb = stopProposing ? "declined" : "skipped";
+      return body.refused
+        ? `${body.dismissed} ${verb}, ${body.refused} left held.`
+        : `${body.dismissed} post${body.dismissed === 1 ? "" : "s"} ${verb}.`;
+    });
+  }
+
+  /**
    * Approve everything picked, in one confirmed decision.
    *
    * The confirmation is over a list somebody has read, not a weaker promise
@@ -1512,12 +1569,14 @@ export function AutopilotPanel({
    * terms, and one that is unfinished is reported and left held rather than
    * failing the others with it.
    */
-  async function approvePicked() {
+  async function approvePicked({ publishNow = false } = {}) {
     const ids = [...picked];
     if (!ids.length) return;
     if (!window.confirm(
       `Approve ${ids.length} post${ids.length === 1 ? "" : "s"}? `
-      + "Each goes to its own account, exactly as shown."
+      + (publishNow
+        ? "Each is published immediately, to its own account, exactly as shown."
+        : "Each goes to its own account, exactly as shown.")
     )) return;
     await run("approve-batch", async () => {
       const body = await json<{
@@ -1530,6 +1589,7 @@ export function AutopilotPanel({
         body: JSON.stringify({
           execution_ids: ids,
           confirm_external_action: true,
+          publish_now: publishNow,
         }),
       }));
       setBatchResults(body.results.filter((row) => !row.approved));
@@ -2341,11 +2401,33 @@ export function AutopilotPanel({
                       : new Set(exceptions.map((item) => item.id)))}>
                     {picked.size === exceptions.length ? "Clear" : "Select all"}
                   </Button>
+                  {/* Every answer a single post offers, over the selection.
+                      Approving in one action while the other three stayed
+                      one-at-a-time made clearing an inbox cost more than
+                      filling it. */}
                   <Button variant="primary" size="sm"
                     disabled={!picked.size}
                     busy={busy === "approve-batch"}
                     onClick={() => void approvePicked()}>
                     Approve {picked.size || ""}
+                  </Button>
+                  <Button variant="secondary" size="sm"
+                    disabled={!picked.size}
+                    busy={busy === "approve-batch"}
+                    onClick={() => void approvePicked({ publishNow: true })}>
+                    Publish now
+                  </Button>
+                  <Button variant="quiet" size="sm"
+                    disabled={!picked.size}
+                    busy={busy === "dismiss-batch"}
+                    onClick={() => void dismissPicked()}>
+                    Skip
+                  </Button>
+                  <Button variant="quiet" size="sm"
+                    disabled={!picked.size}
+                    busy={busy === "dismiss-batch"}
+                    onClick={() => void dismissPicked({ stopProposing: true })}>
+                    Decline
                   </Button>
                 </>
               )}
@@ -2385,8 +2467,10 @@ export function AutopilotPanel({
               <strong>Approve</strong> sends it on the campaign’s schedule ·{" "}
               <strong>Publish now</strong> sends it immediately ·{" "}
               <strong>Edit</strong> changes what it says, media stays frozen ·{" "}
-              <strong>Skip</strong> frees the slot and clip; the post returns
-              next cycle.
+              <strong>Skip this time</strong> frees the slot and clip; the post
+              returns next cycle ·{" "}
+              <strong>Decline</strong> also pauses the post, so it stops being
+              proposed until you put it back.
             </small>
           )}
           <ul className="campaign-approval-list">
@@ -2538,10 +2622,29 @@ export function AutopilotPanel({
                                 }}
                               >Review products</Button>
                             )}
+                            {/* Both answers to "no", because they are not the
+                                same answer. Skipping frees this outing and the
+                                post comes back next pass; declining takes it
+                                out of the rotation, which is the only one that
+                                stops a post nobody wants arriving here every
+                                cycle. Only "Skip" used to exist, under a name
+                                that read like the milder of two options with
+                                no second option to be milder than. */}
                             <Button variant="quiet" size="sm"
                               busy={busy === `dismiss-${item.id}`}
                               onClick={() => void decideException(item.id, "dismiss")}
-                            >Skip this cycle</Button>
+                            >Skip this time</Button>
+                            <Button variant="quiet" size="sm"
+                              busy={busy === `dismiss-${item.id}`}
+                              onClick={() => {
+                                if (!window.confirm(
+                                  "Decline this post? It is cancelled and paused, "
+                                  + "so it stops being proposed until you put it "
+                                  + "back in the queue.",
+                                )) return;
+                                void decideException(item.id, "dismiss", { stopProposing: true });
+                              }}
+                            >Decline</Button>
                           </span>
                         </>
                       )}

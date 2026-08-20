@@ -145,6 +145,111 @@ def test_approving_a_batch_needs_the_same_confirmation_one_post_does(workspace) 
     assert "confirmation" in response.json()["detail"]
 
 
+def test_skipping_a_held_post_leaves_it_in_the_rotation(workspace) -> None:
+    """"Not now" and "not this" are different answers.
+
+    Cancelling the execution frees the slot and the queue item, and the post is
+    proposed again on the next pass. That is right for one of the two.
+    """
+    campaign_id = campaign(workspace)
+    item = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={"video_path": r"S:\media\clip.mp4", "body": "Real copy."},
+    ).json()["item"]
+    _held(workspace, campaign_id, "exec-skip", queue_item_id=item["id"])
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/autopilot/executions/exec-skip/dismiss",
+        json={"execution_ids": ["exec-skip"], "stop_proposing": False},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["execution"]["state"] == "cancelled"
+    queue = request(
+        "GET", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot"
+    ).json()["queue"]
+    assert [row["state"] for row in queue] == ["approved"]
+
+
+def test_declining_a_held_post_stops_it_coming_back(workspace) -> None:
+    """Otherwise a post nobody wants returns to the inbox every cycle.
+
+    Paused rather than deleted: it stays in the queue, marked, and goes back
+    into the rotation the moment somebody says so.
+    """
+    campaign_id = campaign(workspace)
+    item = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={"video_path": r"S:\media\clip.mp4", "body": "Real copy."},
+    ).json()["item"]
+    _held(workspace, campaign_id, "exec-no", queue_item_id=item["id"])
+
+    request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/autopilot/executions/exec-no/dismiss",
+        json={"execution_ids": ["exec-no"], "stop_proposing": True},
+    )
+
+    queue = request(
+        "GET", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot"
+    ).json()["queue"]
+    assert [row["state"] for row in queue] == ["paused"]
+
+
+def test_refusing_a_batch_is_one_decision_like_approving_one(workspace) -> None:
+    """Approving in one action and refusing one at a time is not a pair.
+
+    An inbox of fourteen where two are worth posting was one click and twelve.
+    """
+    campaign_id = campaign(workspace)
+    for index in range(3):
+        _held(workspace, campaign_id, f"exec-batch-{index}")
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/autopilot/executions/dismiss",
+        json={"execution_ids": [f"exec-batch-{index}" for index in range(3)]},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["dismissed"] == 3
+
+
+def test_one_unknown_post_does_not_sink_a_refused_batch(workspace) -> None:
+    campaign_id = campaign(workspace)
+    _held(workspace, campaign_id, "exec-real")
+
+    body = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/autopilot/executions/dismiss",
+        json={"execution_ids": ["exec-real", "exec-gone"]},
+    ).json()
+
+    assert body["dismissed"] == 1
+    assert body["refused"] == 1
+    assert body["results"][1]["problem"]
+
+
+def test_refusing_needs_no_confirmation_the_way_approving_does(workspace) -> None:
+    """Nothing leaves the machine, and every part of it is reversible."""
+    campaign_id = campaign(workspace)
+    _held(workspace, campaign_id, "exec-quiet")
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/autopilot/executions/dismiss",
+        json={"execution_ids": ["exec-quiet"]},
+    )
+
+    assert response.status_code == 200, response.text
+
+
 def test_one_unfinished_post_does_not_sink_the_batch(workspace, monkeypatch) -> None:
     """The whole point of the batch, and the thing that would make it useless.
 

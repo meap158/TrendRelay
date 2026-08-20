@@ -1269,6 +1269,9 @@ html { scroll-behavior: smooth; }
 .campaign-dialog-form .campaign-dialog-check input[type="checkbox"] { width: auto; margin-block-start: 2px; padding: 0; }
 .campaign-dialog-form .campaign-dialog-check > span { display: grid; gap: 3px; min-width: 0; }
 .campaign-dialog-form .campaign-dialog-check small { font-weight: 400; }
+/* A <small> inside a <label> the form styles as bold; these hints sit in a
+   span instead, so they need the same quieting said once. */
+.campaign-dialog-hint { color: var(--muted); font-size: 10px; font-weight: 400; line-height: 1.45; }
 .campaign-dialog-form :is(input, textarea, select) { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; }
 /* The same flat field with its own chevron the rest of the app's dropdowns
    use, rather than the platform's control, which is a different height and a

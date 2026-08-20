@@ -1721,6 +1721,24 @@ class BatchApproval(BaseModel):
     publish_now: bool = False
 
 
+class BatchDismissal(BaseModel):
+    """Several held posts, refused in one decision.
+
+    Refusing needs no confirmation the way approving does: nothing leaves the
+    machine, and every part of it is reversible - the execution is cancelled
+    and can be planned again, and a post taken out of the rotation is paused
+    rather than deleted.
+    """
+
+    execution_ids: list[str] = Field(min_length=1, max_length=MAX_APPROVALS_PER_REQUEST)
+    #: What becomes of the posts themselves, which is the difference between
+    #: the two things "no" can mean. False frees this outing and leaves the
+    #: post in the rotation, to be proposed again on the next pass. True takes
+    #: the post out of the rotation until somebody puts it back - otherwise a
+    #: post nobody wants returns for approval every cycle, for ever.
+    stop_proposing: bool = False
+
+
 class ExceptionEdit(BaseModel):
     """What an operator may rewrite on a held post before approving it.
 
@@ -2195,6 +2213,53 @@ def approve_autopilot_executions(
     }
 
 
+def _dismiss(
+    session: Session,
+    request: Request,
+    workspace_id: str,
+    campaign_id: str,
+    user_id: str,
+    execution: PublicationExecution,
+    *,
+    stop_proposing: bool,
+) -> None:
+    """Refuse one held post, and decide whether the post itself comes back.
+
+    Cancelling the execution frees the slot and the queue item, and the post is
+    proposed again on the next pass - which is right for "not now" and wrong
+    for "not this". Without the second, a post nobody wants returns to the
+    inbox every cycle and the only way to stop it is to find it in the queue.
+
+    Paused rather than deleted: it stays in the queue, marked, and goes back
+    into the rotation the moment somebody says so.
+    """
+    execution.state = "cancelled"
+    execution.reconciled_at = utc_now()
+    execution.updated_at = utc_now()
+    paused = False
+    if stop_proposing and execution.queue_item_id:
+        item = session.scalar(
+            select(CampaignQueueItem).where(
+                CampaignQueueItem.id == execution.queue_item_id,
+                CampaignQueueItem.campaign_id == campaign_id,
+                CampaignQueueItem.workspace_id == workspace_id,
+            )
+        )
+        if item is not None and item.state != "retired":
+            item.state = "paused"
+            item.updated_at = datetime.now(UTC)
+            paused = True
+    audit(
+        session, request, workspace_id, user_id,
+        "campaign.exception_dismissed", "campaign", campaign_id,
+        {
+            "execution_id": execution.id,
+            "stop_proposing": stop_proposing,
+            "post_paused": paused,
+        },
+    )
+
+
 @router.post("/{campaign_id}/autopilot/executions/{execution_id}/dismiss")
 def dismiss_autopilot_execution(
     workspace_id: str,
@@ -2203,17 +2268,62 @@ def dismiss_autopilot_execution(
     request: Request,
     user: AuthenticatedUser,
     session: DatabaseSession,
+    body: BatchDismissal | None = None,
 ) -> dict[str, Any]:
-    """Decline a held post. Cancelling frees its slot and its queue item."""
+    """Refuse a held post. Cancelling frees its slot and its queue item."""
     require_role(membership(session, workspace_id, user.id), EDITORS)
     _campaign(session, workspace_id, campaign_id)
     execution = _held_execution(session, workspace_id, campaign_id, execution_id)
-    execution.state = "cancelled"
-    execution.reconciled_at = utc_now()
-    execution.updated_at = utc_now()
-    audit(
-        session, request, workspace_id, user.id,
-        "campaign.exception_dismissed", "campaign", campaign_id,
-        {"execution_id": execution.id},
+    _dismiss(
+        session, request, workspace_id, campaign_id, user.id, execution,
+        stop_proposing=bool(body and body.stop_proposing),
     )
     return {"execution": _execution_view(execution)}
+
+
+@router.post("/{campaign_id}/autopilot/executions/dismiss")
+def dismiss_autopilot_executions(
+    workspace_id: str,
+    campaign_id: str,
+    body: BatchDismissal,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Refuse several held posts, each judged on its own.
+
+    The refusing half of the batch. Approving in one action and refusing one at
+    a time is not a pair of options: an inbox of fourteen where two are worth
+    posting takes one click and twelve.
+    """
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    _campaign(session, workspace_id, campaign_id)
+    results: list[dict[str, Any]] = []
+    dismissed = 0
+    for execution_id in dict.fromkeys(body.execution_ids):
+        try:
+            execution = _held_execution(
+                session, workspace_id, campaign_id, execution_id
+            )
+        except HTTPException as error:
+            results.append({
+                "execution_id": execution_id,
+                "dismissed": False,
+                "problem": str(error.detail),
+            })
+            continue
+        _dismiss(
+            session, request, workspace_id, campaign_id, user.id, execution,
+            stop_proposing=body.stop_proposing,
+        )
+        dismissed += 1
+        results.append({
+            "execution_id": execution_id,
+            "dismissed": True,
+            "destination_label": execution.destination_label,
+        })
+    return {
+        "dismissed": dismissed,
+        "refused": len(results) - dismissed,
+        "results": results,
+    }

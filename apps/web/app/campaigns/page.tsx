@@ -52,6 +52,8 @@ type Campaign = {
 type CampaignPolicy = {
   max_products_per_post: number;
   min_recycle_days: number;
+  repeat_posts: boolean;
+  rotate_products: boolean;
   daily_cap_per_account: number;
   weekly_post_cap: number | null;
   authority: string;
@@ -496,6 +498,9 @@ export default function CampaignsPage() {
               // Only meaningful for the one-offer mode, and cleared otherwise
               // so a mode change does not leave a stale pin behind it.
               offer_id: offerMode === "manual" ? (offerChoice || null) : null,
+              min_recycle_days: Number(form.get("min_recycle_days")),
+              repeat_posts: form.get("repeat_posts") === "on",
+              rotate_products: form.get("rotate_products") === "on",
               disclose: form.get("disclose") === "on",
               disclosure: form.get("disclosure"),
               bio_hint: form.get("bio_hint"),
@@ -916,6 +921,7 @@ export default function CampaignsPage() {
                     placeholder="No cap" defaultValue={policy.weekly_post_cap ?? ""} />
                   <small>Across every destination. Empty leaves the per-account caps.</small>
                 </label>
+
               </div>
               <label>Authority
                 <select name="authority" defaultValue={policy.authority}>
@@ -996,6 +1002,42 @@ export default function CampaignsPage() {
                     ...current, bioHint: event.target.value,
                   }))} />
                 <small>Used where a link in a post is not clickable.</small>
+              </label>
+              {/* Back where the campaign is described. These three moved out
+                  to the posting-strategy list, which explains each rule beside
+                  a toggle - a good place to read them and a strange one to be
+                  the only place they exist, since this dialog is where somebody
+                  goes to change what a campaign does. The list still toggles
+                  them; both show the same value.
+
+                  The interval sits under the rule it belongs to rather than
+                  among the caps: it governs nothing until repeats are on, and
+                  a number that far from its switch reads like another ceiling. */}
+              <label className="campaign-dialog-check">
+                <input type="checkbox" name="repeat_posts"
+                  defaultChecked={policy.repeat_posts} />
+                <span>
+                  Let a post go out more than once
+                  <span className="campaign-dialog-hint">Off means each post
+                    goes to each account once.</span>
+                </span>
+              </label>
+              <label>Rest between repeats
+                <input type="number" name="min_recycle_days" min={1} max={365}
+                  defaultValue={policy.min_recycle_days} />
+                <small>Days before the same post may return to the same
+                  account. Governs nothing while repeats are off.</small>
+              </label>
+              <label className="campaign-dialog-check">
+                <input type="checkbox" name="rotate_products"
+                  defaultChecked={policy.rotate_products} />
+                <span>
+                  Take turns between products
+                  <span className="campaign-dialog-hint">Each post takes the
+                    best-fitting product that has not had its turn. Off means
+                    the best fit wins every post, which is usually the same
+                    one.</span>
+                </span>
               </label>
               <label>Optimise for
                 <select name="priority" defaultValue={policy.priority}>
