@@ -1522,6 +1522,8 @@ export default function PublishPage() {
   const [newLoginLabel, setNewLoginLabel] = useState("");
   /** The login a removal is waiting to be confirmed for. */
   const [removingLogin, setRemovingLogin] = useState<Provider | null>(null);
+  const [renamingLogin, setRenamingLogin] = useState<Provider | null>(null);
+  const [renamedLabel, setRenamedLabel] = useState("");
 
   /**
    * What to call the next login on an engine, before anybody types anything.
@@ -1530,11 +1532,18 @@ export default function PublishPage() {
    * field's value rather than its placeholder so Enter works immediately. A
    * placeholder would look the same and submit nothing.
    */
+  /**
+   * What to call the next login for an engine.
+   *
+   * The ordinal on its own. This suggested "Zernio 2", and every place that
+   * shows a connection prefixes it with the engine already - so the card read
+   * "Zernio · Zernio 2" and the engine's name appeared twice in four words.
+   * The label answers "which one", not "which engine".
+   */
   function suggestedLoginName(engine: PublishingEngine | null): string {
     if (!engine) return "";
     const rows = (connection?.providers ?? []).filter((item) => item.engine === engine);
-    const label = rows.find((item) => item.is_default)?.engine_label ?? engine;
-    return `${label} ${rows.length + 1}`;
+    return String(rows.length + 1);
   }
 
   async function addConnection(engine: PublishingEngine, label: string) {
@@ -1562,6 +1571,27 @@ export default function PublishPage() {
   }
 
   /** Forget a login and the key that was only for it. */
+  async function renameConnection(provider: Provider, label: string) {
+    setRenamingLogin(null);
+    setBusy(`${provider.id}-rename`);
+    setError(null);
+    setNotice(null);
+    try {
+      await json(
+        await apiFetch(
+          `/api/workspaces/${workspaceId}/publishing/connections/${provider.id}/rename`,
+          { method: "POST", body: JSON.stringify({ label }) },
+        ),
+      );
+      await loadConnection();
+      setNotice(t("publish.accountRenamed", { label }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The account could not be renamed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function removeConnection(provider: Provider) {
     setRemovingLogin(null);
     setBusy(`${provider.id}-remove`);
@@ -1897,6 +1927,23 @@ export default function PublishPage() {
                   <ProviderMark provider={provider.engine} />
                   <div>
                     <strong>{provider.label}</strong>
+                    {/* Renaming, where renaming means something. The first
+                        login of an engine is named after the engine and the
+                        API refuses to rename it, so offering the pencil there
+                        would be offering a refusal. */}
+                    {!provider.is_default && canExecute && (
+                      <button
+                        type="button"
+                        className="engine-rename"
+                        disabled={busy !== null}
+                        title={t("publish.renameAccount")}
+                        aria-label={t("publish.renameThisAccount", { label: provider.label })}
+                        onClick={() => {
+                          setRenamingLogin(provider);
+                          setRenamedLabel(provider.connection_label ?? "");
+                        }}
+                      ><ActionIcon name="edit" size={12} /></button>
+                    )}
                     {/* Whose login it is, in place of the tagline once there is
                         an answer. Two connections to one engine are otherwise
                         told apart only by a name somebody typed, and the engine
@@ -2451,6 +2498,48 @@ export default function PublishPage() {
           <p className="engine-login-warning">
             {t("publish.removeAccountDetail")}
           </p>
+        </Dialog>
+
+        {/* Renaming, in the same shape as adding one. The label answers "which
+            of these logins", so the engine is not asked for again - it cannot
+            change, and a second login is always the same engine as the first. */}
+        <Dialog
+          open={renamingLogin !== null}
+          title={t("publish.renameAccount")}
+          description={t("publish.renameAccountHint")}
+          onClose={() => setRenamingLogin(null)}
+          footer={
+            <>
+              <Button variant="quiet" onClick={() => setRenamingLogin(null)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                variant="primary"
+                busy={busy === `${renamingLogin?.id}-rename`}
+                disabled={!renamedLabel.trim()}
+                onClick={() => {
+                  if (renamingLogin) void renameConnection(renamingLogin, renamedLabel.trim());
+                }}
+              >{t("common.save")}</Button>
+            </>
+          }
+        >
+          <label className="engine-login-name">
+            <span>{t("publish.accountName")}</span>
+            <input
+              autoFocus
+              value={renamedLabel}
+              maxLength={80}
+              placeholder={t("publish.accountNamePlaceholder")}
+              onChange={(event) => setRenamedLabel(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && renamedLabel.trim() && renamingLogin) {
+                  event.preventDefault();
+                  void renameConnection(renamingLogin, renamedLabel.trim());
+                }
+              }}
+            />
+          </label>
         </Dialog>
       </section>
       )}
