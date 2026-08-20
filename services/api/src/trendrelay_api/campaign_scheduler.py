@@ -1003,6 +1003,18 @@ def plan_campaign(
             notes.extend(dict.fromkeys(slot_notes))
         notes.extend(dict.fromkeys(item_notes))
 
+    if unwritten:
+        # One sentence, a count, and enough names to go and find them. Naming
+        # eighty is not more informative than naming two and saying eighty -
+        # it is the same fact, past the point anybody reads it.
+        names = list(unwritten.values())
+        shown = ", ".join(names[:2])
+        rest = len(names) - 2
+        notes.append(
+            f"{len(names)} post(s) still need copy written and are skipped "
+            f"until it is: {shown}" + (f", and {rest} more." if rest > 0 else ".")
+        )
+
     return scheduled, _explain_run(scheduled, notes, len(upcoming))
 
 
@@ -1045,6 +1057,12 @@ def _why_nothing_eligible(
     return f"Everything rested is already spoken for on {label}."
 
 
+#: How many distinct reasons a run's note will spell out before counting the
+#: rest. Six is about what fits in a status line somebody reads rather than
+#: scrolls.
+MAX_RUN_REASONS = 6
+
+
 def _explain_run(
     scheduled: list[ScheduledPost], notes: list[str], slots: int
 ) -> str:
@@ -1073,12 +1091,24 @@ def _explain_run(
     if not notes:
         return headline if scheduled else "Nothing to schedule right now."
     counted = Counter(notes)
+    # Ordered by how much each reason cost and capped, so the line stays
+    # readable however many distinct reasons a run collects. A status note is
+    # read at a glance; past half a dozen reasons it is a log, and the ones
+    # that blocked the most slots are the ones worth the glance.
+    #
+    # This is a backstop, not the fix for any particular note - the unwritten
+    # posts that produced a line thousands of characters long are summarised
+    # before they get here. It exists so the next reason to multiply cannot do
+    # the same thing.
+    ranked = counted.most_common()
+    shown, hidden = ranked[:MAX_RUN_REASONS], ranked[MAX_RUN_REASONS:]
     return " ".join([
         headline,
         *(
             note if times == 1 else f"{note} ({times} of {slots} slots)"
-            for note, times in counted.items()
+            for note, times in shown
         ),
+        *([f"And {len(hidden)} further reason(s)."] if hidden else []),
     ])
 
 

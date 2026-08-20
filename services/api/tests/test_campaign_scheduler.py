@@ -278,7 +278,32 @@ def test_an_unwritten_package_is_skipped_not_posted(session) -> None:
     posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
 
     assert [post.queue_item_id for post in posts] == ["q-written"]
-    assert "still needs its copy written" in note
+    assert "still need copy written" in note
+    assert "q-unwritten" in note
+
+
+def test_many_unwritten_posts_are_counted_rather_than_listed(session) -> None:
+    """The note is read at a glance, so it has to stay glanceable.
+
+    This said it once per unwritten post per slot. A real queue holding eighty
+    of them produced eighty sentences, each repeated across five slots - a
+    status line thousands of characters long that said one thing.
+    """
+    from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
+
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    for index in range(30):
+        queue_item(session, f"q-{index}", body=PLACEHOLDER_BODY, position=index)
+
+    _, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert "30 post(s) still need copy written" in note
+    assert "and 28 more" in note
+    # The number is the finding; the names are a way in. Two of thirty is
+    # enough of the second, and the length is what this test is really about.
+    assert len(note) < 400
+    assert note.count("still need copy written") == 1
 
 
 def test_the_unwritten_post_note_trims_a_long_filename_title(session) -> None:
@@ -1141,6 +1166,30 @@ def test_a_successful_run_still_leads_with_what_it_did() -> None:
     note = scheduler._explain_run([_Post("d1"), _Post("d2")], [], 6)
 
     assert note == "2 post(s) scheduled across 2 destination(s)."
+
+
+def test_a_run_with_many_distinct_reasons_counts_the_tail() -> None:
+    # A backstop rather than a fix for any one note: the reason that multiplied
+    # is summarised before it reaches here. This is so the next one cannot do
+    # the same thing.
+    note = scheduler._explain_run([], [f"Reason {n}." for n in range(20)], 20)
+
+    assert "And 14 further reason(s)." in note
+    assert note.count("Reason") == scheduler.MAX_RUN_REASONS
+
+
+def test_the_costliest_reasons_are_the_ones_shown() -> None:
+    # Ordered by how many slots each cost, so a truncated list keeps the part
+    # worth reading rather than whichever happened to be recorded first.
+    #
+    # The costly reason is put last on purpose: recorded in order it would be
+    # the eleventh of twenty and cut, so this fails if the ranking is dropped.
+    note = scheduler._explain_run(
+        [], [f"Filler {n}." for n in range(10)] + ["Common."] * 9, 20
+    )
+
+    assert "Common. (9 of 20 slots)" in note
+    assert "And 5 further reason(s)." in note
 
 
 def test_nothing_due_and_nothing_wrong_says_neither() -> None:
