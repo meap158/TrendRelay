@@ -34,6 +34,28 @@ export type Standout = {
   score: number;
 };
 
+/**
+ * The wordings this module produces, as `{count}` templates where they count.
+ *
+ * English by default so callers that do not translate - and these tests - keep
+ * the same output; the board passes its locale's versions instead. The same
+ * shape the news module uses, for the same reason: the strings belong to the
+ * interface, and the ranking should not have to know which language it is in.
+ */
+export type StandoutLabels = {
+  reactions: string;
+  fastAndTalked: string;
+  fast: string;
+  talked: string;
+};
+
+const EN_STANDOUT: StandoutLabels = {
+  reactions: "{count} reactions",
+  fastAndTalked: "Moving fast and heavily discussed",
+  fast: "Reacting faster than the board's usual pace",
+  talked: "Far more discussion than its reach",
+};
+
 /** Reaction per day, treating an undated post as merely ordinary rather than absent. */
 function pace(post: EngagedPost, now: number): number {
   return dailyReaction(post, now) ?? 0;
@@ -58,7 +80,11 @@ function median(values: number[]): number {
  * Deliberately plain: hot is not a clever measure, it is the obvious one, and
  * dressing it up would only make it harder to trust.
  */
-export function hottest(posts: EngagedPost[], limit = 6): Standout[] {
+export function hottest(
+  posts: EngagedPost[],
+  limit = 6,
+  labels: StandoutLabels = EN_STANDOUT,
+): Standout[] {
   return [...posts]
     .filter((post) => post.interactions > 0)
     .sort((left, right) => right.interactions - left.interactions)
@@ -66,7 +92,7 @@ export function hottest(posts: EngagedPost[], limit = 6): Standout[] {
     .map((post) => ({
       post,
       score: post.interactions,
-      reason: `${post.interactions.toLocaleString()} reactions`,
+      reason: labels.reactions.replace("{count}", post.interactions.toLocaleString()),
     }));
 }
 
@@ -86,6 +112,7 @@ export function emerging(
   limit = 6,
   now = Date.now(),
   exclude: Iterable<string> = [],
+  labels: StandoutLabels = EN_STANDOUT,
 ): Standout[] {
   const usable = posts.filter((post) => post.interactions > 0);
   if (usable.length < 3) return [];
@@ -118,10 +145,10 @@ export function emerging(
         typicalTalk > 0 ? talk / typicalTalk : 0,
       ),
       reason: fast && talked
-        ? "Moving fast and heavily discussed"
+        ? labels.fastAndTalked
         : fast
-          ? "Reacting faster than the board's usual pace"
-          : "Far more discussion than its reach",
+          ? labels.fast
+          : labels.talked,
     });
   }
 
@@ -143,11 +170,12 @@ export function emerging(
  */
 export function standoutBoard(
   posts: EngagedPost[],
-  { limit = 5, now = Date.now() }: { limit?: number; now?: number } = {},
+  { limit = 5, now = Date.now(), labels = EN_STANDOUT }:
+    { limit?: number; now?: number; labels?: StandoutLabels } = {},
 ): { hot: Standout[]; rising: Standout[] } {
-  const hot = hottest(posts, limit);
+  const hot = hottest(posts, limit, labels);
   return {
     hot,
-    rising: emerging(posts, limit, now, hot.map((item) => item.post.id)),
+    rising: emerging(posts, limit, now, hot.map((item) => item.post.id), labels),
   };
 }

@@ -35,6 +35,7 @@ import { standoutBoard, type Standout } from "../../lib/discover-board";
 import { compactCount } from "../../lib/post-board";
 import { seedFromEngagedPost, type DiscoverySeed } from "../../lib/discovery-ideas";
 import type { EngagedPost } from "../../lib/engaged-posts";
+import { useLocale } from "../i18n-provider";
 import { Button } from "../ui/button";
 
 function Shelf({
@@ -54,6 +55,7 @@ function Shelf({
   chosen: Set<string>;
   onAdd: (post: EngagedPost) => void;
 }) {
+  const { t } = useLocale();
   return (
     <section className={`standout-shelf ${tone}`} aria-label={title}>
       <header>
@@ -85,7 +87,9 @@ function Shelf({
                 <small>
                   <span className="standout-reason">{reason}</span>
                   <span>{post.source}</span>
-                  {post.views ? <span>{compactCount(post.views)} views</span> : null}
+                  {post.views
+                    ? <span>{t("discover.standout.views", { count: compactCount(post.views) })}</span>
+                    : null}
                 </small>
                 <Button
                   variant={added ? "quiet" : "secondary"}
@@ -93,7 +97,9 @@ function Shelf({
                   disabled={added}
                   onClick={() => onAdd(post)}
                 >
-                  {added ? "Added" : <><Plus size={13} aria-hidden="true" /> Add to idea</>}
+                  {added
+                    ? t("discover.standout.added")
+                    : <><Plus size={13} aria-hidden="true" /> {t("discover.standout.add")}</>}
                 </Button>
               </li>
             );
@@ -119,7 +125,22 @@ export function StandoutBoard({
   // Recomputed with the board rather than on a timer: a post's pace depends on
   // its age, and re-reading the clock every second would reorder the shelf
   // under somebody's cursor for no new information.
-  const { hot, rising } = useMemo(() => standoutBoard(posts, { limit: 5 }), [posts]);
+  const { t } = useLocale();
+  // Recomputed when the locale changes as well as when the posts do: the
+  // reasons are built inside the ranking, so a language switch has to reach
+  // them rather than leaving the previous language on the shelf.
+  const { hot, rising } = useMemo(
+    () => standoutBoard(posts, {
+      limit: 5,
+      labels: {
+        reactions: t("discover.standout.reactions"),
+        fastAndTalked: t("discover.standout.reasonFastAndTalked"),
+        fast: t("discover.standout.reasonFast"),
+        talked: t("discover.standout.reasonTalked"),
+      },
+    }),
+    [posts, t],
+  );
   const chosen = useMemo(() => new Set(seeds.map((seed) => seed.id)), [seeds]);
 
   if (!posts.length) return null;
@@ -127,8 +148,8 @@ export function StandoutBoard({
   return (
     <div className="standout-board">
       <Shelf
-        title="Hot right now"
-        blurb="The largest reactions on this board. Widely seen, and widely made."
+        title={t("discover.standout.hot")}
+        blurb={t("discover.standout.hotBlurb")}
         icon={Flame}
         tone="hot"
         items={hot}
@@ -136,8 +157,8 @@ export function StandoutBoard({
         onAdd={(post) => onSeed(seedFromEngagedPost(post))}
       />
       <Shelf
-        title="Emerging"
-        blurb="Punching above its weight: reacting faster, or drawing more discussion, than the board's usual."
+        title={t("discover.standout.emerging")}
+        blurb={t("discover.standout.emergingBlurb")}
         icon={Sprout}
         tone="emerging"
         items={rising}

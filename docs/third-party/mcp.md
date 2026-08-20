@@ -88,9 +88,18 @@ child's environment rather than its arguments, restarting it with rising backoff
 Leave either credential empty and nothing starts; the server stays on loopback
 until you press Start in the Tools tab.
 
+Both credentials, and the three knobs beside them, are editable in the Tools
+tab as well as in `.env` - the tab writes through the same store the publishing
+credential screens use, which refreshes the cached settings so a saved value
+takes effect without restarting the API. Hand-editing still works and is still
+read; "Test tunnel connection" saves first and re-reads `.env`, so it answers
+for what is configured now rather than for what was there at boot.
+
 `tunnel-client` itself is the operator's to install (`TUNNEL_CLIENT_BIN`, or on
 PATH). The supervisor names it clearly when it is missing rather than failing
-silently. What a caller may do is still the server's policy, not whoever reaches
+silently. That setting used to exist only in `.env` and nowhere in the
+interface, so an operator whose client was elsewhere got "tunnel-client could
+not be run" with no hint that a path could be set; it is on the Tools tab now. What a caller may do is still the server's policy, not whoever reaches
 the tunnel.
 
 The server also answers RFC 9728 resource metadata at both
