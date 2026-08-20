@@ -98,6 +98,10 @@ class AutopilotSettings(BaseModel):
     offer_mode: str = Field(default="smart", pattern=r"^(smart|manual|none)$")
     candidate_offer_ids: list[str] = Field(default_factory=list, max_length=500)
     max_products_per_post: int = Field(default=2, ge=1, le=5)
+    #: Whether a disclosure is added at all. Off by default, and what it turns
+    #: off is a legal safeguard - see the model for what that costs and who
+    #: carries it.
+    disclose: bool = False
     disclosure: str = Field(default="Affiliate link; we may earn a commission.", max_length=500)
     bio_hint: str = Field(default="Link in bio", max_length=120)
     min_recycle_days: int = Field(default=30, ge=1, le=365)
@@ -404,12 +408,18 @@ def save_autopilot(
             status_code=409,
             detail="Archived campaigns cannot post. Restore this campaign first.",
         )
-    if body.offer_mode != "none" and not body.disclosure.strip():
-        # Refused here as well as in the composer. A setting that cannot produce
-        # a legal post should not be storable.
+    if body.disclose and body.offer_mode != "none" and not body.disclosure.strip():
+        # Refused here as well as in the composer: a campaign that asks for a
+        # disclosure and has none written cannot produce a post at all, and a
+        # setting that cannot produce one should not be storable. Switching
+        # disclosure off is the other answer, and it is a decision rather than
+        # a blank field.
         raise HTTPException(
             status_code=422,
-            detail="An offer needs a disclosure; it leads every caption.",
+            detail=(
+                "A disclosure is switched on but not written. Write one, or "
+                "switch it off."
+            ),
         )
     if body.offer_id:
         offer = session.scalar(
@@ -454,6 +464,7 @@ def save_autopilot(
         and incoming_disclosure == localised_text(previous_language, "disclosure")
     ):
         incoming_disclosure = localised_text(body.post_language, "disclosure")
+    autopilot.disclose = body.disclose
     autopilot.disclosure = incoming_disclosure
     incoming_hint = body.bio_hint.strip()
     if (
@@ -1076,6 +1087,7 @@ def compose_queue_item(
                 hashtags=list(draft.hashtags or []),
                 products=products,
                 disclosure=disclosure if products else "",
+                require_disclosure=autopilot.disclose,
                 bio_hint=bio_hint,
                 placement_override=destination.link_placement,
                 comment_deliverable=comment_ok,

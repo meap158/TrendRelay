@@ -293,6 +293,7 @@ def compose(
     bio_hint: str = "Link in bio",
     placement_override: str | None = None,
     comment_deliverable: bool = False,
+    require_disclosure: bool = True,
 ) -> ComposedPost:
     """Build the caption and any first comment for one destination.
 
@@ -310,7 +311,7 @@ def compose(
         override=placement_override,
         comment_deliverable=comment_deliverable,
     )
-    if link and not disclosure.strip():
+    if link and require_disclosure and not disclosure.strip():
         raise DisclosureMissing(
             "An affiliate link needs a disclosure in the caption. "
             "The endorsement guides ask for one on every post, before the link."
@@ -351,6 +352,7 @@ def compose_products(
     bio_hint: str = "Link in bio",
     placement_override: str | None = None,
     comment_deliverable: bool = False,
+    require_disclosure: bool = True,
 ) -> ComposedPost:
     """Compose one post with one or more matched affiliate products.
 
@@ -365,7 +367,11 @@ def compose_products(
             hashtags=hashtags,
             disclosure="",
         )
-    if not disclosure.strip():
+    # Required unless the campaign has said otherwise. Off is a decision an
+    # operator makes in Campaign settings and carries themselves; empty while
+    # it is still asked for is a campaign half-configured, and that still
+    # refuses rather than publishing an undisclosed endorsement.
+    if require_disclosure and not disclosure.strip():
         raise DisclosureMissing(
             "Affiliate products need a disclosure in the caption and every promotional reply."
         )
@@ -392,6 +398,7 @@ def compose_products(
             bio_hint=f"{bio_hint}: {primary_name}",
             placement_override=placement_override,
             comment_deliverable=comment_deliverable,
+            require_disclosure=require_disclosure,
         )
 
     if platform in THREAD_LINK_PLATFORMS and len(products) > 1:
@@ -404,9 +411,14 @@ def compose_products(
             bio_hint=bio_hint,
             placement_override=placement_override,
             comment_deliverable=comment_deliverable,
+            require_disclosure=require_disclosure,
         )
         for name, link in products[1:]:
-            thread.append(f"{disclosure.strip()}\n\n{name}\n{link}")
+            # Each promotional reply repeats the disclosure - and repeats
+            # nothing when the campaign adds none, rather than opening with a
+            # blank line where one used to be.
+            lead = disclosure.strip()
+            thread.append(f"{lead}\n\n{name}\n{link}" if lead else f"{name}\n{link}")
         return ComposedPost(
             caption=composed.caption,
             first_comment=composed.first_comment,

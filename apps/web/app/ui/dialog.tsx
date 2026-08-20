@@ -27,6 +27,11 @@ import { useT } from "../i18n-provider";
  * compete with a verb. It also means a dialog that decides nothing needs no
  * footer at all - the × is the way out, and a lone "Close" down there was only
  * the same button written twice.
+ *
+ * `headerAction` puts the affirmative one up there beside the ×, for a panel
+ * of settings rather than a question: nothing is being abandoned by closing
+ * it, so "Cancel" would be the × written twice again, and Save belongs where
+ * the way out already is rather than at the end of a form that scrolls.
  */
 export function Dialog({
   open,
@@ -35,6 +40,7 @@ export function Dialog({
   onClose,
   children,
   footer,
+  headerAction,
   size = "default",
 }: {
   open: boolean;
@@ -43,6 +49,8 @@ export function Dialog({
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  /** The affirmative action, beside the ×. A settings panel's Save. */
+  headerAction?: ReactNode;
   /**
    * `wide` for a panel whose content is the point rather than a form — a
    * gallery of objects, a stack of effects with their own controls. At the
@@ -67,13 +75,16 @@ export function Dialog({
                 <RadixDialog.Description>{description}</RadixDialog.Description>
               )}
             </div>
-            <RadixDialog.Close asChild>
-              {/* Labelled rather than lettered: the glyph is for the eye and
-                  the name is for everything else. */}
-              <Button variant="quiet" size="sm" iconOnly aria-label={t("common.close")}>
-                <X size={16} aria-hidden="true" />
-              </Button>
-            </RadixDialog.Close>
+            <div className="ui-dialog-head-actions">
+              {headerAction}
+              <RadixDialog.Close asChild>
+                {/* Labelled rather than lettered: the glyph is for the eye and
+                    the name is for everything else. */}
+                <Button variant="quiet" size="sm" iconOnly aria-label={t("common.close")}>
+                  <X size={16} aria-hidden="true" />
+                </Button>
+              </RadixDialog.Close>
+            </div>
           </header>
           {/* The body scrolls, the head and the foot do not. The panel caps
               its own height, and without somewhere for the overflow to go a

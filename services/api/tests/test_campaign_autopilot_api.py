@@ -241,16 +241,48 @@ def test_switching_it_on_needs_explicit_confirmation(workspace) -> None:
     assert "confirmation" in response.json()["detail"]
 
 
-def test_an_offer_without_a_disclosure_cannot_be_saved(workspace) -> None:
-    # Refused at the setting as well as at the post: a configuration that cannot
-    # produce a lawful post should not be storable.
+def test_a_disclosure_switched_on_and_left_blank_cannot_be_saved(workspace) -> None:
+    """Refused at the setting as well as at the post.
+
+    A campaign that asks for a disclosure and has none written cannot produce a
+    post at all, so the setting that says so should not be storable. Switching
+    it off is the other answer, and it is a decision rather than a blank field.
+    """
     campaign_id = campaign(workspace)
     response = request(
         "PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
-        json={"offer_id": "offer-1", "disclosure": "   ", "confirm_external_action": True},
+        json={
+            "offer_id": "offer-1", "disclose": True, "disclosure": "   ",
+            "confirm_external_action": True,
+        },
     )
     assert response.status_code == 422
     assert "disclosure" in response.json()["detail"]
+
+
+def test_a_campaign_may_decide_to_disclose_nothing(workspace) -> None:
+    """Off by default, and savable.
+
+    What this turns off is a legal safeguard - the endorsement guides ask for a
+    disclosure near the endorsement and no later than the link, and the
+    networks require paid promotion to be marked - so it is a setting somebody
+    chooses, and the wording they wrote is kept for when they choose otherwise.
+    """
+    campaign_id = campaign(workspace)
+
+    saved = request(
+        "PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
+        json={
+            "offer_id": "offer-1", "disclosure": "Affiliate link.",
+            "confirm_external_action": True,
+        },
+    )
+
+    assert saved.status_code == 200, saved.text
+    settings = saved.json()["autopilot"]
+    assert settings["disclose"] is False
+    # Kept, not cleared: switching it back on should not mean writing it again.
+    assert settings["disclosure"] == "Affiliate link."
 
 
 def test_settings_round_trip(workspace) -> None:
@@ -1424,10 +1456,34 @@ def test_the_editor_is_told_the_caption_each_account_receives(workspace) -> None
     assert account["caption"].rstrip().endswith("#coffee")
 
 
+def test_a_campaign_adds_no_disclosure_unless_it_is_switched_on(workspace) -> None:
+    """The default, at the only place it shows: the caption that goes out.
+
+    A post override does not turn it back on. The switch is the campaign's and
+    an override is a wording, so a post that words its own still says nothing
+    while the campaign says nothing.
+    """
+    campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
+    _account(workspace, campaign_id, "youtube", "brand on YouTube")
+
+    composed = _post_in_the_editor(
+        workspace, campaign_id, disclosure="Paid partnership. #ad"
+    )
+
+    assert composed["disclosure"] == ""
+    caption = composed["accounts"][0]["caption"]
+    assert caption.startswith("Espresso anywhere.")
+    assert "Paid partnership" not in caption
+    # And the product is still attached: no disclosure is not no post.
+    assert "https://example.test/aff" in caption
+
+
 def test_a_post_can_word_its_own_disclosure(workspace) -> None:
     campaign_id = campaign(workspace)
     tag_offer(workspace, campaign_id)
     _account(workspace, campaign_id, "youtube", "brand on YouTube")
+    _campaign_setting(workspace, campaign_id, disclose=True)
 
     composed = _post_in_the_editor(
         workspace, campaign_id, disclosure="Paid partnership. #ad"
@@ -1485,6 +1541,7 @@ def test_an_account_that_would_refuse_the_post_says_so_alone(workspace) -> None:
     campaign_id = campaign(workspace)
     tag_offer(workspace, campaign_id)
     _account(workspace, campaign_id, "youtube", "brand on YouTube")
+    _campaign_setting(workspace, campaign_id, disclose=True)
     # Written to the row rather than through settings, which will not save an
     # empty disclosure. This is the state a campaign can still be in - imported,
     # or made before the setting existed - and the panel is where it gets fixed.

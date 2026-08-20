@@ -58,6 +58,7 @@ type CampaignPolicy = {
   priority: string;
   offer_mode: "smart" | "manual" | "none";
   offer_id: string | null;
+  disclose: boolean;
   disclosure: string;
   bio_hint: string;
 };
@@ -76,6 +77,7 @@ type PublicationPlan = {
   caption: string;
   hashtags: string[];
   affiliate_url?: string | null;
+  disclose: boolean;
   disclosure: string;
   deep_link?: string | null;
   scheduled_at: string;
@@ -413,6 +415,7 @@ export default function CampaignsPage() {
               ? Number(form.get("weekly_post_cap")) : null,
             authority: form.get("authority"),
             priority: form.get("priority"),
+            disclose: form.get("disclose") === "on",
             disclosure: newScaffolding.disclosure,
             bio_hint: newScaffolding.bioHint,
           }),
@@ -493,6 +496,7 @@ export default function CampaignsPage() {
               // Only meaningful for the one-offer mode, and cleared otherwise
               // so a mode change does not leave a stale pin behind it.
               offer_id: offerMode === "manual" ? (offerChoice || null) : null,
+              disclose: form.get("disclose") === "on",
               disclosure: form.get("disclosure"),
               bio_hint: form.get("bio_hint"),
             } : {}),
@@ -796,13 +800,21 @@ export default function CampaignsPage() {
                 changes, until somebody types their own. The API has always
                 chosen these; showing them here is what makes them editable
                 before the campaign exists rather than after. */}
-            <label>Disclosure
+            <label className="campaign-dialog-check">
+              <input type="checkbox" name="disclose" />
+              <span>
+                Add an affiliate disclosure
+                <small>Off unless you ask for it. The FTC&apos;s endorsement guides
+                  ask for one near the endorsement, and TikTok, Meta and YouTube
+                  each require paid promotion to be marked.</small>
+              </span>
+            </label>
+            <label>Disclosure wording
               <input name="disclosure" maxLength={280} value={newScaffolding.disclosure}
                 onChange={(event) => setNewScaffolding((current) => ({
                   ...current, disclosure: event.target.value,
                 }))} />
-              <small>Leads every caption, on every network. Not optional:
-                each post is its own advertisement.</small>
+              <small>Used when the switch above is on.</small>
             </label>
             <label>Profile-link wording
               <input name="bio_hint" maxLength={120} value={newScaffolding.bioHint}
@@ -832,13 +844,19 @@ export default function CampaignsPage() {
         title={t("campaigns.settings")}
         description="What this campaign is for, and the language it posts in. Product matching reads the goal and the audience, so keeping them accurate is what keeps its picks sensible."
         onClose={() => setSettingsFor(null)}
+        /* Save beside the way out, and only one way out. Cancel sat at the top
+           of the form doing exactly what the × does - nothing is abandoned by
+           closing a settings panel, since nothing is saved until Save - so it
+           was the same button written twice. Outside the form and bound to it
+           by id, which is what keeps it in the header while it still submits. */
+        headerAction={settingsFor ? (
+          <Button type="submit" form="campaign-settings-form" variant="primary"
+            size="sm" busy={busy === "settings"}>{t("common.save")}</Button>
+        ) : undefined}
       >
         {settingsFor && (
-          <form className="campaign-dialog-form" onSubmit={saveCampaignSettings}>
-            <div className="campaign-dialog-actions">
-              <Button type="button" variant="quiet" onClick={() => setSettingsFor(null)}>{t("common.cancel")}</Button>
-              <Button type="submit" variant="primary" busy={busy === "settings"}>{t("common.save")}</Button>
-            </div>
+          <form id="campaign-settings-form" className="campaign-dialog-form"
+            onSubmit={saveCampaignSettings}>
             <label>{t("campaigns.name")}
               <input name="name" required maxLength={160} defaultValue={settingsFor.name} />
             </label>
@@ -947,14 +965,29 @@ export default function CampaignsPage() {
               {/* Controlled, so changing the language above rewrites these on
                   screen. The API already did it on save, which meant the field
                   showed the old language until the dialog was reopened. */}
-              <label>Disclosure
+              {/* A switch and a wording, because they are two questions.
+                  Whether a post carries a disclosure is a decision about
+                  compliance; what it says is a matter of phrasing, and the
+                  phrasing is kept whichever way the switch is set. */}
+              <label className="campaign-dialog-check">
+                <input type="checkbox" name="disclose" defaultChecked={policy.disclose} />
+                <span>
+                  Add an affiliate disclosure
+                  <small>Leads every caption on every network when a product is
+                    attached. Off means posts carry no disclosure at all: the
+                    FTC&apos;s endorsement guides ask for one near the endorsement,
+                    and TikTok, Meta and YouTube each require paid promotion to
+                    be marked, so this is your call and your liability.</small>
+                </span>
+              </label>
+              <label>Disclosure wording
                 <input name="disclosure" maxLength={280}
                   value={settingsScaffolding.disclosure}
                   onChange={(event) => setSettingsScaffolding((current) => ({
                     ...current, disclosure: event.target.value,
                   }))} />
-                <small>Leads every caption, on every network. Not optional:
-                  each post is its own advertisement.</small>
+                <small>Kept whether or not it is switched on, so turning it back
+                  on does not mean writing it again.</small>
               </label>
               <label>Profile-link wording
                 <input name="bio_hint" maxLength={120}

@@ -155,6 +155,10 @@ class CampaignCreate(BaseModel):
     #: The caption scaffolding. Left unset these are written in the campaign's
     #: own language, which is what the route already did and what keeps a
     #: Vietnamese campaign from opening with an English disclosure.
+    #:
+    #: Whether one is added at all is `disclose`, and it is off unless asked
+    #: for: what it turns off is a legal safeguard, described on the model.
+    disclose: bool | None = None
     disclosure: str | None = Field(default=None, max_length=280)
     bio_hint: str | None = Field(default=None, max_length=120)
 
@@ -228,6 +232,9 @@ class CampaignUpdate(BaseModel):
     #: beside the queue because they follow the post language, which is here:
     #: changing the language rewrites both, unless the operator has written
     #: their own.
+    #:
+    #: None leaves the campaign's own answer to `disclose` alone.
+    disclose: bool | None = None
     disclosure: str | None = Field(default=None, max_length=280)
     bio_hint: str | None = Field(default=None, max_length=120)
 
@@ -472,6 +479,7 @@ def create_campaign(
     # Set only when asked for, so the column defaults stay the single place
     # each of these is decided.
     for field in (
+        "disclose",
         "max_products_per_post",
         "daily_cap_per_account",
         "weekly_post_cap",
@@ -604,10 +612,14 @@ def update_campaign(
         disclosure = (
             body.disclosure if body.disclosure is not None else autopilot.disclosure
         )
-        if mode != "none" and not (disclosure or "").strip():
+        discloses = body.disclose if body.disclose is not None else autopilot.disclose
+        if discloses and mode != "none" and not (disclosure or "").strip():
             raise HTTPException(
                 status_code=422,
-                detail="An offer needs a disclosure; it leads every caption.",
+                detail=(
+                    "A disclosure is switched on but not written. Write one, or "
+                    "switch it off."
+                ),
             )
     # Stored on the autopilot, which is what reads it, and set from here because
     # this is where the campaign says what it is for. The same arrangement the
@@ -615,6 +627,7 @@ def update_campaign(
     # rather than copied.
     if autopilot:
         policy = {
+            "disclose": body.disclose,
             "max_products_per_post": body.max_products_per_post,
             "min_recycle_days": body.min_recycle_days,
             "repeat_posts": body.repeat_posts,

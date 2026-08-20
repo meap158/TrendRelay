@@ -53,6 +53,10 @@ def session():
         active.add(CampaignAutopilot(
             id="auto", workspace_id="ws", campaign_id="camp", enabled=True,
             created_by="local-admin", disclosure="Affiliate link; we may earn.",
+            # A disclosing campaign, said out loud: the switch is off by
+            # default now, and what an assistant is told about a disclosure is
+            # only a subject when there is one.
+            disclose=True,
             bio_hint="Link in bio", min_recycle_days=30, daily_cap_per_account=2,
             delivery="draft", posts_scheduled=0,
         ))

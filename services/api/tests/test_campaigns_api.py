@@ -646,20 +646,41 @@ def test_campaign_settings_set_how_products_attach() -> None:
     assert saved.bio_hint == "Link in bio"
 
 
-def test_a_commercial_campaign_still_needs_a_disclosure() -> None:
+def test_a_campaign_that_asks_to_disclose_still_needs_the_words() -> None:
     """The rule the autopilot endpoint enforces, enforced here too.
 
     Otherwise moving the mode to this dialog would let somebody set it against
-    an empty disclosure from a screen that no longer shows one.
+    a disclosure that is switched on and blank, from a screen that no longer
+    shows one.
     """
     workspace_id = create_workspace()
     campaign_id = create_campaign(workspace_id)["id"]
-    update_campaign(workspace_id, campaign_id, offer_mode="none", disclosure=" ")
+    update_campaign(
+        workspace_id, campaign_id, offer_mode="none", disclose=True, disclosure=" ",
+    )
 
     refused = update_campaign(workspace_id, campaign_id, offer_mode="smart")
 
     assert refused.status_code == 422
     assert "disclosure" in refused.json()["detail"]
+
+
+def test_a_campaign_can_attach_products_and_disclose_nothing() -> None:
+    """Off is the default, and it does not block a commercial campaign.
+
+    What it turns off is a legal safeguard - the endorsement guides ask for a
+    disclosure near the endorsement, and the networks require paid promotion to
+    be marked - so this is the operator's decision, not the program's.
+    """
+    workspace_id = create_workspace()
+    campaign_id = create_campaign(workspace_id)["id"]
+
+    allowed = update_campaign(
+        workspace_id, campaign_id, offer_mode="smart", disclosure=" ",
+    )
+
+    assert allowed.status_code == 200, allowed.text
+    assert autopilot_of(campaign_id).disclose is False
 
 
 def test_the_check_reads_what_the_request_would_leave_behind() -> None:

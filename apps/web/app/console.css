@@ -915,6 +915,9 @@ html { scroll-behavior: smooth; }
 .campaign-wording input { box-sizing: border-box; width: 100%; font-size: 11px; }
 .campaign-wording > label > small { color: var(--muted); font-size: 10px; line-height: 1.4; }
 .campaign-wording-reset { border: 0; padding: 0; color: var(--link); background: none; font: inherit; font-weight: 600; cursor: pointer; }
+/* Said in the amber the rest of the app uses for a consequence, because
+   posting an unmarked endorsement is one. */
+.campaign-wording-off { grid-column: 1 / -1; margin: 0; color: var(--warn); font-size: 10px; line-height: 1.45; }
 /* What each account actually receives. Captions are prose, so they are set in
    the page's own face rather than a monospace block - what is being checked is
    the reading of it. Tall ones scroll inside their own box, because a preview
@@ -1255,6 +1258,13 @@ html { scroll-behavior: smooth; }
 .campaign-manual-work > .plan-create { border-width: 1px 0 0; border-radius: 0; }
 .campaign-dialog-form { display: grid; gap: 12px; }
 .campaign-dialog-form label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
+/* A switch reads as a switch: the box beside the words rather than above
+   them, and the box sized to itself rather than to the form's full-width
+   inputs. */
+.campaign-dialog-form label.campaign-dialog-check { grid-template-columns: auto minmax(0, 1fr); gap: 4px 9px; align-items: start; }
+.campaign-dialog-form .campaign-dialog-check input[type="checkbox"] { width: auto; margin-block-start: 2px; padding: 0; }
+.campaign-dialog-form .campaign-dialog-check > span { display: grid; gap: 3px; min-width: 0; }
+.campaign-dialog-form .campaign-dialog-check small { font-weight: 400; }
 .campaign-dialog-form :is(input, textarea, select) { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; }
 /* The same flat field with its own chevron the rest of the app's dropdowns
    use, rather than the platform's control, which is a different height and a

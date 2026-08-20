@@ -240,6 +240,10 @@ a.ui-button { text-decoration: none; }
 /* Pulled up level with the title rather than sitting on its baseline, and out
    to the panel's edge, which is where a dismiss is looked for. */
 .ui-dialog-head > .ui-button-icon { margin: -2px -4px 0 0; }
+/* Save and the way out, together, and not wrapping away from each other
+   when the title is long. */
+.ui-dialog-head-actions { display: flex; flex: none; gap: 6px; align-items: center; }
+.ui-dialog-head-actions > .ui-button-icon { margin: -2px -4px 0 0; }
 .ui-dialog-head h2 { margin: 0 0 2px; font-size: 15px; font-weight: 500; }
 .ui-dialog-head p { margin: 0; color: var(--muted); }
 /* Takes the room the head and the foot leave, and scrolls when the content

@@ -109,8 +109,20 @@ class CampaignAutopilot(Base):
     #: Multiple products are useful on link-friendly networks; bio-only
     #: networks deliberately receive one primary product per post.
     max_products_per_post: Mapped[int] = mapped_column(Integer, default=2)
-    #: Leads every caption. Required before an offer can be attached; the check
-    #: lives in the composer, which refuses rather than posting undisclosed.
+    #: Whether a disclosure is added at all.
+    #:
+    #: Off by default, by the operator's decision. The wording below is still
+    #: kept and still leads the caption the moment this is switched on, so
+    #: turning it off is not the same as clearing it.
+    #:
+    #: What it turns off is a legal safeguard, not a preference: the FTC's
+    #: endorsement guides ask for a disclosure near the endorsement and no
+    #: later than the link, and TikTok, Meta and YouTube each require paid
+    #: promotion to be marked in their own terms. Whoever owns the account
+    #: carries that, which is why this is a setting and not a default.
+    disclose: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: Leads every caption when `disclose` is on. Kept whether or not it is:
+    #: switching disclosure off should not lose the wording somebody wrote.
     disclosure: Mapped[str] = mapped_column(
         String(500), default="Affiliate link; we may earn a commission."
     )
@@ -365,11 +377,18 @@ class CampaignDestinationOfferLink(Base):
 
 
 def disclosure_for(item: CampaignQueueItem, autopilot: CampaignAutopilot) -> str:
-    """The disclosure this post carries: its own, or the campaign's.
+    """The disclosure this post carries: its own, the campaign's, or none.
 
     Read through a function rather than at each call site, because there are
-    several and a missed one is an endorsement published without a disclosure.
+    several and a missed one is an endorsement published without a disclosure -
+    or, now that a campaign may switch disclosure off, one published with a
+    disclosure the campaign said not to add.
+
+    A post that words its own still says nothing when the campaign discloses
+    nothing: the switch is the campaign's, and an override is a wording.
     """
+    if not autopilot.disclose:
+        return ""
     return (item.disclosure or "").strip() or autopilot.disclosure
 
 

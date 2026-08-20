@@ -948,6 +948,10 @@ def plan_campaign(
                     hashtags=list(item.hashtags or []),
                     products=product_links,
                     disclosure=disclosure_for(item, autopilot) if product_links else "",
+                    # Empty because the campaign switched disclosure off is a
+                    # decision; empty while it is still asked for is a campaign
+                    # half-configured, and only the second refuses.
+                    require_disclosure=autopilot.disclose,
                     bio_hint=bio_hint_for(item, autopilot),
                     placement_override=destination.link_placement,
                     comment_deliverable=comment_ok,
@@ -1250,6 +1254,7 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
         "offer_mode": autopilot.offer_mode,
         "candidate_offer_ids": autopilot.candidate_offer_ids,
         "max_products_per_post": autopilot.max_products_per_post,
+        "disclose": autopilot.disclose,
         "disclosure": autopilot.disclosure,
         "bio_hint": autopilot.bio_hint,
         "min_recycle_days": autopilot.min_recycle_days,

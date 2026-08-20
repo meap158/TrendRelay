@@ -236,18 +236,45 @@ def test_a_draft_item_is_never_posted(session) -> None:
     assert "1 queued post(s), none approved yet." in note
 
 
-def test_an_offer_with_no_disclosure_stops_the_campaign(session) -> None:
-    # Refused here rather than posted undisclosed. Each post is its own
-    # advertisement and needs its own disclosure.
+def test_a_campaign_that_asks_for_a_disclosure_and_has_none_stops(session) -> None:
+    """Switched on and left blank is a campaign half-configured.
+
+    Refused here rather than posted undisclosed. Switching disclosure off is
+    the other answer, and it is a decision somebody makes rather than a field
+    they forgot.
+    """
     destination(session, "d1", "youtube")
     slot(session, 18)
     queue_item(session, "q1")
     posts, note = plan_campaign(
-        session, autopilot(session, disclosure="  "), now=NOW,
+        session, autopilot(session, disclose=True, disclosure="  "), now=NOW,
         link_for=lambda _id: "https://tr.example/c/abc",
     )
     assert posts == []
     assert "disclosure" in note
+
+
+def test_a_campaign_that_discloses_nothing_still_posts(session) -> None:
+    """Off is a decision, and the composer takes it.
+
+    What it turns off is a legal safeguard - the endorsement guides ask for a
+    disclosure near the endorsement, and the networks require paid promotion to
+    be marked - and the operator who switched it off carries that.
+    """
+    destination(session, "d1", "youtube")
+    slot(session, 18)
+    queue_item(session, "q1")
+    offer(session, "offer-1", "Coffee thing")
+
+    posts, _ = plan_campaign(
+        session, autopilot(session, offer_mode="smart"), now=NOW,
+        link_for=lambda _destination, offer_id: f"https://tr.example/{offer_id}",
+    )
+
+    assert len(posts) == 1
+    assert posts[0].offer_ids  # the product is attached
+    assert "commission" not in posts[0].caption.lower()
+    assert posts[0].caption.startswith("Three ways")
 
 
 # --- scheduling ---------------------------------------------------------------
@@ -456,11 +483,13 @@ def test_the_link_lands_in_the_caption_on_youtube_and_in_the_bio_on_tiktok(sessi
 
 
 def test_every_scheduled_post_leads_with_the_disclosure(session) -> None:
+    """When the campaign asks for one, it leads - on every post, not the first."""
     destination(session, "d1", "tiktok")
     slot(session, 12)
     queue_item(session, "q1")
     posts, _ = plan_campaign(
-        session, autopilot(session), now=NOW, link_for=lambda _id: "https://tr.example/c/abc"
+        session, autopilot(session, disclose=True), now=NOW,
+        link_for=lambda _id: "https://tr.example/c/abc",
     )
     assert posts[0].caption.startswith("Affiliate link; we may earn a commission.")
 
@@ -476,7 +505,9 @@ def test_multiple_matched_products_become_disclosed_thread_replies(session) -> N
     )
     first = offer(session, "offer-maker", "Espresso maker")
     second = offer(session, "offer-grinder", "Coffee grinder")
-    pilot = autopilot(session, offer_mode="smart", max_products_per_post=2)
+    pilot = autopilot(
+        session, offer_mode="smart", max_products_per_post=2, disclose=True
+    )
 
     posts, _ = plan_campaign(
         session,

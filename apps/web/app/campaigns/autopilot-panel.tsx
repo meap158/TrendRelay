@@ -134,6 +134,8 @@ type QueueItem = {
 
 type Autopilot = {
   enabled: boolean;
+  /** Whether a disclosure is added at all. Off unless the campaign asks. */
+  disclose: boolean;
   delivery: "draft" | "schedule" | "now";
   /** How much the campaign may do alone; run by exception is the default. */
   authority: "assist" | "auto_draft" | "run_by_exception" | "autonomous";
@@ -3501,20 +3503,30 @@ export function AutopilotPanel({
                     : "No product is confident enough to attach; the post would go out on its own."}</small>
               </div>
               <div className="campaign-wording">
-                <label>Disclosure
-                  <input value={editingDisclosure} maxLength={300}
-                    placeholder={composed?.campaign_disclosure ?? autopilot.disclosure}
-                    onChange={(event) => setEditingDisclosure(event.target.value)} />
-                  <small>{editingDisclosure.trim() ? (
-                    <>This post only.{" "}
-                      <button type="button" className="campaign-wording-reset"
-                        onClick={() => setEditingDisclosure("")}>
-                        Use the campaign&apos;s
-                      </button></>
-                  ) : autopilot.disclosure
-                    ? "The campaign's wording. Leads the caption whenever a product is attached."
-                    : "None set. Any account carrying a product will refuse the post until there is one."}</small>
-                </label>
+                {/* Only where the campaign adds one. A wording box above a
+                    caption that will not carry it describes a field that
+                    governs nothing, and the switch is the campaign's to set. */}
+                {autopilot.disclose ? (
+                  <label>Disclosure
+                    <input value={editingDisclosure} maxLength={300}
+                      placeholder={composed?.campaign_disclosure ?? autopilot.disclosure}
+                      onChange={(event) => setEditingDisclosure(event.target.value)} />
+                    <small>{editingDisclosure.trim() ? (
+                      <>This post only.{" "}
+                        <button type="button" className="campaign-wording-reset"
+                          onClick={() => setEditingDisclosure("")}>
+                          Use the campaign&apos;s
+                        </button></>
+                    ) : autopilot.disclosure
+                      ? "The campaign's wording. Leads the caption whenever a product is attached."
+                      : "Switched on but not written. Any account carrying a product will refuse the post until there is one."}</small>
+                  </label>
+                ) : (
+                  <p className="campaign-wording-off">
+                    This campaign adds no disclosure. Posts carrying a product go
+                    out unmarked, which Campaign settings can change.
+                  </p>
+                )}
                 {/* Only where a bio placement is in play. On a campaign whose
                     accounts all take links, this field governs nothing. */}
                 {destinations.some((item) => item.link_placement === "bio") && (
