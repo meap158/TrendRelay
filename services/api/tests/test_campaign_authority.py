@@ -210,6 +210,91 @@ def test_earned_autonomy_posts_a_finished_post_without_a_person(
     assert len(engine_stub) == 1
 
 
+def full_engine(monkeypatch, reason: str = "Posts today: 5 of 5 used. Resets daily.") -> None:
+    """An engine that has said it has nothing left."""
+    from trendrelay_api.integrations import publishing
+
+    monkeypatch.setattr(
+        publishing, "delivery_block", lambda provider, integration=None: reason
+    )
+
+
+def test_a_full_engine_holds_the_post_back_rather_than_failing_it(
+    session, tmp_path, monkeypatch, engine_stub
+) -> None:
+    """What autonomy needs to survive a quota: a pause, not a failure.
+
+    Handing the post over anyway spent a slot on a delivery the engine would
+    refuse, and the refusal settled as a failed execution - which reads like
+    something broke, and leaves a post to find and re-make. Nothing is frozen
+    now; the post keeps its place in the queue and the next tick asks again.
+    """
+    campaign_setup(session, tmp_path)
+    full_engine(monkeypatch)
+
+    result = run_campaign(session, autopilot(session, authority="autonomous"), now=NOW)
+
+    assert engine_stub == [], "nothing may reach an engine that has no room"
+    assert executions(session) == [], "and nothing is frozen to be cleaned up later"
+    assert result["deferred"], result
+    assert "5 of 5" in result["deferred"][0]
+    assert "Waiting for engine capacity" in result["note"]
+
+
+def test_the_post_goes_out_once_the_engine_has_room_again(
+    session, tmp_path, monkeypatch, engine_stub
+) -> None:
+    """Deferred is not dropped. The queue item was never touched."""
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="autonomous")
+    full_engine(monkeypatch)
+    run_campaign(session, pilot, now=NOW)
+
+    from trendrelay_api.integrations import publishing
+    monkeypatch.setattr(
+        publishing, "delivery_block", lambda provider, integration=None: None
+    )
+    run_campaign(session, pilot, now=NOW)
+
+    assert len(engine_stub) == 1
+    assert executions(session)[0].state == "queued"
+
+
+def test_approving_into_a_full_engine_is_refused_before_the_job(
+    session, tmp_path, monkeypatch, engine_stub
+) -> None:
+    """Told before the fact, and the post stays where it can be approved again."""
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+    full_engine(monkeypatch)
+
+    with pytest.raises(ValueError) as refused:
+        approve_execution(session, pilot, execution, now=NOW)
+
+    assert "cannot take a post right now" in str(refused.value)
+    assert "approve it again" in str(refused.value)
+    assert execution.state == "proposed", "still held, not failed"
+    assert engine_stub == []
+
+
+def test_a_quota_refusal_is_not_read_as_a_broken_account() -> None:
+    """Two of the four engines report no usage, so this is the only warning.
+
+    A 429 often carries a 403 with it, and "unauthorized" is the wrong thing to
+    tell somebody whose credentials are fine - it is also what the breaker
+    counts, so three of these would switch a campaign off for being popular.
+    """
+    from trendrelay_api.campaign_runner import _classify_failure
+
+    assert _classify_failure("HTTP 429 Too Many Requests") == "rate_limited"
+    assert _classify_failure("403: daily limit reached for this channel") == "rate_limited"
+    assert _classify_failure("quota exceeded") == "rate_limited"
+    # And a real refusal still reads as one.
+    assert _classify_failure("401 unauthorized") == "auth"
+
+
 def test_auto_draft_delivers_only_engine_drafts(session, tmp_path, monkeypatch) -> None:
     """The request itself must carry draft, whatever delivery the settings say.
 

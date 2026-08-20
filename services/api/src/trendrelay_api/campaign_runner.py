@@ -50,6 +50,25 @@ UNCERTAIN_MARKERS = (
 #: "reconnect the engine", and the class the auth circuit breaker counts.
 AUTH_MARKERS = ("401", "403", "unauthor", "forbidden", "invalid key", "api key", "token")
 
+#: An engine saying "not now" rather than "no".
+#:
+#: Two of the four engines report no usage figures at all, so nothing can be
+#: asked of them before delivering and a quota is only discoverable by being
+#: refused. Recognising that refusal is what keeps it from reading like a
+#: broken post: the queue item and its content are fine, the engine is simply
+#: full, and the next slot will very likely work.
+RATE_LIMIT_MARKERS = (
+    "429",
+    "rate limit",
+    "rate-limit",
+    "ratelimit",
+    "too many requests",
+    "quota",
+    "daily limit",
+    "limit reached",
+    "limit exceeded",
+)
+
 #: How many recent settled executions the circuit breakers look at, and the
 #: counts that trip them. Small on purpose: three auth refusals in a row is not
 #: bad luck, and every further attempt is another refusal against a provider
@@ -63,6 +82,12 @@ def _classify_failure(error: str) -> str:
     text = (error or "").casefold()
     if any(marker in text for marker in UNCERTAIN_MARKERS):
         return "uncertain"
+    # Before auth, because a quota refusal often carries a 403 with it and
+    # "unauthorized" is the wrong thing to tell somebody whose credentials are
+    # fine. It is also what the breaker counts: three of these would switch a
+    # campaign off for being popular.
+    if any(marker in text for marker in RATE_LIMIT_MARKERS):
+        return "rate_limited"
     if any(marker in text for marker in AUTH_MARKERS):
         return "auth"
     if any(marker in text for marker in ("no such media", "media file", "not found beneath")):
@@ -405,11 +430,25 @@ def run_campaign(
     posts, note = plan_campaign(session, autopilot, now=moment, link_for=link_for)
     created: list[dict[str, Any]] = []
     failures: list[str] = []
+    deferred: list[str] = []
     held: list[dict[str, Any]] = []
     reserved: list[ScheduledPost] = []
     for post in posts:
         destination = destinations.get(post.destination_id)
         if not destination:
+            continue
+        # Asked before anything is frozen, because an engine with nothing left
+        # cannot take this post and the alternatives are all worse: freezing it
+        # spends a slot on a delivery that will be refused, and the refusal
+        # settles as a failed execution that reads like something broke. Held
+        # back instead - the post stays in the queue, the slot goes unused, and
+        # the next tick asks again. This is what "autonomous" needs to survive
+        # a quota: a pause, not a failure.
+        from trendrelay_api.integrations.publishing import delivery_block
+
+        blocked = delivery_block(destination.provider, destination.integration_id)
+        if blocked:
+            deferred.append(f"{destination.label}: {blocked}")
             continue
         execution = _freeze_execution(
             session, autopilot, post, destination, minted, now=moment
@@ -491,12 +530,24 @@ def run_campaign(
             f"{note} {len(held)} post(s) waiting for approval in the "
             "exception inbox."
         )
+    if deferred:
+        # Named as waiting rather than as a problem, because it is one: the
+        # quota returns and the post is still there.
+        note = (
+            f"{note} Waiting for engine capacity: {'; '.join(dict.fromkeys(deferred))}"
+        )
     if failures:
         note = f"{note} Not sent: {'; '.join(failures)}"
     # Reservation bookkeeping only. Nothing is counted as posted here - that
     # happens in reconciliation, when the provider has actually answered.
     record_scheduled(session, autopilot, reserved, note=note, now=moment)
-    return {"note": note, "posts": created, "held": held, "failures": failures}
+    return {
+        "note": note,
+        "posts": created,
+        "held": held,
+        "failures": failures,
+        "deferred": deferred,
+    }
 
 
 def approve_execution(
@@ -532,6 +583,18 @@ def approve_execution(
     if unfinished:
         raise ValueError("This post is not finished. " + " ".join(unfinished))
     moment = now or datetime.now(UTC)
+    from trendrelay_api.integrations.publishing import delivery_block
+
+    blocked = delivery_block(execution.provider, execution.integration_id)
+    if blocked:
+        # Refused before the job exists. Approving into a full quota produced a
+        # failed execution and a post that had to be found and re-made; this
+        # leaves it held, which is where it can simply be approved again.
+        raise ValueError(
+            f"{execution.destination_label or execution.platform} cannot take a "
+            f"post right now. {blocked} The post stays held; approve it again "
+            "when there is room."
+        )
     problem = _media_ready(execution)
     if problem:
         execution.state = "failed"

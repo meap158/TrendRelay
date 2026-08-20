@@ -11,6 +11,7 @@ Three provider engines are supported and selected by the operator:
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
@@ -2339,6 +2340,60 @@ def bundle_daily_limits(social_account_id: str) -> dict[str, Any] | None:
         )
     except Exception:
         return None
+
+
+#: Measured usage, cached for a moment so the delivery check can be asked per
+#: post without becoming a request per post. One tick is a minute, so a figure
+#: this age is the same figure the tick would have read.
+_USAGE_TTL_SECONDS = 45.0
+_USAGE_CACHE: dict[tuple[str, str], tuple[float, Any]] = {}
+
+
+def _measured_daily(provider_id: str, integration_id: str | None) -> Any:
+    """bundle.social's daily counter for one account, briefly remembered."""
+    if provider_id != "bundle_social" or not integration_id:
+        return None
+    key = (provider_id, integration_id)
+    cached = _USAGE_CACHE.get(key)
+    now = time.monotonic()
+    if cached and now - cached[0] < _USAGE_TTL_SECONDS:
+        return cached[1]
+    figures = bundle_daily_limits(integration_id)
+    _USAGE_CACHE[key] = (now, figures)
+    return figures
+
+
+def delivery_block(provider_id: str, integration_id: str | None = None) -> str | None:
+    """Why this engine cannot take a post right now, or None if it can.
+
+    Asked before a post is handed over rather than discovered when the engine
+    refuses it. A refusal costs a failed execution and a burnt slot; asking
+    first costs a cached header, and the post keeps its place until there is
+    room for it.
+
+    Only what an engine has actually said about itself can stop a post - the
+    same rule `exhausted` applies. A published plan figure is a scrape of a
+    pricing page and may be a year stale; blocking on one would stop posts
+    that the engine would have accepted. Engines that report nothing are
+    therefore never blocked here, and are protected instead by recognising a
+    quota refusal when it arrives.
+    """
+    from trendrelay_api.integrations import engine_limits
+
+    items = engine_limits.allowances(
+        provider_id,
+        # Not a delivery question: a workspace at its account limit has used up
+        # its room for more accounts, not its room to post. `exhausted` ignores
+        # it, and passing the real count would cost a request to find out.
+        account_count=0,
+        rate_limit=(
+            engine_limits.parse_rate_limit(buffer_rate_limit_header())
+            if provider_id == "buffer" else None
+        ),
+        daily=_measured_daily(provider_id, integration_id),
+    )
+    spent = engine_limits.exhausted(items)
+    return engine_limits.spent_note(spent) if spent else None
 
 
 ACCOUNT_READERS = {
