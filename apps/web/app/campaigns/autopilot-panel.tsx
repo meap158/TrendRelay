@@ -20,6 +20,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl } from "../../lib/api";
+import { AUTHORITIES } from "./authority-options";
 
 import { Button } from "../ui/button";
 import { SegmentedControl } from "../ui/segmented";
@@ -2248,9 +2249,25 @@ export function AutopilotPanel({
         title={t("autopilot.heading")}
         aside={
           <div className="autopilot-run-row">
-            {/* Beside the switch, not behind a tab named for revenue. The
-                switch says whether the campaign runs; this says what running
-                does, and reading one without the other explains nothing. */}
+            {/* Beside the switch, not in the settings dialog. These three are
+                one sentence - whether it runs, how much it does alone, and
+                what running does - and the middle of it was two clicks away in
+                a form about what the campaign is for. Read together they
+                explain each other; read apart, none of them explains
+                anything. */}
+            <label className="autopilot-delivery">
+              <span>Authority</span>
+              <select
+                value={autopilot.authority}
+                disabled={!canEdit}
+                onChange={(event) =>
+                  void save({ authority: event.target.value as Autopilot["authority"] })}
+              >
+                {AUTHORITIES.map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </label>
             <label className="autopilot-delivery">
               <span>{t("autopilot.delivery")}</span>
               <select

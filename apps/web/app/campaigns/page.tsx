@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
+import { AUTHORITIES } from "./authority-options";
 import { useAuth } from "../auth-provider";
 import { useLocale } from "../i18n-provider";
 import { LOCALES } from "../../lib/i18n/locales";
@@ -168,13 +169,6 @@ const OFFER_MODES: readonly (readonly [OfferMode, string, string])[] = [
  * an operator picked the recommended option and then approved every post by
  * hand wondering which rule they kept tripping.
  */
-const AUTHORITIES: readonly (readonly [string, string])[] = [
-  ["assist", "Assist — prepare, and approve every post"],
-  ["auto_draft", "Auto draft — engine drafts only, and approve every post"],
-  ["run_by_exception", "Run by exception — approve every post (recommended)"],
-  ["autonomous", "Autonomous — post without approval (earned)"],
-];
-
 const PRIORITIES: readonly (readonly [string, string])[] = [
   ["balanced", "Balanced — blend measured axes"],
   ["revenue", "Revenue — earnings per click"],
@@ -498,7 +492,6 @@ export default function CampaignsPage() {
             ...(policy ? {
               max_products_per_post: Number(form.get("max_products_per_post")),
               daily_cap_per_account: Number(form.get("daily_cap_per_account")),
-              authority: form.get("authority"),
               priority: form.get("priority"),
               weekly_post_cap: form.get("weekly_post_cap")
                 ? Number(form.get("weekly_post_cap")) : null,
@@ -932,14 +925,6 @@ export default function CampaignsPage() {
                 </label>
 
               </div>
-              <label>Authority
-                <select name="authority" defaultValue={policy.authority}>
-                  {AUTHORITIES.map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-                <small>How much of the posting runs without you.</small>
-              </label>
               <div className="campaign-product-mode">
                 <div>
                   <strong>Products</strong>
