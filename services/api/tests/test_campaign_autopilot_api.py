@@ -1290,6 +1290,147 @@ def test_rotation_turned_off_previews_the_same_best_fit_every_row(workspace) -> 
     assert picked == ["offer-1", "offer-1"]
 
 
+# --- the post as each account will receive it ----------------------------------
+#
+# What somebody writes in the editor is two thirds of a post. The campaign leads
+# it with a disclosure, attaches the product where that account allows a link,
+# and moves the hashtags below both - and none of that used to be visible while
+# they wrote it.
+
+
+def _post_in_the_editor(workspace: str, campaign_id: str, **draft) -> dict:
+    body = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/composition",
+        json={"body": "Espresso anywhere.", "hashtags": ["coffee"], **draft},
+    )
+    assert body.status_code == 200, body.text
+    return body.json()
+
+
+def _account(workspace: str, campaign_id: str, platform: str, label: str) -> str:
+    made = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/destinations",
+        json={
+            "provider": "buffer", "integration_id": f"acct-{platform}",
+            "platform": platform, "label": label,
+        },
+    )
+    assert made.status_code == 201, made.text
+    return made.json()["destination"]["id"]
+
+
+def test_the_editor_is_told_the_caption_each_account_receives(workspace) -> None:
+    """Not a description of the rules - the text they produce."""
+    campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
+    _account(workspace, campaign_id, "youtube", "brand on YouTube")
+
+    composed = _post_in_the_editor(workspace, campaign_id)
+
+    account = composed["accounts"][0]
+    assert account["placement"] == "caption"
+    # The disclosure leads, the copy follows, the link is attached, and the
+    # hashtags sit below both - in one string, as the network will see it.
+    assert account["caption"].startswith(composed["disclosure"])
+    assert "Espresso anywhere." in account["caption"]
+    assert "https://example.test/aff" in account["caption"]
+    assert account["caption"].rstrip().endswith("#coffee")
+
+
+def test_a_post_can_word_its_own_disclosure(workspace) -> None:
+    campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
+    _account(workspace, campaign_id, "youtube", "brand on YouTube")
+
+    composed = _post_in_the_editor(
+        workspace, campaign_id, disclosure="Paid partnership. #ad"
+    )
+
+    assert composed["disclosure"] == "Paid partnership. #ad"
+    assert composed["campaign_disclosure"] != "Paid partnership. #ad"
+    assert composed["accounts"][0]["caption"].startswith("Paid partnership. #ad")
+
+
+def test_clearing_the_override_goes_back_to_the_campaigns_words(workspace) -> None:
+    """The one field where empty must not mean empty.
+
+    A post stored with a blank disclosure is an endorsement that discloses
+    nothing; the composer refuses to publish it, which turns a cleared field
+    into a post that silently never goes out.
+    """
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    item = request("POST", f"{base}/queue", json={
+        "video_path": r"S:\media\clip.mp4", "body": "Real copy.",
+    }).json()["item"]
+    request("PATCH", f"{base}/queue/{item['id']}", json={"disclosure": "Mine. #ad"})
+
+    cleared = request(
+        "PATCH", f"{base}/queue/{item['id']}", json={"disclosure": ""}
+    ).json()["item"]
+
+    assert cleared["disclosure"] is None
+
+
+def test_a_written_comment_does_not_displace_the_link_in_the_preview(workspace) -> None:
+    """The preview shows the merge, because the merge is where posts got lost.
+
+    On a first-comment network the comment is where the link lives. This was
+    once "the written one, or else the generated one", and writing a comment
+    silently deleted the link.
+    """
+    campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
+    _account(workspace, campaign_id, "instagram", "brand on Instagram")
+
+    composed = _post_in_the_editor(
+        workspace, campaign_id, first_comment="More on this below.",
+    )
+
+    account = composed["accounts"][0]
+    if account["placement"] == "first_comment":
+        assert account["first_comment"].startswith("More on this below.")
+        assert "https://example.test/aff" in account["first_comment"]
+
+
+def test_an_account_that_would_refuse_the_post_says_so_alone(workspace) -> None:
+    """One refusing account should not blank the preview for the others."""
+    campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
+    _account(workspace, campaign_id, "youtube", "brand on YouTube")
+    # Written to the row rather than through settings, which will not save an
+    # empty disclosure. This is the state a campaign can still be in - imported,
+    # or made before the setting existed - and the panel is where it gets fixed.
+    with TestingSession.begin() as session:
+        session.scalar(select(CampaignAutopilot).where(
+            CampaignAutopilot.campaign_id == campaign_id
+        )).disclosure = ""
+
+    composed = _post_in_the_editor(workspace, campaign_id)
+
+    account = composed["accounts"][0]
+    assert account["refused"]
+    assert "disclosure" in account["refused"]
+
+
+def test_previewing_a_post_never_saves_the_draft_being_previewed(workspace) -> None:
+    """The editor previews on every keystroke; none of them may publish."""
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    item = request("POST", f"{base}/queue", json={
+        "video_path": r"S:\media\clip.mp4", "body": "Saved copy.",
+    }).json()["item"]
+
+    _post_in_the_editor(
+        workspace, campaign_id, item_id=item["id"], body="Unsaved typing.",
+    )
+
+    queue = request("GET", f"{base}/autopilot").json()["queue"]
+    assert [row["body"] for row in queue] == ["Saved copy."]
+    assert len(queue) == 1
+
+
 # --- what would actually attach, not just what fits ----------------------------
 
 

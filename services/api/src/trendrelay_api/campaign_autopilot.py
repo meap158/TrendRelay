@@ -21,8 +21,9 @@ profile link points at, so the clicks are still attributed.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 #: Networks where a link in the caption or description is clickable and carries
 #: no reach penalty. A link belongs in the post body here.
@@ -431,6 +432,48 @@ def compose_products(
         caption="\n\n".join(part for part in (disclosure.strip(), root_body) if part),
         first_comment="\n".join(f"{name}: {link}" for name, link in products),
         placement=placement,
+    )
+
+
+def compose_for_post(
+    *,
+    written_first_comment: str | None = None,
+    written_thread: Sequence[str] = (),
+    **composed: Any,
+) -> ComposedPost:
+    """The whole post as it will be published, words and generated parts merged.
+
+    `compose_products` builds what the campaign generates. What a network
+    receives is that, merged with what somebody wrote on the post - and the
+    merge has rules of its own:
+
+    The written comment leads and the generated link follows it, in one
+    comment, because a network that takes a first comment takes one. This was
+    once "the written one, or else the generated one", which meant that on a
+    first-comment network - where the comment is where the link lives - writing
+    a comment silently deleted the link and the post went out selling nothing.
+
+    Written replies publish before generated product replies, so a thread reads
+    as the words somebody wrote followed by the products they are about.
+
+    Here rather than in the scheduler because the editor previews this too, and
+    a preview that reimplemented the merge would be a second copy of the rule
+    whose first copy deleted links.
+    """
+    post = compose_products(**composed)
+    written = (written_first_comment or "").strip()
+    generated = (post.first_comment or "").strip()
+    return ComposedPost(
+        caption=post.caption,
+        first_comment=(
+            f"{written}\n\n{generated}" if written and generated
+            else written or post.first_comment
+        ),
+        placement=post.placement,
+        thread=(
+            *(part.strip() for part in written_thread if part.strip()),
+            *post.thread,
+        ),
     )
 
 

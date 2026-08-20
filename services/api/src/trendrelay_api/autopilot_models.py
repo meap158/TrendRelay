@@ -266,6 +266,12 @@ class CampaignQueueItem(Base):
     #: in the timeline before deployment.
     first_comment: Mapped[str | None] = mapped_column(String(2000))
     thread: Mapped[list[str]] = mapped_column(JSON, default=list)
+    #: This post's own disclosure and bio wording, where the campaign's does not
+    #: suit it. None - not an empty string - means the campaign's, so clearing
+    #: the field falls back rather than posting an endorsement with no
+    #: disclosure at all.
+    disclosure: Mapped[str | None] = mapped_column(String(300))
+    bio_hint: Mapped[str | None] = mapped_column(String(120))
     #: A human pin. Empty lets smart mode choose from current evidence.
     offer_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     #: Latest explainable matcher result, shown in Campaigns and retained so a
@@ -356,3 +362,17 @@ class CampaignDestinationOfferLink(Base):
         ForeignKey("tracking_links.id", ondelete="CASCADE"), unique=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(default=utc_now)
+
+
+def disclosure_for(item: CampaignQueueItem, autopilot: CampaignAutopilot) -> str:
+    """The disclosure this post carries: its own, or the campaign's.
+
+    Read through a function rather than at each call site, because there are
+    several and a missed one is an endorsement published without a disclosure.
+    """
+    return (item.disclosure or "").strip() or autopilot.disclosure
+
+
+def bio_hint_for(item: CampaignQueueItem, autopilot: CampaignAutopilot) -> str:
+    """The words pointing at the profile link, this post's or the campaign's."""
+    return (item.bio_hint or "").strip() or autopilot.bio_hint

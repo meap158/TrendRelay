@@ -112,6 +112,9 @@ type QueueItem = {
   hashtags: string[];
   first_comment: string | null;
   thread: string[];
+  /** This post's own wording. Null where it uses the campaign's. */
+  disclosure: string | null;
+  bio_hint: string | null;
   state: "draft" | "approved" | "paused" | "retired";
   position: number;
   times_posted: number;
@@ -190,6 +193,35 @@ type HeldExecution = {
   placement: string | null;
   /** The exact Library version this was frozen against, for its still. */
   asset_id?: string | null;
+};
+
+/**
+ * A post being written, composed exactly as each account would receive it.
+ *
+ * The same function the scheduler publishes through, so this is not a
+ * rendering of the rules - it is the rules' own answer.
+ */
+type ComposedPost = {
+  accounts: {
+    destination_id: string;
+    label: string;
+    platform: PublishingPlatform;
+    placement?: "caption" | "first_comment" | "bio" | "none";
+    placement_reason?: string;
+    title?: string | null;
+    caption?: string;
+    first_comment?: string | null;
+    thread?: string[];
+    /** Why this account would not take the post at all, if it would not. */
+    refused: string | null;
+  }[];
+  products: { offer_id: string; name: string; link: string }[];
+  selection: string;
+  /** What this post will actually use, campaign's or its own. */
+  disclosure: string;
+  bio_hint: string;
+  campaign_disclosure: string;
+  campaign_bio_hint: string;
 };
 
 type PreviewPost = {
@@ -1167,6 +1199,12 @@ export function AutopilotPanel({
   const [effectOpen, setEffectOpen] = useState(false);
   const [editing, setEditing] = useState<QueueItem | null>(null);
   const [editingReplies, setEditingReplies] = useState<string[]>([]);
+  // The campaign's own wording, overridden for this post. Empty means the
+  // campaign's, which is why these are strings rather than nullable: the field
+  // shows the campaign's text and clearing it is how you go back to it.
+  const [editingDisclosure, setEditingDisclosure] = useState("");
+  const [editingBioHint, setEditingBioHint] = useState("");
+  const [composed, setComposed] = useState<ComposedPost | null>(null);
   const [picking, setPicking] = useState(false);
   // Two panes: Posts is what goes out, Queue & setup is everything behind it.
   //
@@ -1561,6 +1599,81 @@ export function AutopilotPanel({
       setBusy("");
     }
   }
+
+  /** Load a post's own wording into the editor, blank meaning the campaign's. */
+  function openEditorWording(item: QueueItem) {
+    setEditingDisclosure(item.disclosure ?? "");
+    setEditingBioHint(item.bio_hint ?? "");
+    setComposed(null);
+  }
+
+  /**
+   * Compose the post being edited, as every account would receive it.
+   *
+   * Asked of the server on every pause in typing rather than assembled here.
+   * The disclosure leads, the product and its link go wherever that network
+   * allows, the hashtags move below both, written replies come before
+   * generated ones - and each of those is a rule with a reason that already
+   * exists in one place. A copy of it in the browser would be a second
+   * implementation that is right until the day it is not, which is the day
+   * somebody trusts this panel and posts something else.
+   */
+  const composeDraft = useCallback(async (draft: Record<string, unknown>) => {
+    try {
+      setComposed(await json<ComposedPost>(
+        await apiFetch(`${base}/queue/composition`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(draft),
+        }),
+      ));
+    } catch {
+      // Quiet, like the row matcher: somebody writing a caption should not be
+      // handed an error about the panel underneath it.
+      setComposed(null);
+    }
+  }, [apiFetch, base]);
+
+  const editForm = useRef<HTMLFormElement | null>(null);
+  const composeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * Recompose shortly after typing stops.
+   *
+   * Read off the form rather than from state, because these fields are
+   * uncontrolled - a caption re-rendered on every keystroke is a caption that
+   * loses the cursor. The pause is long enough that a sentence is one request
+   * and short enough that the preview feels like part of the same act.
+   */
+  const scheduleCompose = useCallback(() => {
+    if (composeTimer.current) clearTimeout(composeTimer.current);
+    composeTimer.current = setTimeout(() => {
+      const form = editForm.current;
+      if (!form || !editing) return;
+      const values = new FormData(form);
+      void composeDraft({
+        item_id: editing.id,
+        title: String(values.get("title") ?? "").trim() || null,
+        body: String(values.get("body") ?? "").trim(),
+        hashtags: String(values.get("hashtags") ?? "").split(/[\s,]+/).filter(Boolean),
+        first_comment: String(values.get("first_comment") ?? "").trim() || null,
+        thread: editingReplies.map((part) => part.trim()).filter(Boolean),
+        offer_ids: editing.offer_ids,
+        disclosure: editingDisclosure.trim() || null,
+        bio_hint: editingBioHint.trim() || null,
+      });
+    }, 350);
+  }, [composeDraft, editing, editingReplies, editingDisclosure, editingBioHint]);
+
+  // On opening, and after every change this component owns rather than the
+  // form: the replies, and the two wordings.
+  useEffect(() => {
+    if (!editing) return;
+    scheduleCompose();
+    return () => {
+      if (composeTimer.current) clearTimeout(composeTimer.current);
+    };
+  }, [editing, scheduleCompose]);
 
   /**
    * Match the whole selection at once, when the composer opens.
@@ -2953,6 +3066,7 @@ export function AutopilotPanel({
                     <Button variant="quiet" size="sm" onClick={() => {
                       setEditing(item);
                       setEditingReplies(item.thread.length ? item.thread : [""]);
+                      openEditorWording(item);
                       revealPanel("campaign-edit-content");
                     }}>Edit content</Button>
                     <Button variant="quiet" size="sm" busy={busy === `recommend-${item.id}`}
@@ -3062,7 +3176,8 @@ export function AutopilotPanel({
           </div>
         )}
         {editing && (
-          <form className="autopilot-compose" id="campaign-edit-content" onSubmit={(event) => {
+          <form className="autopilot-compose" id="campaign-edit-content"
+            ref={editForm} onInput={scheduleCompose} onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
             void run("edit-copy", async () => {
@@ -3076,6 +3191,11 @@ export function AutopilotPanel({
                     .split(/[\s,]+/).filter(Boolean),
                   first_comment: String(form.get("first_comment") ?? "").trim() || null,
                   thread: editingReplies.map((part) => part.trim()).filter(Boolean),
+                  // Empty goes back to the campaign's wording rather than
+                  // storing an empty disclosure, which is the one thing a post
+                  // with a product attached may not have.
+                  disclosure: editingDisclosure.trim() || null,
+                  bio_hint: editingBioHint.trim() || null,
                 }),
               }));
               setEditing(null);
@@ -3087,7 +3207,8 @@ export function AutopilotPanel({
                 <strong>Edit post</strong>
                 <small>Everything below is one post. The campaign adds the
                   disclosure and the product link to it, differently on each
-                  account - what that comes to is spelled out underneath.</small>
+                  account - what that comes to is composed underneath, exactly
+                  as each one will receive it.</small>
               </span>
               <Button variant="quiet" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
             </div>
@@ -3161,46 +3282,95 @@ export function AutopilotPanel({
                 supplies the rest, and it used to supply it invisibly: somebody
                 writing a caption here had no way to know a disclosure would be
                 prepended to it, that the hashtags would be moved below a link,
-                or that on TikTok the link would not appear in the post at all. */}
+                or that on TikTok the link would not appear in the post at all.
+                It was then described in prose, which is a manual for a machine
+                that is right here and can be asked. This is its answer: the
+                same composer the scheduler publishes through, run on what is
+                in the form. */}
             <section className="campaign-post-anatomy">
-              <strong>What goes out</strong>
-              <ol>
-                <li>
-                  <b>Disclosure</b>
-                  <span>{autopilot.disclosure
-                    ? `Leads the caption whenever a product is attached: "${autopilot.disclosure}"`
-                    : "None set. A post with a product attached will be refused until Campaign settings has one."}</span>
-                </li>
-                <li><b>Your copy</b><span>The caption above, then the hashtags.</span></li>
-                <li>
-                  <b>The product link</b>
-                  <span>{autopilot.offer_mode === "none"
-                    ? "Nothing is attached: this campaign posts organically."
-                    : "Added per account, in the place that account allows."}</span>
-                </li>
-                <li>
-                  <b>Your follow-up</b>
-                  <span>{editing.thread.length || editing.first_comment
-                    ? "Publishes after the post, ahead of any generated product replies."
-                    : "Nothing written; only generated product replies would follow the post."}</span>
-                </li>
-              </ol>
-              {autopilot.offer_mode !== "none" && destinations.length > 0 && (
-                <ul className="campaign-link-map" aria-label="Where the link lands">
-                  {destinations.map((item) => (
-                    <li key={item.id}>
-                      <PlatformIcon platform={item.platform} size={18} />
-                      <strong>{item.label}</strong>
-                      <Badge tone={placementTone(item.link_placement)}>
-                        {t(`autopilot.placement.${item.link_placement}`)}
-                      </Badge>
-                      <small>{item.link_placement === "bio"
-                        ? `Not clickable in the post. The caption points at the profile: "${autopilot.bio_hint}".`
-                        : item.link_placement === "first_comment"
-                          ? `In the ${followUpKind(item.platform)}, straight after the post.`
-                          : item.link_placement === "none"
-                            ? "No link goes out here at all."
-                            : "In the caption itself, below your copy."}</small>
+              <div className="campaign-anatomy-head">
+                <strong>What goes out</strong>
+                <small>{composed?.products.length
+                  ? `With ${composed.products.map((item) => item.name).join(", ")} attached.`
+                  : autopilot.offer_mode === "none"
+                    ? "This campaign posts organically; no product is attached."
+                    : "No product is confident enough to attach; the post would go out on its own."}</small>
+              </div>
+              <div className="campaign-wording">
+                <label>Disclosure
+                  <input value={editingDisclosure} maxLength={300}
+                    placeholder={composed?.campaign_disclosure ?? autopilot.disclosure}
+                    onChange={(event) => setEditingDisclosure(event.target.value)} />
+                  <small>{editingDisclosure.trim() ? (
+                    <>This post only.{" "}
+                      <button type="button" className="campaign-wording-reset"
+                        onClick={() => setEditingDisclosure("")}>
+                        Use the campaign&apos;s
+                      </button></>
+                  ) : autopilot.disclosure
+                    ? "The campaign's wording. Leads the caption whenever a product is attached."
+                    : "None set. Any account carrying a product will refuse the post until there is one."}</small>
+                </label>
+                {/* Only where a bio placement is in play. On a campaign whose
+                    accounts all take links, this field governs nothing. */}
+                {destinations.some((item) => item.link_placement === "bio") && (
+                  <label>Bio wording
+                    <input value={editingBioHint} maxLength={120}
+                      placeholder={composed?.campaign_bio_hint ?? autopilot.bio_hint}
+                      onChange={(event) => setEditingBioHint(event.target.value)} />
+                    <small>{editingBioHint.trim() ? (
+                      <>This post only.{" "}
+                        <button type="button" className="campaign-wording-reset"
+                          onClick={() => setEditingBioHint("")}>
+                          Use the campaign&apos;s
+                        </button></>
+                    ) : "The campaign's wording, where no link in a post is clickable."}</small>
+                  </label>
+                )}
+              </div>
+              {destinations.length === 0 ? (
+                <p className="autopilot-empty">
+                  No account on this campaign yet, so there is nothing to compose for.
+                </p>
+              ) : !composed ? (
+                <p className="autopilot-empty">Composing what each account receives…</p>
+              ) : (
+                <ul className="campaign-composed" aria-label="What each account receives">
+                  {composed.accounts.map((account) => (
+                    <li key={account.destination_id}>
+                      <div className="campaign-composed-head">
+                        <PlatformIcon platform={account.platform} size={18} />
+                        <strong>{account.label}</strong>
+                        {account.placement && (
+                          <Badge tone={placementTone(account.placement)}>
+                            {t(`autopilot.placement.${account.placement}`)}
+                          </Badge>
+                        )}
+                      </div>
+                      {account.refused ? (
+                        <p className="campaign-composed-refused">{account.refused}</p>
+                      ) : (
+                        <>
+                          {account.title && (
+                            <p className="campaign-composed-title">{account.title}</p>
+                          )}
+                          <pre className="campaign-composed-text">{account.caption}</pre>
+                          {account.first_comment && (
+                            <div className="campaign-composed-part">
+                              <b>{followUpKind(account.platform)}</b>
+                              <pre className="campaign-composed-text">
+                                {account.first_comment}
+                              </pre>
+                            </div>
+                          )}
+                          {(account.thread ?? []).map((reply, index) => (
+                            <div className="campaign-composed-part" key={index}>
+                              <b>Reply {index + 1}</b>
+                              <pre className="campaign-composed-text">{reply}</pre>
+                            </div>
+                          ))}
+                        </>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -3768,6 +3938,7 @@ export function AutopilotPanel({
                                     setView("content");
                                     setEditing(item);
                                     setEditingReplies(item.thread.length ? item.thread : [""]);
+                                    openEditorWording(item);
                                     revealPanel("campaign-edit-content");
                                   }}>Edit this post</button>
                               )}

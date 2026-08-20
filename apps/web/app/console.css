@@ -904,24 +904,33 @@ html { scroll-behavior: smooth; }
 /* What the campaign adds to the copy above, and where it lands. The form only
    edits two thirds of a post; this is the third somebody could not see. */
 .campaign-post-anatomy { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
-.campaign-post-anatomy > strong { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
-.campaign-post-anatomy ol { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; counter-reset: anatomy; }
-.campaign-post-anatomy ol > li { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 8px; align-items: baseline; }
-.campaign-post-anatomy ol > li > b { counter-increment: anatomy; font-size: 10px; }
-.campaign-post-anatomy ol > li > b::before { content: counter(anatomy) ". "; color: var(--muted); }
-.campaign-post-anatomy ol > li > span { color: var(--muted); font-size: 10px; line-height: 1.45; }
-/* The columns live on the list, not the row: as a grid per row the badge
-   column was as wide as that row's own badge, so three accounts put their
-   notes in three different places. */
-.campaign-link-map { display: grid; grid-template-columns: 18px minmax(0, 140px) auto minmax(0, 1fr); gap: 5px 7px; align-items: center; margin: 0; padding-block-start: 8px; border-block-start: 1px solid var(--line); list-style: none; }
-.campaign-link-map > li { display: contents; }
-.campaign-link-map > li > strong { min-width: 0; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.campaign-link-map > li > small { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.campaign-anatomy-head { display: flex; flex-wrap: wrap; gap: 3px 8px; align-items: baseline; }
+.campaign-anatomy-head > strong { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
+.campaign-anatomy-head > small { color: var(--muted); font-size: 10px; }
+/* The two wordings the campaign supplies, editable where they are read. Side
+   by side while there is room: neither is more than a line of text, and a
+   column each is what keeps this section from pushing Save off the screen. */
+.campaign-wording { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+.campaign-wording > label { display: grid; gap: 3px; min-width: 0; font-size: 10px; }
+.campaign-wording input { box-sizing: border-box; width: 100%; font-size: 11px; }
+.campaign-wording > label > small { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.campaign-wording-reset { border: 0; padding: 0; color: var(--link); background: none; font: inherit; font-weight: 600; cursor: pointer; }
+/* What each account actually receives. Captions are prose, so they are set in
+   the page's own face rather than a monospace block - what is being checked is
+   the reading of it. Tall ones scroll inside their own box, because a preview
+   that grows without limit buries the button that saves it. */
+.campaign-composed { display: grid; gap: 8px; margin: 0; padding-inline: 0; padding-block-start: 8px; border-block-start: 1px solid var(--line); list-style: none; }
+.campaign-composed > li { display: grid; gap: 5px; padding: 8px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.campaign-composed-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.campaign-composed-head > strong { min-width: 0; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-composed-title { margin: 0; font-size: 11px; font-weight: 600; }
+.campaign-composed-text { margin: 0; max-height: 13em; overflow: auto; padding: 7px 8px; border-radius: var(--radius-sm); background: var(--panel-raised); font: inherit; font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.campaign-composed-part { display: grid; gap: 3px; }
+.campaign-composed-part > b { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
+.campaign-composed-refused { margin: 0; color: var(--warn); font-size: 10px; line-height: 1.45; }
 
 @media (max-width: 620px) {
-  .campaign-post-anatomy ol > li { grid-template-columns: 1fr; gap: 2px; }
-  .campaign-link-map { grid-template-columns: 18px minmax(0, 1fr) auto; }
-  .campaign-link-map > li > small { grid-column: 1 / -1; }
+  .campaign-wording { grid-template-columns: 1fr; }
 }
 .campaign-item-products { margin-top: 10px; border-color: var(--line-strong); }
 .campaign-product-actions { border-top: 1px solid var(--line); padding-top: 10px; }

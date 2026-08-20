@@ -23,6 +23,8 @@ from trendrelay_api.autopilot_models import (
     CampaignAutopilot,
     CampaignDestination,
     CampaignQueueItem,
+    bio_hint_for,
+    disclosure_for,
 )
 from trendrelay_api.campaign_autopilot import (
     PLACEHOLDER_BODY,
@@ -196,6 +198,11 @@ class QueueItemUpdate(BaseModel):
     first_comment: str | None = Field(default=None, max_length=2000)
     thread: list[str] | None = Field(default=None, max_length=24)
     offer_ids: list[str] | None = Field(default=None, max_length=5)
+    #: This post's own wording for what the campaign otherwise supplies. Sent
+    #: empty or null to go back to the campaign's - never stored as an empty
+    #: disclosure, which is the one value that must not reach a post.
+    disclosure: str | None = Field(default=None, max_length=300)
+    bio_hint: str | None = Field(default=None, max_length=120)
 
 
 def _campaign(session: Session, workspace_id: str, campaign_id: str) -> Campaign:
@@ -303,6 +310,11 @@ def _queue_view(item: CampaignQueueItem) -> dict[str, Any]:
         "hashtags": item.hashtags,
         "first_comment": item.first_comment,
         "thread": item.thread,
+        # Null where this post uses the campaign's wording, so the editor can
+        # show the campaign's text as the default rather than as an edit
+        # somebody made.
+        "disclosure": item.disclosure,
+        "bio_hint": item.bio_hint,
         "offer_ids": item.offer_ids,
         "offer_match": item.offer_match,
         "state": item.state,
@@ -709,6 +721,13 @@ def apply_queue_item_edits(
         item.first_comment = (body.first_comment or "").strip() or None
     if body.thread is not None:
         item.thread = [part.strip() for part in body.thread if part.strip()]
+    # Cleared means "the campaign's", which is why an empty string becomes None
+    # rather than being stored. A stored empty disclosure would be a post that
+    # discloses nothing, and the composer would refuse to publish it.
+    if "disclosure" in body.model_fields_set:
+        item.disclosure = (body.disclosure or "").strip() or None
+    if "bio_hint" in body.model_fields_set:
+        item.bio_hint = (body.bio_hint or "").strip() or None
     if body.offer_ids is not None:
         _require_offer_ids(
             session, workspace_id, body.offer_ids,
@@ -909,6 +928,161 @@ def draft_offer_recommendations(
     # it: a transient item that reached a flush would become a real queue row.
     session.expunge_all()
     return {"assets": found}
+
+
+class CompositionRequest(BaseModel):
+    """A post as it stands in the editor, whether or not it has been saved."""
+
+    #: The queue item being edited, if there is one. Read for the identity the
+    #: editor does not carry - the media this post is about - which is what the
+    #: matcher scores against.
+    item_id: str | None = None
+    title: str | None = Field(default=None, max_length=200)
+    body: str = Field(default="", max_length=4000)
+    hashtags: list[str] = Field(default_factory=list, max_length=30)
+    first_comment: str | None = Field(default=None, max_length=2000)
+    thread: list[str] = Field(default_factory=list, max_length=24)
+    offer_ids: list[str] = Field(default_factory=list, max_length=5)
+    disclosure: str | None = Field(default=None, max_length=300)
+    bio_hint: str | None = Field(default=None, max_length=120)
+
+
+@router.post("/{campaign_id}/queue/composition")
+def compose_queue_item(
+    workspace_id: str,
+    campaign_id: str,
+    body: CompositionRequest,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """The exact text each account would receive, for a post being written.
+
+    A caption in the editor is not the post. The campaign leads it with a
+    disclosure, appends the product and its link where that account allows one,
+    moves the hashtags below both, and puts written replies ahead of generated
+    ones - none of which was visible while somebody wrote. The editor described
+    those rules in prose instead, which is a manual for a machine that is right
+    here and can simply be asked.
+
+    Composed by `compose_for_post`, which is what the scheduler publishes
+    through, against the products `chosen_matches` would attach and their real
+    affiliate links. Nothing here is a second implementation of any of it: the
+    reason to show this at all is that it is the same answer.
+
+    A network that would refuse the post says so per account rather than
+    failing the request - a missing disclosure is exactly what somebody opened
+    this panel to fix, and one refusing account should not blank the others.
+    """
+    membership(session, workspace_id, user.id)
+    campaign = _campaign(session, workspace_id, campaign_id)
+    autopilot = _autopilot(session, workspace_id, campaign_id, user_id=user.id)
+    destinations = session.scalars(select(CampaignDestination).where(
+        CampaignDestination.campaign_id == campaign_id,
+        CampaignDestination.enabled.is_(True),
+    )).all()
+    saved = None
+    if body.item_id:
+        saved = session.scalar(select(CampaignQueueItem).where(
+            CampaignQueueItem.id == body.item_id,
+            CampaignQueueItem.campaign_id == campaign_id,
+            CampaignQueueItem.workspace_id == workspace_id,
+        ))
+    # Built rather than edited in place. The saved row is in this session, and
+    # mutating it to preview an unsaved draft would publish the draft on the
+    # next flush - the edit would save itself merely by being previewed.
+    draft = CampaignQueueItem(
+        workspace_id=workspace_id,
+        campaign_id=campaign_id,
+        asset_id=saved.asset_id if saved else None,
+        video_path=saved.video_path if saved else "",
+        image_paths=list(saved.image_paths or []) if saved else [],
+        title=body.title,
+        body=body.body,
+        hashtags=list(body.hashtags),
+        first_comment=body.first_comment,
+        thread=list(body.thread),
+        offer_ids=list(body.offer_ids),
+        disclosure=body.disclosure,
+        bio_hint=body.bio_hint,
+    )
+    from trendrelay_api.campaign_autopilot import DisclosureMissing, compose_for_post
+    from trendrelay_api.campaign_offer_matcher import chosen_matches, last_promoted
+    from trendrelay_api.integrations.publishing import (
+        first_comment_deliverable,
+        limits_for,
+    )
+
+    matches, strategy = chosen_matches(
+        session, campaign, autopilot, draft, destinations,
+        last_used=last_promoted(session, campaign_id),
+    )
+    products: list[tuple[str, str]] = []
+    attached: list[dict[str, Any]] = []
+    for match in matches:
+        link = offer_link_url(session, match.offer_id)
+        if not link:
+            continue
+        products.append((match.product_name, link))
+        attached.append({
+            "offer_id": match.offer_id, "name": match.product_name, "link": link,
+        })
+    disclosure = disclosure_for(draft, autopilot)
+    bio_hint = bio_hint_for(draft, autopilot)
+    accounts: list[dict[str, Any]] = []
+    for destination in destinations:
+        comment_ok = first_comment_deliverable(
+            destination.provider, destination.platform
+        )
+        try:
+            post = compose_for_post(
+                platform=destination.platform,
+                body=draft.body,
+                hashtags=list(draft.hashtags or []),
+                products=products,
+                disclosure=disclosure if products else "",
+                bio_hint=bio_hint,
+                placement_override=destination.link_placement,
+                comment_deliverable=comment_ok,
+                written_first_comment=draft.first_comment,
+                written_thread=draft.thread or (),
+            )
+        except DisclosureMissing as refusal:
+            accounts.append({
+                "destination_id": destination.id,
+                "label": destination.label,
+                "platform": destination.platform,
+                "refused": str(refusal),
+            })
+            continue
+        accounts.append({
+            "destination_id": destination.id,
+            "label": destination.label,
+            "platform": destination.platform,
+            "placement": post.placement.placement,
+            "placement_reason": post.placement.reason,
+            "title": (
+                draft.title if limits_for(destination.platform).title else None
+            ),
+            "caption": post.caption,
+            "first_comment": post.first_comment,
+            "thread": list(post.thread),
+            "refused": None,
+        })
+    # As in draft matching: a transient item that reached a flush would become
+    # a queue row nobody asked for.
+    session.expunge_all()
+    return {
+        "accounts": accounts,
+        "products": attached,
+        "selection": strategy.get("selection", ""),
+        # What the campaign supplies, so the editor can show its fields filled
+        # with the text that will actually be used and mark which of it this
+        # post has overridden.
+        "disclosure": disclosure,
+        "bio_hint": bio_hint,
+        "campaign_disclosure": autopilot.disclosure,
+        "campaign_bio_hint": autopilot.bio_hint,
+    }
 
 
 @router.get("/{campaign_id}/offer-recommendations")

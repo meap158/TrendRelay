@@ -30,12 +30,14 @@ from trendrelay_api.autopilot_models import (
     CampaignDestination,
     CampaignDestinationOfferLink,
     CampaignQueueItem,
+    bio_hint_for,
+    disclosure_for,
 )
 from trendrelay_api.campaign_autopilot import (
     EXPLORATION_EVERY,
     DisclosureMissing,
     choose_destination,
-    compose_products,
+    compose_for_post,
     rank_destinations,
 )
 from trendrelay_api.campaign_offer_matcher import (
@@ -908,15 +910,20 @@ def plan_campaign(
                     product_links.append((match.product_name, link))
                     linked_matches.append(match)
             try:
-                post = compose_products(
+                post = compose_for_post(
                     platform=destination.platform,
                     body=item.body,
                     hashtags=list(item.hashtags or []),
                     products=product_links,
-                    disclosure=autopilot.disclosure if product_links else "",
-                    bio_hint=autopilot.bio_hint,
+                    disclosure=disclosure_for(item, autopilot) if product_links else "",
+                    bio_hint=bio_hint_for(item, autopilot),
                     placement_override=destination.link_placement,
                     comment_deliverable=comment_ok,
+                    # Operator-authored comments and replies form one content
+                    # package with the caption the campaign generates. Merged
+                    # by the composer, which is also what the editor previews.
+                    written_first_comment=item.first_comment,
+                    written_thread=item.thread or (),
                 )
             except DisclosureMissing as error:
                 return [], str(error)
@@ -926,25 +933,6 @@ def plan_campaign(
                     for match in linked_matches
                 )
                 or f"No affiliate product attached ({match_strategy['selection']})."
-            )
-            # Operator-authored comments and replies form one persistent content
-            # package with the base caption. Generated affiliate replies are added
-            # afterwards, so the timeline can show and validate the exact sequence.
-            #
-            # Both, when both exist. This used to be `written or generated`, which
-            # meant that on a first-comment network - where the comment *is* where
-            # the link lives - anyone who wrote a comment silently deleted the
-            # link, and the post went out selling nothing with no sign anything had
-            # been dropped. The words lead and the link follows them, one comment,
-            # because the network only takes one.
-            written = (item.first_comment or "").strip()
-            generated = (post.first_comment or "").strip()
-            first_comment = (
-                f"{written}\n\n{generated}" if written and generated
-                else written or post.first_comment
-            )
-            custom_thread = tuple(
-                part.strip() for part in (item.thread or []) if part.strip()
             )
             scheduled.append(ScheduledPost(
                 campaign_id=autopilot.campaign_id,
@@ -959,13 +947,13 @@ def plan_campaign(
                 effect_ids=frozen.effect_ids,
                 title=item.title,
                 caption=post.caption,
-                first_comment=first_comment,
+                first_comment=post.first_comment,
                 placement=post.placement.placement,
                 reason=(
                     f"{'Ranked' if rank.ranked else 'Unranked'}: {rank.reason} "
                     f"{post.placement.reason} Product match: {match_reason}"
                 ),
-                thread=(*custom_thread, *post.thread),
+                thread=post.thread,
                 offer_ids=tuple(match.offer_id for match in linked_matches),
                 product_names=tuple(match.product_name for match in linked_matches),
                 offer_confidences=tuple(match.confidence for match in linked_matches),
