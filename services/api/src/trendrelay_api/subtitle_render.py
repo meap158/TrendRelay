@@ -49,6 +49,7 @@ def probe_size(video: Path) -> tuple[int, int]:
             "-of", "json", str(video),
         ],
         capture_output=True, text=True, timeout=PROBE_TIMEOUT_SECONDS, check=False,
+        stdin=subprocess.DEVNULL,
     )
     if done.returncode != 0:
         return DEFAULT_SIZE
@@ -124,6 +125,11 @@ def burn_in(
             ],
             cwd=work, capture_output=True, text=True,
             timeout=RENDER_TIMEOUT_SECONDS, check=False,
+            # FFmpeg reads stdin for its interactive keys, and a worker has no
+            # console to give it. Inheriting whatever stdin the process was
+            # started with is how an encode ends up waiting on a pipe that will
+            # never deliver, holding the job until the lease expires.
+            stdin=subprocess.DEVNULL,
         )
         if done.returncode != 0 or not rendered.is_file():
             detail = (done.stderr or "").strip().splitlines()
