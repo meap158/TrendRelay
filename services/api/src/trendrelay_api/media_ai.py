@@ -981,6 +981,14 @@ def run_enrichment_job(
                         "switch in the Library, or its card in Tools."
                     )
                 )
+        # Read what the models need, then let the connection go. Transcribing a
+        # clip is minutes of inference, and doing it inside the session held a
+        # pooled database connection open for every one of them - so a few
+        # concurrent jobs could exhaust the pool while none of them were
+        # touching the database at all. Nothing below here needs a session
+        # until there are results to write.
+        audio: Path | None = None
+        source: Path | None = None
         with factory() as session:
             asset = session.scalar(
                 select(MediaAsset).where(
@@ -990,19 +998,27 @@ def run_enrichment_job(
             )
             if not asset:
                 raise RuntimeError("Media asset was removed before analysis.")
-            drafts: list[tuple[Mode, dict[str, Any]]] = []
             if "speech" in payload["modes"]:
-                audio = _version_path(session, asset.id, "audio")
-                if not audio:
-                    audio = _version_path(session, asset.id, "original")
-                if not audio:
-                    raise RuntimeError("The audio version is unavailable.")
-                drafts.append(("speech", SPEECH_RUNNER(audio, payload.get("language"))))
+                audio = _version_path(session, asset.id, "audio") or _version_path(
+                    session, asset.id, "original"
+                )
             if "ocr" in payload["modes"]:
                 source = _version_path(session, asset.id, "original")
-                if not source:
-                    raise RuntimeError("The original version is unavailable.")
-                drafts.append(("ocr", OCR_RUNNER(asset, source, work)))
+            # Detached, but its loaded values stay readable. The OCR pass wants
+            # `media_kind` and nothing else, so this keeps the answer without
+            # keeping the row - and without a lazy load firing on a closed
+            # session halfway through a render.
+            session.expunge(asset)
+
+        drafts: list[tuple[Mode, dict[str, Any]]] = []
+        if "speech" in payload["modes"]:
+            if not audio:
+                raise RuntimeError("The audio version is unavailable.")
+            drafts.append(("speech", SPEECH_RUNNER(audio, payload.get("language"))))
+        if "ocr" in payload["modes"]:
+            if not source:
+                raise RuntimeError("The original version is unavailable.")
+            drafts.append(("ocr", OCR_RUNNER(asset, source, work)))
         transcript_ids = []
         with factory.begin() as session:
             for kind, draft in drafts:
