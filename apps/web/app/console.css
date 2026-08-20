@@ -265,6 +265,53 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .loading-panel strong { font-size: 15px; }
 .loading-panel span { color: var(--muted); line-height: 1.5; }
 .loading-panel-actions { display: flex; gap: 6px; align-items: center; }
+
+/* The animated brand mark. The trend line traces itself in, the four points
+   light along it in turn, then it eases back and loops - a small sign that
+   something is still working, drawn from the app's own logo rather than a
+   generic spinner. pathLength=1 on the <path> normalises the line to a unit,
+   so the dash math holds whatever the exact coordinates are. */
+.loading-mark { display: inline-flex; margin-block-end: 4px; }
+.loading-mark svg { width: 44px; height: 44px; overflow: visible; }
+.loading-mark-line {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: loading-mark-draw 2.4s ease-in-out infinite;
+}
+.loading-mark circle {
+  fill: var(--green);
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0.2;
+  animation: loading-mark-point 2.4s ease-in-out infinite;
+}
+/* Staggered so the points arrive in the order the line reaches them. */
+.loading-mark circle:nth-of-type(1) { animation-delay: 0.15s; }
+.loading-mark circle:nth-of-type(2) { animation-delay: 0.45s; }
+.loading-mark circle:nth-of-type(3) { animation-delay: 0.75s; }
+.loading-mark circle:nth-of-type(4) { animation-delay: 1.05s; }
+@keyframes loading-mark-draw {
+  0%        { stroke-dashoffset: 1; opacity: 0.35; }
+  45%       { stroke-dashoffset: 0; opacity: 1; }
+  70%       { stroke-dashoffset: 0; opacity: 1; }
+  100%      { stroke-dashoffset: 0; opacity: 0.35; }
+}
+@keyframes loading-mark-point {
+  0%, 100%  { opacity: 0.2; transform: scale(0.7); }
+  40%       { opacity: 1;   transform: scale(1.15); }
+  70%       { opacity: 0.85; transform: scale(1); }
+}
+/* Honour a reduced-motion preference: hold the finished mark, no looping. */
+@media (prefers-reduced-motion: reduce) {
+  .loading-mark-line, .loading-mark circle { animation: none; }
+  .loading-mark-line { stroke-dashoffset: 0; }
+  .loading-mark circle { opacity: 1; }
+}
 .empty-console h1 { margin: 16px 0 8px; font-weight: 500; font-size: 20px; }
 .empty-console h2 { margin: 12px 0; font-size: 16px; font-weight: 500; }
 .empty-console p { margin-bottom: 24px; color: var(--muted); line-height: 1.5; font-size: 14px; }
