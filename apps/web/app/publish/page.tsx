@@ -1926,6 +1926,12 @@ export default function PublishPage() {
                 <div className="engine-card-head">
                   <ProviderMark provider={provider.engine} />
                   <div>
+                    {/* The name and its pencil on one line. `strong` is a
+                        block here so the name can truncate with an ellipsis,
+                        and a block fills its cell - which put the pencil on
+                        the line below. A flex row keeps both, since a flex
+                        item can still truncate given `min-width: 0`. */}
+                    <div className="engine-name-row">
                     <strong>{provider.label}</strong>
                     {/* Renaming, where renaming means something. The first
                         login of an engine is named after the engine and the
@@ -1944,6 +1950,7 @@ export default function PublishPage() {
                         }}
                       ><ActionIcon name="edit" size={12} /></button>
                     )}
+                    </div>
                     {/* Whose login it is, in place of the tagline once there is
                         an answer. Two connections to one engine are otherwise
                         told apart only by a name somebody typed, and the engine

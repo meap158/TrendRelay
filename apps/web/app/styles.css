@@ -1320,10 +1320,17 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
   font: inherit;
 }
 
+/* The name and its pencil share a line. `min-width: 0` on both, because a flex
+   item defaults to its content's width and would otherwise refuse to shrink -
+   which is what lets the long name keep its ellipsis instead of pushing the
+   pencil out of the card. */
+.engine-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.engine-name-row > strong { min-width: 0; }
+
 /* Rename, beside the name it renames. Quiet enough to be chrome rather than a
    fourth action competing with the three on the card, and it only appears on
    logins that can actually be renamed. */
-.engine-rename { display: inline-flex; align-items: center; justify-content: center; margin-inline-start: 6px; padding: 2px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--muted); cursor: pointer; vertical-align: middle; }
+.engine-rename { display: inline-flex; flex: none; align-items: center; justify-content: center; padding: 2px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--muted); cursor: pointer; vertical-align: middle; }
 .engine-rename:hover:not(:disabled) { color: var(--link); background: var(--panel-raised); }
 .engine-rename:disabled { cursor: default; opacity: .5; }
 .engine-rename:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
