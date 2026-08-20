@@ -29,30 +29,6 @@ type Consolidated = {
 };
 
 /**
- * Countries this list can be asked about.
- *
- * China is here where the single-source lists do not offer it, because it is
- * the one country where two sources can corroborate each other: the Douyin
- * board only covers CN.
- */
-const REGIONS: ReadonlyArray<readonly [string, string]> = [
-  ["US", "United States"],
-  ["GB", "United Kingdom"],
-  ["DE", "Germany"],
-  ["FR", "France"],
-  ["ES", "Spain"],
-  ["IT", "Italy"],
-  ["BR", "Brazil"],
-  ["MX", "Mexico"],
-  ["CA", "Canada"],
-  ["AU", "Australia"],
-  ["JP", "Japan"],
-  ["ID", "Indonesia"],
-  ["VN", "Vietnam"],
-  ["CN", "China"],
-];
-
-/**
  * The time control, phrased as what somebody is looking for.
  *
  * It filters the ranked result rather than narrowing the fetch: every window is
@@ -158,21 +134,20 @@ const S: Record<string, React.CSSProperties> = {
 };
 
 export function TrendingTopics({
+  country,
   onResearch,
   onScore,
   selectedIds,
   onToggle,
 }: {
+  country: string;
   onResearch: (term: string) => void;
   onScore: (topic: Topic) => void;
   selectedIds?: ReadonlySet<string>;
   onToggle?: (seed: DiscoverySeed) => void;
 }) {
-  const [region, setRegion] = usePersistedState<string>(
-    "trendrelay.discover.consolidated.region",
-    "US",
-    (value): value is string => REGIONS.some(([code]) => code === value),
-  );
+  // The page's one country is this board's region; no selector of its own.
+  const region = country;
   const [lens, setLens] = usePersistedState<string>(
     "trendrelay.discover.consolidated.lens",
     "all",
@@ -247,6 +222,8 @@ export function TrendingTopics({
   useEffect(() => {
     if (firstRegion.current === region) return;
     firstRegion.current = region;
+    // Douyin exists only for China; leaving CN drops the platform back to all.
+    if (region !== "CN" && platform === "douyin") setPlatform("all");
     void load();
     // `load` is rebuilt whenever the region changes, which would run this again.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -273,24 +250,6 @@ export function TrendingTopics({
       </div>
 
       <div style={S.controls}>
-        <label style={S.control}>
-          <span style={S.controlLabel}>Country</span>
-          <select
-            value={region}
-            onChange={(event) => {
-              const next = event.target.value;
-              setRegion(next);
-              if (next !== "CN" && platform === "douyin") setPlatform("all");
-            }}
-            style={S.select}
-          >
-            {REGIONS.map(([code, name]) => (
-              <option key={code} value={code}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
         <label style={S.control}>
           <span style={S.controlLabel}>Platform</span>
           <select value={platform} onChange={(event) => setPlatform(event.target.value)} style={S.select}>

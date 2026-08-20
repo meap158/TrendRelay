@@ -7,6 +7,7 @@ import { Crown, Download, Flame, Hash, Music2, RefreshCw, type LucideIcon } from
 
 import { apiBaseUrl } from "../../lib/api";
 import { fetchWorkspaces } from "../../lib/workspaces";
+import { REGIONS, isRegion } from "../../lib/regions";
 import type { DiscoverySeed } from "../../lib/discovery-ideas";
 import { searchTerm, type Topic } from "../../lib/trend-shapes";
 import { useAuth } from "../auth-provider";
@@ -147,20 +148,6 @@ type Inspiration = {
   relevance?: number;
 };
 
-const TIKTOK_REGIONS: ReadonlyArray<readonly [string, string]> = [
-  ["US", "United States"],
-  ["GB", "United Kingdom"],
-  ["DE", "Germany"],
-  ["FR", "France"],
-  ["ES", "Spain"],
-  ["IT", "Italy"],
-  ["BR", "Brazil"],
-  ["MX", "Mexico"],
-  ["CA", "Canada"],
-  ["AU", "Australia"],
-  ["JP", "Japan"],
-  ["ID", "Indonesia"],
-];
 const TIKTOK_PERIODS: ReadonlyArray<readonly [number, string]> = [
   [7, "Last 7 days"],
   [30, "Last 30 days"],
@@ -365,7 +352,11 @@ export default function ResearchDashboard() {
   const [tiktokResult, setTiktokResult] = usePersistedCache<TikTokResult>(
     "trendrelay.discover.tiktok.result", RESEARCH_MAX_AGE, isTikTok);
   const [tiktokCategories, setTiktokCategories] = useState<TikTokCategory[]>([]);
-  const [tiktokRegion, setTiktokRegion] = useState("US");
+  // One country setting for the whole page: every board follows it rather than
+  // each keeping its own. Persisted, validated against the shared list.
+  const [country, setCountry] = usePersistedState(
+    "trendrelay.discover.country", "US", isRegion,
+  );
   const [tiktokPeriod, setTiktokPeriod] = useState(7);
   const [briefing, setBriefing] = usePersistedCache<MetaBriefing>(
     "trendrelay.discover.briefing", RESEARCH_MAX_AGE, isBriefing);
@@ -765,12 +756,11 @@ export default function ResearchDashboard() {
     const category = remembered ? remembered.category : tiktokCategories[0]!.id;
     void (async () => {
       if (remembered) {
-        setTiktokRegion(remembered.region);
         setTiktokPeriod(remembered.period);
       }
       await fetchTiktokDiscovery(
         category,
-        remembered ? { region: remembered.region, period: remembered.period } : {},
+        remembered ? { period: remembered.period } : {},
       );
     })();
     // fetchTiktokDiscovery is re-created each render; the ref guards the one run.
@@ -781,7 +771,7 @@ export default function ResearchDashboard() {
     category: string,
     options: { region?: string; period?: number; refresh?: boolean } = {},
   ) {
-    const region = options.region ?? tiktokRegion;
+    const region = options.region ?? country;
     const period = options.period ?? tiktokPeriod;
     setBusy("tiktok");
     setError(null);
@@ -998,6 +988,22 @@ export default function ResearchDashboard() {
               {label}
             </button>
           ))}
+          {/* One country for the whole page. Trends, popular posts, TikTok and
+              the news board all follow it; Douyin stays China and the
+              network-wide sources (Bluesky, Hacker News) are unaffected. */}
+          <label className="dsc-country">
+            <span>Country</span>
+            <select
+              className="dsc-country-select"
+              value={country}
+              aria-label="Country for every Discover board"
+              onChange={(event) => setCountry(event.target.value)}
+            >
+              {REGIONS.map(([code, label]) => (
+                <option key={code} value={code}>{label}</option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div className="dsc-quick-links-row">
@@ -1023,12 +1029,12 @@ export default function ResearchDashboard() {
       {/* One list first, because the question anyone opens this page with is
           "what is hot", not "what did TikTok say". Seven sources on seven
           boards is fourteen answers to read before knowing anything. */}
-      <DiscoveryFeed selectedIds={ideaSeedIds} onToggle={toggleIdeaSeed} />
+      <DiscoveryFeed country={country} selectedIds={ideaSeedIds} onToggle={toggleIdeaSeed} />
 
       {/* News leads. It reads public feeds rather than this workspace's own
           history, so it is reliably full on a first visit before any research
           has run - which is what stops Discover opening as an empty form. */}
-      <NewsBoard seeds={ideaSeeds} onSeed={toggleIdeaSeed} />
+      <NewsBoard country={country} seeds={ideaSeeds} onSeed={toggleIdeaSeed} />
 
       {/* Folded, not deleted. A hashtag and a video are different evidence,
           and these two boards answer what the merged list cannot: what shape a
@@ -1037,6 +1043,7 @@ export default function ResearchDashboard() {
           nobody can check. */}
       <div className="dsc-section">
         <TrendingTopics
+          country={country}
           onResearch={exploreTopic}
           onScore={scoreTopic}
           selectedIds={ideaSeedIds}
@@ -1046,6 +1053,7 @@ export default function ResearchDashboard() {
 
       <div className="dsc-section">
         <PopularPosts
+          country={country}
           onResearch={exploreTopic}
           selectedIds={ideaSeedIds}
           onToggle={toggleIdeaSeed}
@@ -1278,23 +1286,6 @@ export default function ResearchDashboard() {
               </p>
             </div>
             <div className="dsc-tiktok-controls">
-              <select
-                aria-label={t("research.tiktokRegion")}
-                className="dsc-tiktok-select"
-                value={tiktokRegion}
-                disabled={busy === "tiktok"}
-                onChange={(event) => {
-                  const region = event.target.value;
-                  setTiktokRegion(region);
-                  if (tiktokResult) {
-                    void fetchTiktokDiscovery(tiktokResult.category, { region });
-                  }
-                }}
-              >
-                {TIKTOK_REGIONS.map(([code, label]) => (
-                  <option key={code} value={code}>{label}</option>
-                ))}
-              </select>
               <select
                 aria-label={t("research.tiktokPeriod")}
                 className="dsc-tiktok-select"

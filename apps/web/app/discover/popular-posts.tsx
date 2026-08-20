@@ -74,22 +74,6 @@ const PLATFORMS: ReadonlyArray<readonly [PostSource, string]> = [
   ["hackernews", "Hacker News"],
 ];
 
-/** Countries Creative Center will answer for. */
-const REGIONS: ReadonlyArray<readonly [string, string]> = [
-  ["US", "United States"],
-  ["GB", "United Kingdom"],
-  ["DE", "Germany"],
-  ["FR", "France"],
-  ["ES", "Spain"],
-  ["IT", "Italy"],
-  ["BR", "Brazil"],
-  ["MX", "Mexico"],
-  ["CA", "Canada"],
-  ["AU", "Australia"],
-  ["JP", "Japan"],
-  ["ID", "Indonesia"],
-  ["VN", "Vietnam"],
-];
 
 /** The windows the source offers. One is asked for, not all three. */
 const PERIODS: ReadonlyArray<readonly [number, string]> = [
@@ -213,20 +197,19 @@ const S: Record<string, React.CSSProperties> = {
 };
 
 export function PopularPosts({
+  country,
   onResearch,
   selectedIds,
   onToggle,
 }: {
+  country: string;
   onResearch: (term: string) => void;
   selectedIds?: ReadonlySet<string>;
   onToggle?: (seed: DiscoverySeed) => void;
 }) {
   const { jobs } = useJobs();
-  const [region, setRegion] = usePersistedState<string>(
-    "trendrelay.discover.posts.region",
-    "US",
-    (value): value is string => REGIONS.some(([code]) => code === value),
-  );
+  // The page's one country is this board's region; no selector of its own.
+  const region = country;
   const [period, setPeriod] = usePersistedState<number>(
     "trendrelay.discover.posts.period",
     7,
@@ -456,14 +439,6 @@ export function PopularPosts({
                 </option>
               );
             })}
-          </select>
-        </label>
-        <label style={S.control}>
-          <span style={S.controlLabel}>Country</span>
-          <select value={region} onChange={(event) => setRegion(event.target.value)} style={S.select}>
-            {REGIONS.map(([code, name]) => (
-              <option key={code} value={code}>{name}</option>
-            ))}
           </select>
         </label>
         {platform === "youtube" ? (

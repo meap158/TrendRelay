@@ -37,17 +37,6 @@ import type { Topic } from "../../lib/trend-shapes";
 import { Button } from "../ui/button";
 import { usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 
-/** Countries every source that has a region will answer for. */
-const REGIONS: ReadonlyArray<readonly [string, string]> = [
-  ["VN", "Vietnam"],
-  ["US", "United States"],
-  ["GB", "United Kingdom"],
-  ["ID", "Indonesia"],
-  ["JP", "Japan"],
-  ["DE", "Germany"],
-  ["FR", "France"],
-  ["BR", "Brazil"],
-];
 
 const PERIODS: ReadonlyArray<readonly [number, string]> = [
   [7, "Last 7 days"],
@@ -81,17 +70,17 @@ type Loaded = {
 };
 
 export function DiscoveryFeed({
+  country,
   selectedIds,
   onToggle,
 }: {
+  country: string;
   selectedIds?: ReadonlySet<string>;
   onToggle?: (seed: DiscoverySeed) => void;
 }) {
-  const [region, setRegion] = usePersistedState<string>(
-    "trendrelay.discover.feed.region",
-    "VN",
-    (value): value is string => REGIONS.some(([code]) => code === value),
-  );
+  // The page's one country is this board's region; it keeps no selector of its
+  // own now that the setting is global.
+  const region = country;
   const [period, setPeriod] = usePersistedState<number>(
     "trendrelay.discover.feed.period",
     7,
@@ -203,14 +192,6 @@ export function DiscoveryFeed({
           </p>
         </div>
         <div className="discovery-feed-controls">
-          <label>
-            Region
-            <select value={region} onChange={(event) => setRegion(event.target.value)}>
-              {REGIONS.map(([code, name]) => (
-                <option key={code} value={code}>{name}</option>
-              ))}
-            </select>
-          </label>
           <label>
             Window
             <select

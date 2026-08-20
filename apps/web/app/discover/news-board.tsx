@@ -152,9 +152,11 @@ function Shelf({
 }
 
 export function NewsBoard({
+  country,
   seeds,
   onSeed,
 }: {
+  country: string;
   seeds: DiscoverySeed[];
   onSeed: (seed: DiscoverySeed) => void;
 }) {
@@ -205,7 +207,7 @@ export function NewsBoard({
   useEffect(() => {
     const controller = new AbortController();
 
-    fetch(`${apiBaseUrl()}/api/research/news?desk=${desk}&limit=6`, {
+    fetch(`${apiBaseUrl()}/api/research/news?desk=${desk}&limit=6&country=${country}`, {
       cache: "no-store",
       signal: controller.signal,
     })
@@ -229,7 +231,7 @@ export function NewsBoard({
 
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [desk, reload]);
+  }, [desk, reload, country]);
 
   const current = result?.desk === desk ? result : null;
   const board = current?.board ?? null;

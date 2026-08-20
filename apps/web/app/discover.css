@@ -223,6 +223,10 @@
 .dsc-mode-row { display: flex; gap: 8px; margin-top: 8px; }
 .dsc-mode-btn { background: transparent; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 6px 16px; font-size: 13px; cursor: pointer; color: var(--muted); font-family: inherit; font-weight: 500; transition: all 0.15s; }
 .dsc-mode-btn-active { background: var(--green-dark); border: 1px solid var(--green); color: var(--green); }
+/* The one country control, at the far end of the mode row: every board follows
+   it, so it sits with the page's other top-level switches, not inside a board. */
+.dsc-country { display: inline-flex; align-items: center; gap: 6px; margin-inline-start: auto; font-size: 13px; color: var(--muted); }
+.dsc-country-select { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font: inherit; font-size: 13px; padding: 6px 8px; max-inline-size: 200px; }
 .dsc-top-bar { display: flex; align-items: center; justify-content: space-between; max-width: var(--dsc-measure); margin: 0 auto; padding: 10px 24px; border-bottom: 1px solid var(--panel-raised); font-size: 13px; color: var(--muted); }
 .dsc-ws-select { border: 1px solid var(--line-strong); border-radius: 8px; padding: 4px 8px; font-size: 13px; background: var(--panel); color: var(--text); font-family: inherit; }
 .dsc-error { background: var(--bad-bg); color: var(--bad); padding: 12px 24px; font-size: 14px; text-align: center; margin: 0px; }
