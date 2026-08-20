@@ -284,6 +284,12 @@ nav strong { color: var(--text); }
 .tunnel-test { margin-top: 14px; padding: 12px 13px; border: 1px solid var(--line); border-inline-start-width: 3px; border-radius: var(--radius-sm); background: var(--panel); }
 .tunnel-test-ok { border-inline-start-color: var(--green); background: #f1f8f5; }
 .tunnel-test-problem { border-inline-start-color: var(--warn-line); background: var(--warn-bg); }
+/* A start/save/test result shown inside the setup modal, dismissable. Green for
+   a plain message, red for an error - the same colours the page-level notices
+   use, so the modal reads the same way. */
+.setup-notice { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; border-inline-start: 3px solid var(--green); padding: 10px 14px; color: var(--green); background: var(--green-dark); border-radius: var(--radius-sm); }
+.setup-notice > span { overflow-wrap: anywhere; line-height: 1.5; }
+.setup-notice-error { border-inline-start-color: var(--red); color: var(--bad); background: var(--bad-bg); }
 .tunnel-test-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; justify-content: space-between; }
 .tunnel-test-head > strong { font-size: 0.82rem; }
 .tunnel-test dl { display: grid; gap: 4px; margin: 10px 0 0; }

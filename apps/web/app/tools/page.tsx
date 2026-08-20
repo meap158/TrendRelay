@@ -457,6 +457,33 @@ export default function ToolsPage() {
     }
   }
 
+  /**
+   * Test the MCP server and its tunnel from the card, without opening Setup.
+   *
+   * Runs the same tunnel doctor the modal's "Test tunnel connection" does - it
+   * checks the loopback server and the path a tunnel would take to it - and
+   * shows the answer as the dismissable panel above. A quick "is it working?"
+   * from the list, for when the full setup panel is more than the question needs.
+   */
+  async function quickTestMcp(toolId: string) {
+    setBusy(`${toolId}-quick-test`);
+    setError(null);
+    setMessage(null);
+    try {
+      const payload = await responseJson<{ result: TunnelTest }>(
+        await apiFetch(`/api/tools/${toolId}/setup/test-tunnel`, {
+          method: "POST",
+          body: JSON.stringify({ confirm_external_action: true }),
+        }),
+      );
+      setTunnelTest(payload.result);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The MCP test could not run.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (loading) return <main className="tools-page"><p>{t("tools.loading")}</p></main>;
   if (!user) return <main className="tools-page"><h1>{t("tools.signInPrompt")}</h1><Link href="/sign-in?next=%2Ftools">{t("nav.signIn")}</Link></main>;
 
@@ -539,8 +566,39 @@ export default function ToolsPage() {
           </details>
         </div>
       </section>
-      {error && <p className="registry-error" role="alert">{error}</p>}
-      {message && <p className="registry-message" role="status">{message}</p>}
+      {error && (
+        <div className="setup-notice setup-notice-error" role="alert">
+          <span>{error}</span>
+          <button type="button" className={buttonClass({ variant: "quiet", size: "sm" })}
+            onClick={() => setError(null)}>Dismiss</button>
+        </div>
+      )}
+      {message && (
+        <div className="setup-notice" role="status">
+          <span>{message}</span>
+          <button type="button" className={buttonClass({ variant: "quiet", size: "sm" })}
+            onClick={() => setMessage(null)}>Dismiss</button>
+        </div>
+      )}
+      {/* The MCP quick-test's answer, at page level when its own panel is not
+          open - the same five checks the modal shows, dismissable. */}
+      {!setup && tunnelTest && (
+        <section className={`tunnel-test tunnel-test-${tunnelTest.status}`} aria-live="polite">
+          <div className="tunnel-test-head">
+            <strong>{tunnelTest.message}</strong>
+            <button type="button" className={buttonClass({ variant: "quiet", size: "sm" })}
+              onClick={() => setTunnelTest(null)}>Dismiss</button>
+          </div>
+          <dl>
+            {tunnelTest.checks.map((check) => (
+              <div key={check.id} className={`tunnel-check tunnel-check-${check.state}`}>
+                <dt>{check.label}</dt>
+                <dd>{check.detail}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
       {/* Grouped by where the work shows up, because that is the question
           somebody arrives with - "what powers my captions", not "what is a
           media intelligence tool". Sixteen tools carried eleven categories
@@ -617,6 +675,14 @@ export default function ToolsPage() {
                           way the dialogs end on Save, and the two places that
                           list the same three buttons now list them in the same
                           order. */}
+                      {tool.id === "mcp-server" && (
+                        <button type="button" className={buttonClass({ variant: "quiet", size: "sm" })}
+                          disabled={busy === `${tool.id}-quick-test`}
+                          title="Test the MCP server and its tunnel"
+                          onClick={() => void quickTestMcp(tool.id)}>
+                          <ActionIcon name="search" />{busy === `${tool.id}-quick-test` ? "Testing…" : "Test"}
+                        </button>
+                      )}
                       {guidedSetup.has(tool.id) && (
                         <button type="button" className={buttonClass({ variant: "secondary", size: "sm" })}
                           disabled={busy === `${tool.id}-setup`}
@@ -756,26 +822,6 @@ export default function ToolsPage() {
           )}
           {setup.tool_id === "douyin-downloader" && setup.connection && <p className="connection-note">{t("tools.douyinConnection")} <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
           {setup.tool_id === "mcp-server" && setup.connection && <p className="connection-note">Assistant access: <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
-          {/* The test's answer, where it was asked for. Five named checks
-              rather than a verdict: "the tunnel does not work" has five
-              different fixes, and each of these lines names one of them. */}
-          {setup.tool_id === "mcp-server" && tunnelTest && (
-            <section className={`tunnel-test tunnel-test-${tunnelTest.status}`} aria-live="polite">
-              <div className="tunnel-test-head">
-                <strong>{tunnelTest.message}</strong>
-                <button type="button" className={buttonClass({ variant: "quiet", size: "sm" })}
-                  onClick={() => setTunnelTest(null)}>Dismiss</button>
-              </div>
-              <dl>
-                {tunnelTest.checks.map((check) => (
-                  <div key={check.id} className={`tunnel-check tunnel-check-${check.state}`}>
-                    <dt>{check.label}</dt>
-                    <dd>{check.detail}</dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
-          )}
           {setup.media_ai?.job && (
             /* The download's own words. A job that failed after twenty minutes
                of pip output has a reason, and this is the only place the
@@ -875,6 +921,40 @@ export default function ToolsPage() {
               ><ActionIcon name={action.kind === "diagnostics" ? "search" : action.kind === "prepare-media-ai" ? "download" : action.kind === "navigate" ? "link" : "play"} />{action.label}</button>
             ))}
           </div>
+          {/* Feedback sits right under the buttons that produce it - a start's
+              message, an error, the tunnel test's checks - so what you clicked
+              answers where you are looking. All dismissable. */}
+          {error && (
+            <div className="setup-notice setup-notice-error" role="alert">
+              <span>{error}</span>
+              <button type="button" className={buttonClass({ variant: "quiet", size: "sm" })}
+                onClick={() => setError(null)}>Dismiss</button>
+            </div>
+          )}
+          {message && (
+            <div className="setup-notice" role="status">
+              <span>{message}</span>
+              <button type="button" className={buttonClass({ variant: "quiet", size: "sm" })}
+                onClick={() => setMessage(null)}>Dismiss</button>
+            </div>
+          )}
+          {setup.tool_id === "mcp-server" && tunnelTest && (
+            <section className={`tunnel-test tunnel-test-${tunnelTest.status}`} aria-live="polite">
+              <div className="tunnel-test-head">
+                <strong>{tunnelTest.message}</strong>
+                <button type="button" className={buttonClass({ variant: "quiet", size: "sm" })}
+                  onClick={() => setTunnelTest(null)}>Dismiss</button>
+              </div>
+              <dl>
+                {tunnelTest.checks.map((check) => (
+                  <div key={check.id} className={`tunnel-check tunnel-check-${check.state}`}>
+                    <dt>{check.label}</dt>
+                    <dd>{check.detail}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          )}
           <p className="privacy-note">{t("tools.localOnlyNote")}</p>
         </>}
       </Dialog>
