@@ -5,6 +5,9 @@ subtitle file rather than used as numbers, so the interesting cases are not
 hostile so much as unconstrained: a form that sends a string where a number
 goes, a font name somebody pasted, a reading speed of zero. Each of these was
 a corrupt render or a 500 before the values were checked.
+
+The format tests are the same shape one level down: speech that contains the
+characters the file format uses structurally.
 """
 
 from __future__ import annotations
@@ -98,3 +101,46 @@ def test_word_count_can_still_be_turned_off() -> None:
     style is configured, so the type check has to let it through."""
     _, layout = captions.resolve("broadcast", layout_overrides={"max_words": None})
     assert layout.max_words is None
+
+
+# --- what the sidecar files do with real speech -------------------------------
+
+
+def test_markup_characters_in_speech_survive_as_text() -> None:
+    """A WebVTT payload is parsed as markup: `<` opens a tag, `&` an entity.
+
+    "Marks & Spencer" is not an unusual thing to say on camera.
+    """
+    out = fmt.to_vtt([Cue(1, 0, 2000, ["5 < 10 & Marks & Spencer"])])
+
+    assert "&lt;" in out and "&amp;" in out
+    assert "5 < 10" not in out
+
+
+def test_an_arrow_in_speech_does_not_look_like_a_timing_row() -> None:
+    out = fmt.to_vtt([Cue(1, 0, 2000, ["the arrow --> points right"])])
+
+    # Exactly one: the cue's own timing, and not the line of speech under it.
+    assert sum(1 for line in out.splitlines() if "-->" in line) == 1
+
+
+def test_a_blank_line_inside_a_cue_does_not_end_it() -> None:
+    """A blank line is the record separator in both formats.
+
+    One inside a cue's text split it, and everything after became a block with
+    no index and no timing.
+    """
+    out = fmt.to_srt(
+        [Cue(1, 0, 2000, ["first", "", "second"]), Cue(2, 2100, 4000, ["next"])]
+    )
+
+    assert out.count("-->") == 2
+    assert "first\nsecond" in out
+
+
+def test_numbering_stays_contiguous_past_a_cue_with_nothing_to_say() -> None:
+    # An index that skips is a malformed file rather than a gap.
+    out = fmt.to_srt([Cue(1, 0, 2000, [""]), Cue(2, 2100, 4000, ["kept"])])
+
+    assert out.startswith("1\n")
+    assert "kept" in out

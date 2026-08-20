@@ -174,21 +174,60 @@ def ass_colour(value: str, alpha: int = 0) -> str:
 # --- SRT and WebVTT -----------------------------------------------------------
 
 
+def _payload_lines(cue: Cue) -> list[str]:
+    """A cue's text as lines that cannot end the cue early.
+
+    A blank line is the record separator in both of these formats, so one
+    inside a cue's own text splits it: everything after the blank becomes a
+    block with no index and no timing, and a parser either drops the rest of
+    the file or reads it as garbage. Cues built by the engine never carry one -
+    `wrap_lines` drops empties - but these two functions are also handed
+    transcripts somebody pasted in and cues a translator rewrote, and neither
+    of those has been through it.
+    """
+    return [line for line in cue.text.split("\n") if line.strip()]
+
+
 def to_srt(cues: Sequence[Cue]) -> str:
-    """The universal format. No styling survives here, by design."""
-    blocks = [
-        f"{position}\n{srt_time(cue.start_ms)} --> {srt_time(cue.end_ms)}\n{cue.text}"
-        for position, cue in enumerate(cues, start=1)
-    ]
+    """The universal format. No styling survives here, by design.
+
+    Numbering stays contiguous across a cue with nothing to say, because an
+    index that skips is a malformed file rather than a gap.
+    """
+    blocks = []
+    for cue in cues:
+        lines = _payload_lines(cue)
+        if not lines:
+            continue
+        position = len(blocks) + 1
+        timing = f"{srt_time(cue.start_ms)} --> {srt_time(cue.end_ms)}"
+        blocks.append(f"{position}\n{timing}\n" + "\n".join(lines))
     return "\n\n".join(blocks) + ("\n" if blocks else "")
+
+
+def escape_vtt(text: str) -> str:
+    """Make text safe to put in a WebVTT cue.
+
+    A cue's payload is parsed as markup, not as plain text: `<` opens a tag and
+    `&` opens an entity, so a caption reading `Marks & Spencer` or `5 < 10`
+    renders wrong or disappears. Ampersand goes first, or the escapes this adds
+    would themselves be escaped.
+
+    Escaping `>` is what also protects the arrow: a payload line containing
+    `-->` looks exactly like a timing row to a parser, and `--&gt;` cannot.
+    """
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def to_vtt(cues: Sequence[Cue]) -> str:
     """What a browser plays without a plugin, which is what makes previewing cheap."""
-    blocks = [
-        f"{vtt_time(cue.start_ms)} --> {vtt_time(cue.end_ms)}\n{cue.text}"
-        for cue in cues
-    ]
+    blocks = []
+    for cue in cues:
+        lines = _payload_lines(cue)
+        if not lines:
+            continue
+        timing = f"{vtt_time(cue.start_ms)} --> {vtt_time(cue.end_ms)}"
+        blocks.append(f"{timing}\n" + "\n".join(escape_vtt(line) for line in lines))
     return "WEBVTT\n\n" + "\n\n".join(blocks) + ("\n" if blocks else "")
 
 
