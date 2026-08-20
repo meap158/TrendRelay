@@ -298,9 +298,16 @@ def anonymise_image(
         "--seed", str(settings.seed),
     ])
     if completed.returncode != 0:
-        detail = (completed.stderr or "").strip().splitlines()
-        last = detail[-1] if detail else "The face anonymiser failed."
-        raise FaceAnonUnavailable(_explain(last))
+        stderr = (completed.stderr or "").strip()
+        lines = stderr.splitlines()
+        last = lines[-1] if lines else "The face anonymiser failed."
+        # Read against the whole of stderr, not just its last line. A Python
+        # traceback names the cause on the exception line and then adds a
+        # generic suggestion after it, so the last line was "If this is a
+        # private repository, make sure to pass a token" while the line above
+        # it said the repository does not exist. Matching only the last one
+        # sent somebody to find a token for a repository no token can reach.
+        raise FaceAnonUnavailable(_explain(stderr, fallback=last))
     try:
         return json.loads(completed.stdout)
     except json.JSONDecodeError as error:
@@ -319,8 +326,13 @@ MISSING_BASE_MARKERS = (
 )
 
 
-def _explain(detail: str) -> str:
-    """Turn the provider's own wording into something an operator can act on."""
+def _explain(detail: str, fallback: str | None = None) -> str:
+    """Turn the provider's own wording into something an operator can act on.
+
+    `detail` is matched against in full - give it the whole of stderr. What is
+    returned when nothing matches is `fallback`, so a caller can search a
+    traceback while still reporting the one line worth showing from it.
+    """
     if any(marker in detail for marker in MISSING_BASE_MARKERS):
         return (
             "This model builds on stabilityai/stable-diffusion-2-1, which has "
@@ -329,7 +341,7 @@ def _explain(detail: str) -> str:
             "and scheduler from somewhere else before it can run, and picking "
             "that source is a decision about provenance rather than a setting."
         )
-    return detail
+    return fallback if fallback is not None else detail
 
 
 def install_hint() -> str:
