@@ -33,7 +33,7 @@ import {
   isLocale,
   preferredLocale,
 } from "../lib/i18n/locales";
-import { MESSAGES } from "../lib/i18n/messages";
+import { EN, loadMessages } from "../lib/i18n/messages";
 import type { Messages } from "../lib/i18n/messages/en";
 
 const STORAGE_KEY = "trendrelay.locale";
@@ -123,6 +123,25 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
   const restored = useRef(false);
 
+  // The active dictionary, loaded on demand. English (the fallback, already in
+  // the bundle) until a chosen locale's chunk arrives, then that. A lookup never
+  // waits: it falls through to English while the chunk is in flight.
+  const [dictionary, setDictionary] = useState<Messages>(EN);
+
+  useEffect(() => {
+    if (locale === "en") {
+      setDictionary(EN);
+      return;
+    }
+    let live = true;
+    void loadMessages(locale).then((loaded) => {
+      if (live) setDictionary(loaded);
+    });
+    return () => {
+      live = false;
+    };
+  }, [locale]);
+
   useEffect(() => {
     queueMicrotask(() => {
       try {
@@ -167,10 +186,9 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<LocaleContextValue>(() => {
     const tag = intlTagOf(locale);
-    const dictionary = MESSAGES[locale] as Messages;
 
     const t = (path: string, values?: Values): string => {
-      const found = lookup(dictionary, path) ?? lookup(MESSAGES.en, path);
+      const found = lookup(dictionary, path) ?? lookup(EN, path);
       if (typeof found !== "string") {
         // The key itself, so a gap is visible in the interface rather than
         // rendering an empty space nobody notices in review.
@@ -183,7 +201,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
       path: string,
       nodes: Record<string, React.ReactNode>,
     ): React.ReactNode[] => {
-      const found = lookup(dictionary, path) ?? lookup(MESSAGES.en, path);
+      const found = lookup(dictionary, path) ?? lookup(EN, path);
       if (typeof found !== "string") return [path];
       // Split on the placeholders themselves so the surrounding text keeps
       // whatever order the translation put it in.
@@ -221,7 +239,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
           ),
       },
     };
-  }, [locale, dir, setLocale]);
+  }, [dictionary, locale, dir, setLocale]);
 
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
 }
