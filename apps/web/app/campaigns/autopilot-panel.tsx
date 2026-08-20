@@ -1078,6 +1078,15 @@ export function AutopilotPanel({
   const [autopilot, setAutopilot] = useState<Autopilot | null>(null);
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  /**
+   * The queued posts ticked for a batch action.
+   *
+   * Held as ids rather than items so a refresh cannot leave stale copies in
+   * it; what the buttons act on is filtered against the live queue at render,
+   * so a post deleted from under the selection simply stops counting instead
+   * of being sent to the API and coming back missing.
+   */
+  const [queuePicked, setQueuePicked] = useState<Set<string>>(new Set());
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const [offers, setOffers] = useState<Offer[]>([]);
@@ -1907,6 +1916,57 @@ export function AutopilotPanel({
   const selectedPictures = selectedLibrary.filter(
     (asset) => asset.media_kind === "image",
   ).length;
+
+  /**
+   * The ticked posts that are still in the queue.
+   *
+   * Filtered rather than pruned in an effect: a post removed underneath the
+   * selection stops counting on the next render, with no state to keep in step
+   * and no chance of sending an id the API will only report back as missing.
+   */
+  const pickedQueue = queue.filter((item) => queuePicked.has(item.id));
+  const allQueueSelected = queue.length > 0 && pickedQueue.length === queue.length;
+
+  function toggleQueuePick(id: string) {
+    setQueuePicked((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
+  /** Everything, or nothing - the same two-state box the Library and the picker use. */
+  function toggleAllQueue() {
+    setQueuePicked(allQueueSelected ? new Set() : new Set(queue.map((item) => item.id)));
+  }
+
+  async function batchQueue(action: "approve" | "hold" | "remove") {
+    const ids = pickedQueue.map((item) => item.id);
+    if (!ids.length) return;
+    if (action === "remove" && !window.confirm(
+      `Remove ${ids.length} post${ids.length === 1 ? "" : "s"} from this campaign's queue?`
+      + "\n\nPosts already published are not affected.",
+    )) return;
+    await run(`queue-batch-${action}`, async () => {
+      const body = await json<{ changed: string[]; missing: string[] }>(
+        await apiFetch(`${base}/queue/batch`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ item_ids: ids, action }),
+        }),
+      );
+      setQueuePicked(new Set());
+      const count = body.changed.length;
+      const verb = action === "approve"
+        ? "added to the rotation"
+        : action === "hold" ? "held back" : "removed";
+      // The missing count is said rather than swallowed: it is the difference
+      // between "I ticked twelve and eleven happened" being a bug and being
+      // somebody else deleting a row while this was open.
+      return `${count} post${count === 1 ? "" : "s"} ${verb}.`
+        + (body.missing.length ? ` ${body.missing.length} were already gone.` : "");
+    });
+  }
 
   /** Replace the selection with everything loaded, or clear it - as the Library does. */
   function toggleAllLoaded() {
@@ -2894,9 +2954,85 @@ export function AutopilotPanel({
         {queue.length === 0 ? (
           <p className="autopilot-empty">{t("autopilot.noQueue")}</p>
         ) : (
-          <ul className="autopilot-queue">
+          <>
+          {/* Approving and removing were per-row only, so a campaign that took
+              twenty clips from the Library in one go had to be curated twenty
+              times over. The same two-state box the Library and the media
+              picker carry, and the same actions the rows already offer - this
+              adds no power, only a way to use it more than once. */}
+          {canEdit && (
+            <div className={`campaign-queue-bar${pickedQueue.length ? " active" : ""}`}>
+              <span
+                className="library-pick"
+                role="checkbox"
+                tabIndex={0}
+                aria-checked={allQueueSelected}
+                aria-label={allQueueSelected
+                  ? "Clear selection"
+                  : `Select all ${queue.length} queued posts`}
+                onClick={toggleAllQueue}
+                onKeyDown={(event) => {
+                  if (event.key !== " " && event.key !== "Enter") return;
+                  event.preventDefault();
+                  toggleAllQueue();
+                }}
+              >{allQueueSelected && <ActionIcon name="confirm" size={12} />}</span>
+              <strong>
+                {pickedQueue.length
+                  ? `${pickedQueue.length} selected`
+                  : `Select from ${queue.length} post${queue.length === 1 ? "" : "s"}`}
+              </strong>
+              {pickedQueue.length > 0 && (
+                <>
+                  {/* Only offered when it would change something. A batch that
+                      approves what is already approved reports a number that
+                      did not happen. */}
+                  {pickedQueue.some((item) => item.state !== "approved") && (
+                    <Button variant="secondary" size="sm"
+                      busy={busy === "queue-batch-approve"}
+                      onClick={() => void batchQueue("approve")}>
+                      {t("autopilot.approve")}
+                    </Button>
+                  )}
+                  {pickedQueue.some((item) => item.state === "approved") && (
+                    <Button variant="quiet" size="sm"
+                      busy={busy === "queue-batch-hold"}
+                      onClick={() => void batchQueue("hold")}>
+                      Hold back
+                    </Button>
+                  )}
+                  <Button variant="danger" size="sm"
+                    busy={busy === "queue-batch-remove"}
+                    onClick={() => void batchQueue("remove")}>
+                    {t("common.delete")}
+                  </Button>
+                  <Button variant="quiet" size="sm" onClick={() => setQueuePicked(new Set())}>
+                    Clear selection
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+          <ul className={canEdit ? "autopilot-queue selectable" : "autopilot-queue"}>
             {queue.map((item) => (
               <li key={item.id} id={`queued-${item.id}`} className={item.state}>
+                {/* A span, not a div: `.autopilot-queue > li > div` is a grid
+                    rule that catches any div wrapper added inside these rows. */}
+                {canEdit && (
+                  <span
+                    className="library-pick"
+                    role="checkbox"
+                    tabIndex={0}
+                    aria-checked={queuePicked.has(item.id)}
+                    aria-label={`Select ${displayTitle(item.title) ?? "this post"}`}
+                    onClick={() => toggleQueuePick(item.id)}
+                    onKeyDown={(event) => {
+                      if (event.key !== " " && event.key !== "Enter") return;
+                      event.preventDefault();
+                      toggleQueuePick(item.id);
+                    }}
+                  >{queuePicked.has(item.id) && <ActionIcon name="confirm" size={12} />}</span>
+                )}
                 {/* The clip itself, not just its name: this list is where
                     content is curated, and a thumbnail answers "which video
                     is this" faster than any filename. */}
@@ -3082,6 +3218,7 @@ export function AutopilotPanel({
               </li>
             ))}
           </ul>
+          </>
         )}
         {productItem && recommendations?.item_id === productItem.id && (
           <div className="campaign-item-products" id="campaign-products">

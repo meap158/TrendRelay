@@ -1159,6 +1159,66 @@ def remove_queue_item(
     session.delete(item)
     return {"removed": item_id}
 
+class QueueBatch(BaseModel):
+    """One action, applied to the items the operator ticked."""
+
+    #: Capped because this is one transaction and one audit burst. Two hundred
+    #: is far past any real queue and still bounded.
+    item_ids: list[str] = Field(min_length=1, max_length=200)
+    #: Only what a single row can already do. "hold" is the inverse of
+    #: "approve" - a bulk approve that could not be undone in bulk would be a
+    #: trap, and `draft` is a state the per-item endpoint already accepts.
+    action: str = Field(pattern=r"^(approve|hold|remove)$")
+
+
+@router.post("/{campaign_id}/queue/batch")
+def batch_queue_items(
+    workspace_id: str,
+    campaign_id: str,
+    body: QueueBatch,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Approve, hold or remove several queued posts at once.
+
+    Scoped in the query rather than checked afterwards: an id belonging to
+    another campaign or another workspace simply does not come back, so it is
+    reported as missing instead of being acted on.
+
+    Reports what it did and what it could not find. A caller that ticked twelve
+    rows and had one deleted underneath it should be told eleven, not handed a
+    404 for the whole batch - the other eleven were a real instruction.
+    """
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    wanted = list(dict.fromkeys(body.item_ids))
+    items = list(session.scalars(
+        select(CampaignQueueItem).where(
+            CampaignQueueItem.id.in_(wanted),
+            CampaignQueueItem.campaign_id == campaign_id,
+            CampaignQueueItem.workspace_id == workspace_id,
+        )
+    ).all())
+    found = {item.id for item in items}
+
+    for item in items:
+        if body.action == "remove":
+            session.delete(item)
+            continue
+        item.state = "approved" if body.action == "approve" else "draft"
+        if body.action == "approve":
+            audit(
+                session, request, workspace_id, user.id,
+                "campaign.queue_item_approved", "campaign_queue_item", item.id, {},
+            )
+
+    return {
+        "action": body.action,
+        "changed": sorted(found),
+        "missing": sorted(set(wanted) - found),
+    }
+
+
 
 def _would_be_accepted(
     autopilot: CampaignAutopilot, post: Any, destination: CampaignDestination

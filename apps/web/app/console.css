@@ -938,6 +938,15 @@ html { scroll-behavior: smooth; }
 .autopilot-destinations, .autopilot-queue { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .autopilot-destinations > li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
 .autopilot-queue > li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+/* A fifth column only when the rows are selectable. Widening the template
+   unconditionally would leave an empty column for a reader who cannot edit,
+   and the checkbox is not rendered for them at all. */
+.autopilot-queue.selectable > li { grid-template-columns: auto auto minmax(0, 1fr) auto auto; }
+/* The same bar the Library carries above its grid, in the same shape: a
+   two-state box, what is picked, and the actions the rows already offer. */
+.campaign-queue-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.campaign-queue-bar.active { border-color: var(--link); background: var(--link-bg); }
+.campaign-queue-bar > strong { margin-inline-end: auto; font-size: 11px; font-weight: 600; }
 .autopilot-queue-thumb { display: grid; place-items: center; }
 .autopilot-queue-thumb .picker-thumb, .autopilot-queue-thumb .campaign-pipeline-thumb-empty { display: grid; place-items: center; inline-size: 84px; block-size: 64px; overflow: hidden; border-radius: var(--radius-sm); background: var(--line); color: var(--muted); }
 .autopilot-queue-thumb .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }

@@ -1499,3 +1499,120 @@ def test_asking_about_the_campaign_forecasts_nothing(workspace) -> None:
 
     assert body["chosen_offer_ids"] == []
     assert body["matches"]
+
+
+# --- acting on several queued posts at once ----------------------------------
+
+
+def queued(workspace_id: str, campaign_id: str, name: str) -> str:
+    body = request(
+        "POST", f"/api/workspaces/{workspace_id}/campaigns/{campaign_id}/queue",
+        json={"video_path": rf"S:\media\{name}.mp4", "body": f"Copy for {name}"},
+    ).json()
+    return body["item"]["id"]
+
+
+def states(workspace_id: str, campaign_id: str) -> dict[str, str]:
+    queue = request(
+        "GET", f"/api/workspaces/{workspace_id}/campaigns/{campaign_id}/autopilot"
+    ).json()["queue"]
+    return {item["id"]: item["state"] for item in queue}
+
+
+def test_several_posts_can_be_held_and_approved_in_one_go(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    first = queued(workspace, campaign_id, "one")
+    second = queued(workspace, campaign_id, "two")
+    third = queued(workspace, campaign_id, "three")
+
+    held = request("POST", f"{base}/queue/batch",
+                   json={"item_ids": [first, second], "action": "hold"})
+
+    assert held.status_code == 200
+    assert held.json()["changed"] == sorted([first, second])
+    after = states(workspace, campaign_id)
+    assert after[first] == "draft"
+    assert after[second] == "draft"
+    # Untouched, because it was not ticked.
+    assert after[third] == "approved"
+
+    request("POST", f"{base}/queue/batch",
+            json={"item_ids": [first, second], "action": "approve"})
+
+    assert states(workspace, campaign_id)[first] == "approved"
+
+
+def test_several_posts_can_be_removed_in_one_go(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    first = queued(workspace, campaign_id, "one")
+    second = queued(workspace, campaign_id, "two")
+    kept = queued(workspace, campaign_id, "three")
+
+    response = request("POST", f"{base}/queue/batch",
+                       json={"item_ids": [first, second], "action": "remove"})
+
+    assert response.status_code == 200
+    assert list(states(workspace, campaign_id)) == [kept]
+
+
+def test_an_id_that_is_no_longer_there_is_reported_rather_than_failing_the_batch(
+    workspace,
+) -> None:
+    # Somebody ticks twelve rows and one is deleted underneath them. The other
+    # eleven were still a real instruction; answering 404 for the lot would
+    # throw the whole thing away.
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    real = queued(workspace, campaign_id, "one")
+
+    response = request("POST", f"{base}/queue/batch",
+                       json={"item_ids": [real, "gone-already"], "action": "hold"})
+
+    assert response.status_code == 200
+    assert response.json()["changed"] == [real]
+    assert response.json()["missing"] == ["gone-already"]
+    assert states(workspace, campaign_id)[real] == "draft"
+
+
+def test_another_campaign_s_post_is_not_touched(workspace) -> None:
+    # Scoped in the query rather than checked afterwards, so an id from
+    # somewhere else comes back missing instead of being acted on.
+    mine = campaign(workspace)
+    theirs = campaign(workspace)
+    outsider = queued(workspace, theirs, "theirs")
+
+    response = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{mine}/queue/batch",
+        json={"item_ids": [outsider], "action": "remove"},
+    )
+
+    assert response.json()["missing"] == [outsider]
+    assert states(workspace, theirs)[outsider] == "approved"
+
+
+def test_an_unknown_action_is_refused(workspace) -> None:
+    campaign_id = campaign(workspace)
+    item = queued(workspace, campaign_id, "one")
+
+    response = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/batch",
+        json={"item_ids": [item], "action": "publish"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_an_empty_selection_is_refused(workspace) -> None:
+    # Nothing ticked is not an instruction, and a batch that quietly did
+    # nothing would look exactly like one that failed.
+    campaign_id = campaign(workspace)
+
+    response = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue/batch",
+        json={"item_ids": [], "action": "hold"},
+    )
+
+    assert response.status_code == 422
+
