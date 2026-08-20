@@ -2133,6 +2133,25 @@ export function AutopilotPanel({
     });
   }
 
+  /** The open day's tickable posts - the planned, deletable ones. A delivered
+      post is not among them, so "select all" never picks something it cannot
+      act on. */
+  function selectableDayIds() {
+    return openDayEntries
+      .filter((entry) => entry.kind === "planned" && entry.queue_item_id
+        && canEdit && queueById.has(entry.queue_item_id))
+      .map((entry) => entry.queue_item_id as string);
+  }
+
+  /** Tick every selectable post, or clear them if all are already ticked. */
+  function toggleAllDayPosts() {
+    const ids = selectableDayIds();
+    setSelectedDayPosts((current) => {
+      const all = ids.length > 0 && ids.every((id) => current.has(id));
+      return all ? new Set() : new Set(ids);
+    });
+  }
+
   async function loadRecommendations(item: QueueItem | null = null) {
     setBusy(item ? `recommend-${item.id}` : "recommendations");
     try {
@@ -2535,6 +2554,12 @@ export function AutopilotPanel({
         (entry) => new Date(entry.at).toLocaleDateString("en-CA", { timeZone: readerZone }) === openDay,
       )
     : [];
+  // The day's tickable posts and whether all / some are ticked, so the drawer's
+  // "select all" can show a full, an indeterminate, or an empty box.
+  const daySelectableIds = openDay ? selectableDayIds() : [];
+  const allDaySelected = daySelectableIds.length > 0
+    && daySelectableIds.every((id) => selectedDayPosts.has(id));
+  const someDaySelected = selectedDayPosts.size > 0 && !allDaySelected;
   const deliveredCount = timeline.filter((entry) => entry.kind === "delivered").length;
   const plannedCount = timeline.length - deliveredCount;
   const timelineAccounts = new Set(timeline.map((entry) => entry.destination_id)).size;
@@ -5060,10 +5085,20 @@ export function AutopilotPanel({
           {/* The selection bar keeps its own row whether anything is ticked or
               not, so ticking the first post never shoves the list down. */}
           <div className="campaign-day-tools" data-active={selectedDayPosts.size > 0 || undefined}>
+            {daySelectableIds.length > 0 && (
+              <label className="campaign-day-selectall">
+                <input type="checkbox"
+                  ref={(el) => { if (el) el.indeterminate = someDaySelected; }}
+                  checked={allDaySelected}
+                  onChange={toggleAllDayPosts}
+                  aria-label="Select all planned posts this day" />
+                Select all
+              </label>
+            )}
             {selectedDayPosts.size > 0 && (
               <>
-                <strong>{selectedDayPosts.size} selected</strong>
                 <span className="campaign-day-tools-gap" />
+                <strong>{selectedDayPosts.size} selected</strong>
                 <button type="button" className="campaign-day-clear"
                   onClick={() => setSelectedDayPosts(new Set())}>Clear</button>
                 <Button variant="danger" size="sm" busy={busy === "drop"}

@@ -1168,6 +1168,8 @@ html { scroll-behavior: smooth; }
 .campaign-day-tools { display: flex; align-items: center; gap: 10px; min-block-size: 40px; padding-block-end: 4px; }
 .campaign-day-tools > strong { font-size: 13px; font-weight: 600; }
 .campaign-day-tools-gap { flex: 1 1 auto; }
+.campaign-day-selectall { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; cursor: pointer; }
+.campaign-day-selectall input { inline-size: 15px; block-size: 15px; margin: 0; accent-color: var(--green); cursor: pointer; }
 .campaign-day-clear { appearance: none; padding: 4px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
 .campaign-day-clear:hover { color: var(--text); text-decoration: underline; }
 .campaign-day-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
