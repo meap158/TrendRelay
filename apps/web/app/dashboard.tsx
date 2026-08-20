@@ -341,10 +341,18 @@ export default function Dashboard() {
       }
     };
     void fetchStatus();
-    const timer = setInterval(() => void fetchStatus(), 4000);
+    // Don't poll a tab nobody is looking at; pick it back up on return.
+    const timer = setInterval(() => {
+      if (document.visibilityState !== "hidden") void fetchStatus();
+    }, 4000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void fetchStatus();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
       clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [apiFetch, workspaceId, fail]);
 

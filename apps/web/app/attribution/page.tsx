@@ -99,17 +99,20 @@ export default function AttributionPage() {
   const refresh = useCallback(async (nextWorkspace = workspaceId) => {
     if (!nextWorkspace) return;
     const base = `/api/workspaces/${nextWorkspace}`;
+    // Read with the products, not per row: the tag column on two hundred
+    // products is one question about the workspace. And in the same parallel
+    // batch as the rest - it depends on none of them, so waiting for the other
+    // four to land before asking only added a fifth round-trip to every load.
     const [
-      campaignBody, planBody, summaryBody, productBody,
+      campaignBody, planBody, summaryBody, productBody, tagBody,
     ] = await Promise.all([
       json<{ campaigns: Campaign[] }>(await apiFetch(`${base}/campaigns`)),
       json<{ plans: Plan[] }>(await apiFetch(`${base}/campaigns/calendar`)),
       json<Summary>(await apiFetch(`${base}/attribution/summary`)),
       json<ProductsPayload>(await apiFetch(`${base}/attribution/products`)),
+      json<typeof tagChoices>(await apiFetch(`${base}/attribution/campaign-tags`)),
     ]);
-    // Read with the products, not per row: the tag column on two hundred
-    // products is one question about the workspace.
-    setTagChoices(await json(await apiFetch(`${base}/attribution/campaign-tags`)));
+    setTagChoices(tagBody);
     setCampaigns(campaignBody.campaigns);
     setPlans(planBody.plans);
     setSummary(summaryBody);

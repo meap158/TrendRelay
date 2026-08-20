@@ -314,11 +314,30 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   }, [activeWorkspaceId, apiFetch, effectJob, user]);
 
   useEffect(() => {
-    queueMicrotask(() => void refresh());
-    const timer = setInterval(() => {
+    // Deferred, not immediate. This poll fans out to seven endpoints and lives
+    // in the layout, so `queueMicrotask` fired it during hydration on every
+    // page - right when first paint is already competing for the network. Let
+    // the page paint, then start watching.
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const start = window.setTimeout(() => {
       void refresh();
-    }, 4000);
-    return () => clearInterval(timer);
+      timer = setInterval(() => {
+        // A hidden tab is nobody watching a progress bar. Skip the fan-out while
+        // it is away and pick it back up on return, below.
+        if (document.visibilityState !== "hidden") void refresh();
+      }, 4000);
+    }, 800);
+    // Returning to the tab refreshes at once rather than waiting out the
+    // interval, so a job that finished while away is not stale on the way back.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearTimeout(start);
+      if (timer) clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [refresh]);
 
   useEffect(() => {
