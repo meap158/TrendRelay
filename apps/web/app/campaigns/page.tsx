@@ -15,6 +15,7 @@ import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { SearchSelect } from "../ui/search-select";
 import { ActionIcon } from "../ui/action-icons";
+import { WaitingBlock } from "../ui/waiting-block";
 import { handoffPath } from "../../lib/media-rules";
 import { isDefaultScaffolding, scaffoldingFor } from "../../lib/campaign-scaffolding";
 import {
@@ -29,9 +30,22 @@ import {
 // The autopilot panel is the largest view in the app and renders only for the
 // selected campaign, below the list. Load it as its own chunk so the campaign
 // list and chrome paint without waiting on it. Client-only, so ssr:false.
+/**
+ * The same wait the panel shows itself, for the moment before it exists.
+ *
+ * Two different gaps end up here. This one is the chunk arriving, and happens
+ * once; the panel's own is its data arriving, and happens on every campaign
+ * switch. Both used to render nothing, so the page below the campaign list
+ * simply vanished and came back.
+ */
+function PanelWaiting() {
+  const { t } = useLocale();
+  return <WaitingBlock message={t("common.loading")} />;
+}
+
 const AutopilotPanel = dynamic(
   () => import("./autopilot-panel").then((m) => m.AutopilotPanel),
-  { ssr: false },
+  { ssr: false, loading: () => <PanelWaiting /> },
 );
 
 type Workspace = { id: string; name: string; role: string };

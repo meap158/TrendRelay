@@ -270,6 +270,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .loading-panel strong { font-size: 15px; }
 .loading-panel span { color: var(--muted); line-height: 1.5; }
 .loading-panel-actions { display: flex; gap: 6px; align-items: center; }
+/* A wait that stands in for one section, not the screen. Sized so the page
+ * keeps roughly the shape it had: the panel this replaces is never short, so
+ * collapsing to nothing and springing back was the jarring part rather than
+ * the waiting itself. See `WaitingBlock`. */
+.waiting-block { display: grid; justify-items: center; align-content: center; gap: 10px; min-height: 320px; padding: 32px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); }
+.waiting-block strong { color: var(--muted); font-size: 13px; font-weight: 600; }
 
 /* The animated brand mark. The trend line traces itself in, the four points
    light along it in turn, then it eases back and loops - a small sign that

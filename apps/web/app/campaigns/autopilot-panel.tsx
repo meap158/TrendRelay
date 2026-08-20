@@ -26,6 +26,7 @@ import { Button } from "../ui/button";
 import { SegmentedControl } from "../ui/segmented";
 import { ActionIcon } from "../ui/action-icons";
 import { Dialog } from "../ui/dialog";
+import { WaitingBlock } from "../ui/waiting-block";
 import { SelectionCheckbox } from "../ui/selection-checkbox";
 import { SortableHeader, nextSort } from "../ui/sortable-header";
 import type { SortState } from "../ui/sortable-header";
@@ -1131,6 +1132,15 @@ export function AutopilotPanel({
 }) {
   const t = useT();
   const [autopilot, setAutopilot] = useState<Autopilot | null>(null);
+  /**
+   * Whether the first load failed, as opposed to not having finished.
+   *
+   * Both leave `autopilot` null, and they want opposite things on screen: one
+   * is a wait somebody should see progress for, the other is over and has
+   * already been announced by `fail`. Without this the panel would show a mark
+   * that spins for as long as the tab is open.
+   */
+  const [firstLoadFailed, setFirstLoadFailed] = useState(false);
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   /**
@@ -1420,8 +1430,10 @@ export function AutopilotPanel({
 
   useEffect(() => {
     queueMicrotask(() => {
-      void refresh().catch((reason) =>
-        fail(explainFailure(reason, "Autopilot unavailable.")));
+      void refresh().catch((reason) => {
+        setFirstLoadFailed(true);
+        fail(explainFailure(reason, "Autopilot unavailable."));
+      });
       // Everything the readiness check needs, loaded once. Each of these is a
       // different subsystem, and the point of the checklist is that it names
       // which one is missing rather than reporting a single blank "not ready".
@@ -2073,7 +2085,15 @@ export function AutopilotPanel({
     void loadTagged();
   }, [loadTagged]);
 
-  if (!autopilot) return null;
+  // Switching campaigns remounts this panel by key, so everything below is
+  // fetched again from nothing. Rendering null meanwhile dropped the whole
+  // lower half of the page for as long as the round trip took and then put it
+  // back - the flash. The previous campaign's panel is deliberately not held
+  // on screen instead: this one approves and publishes, and showing campaign
+  // A's posts under campaign B's heading is worse than showing a wait.
+  if (!autopilot) {
+    return firstLoadFailed ? null : <WaitingBlock message={t("common.loading")} />;
+  }
 
   const unmet = ready.rows.filter((row) => !row.met);
 
