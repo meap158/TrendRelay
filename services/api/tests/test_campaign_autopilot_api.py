@@ -1935,3 +1935,20 @@ def test_the_outlook_says_how_far_it_looked(workspace) -> None:
     ).json()
 
     assert body["horizon_days"] == 7
+
+
+def test_the_outlook_can_be_asked_to_look_further(workspace) -> None:
+    """Seven days is a view, not a rule.
+
+    Nothing is created by looking, and the worker commits only to its own
+    horizon whatever was previewed - so how far to look is the reader's
+    choice. A queue larger than a week has most of its posts outside a
+    week-long look, and looking further is the only way to see when they land.
+    """
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/preview"
+
+    assert request("POST", f"{base}?days=30").json()["horizon_days"] == 30
+    assert request("POST", f"{base}?days=1").json()["horizon_days"] == 1
+    # Bounded, because each look is a real scheduling pass over every slot.
+    assert request("POST", f"{base}?days=365").status_code == 422
