@@ -1177,6 +1177,119 @@ def test_a_selection_larger_than_the_cap_is_refused(workspace) -> None:
     assert response.status_code == 422
 
 
+def _second_product(workspace: str, campaign_id: str) -> None:
+    """A second tagged product, so "which one" is a real question.
+
+    Named to share a token with the first and lose to it: a rotation is only
+    visible when the ranking has an opinion for it to take turns against.
+    """
+    with TestingSession.begin() as session:
+        session.add(Product(
+            id="prod-2", workspace_id=workspace, catalog_key="k2", identifier="i2",
+            name="Coffee grinder", brand="B", category="Kitchen",
+            marketplace="amazon", product_url="https://example.test/p2",
+            created_by="owner-user",
+        ))
+        session.add(ProductOffer(
+            id="offer-2", workspace_id=workspace, product_id="prod-2",
+            fingerprint="f2", network="amazon", merchant="Amazon",
+            affiliate_url="https://example.test/aff2", price_cents=4_999,
+            currency="USD", commission_bps=400, cookie_days=1,
+            availability="available", created_by="owner-user",
+        ))
+    tag_offer(workspace, campaign_id, "offer-2")
+
+
+def _campaign_setting(workspace: str, campaign_id: str, **settings) -> None:
+    response = request(
+        "PUT", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot",
+        json={"disclosure": "#ad", "confirm_external_action": True, **settings},
+    )
+    assert response.status_code == 200, response.text
+
+
+def _drafted(workspace: str, campaign_id: str, asset_ids: list[str]) -> dict:
+    body = request(
+        "POST",
+        f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+        "/offer-recommendations/draft",
+        json={"asset_ids": asset_ids},
+    )
+    assert body.status_code == 200, body.text
+    return body.json()["assets"]
+
+
+def test_the_preview_carries_no_more_products_than_a_post_will(workspace) -> None:
+    """A preview of a post that could not happen is worse than no preview.
+
+    This showed the top of the raw ranking, and the composer asked for two of
+    it - so a campaign set to one product per post previewed two, and the
+    setting looked ignored.
+    """
+    campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
+    _second_product(workspace, campaign_id)
+    _campaign_setting(workspace, campaign_id, max_products_per_post=1)
+    _draft_asset(
+        workspace, "asset-cap", "Portable espresso setup",
+        "Make espresso anywhere with this compact coffee kit", ["coffee"],
+    )
+
+    found = _drafted(workspace, campaign_id, ["asset-cap"])
+
+    assert len(found["asset-cap"]["matches"]) == 1
+
+
+def test_a_batch_spreads_across_products_rather_than_repeating_one(workspace) -> None:
+    """Best fit first, then whoever has not had a turn.
+
+    Every row was scored on its own, and the ranking does not change between
+    them - so twenty clips all took the same leading product. Each row really
+    did get its best match, which is why it went unnoticed until the posts
+    promoted two products out of forty.
+    """
+    campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
+    _second_product(workspace, campaign_id)
+    _campaign_setting(workspace, campaign_id, max_products_per_post=1)
+    for index in range(2):
+        _draft_asset(
+            workspace, f"asset-turn-{index}", "Portable espresso setup",
+            "Make espresso anywhere with this compact coffee kit", ["coffee"],
+        )
+
+    found = _drafted(
+        workspace, campaign_id, ["asset-turn-0", "asset-turn-1"]
+    )
+
+    picked = [
+        found[f"asset-turn-{index}"]["matches"][0]["offer_id"] for index in range(2)
+    ]
+    assert picked == ["offer-1", "offer-2"]
+
+
+def test_rotation_turned_off_previews_the_same_best_fit_every_row(workspace) -> None:
+    """The preview follows the setting either way, including off."""
+    campaign_id = campaign(workspace)
+    tag_offer(workspace, campaign_id)
+    _second_product(workspace, campaign_id)
+    _campaign_setting(
+        workspace, campaign_id, max_products_per_post=1, rotate_products=False
+    )
+    for index in range(2):
+        _draft_asset(
+            workspace, f"asset-same-{index}", "Portable espresso setup",
+            "Make espresso anywhere with this compact coffee kit", ["coffee"],
+        )
+
+    found = _drafted(workspace, campaign_id, ["asset-same-0", "asset-same-1"])
+
+    picked = [
+        found[f"asset-same-{index}"]["matches"][0]["offer_id"] for index in range(2)
+    ]
+    assert picked == ["offer-1", "offer-1"]
+
+
 # --- what would actually attach, not just what fits ----------------------------
 
 

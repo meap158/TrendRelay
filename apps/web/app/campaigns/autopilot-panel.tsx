@@ -1577,7 +1577,10 @@ export function AutopilotPanel({
         await apiFetch(`${base}/offer-recommendations/draft`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ asset_ids: ids.slice(0, 100), limit: 2 }),
+          // No count of its own: how many products a post carries is the
+          // campaign's setting, and asking for a different number here is how
+          // the preview came to show two where the campaign allows one.
+          body: JSON.stringify({ asset_ids: ids.slice(0, 100) }),
         }),
       );
       setRowMatches(Object.fromEntries(

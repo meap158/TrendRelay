@@ -818,9 +818,6 @@ class DraftMatchRequest(BaseModel):
     #: selection here, and the cap is what keeps one request from becoming a
     #: hundred sequential matches inside a single handler.
     asset_ids: list[str] = Field(min_length=1, max_length=100)
-    #: Only the leaders are wanted per row; the full ranking is a click away on
-    #: the queued item. Three keeps the row readable.
-    limit: int = Field(default=3, ge=1, le=10)
 
 
 @router.post("/{campaign_id}/offer-recommendations/draft")
@@ -838,11 +835,17 @@ def draft_offer_recommendations(
     same matcher the scheduler runs, so what is shown is what would be picked.
 
     Scored against a queue item that is built and never saved. It is the one
-    way to reuse the real path exactly: `match_offers` reads its evidence off
+    way to reuse the real path exactly: `chosen_matches` reads its evidence off
     an item, and an item's strongest signals - the creative analysis, the
     source caption, the hashtags - all hang off the asset, which exists now.
     Reimplementing the scoring against a bare asset would be a second ranking
     to keep in step with the first.
+
+    `chosen_matches` rather than the ranking underneath it, so the preview is
+    subject to everything the post will be: the campaign's ceiling on products
+    per post, its offer mode, and the rotation. Showing the top of the raw
+    ranking meant a campaign that allows one product previewed two, and every
+    row of a batch previewed the same one.
 
     One call for the whole selection rather than one per row: a hundred rows
     would otherwise be a hundred requests, each re-reading the same campaign
@@ -855,9 +858,16 @@ def draft_offer_recommendations(
         CampaignDestination.campaign_id == campaign_id,
         CampaignDestination.enabled.is_(True),
     )).all()
-    from trendrelay_api.campaign_offer_matcher import match_offers
+    from trendrelay_api.campaign_offer_matcher import chosen_matches, last_promoted
 
     wanted = list(dict.fromkeys(body.asset_ids))
+    # The rotation's memory, exactly as a scheduler run keeps it: what this
+    # campaign has promoted before, and what the rows above have taken. Without
+    # the second, twenty rows scored independently all take the same leader -
+    # each one really is its best match, which is why nobody notices until the
+    # posts go out promoting two products out of forty.
+    promoted_before = last_promoted(session, campaign_id)
+    used_in_run: list[str] = []
     known = {
         asset.id: asset
         for asset in session.scalars(select(MediaAsset).where(
@@ -881,14 +891,16 @@ def draft_offer_recommendations(
             body="",
             hashtags=[],
         )
-        matches, strategy = match_offers(
+        matches, strategy = chosen_matches(
             session,
             campaign,
             autopilot,
-            item=draft,
-            destinations=destinations,
-            limit=body.limit,
+            draft,
+            destinations,
+            used_in_run=used_in_run,
+            last_used=promoted_before,
         )
+        used_in_run.extend(match.offer_id for match in matches)
         found[asset_id] = {
             "matches": [match.view() for match in matches],
             "strategy": strategy,
