@@ -12,6 +12,7 @@ import subprocess
 import sys
 from contextlib import contextmanager
 from pathlib import Path
+from threading import Lock
 from typing import Any, Literal
 
 from sqlalchemy import select
@@ -734,11 +735,29 @@ def _version_path(session: Any, asset_id: str, kind: str) -> Path | None:
     return path if path.is_file() else None
 
 
-def _speech_draft(path: Path, language: str | None) -> dict[str, Any]:
+#: The loaded model, and the settings it was loaded for.
+#:
+#: Weights are hundreds of megabytes and were being read off disk and decoded
+#: again for every clip, which is most of the wait on a short one. One entry
+#: rather than a cache: holding a second model doubles the memory to serve a
+#: setting nobody changes between two jobs.
+_SPEECH_MODEL: tuple[tuple[str, str, str], Any] | None = None
+
+#: Guards the load, and the transcription itself.
+#:
+#: A `WhisperModel` does not promise to be safe to call from two threads at
+#: once, and sharing one made that reachable where a model per call never was.
+#: Serialising costs nothing real: inference already saturates the device it
+#: runs on, so two at once on one machine is slower than two in turn.
+_SPEECH_LOCK = Lock()
+
+
+def _speech_model(settings: Any) -> Any:
+    """The transcription model, loaded once and kept."""
+    global _SPEECH_MODEL
     _runtime_path()
     from faster_whisper import WhisperModel
 
-    settings = get_settings()
     model_root = MODEL_ROOT / "faster-whisper"
     if not model_root.is_dir() or not any(model_root.rglob("model.bin")):
         raise RuntimeError(
@@ -746,22 +765,55 @@ def _speech_draft(path: Path, language: str | None) -> dict[str, Any]:
             "Open the transcription switch in the Library, or the faster-whisper "
             "card in Tools, and choose Download and switch on."
         )
-    model = WhisperModel(
+    wanted = (
         settings.media_ai_speech_model,
-        device=settings.media_ai_device,
-        compute_type=settings.media_ai_compute_type,
+        settings.media_ai_device,
+        settings.media_ai_compute_type,
+    )
+    if _SPEECH_MODEL is not None and _SPEECH_MODEL[0] == wanted:
+        return _SPEECH_MODEL[1]
+    model = WhisperModel(
+        wanted[0],
+        device=wanted[1],
+        compute_type=wanted[2],
         download_root=str(model_root),
         local_files_only=True,
     )
-    segments, info = model.transcribe(
-        str(path),
-        language=None if not language or language == "auto" else language,
-        beam_size=5,
-        vad_filter=True,
-        word_timestamps=True,
-    )
-    records = []
-    text_parts = []
+    _SPEECH_MODEL = (wanted, model)
+    return model
+
+
+def _speech_draft(path: Path, language: str | None) -> dict[str, Any]:
+    settings = get_settings()
+    # The whole pass stays inside the lock. `transcribe` hands back a lazy
+    # generator - the inference happens while it is iterated, not when it is
+    # called - so consuming it outside would run the model unguarded and make
+    # the lock decorative.
+    with _SPEECH_LOCK:
+        model = _speech_model(settings)
+        segments, info = model.transcribe(
+            str(path),
+            language=None if not language or language == "auto" else language,
+            beam_size=5,
+            vad_filter=True,
+            word_timestamps=True,
+        )
+        records, text_parts = _speech_records(segments)
+    text = " ".join(text_parts).strip()
+    if not text:
+        raise RuntimeError("The speech provider found no spoken text.")
+    return {
+        "language": str(info.language or language or "und"),
+        "text": text[:100_000],
+        "segments": records,
+        "provider": f"faster-whisper@{SPEECH_VERSION}:{settings.media_ai_speech_model}",
+    }
+
+
+def _speech_records(segments: Any) -> tuple[list[dict[str, Any]], list[str]]:
+    """Drain the transcriber's segments into records worth storing."""
+    records: list[dict[str, Any]] = []
+    text_parts: list[str] = []
     for segment in segments:
         text = " ".join(str(segment.text).strip().split())
         if not text:
@@ -785,15 +837,7 @@ def _speech_draft(path: Path, language: str | None) -> dict[str, Any]:
                 ],
             }
         )
-    text = " ".join(text_parts).strip()
-    if not text:
-        raise RuntimeError("The speech provider found no spoken text.")
-    return {
-        "language": str(info.language or language or "und"),
-        "text": text[:100_000],
-        "segments": records,
-        "provider": f"faster-whisper@{SPEECH_VERSION}:{settings.media_ai_speech_model}",
-    }
+    return records, text_parts
 
 
 def _extract_ocr_frames(asset: MediaAsset, source: Path, work: Path) -> list[Path]:
