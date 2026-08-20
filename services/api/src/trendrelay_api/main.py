@@ -473,13 +473,21 @@ async def popular_posts(
     region: str = Query(default="US", min_length=2, max_length=2),
     period: int = Query(default=7),
     limit: int = Query(default=20, ge=1, le=50),
-    platform: Literal["all", "tiktok", "youtube"] = Query(default="all"),
+    platform: Literal[
+        "all", "tiktok", "youtube", "bluesky", "hackernews"
+    ] = Query(default="all"),
 ) -> dict[str, object]:
     """The posts doing best in one country, and who made them.
 
     TikTok supplies a selected time window. YouTube supplies its current
     regional popular chart and says so on each row rather than inheriting the
     TikTok window. ``all`` uses every configured provider.
+
+    Every source below is selectable on its own. Bluesky and Hacker News were
+    added to the provider list and to the interface's dropdown but not here, so
+    picking either answered 422 - and they are the two that need no key, which
+    makes them the likeliest to be picked. `test_every_advertised_source_can_be
+    _asked_for_on_its_own` holds the two lists level.
     """
     require_local_mutation(request)
     if period not in POST_PERIODS:

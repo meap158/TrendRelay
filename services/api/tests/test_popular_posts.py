@@ -311,3 +311,33 @@ def test_a_card_with_no_cover_still_makes_a_post() -> None:
 
     assert post["creator"] == "Quiet"
     assert post["thumbnail"] is None
+
+
+def test_every_advertised_source_can_be_asked_for_on_its_own(monkeypatch) -> None:
+    """What the board offers and what the route accepts must not drift apart.
+
+    Bluesky and Hacker News were added to the provider list this endpoint
+    returns - and to the dropdown that reads it - without being added to the
+    query parameter, so choosing either answered 422. They are the two sources
+    needing no key at all, which makes them the likeliest to be chosen.
+
+    Written against the advertised list rather than a copy of it, so a sixth
+    source added to one and not the other fails here instead of in somebody's
+    dropdown.
+    """
+    import trendrelay_api.main as main_module
+
+    monkeypatch.setattr(main_module, "collect_posts", lambda **_: {
+        "region": "US", "period_days": 7, "posts": [], "post_count": 0,
+        "sources": [], "requested_sources": [], "notes": [],
+        "complete": True, "public_data_only": True,
+    })
+
+    advertised = get("/api/research/posts/popular?region=US").json()["providers"]
+
+    assert {item["id"] for item in advertised} >= {"tiktok", "youtube", "bluesky", "hackernews"}
+    for provider in advertised:
+        response = get(f"/api/research/posts/popular?region=US&platform={provider['id']}")
+        # 409 is a fair answer for a source needing a key it does not have.
+        # 422 means the interface offers something the route does not know.
+        assert response.status_code != 422, f"{provider['id']} is offered but refused"
