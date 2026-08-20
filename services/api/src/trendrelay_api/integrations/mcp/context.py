@@ -16,6 +16,7 @@ from trendrelay_api.autopilot_models import (
     CampaignAutopilot,
     CampaignDestination,
     CampaignQueueItem,
+    disclosure_for,
 )
 from trendrelay_api.models import Campaign
 from trendrelay_api.opportunity_models import Product, ProductOffer
@@ -93,6 +94,11 @@ def _commission(offer: ProductOffer) -> str | None:
 
 
 def _resolve_products(session: Session, item: CampaignQueueItem) -> list[dict[str, Any]]:
+    # The link the post would carry, so the assistant writes a caption that
+    # earns on the product it names rather than one that mentions a different
+    # thing than the one being sold.
+    from trendrelay_api.campaign_autopilot_api import offer_link_url
+
     offer_ids = _offer_ids_for(item)
     if not offer_ids:
         return []
@@ -123,6 +129,7 @@ def _resolve_products(session: Session, item: CampaignQueueItem) -> list[dict[st
             "merchant": offer.merchant,
             "price": _money(offer.price_cents, offer.currency),
             "commission": _commission(offer),
+            "affiliate_link": offer_link_url(session, offer.id),
             "availability": offer.availability,
             "pinned": bool(item.offer_ids),
         })
@@ -163,6 +170,60 @@ def _follow_up_landing(destinations: list[Any]) -> dict[str, Any]:
             "deliverable": deliverable,
         })
     return {"any_deliverable": any_deliverable, "per_destination": landings}
+
+
+_WEEKDAYS = (
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+)
+
+
+def _posting_schedule(session: Session, workspace_id: str) -> list[str]:
+    """When this workspace posts, as readable phrases like 'Every day 09:00'.
+
+    The times are the workspace's, not the post's - a queued post is recycled
+    content that goes out on the next open slot - but they are what an assistant
+    needs to know the campaign is daily at nine rather than a one-off.
+    """
+    from trendrelay_api.models import PublishingSlot
+
+    slots = session.scalars(
+        select(PublishingSlot)
+        .where(PublishingSlot.workspace_id == workspace_id)
+        .order_by(PublishingSlot.hour, PublishingSlot.minute)
+    ).all()
+    phrases: list[str] = []
+    for slot in slots:
+        day = "Every day" if slot.weekday < 0 else _WEEKDAYS[slot.weekday]
+        phrases.append(f"{day} {slot.hour:02d}:{slot.minute:02d}")
+    return phrases
+
+
+#: How each resolved link placement reads in a sentence, so the composed
+#: "where it posts" line says where the affiliate link actually goes.
+_LINK_PLACEMENT_PHRASE = {
+    "first_comment": "link in the first comment",
+    "caption": "link in the caption",
+    "bio": "link in bio",
+    "description": "link in the description",
+    "none": "no clickable link",
+}
+
+
+def _destination_summary(view: dict[str, Any]) -> str:
+    """One line, like 'Facebook · Video · link in the first comment'.
+
+    The raw pieces are all in the destination view; this composes them so the
+    assistant does not have to, and so 'where it would go' reads the same way
+    the interface says it.
+    """
+    parts = [str(view.get("provider_label") or view.get("platform") or "a platform")]
+    post_type = view.get("post_type")
+    if post_type:
+        parts.append(str(post_type).replace("_", " ").title())
+    placement = view.get("link_placement")
+    if placement:
+        parts.append(_LINK_PLACEMENT_PHRASE.get(placement, f"link: {placement}"))
+    return " · ".join(parts)
 
 
 def list_campaigns(session: Session, workspace_id: str) -> list[dict[str, Any]]:
@@ -296,6 +357,19 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
     )
     destinations = _destinations(session, item.campaign_id, workspace_id)
     follow_up = _follow_up_landing(destinations)
+    # Composed here so every destination carries a one-line "where it posts"
+    # alongside its raw fields.
+    destination_views = [_destination_view(session, d) for d in destinations]
+    for view in destination_views:
+        view["posts_to"] = _destination_summary(view)
+    # The disclosure this post actually carries - its own override, or the
+    # campaign's - resolved once so a caption is not written without it.
+    autopilot = session.scalar(
+        select(CampaignAutopilot).where(CampaignAutopilot.campaign_id == item.campaign_id)
+    )
+    effective_disclosure = (
+        disclosure_for(item, autopilot) if autopilot else (item.disclosure or None)
+    )
     missing = {
         "caption": _needs_copy(item),
         "first_comment": item.first_comment is None and follow_up["any_deliverable"],
@@ -311,8 +385,13 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
         "media_kind": "carousel" if item.image_paths else "video",
         "video_title": _asset_title(session, item),
         "products": _resolve_products(session, item),
-        "destinations": [_destination_view(session, d) for d in destinations],
+        "destinations": destination_views,
         "follow_up_landing": follow_up,
+        # The workspace's posting times, so the assistant knows the cadence the
+        # copy is written for.
+        "schedule": _posting_schedule(session, workspace_id),
+        # Resolved and surfaced on its own so it is never left off a caption.
+        "effective_disclosure": effective_disclosure,
         "current_copy": {
             "caption": None if _needs_copy(item) else item.body,
             "hashtags": list(item.hashtags or []),

@@ -92,8 +92,8 @@ def test_every_operation_is_classified_on_purpose() -> None:
 def test_the_allowed_surface_is_the_reads_and_the_copy_writes() -> None:
     assert policy.allowed_operations() == [
         "get_campaign_config", "get_post_context", "list_campaigns",
-        "list_posts_needing_copy", "write_caption", "write_first_comment",
-        "write_post_copy", "write_thread",
+        "list_posts_needing_copy", "write_caption", "write_disclosure",
+        "write_first_comment", "write_post_copy", "write_thread",
     ]
 
 
@@ -140,6 +140,30 @@ def test_get_post_context_carries_product_destination_and_need(session) -> None:
     assert ctx["needs"]["caption"] is True
     assert ctx["campaign"]["objective"] == "sell study kits"
     assert ctx["campaign"]["languages"] == ["vi"]
+
+
+def test_get_post_context_surfaces_link_disclosure_and_schedule(session) -> None:
+    from trendrelay_api.models import PublishingSlot
+
+    session.add(PublishingSlot(id="s09", workspace_id="ws", weekday=-1, hour=9, minute=0))
+    session.add(PublishingSlot(id="s21", workspace_id="ws", weekday=-1, hour=21, minute=0))
+    session.commit()
+
+    ctx = context.get_post_context(session, "ws", "q1")
+    # The link the caption should point at, so it earns on the product it names.
+    assert ctx["products"][0]["affiliate_link"] == "https://s.shopee.vn/x"
+    # No per-post override, so the post carries the campaign's disclosure.
+    assert ctx["effective_disclosure"] == "Affiliate link; we may earn."
+    # The workspace's posting times, read as phrases.
+    assert ctx["schedule"] == ["Every day 09:00", "Every day 21:00"]
+    # A composed one-line "where it posts" per destination.
+    assert " · " in ctx["destinations"][0]["posts_to"]
+
+
+def test_writing_a_disclosure_overrides_the_campaigns(session) -> None:
+    writes.write_post_copy(session, "ws", "q1", disclosure="Paid partnership.")
+    ctx = context.get_post_context(session, "ws", "q1")
+    assert ctx["effective_disclosure"] == "Paid partnership."
 
 
 def test_writing_a_caption_flips_the_post_to_having_copy(session) -> None:

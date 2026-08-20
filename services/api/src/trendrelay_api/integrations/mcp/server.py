@@ -190,7 +190,8 @@ def build_server(workspace_id: str) -> FastMCP:
         name="write_post_copy",
         description=(
             "Write several copy fields for a post at once - any of caption, "
-            "first_comment, thread, hashtags, title. A field left unset is not changed."
+            "first_comment, thread, hashtags, title, disclosure. A field left unset "
+            "is not changed."
         ),
     )
     def write_post_copy(
@@ -200,13 +201,30 @@ def build_server(workspace_id: str) -> FastMCP:
         thread: list[str] | None = None,
         hashtags: list[str] | None = None,
         title: str | None = None,
+        disclosure: str | None = None,
     ) -> dict[str, Any]:
         return _call(
             "write_post_copy",
             lambda s: writes.write_post_copy(
                 s, workspace_id, item_id,
                 caption=caption, first_comment=first_comment,
-                thread=thread, hashtags=hashtags, title=title,
+                thread=thread, hashtags=hashtags, title=title, disclosure=disclosure,
+            ),
+        )
+
+    @server.tool(
+        name="write_disclosure",
+        description=(
+            "Set this post's own disclosure line - the affiliate/ad disclosure it "
+            "carries, overriding the campaign's default. An empty string clears the "
+            "override and falls the post back to the campaign's disclosure."
+        ),
+    )
+    def write_disclosure(item_id: str, disclosure: str) -> dict[str, Any]:
+        return _call(
+            "write_disclosure",
+            lambda s: writes.write_post_copy(
+                s, workspace_id, item_id, disclosure=disclosure
             ),
         )
 

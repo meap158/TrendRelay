@@ -26,6 +26,7 @@ def write_post_copy(
     thread: list[str] | None = None,
     hashtags: list[str] | None = None,
     title: str | None = None,
+    disclosure: str | None = None,
 ) -> dict[str, Any]:
     """Set any of a post's copy fields, leaving the rest and its state alone.
 
@@ -61,9 +62,14 @@ def write_post_copy(
         fields["thread"] = thread
     if title is not None:
         fields["title"] = title
+    if disclosure is not None:
+        # Its own disclosure line for this post; an empty string clears the
+        # override and falls the post back to the campaign's.
+        fields["disclosure"] = disclosure
     if not fields:
         raise ValueError(
-            "Provide at least one of caption, first_comment, thread, hashtags or title."
+            "Provide at least one of caption, first_comment, thread, hashtags, title "
+            "or disclosure."
         )
 
     update = QueueItemUpdate(**fields)
