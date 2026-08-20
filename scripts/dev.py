@@ -511,6 +511,13 @@ def build_services(include_desktop: bool, *, may_terminate: bool = True) -> list
             [str(python), "scripts/tunnel.py", "--parent-pid", str(os.getpid())],
             "blue",
             restart_on_exit=False,
+            # Optional on purpose: with no tunnel configured, tunnel.py does its
+            # nothing and exits 0, which is the common case on a dev machine. It
+            # was left required, so that expected clean exit was read as a fatal
+            # one and took the whole stack down with it ("Tunnel exited with code
+            # 0" -> everything stopped). An optional service that exits is dropped
+            # and the rest keeps running, which is what should happen here.
+            required=False,
         )
     )
     if include_desktop:
@@ -576,24 +583,63 @@ def validation_errors(include_desktop: bool, services: list[Service]) -> list[st
     return errors
 
 
+#: The API port the frontend falls back to when NEXT_PUBLIC_API_URL is unset
+#: (apps/web/lib/api.ts) and the canonical port in the app's config. The dev
+#: backend runs on its own port instead and hands that to the frontend, so this
+#: is only ever the fallback - but a foreign process squatting on it is what
+#: turns a missing env var into a browser "Failed to fetch", so the runner
+#: names it rather than leaving it a mystery.
+CANONICAL_API_PORT = 8080
+
+
 def print_banner(include_desktop: bool, services: list[Service]) -> None:
     backend = next((s for s in services if s.name == "Backend"), None)
     frontend = next((s for s in services if s.name == "Frontend"), None)
+    tunnel = next((s for s in services if s.name == "Tunnel"), None)
     backend_port = backend.port if backend else 8011
     frontend_port = frontend.port if frontend else 3001
-    width = 62
+    width = 60
     print("=" * width)
-    print("           TrendRelay - Unified Dev Runner")
+    print("   TrendRelay - Unified Dev Runner")
     print("=" * width)
     print(f"   - Backend:  http://0.0.0.0:{backend_port}")
     print(f"   - API docs: http://0.0.0.0:{backend_port}/docs")
     print(f"   - Frontend: http://0.0.0.0:{frontend_port}")
-    print("   - Worker:    durable SQL queue (hot reload)")
-    print(
-        f"   - Desktop:  {'enabled' if include_desktop else 'disabled (use start-electron.bat)'}"
-    )
+    print("   - Worker:   durable SQL queue (hot reload)")
+    # MCP lives inside the tunnel supervisor and only comes up when a tunnel is
+    # configured, so it is described by that state rather than a URL that would
+    # not answer on an unconfigured machine.
+    if tunnel is not None:
+        print("   - MCP:      loopback, up only when a tunnel is configured (Tools)")
+    if include_desktop:
+        print("   - Desktop:  enabled")
+    else:
+        print("   - Desktop:  disabled (use start-electron.bat)")
     print("=" * width)
-    print("\nStarting or reusing hot-reload services (staggered)...\n")
+    print("\n[System] Starting or reusing hot-reload services (staggered)...\n")
+
+
+def note_foreign_api_port(services: list[Service]) -> None:
+    """Name the process on the API's fallback port, without disturbing it.
+
+    The dev backend runs on its own port and hands that to the frontend, so a
+    process squatting on the canonical 8080 does not stop this stack. But if that
+    env ever fails to reach the browser, the page falls back to 8080
+    (apps/web/lib/api.ts) and calls whatever is there - which reads as "Failed to
+    fetch" with no hint that a stray process from another project is the cause.
+    Naming it turns that mystery into one line. Left running, never killed: on a
+    port this stack does not use, it is very likely not ours to stop.
+    """
+    backend = next((s for s in services if s.name == "Backend"), None)
+    backend_port = backend.port if backend else None
+    if backend_port == CANONICAL_API_PORT or _port_is_free(CANONICAL_API_PORT):
+        return
+    print(
+        f"[System] Port {CANONICAL_API_PORT} is held by another process. This stack "
+        f"serves the API on {backend_port} and points the browser there, so it should "
+        f"work - but if the page ever shows 'Failed to fetch', that process is why "
+        "(it is the frontend's fallback port). Stop or move it; this runner leaves it be."
+    )
 
 
 def open_browser_app(include_desktop: bool, services: list[Service]) -> bool:
@@ -785,6 +831,7 @@ def main() -> int:
         print("Unified runner checks passed.")
         return 0
 
+    note_foreign_api_port(services)
     reused, startable = partition_services(services)
     for service in reused:
         print(
