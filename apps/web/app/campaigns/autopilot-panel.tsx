@@ -30,7 +30,7 @@ import { SearchSelect } from "../ui/search-select";
 import { useT } from "../i18n-provider";
 import { LOCALES } from "../../lib/i18n/locales";
 import { EffectEditor } from "../library/effect-editor";
-import { TimelinePlayer } from "./timeline-player";
+import { TimelineImage, TimelinePlayer } from "./timeline-player";
 import { accountIdentity, type EngineAccount } from "../publishing-account";
 import { profileUrl } from "../../lib/social-profile";
 import { commissionLabel, type CommissionBearing } from "../commission";
@@ -4259,12 +4259,10 @@ export function AutopilotPanel({
                               {!entry.video_path && entry.image_paths.length > 0 && (
                                 <div className="timeline-media-strip">
                                   {entry.image_paths.map((path) => (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
+                                    <TimelineImage
                                       key={path}
-                                      className="timeline-media"
                                       src={`${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview?path=${encodeURIComponent(path)}`}
-                                      alt={path}
+                                      path={path}
                                     />
                                   ))}
                                 </div>

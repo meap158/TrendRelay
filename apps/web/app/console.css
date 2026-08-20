@@ -950,6 +950,10 @@ html { scroll-behavior: smooth; }
 .campaign-queue-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .campaign-queue-bar.active { border-color: var(--link); background: var(--link-bg); }
 .campaign-queue-bar > strong { margin-inline-end: auto; font-size: 11px; font-weight: 600; }
+/* A carousel picture's slot, holding its place while the bytes arrive. The
+   strip is a flex row, so without this the row reflows as each one lands. */
+.timeline-media-slot { display: inline-flex; align-items: center; justify-content: center; min-width: 48px; min-height: 48px; }
+
 /* The composer's two ways out, on one line and right-aligned so the primary
    sits where every other form in the campaign puts it. */
 .autopilot-compose-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
