@@ -487,6 +487,23 @@ export function localValue(value: Date) {
 }
 
 /**
+ * How a scheduled post reads, from its job's status.
+ *
+ * "queued" and "succeeded" are the words the job uses for itself, not ones a
+ * reader recognises. A post waiting for its time is Scheduled, a fired one is
+ * Published, and a failed one is Failed - the same vocabulary the campaign
+ * timeline uses, so the two surfaces agree.
+ */
+export function scheduleLabel(state: string): { label: string; tone: "good" | "warn" | "neutral" } {
+  switch (state) {
+    case "succeeded": return { label: "Published", tone: "good" };
+    case "failed": return { label: "Failed", tone: "warn" };
+    case "cancelled": return { label: "Cancelled", tone: "neutral" };
+    default: return { label: "Scheduled", tone: "neutral" };
+  }
+}
+
+/**
  * The next occurrences of the configured slots, for a one-click row.
  *
  * `timeZone` is the workspace's, because that is the clock a slot's hour is
@@ -635,8 +652,8 @@ export function UpcomingPosts({
                   {(entry.platforms ?? []).map((platform) => (
                     <PlatformIcon key={platform} platform={platform} size={14} />
                   ))}
-                  <Badge tone={entry.state === "succeeded" ? "good" : "neutral"}>
-                    {entry.state}
+                  <Badge tone={scheduleLabel(entry.state).tone}>
+                    {scheduleLabel(entry.state).label}
                   </Badge>
                 </span>
               </div>
