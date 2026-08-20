@@ -797,6 +797,13 @@ def _speech_draft(path: Path, language: str | None) -> dict[str, Any]:
             beam_size=5,
             vad_filter=True,
             word_timestamps=True,
+            # Whisper conditions each window on the text it just produced,
+            # which is what makes it repeat a phrase for minutes once it starts:
+            # the repetition becomes its own context and feeds itself. The
+            # published fix is to stop carrying that context across windows. It
+            # costs a little coherence across a sentence boundary and removes a
+            # failure that ruins a whole transcript.
+            condition_on_previous_text=False,
         )
         records, text_parts = _speech_records(segments)
     text = " ".join(text_parts).strip()
