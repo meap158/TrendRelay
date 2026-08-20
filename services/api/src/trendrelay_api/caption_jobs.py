@@ -218,8 +218,16 @@ def _record_version(
     "Remove effects" deletes what it finds, so a captioned cut filed there
     would be destroyed by a button that never mentioned captions.
     """
-    data = path.read_bytes()
-    digest = hashlib.sha256(data).hexdigest()
+    # Read in blocks rather than whole. This is a re-encoded video - the same
+    # length as the source and often hundreds of megabytes - and pulling it
+    # into memory to hash it put that whole file in the worker's heap at the
+    # end of every burn, which is where a long clip took the process down.
+    digest_of = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest_of.update(block)
+    digest = digest_of.hexdigest()
+    size_bytes = path.stat().st_size
     with factory.begin() as session:
         existing = session.scalar(
             select(MediaAssetVersion).where(
@@ -238,6 +246,6 @@ def _record_version(
                 path=str(path),
                 sha256=digest,
                 mime_type="video/mp4",
-                size_bytes=len(data),
+                size_bytes=size_bytes,
             )
         )
