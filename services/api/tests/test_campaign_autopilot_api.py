@@ -1920,3 +1920,18 @@ def test_autonomy_is_refused_until_it_is_earned(workspace) -> None:
     assert refused.status_code == 409
     # The refusal names the count, so it agrees with what the page shows.
     assert "10" in refused.json()["detail"]
+
+
+def test_the_outlook_says_how_far_it_looked(workspace) -> None:
+    """A queue larger than the window has posts with no place in it.
+
+    Saying so needs the number: "every slot is taken" reads as a fault, while
+    "the next seven days are full" is a queue doing what a queue does.
+    """
+    campaign_id = campaign(workspace)
+
+    body = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot/preview"
+    ).json()
+
+    assert body["horizon_days"] == 7

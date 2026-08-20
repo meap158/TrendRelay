@@ -519,12 +519,19 @@ function TimelineCalendar({
   timezone,
   month,
   onMonthChange,
+  onSelectEntry,
+  onOpenDay,
 }: {
   entries: TimelineEntry[];
   timezone: string;
   /** The month on display, as YYYY-MM in the schedule's own timezone. */
   month: string;
   onMonthChange: (next: string) => void;
+  /** Open one post - the editor for a planned one, the permalink for a sent
+      one. A chip is the thing a reader points at to act on that post. */
+  onSelectEntry: (entry: TimelineEntry) => void;
+  /** Open the full day, when a cell holds more than it can show. */
+  onOpenDay: (dayKey: string) => void;
 }) {
   const byDay = entries.reduce<Record<string, TimelineEntry[]>>((days, entry) => {
     const key = new Date(entry.at).toLocaleDateString("en-CA", { timeZone: timezone });
@@ -587,8 +594,10 @@ function TimelineCalendar({
             >
               {key && <em>{Number(key.slice(8))}</em>}
               {dayEntries.slice(0, 3).map((entry) => (
-                <span key={entry.key} className={`campaign-calendar-chip ${chipTone(entry)}`}
-                  title={displayTitle(entry.title) ?? entry.caption.slice(0, 80)}>
+                <button type="button" key={entry.key}
+                  className={`campaign-calendar-chip ${chipTone(entry)}`}
+                  title={displayTitle(entry.title) ?? entry.caption.slice(0, 80)}
+                  onClick={() => onSelectEntry(entry)}>
                   <b>{new Date(entry.at).toLocaleTimeString(undefined, {
                     hour: "2-digit", minute: "2-digit", hour12: false,
                     timeZone: timezone,
@@ -597,10 +606,11 @@ function TimelineCalendar({
                     <PlatformIcon platform={entry.destination.platform} size={12} />
                   )}
                   <span>{displayTitle(entry.title) || entry.caption.slice(0, 40) || "Post"}</span>
-                </span>
+                </button>
               ))}
-              {dayEntries.length > 3 && (
-                <small className="campaign-calendar-more">+{dayEntries.length - 3} more</small>
+              {key && dayEntries.length > 3 && (
+                <button type="button" className="campaign-calendar-more"
+                  onClick={() => onOpenDay(key)}>+{dayEntries.length - 3} more</button>
               )}
             </div>
           );
@@ -1193,7 +1203,11 @@ export function AutopilotPanel({
    */
   const readerZone = scheduleTimezone;
   const [preview, setPreview] = useState<
-    { note: string; posts: PreviewPost[]; deployed: DeployedPost[]; problems: number } | null
+    {
+      note: string; posts: PreviewPost[]; deployed: DeployedPost[]; problems: number;
+      /** How many days the plan looked ahead, so a full window can name itself. */
+      horizon_days?: number;
+    } | null
   >(null);
   /** Posts the authority rules deferred to a person, reason attached. */
   const [exceptions, setExceptions] = useState<HeldExecution[]>([]);
@@ -1317,8 +1331,17 @@ export function AutopilotPanel({
   // The references this mirrors (Buffer, Zernio) offer the same posts as a
   // list and as a calendar; the list answers "what went out", the calendar
   // answers "how does the month look". Null month means the current one.
-  const [timelineView, setTimelineView] = useState<"list" | "calendar">("list");
+  const [timelineView, setTimelineView] = useState<"list" | "calendar" | "grid">("list");
   const [calendarMonth, setCalendarMonth] = useState<string | null>(null);
+  // Which day the calendar's "see more" opened, as YYYY-MM-DD in the reader's
+  // zone. The drawer lists that day in full; the calendar cell only has room
+  // for the first few.
+  const [openDay, setOpenDay] = useState<string | null>(null);
+  // Where an edit was opened from, so closing the modal returns there. The
+  // editor lives in the content view; opening it from the timeline switches
+  // there under the overlay, and this is what sends the reader back to the
+  // calendar or grid they were reading rather than stranding them in Setup.
+  const [editReturn, setEditReturn] = useState<"posts" | null>(null);
   // The held post being rewritten before its decision, if any.
   const [editingHeld, setEditingHeld] = useState<HeldExecution | null>(null);
   /** Held posts picked for one approval. Empty means nothing is selected. */
@@ -1603,6 +1626,7 @@ export function AutopilotPanel({
     try {
       const body = await json<{
         note: string; posts: PreviewPost[]; deployed: DeployedPost[]; problems: number;
+        horizon_days?: number;
       }>(await apiFetch(`${base}/autopilot/preview`, { method: "POST" }));
       setPreview(body);
       showingPlan.current = true;
@@ -2008,6 +2032,57 @@ export function AutopilotPanel({
     });
   }
 
+  /**
+   * Open the post editor as a modal, loaded from a queue item.
+   *
+   * The editor's markup lives in the content view, so opening it from the
+   * timeline (calendar, grid, or the day drawer) switches there first; the
+   * overlay covers that, and `from` is what closes the loop back afterwards.
+   * A single door means the calendar chip, the drawer row and the queue row's
+   * Edit button all reach the exact same form rather than three near-copies.
+   */
+  function openPostEditor(item: QueueItem, from: "posts" | null = null) {
+    if (from) setEditReturn(from);
+    setOpenDay(null);
+    setView("content");
+    setEditing(item);
+    setEditingReplies(item.thread.length ? item.thread : [""]);
+    openEditorWording(item);
+  }
+
+  /** Close the editor and return to whichever view opened it. */
+  function closePostEditor() {
+    setEditing(null);
+    if (editReturn) {
+      setView(editReturn);
+      setEditReturn(null);
+    }
+  }
+
+  /**
+   * Act on a post picked from the calendar or the day drawer.
+   *
+   * A planned post opens the editor - that is the whole point of the click,
+   * per the request. A delivered one has nowhere to be edited, so it opens
+   * where it lives: its permalink. Anything else (a planned post a reader
+   * cannot edit, or one with no link) falls back to opening its day in full.
+   */
+  function selectTimelineEntry(entry: TimelineEntry) {
+    if (entry.kind === "planned" && entry.queue_item_id && canEdit) {
+      const item = queueById.get(entry.queue_item_id);
+      if (item) {
+        openPostEditor(item, "posts");
+        return;
+      }
+    }
+    const url = entry.post_url ?? entry.page_url;
+    if (url) {
+      window.open(url, "_blank", "noreferrer");
+      return;
+    }
+    setOpenDay(new Date(entry.at).toLocaleDateString("en-CA", { timeZone: readerZone }));
+  }
+
   async function loadRecommendations(item: QueueItem | null = null) {
     setBusy(item ? `recommend-${item.id}` : "recommendations");
     try {
@@ -2403,6 +2478,13 @@ export function AutopilotPanel({
       return days;
     }, {}),
   );
+  // Everything on the day the "see more" drawer opened, in the same zone the
+  // grid grouped by, so the drawer and the cell agree on which day a post is on.
+  const openDayEntries = openDay
+    ? timeline.filter(
+        (entry) => new Date(entry.at).toLocaleDateString("en-CA", { timeZone: readerZone }) === openDay,
+      )
+    : [];
   const deliveredCount = timeline.filter((entry) => entry.kind === "delivered").length;
   const plannedCount = timeline.length - deliveredCount;
   const timelineAccounts = new Set(timeline.map((entry) => entry.destination_id)).size;
@@ -3560,7 +3642,14 @@ export function AutopilotPanel({
                           : !slots.length
                             ? "No posting times yet. Add one and the plan appears here."
                             : preview
-                              ? "Not in this cycle: every slot is taken by another post."
+                              // Says which window is full, and that being
+                              // outside it is normal. "Every slot is taken by
+                              // another post" describes a queue larger than
+                              // the outlook - which is most queues - but reads
+                              // as a fault, so a full week of correct planning
+                              // looked like dozens of posts going nowhere.
+                              ? `Waiting its turn: the next ${preview.horizon_days ?? 7} days are `
+                                + "already full. It stays in rotation and takes the first free slot after that."
                               : "Loading the plan…"}
                   />
                 </div>
@@ -3601,12 +3690,8 @@ export function AutopilotPanel({
                           return t("autopilot.itemApproved");
                         })}>{t("autopilot.approve")}</Button>
                     )}
-                    <Button variant="quiet" size="sm" onClick={() => {
-                      setEditing(item);
-                      setEditingReplies(item.thread.length ? item.thread : [""]);
-                      openEditorWording(item);
-                      revealPanel("campaign-edit-content");
-                    }}>Edit content</Button>
+                    <Button variant="quiet" size="sm"
+                      onClick={() => openPostEditor(item)}>Edit content</Button>
                     <Button variant="quiet" size="sm" busy={busy === `recommend-${item.id}`}
                       onClick={() => void loadRecommendations(item)}>
                       {item.offer_ids.length ? "Edit products" : "Review products"}
@@ -3715,6 +3800,13 @@ export function AutopilotPanel({
           </div>
         )}
         {editing && (
+          <Dialog
+            open
+            size="wide"
+            onClose={closePostEditor}
+            title="Edit scheduled post"
+            description="Everything below is one post. The campaign adds the disclosure and the product link to it, differently on each account - what that comes to is composed underneath, exactly as each one will receive it."
+          >
           <form className="autopilot-compose" id="campaign-edit-content"
             ref={editForm} onInput={scheduleCompose} onSubmit={(event) => {
             event.preventDefault();
@@ -3737,20 +3829,12 @@ export function AutopilotPanel({
                   bio_hint: editingBioHint.trim() || null,
                 }),
               }));
-              setEditing(null);
+              closePostEditor();
               return "Campaign copy updated.";
             });
           }}>
-            <div className="autopilot-picker-head">
-              <span>
-                <strong>Edit post</strong>
-                <small>Everything below is one post. The campaign adds the
-                  disclosure and the product link to it, differently on each
-                  account - what that comes to is composed underneath, exactly
-                  as each one will receive it.</small>
-              </span>
-              <Button variant="quiet" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
-            </div>
+            {/* The title, description and close now come from the Dialog frame,
+                so the form opens straight into its first field. */}
             {/* Only where a title exists. It is still shown when nothing takes
                 one but this post already has a title, because hiding a field
                 that holds text is how text gets lost. */}
@@ -3927,6 +4011,7 @@ export function AutopilotPanel({
             </section>
             <Button type="submit" variant="primary" busy={busy === "edit-copy"}>Save post</Button>
           </form>
+          </Dialog>
         )}
       </Card>}
           </div>
@@ -3990,7 +4075,9 @@ export function AutopilotPanel({
                     <select
                       value={item.link_placement_setting}
                       onChange={(event) => void run("placement", async () => {
-                        await json(await apiFetch(
+                        const saved = await json<{
+                          held?: { recomposed: number; kept: number };
+                        }>(await apiFetch(
                           `${base}/destinations/${item.id}/placement`,
                           {
                             method: "POST",
@@ -4001,7 +4088,18 @@ export function AutopilotPanel({
                           },
                         ));
                         await refresh();
-                        return `Link placement updated for ${item.label}.`;
+                        // Where the link goes decides what the caption says,
+                        // so this reaches the posts already waiting for this
+                        // account - and says how many.
+                        const reached = saved?.held;
+                        return `Link placement updated for ${item.label}.`
+                          + (reached?.recomposed
+                            ? ` ${reached.recomposed} waiting post${
+                              reached.recomposed === 1 ? "" : "s"} rewritten.`
+                            : "")
+                          + (reached?.kept
+                            ? ` ${reached.kept} left as edited by hand.`
+                            : "");
                       })}
                     >
                       <option value="auto">Auto — network decides (recommended)</option>
@@ -4538,6 +4636,7 @@ export function AutopilotPanel({
               onChange={setTimelineView}
               options={[
                 { value: "list", label: "List" },
+                { value: "grid", label: "Grid" },
                 { value: "calendar", label: "Calendar" },
               ]}
             />
@@ -4593,6 +4692,8 @@ export function AutopilotPanel({
                 timeZone: readerZone,
               }).slice(0, 7)}
             onMonthChange={setCalendarMonth}
+            onSelectEntry={selectTimelineEntry}
+            onOpenDay={setOpenDay}
           />
         )}
         {timeline.length > 0 && timelineView === "list" && (
@@ -4690,14 +4791,9 @@ export function AutopilotPanel({
                                   thought that started it. */}
                               {canEdit && entry.kind === "planned" && (
                                 <button type="button" className="campaign-entry-edit"
-                                  onClick={() => {
-                                    const item = queueById.get(entry.queue_item_id!)!;
-                                    setView("content");
-                                    setEditing(item);
-                                    setEditingReplies(item.thread.length ? item.thread : [""]);
-                                    openEditorWording(item);
-                                    revealPanel("campaign-edit-content");
-                                  }}>Edit this post</button>
+                                  onClick={() => openPostEditor(
+                                    queueById.get(entry.queue_item_id!)!, "posts")}
+                                  >Edit this post</button>
                               )}
                               From{" "}
                               <button type="button" onClick={() => {
@@ -4811,6 +4907,84 @@ export function AutopilotPanel({
                 </ol>
               </section>
             ))}
+          </div>
+        )}
+        {timeline.length > 0 && timelineView === "grid" && (
+          <div className="campaign-grid">
+            {timeline.map((entry) => {
+              const destination = entry.destination ?? destinations.find(
+                (item) => item.id === entry.destination_id) ?? null;
+              const platform = destination?.platform;
+              const thumbnailAsset: LibraryAsset | null = entry.asset_id ? {
+                id: entry.asset_id,
+                title: entry.title ?? "Campaign video",
+                original_path: "",
+                media_kind: "video",
+                duration_ms: null,
+                platform: platform ?? null,
+                creator: null,
+                width: null,
+                height: null,
+                versions: [{ id: `${entry.asset_id}-thumbnail`, kind: "thumbnail" }],
+              } : null;
+              const editable = entry.kind === "planned" && Boolean(entry.queue_item_id)
+                && canEdit && queueById.has(entry.queue_item_id!);
+              return (
+                <article key={entry.key} className={[
+                  "campaign-grid-card",
+                  entry.kind === "delivered" ? `delivered ${entry.status ?? ""}` : "",
+                  entry.problem ? "refused" : "",
+                ].filter(Boolean).join(" ")}>
+                  <button type="button" className="campaign-grid-media"
+                    onClick={() => selectTimelineEntry(entry)}
+                    title={displayTitle(entry.title) ?? entry.caption.slice(0, 80)}>
+                    {thumbnailAsset
+                      ? <AssetThumbnail asset={thumbnailAsset} workspaceId={workspaceId} apiFetch={apiFetch} />
+                      : <span className="campaign-grid-media-empty"><ActionIcon name="play" /></span>}
+                    {platform && (
+                      <span className="campaign-grid-platform">
+                        <PlatformIcon platform={platform} size={16} />
+                      </span>
+                    )}
+                  </button>
+                  <div className="campaign-grid-body">
+                    <strong>{displayTitle(entry.title) || entry.caption.slice(0, 60) || "Untitled post"}</strong>
+                    <small>
+                      {new Date(entry.at).toLocaleString(undefined, {
+                        month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+                        timeZone: readerZone,
+                      })}
+                      {destination?.label ? ` · ${destination.label}` : ""}
+                    </small>
+                  </div>
+                  <div className="campaign-grid-foot">
+                    {entry.kind === "delivered" ? (
+                      <Badge tone={entry.status === "succeeded" ? "good"
+                        : entry.status === "failed" ? "warn" : "neutral"}>
+                        {entry.status === "succeeded"
+                          ? `Delivered · ${entry.delivery}`
+                          : entry.status ?? "delivered"}
+                      </Badge>
+                    ) : (
+                      <Badge tone={entry.problem ? "warn" : "neutral"}>
+                        {autopilot.delivery === "draft" ? "Planned · draft"
+                          : autopilot.delivery === "schedule" ? "Planned · scheduled"
+                          : "Planned · now"}
+                      </Badge>
+                    )}
+                    {editable ? (
+                      <Button variant="quiet" size="sm"
+                        onClick={() => openPostEditor(queueById.get(entry.queue_item_id!)!, "posts")}>
+                        Edit
+                      </Button>
+                    ) : entry.post_url ? (
+                      <a className="campaign-grid-open" href={entry.post_url}
+                        target="_blank" rel="noreferrer">Open</a>
+                    ) : null}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
         {!preview && !ready.configured && (

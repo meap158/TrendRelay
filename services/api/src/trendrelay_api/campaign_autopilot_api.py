@@ -62,6 +62,11 @@ EDITORS = {"owner", "editor", "approver"}
 #: watch, not a statistical claim.
 GRADUATION_PUBLISHED_POSTS = 10
 
+#: How far the outlook plans. The worker itself fills only the next day - this
+#: is the page's view, long enough to show a week's shape without asking the
+#: scheduler to commit to it.
+OUTLOOK_HORIZON = timedelta(days=7)
+
 
 def graduation_progress(session: Session, campaign_id: str) -> dict[str, Any]:
     """How near this campaign is to posting without a person.
@@ -651,13 +656,25 @@ def set_destination_placement(
     )
     if not item:
         raise HTTPException(status_code=404, detail="Destination not found.")
+    changed = item.link_placement != body.link_placement
     item.link_placement = body.link_placement
+    # Where a link goes decides what the caption says and whether there is a
+    # first comment at all, so this reaches the posts already waiting for this
+    # account exactly as the campaign's own settings do. Only this account's:
+    # the setting belongs to the destination, and recomposing the rest would
+    # report changing posts it cannot reach.
+    reached = {"recomposed": 0, "kept": 0}
+    if changed:
+        autopilot = _autopilot(session, workspace_id, campaign_id, user_id=user.id)
+        from trendrelay_api.campaign_runner import recompose_held
+
+        reached = recompose_held(session, autopilot, destination_id=item.id)
     audit(
         session, request, workspace_id, user.id,
         "campaign.destination_placement", "campaign_destination", item.id,
-        {"link_placement": body.link_placement},
+        {"link_placement": body.link_placement, "recomposed_held": reached["recomposed"]},
     )
-    return {"destination": _destination_view(session, item)}
+    return {"destination": _destination_view(session, item), "held": reached}
 
 
 @router.delete("/{campaign_id}/destinations/{destination_id}")
@@ -1388,7 +1405,7 @@ def preview_autopilot(
         session, autopilot, now=datetime.now(UTC),
         link_for=lambda _destination_id, offer_id: offer_link_url(session, offer_id),
         allow_inactive=True,
-        horizon=timedelta(days=7),
+        horizon=OUTLOOK_HORIZON,
     )
     by_id = {item.id: item for item in destinations}
     queue_by_id = {
@@ -1546,6 +1563,11 @@ def preview_autopilot(
         "posts": rendered,
         "deployed": deployed,
         "problems": sum(1 for item in rendered if item["problem"]),
+        # How far this plan looked. A queue larger than the window has posts
+        # with no place in it, and saying so needs the number: "every slot is
+        # taken" reads as a fault, while "the next seven days are full" is a
+        # queue doing exactly what a queue does.
+        "horizon_days": OUTLOOK_HORIZON.days,
     }
 
 
