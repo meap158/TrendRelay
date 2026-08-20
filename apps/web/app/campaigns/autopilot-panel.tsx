@@ -631,6 +631,26 @@ function displayTitle(value: string | null): string | null {
   return value ? value.replace(/\.(mp4|mov|webm|mkv|avi|jpg|jpeg|png|webp)$/i, "") : value;
 }
 
+/**
+ * How a delivered post reads, by the clock.
+ *
+ * Handing a post to the engine is not publishing it: a scheduled post sits on
+ * the engine as Scheduled until its time passes, and is Published only after.
+ * Failure is its own state. So a succeeded delivery is read against the post's
+ * own time rather than called done the moment the job returned. (A post still
+ * in TrendRelay's queue is Planned, and is labelled where it is rendered.)
+ */
+function deliveredStatus(entry: TimelineEntry): { label: string; tone: "good" | "warn" | "neutral" } {
+  if (entry.status === "failed") return { label: "Failed", tone: "warn" };
+  if (entry.status === "succeeded") {
+    return new Date(entry.at).getTime() <= Date.now()
+      ? { label: "Published", tone: "good" }
+      : { label: "Scheduled", tone: "good" };
+  }
+  const raw = entry.status ?? "delivered";
+  return { label: raw.charAt(0).toUpperCase() + raw.slice(1), tone: "neutral" };
+}
+
 /* Which queue package a held post was frozen from, so approval traces back to
    the row in "What it posts" instead of floating free of it. The frozen title
    matches that row's own name; its clip's filename is the fallback when the
@@ -4834,11 +4854,8 @@ export function AutopilotPanel({
                             {/* Whether it has gone out, in one badge. This was
                                 the difference between the two lists. */}
                             {entry.kind === "delivered" ? (
-                              <Badge tone={entry.status === "succeeded" ? "good"
-                                : entry.status === "failed" ? "warn" : "neutral"}>
-                                {entry.status === "succeeded"
-                                  ? `Delivered · ${entry.delivery}`
-                                  : entry.status ?? "delivered"}
+                              <Badge tone={deliveredStatus(entry).tone}>
+                                {deliveredStatus(entry).label}
                               </Badge>
                             ) : (
                               <Badge tone={entry.problem ? "warn" : "neutral"}>
@@ -5034,11 +5051,8 @@ export function AutopilotPanel({
                   </div>
                   <div className="campaign-grid-foot">
                     {entry.kind === "delivered" ? (
-                      <Badge tone={entry.status === "succeeded" ? "good"
-                        : entry.status === "failed" ? "warn" : "neutral"}>
-                        {entry.status === "succeeded"
-                          ? `Delivered · ${entry.delivery}`
-                          : entry.status ?? "delivered"}
+                      <Badge tone={deliveredStatus(entry).tone}>
+                        {deliveredStatus(entry).label}
                       </Badge>
                     ) : (
                       <Badge tone={entry.problem ? "warn" : "neutral"}>
@@ -5146,9 +5160,8 @@ export function AutopilotPanel({
                     </span>
                   </button>
                   {entry.kind === "delivered" ? (
-                    <Badge tone={entry.status === "succeeded" ? "good"
-                      : entry.status === "failed" ? "warn" : "neutral"}>
-                      {entry.status ?? "delivered"}
+                    <Badge tone={deliveredStatus(entry).tone}>
+                      {deliveredStatus(entry).label}
                     </Badge>
                   ) : (
                     <Badge tone={entry.problem ? "warn" : "neutral"}>Planned</Badge>
