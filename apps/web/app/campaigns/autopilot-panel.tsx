@@ -1264,6 +1264,15 @@ export function AutopilotPanel({
     `${apiBaseUrl()}/api/workspaces/${workspaceId}/publishing/media/preview`
     + `?path=${encodeURIComponent(path)}`;
 
+  /**
+   * Whether a plan is on screen, as a ref rather than read off state.
+   *
+   * `run` would otherwise have to depend on `preview`, which rebuilds it
+   * every time a plan loads - and every handler holding the old one would
+   * be one render behind.
+   */
+  const showingPlan = useRef(false);
+
   const refresh = useCallback(async () => {
     const body = await json<{
       autopilot: Autopilot; destinations: Destination[]; queue: QueueItem[];
@@ -1453,19 +1462,6 @@ export function AutopilotPanel({
     searchTimer.current = window.setTimeout(() => void loadLibrary(next), 220);
   }
 
-  const run = useCallback(async (label: string, work: () => Promise<string>) => {
-    setBusy(label);
-    try {
-      if (label !== "preview") setPreview(null);
-      succeed(await work());
-      await refresh();
-    } catch (reason) {
-      fail(explainFailure(reason, "That did not work."));
-    } finally {
-      setBusy("");
-    }
-  }, [refresh, succeed, fail]);
-
   const loadPreview = useCallback(async (announce = true) => {
     setBusy("preview");
     try {
@@ -1473,6 +1469,7 @@ export function AutopilotPanel({
         note: string; posts: PreviewPost[]; deployed: DeployedPost[]; problems: number;
       }>(await apiFetch(`${base}/autopilot/preview`, { method: "POST" }));
       setPreview(body);
+      showingPlan.current = true;
       if (announce) {
         succeed(body.problems
           ? t("autopilot.previewProblems", { count: body.problems })
@@ -1484,6 +1481,30 @@ export function AutopilotPanel({
       setBusy("");
     }
   }, [apiFetch, base, fail, succeed, t]);
+
+  const run = useCallback(async (label: string, work: () => Promise<string>) => {
+    setBusy(label);
+    // Whether a plan was on screen before this changed it. Cleared below
+    // because a plan drawn before the change is wrong, but clearing was all
+    // this did: the outlook went blank and stayed blank until somebody pressed
+    // Refresh outlook, so approving a post looked like it had removed it from
+    // the calendar. Reloaded only when it was already showing, so a campaign
+    // nobody has previewed still costs nothing.
+    const replanning = label !== "preview" && showingPlan.current;
+    try {
+      if (label !== "preview") {
+        setPreview(null);
+        showingPlan.current = false;
+      }
+      succeed(await work());
+      await refresh();
+      if (replanning) await loadPreview(false);
+    } catch (reason) {
+      fail(explainFailure(reason, "That did not work."));
+    } finally {
+      setBusy("");
+    }
+  }, [refresh, succeed, fail, loadPreview]);
 
   async function save(changes: Partial<Autopilot>, { confirm = false } = {}) {
     if (!autopilot) return;
