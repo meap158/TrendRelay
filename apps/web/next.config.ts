@@ -1,22 +1,20 @@
 import type { NextConfig } from "next";
 
 /**
- * Why `npm run dev` passes `--webpack`, and when to take it off.
+ * `npm run dev` uses Turbopack (the Next 16 default), and why it can.
  *
- * Not because Turbopack is broken. It was switched off while its cache appeared
- * to be failing every write - "Another write batch or compaction is already
- * active", then manifests that never appeared - and that diagnosis turned out
- * to be wrong. The cause was two `scripts/dev.py` runners at once: the second
- * took the first's ports and deleted `.next-dev` while the first was serving
- * out of it, so the bundler was writing into a directory that had been removed
- * underneath it. That is fixed in dev.py, which now claims its lock atomically
- * before taking or deleting anything.
+ * It passed `--webpack` for a while, to dodge a cache error - "Another write
+ * batch or compaction is already active", then manifests that never appeared.
+ * That diagnosis was wrong: the cause was two `scripts/dev.py` runners at once,
+ * the second taking the first's ports and deleting `.next-dev` while the first
+ * was serving out of it, so the bundler wrote into a directory removed under
+ * it. dev.py fixed that - it claims its lock atomically before taking or
+ * deleting anything - so the workaround was removed. Turbopack is markedly
+ * faster on the cold compile that was making startup slow.
  *
- * So this flag is a workaround for a fault that no longer exists, kept only
- * because flipping the bundler back has not been tried since. Remove
- * `--webpack` from the dev script when there is appetite to confirm it; Next 16
- * uses Turbopack by default and it is markedly faster. Put it back if the
- * cache errors return - but check for a second runner first.
+ * If those cache errors ever return, first check for a second runner; only if
+ * that is not it, put `--webpack` back on the dev script as a fallback. The
+ * `distDir` split below keeps dev and build apart under either bundler.
  */
 
 const nextConfig: NextConfig = {
@@ -37,6 +35,12 @@ const nextConfig: NextConfig = {
    * apart here.
    */
   distDir: process.env.NODE_ENV === "development" ? ".next-dev" : ".next",
+  // Trim the icon and dialog packages to only the parts each file uses, so a
+  // page that names three icons does not pay to parse the whole set. Cheap, and
+  // the bundler already tree-shakes named imports - this makes it reliable.
+  experimental: {
+    optimizePackageImports: ["lucide-react", "@radix-ui/react-dialog"],
+  },
   allowedDevOrigins: [
     "localhost",
     "127.0.0.1",
