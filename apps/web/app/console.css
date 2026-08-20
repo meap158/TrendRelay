@@ -1323,6 +1323,10 @@ html { scroll-behavior: smooth; }
 /* A <small> inside a <label> the form styles as bold; these hints sit in a
    span instead, so they need the same quieting said once. */
 .campaign-dialog-hint { color: var(--muted); font-size: 10px; font-weight: 400; line-height: 1.45; }
+/* What a save is about to reach. Amber because it is a consequence rather
+   than a note: posts somebody is already waiting on will read differently
+   afterwards. */
+.campaign-dialog-reach { margin: 0; padding: 9px 11px; border-inline-start: 3px solid var(--amber); border-radius: var(--radius-sm); background: var(--warn-bg); color: var(--text); font-size: 11px; line-height: 1.5; }
 .campaign-dialog-form :is(input, textarea, select) { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; }
 /* The same flat field with its own chevron the rest of the app's dropdowns
    use, rather than the platform's control, which is a different height and a

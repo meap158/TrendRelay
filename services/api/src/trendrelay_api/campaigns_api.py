@@ -678,6 +678,22 @@ def update_campaign(
         autopilot.updated_at = utc_now()
         retranslated = True
 
+    # What the campaign says now, said to the posts already waiting. A post
+    # frozen before the change kept the words the old settings gave it, so the
+    # inbox filled with posts composed under a rule already replaced. The
+    # language pass above counts too: it rewrites the disclosure.
+    reached = {"recomposed": 0, "kept": 0}
+    if autopilot:
+        from trendrelay_api.campaign_runner import (
+            COMPOSITION_SETTINGS,
+            recompose_held,
+        )
+
+        if retranslated or any(
+            field in before and before[field] != getattr(autopilot, field)
+            for field in COMPOSITION_SETTINGS
+        ):
+            reached = recompose_held(session, autopilot)
     audit(
         session,
         request,
@@ -700,9 +716,10 @@ def update_campaign(
                 )
             ),
             "post_language": language if retranslated else None,
+            "recomposed_held": reached["recomposed"],
         },
     )
-    return {"campaign": _campaign(item)}
+    return {"campaign": _campaign(item), "held": reached}
 
 
 @router.post("/{campaign_id}/status")

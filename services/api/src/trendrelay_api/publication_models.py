@@ -180,6 +180,13 @@ class PublicationExecution(Base):
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     #: When the provider outcome was read back and this record settled.
     reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: When a person rewrote part of this post in the approval inbox.
+    #:
+    #: What it protects: a campaign settings change recomposes the posts still
+    #: waiting, so they say what the campaign says now rather than what it said
+    #: when they were frozen. A post somebody has edited is theirs, and is left
+    #: exactly as it is.
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(default=utc_now, index=True)
     updated_at: Mapped[datetime] = mapped_column(default=utc_now)

@@ -50,6 +50,7 @@ from trendrelay_api.integrations.publishing import (
 from trendrelay_api.media_models import MediaAsset
 from trendrelay_api.models import Campaign, DurableJob, utc_now
 from trendrelay_api.opportunity_models import ProductOffer
+from trendrelay_api.campaign_runner import held_posts
 from trendrelay_api.publication_models import PublicationExecution
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/campaigns", tags=["campaigns"])
@@ -397,6 +398,10 @@ def read_autopilot(
         "autopilot": {
             **campaign_status(session, autopilot),
             "graduation": graduation_progress(session, campaign_id),
+            # How many frozen posts a settings change would reach, so the size
+            # of the change can be said before it is made rather than counted
+            # afterwards.
+            "held": held_posts(session, campaign_id),
         },
         "destinations": [_destination_view(session, item) for item in destinations],
         "queue": [_queue_view(item) for item in queue],
@@ -483,6 +488,11 @@ def save_autopilot(
     autopilot.max_products_per_post = body.max_products_per_post
     # A disclosure or bio hint still reading its old language's default
     # follows the language; anything the operator wrote stays theirs.
+    from trendrelay_api.campaign_runner import COMPOSITION_SETTINGS
+
+    composed_before = {
+        field: getattr(autopilot, field) for field in COMPOSITION_SETTINGS
+    }
     incoming_disclosure = body.disclosure.strip()
     if (
         body.post_language != previous_language
@@ -526,6 +536,19 @@ def save_autopilot(
             campaign.status = "active"
             campaign.updated_at = utc_now()
         run_campaign(session, autopilot, now=datetime.now(UTC))
+    # What the campaign says now, said to the posts already waiting. A frozen
+    # post keeps its words on purpose - what is approved is what is sent - but
+    # a rule changed after the freeze reached nothing that was already in the
+    # inbox, so it filled with posts composed under a rule that had been
+    # replaced. Only when something that decides the words actually changed.
+    reached = {"recomposed": 0, "kept": 0}
+    if any(
+        composed_before[field] != getattr(autopilot, field)
+        for field in COMPOSITION_SETTINGS
+    ):
+        from trendrelay_api.campaign_runner import recompose_held
+
+        reached = recompose_held(session, autopilot)
     audit(
         session, request, workspace_id, user.id,
         "campaign.autopilot_saved", "campaign", campaign_id,
@@ -533,13 +556,14 @@ def save_autopilot(
             "enabled": body.enabled,
             "delivery": body.delivery,
             "authority": body.authority,
+            "recomposed_held": reached["recomposed"],
             "offer_id": body.offer_id,
             "offer_mode": body.offer_mode,
             "candidate_offers": len(candidate_ids),
             "max_products_per_post": body.max_products_per_post,
         },
     )
-    return {"autopilot": campaign_status(session, autopilot)}
+    return {"autopilot": campaign_status(session, autopilot), "held": reached}
 
 
 @router.post("/{campaign_id}/destinations", status_code=201)
@@ -2067,6 +2091,10 @@ def edit_autopilot_execution(
         execution.first_comment = (body.first_comment or "").strip() or None
     if body.thread is not None:
         execution.thread = [part.strip() for part in body.thread if part.strip()]
+    # Stamped so a later settings change leaves this post alone. What the
+    # campaign composes is the campaign's to recompose; what somebody wrote
+    # here is theirs.
+    execution.edited_at = utc_now()
     execution.updated_at = utc_now()
     audit(
         session, request, workspace_id, user.id,

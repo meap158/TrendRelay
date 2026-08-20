@@ -63,6 +63,8 @@ type CampaignPolicy = {
   offer_id: string | null;
   disclose: boolean;
   disclosure: string;
+  /** Posts already frozen and waiting, which these settings will reach. */
+  held?: { waiting: number; edited: number; recomposable: number };
   bio_hint: string;
 };
 
@@ -80,7 +82,6 @@ type PublicationPlan = {
   caption: string;
   hashtags: string[];
   affiliate_url?: string | null;
-  disclose: boolean;
   disclosure: string;
   deep_link?: string | null;
   scheduled_at: string;
@@ -478,7 +479,10 @@ export default function CampaignsPage() {
     succeed(null);
     try {
       const form = new FormData(event.currentTarget);
-      await json<{ campaign: Campaign }>(
+      const payload = await json<{
+        campaign: Campaign;
+        held?: { recomposed: number; kept: number };
+      }>(
         await apiFetch(`/api/workspaces/${workspaceId}/campaigns/${settingsFor.id}`, {
           method: "POST",
           body: JSON.stringify({
@@ -512,7 +516,13 @@ export default function CampaignsPage() {
       );
       await refresh(workspaceId);
       setSettingsFor(null);
-      succeed("Campaign settings saved.");
+      // What it reached, not only that it saved.
+      const reached = payload.held;
+      succeed(reached?.recomposed
+        ? `Campaign settings saved. ${reached.recomposed} waiting post${
+          reached.recomposed === 1 ? "" : "s"} updated to match`
+          + (reached.kept ? `; ${reached.kept} left as edited by hand.` : ".")
+        : "Campaign settings saved.");
     } catch (reason) {
       fail(reason instanceof Error ? reason.message : "Could not save campaign settings.");
     } finally {
@@ -965,6 +975,27 @@ export default function CampaignsPage() {
               {/* Controlled, so changing the language above rewrites these on
                   screen. The API already did it on save, which meant the field
                   showed the old language until the dialog was reopened. */}
+              {/* The size of the change, before it is made. These settings
+                  decide what a post says, and posts frozen before now kept the
+                  wording they were frozen with - so "3 posts are waiting" is
+                  the difference between changing a rule and knowing what it
+                  reaches. Only when there is something to reach. */}
+              {(policy.held?.waiting ?? 0) > 0 && (
+                <p className="campaign-dialog-reach" role="status">
+                  <strong>{policy.held?.waiting}</strong>{" "}
+                  {policy.held?.waiting === 1 ? "post is" : "posts are"} waiting
+                  for approval. Saving rewrites{" "}
+                  {policy.held?.recomposable === policy.held?.waiting
+                    ? (policy.held?.waiting === 1 ? "it" : "them")
+                    : `${policy.held?.recomposable} of them`}{" "}
+                  to match these settings.
+                  {(policy.held?.edited ?? 0) > 0 && (
+                    <>{" "}The {policy.held?.edited === 1 ? "other was" : "others were"}{" "}
+                      edited by hand and {policy.held?.edited === 1 ? "stays" : "stay"}{" "}
+                      as written.</>
+                  )}
+                </p>
+              )}
               {/* A switch and a wording, because they are two questions.
                   Whether a post carries a disclosure is a decision about
                   compliance; what it says is a matter of phrasing, and the

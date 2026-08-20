@@ -156,6 +156,47 @@ def low_confidence_match(
     )
 
 
+def attached_product(session, monkeypatch) -> None:
+    """A product that fits, so the post actually carries a link.
+
+    Needed by anything about the disclosure: it leads the caption only when
+    there is something to disclose, so a campaign with no product is a campaign
+    the setting cannot be observed on.
+    """
+    from trendrelay_api.opportunity_models import Product, ProductOffer
+
+    session.add(Product(
+        id="product-fit", workspace_id="ws", catalog_key="key-fit",
+        name="Espresso maker", category="Coffee", marketplace="shop",
+        created_by="user-1",
+    ))
+    session.add(ProductOffer(
+        id="offer-fit", workspace_id="ws", product_id="product-fit",
+        fingerprint="fingerprint-fit", network="affiliate",
+        affiliate_url="https://merchant.example/fit", currency="USD",
+        availability="available", commission_bps=900, created_by="user-1",
+    ))
+    item = session.get(CampaignQueueItem, "q1")
+    # Where `recompose_held` reads the product's name from: the post records
+    # what it resolved, and recomposing reuses that rather than matching again.
+    item.offer_match = {
+        "matches": [{"offer_id": "offer-fit", "product_name": "Espresso maker"}],
+        "chosen_offer_ids": ["offer-fit"],
+    }
+    session.commit()
+    match = OfferMatch(
+        offer_id="offer-fit", product_id="product-fit", product_name="Espresso maker",
+        score=72, confidence="medium", matched_terms=("espresso",), reasons=("fits",),
+        evidence_sources=(), affiliate_url="https://merchant.example/fit",
+        network="affiliate", availability="available", commission_bps=900,
+        commission_flat_cents=None, currency="USD",
+    )
+    monkeypatch.setattr(
+        campaign_scheduler, "resolve_matches",
+        lambda *args, **kwargs: ([match], [match], {"selection": "smart content match"}),
+    )
+
+
 def executions(session) -> list[PublicationExecution]:
     return list(session.scalars(select(PublicationExecution)).all())
 
@@ -293,6 +334,122 @@ def test_a_quota_refusal_is_not_read_as_a_broken_account() -> None:
     assert _classify_failure("quota exceeded") == "rate_limited"
     # And a real refusal still reads as one.
     assert _classify_failure("401 unauthorized") == "auth"
+
+
+def test_a_settings_change_reaches_the_posts_already_waiting(
+    session, tmp_path, monkeypatch, engine_stub
+) -> None:
+    """A frozen post kept the rule it was frozen under, for ever.
+
+    Freezing is the point - what is approved is what is sent - but a setting
+    changed afterwards reached nothing already in the inbox, so it filled with
+    posts composed under a rule the operator had replaced.
+    """
+    from trendrelay_api.campaign_runner import recompose_held
+
+    campaign_setup(session, tmp_path)
+    attached_product(session, monkeypatch)
+    pilot = autopilot(session, authority="assist", disclose=False)
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+    assert "#ad" not in execution.caption
+    assert "merchant.example/fit" in execution.caption
+
+    pilot.disclose = True
+    pilot.disclosure = "#ad"
+    reached = recompose_held(session, pilot, now=NOW)
+
+    assert reached == {"recomposed": 1, "kept": 0}
+    assert execution.caption.startswith("#ad")
+
+
+def test_a_post_somebody_edited_is_never_rewritten(session, tmp_path, engine_stub) -> None:
+    """Their words are not the campaign's to recompose.
+
+    An amended post and a machine-composed one looked identical until a post
+    started recording that it had been edited; without that, applying a change
+    to the inbox would quietly replace what somebody wrote by hand.
+    """
+    from trendrelay_api.campaign_runner import recompose_held
+
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+    execution.caption = "Words I wrote myself."
+    execution.edited_at = NOW
+
+    pilot.disclose = True
+    pilot.disclosure = "#ad"
+    reached = recompose_held(session, pilot, now=NOW)
+
+    assert reached == {"recomposed": 0, "kept": 1}
+    assert execution.caption == "Words I wrote myself."
+
+
+def test_recomposing_moves_nothing_but_the_words(session, tmp_path, engine_stub) -> None:
+    """Same clip, same account, same time, same products.
+
+    A change to the wording is not a reason to re-decide which product a post
+    carries or which slot it fills; those were settled when it was frozen, and
+    moving them would be a different post.
+    """
+    from trendrelay_api.campaign_runner import recompose_held
+
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+    before = (
+        execution.scheduled_at, execution.destination_id,
+        execution.media_path, tuple(execution.offer_ids or ()),
+    )
+
+    pilot.bio_hint = "Different wording"
+    recompose_held(session, pilot, now=NOW)
+
+    assert (
+        execution.scheduled_at, execution.destination_id,
+        execution.media_path, tuple(execution.offer_ids or ()),
+    ) == before
+
+
+def test_a_delivered_post_is_left_alone(session, tmp_path, engine_stub) -> None:
+    """It is a record of what went out, not a draft of what will."""
+    from trendrelay_api.campaign_runner import recompose_held
+
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="autonomous")
+    run_campaign(session, pilot, now=NOW)
+    execution = executions(session)[0]
+    assert execution.state == "queued"
+    sent = execution.caption
+
+    pilot.disclose = True
+    pilot.disclosure = "#ad"
+    reached = recompose_held(session, pilot, now=NOW)
+
+    assert reached == {"recomposed": 0, "kept": 0}
+    assert execution.caption == sent
+
+
+def test_the_count_says_what_a_change_would_reach(session, tmp_path, engine_stub) -> None:
+    """Said before saving, so the size of the change is not a surprise."""
+    from trendrelay_api.campaign_runner import held_posts
+
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+    run_campaign(session, pilot, now=NOW)
+
+    assert held_posts(session, pilot.campaign_id) == {
+        "waiting": 1, "edited": 0, "recomposable": 1,
+    }
+
+    executions(session)[0].edited_at = NOW
+
+    assert held_posts(session, pilot.campaign_id) == {
+        "waiting": 1, "edited": 1, "recomposable": 0,
+    }
 
 
 def test_auto_draft_delivers_only_engine_drafts(session, tmp_path, monkeypatch) -> None:

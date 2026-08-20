@@ -300,6 +300,150 @@ def _hold_reason(autopilot: CampaignAutopilot, post: ScheduledPost) -> str | Non
     return None
 
 
+#: What a held post says, and therefore what changing it has to reach.
+#:
+#: Not every setting: a cap on posts per day cannot change a caption, and
+#: nothing here re-decides which slot a post fills or which account it goes to -
+#: those were reserved when it was frozen and moving them would be a different
+#: post. These are the settings whose whole job is what the words are.
+COMPOSITION_SETTINGS = (
+    "disclose",
+    "disclosure",
+    "bio_hint",
+    "offer_mode",
+    "max_products_per_post",
+)
+
+
+def held_posts(session: Session, campaign_id: str) -> dict[str, int]:
+    """How many posts a settings change would reach, and how many it would not.
+
+    Read before saving so the operator is told the size of what they are about
+    to change, and after, so they are told what happened. Delivered posts are
+    not counted at all: they are a record of what went out.
+    """
+    rows = session.scalars(
+        select(PublicationExecution).where(
+            PublicationExecution.campaign_id == campaign_id,
+            PublicationExecution.state == "proposed",
+        )
+    ).all()
+    edited = sum(1 for row in rows if row.edited_at is not None)
+    return {"waiting": len(rows), "edited": edited, "recomposable": len(rows) - edited}
+
+
+def recompose_held(
+    session: Session, autopilot: CampaignAutopilot, *, now: datetime | None = None
+) -> dict[str, int]:
+    """Rewrite the posts still waiting so they say what the campaign says now.
+
+    A frozen post keeps the words it was frozen with, which is the whole point
+    of freezing: what is approved is what is sent. But a setting changed after
+    the freeze - the disclosure switched on, its wording rewritten, products
+    turned off - then reached nothing that was already waiting, and the inbox
+    filled with posts composed under a rule the operator had already replaced.
+
+    Recomposed from the queue item's own copy and this post's own products, so
+    nothing else moves: same clip, same account, same time, same products, in
+    the same order. Only what the campaign writes around them is rebuilt.
+
+    A post somebody edited in the inbox is left exactly as it is, and counted,
+    because their words are not the campaign's to rewrite. So is one whose
+    queue item has gone: there is no copy left to compose from.
+    """
+    from trendrelay_api.campaign_autopilot import DisclosureMissing, compose_for_post
+    from trendrelay_api.campaign_autopilot_api import offer_link_url
+    from trendrelay_api.autopilot_models import (
+        CampaignQueueItem,
+        bio_hint_for,
+        disclosure_for,
+    )
+    from trendrelay_api.integrations.publishing import first_comment_deliverable
+
+    moment = now or datetime.now(UTC)
+    rows = session.scalars(
+        select(PublicationExecution).where(
+            PublicationExecution.campaign_id == autopilot.campaign_id,
+            PublicationExecution.state == "proposed",
+        )
+    ).all()
+    destinations = {
+        item.id: item
+        for item in session.scalars(
+            select(CampaignDestination).where(
+                CampaignDestination.campaign_id == autopilot.campaign_id
+            )
+        ).all()
+    }
+    changed = kept = 0
+    for execution in rows:
+        if execution.edited_at is not None:
+            kept += 1
+            continue
+        item = (
+            session.get(CampaignQueueItem, execution.queue_item_id)
+            if execution.queue_item_id else None
+        )
+        destination = destinations.get(execution.destination_id)
+        if item is None or destination is None:
+            kept += 1
+            continue
+        # This post's own products, in its own order - trimmed to the ceiling
+        # rather than re-matched. Which product a post carries was decided when
+        # it was queued; a change to the wording is not a reason to re-decide
+        # it. Turning products off is, and drops them.
+        offers = (
+            [] if autopilot.offer_mode == "none"
+            else list(execution.offer_ids or [])[: autopilot.max_products_per_post]
+        )
+        products: list[tuple[str, str]] = []
+        for offer_id in offers:
+            link = offer_link_url(session, offer_id)
+            name = next(
+                (
+                    entry.get("product_name")
+                    for entry in (item.offer_match or {}).get("matches") or []
+                    if entry.get("offer_id") == offer_id and entry.get("product_name")
+                ),
+                None,
+            )
+            if link and name:
+                products.append((name, link))
+        try:
+            post = compose_for_post(
+                platform=destination.platform,
+                body=item.body,
+                hashtags=list(item.hashtags or []),
+                products=products,
+                disclosure=disclosure_for(item, autopilot) if products else "",
+                require_disclosure=autopilot.disclose,
+                bio_hint=bio_hint_for(item, autopilot),
+                placement_override=destination.link_placement,
+                comment_deliverable=first_comment_deliverable(
+                    destination.provider, destination.platform
+                ),
+                written_first_comment=item.first_comment,
+                written_thread=item.thread or (),
+            )
+        except DisclosureMissing:
+            # The campaign asks for a disclosure and has none written. Left as
+            # it was rather than rewritten into something that cannot post -
+            # the settings form refuses this combination anyway, so reaching
+            # here means it arrived some other way.
+            kept += 1
+            continue
+        execution.caption = post.caption
+        execution.first_comment = post.first_comment
+        execution.thread = list(post.thread)
+        execution.placement = post.placement.placement
+        execution.offer_ids = [offer_id for offer_id, _link in zip(
+            offers, products, strict=False
+        )] if products else []
+        execution.updated_at = moment
+        changed += 1
+    return {"recomposed": changed, "kept": kept}
+
+
 def _freeze_execution(
     session: Session,
     autopilot: CampaignAutopilot,

@@ -1534,8 +1534,9 @@ export function AutopilotPanel({
     const next = { ...autopilot, ...changes };
     const turningOn = Boolean(next.enabled && !autopilot.enabled);
     await run("settings", async () => {
-      await json(await apiFetch(`${base}/autopilot`, {
-        method: "PUT",
+      const saved = await json<{ held?: { recomposed: number; kept: number } }>(
+        await apiFetch(`${base}/autopilot`, {
+          method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           enabled: next.enabled,
@@ -1543,6 +1544,11 @@ export function AutopilotPanel({
           offer_mode: next.offer_mode,
           candidate_offer_ids: next.candidate_offer_ids,
           max_products_per_post: next.max_products_per_post,
+          // Sent because the settings PUT is a whole replacement: omitting it
+          // sends the field's default, and the default is off - so changing
+          // the delivery mode from the header would have switched a campaign's
+          // disclosure off on the way past.
+          disclose: next.disclose,
           disclosure: next.disclosure,
           bio_hint: next.bio_hint,
           min_recycle_days: next.min_recycle_days,
@@ -1557,9 +1563,24 @@ export function AutopilotPanel({
           confirm_external_action: confirm,
         }),
       }));
-      return next.enabled && !autopilot.enabled
+      const settled = next.enabled && !autopilot.enabled
         ? t("autopilot.switchedOn")
         : t("autopilot.saved");
+      // What the change reached, when it reached anything. A count is the
+      // difference between "saved" and knowing three posts in the inbox were
+      // rewritten to match.
+      const reached = saved?.held;
+      if (!reached?.recomposed && !reached?.kept) return settled;
+      const parts: string[] = [];
+      if (reached.recomposed) {
+        parts.push(`${reached.recomposed} waiting post${
+          reached.recomposed === 1 ? "" : "s"} updated to match`);
+      }
+      if (reached.kept) {
+        parts.push(`${reached.kept} left as ${
+          reached.kept === 1 ? "it was" : "they were"} - edited by hand`);
+      }
+      return `${settled} ${parts.join("; ")}.`;
     });
     // Switching on activates the campaign server-side; the parent's status
     // chip and list need to hear about it.
