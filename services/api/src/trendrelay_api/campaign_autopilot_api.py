@@ -62,13 +62,14 @@ EDITORS = {"owner", "editor", "approver"}
 GRADUATION_PUBLISHED_POSTS = 10
 
 
-def graduation_block(session: Session, campaign_id: str) -> str | None:
-    """Why this campaign cannot go autonomous yet, or None when it can.
+def graduation_progress(session: Session, campaign_id: str) -> dict[str, Any]:
+    """How near this campaign is to posting without a person.
 
-    Graduation is earned, not clicked. The learning period is visible in the
-    executions themselves: enough provider-confirmed posts to have been
-    watched, and nothing sitting unresolved that could be a duplicate waiting
-    to happen.
+    Reported rather than only enforced. Every authority level below
+    `autonomous` holds every post for approval, so until this is met the
+    operator approves each one by hand - and the only way to discover the bar
+    was to choose Autonomous and be refused. A count somebody can watch is the
+    difference between a rule and a wall.
     """
     published = session.scalar(
         select(func.count(PublicationExecution.id)).where(
@@ -82,7 +83,26 @@ def graduation_block(session: Session, campaign_id: str) -> str | None:
             PublicationExecution.state == "uncertain",
         )
     ) or 0
-    if published < GRADUATION_PUBLISHED_POSTS or unresolved:
+    return {
+        "published": published,
+        "required": GRADUATION_PUBLISHED_POSTS,
+        "unresolved": unresolved,
+        "ready": published >= GRADUATION_PUBLISHED_POSTS and not unresolved,
+    }
+
+
+def graduation_block(session: Session, campaign_id: str) -> str | None:
+    """Why this campaign cannot go autonomous yet, or None when it can.
+
+    Graduation is earned, not clicked. The learning period is visible in the
+    executions themselves: enough provider-confirmed posts to have been
+    watched, and nothing sitting unresolved that could be a duplicate waiting
+    to happen.
+    """
+    progress = graduation_progress(session, campaign_id)
+    published = progress["published"]
+    unresolved = progress["unresolved"]
+    if not progress["ready"]:
         return (
             f"Autonomous authority is earned: {published} of "
             f"{GRADUATION_PUBLISHED_POSTS} provider-confirmed posts so far, and "
@@ -372,7 +392,12 @@ def read_autopilot(
         .order_by(CampaignQueueItem.position, CampaignQueueItem.created_at)
     ).all()
     return {
-        "autopilot": campaign_status(session, autopilot),
+        # Graduation travels with the status because it is what decides whether
+        # anything posts without a person, and the page had no way to say so.
+        "autopilot": {
+            **campaign_status(session, autopilot),
+            "graduation": graduation_progress(session, campaign_id),
+        },
         "destinations": [_destination_view(session, item) for item in destinations],
         "queue": [_queue_view(item) for item in queue],
     }

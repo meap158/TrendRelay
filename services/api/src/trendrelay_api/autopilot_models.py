@@ -80,12 +80,18 @@ class CampaignAutopilot(Base):
     #: Off by default, and off is the only state a new campaign can be created
     #: in. Nothing starts posting because a form was submitted.
     enabled: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
-    #: How much this campaign may do alone. `assist` plans and holds every post
-    #: for approval; `auto_draft` proceeds but only ever as engine drafts;
-    #: `run_by_exception` - the recommended default - proceeds and holds only
-    #: what trips a rule; `autonomous` holds nothing but the hard gates. A
-    #: low-confidence product is held at every level: quality is not a policy
-    #: an authority level can waive.
+    #: How much this campaign may do alone.
+    #:
+    #: Read `_hold_reason` before trusting any summary of this, including the
+    #: one that used to be here. Approval before an engine is the pipeline's
+    #: rule rather than one level's setting: *every* level below `autonomous`
+    #: holds every frozen post for a person, `run_by_exception` included. What
+    #: the levels below it change is what is prepared and how - `auto_draft`
+    #: only ever hands over engine drafts - not whether a person is asked.
+    #:
+    #: `autonomous` is the one level that posts without a person, and it is
+    #: earned through `graduation_block` rather than chosen. A low-confidence
+    #: product is held even there: quality is not a policy any level waives.
     authority: Mapped[str] = mapped_column(String(20), default="run_by_exception")
     #: What the campaign optimises for: reach, discussion, revenue, or a
     #: balanced blend. Ranking reads this; the campaign's prose objective is

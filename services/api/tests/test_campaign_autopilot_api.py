@@ -1884,3 +1884,39 @@ def test_an_empty_selection_is_refused(workspace) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_the_page_is_told_how_near_autonomy_is(workspace) -> None:
+    """The bar existed only as a refusal, which is how it stayed invisible.
+
+    Every authority level below autonomous holds every post for a person, so
+    until this is met the operator approves each one by hand - and the only way
+    to learn what was being counted was to choose Autonomous and be refused.
+    """
+    campaign_id = campaign(workspace)
+
+    graduation = request(
+        "GET", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/autopilot"
+    ).json()["autopilot"]["graduation"]
+
+    assert graduation["published"] == 0
+    assert graduation["required"] == 10
+    assert graduation["ready"] is False
+
+
+def test_autonomy_is_refused_until_it_is_earned(workspace) -> None:
+    campaign_id = campaign(workspace)
+    base = f"/api/workspaces/{workspace}/campaigns/{campaign_id}"
+    settings = request("GET", f"{base}/autopilot").json()["autopilot"]
+
+    refused = request("PUT", f"{base}/autopilot", json={
+        **{key: settings[key] for key in (
+            "offer_mode", "max_products_per_post", "disclosure", "bio_hint",
+            "min_recycle_days", "daily_cap_per_account", "delivery", "priority",
+        ) if key in settings},
+        "authority": "autonomous",
+    })
+
+    assert refused.status_code == 409
+    # The refusal names the count, so it agrees with what the page shows.
+    assert "10" in refused.json()["detail"]

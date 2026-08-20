@@ -139,6 +139,13 @@ type Autopilot = {
   delivery: "draft" | "schedule" | "now";
   /** How much the campaign may do alone; run by exception is the default. */
   authority: "assist" | "auto_draft" | "run_by_exception" | "autonomous";
+  /** How near this campaign is to being allowed to post without a person. */
+  graduation?: {
+    published: number;
+    required: number;
+    unresolved: number;
+    ready: boolean;
+  };
   /** What ranking optimises for. */
   priority: "reach" | "discussion" | "revenue" | "balanced";
   offer_id: string | null;
@@ -836,6 +843,21 @@ function PostingStrategy({
         <span>{autopilot.authority === "autonomous"
           ? "Posts go out without you, except any carrying a weakly matched product - those always wait."
           : "Every post waits in Approval, exactly as it will be sent. Nothing reaches an engine before you approve it."}</span>
+        {/* How to stop approving every post, where the approving is explained.
+            The bar existed only as a refusal: choosing Autonomous answered 409
+            with the numbers in it, so the one way to learn what was being
+            counted was to try something the page had already discouraged. */}
+        {autopilot.authority !== "autonomous" && autopilot.graduation && (
+          <small className="campaign-graduation">
+            {autopilot.graduation.ready
+              ? "This campaign has earned Autonomous: switch it in settings and only weakly matched products will wait."
+              : `Autonomous unlocks at ${autopilot.graduation.required} provider-confirmed posts `
+                + `- ${autopilot.graduation.published} so far`
+                + (autopilot.graduation.unresolved
+                  ? `, with ${autopilot.graduation.unresolved} uncertain deliver${autopilot.graduation.unresolved === 1 ? "y" : "ies"} to resolve first.`
+                  : ".")}
+          </small>
+        )}
       </li>
     </ol>
   );

@@ -964,6 +964,10 @@ html { scroll-behavior: smooth; }
 .campaign-account-link:hover strong, .campaign-account-link:focus-visible strong { color: var(--link); text-decoration: underline; }
 .campaign-account-link svg { flex: none; color: var(--muted); }
 .campaign-account-link:hover svg { color: var(--link); }
+/* The way out of approving every post, under the line that explains the
+   approving. Its own line rather than more of the sentence above: it is the
+   only actionable part of that row. */
+.campaign-graduation { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .autopilot-queue-thumb { display: grid; place-items: center; }
 .autopilot-queue-thumb .picker-thumb, .autopilot-queue-thumb .campaign-pipeline-thumb-empty { display: grid; place-items: center; inline-size: 84px; block-size: 64px; overflow: hidden; border-radius: var(--radius-sm); background: var(--line); color: var(--muted); }
 .autopilot-queue-thumb .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }

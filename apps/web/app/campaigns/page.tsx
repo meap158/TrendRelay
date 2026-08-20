@@ -159,11 +159,20 @@ const OFFER_MODES: readonly (readonly [OfferMode, string, string])[] = [
   ["none", "No products", "Organic posts only"],
 ];
 
+/**
+ * How much a campaign may do alone - described by what it actually does.
+ *
+ * "Run by exception" read as though it held only exceptions, and it does not:
+ * every level below Autonomous holds every post for approval. That is the
+ * pipeline's rule rather than a setting, but the label promised otherwise, so
+ * an operator picked the recommended option and then approved every post by
+ * hand wondering which rule they kept tripping.
+ */
 const AUTHORITIES: readonly (readonly [string, string])[] = [
-  ["assist", "Assist — draft everything for review"],
-  ["auto_draft", "Auto draft — prepare, never send"],
-  ["run_by_exception", "Run by exception (recommended)"],
-  ["autonomous", "Autonomous — send without approval"],
+  ["assist", "Assist — prepare, and approve every post"],
+  ["auto_draft", "Auto draft — engine drafts only, and approve every post"],
+  ["run_by_exception", "Run by exception — approve every post (recommended)"],
+  ["autonomous", "Autonomous — post without approval (earned)"],
 ];
 
 const PRIORITIES: readonly (readonly [string, string])[] = [
