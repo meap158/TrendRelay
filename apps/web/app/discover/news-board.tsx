@@ -40,6 +40,7 @@ import { seedFromNewsStory, type DiscoverySeed, type SeedLabels } from "../../li
 import { useLocale } from "../i18n-provider";
 import { Button } from "../ui/button";
 import { SegmentedControl } from "../ui/segmented";
+import { WaitingBlock } from "../ui/waiting-block";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 
 type Density = "cards" | "rows" | "headlines";
@@ -303,8 +304,13 @@ export function NewsBoard({
         </p>
       ) : null}
 
+      {/* The same mark every other wait in the app shows. This was a bare line
+          of text in the corner, which is what the rest of the app was moved
+          off; it was missed because it waits inside the page rather than
+          instead of it. Only before the first board - a refresh keeps the
+          headlines up rather than blanking them. */}
       {loading && !board ? (
-        <p className="news-empty">{t("discover.news.loading")}</p>
+        <WaitingBlock className="waiting-block-compact" message={t("discover.news.loading")} />
       ) : null}
 
       {board && !board.covered.length && !board.breaking.length && !loading ? (

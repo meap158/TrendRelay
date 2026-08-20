@@ -276,6 +276,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
  * the waiting itself. See `WaitingBlock`. */
 .waiting-block { display: grid; justify-items: center; align-content: center; gap: 10px; min-height: 320px; padding: 32px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); }
 .waiting-block strong { color: var(--muted); font-size: 13px; font-weight: 600; }
+/* In-flow rather than a card, for a wait that sits inside a shelf that already
+ * has its own frame. Shorter too: standing in for a strip of headlines, not
+ * for half a page. */
+.waiting-block-compact { min-height: 120px; padding: 18px; border: 0; background: none; }
+.waiting-block-compact strong { font-size: 11px; font-weight: 500; }
 
 /* The animated brand mark. The trend line traces itself in, the four points
    light along it in turn, then it eases back and loops - a small sign that
