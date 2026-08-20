@@ -14,6 +14,24 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+#: This repository's own `scripts` package, ahead of anything else claiming the
+#: name.
+#:
+#: Running this file as a script puts `scripts/` on `sys.path`, not the
+#: repository root - so `import scripts` searches site-packages, and pywin32
+#: (a dependency of `mcp`) ships an importable `win32/scripts/` namespace
+#: package that answers to it. `scripts.model_assets` then does not exist, and
+#: no later `sys.path` change can fix it: the name is already bound.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if "scripts" in sys.modules and not getattr(
+    sys.modules["scripts"], "__file__", None
+):
+    # A namespace package got there first. Dropping it lets the import system
+    # find this repository's package, which has an `__init__.py` and wins on
+    # the path order set above.
+    del sys.modules["scripts"]
 API_PROJECT = ROOT / "services" / "api"
 API_MANIFEST = API_PROJECT / "pyproject.toml"
 STAMP = ROOT / ".venv" / ".trendrelay-api-dependencies.json"
