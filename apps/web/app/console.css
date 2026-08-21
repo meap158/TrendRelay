@@ -1183,6 +1183,20 @@ html { scroll-behavior: smooth; }
 .campaign-day-main:hover { background: var(--panel-raised); }
 .campaign-day-main > time { flex: 0 0 auto; inline-size: 68px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .campaign-day-body { flex: 1 1 auto; min-inline-size: 0; display: grid; gap: 1px; }
+/* The clip's own frame, in the space the platform mark used to have to itself.
+ *
+ * 9:16, because that is what these are: a landscape box would crop a vertical
+ * clip to a horizontal strip through the middle, which for a fashion clip is a
+ * torso and no face. Sized off the two lines of text beside it so the row does
+ * not grow to hold it. */
+.campaign-day-thumb { position: relative; flex: 0 0 auto; display: grid; place-items: center; inline-size: 24px; block-size: 40px; overflow: hidden; border-radius: var(--radius-sm); background: var(--line); color: var(--muted); }
+.campaign-day-thumb .picker-thumb { inline-size: 100%; block-size: 100%; }
+.campaign-day-thumb .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+/* The thumbnail carries its own name and duration; neither fits in 24px. */
+.campaign-day-thumb .picker-thumb b, .campaign-day-thumb .picker-thumb i { display: none; }
+/* On the corner rather than beside it, so the mark and the frame share one
+   column. Same inset the grid card uses, so the two read as the same object. */
+.campaign-day-thumb-mark { position: absolute; inset-block-end: 1px; inset-inline-end: 1px; display: grid; place-items: center; padding: 1px; border-radius: 3px; background: var(--panel); box-shadow: 0 1px 2px rgb(20 28 38 / 35%); }
 .campaign-day-body strong { overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-day-body small { color: var(--muted); font-size: 11px; }
 

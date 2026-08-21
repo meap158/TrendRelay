@@ -5153,7 +5153,42 @@ export function AutopilotPanel({
                     <time>{new Date(entry.at).toLocaleTimeString(undefined, {
                       hour: "numeric", minute: "2-digit", timeZone: readerZone,
                     })}</time>
-                    {platform && <PlatformIcon platform={platform} size={18} />}
+                    {/* Which clip, not only which filename. These titles are
+                        the original filename - a date, a run of hashtags and
+                        an id - so on a day of five posts the rows differ in
+                        their least readable part. A frame answers "which one"
+                        before the text is read at all.
+
+                        The platform mark rides the corner rather than sitting
+                        beside it, the way the grid card does, so the two of
+                        them cost one column instead of two. */}
+                    <span className="campaign-day-thumb">
+                      {entry.asset_id ? (
+                        <AssetThumbnail
+                          asset={{
+                            id: entry.asset_id,
+                            title: entry.title ?? "Campaign video",
+                            original_path: "",
+                            media_kind: "video",
+                            duration_ms: null,
+                            platform: platform ?? null,
+                            creator: null,
+                            width: null,
+                            height: null,
+                            versions: [{ id: `${entry.asset_id}-thumbnail`, kind: "thumbnail" }],
+                          }}
+                          workspaceId={workspaceId}
+                          apiFetch={apiFetch}
+                        />
+                      ) : (
+                        <span className="campaign-day-thumb-empty"><ActionIcon name="play" /></span>
+                      )}
+                      {platform && (
+                        <span className="campaign-day-thumb-mark">
+                          <PlatformIcon platform={platform} size={12} />
+                        </span>
+                      )}
+                    </span>
                     <span className="campaign-day-body">
                       <strong>{displayTitle(entry.title) || entry.caption.slice(0, 80) || "Untitled post"}</strong>
                       <small>{destination?.label ?? entry.destination_id ?? "Social account"}</small>
