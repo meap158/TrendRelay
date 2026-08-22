@@ -35,6 +35,7 @@ import { WaitingScreen } from "../ui/waiting-screen";
 import { WaitingBlock } from "../ui/waiting-block";
 import { Button, buttonClass } from "../ui/button";
 import { Dialog } from "../ui/dialog";
+import { Select } from "../ui/select";
 import { Badge, Switch } from "../ui/primitives";
 import { CredentialRow } from "../ui/credential-field";
 import {
@@ -2488,7 +2489,7 @@ export default function PublishPage() {
               shortcut with different rules. */}
           <label className="engine-login-name">
             <span>{t("publish.whichEngine")}</span>
-            <select
+            <Select
               value={addingToEngine ?? ""}
               onChange={(event) => {
                 const engine = event.target.value as PublishingEngine;
@@ -2506,7 +2507,7 @@ export default function PublishPage() {
                 .map((item) => (
                   <option key={item.engine} value={item.engine}>{item.engine_label}</option>
                 ))}
-            </select>
+            </Select>
           </label>
           <label className="engine-login-name">
             <span>{t("publish.accountName")}</span>
@@ -2857,12 +2858,12 @@ export default function PublishPage() {
                   board by name; the other three want its id, so a typed name
                   failed on them without saying why. */}
               {boards.length ? (
-                <select name="board" required defaultValue="">
+                <Select name="board" required defaultValue="">
                   <option value="" disabled>{t("publish.chooseBoard")}</option>
                   {boards.map((board) => (
                     <option key={board.id} value={board.id}>{board.name}</option>
                   ))}
-                </select>
+                </Select>
               ) : (
                 <input name="board" placeholder={t("publish.productLaunches")} required />
               )}
@@ -3296,10 +3297,10 @@ export default function PublishPage() {
                 supported={chosen.filter((platform) =>
                   platform === "tiktok" || platform === "youtube")} />
             </span>
-              <select name="visibility" defaultValue="public">
+              <Select name="visibility" defaultValue="public">
                 <option value="public">{t("publish.public")}</option>
                 <option value="private">{t("publish.privateOnlyMe")}</option>
-              </select>
+              </Select>
             </label>
           </div>
 

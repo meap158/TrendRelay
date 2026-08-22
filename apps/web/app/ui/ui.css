@@ -302,6 +302,17 @@ a.ui-button { text-decoration: none; }
 .search-select-chevron { flex: 0 0 auto; transition: transform 150ms ease; }
 .search-select-chevron.open { transform: rotate(180deg); }
 .search-select-trigger:focus-visible { outline: 2px solid color-mix(in srgb, var(--link) 38%, transparent); outline-offset: 1px; }
+.search-select-trigger[data-invalid="true"] { border-color: var(--bad); box-shadow: inset 0 0 0 1px var(--bad); }
+.workspace-session-preferences .toolbar-picker .search-select { width: 100%; }
+.toolbar-picker .search-select-trigger { min-height: 30px; padding: 4px 8px; font-size: 12px; }
+.timezone-picker .search-select { width: clamp(124px, 13vw, 168px); }
+.language-picker .search-select { width: clamp(96px, 10vw, 128px); }
+.voice-field .search-select { width: 100%; }
+.voice-field .search-select-trigger { min-height: 36px; background: var(--panel); }
+@media (max-width: 360px) {
+  .timezone-picker .search-select { width: 112px; }
+  .language-picker .search-select { width: 80px; }
+}
 /* A modal both hides its overflow and is transformed to centre itself, so a
    list opened inside one can escape it by neither overflow nor `position:
    fixed`, and portalling it to the body would put it outside the focus trap,
@@ -314,7 +325,7 @@ a.ui-button { text-decoration: none; }
    measures the space against whatever ancestor would cut the list off and sets
    the height. The search box keeps its own height while the list underneath
    takes what is left, so a constrained list scrolls rather than overflowing. */
-.search-select-popover { position: absolute; z-index: 80; inset-block: calc(100% + 4px) auto; inset-inline: var(--search-select-popover-inset-inline, 0); inline-size: var(--search-select-popover-width, auto); display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; padding: 8px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); box-shadow: 0 14px 34px rgb(15 23 42 / 16%); }
+.search-select-popover { position: absolute; z-index: 80; inset-block: calc(100% + 4px) auto; inset-inline: var(--search-select-popover-inset-inline, 0 auto); inline-size: var(--search-select-popover-width, max-content); min-inline-size: 100%; max-inline-size: calc(100vw - 24px); display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; padding: 8px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); box-shadow: 0 14px 34px rgb(15 23 42 / 16%); }
 .search-select-popover[data-side="above"] { inset-block: auto calc(100% + 4px); inset-inline: var(--search-select-popover-inset-inline, 0); box-shadow: 0 -14px 34px rgb(15 23 42 / 16%); }
 .search-select-popover > input { width: 100%; min-height: 36px; padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--text); font: inherit; }
 .search-select-list { display: grid; overflow-y: auto; overscroll-behavior: contain; }
@@ -331,8 +342,14 @@ a.ui-button { text-decoration: none; }
 /* The pointer sets the active row on move, so this only matters before the
  * mouse has travelled - a row under a resting cursor still looks reachable. */
 .search-select-list button:hover { background: var(--panel-raised); }
+.search-select-list button:disabled { color: var(--muted); background: transparent; cursor: not-allowed; opacity: .58; }
 .search-select-list strong { overflow-wrap: anywhere; font-size: 12px; font-weight: 600; }
 .search-select-list small { color: var(--muted); font-size: 11px; }
+
+/* A native select remains the form's successful control and validation source;
+ * the visible listbox supplies the consistent app-owned presentation. */
+.ui-select { position: relative; display: inline-block; width: 100%; min-width: 0; border: 0; border-radius: 0; padding: 0; color: var(--text); background: transparent; font: inherit; }
+.ui-select-native { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; border: 0; clip-path: inset(50%); overflow: hidden; white-space: nowrap; pointer-events: none; }
 /* Dense rows: the qualifier sits beside the name rather than under it, which
    is the difference between eight rows visible and fourteen. The name takes
    the space it needs and the qualifier is pushed to the end, so the column of

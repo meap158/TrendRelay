@@ -35,6 +35,7 @@ import {
   type PopularPost,
 } from "../../lib/post-board";
 import { Button } from "../ui/button";
+import { Select } from "../ui/select";
 import { useJobs } from "../jobs-provider";
 import { useLocale } from "../i18n-provider";
 import { usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
@@ -353,7 +354,7 @@ export function PopularPosts({
           <div style={{ ...S.controls, margin: 0, gap: "8px" }}>
             <label style={S.control}>
               <span style={S.controlLabel}>Rank by</span>
-              <select
+              <Select
                 value={engagementSort}
                 onChange={(event) => setEngagementSort(event.target.value as EngagedPostSort)}
                 style={{ ...S.select, minWidth: "150px" }}
@@ -365,11 +366,11 @@ export function PopularPosts({
                     reaction is made of, and how long it took to arrive. */}
                 <option value="discussion">Most discussed for its reach</option>
                 <option value="staying-power">Slowest burn</option>
-              </select>
+              </Select>
             </label>
             <label style={S.control}>
               <span style={S.controlLabel}>Source</span>
-              <select
+              <Select
                 value={visibleEngagementSource}
                 onChange={(event) => setEngagementSource(event.target.value)}
                 style={{ ...S.select, minWidth: "130px" }}
@@ -378,7 +379,7 @@ export function PopularPosts({
                 {researchSources.map((source) => (
                   <option key={source} value={source}>{source}</option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
         </div>
@@ -440,7 +441,7 @@ export function PopularPosts({
       <div className="popular-posts-filters" style={S.controls}>
         <label style={S.control}>
           <span style={S.controlLabel}>Platform</span>
-          <select
+          <Select
             value={platform}
             onChange={(event) => setPlatform(event.target.value as typeof platform)}
             style={S.select}
@@ -454,7 +455,7 @@ export function PopularPosts({
                 </option>
               );
             })}
-          </select>
+          </Select>
         </label>
         {platform === "youtube" ? (
           <label style={S.control}>
@@ -464,7 +465,7 @@ export function PopularPosts({
         ) : (
           <label style={S.control}>
             <span style={S.controlLabel}>TikTok window</span>
-            <select
+            <Select
               value={period}
               onChange={(event) => setPeriod(Number(event.target.value))}
               style={S.select}
@@ -472,7 +473,7 @@ export function PopularPosts({
               {PERIODS.map(([days, label]) => (
                 <option key={days} value={days}>{label}</option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
       </div>

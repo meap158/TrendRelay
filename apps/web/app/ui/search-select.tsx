@@ -10,6 +10,7 @@ export type SearchSelectOption = {
   label: string;
   description?: string;
   keywords?: string;
+  disabled?: boolean;
 };
 
 /** Which side of the trigger the list opens on, and how tall it may be. */
@@ -41,7 +42,8 @@ function clipBounds(node: HTMLElement | null): { top: number; bottom: number } {
 export function SearchSelect({
   value, options, onChange, placeholder, searchPlaceholder = "Search…",
   emptyLabel = "No matches", ariaLabel, disabled, searchable = true,
-  clearable = true, dense = false,
+  clearable = true, dense = false, required = false, invalid = false,
+  triggerRef,
 }: {
   value: string;
   options: SearchSelectOption[];
@@ -51,6 +53,9 @@ export function SearchSelect({
   emptyLabel?: string;
   ariaLabel?: string;
   disabled?: boolean;
+  required?: boolean;
+  invalid?: boolean;
+  triggerRef?: (node: HTMLButtonElement | null) => void;
   /**
    * Whether to offer the search box.
    *
@@ -113,7 +118,8 @@ export function SearchSelect({
    */
   function reveal() {
     const chosen = rows.findIndex((row) => row.value === value);
-    setActive(chosen >= 0 ? chosen : 0);
+    const firstEnabled = rows.findIndex((row) => !row.disabled);
+    setActive(chosen >= 0 && !rows[chosen]?.disabled ? chosen : Math.max(0, firstEnabled));
     setOpen(true);
   }
 
@@ -126,7 +132,7 @@ export function SearchSelect({
 
   function choose(index: number) {
     const row = rows[index];
-    if (!row) return;
+    if (!row || row.disabled) return;
     onChange(row.value);
     setOpen(false);
     setQuery("");
@@ -152,7 +158,12 @@ export function SearchSelect({
     event.preventDefault();
     if (intent.type === "open") reveal();
     else if (intent.type === "close") { setOpen(false); trigger.current?.focus(); }
-    else if (intent.type === "move") setActive(intent.index);
+    else if (intent.type === "move") {
+      const direction = event.key === "End" || event.key === "ArrowUp" ? -1 : 1;
+      let candidate = intent.index;
+      while (rows[candidate]?.disabled) candidate += direction;
+      setActive(rows[candidate] ? candidate : active);
+    }
     else choose(intent.index);
   }
 
@@ -206,7 +217,9 @@ export function SearchSelect({
         aria-haspopup="listbox" aria-expanded={open}
         aria-controls={listId}
         aria-label={ariaLabel ? `${ariaLabel}: ${selected?.label ?? placeholder}` : undefined}
-        disabled={disabled} ref={trigger}
+        data-required={required || undefined}
+        data-invalid={invalid || undefined}
+        disabled={disabled} ref={(node) => { trigger.current = node; triggerRef?.(node); }}
         onKeyDown={onKeys}
         onClick={() => (open ? setOpen(false) : reveal())}>
         <span>{selected?.label ?? placeholder}</span>
@@ -239,6 +252,8 @@ export function SearchSelect({
                 // Selected is what the field holds; active is where the
                 // keyboard is. They are different states and look different.
                 aria-selected={row.value === value}
+                aria-disabled={row.disabled || undefined}
+                disabled={row.disabled}
                 data-active={index === active}
                 className={row.value === value ? "selected" : undefined}
                 // Pointer and keyboard agree on which row is active, so moving

@@ -2,6 +2,7 @@
 
 import { optionLabel, paramHelp, paramLabel } from "../../lib/i18n/effects";
 import { useT } from "../i18n-provider";
+import { Select } from "../ui/select";
 
 /**
  * The shape of the effect registry as the API serves it, and the control that
@@ -125,7 +126,7 @@ export function ParamControl({
     return (
       <label className="effect-param">
         <span>{label}</span>
-        <select
+        <Select
           value={String(value ?? "")}
           disabled={disabled}
           onChange={(event) => {
@@ -138,7 +139,7 @@ export function ParamControl({
               {optionLabel(t, effectId, option.value, option.label)}
             </option>
           ))}
-        </select>
+        </Select>
         {help && <small>{help}</small>}
       </label>
     );

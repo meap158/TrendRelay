@@ -33,6 +33,7 @@ import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 import type { SortState } from "../ui/sortable-header";
 import { Badge, Card, Switch } from "../ui/primitives";
 import { SearchSelect } from "../ui/search-select";
+import { Select } from "../ui/select";
 import { useT } from "../i18n-provider";
 import { LOCALES } from "../../lib/i18n/locales";
 import { EffectEditor } from "../library/effect-editor";
@@ -2604,7 +2605,7 @@ export function AutopilotPanel({
                 anything. */}
             <label className="autopilot-delivery">
               <span>Authority</span>
-              <select
+              <Select
                 value={autopilot.authority}
                 disabled={!canEdit}
                 onChange={(event) =>
@@ -2613,11 +2614,11 @@ export function AutopilotPanel({
                 {AUTHORITIES.map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="autopilot-delivery">
               <span>{t("autopilot.delivery")}</span>
-              <select
+              <Select
                 value={autopilot.delivery}
                 disabled={!canEdit}
                 onChange={(event) =>
@@ -2632,7 +2633,7 @@ export function AutopilotPanel({
                     scheduled job to modify, so there is no second post to
                     make. */}
                 <option value="now">{t("autopilot.deliveryNow")}</option>
-              </select>
+              </Select>
             </label>
           <Switch
             checked={autopilot.enabled}
@@ -4167,7 +4168,7 @@ export function AutopilotPanel({
                   <div className="autopilot-destination-controls">
                   <label className="autopilot-placement-choice">
                     Link placement
-                    <select
+                    <Select
                       value={item.link_placement_setting}
                       onChange={(event) => void run("placement", async () => {
                         const saved = await json<{
@@ -4201,7 +4202,7 @@ export function AutopilotPanel({
                       <option value="caption">Always in the caption</option>
                       <option value="first_comment">First comment, where deliverable</option>
                       <option value="bio">Always via bio link</option>
-                    </select>
+                    </Select>
                   </label>
                   {/* The icon, like every other removal in the app. As a word
                       it stretched to a grid column: 106px of button beside a
@@ -4414,7 +4415,7 @@ export function AutopilotPanel({
                     />
                     <label>
                       <span>Show</span>
-                      <select value={productFilter}
+                      <Select value={productFilter}
                         onChange={(event) => {
                           setProductFilter(event.target.value as typeof productFilter);
                           setProductPage(0);
@@ -4422,7 +4423,7 @@ export function AutopilotPanel({
                         <option value="all">All</option>
                         <option value="available">Available</option>
                         <option value="unavailable">Unavailable</option>
-                      </select>
+                      </Select>
                     </label>
                   </div>
                   {/* The count, the selection and the paginator on one line -

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../ui/button";
+import { Select } from "../ui/select";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
 import { ProviderSwitch, providerOf, useMediaAi } from "./transcription-setup";
@@ -341,14 +342,14 @@ export function CaptionEditor({
               burning in re-encodes every frame. */}
           <label className="caption-delivery">
             <span>Deliver</span>
-            <select
+            <Select
               value={delivery}
               onChange={(event) => setDelivery(event.target.value)}
             >
               <option value="sidecar">Subtitle files only</option>
               <option value="burned">Burned into the video</option>
               <option value="both">Both</option>
-            </select>
+            </Select>
           </label>
           <Button
             variant="primary"
@@ -429,7 +430,7 @@ export function CaptionEditor({
               />
             </div>
           ) : availableTranslations.length > 0 ? (
-            <select
+            <Select
               value={translateTo}
               onChange={(event) => setTranslateTo(event.target.value)}
             >
@@ -439,7 +440,7 @@ export function CaptionEditor({
                   {pair.label.replace(/^.*? to /, "")}
                 </option>
               ))}
-            </select>
+            </Select>
           ) : (
             <p className="caption-editor-note">
               No installed translation starts from {sourceLanguage ?? "this transcript's language"}.

@@ -62,6 +62,7 @@ Concise, confident, implementation-focused.
 - Include long-content, overflow, and empty-state handling.
 - Include known page component density: buttons (71), links (17), inputs (6), navigation (1), lists (1).
 - Keep app-wide context such as workspace, account, language, and timezone in the global toolbar. A page must not repeat a global workspace selector or keep an independent workspace selection.
+- Every single-value dropdown must use the shared `Select` or `SearchSelect` control from `apps/web/app/ui/`; browser-default dropdown chrome and page-local substitutes are prohibited. The native form control must remain the value and validation source, long option sets must be searchable, and each dropdown must be verified for keyboard operation, disabled and required states, long labels, and viewport-safe placement.
 
 ## Responsive acceptance
 - Verify every primary workspace at 320px, 390px, and 768px after its asynchronous content has loaded; opening dialogs and global menus is part of the check.

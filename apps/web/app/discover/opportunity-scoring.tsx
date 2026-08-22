@@ -18,6 +18,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "../ui/button";
+import { Select } from "../ui/select";
 import { useT } from "../i18n-provider";
 
 type Offer = {
@@ -283,14 +284,14 @@ export function OpportunityScoring({
               <input name="trend_entity" required minLength={2} defaultValue={prefill.trend} />
             </label>
             <label>{t("opportunities.lifecycle")}
-              <select name="lifecycle" defaultValue="unknown">
+              <Select name="lifecycle" defaultValue="unknown">
                 <option value="unknown">{t("lifecycle.unknown")}</option>
                 <option value="emerging">{t("lifecycle.emerging")}</option>
                 <option value="accelerating">{t("lifecycle.accelerating")}</option>
                 <option value="peaking">{t("lifecycle.peaking")}</option>
                 <option value="saturated">{t("lifecycle.saturated")}</option>
                 <option value="declining">{t("lifecycle.declining")}</option>
-              </select>
+              </Select>
             </label>
             <label>{t("campaigns.markets")}<input name="markets" placeholder="US, TH" /></label>
             <label>{t("campaigns.languages")}<input name="languages" placeholder="en, th" /></label>
@@ -354,14 +355,14 @@ export function OpportunityScoring({
             ))}
             {selectedOffers.length > 0 && (
               <label>{t("opportunities.primaryOffer")}
-                <select value={selectedOffer} onChange={(event) => setSelectedOffer(event.target.value)}>
+                <Select value={selectedOffer} onChange={(event) => setSelectedOffer(event.target.value)}>
                   <option value="">{t("opportunities.noPrimaryOffer")}</option>
                   {selectedOffers.map((id) => (
                     <option key={id} value={id}>
                       {offerById.get(id)?.product.name} · {offerById.get(id)?.network}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             )}
           </div>

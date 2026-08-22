@@ -12,6 +12,7 @@ import {
   type AssetFilterValues,
 } from "../ui/asset-filters";
 import { Button } from "../ui/button";
+import { Select } from "../ui/select";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
 import { ActionIcon } from "../ui/action-icons";
@@ -954,7 +955,7 @@ export function SlotEditor({
             aria-label={t("composer.timeOfDay")}
             onChange={(event) => setDraft(event.target.value)}
           />
-          <select
+          <Select
             value={weekday}
             aria-label={t("composer.repeats")}
             onChange={(event) => setWeekday(Number(event.target.value))}
@@ -963,7 +964,7 @@ export function SlotEditor({
             {WEEKDAY_NAMES.map((name, index) => (
               <option key={name} value={index}>{name} only</option>
             ))}
-          </select>
+          </Select>
           <Button variant="quiet" size="sm" disabled={busy || !draft} onClick={add}>
             Add time
           </Button>

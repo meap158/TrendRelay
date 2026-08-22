@@ -3,6 +3,7 @@
 import { Button } from "./button";
 import { useT } from "../i18n-provider";
 import { SearchSelect } from "./search-select";
+import { Select } from "./select";
 import {
   EMPTY_FACETS,
   activeFilterCount,
@@ -134,7 +135,7 @@ export function AssetFilters({
 
       {shown.has("platform") && (
         <label>{t("filters.source")}
-          <select
+          <Select
             aria-label={t("filters.bySource")}
             value={values.platform ?? ""}
             onChange={(event) => set({ platform: event.target.value })}
@@ -145,13 +146,13 @@ export function AssetFilters({
                 {label(facet, "Other sources")}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       )}
 
       {shown.has("mediaKind") && (
         <label>{t("filters.media")}
-          <select
+          <Select
             aria-label={t("filters.byMediaKind")}
             value={values.mediaKind ?? ""}
             onChange={(event) =>
@@ -161,7 +162,7 @@ export function AssetFilters({
             {facets.media_kinds.map((facet) => (
               <option key={facet.value} value={facet.value}>{label(facet, "Other media")}</option>
             ))}
-          </select>
+          </Select>
         </label>
       )}
 
@@ -169,7 +170,7 @@ export function AssetFilters({
           will grow — a blurred cut is the first rendered effect, not the last. */}
       {shown.has("effect") && (
         <label>{t("filters.effects")}
-          <select
+          <Select
             aria-label={t("filters.byEffect")}
             value={values.effect ?? ""}
             onChange={(event) => set({ effect: event.target.value })}
@@ -178,13 +179,13 @@ export function AssetFilters({
             {facets.effects.map((facet) => (
               <option key={facet.value} value={facet.value}>{label(facet, facet.value)}</option>
             ))}
-          </select>
+          </Select>
         </label>
       )}
 
       {shown.has("processing") && (
         <label>{t("filters.processing")}
-          <select
+          <Select
             aria-label={t("filters.byProcessing")}
             value={values.processing ?? ""}
             onChange={(event) => set({ processing: event.target.value })}
@@ -195,13 +196,13 @@ export function AssetFilters({
               const name = key ? t(key) : facet.label;
               return <option key={facet.value} value={facet.value}>{name} ({facet.count})</option>;
             })}
-          </select>
+          </Select>
         </label>
       )}
 
       {shown.has("length") && (
         <label>{t("filters.length")}
-          <select
+          <Select
             aria-label={t("filters.byLength")}
             value={values.maxSeconds ?? ""}
             onChange={(event) =>
@@ -211,7 +212,7 @@ export function AssetFilters({
             {LENGTHS.map(([seconds, text]) => (
               <option key={seconds} value={seconds}>{text}</option>
             ))}
-          </select>
+          </Select>
         </label>
       )}
 

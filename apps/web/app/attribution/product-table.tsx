@@ -17,6 +17,7 @@ import { Card } from "../ui/primitives";
 import { Button } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
 import { SelectionCheckbox } from "../ui/selection-checkbox";
+import { Select } from "../ui/select";
 import { useT } from "../i18n-provider";
 import { commissionRate } from "../commission";
 import { money } from "./format";
@@ -282,7 +283,7 @@ export function ProductTable({
         {(campaigns.length > 0 || fileNames.length > 0 || hasImportDates) && (
           <div className="product-filters">
             {campaigns.length > 0 && (
-              <select
+              <Select
                 className="product-filter"
                 value={filterCampaign}
                 aria-label={t("attribution.filterByCampaign")}
@@ -292,10 +293,10 @@ export function ProductTable({
                 {campaigns.map((campaign) => (
                   <option key={campaign.id} value={campaign.id}>{campaign.name}</option>
                 ))}
-              </select>
+              </Select>
             )}
             {fileNames.length > 0 && (
-              <select
+              <Select
                 className="product-filter"
                 value={filterFile}
                 aria-label={t("attribution.filterByFile")}
@@ -305,7 +306,7 @@ export function ProductTable({
                 {fileNames.map((name) => (
                   <option key={name} value={name}>{name}</option>
                 ))}
-              </select>
+              </Select>
             )}
             {hasImportDates && (
               <span className="product-filter-dates">
@@ -364,7 +365,7 @@ export function ProductTable({
               products no campaign can use. */}
           {onTagOffers && campaigns.length > 0 && (
             <>
-              <select
+              <Select
                 className="product-tag-campaign"
                 value={tagCampaign}
                 aria-label={t("attribution.tagSelectionAria")}
@@ -376,7 +377,7 @@ export function ProductTable({
                     {campaign.name} ({campaign.tagged_products})
                   </option>
                 ))}
-              </select>
+              </Select>
               <Button
                 variant="secondary"
                 size="sm"

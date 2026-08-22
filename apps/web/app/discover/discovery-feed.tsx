@@ -35,6 +35,7 @@ import { seedFromPost, seedFromTopic, type DiscoverySeed } from "../../lib/disco
 import type { PopularPost } from "../../lib/post-board";
 import type { Topic } from "../../lib/trend-shapes";
 import { Button } from "../ui/button";
+import { Select } from "../ui/select";
 import { useLocale } from "../i18n-provider";
 import { usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 
@@ -196,14 +197,14 @@ export function DiscoveryFeed({
         <div className="discovery-feed-controls">
           <label>
             Window
-            <select
+            <Select
               value={period}
               onChange={(event) => setPeriod(Number(event.target.value))}
             >
               {PERIODS.map(([days, name]) => (
                 <option key={days} value={days}>{name}</option>
               ))}
-            </select>
+            </Select>
           </label>
           <Button variant="secondary" size="sm" onClick={() => void load()} busy={busy}>
             <RefreshCw size={14} /> Refresh

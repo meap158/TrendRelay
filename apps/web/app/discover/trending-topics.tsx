@@ -16,6 +16,7 @@ import { apiBaseUrl } from "../../lib/api";
 import { seedFromTopic, type DiscoverySeed } from "../../lib/discovery-ideas";
 import { filterTopics, SHAPE_COPY, reasons, searchTerm, windowSummary, type Shape, type Topic } from "../../lib/trend-shapes";
 import { Button } from "../ui/button";
+import { Select } from "../ui/select";
 import { useLocale } from "../i18n-provider";
 import { usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 
@@ -253,13 +254,13 @@ export function TrendingTopics({
       <div style={S.controls}>
         <label style={S.control}>
           <span style={S.controlLabel}>Platform</span>
-          <select value={platform} onChange={(event) => setPlatform(event.target.value)} style={S.select}>
+          <Select value={platform} onChange={(event) => setPlatform(event.target.value)} style={S.select}>
             {PLATFORMS.map(([id, label]) => (
               <option key={id} value={id} disabled={id === "douyin" && region !== "CN"}>
                 {label}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <div style={S.control}>
           <span style={S.controlLabel}>Looking for</span>

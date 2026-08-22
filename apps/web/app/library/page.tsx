@@ -19,6 +19,7 @@ import { Dialog } from "../ui/dialog";
 import { SegmentedControl } from "../ui/segmented";
 import { ActionIcon, bulkActionIcon } from "../ui/action-icons";
 import { StatusToasts, useStatus } from "../ui/status";
+import { Select } from "../ui/select";
 import { Badge } from "../ui/primitives";
 import {
   AssetFilters,
@@ -1650,12 +1651,12 @@ export default function LibraryPage() {
               <button type="button" className={mediaKind === "audio" ? "selected" : ""} aria-pressed={mediaKind === "audio"} onClick={() => patchFilters({ mediaKind: "audio" })}>{t("library.audio")} <span>{mediaCount("audio")}</span></button>
             </div>
             <label>{t("library.sortLabel")}
-              <select aria-label={t("library.sortLabel")} value={sortOrder} onChange={(event) => { if (isSortOrder(event.target.value)) setSortOrder(event.target.value); }}>
+              <Select aria-label={t("library.sortLabel")} value={sortOrder} onChange={(event) => { if (isSortOrder(event.target.value)) setSortOrder(event.target.value); }}>
                 <option value="newest">{t("library.sortNewest")}</option>
                 <option value="oldest">{t("library.sortOldest")}</option>
                 <option value="title">{t("library.sortTitle")}</option>
                 <option value="duration">{t("library.sortLongest")}</option>
-              </select>
+              </Select>
             </label>
           </nav>
 
@@ -1666,11 +1667,11 @@ export default function LibraryPage() {
             onChange={setFilters}
           >
             <label>{t("library.group")}
-              <select aria-label={t("library.groupLabel")} value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)}>
+              <Select aria-label={t("library.groupLabel")} value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)}>
                 <option value="none">{t("library.noGrouping")}</option>
                 <option value="channel">{t("library.channel")}</option>
                 <option value="source">{t("library.source")}</option>
-              </select>
+              </Select>
             </label>
           </AssetFilters>
           <div className="library-collection-toolbar">

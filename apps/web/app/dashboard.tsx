@@ -10,6 +10,7 @@ import { Button, buttonClass } from "./ui/button";
 import { LoadingMark } from "./ui/loading-mark";
 import { ActionIcon } from "./ui/action-icons";
 import { StatusToasts, useStatus } from "./ui/status";
+import { Select } from "./ui/select";
 import { numberIn, oneOf, subsetOf, usePersistedState } from "./ui/use-persisted-state";
 
 const isDownloadMode = oneOf("post", "like", "mix", "music");
@@ -655,7 +656,7 @@ export default function Dashboard() {
           <details className="download-options">
             <summary>{t("downloads.options")} <span>{modeLabel(mode)} · {limit === 0 ? "all videos" : `up to ${limit} per source`} · {mediaKinds.length === 3 ? "video, images and audio" : mediaKinds.length === 1 ? "video only" : `video and ${mediaKinds.includes("image") ? "images" : "audio"}`}</span></summary>
             <div className="download-options-grid">
-              <label><span>{t("downloads.fromProfiles")}</span><select value={mode} onChange={(event) => { if (isDownloadMode(event.target.value)) setMode(event.target.value); }}><option value="post">{t("downloads.publishedPosts")}</option><option value="like">{t("downloads.likedVideos")}</option><option value="mix">{t("downloads.collections")}</option><option value="music">{t("downloads.musicVideos")}</option></select></label>
+              <label><span>{t("downloads.fromProfiles")}</span><Select value={mode} onChange={(event) => { if (isDownloadMode(event.target.value)) setMode(event.target.value); }}><option value="post">{t("downloads.publishedPosts")}</option><option value="like">{t("downloads.likedVideos")}</option><option value="mix">{t("downloads.collections")}</option><option value="music">{t("downloads.musicVideos")}</option></Select></label>
               <fieldset><legend>{t("downloads.perSource")}</legend><div className="limit-presets">{[0, 10, 20, 50, 100].map((value) => <button key={value} type="button" className={limit === value ? "selected" : ""} aria-pressed={limit === value} onClick={() => setLimit(value)}>{value === 0 ? "All" : value}</button>)}</div></fieldset>
               <fieldset>
                 <legend>{t("downloads.whatToFetch")}</legend>

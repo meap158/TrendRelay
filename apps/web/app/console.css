@@ -146,14 +146,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .workspace-session-check { flex: 0 0 auto; color: var(--link); font-size: 13px; font-weight: 800; }
 .workspace-session-preferences { display: grid; gap: 10px; border-block: 1px solid var(--line-strong); padding: 12px 14px; }
 .workspace-session-preferences .toolbar-picker { display: grid; grid-template-columns: 72px minmax(0, 1fr); width: 100%; }
-.workspace-session-preferences .toolbar-picker .search-select { width: 100%; }
 .workspace-session-panel > .ui-button { justify-self: start; margin: 5px 8px; }
 /* The toolbar's pickers - language, timezone - as one rule, because two
    adjacent dropdowns that differ by a few pixels read as two different kinds of
    thing. They were a native select with hardcoded greys beside an app-styled
    one, which is exactly how that looks. */
 .toolbar-picker { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; min-width: 0; color: var(--muted); font-size: 12px; }
-.toolbar-picker .search-select-trigger { min-height: 30px; padding: 4px 8px; font-size: 12px; }
 /* Compact hides the word, not the label: an unlabelled control announces only
    its current value to a screen reader. */
 .toolbar-picker.compact > span { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
@@ -167,8 +165,6 @@ button, a { -webkit-tap-highlight-color: transparent; }
    reads. */
 .timezone-picker { --search-select-popover-inset-inline: 0 auto; --search-select-popover-width: min(280px, calc(100vw - 24px)); }
 .language-picker { --search-select-popover-inset-inline: auto 0; --search-select-popover-width: min(210px, calc(100vw - 24px)); }
-.timezone-picker .search-select { width: clamp(124px, 13vw, 168px); }
-.language-picker .search-select { width: clamp(96px, 10vw, 128px); }
 .notification-shell { position: relative; }
 .notification-trigger { position: relative; display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; padding: 0; color: var(--muted); background: var(--panel); cursor: pointer; }
 .notification-trigger:hover, .notification-trigger[aria-expanded="true"] { border-color: var(--line); color: var(--text); background: var(--panel-raised); }
@@ -400,8 +396,6 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .toolbar-actions { gap: 4px; }
   .timezone-picker { --search-select-popover-width: min(240px, calc(100vw - 16px)); }
   .language-picker { --search-select-popover-width: min(180px, calc(100vw - 16px)); }
-  .timezone-picker .search-select { width: 112px; }
-  .language-picker .search-select { width: 80px; }
   .local-admin-badge { display: none; }
 }
 
@@ -1592,6 +1586,28 @@ html { scroll-behavior: smooth; }
   background: var(--panel);
   color: inherit;
   font: inherit;
+}
+
+/* Keep the paired selectors inside the mobile card. This must follow the
+   desktop flex rule above so the cascade cannot restore their min-content
+   width after the narrow-screen layout has already opted into stacking. */
+@media (max-width: 600px) {
+  .autopilot-run-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    inline-size: 100%;
+  }
+
+  .autopilot-delivery {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    inline-size: 100%;
+  }
+
+  .autopilot-delivery .ui-select {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
 }
 
 /* Sized to itself, not to the grid column it happens to land in, and matched

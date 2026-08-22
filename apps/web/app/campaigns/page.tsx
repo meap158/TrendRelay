@@ -16,6 +16,7 @@ import { Button, buttonClass } from "../ui/button";
 import { WaitingScreen } from "../ui/waiting-screen";
 import { Dialog } from "../ui/dialog";
 import { SearchSelect } from "../ui/search-select";
+import { Select } from "../ui/select";
 import { ActionIcon } from "../ui/action-icons";
 import { WaitingBlock } from "../ui/waiting-block";
 import { handoffPath } from "../../lib/media-rules";
@@ -670,7 +671,7 @@ export default function CampaignsPage() {
             {campaignsReady && (
               <label className="campaign-scope-filter">
                 <span className="sr-only">{t("campaigns.visibility")}</span>
-                <select
+                <Select
                   aria-label={t("campaigns.visibility")}
                   value={campaignScope}
                   onChange={(event) => changeCampaignScope(event.target.value as CampaignScope)}
@@ -678,7 +679,7 @@ export default function CampaignsPage() {
                   <option value="current">{t("campaigns.scopeCurrent", { count: currentCampaigns.length })}</option>
                   <option value="archived">{t("campaigns.scopeArchived", { count: archivedCampaigns.length })}</option>
                   <option value="all">{t("campaigns.scopeAll", { count: campaigns.length })}</option>
-                </select>
+                </Select>
               </label>
             )}
           </div>
@@ -829,28 +830,28 @@ export default function CampaignsPage() {
               anything it does not cover is still typed. */}
           <div className="campaign-dialog-grid">
             <label>{t("campaigns.objective")}
-              <select
+              <Select
                 name={objectiveChoice ? "objective" : undefined}
                 value={objectiveChoice}
                 onChange={(event) => setObjectiveChoice(event.target.value)}
               >
                 {CAMPAIGN_GOALS.map((goal) => <option key={goal} value={goal}>{goal}</option>)}
                 <option value="">Something else…</option>
-              </select>
+              </Select>
               {!objectiveChoice && (
                 <textarea name="objective" rows={2} required maxLength={1000}
                   placeholder="What should this campaign achieve?" />
               )}
             </label>
             <label>{t("campaigns.audience")}
-              <select
+              <Select
                 name={audienceChoice ? "audience" : undefined}
                 value={audienceChoice}
                 onChange={(event) => setAudienceChoice(event.target.value)}
               >
                 {CAMPAIGN_AUDIENCES.map((who) => <option key={who} value={who}>{who}</option>)}
                 <option value="">Something else…</option>
-              </select>
+              </Select>
               {!audienceChoice && (
                 <textarea name="audience" rows={2} required maxLength={1000}
                   placeholder="Who are these posts for?" />
@@ -860,12 +861,12 @@ export default function CampaignsPage() {
           {/* Controlled, because the disclosure and the profile-link wording
               below are rewritten when it changes. */}
           <label>{t("campaigns.postLanguage")}
-            <select name="language" value={newLanguage}
+            <Select name="language" value={newLanguage}
               onChange={(event) => changeNewLanguage(event.target.value)}>
               {POST_LANGUAGES.map((item) => (
                 <option key={item.value} value={item.value}>{item.label}</option>
               ))}
-            </select>
+            </Select>
             <small>The language the disclosure, bio hint and product labels are written in. Your own copy is always your own.</small>
           </label>
           {/* The same three modes the settings dialog offers, in the same
@@ -935,11 +936,11 @@ export default function CampaignsPage() {
               </label>
             </div>
             <label>Authority
-              <select name="authority" defaultValue="run_by_exception">
+              <Select name="authority" defaultValue="run_by_exception">
                 {AUTHORITIES.map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
-              </select>
+              </Select>
               <small>How much of the posting runs without you.</small>
             </label>
             {/* Written in the campaign's language and rewritten when it
@@ -970,11 +971,11 @@ export default function CampaignsPage() {
               <small>Used where a link in a post is not clickable.</small>
             </label>
             <label>Optimise for
-              <select name="priority" defaultValue="balanced">
+              <Select name="priority" defaultValue="balanced">
                 {PRIORITIES.map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
-              </select>
+              </Select>
               <small>Ranking uses an axis only once it has evidence.</small>
             </label>
           </details>
@@ -1015,7 +1016,7 @@ export default function CampaignsPage() {
                 defaultValue={settingsFor.audience} />
             </label>
             <label>{t("campaigns.postLanguage")}
-              <select name="language" defaultValue={settingsFor.languages[0] ?? "en"}
+              <Select name="language" defaultValue={settingsFor.languages[0] ?? "en"}
                 onChange={(event) => setSettingsScaffolding((current) => {
                   const fresh = scaffoldingFor(event.target.value);
                   return {
@@ -1028,7 +1029,7 @@ export default function CampaignsPage() {
                 {POST_LANGUAGES.map((item) => (
                   <option key={item.value} value={item.value}>{item.label}</option>
                 ))}
-              </select>
+              </Select>
               <small>Changes the disclosure and bio hint too, unless you have written your own.</small>
             </label>
             {/* How hard it is run. Set once when the campaign is described
@@ -1194,11 +1195,11 @@ export default function CampaignsPage() {
                 </span>
               </label>
               <label>Optimise for
-                <select name="priority" defaultValue={policy.priority}>
+                <Select name="priority" defaultValue={policy.priority}>
                   {PRIORITIES.map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
-                </select>
+                </Select>
                 <small>Ranking uses an axis only once it has evidence.</small>
               </label>
             </>}

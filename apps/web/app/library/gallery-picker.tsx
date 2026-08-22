@@ -4,6 +4,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { Button } from "../ui/button";
+import { Select } from "../ui/select";
 import { Badge } from "../ui/primitives";
 import { ParamControl } from "./effect-params";
 import type { EffectDefinition, EffectParam, ParamOption } from "./effect-params";
@@ -534,7 +535,7 @@ export function GalleryPanel({
                 <div className="overlay-import">
                   <label>
                     <span className="ui-visually-hidden">{t("overlayPicker.addFromLibrary")}</span>
-                    <select
+                    <Select
                       value={importing}
                       disabled={!canEdit || adding}
                       onChange={(event) => setImporting(event.target.value)}
@@ -543,7 +544,7 @@ export function GalleryPanel({
                       {pictures.map((asset) => (
                         <option key={asset.id} value={asset.id}>{asset.title}</option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
                   <Button
                     variant="secondary"

@@ -6,6 +6,7 @@ import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
 import { SearchSelect } from "../ui/search-select";
+import { Select } from "../ui/select";
 import { SegmentedControl } from "../ui/segmented";
 import { useT } from "../i18n-provider";
 
@@ -532,17 +533,17 @@ export function VoiceEditor({
           <div className="voice-filter-grid">
             <label className="voice-field">
               <span>Voice language</span>
-              <select value={languageFilter} onChange={(event) => {
+              <Select value={languageFilter} onChange={(event) => {
                 setLanguageFilter(event.target.value);
                 setVoiceId("");
               }}>
                 <option value="">All languages</option>
                 {languages.map((language) => <option key={language} value={language}>{language}</option>)}
-              </select>
+              </Select>
             </label>
             <label className="voice-field">
               <span>Voice region</span>
-              <select value={regionFilter} onChange={(event) => {
+              <Select value={regionFilter} onChange={(event) => {
                 setRegionFilter(event.target.value);
                 setVoiceId("");
               }}>
@@ -550,7 +551,7 @@ export function VoiceEditor({
                 {regions.map((region) => (
                   <option key={region} value={region}>{regionNames[region]} · {region}</option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
 
@@ -573,7 +574,7 @@ export function VoiceEditor({
           <div className="voice-filter-grid">
             <label className="voice-field">
               <span>Model</span>
-              <select value={modelId} onChange={(event) => {
+              <Select value={modelId} onChange={(event) => {
                 const next = event.target.value;
                 setModelId(next);
                 const supported = models.find((model) => model.model_id === next)?.languages ?? [];
@@ -585,19 +586,19 @@ export function VoiceEditor({
                 {models.map((model) => (
                   <option key={model.model_id} value={model.model_id}>{model.name}</option>
                 ))}
-              </select>
+              </Select>
               {selectedModel?.description && <small>{selectedModel.description}</small>}
             </label>
             <label className="voice-field">
               <span>Spoken language</span>
-              <select value={languageCode} onChange={(event) => setLanguageCode(event.target.value)}>
+              <Select value={languageCode} onChange={(event) => setLanguageCode(event.target.value)}>
                 <option value="">Detect from text</option>
                 {(selectedModel?.languages ?? []).map((language) => (
                   <option key={language.language_id} value={language.language_id}>
                     {language.name} · {language.language_id}
                   </option>
                 ))}
-              </select>
+              </Select>
               <small>Restricts normalization where the selected model supports it.</small>
             </label>
           </div>

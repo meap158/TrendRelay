@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "../ui/button";
+import { Select } from "../ui/select";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
 import { ActionIcon } from "../ui/action-icons";
@@ -190,10 +191,10 @@ export function ClipEditor({
               <input name="title" required minLength={2} defaultValue={assetTitle.slice(0, 60)} />
             </label>
             <label className="ui-field">{t("clipEditor.pipeline")}
-              <select name="pipeline" defaultValue="clip-factory">
+              <Select name="pipeline" defaultValue="clip-factory">
                 <option value="clip-factory">{t("clipEditor.clipFactory")}</option>
                 <option value="podcast-repurpose">{t("clipEditor.podcastRepurpose")}</option>
-              </select>
+              </Select>
             </label>
             <label className="ui-field">{t("clipEditor.budgetCap")}
               <input name="budget_usd" type="number" min="1" max="100" step="0.01" defaultValue="1" />

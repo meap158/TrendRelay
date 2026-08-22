@@ -26,6 +26,7 @@ import { useLocale } from "../i18n-provider";
 import { Button, buttonClass } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
 import { SearchSelect } from "../ui/search-select";
+import { Select } from "../ui/select";
 import { numberIn, oneOf, usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 import { useJobs } from "../jobs-provider";
 import { useWorkspace } from "../workspace-provider";
@@ -1025,7 +1026,7 @@ export default function ResearchDashboard() {
 
         <div className="dsc-discovery-toolbar">
           <form className="dsc-search-form" onSubmit={runQuery}>
-            <select
+            <Select
               className="dsc-search-mode"
               aria-label={t("discover.sourceModes")}
               value={queryMode}
@@ -1033,7 +1034,7 @@ export default function ResearchDashboard() {
             >
               <option value="trends">{t("discover.actions.researchMode")}</option>
               <option value="ads">{t("discover.actions.metaAdsMode")}</option>
-            </select>
+            </Select>
             <input
               className="dsc-search-input"
               required
@@ -1129,7 +1130,7 @@ export default function ResearchDashboard() {
           <div className="dsc-tiktok-controls">
             <label className="dsc-topic-count-label">
               Save to Library
-              <select
+              <Select
                 className="dsc-topic-count-select"
                 value={topicCount}
                 onChange={(event) => setTopicCount(Number(event.target.value))}
@@ -1138,7 +1139,7 @@ export default function ResearchDashboard() {
                 {TOPIC_COUNTS.map((count) => (
                   <option key={count} value={count}>{count}</option>
                 ))}
-              </select>
+              </Select>
               per topic
             </label>
             <div className="dsc-board-view-toggle" role="group" aria-label={t("discover.boardLayout")}>
@@ -1386,7 +1387,7 @@ export default function ResearchDashboard() {
                   </Button>
                 ))}
               </div>
-              <select
+              <Select
                 aria-label={t("research.tiktokPeriod")}
                 className="dsc-tiktok-select"
                 value={tiktokPeriod}
@@ -1402,7 +1403,7 @@ export default function ResearchDashboard() {
                 {TIKTOK_PERIODS.map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
-              </select>
+              </Select>
               <button
                 type="button"
                 className="dsc-quick-link-btn"
