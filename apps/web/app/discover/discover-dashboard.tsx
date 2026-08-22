@@ -27,6 +27,7 @@ import { useAuth } from "../auth-provider";
 import { useLocale } from "../i18n-provider";
 import { Button, buttonClass } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
+import { SearchSelect } from "../ui/search-select";
 import { numberIn, oneOf, usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 import { useJobs } from "../jobs-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
@@ -160,6 +161,11 @@ type Inspiration = {
   topic?: string;
   relevance?: number;
 };
+
+const DISCOVER_TIKTOK_CATEGORIES: TikTokCategory[] = [
+  { id: "hashtag", label: "Hashtags", description: "", available: true, unavailable_reason: "" },
+  { id: "video", label: "Videos", description: "", available: true, unavailable_reason: "" },
+];
 
 type DiscoverView = "overview" | "trends" | "posts" | "signals" | "opportunities";
 
@@ -378,6 +384,13 @@ export default function ResearchDashboard() {
   const [tiktokResult, setTiktokResult] = usePersistedCache<TikTokResult>(
     "trendrelay.discover.tiktok.result", RESEARCH_MAX_AGE, isTikTok);
   const [tiktokCategories, setTiktokCategories] = useState<TikTokCategory[]>([]);
+  const tiktokSourceModes = useMemo(() => {
+    if (!tiktokCategories.length) return DISCOVER_TIKTOK_CATEGORIES;
+    const available = tiktokCategories.filter(
+      (category) => category.available && ["hashtag", "video"].includes(category.id),
+    );
+    return available;
+  }, [tiktokCategories]);
   // One country setting for the whole page: every board follows it rather than
   // each keeping its own. Persisted, validated against the shared list.
   const [country, setCountry] = usePersistedState(
@@ -1070,38 +1083,61 @@ export default function ResearchDashboard() {
           </button>
         </form>
 
-        <div className="dsc-mode-row">
-          {(
-            [
-              ["trends", t("discover.actions.researchMode")],
-              ["ads", t("discover.actions.metaAdsMode")],
-            ] as const
-          ).map(([val, label]) => (
-            <button
-              key={val}
-              type="button"
-              className={`dsc-mode-btn${queryMode === val ? " dsc-mode-btn-active" : ""}`}
-              onClick={() => setQueryMode(val)}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="dsc-command-row">
+          <div className="dsc-source-modes" role="group" aria-label={t("discover.sourceModes")}>
+            {(
+              [
+                ["trends", t("discover.actions.researchMode")],
+                ["ads", t("discover.actions.metaAdsMode")],
+              ] as const
+            ).map(([val, label]) => (
+              <Button
+                key={val}
+                size="sm"
+                variant="quiet"
+                selected={queryMode === val}
+                aria-pressed={queryMode === val}
+                onClick={() => setQueryMode(val)}
+              >
+                {label}
+              </Button>
+            ))}
+            {tiktokSourceModes.map((category) => (
+              <Button
+                key={category.id}
+                size="sm"
+                variant="quiet"
+                selected={activeView === "trends" && tiktokResult?.category === category.id}
+                aria-pressed={activeView === "trends" && tiktokResult?.category === category.id}
+                disabled={!category.available}
+                busy={busy === "tiktok" && activeView === "trends" && tiktokResult?.category === category.id}
+                title={category.available ? category.description : category.unavailable_reason}
+                onClick={() => {
+                  setActiveView("trends");
+                  void fetchTiktokDiscovery(category.id);
+                }}
+              >
+                <TikTokCategoryIcon id={category.id} />
+                {category.id === "hashtag" ? t("discover.tiktokCategories.hashtags") : t("discover.tiktokCategories.videos")}
+              </Button>
+            ))}
+          </div>
           {/* One country for the whole page. Trends, popular posts, TikTok and
               the news board all follow it; Douyin stays China and the
               network-wide sources (Bluesky, Hacker News) are unaffected. */}
-          <label className="dsc-country">
-            <span>Country</span>
-            <select
-              className="dsc-country-select"
+          <div className="dsc-country">
+            <span>{t("discover.country")}</span>
+            <SearchSelect
               value={country}
-              aria-label="Country for every Discover board"
-              onChange={(event) => setCountry(event.target.value)}
-            >
-              {REGIONS.map(([code, label]) => (
-                <option key={code} value={code}>{label}</option>
-              ))}
-            </select>
-          </label>
+              options={REGIONS.map(([value, label]) => ({ value, label }))}
+              onChange={setCountry}
+              placeholder={t("discover.country")}
+              searchPlaceholder={t("discover.searchCountry")}
+              ariaLabel={t("discover.countryForBoards")}
+              clearable={false}
+              dense
+            />
+          </div>
         </div>
 
       </div>
@@ -1158,27 +1194,6 @@ export default function ResearchDashboard() {
           research jobs found. A summary that replaces its own detail is one
           nobody can check. */}
       {activeView === "trends" && <div className="dsc-section">
-        <div className="dsc-source-switcher">
-          <span>TikTok Creative Center</span>
-          <div className="dsc-quick-links-row">
-            {(tiktokCategories.length
-              ? tiktokCategories
-              : [{ id: "hashtag", label: "Hashtags", description: "", available: true, unavailable_reason: "" }]
-            ).map((category) => (
-              <button
-                key={category.id}
-                type="button"
-                disabled={!category.available || busy === "tiktok"}
-                title={category.available ? category.description : category.unavailable_reason}
-                onClick={() => void fetchTiktokDiscovery(category.id)}
-                className={`dsc-quick-link-btn${category.available ? "" : " is-disabled"}`}
-              >
-                <TikTokCategoryIcon id={category.id} />{category.label}
-                {category.available ? "" : " (retired)"}
-              </button>
-            ))}
-          </div>
-        </div>
         <TrendingTopics
           country={country}
           onResearch={exploreTopic}

@@ -40,7 +40,8 @@ function clipBounds(node: HTMLElement | null): { top: number; bottom: number } {
 /** A compact, searchable replacement for selects with long operational lists. */
 export function SearchSelect({
   value, options, onChange, placeholder, searchPlaceholder = "Search…",
-  emptyLabel = "No matches", disabled, searchable = true, dense = false,
+  emptyLabel = "No matches", ariaLabel, disabled, searchable = true,
+  clearable = true, dense = false,
 }: {
   value: string;
   options: SearchSelectOption[];
@@ -48,6 +49,7 @@ export function SearchSelect({
   placeholder: string;
   searchPlaceholder?: string;
   emptyLabel?: string;
+  ariaLabel?: string;
   disabled?: boolean;
   /**
    * Whether to offer the search box.
@@ -58,6 +60,8 @@ export function SearchSelect({
    * The list, the look and the keyboard behaviour are the same either way.
    */
   searchable?: boolean;
+  /** Keep a required choice required by omitting the synthetic clear row. */
+  clearable?: boolean;
   /**
    * Put each row's description beside its label instead of beneath it.
    *
@@ -96,8 +100,8 @@ export function SearchSelect({
 
   /** Every row the arrows move through: the clear row, then the matches. */
   const rows = useMemo(
-    () => [{ value: "", label: placeholder }, ...visible],
-    [placeholder, visible],
+    () => clearable ? [{ value: "", label: placeholder }, ...visible] : visible,
+    [clearable, placeholder, visible],
   );
 
   /**
@@ -109,7 +113,7 @@ export function SearchSelect({
    */
   function reveal() {
     const chosen = rows.findIndex((row) => row.value === value);
-    setActive(chosen > 0 ? chosen : 0);
+    setActive(chosen >= 0 ? chosen : 0);
     setOpen(true);
   }
 
@@ -200,7 +204,9 @@ export function SearchSelect({
         // The pattern this implements: a button that owns a listbox, saying so
         // rather than leaving a screen reader to infer it from a div.
         aria-haspopup="listbox" aria-expanded={open}
-        aria-controls={listId} disabled={disabled} ref={trigger}
+        aria-controls={listId}
+        aria-label={ariaLabel ? `${ariaLabel}: ${selected?.label ?? placeholder}` : undefined}
+        disabled={disabled} ref={trigger}
         onKeyDown={onKeys}
         onClick={() => (open ? setOpen(false) : reveal())}>
         <span>{selected?.label ?? placeholder}</span>

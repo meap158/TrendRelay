@@ -23,6 +23,14 @@ News remains labelled as a story in the evidence tray, but is persisted as a
 `topic` Campaign signal. A news event is something to make content about, not a
 social post owned by the workspace, and `story` is not a durable signal kind.
 
+The shared command bar is one compact row at desktop width: Trends, Ads,
+Hashtags, Videos, then Country. It uses the shared button and searchable-select
+components rather than native or page-local controls. Country is required (the
+selector has no clear row), its label and search prompt are localized, and the
+four sources become a two-by-two grid at narrow widths. Discover-specific
+surfaces also use the semantic palette, radius, and shadow tokens rather than
+retaining their earlier literal colours and one-off shapes.
+
 ## Context
 
 Discover shows each source's own list - TikTok Creative Center's hashtags and

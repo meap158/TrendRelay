@@ -10,10 +10,10 @@
   gap: 12px;
   margin: 0;
   padding: 10px 12px;
-  border: 1px solid #8eaae5;
+  border: 1px solid var(--link);
   border-radius: var(--radius-lg);
-  background: rgba(245, 248, 255, .97);
-  box-shadow: 0 8px 24px rgba(22, 52, 105, .16);
+  background: var(--link-bg);
+  box-shadow: var(--shadow-lg);
   backdrop-filter: blur(8px);
 }
 .dsc-page.has-idea-tray { padding-block-end: 84px; }
@@ -33,7 +33,7 @@
 .discovery-idea-evidence > strong, .discovery-idea-angles > strong { font-size: 12px; }
 .discovery-idea-evidence ul { display: grid; gap: 7px; margin: 10px 0 0; padding: 0; list-style: none; }
 .discovery-idea-evidence li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: start; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
-.discovery-idea-evidence li > span { border-radius: 999px; padding: 2px 6px; color: #174ea6; background: var(--link-bg); font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.discovery-idea-evidence li > span { border-radius: 999px; padding: 2px 6px; color: var(--link); background: var(--link-bg); font-size: 9px; font-weight: 700; text-transform: uppercase; }
 .discovery-idea-evidence li div { display: grid; gap: 2px; min-width: 0; }
 .discovery-idea-evidence li strong, .discovery-idea-evidence li small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .discovery-idea-evidence li strong { font-size: 11px; }
@@ -44,7 +44,7 @@
 .discovery-idea-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .discovery-idea-angles { padding: 9px 10px; border-inline-start: 3px solid var(--link); background: var(--panel-raised); }
 .discovery-idea-angles ul { margin: 6px 0 0; padding-inline-start: 18px; color: var(--muted); font-size: 11px; line-height: 1.5; }
-.discovery-idea-created { display: flex; flex: 1 1 auto; align-items: center; gap: 12px; min-height: 160px; padding: 20px; border: 1px solid #9bc7ad; border-radius: var(--radius); background: #f1faf4; }
+.discovery-idea-created { display: flex; flex: 1 1 auto; align-items: center; gap: 12px; min-height: 160px; padding: 20px; border: 1px solid var(--green-line); border-radius: var(--radius); background: var(--green-dark); }
 .discovery-idea-created svg { color: var(--link); }
 .discovery-idea-created div { flex: 1; }
 .discovery-idea-created strong { font-size: 15px; }
@@ -216,49 +216,43 @@
 .dsc-topic-count-select { border-radius: 6px; border: 1px solid var(--line-strong); padding: 3px 4px; background: var(--panel); color: var(--text); font: inherit; font-size: 11px; }
 .dsc-topic-note-good { border-left-color: var(--green); background: var(--green-dark); }
 .dsc-topic-note-link { color: var(--link); font-weight: 600; }
-.dsc-tiktok-list { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.dsc-tiktok-list { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
 .dsc-tiktok-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 12px 16px; background: var(--panel); }
 .dsc-tiktok-rank { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; text-align: center; }
 .dsc-tiktok-body { display: flex; align-items: center; gap: 8px; min-width: 0px; flex-wrap: wrap; }
 .dsc-tiktok-name { font-size: 14px; color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-.dsc-tiktok-tag { font-size: 11px; color: var(--muted); background: var(--panel-raised); border-radius: 10px; padding: 2px 8px; }
+.dsc-tiktok-tag { font-size: 11px; color: var(--muted); background: var(--panel-raised); border-radius: 999px; padding: 2px 8px; }
 .dsc-tiktok-metrics { display: flex; gap: 14px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .dsc-tiktok-metric { font-variant-numeric: tabular-nums; }
-.dsc-tiktok-explore { border: 1px solid var(--line-strong); border-radius: 14px; background: var(--panel); color: var(--text); font-size: 11px; font-family: inherit; padding: 4px 10px; cursor: pointer; }
+.dsc-tiktok-explore { border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel); color: var(--text); font-size: 11px; font-family: inherit; padding: 4px 10px; cursor: pointer; }
 .dsc-tiktok-source { margin: 12px 0 0; color: var(--muted); font-size: 11px; }
-.dsc-quick-links-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; justify-content: flex-start; max-width: 800px; }
-.dsc-source-switcher { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
-.dsc-source-switcher > span { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
-.dsc-source-switcher .dsc-quick-links-row { margin-top: 0; }
-.dsc-quick-link-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--panel-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 6px 14px; font-size: 12px; cursor: pointer; color: var(--text); text-decoration: none; font-weight: 500; transition: all 0.15s; }
-.dsc-mode-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-.dsc-mode-btn { background: transparent; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 6px 16px; font-size: 13px; cursor: pointer; color: var(--muted); font-family: inherit; font-weight: 500; transition: all 0.15s; }
-.dsc-mode-btn-active { background: var(--green-dark); border: 1px solid var(--green); color: var(--green); }
+.dsc-command-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.dsc-source-modes { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.dsc-source-modes .ui-button { min-width: 0; }
 /* The one country control, at the far end of the mode row: every board follows
    it, so it sits with the page's other top-level switches, not inside a board. */
-.dsc-country { display: inline-flex; align-items: center; gap: 6px; margin-inline-start: auto; font-size: 13px; color: var(--muted); }
-.dsc-country-select { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font: inherit; font-size: 13px; padding: 6px 8px; max-inline-size: 200px; }
+.dsc-country { --search-select-trigger-min-height: var(--control-sm); --search-select-trigger-padding: 4px 10px; display: grid; flex: 0 0 auto; grid-template-columns: auto 190px; align-items: center; gap: 6px; margin-inline-start: auto; color: var(--muted); font-size: 11px; font-weight: 600; }
 .dsc-top-bar { display: flex; align-items: center; justify-content: space-between; max-width: var(--dsc-measure); margin: 0 auto; padding: 10px 24px; border-bottom: 1px solid var(--panel-raised); font-size: 13px; color: var(--muted); }
-.dsc-ws-select { border: 1px solid var(--line-strong); border-radius: 8px; padding: 4px 8px; font-size: 13px; background: var(--panel); color: var(--text); font-family: inherit; }
+.dsc-ws-select { border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 4px 8px; font-size: 13px; background: var(--panel); color: var(--text); font-family: inherit; }
 .dsc-error { background: var(--bad-bg); color: var(--bad); padding: 12px 24px; font-size: 14px; text-align: center; margin: 0px; }
 .dsc-section { max-width: var(--dsc-measure); margin: 0 auto; padding: var(--dsc-space-3) var(--dsc-inset); }
 .dsc-section-title { font-size: 20px; font-weight: 400; color: var(--text); margin: 0 0 4px; }
 .dsc-section-sub { font-size: 13px; color: var(--muted); margin: 0 0 var(--dsc-space-3); }
 .dsc-filter-row { display: flex; gap: var(--dsc-space-2); margin-bottom: var(--dsc-space-4); flex-wrap: wrap; }
-.dsc-filter-btn { background: transparent; border: 1px solid var(--line-strong); border-radius: 16px; padding: 5px 14px; font-size: 13px; cursor: pointer; color: var(--muted); font-family: inherit; transition: all 0.15s; }
+.dsc-filter-btn { background: transparent; border: 1px solid var(--line-strong); border-radius: 999px; padding: 5px 14px; font-size: 13px; cursor: pointer; color: var(--muted); font-family: inherit; transition: all 0.15s; }
 .dsc-filter-btn-active { background: var(--green-dark); border: 1px solid var(--green); color: var(--green); }
 .dsc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
-.dsc-card { border: 1px solid var(--line); border-radius: 12px; padding: 20px; background: var(--panel); transition: border-color 150ms, box-shadow 150ms; cursor: default; display: flex; flex-direction: column; gap: 12px; }
+.dsc-card { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 20px; background: var(--panel); transition: border-color 150ms, box-shadow 150ms; cursor: default; display: flex; flex-direction: column; gap: 12px; }
 .dsc-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-sm); }
 .dsc-card-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; color: var(--green); }
 .dsc-card-title { font-size: 15px; font-weight: 500; color: var(--text); margin: 0px; line-height: 1.4; }
 .dsc-card-summary { font-size: 13px; color: var(--muted); margin: 0px; line-height: 1.5; }
-.dsc-card-img { width: 100%; height: 140px; object-fit: cover; border-radius: 8px; background: var(--panel-raised); }
+.dsc-card-img { width: 100%; height: 140px; object-fit: cover; border-radius: var(--radius); background: var(--panel-raised); }
 .dsc-metric-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: 12px; color: var(--muted); }
 .dsc-card-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--panel-raised); font-size: 12px; color: var(--muted); }
 .dsc-card-source { flex: 1 1 auto; min-width: 0px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dsc-card-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
-.dsc-card-action { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; border: 1px solid transparent; border-radius: 15px; padding: 0 14px; background: var(--link-bg); color: var(--link); font-size: 12px; font-weight: 500; font-family: inherit; cursor: pointer; transition: background 150ms, border-color 150ms; }
+.dsc-card-action { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; border: 1px solid transparent; border-radius: 999px; padding: 0 14px; background: var(--link-bg); color: var(--link); font-size: 12px; font-weight: 500; font-family: inherit; cursor: pointer; transition: background 150ms, border-color 150ms; }
 .dsc-link { display: inline-flex; align-items: center; min-height: 30px; padding: 0 4px; color: var(--green); text-decoration: none; font-size: 12px; font-weight: 500; white-space: nowrap; }
 .dsc-jobs-section { max-width: var(--dsc-measure); margin: 0 auto; padding: 0 var(--dsc-inset) 32px; }
 .dsc-job-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--panel-raised); font-size: 13px; }
@@ -271,9 +265,6 @@
    spread over a base when a condition held is a second class, and the values
    come from the source rather than from my memory of what an active button
    looks like. Written by hand they came out dark; the real one is green. */
-/* A category with nothing behind it yet: dimmed and not clickable, which was
-   an opacity and a cursor typed into the element. */
-.dsc-quick-link-btn.is-disabled { opacity: .45; cursor: not-allowed; }
 /* One row of metrics that must stay on a single line. */
 .dsc-metric-row-tight { flex-wrap: nowrap; }
 /* A link that is really a button: same look, none of the chrome. */
@@ -352,8 +343,10 @@
 @media (max-width: 640px) {
   .dsc-view-nav { top: 49px; padding-inline: 8px; }
   .dsc-view-tab { padding-inline: 11px; }
-  .dsc-country { flex: 1 1 100%; justify-content: space-between; margin-inline-start: 0; }
-  .dsc-country-select { flex: 1 1 auto; min-width: 0; }
+  .dsc-command-row { align-items: stretch; flex-direction: column; }
+  .dsc-source-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dsc-source-modes .ui-button { justify-content: center; }
+  .dsc-country { grid-template-columns: auto minmax(0, 1fr); margin-inline-start: 0; }
   .dsc-tiktok-row { grid-template-columns: 24px minmax(0, 1fr); gap: 8px; padding: 10px; }
   .dsc-tiktok-metrics, .dsc-tiktok-row > .dsc-board-actions { grid-column: 2; justify-self: start; flex-wrap: wrap; white-space: normal; }
 }
