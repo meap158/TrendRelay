@@ -709,6 +709,8 @@ const QUEUE_BATCH = 8;
 
 /** One request's worth of clips, which is the assets endpoint's own ceiling. */
 const PICKER_PAGE = 100;
+/** Rows of the ready-to-post queue shown per page. */
+const QUEUE_PAGE_SIZE = 50;
 
 /**
  * How many clips the picker will hold at once.
@@ -1471,6 +1473,10 @@ export function AutopilotPanel({
    * of being sent to the API and coming back missing.
    */
   const [queuePicked, setQueuePicked] = useState<Set<string>>(new Set());
+  /** Rendered one page at a time: a 372-post queue mounted at once is the lag. */
+  const [queuePage, setQueuePage] = useState(0);
+  const queuePages = Math.max(1, Math.ceil(queue.length / QUEUE_PAGE_SIZE));
+  const safeQueuePage = Math.min(queuePage, queuePages - 1);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const [offers, setOffers] = useState<Offer[]>([]);
@@ -4023,7 +4029,7 @@ export function AutopilotPanel({
         ) : (
           <>
           <ul className={canEdit ? "autopilot-queue selectable" : "autopilot-queue"}>
-            {queue.map((item) => (
+            {queue.slice(safeQueuePage * QUEUE_PAGE_SIZE, (safeQueuePage + 1) * QUEUE_PAGE_SIZE).map((item) => (
               <li key={item.id} id={`queued-${item.id}`} className={item.state}>
                 {/* A span, not a div: `.autopilot-queue > li > div` is a grid
                     rule that catches any div wrapper added inside these rows. */}
@@ -4238,6 +4244,19 @@ export function AutopilotPanel({
               </li>
             ))}
           </ul>
+          {queuePages > 1 && (
+            <nav className="autopilot-pager" aria-label={t("common.posts")}>
+              <Button variant="quiet" size="sm" disabled={safeQueuePage === 0}
+                onClick={() => setQueuePage(Math.max(0, safeQueuePage - 1))}>
+                {t("common.previous")}
+              </Button>
+              <span>{t("library.previewPosition", { position: safeQueuePage + 1, total: queuePages })}</span>
+              <Button variant="quiet" size="sm" disabled={safeQueuePage >= queuePages - 1}
+                onClick={() => setQueuePage(Math.min(queuePages - 1, safeQueuePage + 1))}>
+                {t("common.next")}
+              </Button>
+            </nav>
+          )}
           </>
         )}
         {productItem && recommendations?.item_id === productItem.id && (
