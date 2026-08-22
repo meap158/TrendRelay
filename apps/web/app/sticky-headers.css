@@ -39,14 +39,14 @@
 }
 
 .library-sticky-header {
-  margin-bottom: 16px;
-  padding-top: 8px;
+  margin-bottom: 10px;
+  padding-top: 4px;
   background: var(--bg);
 }
 
 .library-sticky-header .library-heading {
-  margin-bottom: 8px;
-  padding: 12px 16px;
+  margin-bottom: 0;
+  padding: 8px 14px;
 }
 
 .tools-sticky-header {
@@ -78,8 +78,8 @@
   }
 
   .library-page .library-browser {
-    top: 166px;
-    max-height: calc(100vh - 182px);
+    top: 105px;
+    max-height: calc(100vh - 121px);
   }
 
   .opportunity-page .offer-import-panel,
