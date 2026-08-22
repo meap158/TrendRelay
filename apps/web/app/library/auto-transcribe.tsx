@@ -286,7 +286,7 @@ export function TranscriptDraft({
             {open ? "Hide" : "Show"}
           </Button>
           <Button variant="secondary" size="sm" onClick={() => onUse(draft.text)}>
-            Use as reviewed
+            Use draft
           </Button>
         </span>
       </div>

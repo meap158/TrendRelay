@@ -12,7 +12,7 @@ from trendrelay_api import campaigns_api, media_library, media_library_api
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
-from trendrelay_api.media_models import MediaAsset
+from trendrelay_api.media_models import MediaAsset, MediaTranscript
 from trendrelay_api.models import Base
 
 engine = create_engine(
@@ -462,6 +462,35 @@ def test_ingest_deduplicates_enriches_searches_and_plans(
     assert "link in bio" in recipe["call_to_action"].lower()
     assert recipe["spoken_hook"].startswith("Tired of bad hotel coffee")
     assert "demonstration" in recipe["creative_format"]
+
+    # Editing campaign metadata keeps analysis versioned without pretending an
+    # unchanged transcript was reviewed a second time.
+    metadata_edit = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/enrichment",
+            json={
+                "language": "en",
+                "speech_text": (
+                    "Tired of bad hotel coffee? Watch this portable espresso maker. "
+                    "Shop through the link in bio."
+                ),
+                "ocr_text": "Coffee anywhere in 30 seconds",
+                "product_shown": "Travel espresso kit",
+                "creative_format": "faceless demonstration",
+            },
+        )
+    )
+    assert metadata_edit.status_code == 201
+    with TestingSession() as session:
+        reviewed = session.scalars(
+            select(MediaTranscript).where(
+                MediaTranscript.asset_id == asset_id,
+                MediaTranscript.status == "reviewed",
+            )
+        ).all()
+    assert len(reviewed) == 2  # one speech row and one OCR row, not four
+    assert metadata_edit.json()["asset"]["analysis"]["version"] == 2
 
     search = asyncio.run(
         request(

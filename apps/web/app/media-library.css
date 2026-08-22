@@ -176,8 +176,18 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .recipe-grid > div { padding: 10px; background: var(--panel); }
 .recipe-grid dt { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .recipe-grid dd { margin: 4px 0 0; line-height: 1.4; }
-.library-enrichment > div > p { color: var(--muted); }
+.library-enrichment-head > p { max-width: 780px; margin: -5px 0 0; color: var(--muted); line-height: 1.5; }
 .library-enrichment .ui-button { justify-self: start; }
+.library-enrichment-workspace { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr); gap: 14px; }
+.library-enrichment-workspace > section { display: grid; align-content: start; gap: 9px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.library-enrichment-workspace h4 { margin: 0; color: var(--text); font-size: 12px; }
+.library-enrichment-section-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(110px, 150px); gap: 12px; align-items: end; }
+.library-analysis-advanced { border-top: 1px solid var(--line); padding-top: 9px; }
+.library-analysis-advanced summary { color: var(--text); font-size: 11px; font-weight: 700; cursor: pointer; }
+.library-analysis-advanced > p { margin: 7px 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.library-analysis-advanced > label { margin-top: 8px; }
+.library-enrichment-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.library-enrichment-actions > small { max-width: 600px; color: var(--muted); font-size: 11px; line-height: 1.4; }
 /* Asking for a machine reading, at the top of the form its answer feeds. One
    strip: what to read, and the button. */
 .auto-transcribe { display: grid; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
@@ -204,6 +214,7 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 @media (max-width: 1050px) {
   .library-layout { grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr); }
   .library-detail-grid { grid-template-columns: 1fr; }
+  .library-enrichment-workspace { grid-template-columns: 1fr; }
 }
 @media (max-width: 980px) {
   .library-heading, .library-summary { display: grid; gap: 12px; }

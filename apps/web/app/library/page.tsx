@@ -501,7 +501,9 @@ type Analysis = {
   call_to_action?: string | null;
   product_shown?: string | null;
   creative_format?: string | null;
+  emotional_angle?: string | null;
   structure_tags: string[];
+  scene_boundaries_ms: number[];
   shot_count?: number | null;
   average_shot_ms?: number | null;
   product_reveal_ms?: number | null;
@@ -593,6 +595,10 @@ function reviewedText(asset: Asset, kind: "speech" | "ocr"): string {
   return asset.transcripts.find(
     (item) => item.kind === kind && item.status === "reviewed",
   )?.text ?? "";
+}
+
+function reviewedLanguage(asset: Asset): string {
+  return asset.transcripts.find((item) => item.status === "reviewed")?.language ?? "und";
 }
 
 function displaySize(bytes: number): string {
@@ -2036,10 +2042,10 @@ export default function LibraryPage() {
 
               {canEnrich && (
                 <article className="library-enrichment">
-                  <div>
+                  <header className="library-enrichment-head">
                     <h3>{t("recipe.reviewedHeading")}</h3>
                     <p>{t("recipe.reviewedIntro")}</p>
-                  </div>
+                  </header>
                   {/* Keyed to the asset. These fields are uncontrolled, so
                       without it selecting another clip left the previous one's
                       transcript sitting in the boxes — which matters far more
@@ -2054,30 +2060,43 @@ export default function LibraryPage() {
                       canEdit={canEnrich}
                       onFinished={() => void refresh()}
                     />
-                    <div className="library-form-row">
-                      <label>{t("recipe.language")}<input name="language" defaultValue="und" /></label>
-                      <label>{t("recipe.productShown")}<input name="product_shown" defaultValue={selected.analysis?.product_shown ?? ""} /></label>
-                      <label>{t("recipe.creativeFormat")}<input name="creative_format" defaultValue={selected.analysis?.creative_format ?? ""} placeholder="faceless demo" /></label>
+                    <div className="library-enrichment-workspace">
+                      <section>
+                        <div className="library-enrichment-section-head">
+                          <h4>Reviewed text</h4>
+                          <label>{t("recipe.language")}<input name="language" defaultValue={reviewedLanguage(selected)} placeholder="en, vi, zh…" /></label>
+                        </div>
+                        <label>{t("recipe.reviewedSpeech")}<textarea ref={speechField} name="speech_text" rows={5} defaultValue={reviewedText(selected, "speech")} /></label>
+                        <TranscriptDraft
+                          transcripts={selected.transcripts}
+                          kind="speech"
+                          onUse={(text) => { if (speechField.current) speechField.current.value = text; }}
+                        />
+                        <label>{t("recipe.reviewedText")}<textarea ref={ocrField} name="ocr_text" rows={4} defaultValue={reviewedText(selected, "ocr")} /></label>
+                        <TranscriptDraft
+                          transcripts={selected.transcripts}
+                          kind="ocr"
+                          onUse={(text) => { if (ocrField.current) ocrField.current.value = text; }}
+                        />
+                      </section>
+                      <section>
+                        <h4>Campaign metadata</h4>
+                        <label>{t("recipe.productShown")}<input name="product_shown" defaultValue={selected.analysis?.product_shown ?? ""} placeholder="Product or offer visible in the clip" /></label>
+                        <label>{t("recipe.creativeFormat")}<input name="creative_format" defaultValue={selected.analysis?.creative_format ?? ""} placeholder="Demo, testimonial, comparison…" /></label>
+                        <label>{t("recipe.analystNotes")}<textarea name="analyst_notes" rows={4} defaultValue={selected.analysis?.analyst_notes ?? ""} placeholder="Context that should influence search or product matching" /></label>
+                        <details className="library-analysis-advanced">
+                          <summary>Timing and analysis details</summary>
+                          <p>Optional metadata for deeper analysis. Most clips do not need these fields.</p>
+                          <label>{t("recipe.emotionalAngle")}<input name="emotional_angle" defaultValue={selected.analysis?.emotional_angle ?? ""} /></label>
+                          <label>{t("recipe.sceneCuts")}<input name="scene_boundaries_ms" defaultValue={selected.analysis?.scene_boundaries_ms.join(", ") ?? ""} placeholder="1200, 2800, 5100" /></label>
+                          <label>{t("recipe.productReveal")}<input name="product_reveal_ms" type="number" min={0} defaultValue={selected.analysis?.product_reveal_ms ?? ""} /></label>
+                        </details>
+                      </section>
                     </div>
-                    <label>{t("recipe.reviewedSpeech")}<textarea ref={speechField} name="speech_text" rows={5} defaultValue={reviewedText(selected, "speech")} /></label>
-                    <TranscriptDraft
-                      transcripts={selected.transcripts}
-                      kind="speech"
-                      onUse={(text) => { if (speechField.current) speechField.current.value = text; }}
-                    />
-                    <label>{t("recipe.reviewedText")}<textarea ref={ocrField} name="ocr_text" rows={4} defaultValue={reviewedText(selected, "ocr")} /></label>
-                    <TranscriptDraft
-                      transcripts={selected.transcripts}
-                      kind="ocr"
-                      onUse={(text) => { if (ocrField.current) ocrField.current.value = text; }}
-                    />
-                    <div className="library-form-row">
-                      <label>{t("recipe.sceneCuts")}<input name="scene_boundaries_ms" placeholder="1200, 2800, 5100" /></label>
-                      <label>{t("recipe.productReveal")}<input name="product_reveal_ms" type="number" min={0} defaultValue={selected.analysis?.product_reveal_ms ?? ""} /></label>
-                      <label>{t("recipe.emotionalAngle")}<input name="emotional_angle" /></label>
-                    </div>
-                    <label>{t("recipe.analystNotes")}<textarea name="analyst_notes" rows={3} defaultValue={selected.analysis?.analyst_notes ?? ""} /></label>
-                    <Button type="submit" variant="primary" busy={busy === "enrich"}>{busy === "enrich" ? "Analyzing" : "Save and derive recipe"}</Button>
+                    <footer className="library-enrichment-actions">
+                      <Button type="submit" variant="primary" busy={busy === "enrich"}>{busy === "enrich" ? "Saving…" : "Save reviewed text & metadata"}</Button>
+                      <small>Updates search, captions, voiceovers, campaign matching, and the versioned creative recipe.</small>
+                    </footer>
                   </form>
                 </article>
               )}

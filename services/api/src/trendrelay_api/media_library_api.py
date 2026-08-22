@@ -2791,34 +2791,42 @@ def enrich_asset(
     )
     item = _asset_record(session, workspace_id, asset_id)
     ensure_profile(session, user)
-    if body.speech_text and body.speech_text.strip():
+
+    def add_reviewed_transcript(kind: str, raw_text: str | None) -> bool:
+        text = (raw_text or "").strip()
+        if not text:
+            return False
+        latest = session.scalar(
+            select(MediaTranscript)
+            .where(
+                MediaTranscript.asset_id == item.id,
+                MediaTranscript.kind == kind,
+                MediaTranscript.status == "reviewed",
+            )
+            .order_by(MediaTranscript.created_at.desc())
+            .limit(1)
+        )
+        # Saving campaign metadata should not mint another identical reviewed
+        # transcript. A new row is a real revision: changed text or language.
+        if latest and latest.text == text and latest.language == body.language:
+            return False
         session.add(
             MediaTranscript(
                 workspace_id=workspace_id,
                 asset_id=item.id,
-                kind="speech",
+                kind=kind,
                 language=body.language,
                 provider="operator-reviewed",
                 status="reviewed",
-                text=body.speech_text.strip(),
+                text=text,
                 segments=[],
                 created_by=user.id,
             )
         )
-    if body.ocr_text and body.ocr_text.strip():
-        session.add(
-            MediaTranscript(
-                workspace_id=workspace_id,
-                asset_id=item.id,
-                kind="ocr",
-                language=body.language,
-                provider="operator-reviewed",
-                status="reviewed",
-                text=body.ocr_text.strip(),
-                segments=[],
-                created_by=user.id,
-            )
-        )
+        return True
+
+    speech_added = add_reviewed_transcript("speech", body.speech_text)
+    ocr_added = add_reviewed_transcript("ocr", body.ocr_text)
     next_version = (
         session.scalar(
             select(func.max(CreativeAnalysis.version)).where(CreativeAnalysis.asset_id == item.id)
@@ -2844,8 +2852,8 @@ def enrich_asset(
         item.id,
         {
             "analysis_version": next_version,
-            "speech_added": bool(body.speech_text),
-            "ocr_added": bool(body.ocr_text),
+            "speech_added": speech_added,
+            "ocr_added": ocr_added,
         },
     )
     return {"asset": _asset_view(session, item)}

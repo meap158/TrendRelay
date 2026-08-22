@@ -398,9 +398,9 @@ export const en = {
     structure: "Structure",
     keywords: "Keywords",
     empty: "No recipe yet. Add reviewed speech or on-screen text below.",
-    reviewedHeading: "Reviewed transcript and analysis",
+    reviewedHeading: "Transcript & creative metadata",
     reviewedIntro:
-      "Paste reviewed speech and on-screen text. TrendRelay derives a searchable, versioned recipe without claiming machine output was human-reviewed.",
+      "Review machine-read speech and on-screen text before using them for captions, voiceovers, search, campaign matching, and creative analysis.",
     language: "Language",
     productShown: "Product shown",
     creativeFormat: "Creative format",
