@@ -16,6 +16,18 @@ listing.
 
 An assistant helps write the posts a campaign has queued without a caption yet.
 
+Before acting, it discovers the reviewed procedure for that action:
+
+- `list_sops` lists the action-oriented SOP catalog and can filter by an action
+  or alias.
+- `get_sop` returns the full procedure for the selected action.
+- MCP resources expose the same source as `trendrelay://sops` and
+  `trendrelay://sops/{action}` for clients that consume resources directly.
+
+The catalog is backed by [`docs/sops`](../sops/README.md). Adding a validated
+Markdown entry there exposes it without adding another server handler. The
+first action is `campaigns.fill-needs-copy`.
+
 **Reads** give it the context to write well:
 
 - `list_campaigns` - every campaign, and how many posts still need a caption.
@@ -55,8 +67,8 @@ caller names one directly.
 
 | | Count |
 | --- | --- |
-| Reads | 4 |
-| Workspace writes (copy) | 4 |
+| Reads | 6 |
+| Workspace writes (copy) | 5 |
 | Refused - credentials and sessions | 4 |
 | Refused - approval, execution, deployment | 6 |
 
@@ -114,6 +126,7 @@ than a 404 that reads as broken.
 | --- | --- |
 | Exposure policy | `services/api/src/trendrelay_api/integrations/mcp/policy.py` |
 | Read context | `services/api/src/trendrelay_api/integrations/mcp/context.py` |
+| SOP catalog | `services/api/src/trendrelay_api/integrations/mcp/sops.py`, `docs/sops/` |
 | Copy writes | `services/api/src/trendrelay_api/integrations/mcp/writes.py` |
 | Server | `services/api/src/trendrelay_api/integrations/mcp/server.py` |
 | Supervisor + status | `services/api/src/trendrelay_api/integrations/mcp/service.py` |

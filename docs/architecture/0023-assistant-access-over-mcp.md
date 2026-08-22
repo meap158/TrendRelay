@@ -53,6 +53,13 @@ parity with the GUI is the longer goal; the first surface is copy, and it is
 built from shared handlers so widening it is adding classified operations, not
 reconciling two maps.
 
+**Operating guidance is selected by action.** Reviewed Markdown procedures live
+under `docs/sops/`, with a canonical action and unique aliases in front matter.
+One validated loader exposes them through both MCP tools (`list_sops`, `get_sop`)
+and resources (`trendrelay://sops`, `trendrelay://sops/{action}`). Adding another
+SOP is a documentation change, not another bespoke server handler. Procedures
+guide the use of allowed operations but never add authority to the MCP policy.
+
 **It ships as an optional extra.** `pip install -e services/api[mcp]`. A machine
 that never exposes its workspace does not carry the server or its transport, and
 the Tools tab reports it unavailable until installed - the same stance as the

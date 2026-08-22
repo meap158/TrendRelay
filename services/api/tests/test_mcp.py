@@ -23,7 +23,7 @@ from trendrelay_api.autopilot_models import (
     CampaignQueueItem,
 )
 from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
-from trendrelay_api.integrations.mcp import context, policy, server, service, tunnel, writes
+from trendrelay_api.integrations.mcp import context, policy, server, service, sops, tunnel, writes
 from trendrelay_api.models import Base, Campaign, UserProfile, Workspace, WorkspaceMember
 from trendrelay_api.opportunity_models import Product, ProductOffer
 
@@ -95,8 +95,8 @@ def test_every_operation_is_classified_on_purpose() -> None:
 
 def test_the_allowed_surface_is_the_reads_and_the_copy_writes() -> None:
     assert policy.allowed_operations() == [
-        "get_campaign_config", "get_post_context", "list_campaigns",
-        "list_posts_needing_copy", "write_caption", "write_disclosure",
+        "get_campaign_config", "get_post_context", "get_sop", "list_campaigns",
+        "list_posts_needing_copy", "list_sops", "write_caption", "write_disclosure",
         "write_first_comment", "write_post_copy", "write_thread",
     ]
 
@@ -122,6 +122,33 @@ def test_the_server_offers_only_the_allowed_tools() -> None:
     assert names == policy.allowed_operations()
     refused = [n for n, a in policy.EXPOSURE.items() if a not in policy.ALLOWED]
     assert not [n for n in refused if n in names], "a refused operation was offered"
+
+
+def test_the_campaign_copy_sop_is_discovered_by_action() -> None:
+    catalogue = sops.list_sops()
+    assert [entry["action"] for entry in catalogue] == ["campaigns.fill-needs-copy"]
+    assert "markdown" not in catalogue[0]
+
+    procedure = sops.get_sop("write_campaign_copy")
+    assert procedure["id"] == "campaigns.fill-needs-copy"
+    assert "Connect to TrendRelay MCP first" in procedure["markdown"]
+    assert "Current explicit user instruction" in procedure["markdown"]
+
+
+def test_the_server_exposes_the_sop_catalog_and_action_template() -> None:
+    built = server.build_server("ws")
+    resources = asyncio.run(built.list_resources())
+    templates = asyncio.run(built.list_resource_templates())
+    assert {str(resource.uri) for resource in resources} == {"trendrelay://sops"}
+    assert {str(template.uriTemplate) for template in templates} == {
+        "trendrelay://sops/{action}"
+    }
+    catalog = asyncio.run(built.read_resource("trendrelay://sops"))
+    procedure = asyncio.run(
+        built.read_resource("trendrelay://sops/campaigns.fill-needs-copy")
+    )
+    assert "campaigns.fill-needs-copy" in catalog[0].content
+    assert "Connect to TrendRelay MCP first" in procedure[0].content
 
 
 # --- the caption surface ------------------------------------------------------

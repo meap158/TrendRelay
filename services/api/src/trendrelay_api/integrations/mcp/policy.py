@@ -69,6 +69,8 @@ EXPOSURE: dict[str, Access] = {
     "list_posts_needing_copy": Access.READ,
     "get_post_context": Access.READ,
     "get_campaign_config": Access.READ,
+    "list_sops": Access.READ,
+    "get_sop": Access.READ,
     # --- Workspace writes: the copy itself, never its approval -------------
     "write_caption": Access.WORKSPACE_WRITE,
     "write_first_comment": Access.WORKSPACE_WRITE,

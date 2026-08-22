@@ -11,11 +11,11 @@ requests to it. Nothing binds a public address, nothing accepts an inbound
 connection from the internet, and what a caller may do is decided here rather
 than by whoever reaches the tunnel.
 
-The first surface is copy: an assistant reads the campaign posts queued without a
-caption yet — with the video, the attached product, the destination platform and
-the campaign's own configuration for context — and writes the caption, first
-comment and thread replies back. It never approves or publishes them; that stays
-a person's decision, in the app.
+The first surface is copy: an assistant selects the reviewed SOP for the action,
+then reads the campaign posts queued without a caption yet — with the video, the
+attached product, the destination platform and the campaign's own configuration
+for context — and writes the caption, first comment and thread replies back. It
+never approves or publishes them; that stays a person's decision, in the app.
 
 ---
 
@@ -26,6 +26,7 @@ a person's decision, in the app.
 | Exposure policy | `integrations/mcp/policy.py` | Which operations an MCP caller may invoke. Default is refusal. |
 | Read context | `integrations/mcp/context.py` | The reads: the posts needing copy, and the context to write it. |
 | Copy writes | `integrations/mcp/writes.py` | The one kind of write — a post's copy — through the interface's own edit helper. |
+| SOP catalog | `integrations/mcp/sops.py`, `docs/sops/` | Validated action metadata and reviewed Markdown procedures, exposed as tools and resources. |
 | MCP server | `integrations/mcp/server.py` | Serves the allowed tools over Streamable HTTP on `127.0.0.1`. |
 | Server supervision | `integrations/mcp/service.py` | Starts/stops the server subprocess, an atomic status file, a status reader. |
 | Tunnel config & health | `integrations/mcp/tunnel.py` | The tunnel's settings, command line and `doctor` check, in one place. |
@@ -65,8 +66,8 @@ boundary against a caller that ignores the menu.
 
 | | Count |
 | --- | --- |
-| Reads | 4 |
-| Workspace writes (copy) | 4 |
+| Reads | 6 |
+| Workspace writes (copy) | 5 |
 | Refused — credentials and sessions | 4 |
 | Refused — approval, execution, deployment | 6 |
 
@@ -85,6 +86,19 @@ Parity does **not** mean equal authority. An operation being reachable from the
 window in front of the operator is not an argument for it being reachable by a
 model over a tunnel, and the two refusals above hold however many operations are
 added.
+
+### SOPs are selected by action
+
+Reviewed procedures live as Markdown under `docs/sops/`. Each file declares a
+canonical action plus unique aliases in YAML front matter. `list_sops` and
+`get_sop` expose the catalog as read-only tools; `trendrelay://sops` and
+`trendrelay://sops/{action}` expose the same source as MCP resources. Both paths
+use one loader, so guidance cannot drift between tool and resource clients.
+
+The loader scans recursively and validates every entry on each read. A future
+SOP is therefore added as one reviewed Markdown file, while duplicate selectors,
+missing metadata, and empty procedures fail visibly. An SOP guides an allowed
+operation; it does not widen the MCP policy or grant execution authority.
 
 ---
 
@@ -200,10 +214,10 @@ contract, kept beside each other in `tunnel.py` so they cannot drift.
 ## What is verified
 
 - The transport is proven end to end on loopback: a client connects, lists the
-  eight allowed tools, and calls them against the real workspace. The reads
-  return the post that needs copy, its attached product and commission, its
-  destinations and where a follow-up lands; a write flips the post to having
-  copy.
+  allowed tools and action-oriented SOP resources, and calls them against the
+  real workspace. The reads return the post that needs copy, its attached
+  product and commission, its destinations and where a follow-up lands; a write
+  flips the post to having copy.
 - The boundary is exercised against a caller that ignores the menu: a refused
   operation is absent from the listing and refused by name, on the running
   server, while a read in the same session answers normally.

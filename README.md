@@ -193,6 +193,7 @@ apps/web       Next.js interface
 services/api   FastAPI control plane and media catalog
 scripts        Development supervisor and Douyin integration
 workers        Background media and publishing workers
+docs/sops      Action-indexed operating procedures exposed through MCP
 ```
 
 See [DESIGN.md](DESIGN.md) for interaction principles, [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidance, and [SECURITY.md](SECURITY.md) for private vulnerability reporting.

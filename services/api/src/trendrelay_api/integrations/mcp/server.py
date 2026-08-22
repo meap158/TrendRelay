@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from trendrelay_api.integrations.mcp import context, policy, writes
+from trendrelay_api.integrations.mcp import context, policy, sops, writes
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -19,7 +19,10 @@ if TYPE_CHECKING:
 INSTRUCTIONS = (
     "This is a TrendRelay workspace. Help write copy for campaign posts that are "
     "queued without a caption yet.\n\n"
-    "Start with `list_posts_needing_copy` to see what needs writing, then "
+    "Before an action, use `list_sops` and `get_sop` to load the reviewed SOP "
+    "that matches it. For campaign copy, start with action "
+    "`campaigns.fill-needs-copy`, then use `list_posts_needing_copy` to see what "
+    "needs writing and "
     "`get_post_context` for one post: it gives the video, the attached product and "
     "what it pays, every destination the post reaches and where a first comment or "
     "thread reply lands there, and the campaign's brief. Write with "
@@ -86,6 +89,24 @@ def build_server(workspace_id: str) -> FastMCP:
     for _path in _well_known:
         server.custom_route(_path, methods=["GET"])(_resource_metadata)
 
+    @server.resource(
+        "trendrelay://sops",
+        name="TrendRelay SOP catalog",
+        description="Reviewed operating procedures, indexed by the action being performed.",
+        mime_type="text/markdown",
+    )
+    def sop_catalog() -> str:
+        return sops.catalogue_markdown()
+
+    @server.resource(
+        "trendrelay://sops/{action}",
+        name="TrendRelay SOP by action",
+        description="The reviewed operating procedure for one canonical action or alias.",
+        mime_type="text/markdown",
+    )
+    def sop_for_action(action: str) -> str:
+        return sops.get_sop(action)["markdown"]
+
     def _call(operation: str, fn) -> Any:
         """Run one tool: refuse it if the policy does not allow it, then hand it
         a session. Reads and writes share this - a write commits its own session
@@ -95,6 +116,28 @@ def build_server(workspace_id: str) -> FastMCP:
         _guard(operation)
         with SessionFactory() as session:
             return fn(session)
+
+    @server.tool(
+        name="list_sops",
+        description=(
+            "List reviewed TrendRelay SOPs by action. Call this before acting, then "
+            "use get_sop with the matching canonical action."
+        ),
+    )
+    def list_sops(action: str | None = None) -> list[dict[str, Any]]:
+        _guard("list_sops")
+        return sops.list_sops(action)
+
+    @server.tool(
+        name="get_sop",
+        description=(
+            "Read the reviewed SOP for an action, id or alias. This returns the "
+            "procedure and metadata; use it before the related workspace tools."
+        ),
+    )
+    def get_sop(action: str) -> dict[str, Any]:
+        _guard("get_sop")
+        return sops.get_sop(action)
 
     @server.tool(
         name="list_campaigns",
