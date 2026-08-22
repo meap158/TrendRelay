@@ -213,6 +213,65 @@ def source_snapshot(roots: tuple[str, ...]) -> tuple[tuple[str, int, int], ...]:
 NEXT_DEV_DIRS = (".next-dev", ".next")
 
 
+def npm_command() -> str:
+    """The npm executable. A batch file on Windows, which needs the suffix."""
+    return "npm.cmd" if IS_WINDOWS else "npm"
+
+
+#: Directories the freshness check below must not walk into. `node_modules` is
+#: tens of thousands of files that never decide whether a build is stale, and
+#: the build outputs are what is being compared against.
+NOT_SOURCE = {".next", ".next-dev", "node_modules", ".turbo", ".git"}
+
+
+def web_build_is_stale() -> str | None:
+    """Why the production build needs redoing, or None when it is current.
+
+    `next start` serves whatever `next build` last wrote; nothing watches the
+    tree. Serving yesterday's code because a rebuild was skipped is a worse
+    failure than waiting for one, so the check is by mtime against the build's
+    own marker rather than by trust.
+    """
+    build_id = ROOT / "apps" / "web" / ".next" / "BUILD_ID"
+    if not build_id.is_file():
+        return "no production build yet"
+    built = build_id.stat().st_mtime
+    web = ROOT / "apps" / "web"
+    for directory, subdirectories, files in os.walk(web):
+        subdirectories[:] = [name for name in subdirectories if name not in NOT_SOURCE]
+        for name in files:
+            try:
+                if Path(directory, name).stat().st_mtime > built:
+                    return f"{Path(directory, name).relative_to(web)} changed since the last build"
+            except OSError:
+                # Vanished mid-walk; the next launch will see it.
+                continue
+    return None
+
+
+def build_web(npm: str) -> int:
+    """Compile the production bundle, streaming the build as it goes."""
+    reason = web_build_is_stale()
+    if reason is None:
+        print("Production build is current; starting it.")
+        return 0
+    print(f"Building the production bundle ({reason}). This takes a minute.")
+    completed = subprocess.run(
+        [npm, "run", "build", "--workspace=@trendrelay/web"],
+        cwd=ROOT,
+        check=False,
+    )
+    if completed.returncode != 0:
+        print(
+            "The production build failed, so there is nothing to serve. The "
+            "output above says why; `--production` will not fall back to the "
+            "dev server, because a stack that silently runs a different mode "
+            "than the one asked for is worse than one that stops.",
+            file=sys.stderr,
+        )
+    return completed.returncode
+
+
 def _cleanup_stale_nextjs() -> None:
     for name in NEXT_DEV_DIRS:
         root = ROOT / "apps" / "web" / name
@@ -400,9 +459,11 @@ def service_is_healthy(service: Service, timeout: float | None = None) -> bool:
         return False
 
 
-def build_services(include_desktop: bool, *, may_terminate: bool = True) -> list[Service]:
+def build_services(
+    include_desktop: bool, *, may_terminate: bool = True, production: bool = False
+) -> list[Service]:
     python = ROOT / ".venv" / ("Scripts/python.exe" if IS_WINDOWS else "bin/python")
-    npm = "npm.cmd" if IS_WINDOWS else "npm"
+    npm = npm_command()
 
     backend_port = find_free_port(8011, "Backend", may_terminate=may_terminate)
     frontend_port = find_free_port(3001, "Frontend", may_terminate=may_terminate)
@@ -471,7 +532,12 @@ def build_services(include_desktop: bool, *, may_terminate: bool = True) -> list
             [
                 npm,
                 "run",
-                "dev",
+                # `start` serves what `build` already compiled; `dev` compiles
+                # on demand and reloads on save. That is the whole difference,
+                # and it is the reason the two cannot be combined: Fast Refresh
+                # is the dev bundler watching the tree, and a production server
+                # has no bundler resident to do it.
+                "start" if production else "dev",
                 "--workspace=@trendrelay/web",
                 "--",
                 "--hostname",
@@ -484,7 +550,10 @@ def build_services(include_desktop: bool, *, may_terminate: bool = True) -> list
             {"NEXT_PUBLIC_API_URL": f"http://127.0.0.1:{backend_port}"},
             restart_on_exit=True,
             port=frontend_port,
-            health_timeout=120,
+            # A production server answers as soon as it binds - there is no
+            # first compile to wait through, which is most of what the dev
+            # server's two minutes are for.
+            health_timeout=30 if production else 120,
         ),
     ]
     services.append(
@@ -657,6 +726,14 @@ def parse_args() -> argparse.Namespace:
         "--desktop", action="store_true", help="also launch the Electron shell"
     )
     parser.add_argument(
+        "--production",
+        action="store_true",
+        help=(
+            "serve the compiled bundle instead of the dev server: faster and "
+            "steadier to use, but code changes need a rebuild to appear"
+        ),
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="validate commands and configuration without starting services",
@@ -816,7 +893,9 @@ def main() -> int:
             return 1
 
     # A check must not disturb what it is checking.
-    services = build_services(args.desktop, may_terminate=not args.check)
+    services = build_services(
+        args.desktop, may_terminate=not args.check, production=args.production
+    )
     errors = validation_errors(args.desktop, services)
     if errors:
         release_runner_lock()
@@ -830,6 +909,14 @@ def main() -> int:
             print(f"A dev runner is already active (PID {running_pid}).")
         print("Unified runner checks passed.")
         return 0
+
+    # Before anything binds a port: a failed build must stop the launch rather
+    # than leave a backend up in front of a frontend that was never compiled.
+    if args.production:
+        failure = build_web(npm_command())
+        if failure:
+            release_runner_lock()
+            return failure
 
     note_foreign_api_port(services)
     reused, startable = partition_services(services)

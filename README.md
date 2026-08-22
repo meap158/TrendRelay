@@ -60,6 +60,29 @@ Buffer has no upload endpoint, so it needs media already hosted at a public URL;
 
 If the browser does not open automatically, visit [http://127.0.0.1:3001](http://127.0.0.1:3001).
 
+### Running it as an app rather than a dev server
+
+By default the web front end is Next.js in development mode: it compiles each
+page the first time you open it and reloads the browser when a file changes.
+That is what you want while editing the code and is the slower, heavier way to
+use TrendRelay day to day.
+
+To serve a compiled build instead:
+
+```powershell
+.\start.cmd --production
+```
+
+It compiles once, then serves what it compiled — pages open without a wait,
+memory stays flat, and there is no bundler watching the tree. The trade is
+exactly that last part: **code changes do not appear until the next launch**,
+which rebuilds automatically when it sees a source file newer than the last
+build. Hot reloading and a production server are alternatives rather than
+settings, because Fast Refresh *is* the development bundler watching your
+files; a production server has none resident to do it.
+
+Use the default while working on TrendRelay, and `--production` when using it.
+
 If setup is interrupted, run `.\start.cmd` again. Completed work is reused. To verify an existing Python environment without downloading anything, run:
 
 ```powershell

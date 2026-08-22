@@ -674,7 +674,7 @@ def test_migrations_run_before_any_service_is_built(monkeypatch) -> None:
     monkeypatch.setattr(dev, "build_services", lambda *_a, **_k: order.append("build") or [])
     monkeypatch.setattr(dev, "validation_errors", lambda *_a, **_k: ["stop here"])
     monkeypatch.setattr(dev, "parse_args", lambda: types.SimpleNamespace(
-        desktop=False, check=False, open_browser=False,
+        desktop=False, check=False, open_browser=False, production=False,
     ))
 
     dev.main()
@@ -697,7 +697,7 @@ def test_a_failed_migration_stops_the_start_and_frees_the_lock(monkeypatch) -> N
         lambda *_a, **_k: pytest.fail("services must not be built"),
     )
     monkeypatch.setattr(dev, "parse_args", lambda: types.SimpleNamespace(
-        desktop=False, check=False, open_browser=False,
+        desktop=False, check=False, open_browser=False, production=False,
     ))
 
     assert dev.main() == 1
@@ -715,7 +715,70 @@ def test_check_mode_does_not_migrate(monkeypatch) -> None:
     monkeypatch.setattr(dev, "build_services", lambda *_a, **_k: [])
     monkeypatch.setattr(dev, "validation_errors", lambda *_a, **_k: ["stop here"])
     monkeypatch.setattr(dev, "parse_args", lambda: types.SimpleNamespace(
-        desktop=False, check=True, open_browser=False,
+        desktop=False, check=True, open_browser=False, production=False,
     ))
 
     assert dev.main() == 1
+
+
+# --- serving the compiled bundle instead of the dev server --------------------
+
+
+def frontend(*, production: bool) -> dev.Service:
+    services = dev.build_services(False, may_terminate=False, production=production)
+    return next(service for service in services if service.name == "Frontend")
+
+
+def test_production_serves_the_build_and_development_compiles_on_demand() -> None:
+    """The two cannot be combined, which is why this is a mode rather than a
+    setting somewhere.
+
+    Fast Refresh is the dev bundler watching the tree; a production server has
+    no bundler resident to do it. So `start` is steadier and answers without a
+    first compile, and the price is that a code change needs a rebuild.
+    """
+    assert "start" in frontend(production=True).command
+    assert "dev" in frontend(production=False).command
+
+
+def test_a_missing_build_is_stale(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    (tmp_path / "apps" / "web").mkdir(parents=True)
+
+    assert dev.web_build_is_stale() == "no production build yet"
+
+
+def test_a_source_newer_than_the_build_is_stale(monkeypatch, tmp_path) -> None:
+    """Serving yesterday's code because a rebuild was skipped is the failure
+    this exists to prevent, so freshness is measured rather than assumed."""
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    web = tmp_path / "apps" / "web"
+    (web / ".next").mkdir(parents=True)
+    (web / ".next" / "BUILD_ID").write_text("id")
+    source = web / "app" / "page.tsx"
+    source.parent.mkdir(parents=True)
+    source.write_text("export default function Page() { return null; }")
+
+    built = (web / ".next" / "BUILD_ID").stat().st_mtime
+    os.utime(source, (built + 10, built + 10))
+    assert dev.web_build_is_stale() == str(Path("app") / "page.tsx") + " changed since the last build"
+
+    os.utime(source, (built - 10, built - 10))
+    assert dev.web_build_is_stale() is None
+
+
+def test_node_modules_does_not_decide_whether_a_build_is_stale(monkeypatch, tmp_path) -> None:
+    """It is tens of thousands of files that never answer the question, and
+    walking them would make every launch pay for the check."""
+    monkeypatch.setattr(dev, "ROOT", tmp_path)
+    web = tmp_path / "apps" / "web"
+    (web / ".next").mkdir(parents=True)
+    (web / ".next" / "BUILD_ID").write_text("id")
+    installed = web / "node_modules" / "left-pad" / "index.js"
+    installed.parent.mkdir(parents=True)
+    installed.write_text("module.exports = 1;")
+
+    built = (web / ".next" / "BUILD_ID").stat().st_mtime
+    os.utime(installed, (built + 10, built + 10))
+
+    assert dev.web_build_is_stale() is None
