@@ -5,8 +5,14 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from trendrelay_api.media_library_api import AssetFilter, _effect_facet, asset_conditions
-from trendrelay_api.media_models import MediaAsset
+from trendrelay_api import opportunity_models as _opportunity_models  # noqa: F401
+from trendrelay_api.media_library_api import (
+    AssetFilter,
+    _effect_facet,
+    _processing_facet,
+    asset_conditions,
+)
+from trendrelay_api.media_models import MediaAsset, MediaTranscript
 from trendrelay_api.models import Base
 
 
@@ -148,6 +154,72 @@ def add_version(session, asset_id, kind="blurred", effects=None):
         )
     )
     session.commit()
+
+
+def add_transcript(session, asset_id, *, kind="speech", status="reviewed"):
+    session.add(MediaTranscript(
+        workspace_id="w1", asset_id=asset_id, kind=kind, status=status,
+        provider="test", text=f"{kind} text", created_by="tester",
+    ))
+    session.commit()
+
+
+# --- processing tags ---------------------------------------------------------- #
+
+
+def processing(session, filters=None):
+    filters = filters or AssetFilter()
+    return {
+        item["value"]: item["count"]
+        for item in _processing_facet(
+            session, asset_conditions("w1", filters, omit="processing")
+        )
+    }
+
+
+def test_transcript_state_is_filterable_without_calling_it_an_effect(session) -> None:
+    add(session, "a1")
+    add(session, "a2")
+    add_transcript(session, "a1", status="reviewed")
+    add_transcript(session, "a2", status="machine")
+
+    assert matching(session, AssetFilter(processing="transcript_reviewed")) == {"a1"}
+    assert matching(session, AssetFilter(processing="transcript_draft")) == {"a2"}
+    assert processing(session) == {"transcript_reviewed": 1, "transcript_draft": 1}
+
+
+def test_captions_and_voiceover_are_separate_processing_categories(session) -> None:
+    add(session, "a1")
+    add(session, "a2")
+    add_version(session, "a1", kind="captioned")
+    add_version(session, "a2", kind="voiceover")
+    # The audio and muxed cut belong to one workflow tag, counted once.
+    add_version(session, "a2", kind="voiced")
+
+    assert matching(session, AssetFilter(processing="captions")) == {"a1"}
+    assert matching(session, AssetFilter(processing="voiceover")) == {"a2"}
+    assert processing(session) == {"captions": 1, "voiceover": 1}
+
+
+def test_processing_filter_can_be_combined_with_the_effect_facet(session) -> None:
+    add(session, "a1")
+    add_version(session, "a1", kind="captioned")
+
+    where = asset_conditions("w1", AssetFilter(processing="captions"))
+    # Captions are processing, not visual effects; the important regression is
+    # that composing these two facets remains a valid, asset-scoped query.
+    assert _effect_facet(session, where)[0]["value"] == "none"
+
+
+def test_processing_counts_respect_the_other_library_filters(session) -> None:
+    add(session, "a1", kind="video")
+    add(session, "a2", kind="audio")
+    add_transcript(session, "a1")
+    add_transcript(session, "a2")
+
+    assert processing(session, AssetFilter(media_kind="video")) == {
+        "transcript_reviewed": 1,
+    }
 
 
 def test_blurred_only_keeps_assets_that_have_that_cut(session) -> None:

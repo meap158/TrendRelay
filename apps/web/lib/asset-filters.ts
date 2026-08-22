@@ -13,6 +13,8 @@ export type AssetFilterValues = {
    * list of what is selectable; naming them here would only be a staler copy.
    */
   effect?: string;
+  /** A transcript, caption, or voice artifact carried by the asset. */
+  processing?: string;
   maxSeconds?: number;
 };
 
@@ -22,6 +24,7 @@ export type AssetFacets = {
   platforms: Facet[];
   media_kinds: Facet[];
   effects: Facet[];
+  processing: Facet[];
 };
 
 export const EMPTY_FACETS: AssetFacets = {
@@ -29,6 +32,7 @@ export const EMPTY_FACETS: AssetFacets = {
   platforms: [],
   media_kinds: [],
   effects: [],
+  processing: [],
 };
 
 /** One canonical mapping from controls to the API query. */
@@ -41,6 +45,7 @@ export function assetFilterParams(values: AssetFilterValues): URLSearchParams {
   else if (values.platform) params.set("platform", values.platform);
   if (values.mediaKind) params.set("media_kind", values.mediaKind);
   if (values.effect) params.set("has_version", values.effect);
+  if (values.processing) params.set("processing", values.processing);
   if (values.maxSeconds) params.set("max_duration_seconds", String(values.maxSeconds));
   return params;
 }
@@ -50,7 +55,7 @@ export function activeFilterCount(
   cleared: AssetFilterValues = {},
 ): number {
   const keys: (keyof AssetFilterValues)[] = [
-    "query", "channel", "platform", "mediaKind", "effect", "maxSeconds",
+    "query", "channel", "platform", "mediaKind", "effect", "processing", "maxSeconds",
   ];
   return keys.filter((key) => {
     const value = key === "query" ? values.query?.trim() : values[key];

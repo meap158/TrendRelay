@@ -370,6 +370,7 @@ export const zh: Messages = {
     blurSettings: "模糊设置",
     blurSettingsHelp: "在单帧上检查覆盖范围，并设置模糊的宽度",
     effectsHelp: "在不改动原始文件的前提下，为该素材叠加特效",
+    mediaTags: "媒体标签",
     selectToBegin: "选择一个素材，或导入本地文件开始。",
   },
 
@@ -1200,6 +1201,15 @@ export const zh: Messages = {
     bySource: "按来源筛选",
     byMediaKind: "按素材类型筛选",
     byEffect: "按特效筛选",
+    processing: "处理状态",
+    anyProcessing: "任意处理状态",
+    byProcessing: "按处理状态筛选",
+    transcriptReviewed: "文字稿已审核",
+    transcriptDraft: "文字稿草稿",
+    textReviewed: "屏幕文字已审核",
+    textDraft: "屏幕文字草稿",
+    captions: "字幕",
+    voiceover: "配音",
     byLength: "按时长筛选",
   },
 

@@ -508,11 +508,24 @@ class AssetFilter(BaseModel):
     #: "blurred" keeps only assets that already have that cut; "none" keeps
     #: only those without one. Publishing usually wants one or the other.
     has_version: str | None = None
+    #: A workflow artifact carried by the asset: reviewed/draft transcripts,
+    #: captions, or generated voice. Kept separate from effects because a
+    #: transcript is metadata, not a rendered visual recipe.
+    processing: str | None = None
 
 
 #: Filter values that are not the id of an effect.
 ANY_EFFECT = "any"
 NO_EFFECT = "none"
+
+PROCESSING_LABELS = {
+    "transcript_reviewed": "Transcript reviewed",
+    "transcript_draft": "Transcript draft",
+    "text_reviewed": "On-screen text reviewed",
+    "text_draft": "On-screen text draft",
+    "captions": "Captions",
+    "voiceover": "Voiceover",
+}
 
 
 def _rendered_exists():
@@ -562,6 +575,34 @@ def _effect_condition(wanted: str) -> Any:
     ).exists()
 
 
+def _processing_condition(wanted: str) -> Any:
+    """Whether an asset carries one non-effect workflow artifact."""
+    transcript = {
+        "transcript_reviewed": ("speech", "reviewed"),
+        "transcript_draft": ("speech", "machine"),
+        "text_reviewed": ("ocr", "reviewed"),
+        "text_draft": ("ocr", "machine"),
+    }.get(wanted)
+    if transcript:
+        kind, status = transcript
+        return select(MediaTranscript.id).where(
+            MediaTranscript.asset_id == MediaAsset.id,
+            MediaTranscript.kind == kind,
+            MediaTranscript.status == status,
+        ).correlate(MediaAsset).exists()
+    kinds = {
+        "captions": ("captioned",),
+        "voiceover": ("voiceover", "voiced"),
+    }.get(wanted)
+    if kinds:
+        return select(MediaAssetVersion.id).where(
+            MediaAssetVersion.asset_id == MediaAsset.id,
+            MediaAssetVersion.version_kind.in_(kinds),
+        ).correlate(MediaAsset).exists()
+    # Unknown values must not widen the list to everything.
+    return MediaAsset.id.is_(None)
+
+
 def asset_conditions(
     workspace_id: str, filters: AssetFilter, *, omit: str | None = None
 ) -> list[Any]:
@@ -587,6 +628,8 @@ def asset_conditions(
         values.append(MediaAsset.duration_ms <= filters.max_duration_seconds * 1000)
     if omit != "has_version" and filters.has_version:
         values.append(_effect_condition(filters.has_version))
+    if omit != "processing" and filters.processing:
+        values.append(_processing_condition(filters.processing))
     if filters.q and filters.q.strip():
         escaped = (
             filters.q.casefold().strip()
@@ -596,7 +639,7 @@ def asset_conditions(
         transcript_match = select(MediaTranscript.id).where(
             MediaTranscript.asset_id == MediaAsset.id,
             func.lower(MediaTranscript.text).like(pattern, escape="\\"),
-        ).exists()
+        ).correlate(MediaAsset).exists()
         analysis_match = select(CreativeAnalysis.id).where(
             CreativeAnalysis.asset_id == MediaAsset.id,
             or_(
@@ -608,7 +651,7 @@ def asset_conditions(
                     pattern, escape="\\"
                 ),
             ),
-        ).exists()
+        ).correlate(MediaAsset).exists()
         values.append(
             or_(
                 func.lower(MediaAsset.title).like(pattern, escape="\\"),
@@ -642,6 +685,7 @@ def list_asset_ids(
     media_kind: Annotated[Literal["video", "audio", "image"] | None, Query()] = None,
     max_duration_seconds: Annotated[int | None, Query(ge=1, le=86_400)] = None,
     has_version: Annotated[str | None, Query(max_length=64)] = None,
+    processing: Annotated[str | None, Query(max_length=64)] = None,
 ) -> dict[str, Any]:
     """Every asset id the current filter matches, for a true select-all.
 
@@ -653,6 +697,7 @@ def list_asset_ids(
         q=q, platform=platform, platform_missing=platform_missing, creator=creator,
         creator_missing=creator_missing, media_kind=media_kind,
         max_duration_seconds=max_duration_seconds, has_version=has_version,
+        processing=processing,
     )
     where = asset_conditions(workspace_id, filters)
     matched = session.scalar(select(func.count(MediaAsset.id)).where(*where)) or 0
@@ -687,6 +732,7 @@ def list_assets(
     media_kind: Annotated[Literal["video", "audio", "image"] | None, Query()] = None,
     max_duration_seconds: Annotated[int | None, Query(ge=1, le=86_400)] = None,
     has_version: Annotated[str | None, Query(max_length=64)] = None,
+    processing: Annotated[str | None, Query(max_length=64)] = None,
     sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> dict[str, Any]:
@@ -695,6 +741,7 @@ def list_assets(
         q=q, platform=platform, platform_missing=platform_missing, creator=creator,
         creator_missing=creator_missing, media_kind=media_kind,
         max_duration_seconds=max_duration_seconds, has_version=has_version,
+        processing=processing,
     )
 
     def conditions(*, omit: str | None = None) -> list[Any]:
@@ -762,8 +809,55 @@ def list_assets(
             # than through `facet`. It belongs beside the others because it is
             # the same kind of question: how much of this library has it.
             "effects": _effect_facet(session, conditions(omit="has_version")),
+            "processing": _processing_facet(session, conditions(omit="processing")),
         },
     }
+
+
+def _processing_facet(session: Session, where: list[Any]) -> list[dict[str, Any]]:
+    """Count workflow tags in two grouped queries, not one query per tag."""
+    counts: Counter[str] = Counter()
+    for kind, status, count in session.execute(
+        select(
+            MediaTranscript.kind,
+            MediaTranscript.status,
+            func.count(func.distinct(MediaTranscript.asset_id)),
+        )
+        .join(MediaAsset, MediaAsset.id == MediaTranscript.asset_id)
+        .where(*where)
+        .group_by(MediaTranscript.kind, MediaTranscript.status)
+    ):
+        key = {
+            ("speech", "reviewed"): "transcript_reviewed",
+            ("speech", "machine"): "transcript_draft",
+            ("ocr", "reviewed"): "text_reviewed",
+            ("ocr", "machine"): "text_draft",
+        }.get((kind, status))
+        if key:
+            counts[key] = count
+
+    category = case(
+        (MediaAssetVersion.version_kind == "captioned", "captions"),
+        (MediaAssetVersion.version_kind.in_(("voiceover", "voiced")), "voiceover"),
+        else_=None,
+    )
+    for value, count in session.execute(
+        select(category, func.count(func.distinct(MediaAssetVersion.asset_id)))
+        .join(MediaAsset, MediaAsset.id == MediaAssetVersion.asset_id)
+        .where(
+            *where,
+            MediaAssetVersion.version_kind.in_(("captioned", "voiceover", "voiced")),
+        )
+        .group_by(category)
+    ):
+        if value:
+            counts[value] = count
+
+    return [
+        {"value": value, "label": label, "count": counts[value]}
+        for value, label in PROCESSING_LABELS.items()
+        if counts[value]
+    ]
 
 
 def _effect_facet(session: Session, where: list[Any]) -> list[dict[str, Any]]:
@@ -819,7 +913,7 @@ def _effect_facet(session: Session, where: list[Any]) -> list[dict[str, Any]]:
         # finds a render made before recipes were recorded.
         {
             "value": "blurred",
-            "label": "Faces covered",
+            "label": "Faces covered — any method",
             "count": count(_effect_condition("blurred")),
         },
     ]

@@ -384,6 +384,7 @@ export const fr: Messages = {
     blurSettingsHelp:
       "Vérifiez la couverture sur une image et réglez la largeur du flou",
     effectsHelp: "Empilez des effets sur ce média sans toucher à l'original",
+    mediaTags: "Étiquettes du média",
     selectToBegin:
       "Sélectionnez un média ou importez un fichier local pour commencer.",
   },
@@ -1245,6 +1246,15 @@ export const fr: Messages = {
     bySource: "Filtrer par source",
     byMediaKind: "Filtrer par type de média",
     byEffect: "Filtrer par effet",
+    processing: "Traitement",
+    anyProcessing: "Tout traitement",
+    byProcessing: "Filtrer par traitement",
+    transcriptReviewed: "Transcription validée",
+    transcriptDraft: "Brouillon de transcription",
+    textReviewed: "Texte à l'écran validé",
+    textDraft: "Brouillon du texte à l'écran",
+    captions: "Sous-titres",
+    voiceover: "Voix off",
     byLength: "Filtrer par durée",
   },
 

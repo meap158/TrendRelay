@@ -376,6 +376,7 @@ export const ar: Messages = {
     blurSettings: "إعدادات التمويه",
     blurSettingsHelp: "تحقّق من التغطية على إطار واحد وحدّد اتساع التمويه",
     effectsHelp: "أضف تأثيرات على هذا الملف دون المساس بالنسخة الأصلية",
+    mediaTags: "وسوم الوسائط",
     selectToBegin: "اختر ملفًا أو استورد ملفًا من جهازك للبدء.",
   },
 
@@ -1228,6 +1229,15 @@ export const ar: Messages = {
     bySource: "تصفية حسب المصدر",
     byMediaKind: "تصفية حسب نوع الوسائط",
     byEffect: "تصفية حسب التأثير",
+    processing: "المعالجة",
+    anyProcessing: "أي معالجة",
+    byProcessing: "تصفية حسب المعالجة",
+    transcriptReviewed: "النص مراجع",
+    transcriptDraft: "مسودة النص",
+    textReviewed: "نص الشاشة مراجع",
+    textDraft: "مسودة نص الشاشة",
+    captions: "التسميات التوضيحية",
+    voiceover: "التعليق الصوتي",
     byLength: "تصفية حسب المدة",
   },
 

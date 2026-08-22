@@ -376,6 +376,7 @@ export const ja: Messages = {
     blurSettings: "ぼかし設定",
     blurSettingsHelp: "1 フレームで範囲を確認し、ぼかしの広さを決めます",
     effectsHelp: "オリジナルに手を加えずに、この素材へエフェクトを重ねます",
+    mediaTags: "メディアタグ",
     selectToBegin:
       "素材を選ぶか、ローカルファイルを読み込んで始めてください。",
   },
@@ -1218,6 +1219,15 @@ export const ja: Messages = {
     bySource: "ソースで絞り込む",
     byMediaKind: "種類で絞り込む",
     byEffect: "エフェクトで絞り込む",
+    processing: "処理状態",
+    anyProcessing: "すべての処理状態",
+    byProcessing: "処理状態で絞り込む",
+    transcriptReviewed: "文字起こし確認済み",
+    transcriptDraft: "文字起こし下書き",
+    textReviewed: "画面テキスト確認済み",
+    textDraft: "画面テキスト下書き",
+    captions: "字幕",
+    voiceover: "ボイスオーバー",
     byLength: "長さで絞り込む",
   },
 

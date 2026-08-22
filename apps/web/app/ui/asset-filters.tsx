@@ -32,7 +32,16 @@ export {
  * disagreeing again.
  */
 /** Which controls a surface shows. The picker has no use for a media kind. */
-export type FilterField = "query" | "channel" | "platform" | "mediaKind" | "effect" | "length";
+export type FilterField = "query" | "channel" | "platform" | "mediaKind" | "effect" | "processing" | "length";
+
+const PROCESSING_LABEL_KEYS = {
+  transcript_reviewed: "filters.transcriptReviewed",
+  transcript_draft: "filters.transcriptDraft",
+  text_reviewed: "filters.textReviewed",
+  text_draft: "filters.textDraft",
+  captions: "filters.captions",
+  voiceover: "filters.voiceover",
+} as const;
 
 const LENGTHS: [number, string][] = [
   [15, "Up to 15s"],
@@ -169,6 +178,23 @@ export function AssetFilters({
             {facets.effects.map((facet) => (
               <option key={facet.value} value={facet.value}>{label(facet, facet.value)}</option>
             ))}
+          </select>
+        </label>
+      )}
+
+      {shown.has("processing") && (
+        <label>{t("filters.processing")}
+          <select
+            aria-label={t("filters.byProcessing")}
+            value={values.processing ?? ""}
+            onChange={(event) => set({ processing: event.target.value })}
+          >
+            <option value="">{t("filters.anyProcessing")}</option>
+            {(facets.processing ?? []).map((facet) => {
+              const key = PROCESSING_LABEL_KEYS[facet.value as keyof typeof PROCESSING_LABEL_KEYS];
+              const name = key ? t(key) : facet.label;
+              return <option key={facet.value} value={facet.value}>{name} ({facet.count})</option>;
+            })}
           </select>
         </label>
       )}

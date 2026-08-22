@@ -99,6 +99,36 @@ function cutEffects(t: Translate, version: Version): string[] {
   return [...new Set(names)];
 }
 
+/** Workflow artifacts carried by an asset, separate from visual effects. */
+function processingTags(t: Translate, asset: Asset): string[] {
+  const speech = asset.transcripts.filter((item) => item.kind === "speech");
+  const ocr = asset.transcripts.filter((item) => item.kind === "ocr");
+  const kinds = new Set(asset.versions.map((version) => version.kind));
+  return [
+    speech.some((item) => item.status === "reviewed")
+      ? t("filters.transcriptReviewed")
+      : speech.some((item) => item.status === "machine")
+        ? t("filters.transcriptDraft") : null,
+    ocr.some((item) => item.status === "reviewed")
+      ? t("filters.textReviewed")
+      : ocr.some((item) => item.status === "machine")
+        ? t("filters.textDraft") : null,
+    kinds.has("captioned") ? t("filters.captions") : null,
+    kinds.has("voiceover") || kinds.has("voiced") ? t("filters.voiceover") : null,
+  ].filter((tag): tag is string => Boolean(tag));
+}
+
+function assetTags(t: Translate, asset: Asset): string[] {
+  const rendered = renderedCut(asset.versions);
+  const effects = rendered ? cutEffects(t, rendered) : [];
+  // Captioned cuts are represented by the workflow tag below. A legacy blur
+  // or edit with no recorded recipe still needs its known outcome named.
+  if (rendered && !effects.length && rendered.kind !== "captioned") {
+    effects.push(cutLabel(t, rendered));
+  }
+  return [...new Set([...effects, ...processingTags(t, asset)])];
+}
+
 /**
  * What to call the rendered cut on a two-option switch.
  *
@@ -1295,6 +1325,7 @@ export default function LibraryPage() {
       asset.id,
       cancellingEffectJobId,
     );
+    const tags = assetTags(t, asset);
     return (
       <button className={`${selectedId === asset.id ? "selected" : ""}${renderedCut(asset.versions) ? " has-versions" : ""}${selection.has(asset.id) ? " picked" : ""}`} key={asset.id} aria-label={`Open ${asset.title}${effectActivity ? `. ${effectActivity.label}: ${effectActivity.detail}` : ""}`} aria-pressed={selectedId === asset.id} onClick={() => setSelectedId(asset.id)}>
         {/* A separate control, so selecting never hijacks opening a clip. */}
@@ -1319,13 +1350,11 @@ export default function LibraryPage() {
           {/* Marked for any rendered cut, not only a blurred one. An asset with
               a crop and a sticker on it has been edited just as much, and the
               row was the only place that said so at a glance. */}
-          {renderedCut(asset.versions) && (
-            <span className="effect-tags" aria-label="Applied effects">
-              {cutEffects(t, renderedCut(asset.versions)!).length
-                ? cutEffects(t, renderedCut(asset.versions)!).map((name) => (
-                    <em className="blurred-tag" key={name}>{name}</em>
-                  ))
-                : <em className="blurred-tag">{cutLabel(t, renderedCut(asset.versions)!)}</em>}
+          {tags.length > 0 && (
+            <span className="effect-tags" aria-label={t("library.mediaTags")}>
+              {tags.map((name) => (
+                <em className="blurred-tag" key={name}>{name}</em>
+              ))}
             </span>
           )}
         </span>
@@ -1633,7 +1662,7 @@ export default function LibraryPage() {
           <AssetFilters
             values={filters}
             facets={facets}
-            fields={["channel", "platform", "effect"]}
+            fields={["channel", "platform", "effect", "processing"]}
             onChange={setFilters}
           >
             <label>{t("library.group")}
@@ -1831,19 +1860,17 @@ export default function LibraryPage() {
                         earns the tag, not only a blurred one — a clip that has
                         been cropped and had an object put on a face has been
                         edited just as much, and said nothing here before. */}
-                    {renderedCut(selected.versions) && (
+                    {assetTags(t, selected).length > 0 && (
                       <span
                         className="effect-tags"
-                        aria-label="Applied effects"
+                        aria-label={t("library.mediaTags")}
                         title={blurredVersion(selected)
                           ? `Handoffs send this cut: ${handoffPath(selected)}`
                           : undefined}
                       >
-                        {cutEffects(t, renderedCut(selected.versions)!).length
-                          ? cutEffects(t, renderedCut(selected.versions)!).map((name) => (
-                              <em className="blurred-tag" key={name}>{name}</em>
-                            ))
-                          : <em className="blurred-tag">{cutLabel(t, renderedCut(selected.versions)!)}</em>}
+                        {assetTags(t, selected).map((name) => (
+                          <em className="blurred-tag" key={name}>{name}</em>
+                        ))}
                       </span>
                     )}
                   </p>

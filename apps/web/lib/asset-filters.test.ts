@@ -4,10 +4,13 @@ import { test } from "node:test";
 import { activeFilterCount, assetFilterParams } from "./asset-filters.ts";
 
 test("media and effect filters use the API parameter names", () => {
-  const params = assetFilterParams({ mediaKind: "image", effect: "face_overlay" });
+  const params = assetFilterParams({
+    mediaKind: "image", effect: "face_overlay", processing: "captions",
+  });
 
   assert.equal(params.get("media_kind"), "image");
   assert.equal(params.get("has_version"), "face_overlay");
+  assert.equal(params.get("processing"), "captions");
 });
 
 test("media and effect filters combine instead of replacing one another", () => {
@@ -22,7 +25,7 @@ test("media and effect filters combine instead of replacing one another", () => 
 });
 
 test("clearing a filter removes it from the request", () => {
-  const params = assetFilterParams({ mediaKind: "", effect: "" });
+  const params = assetFilterParams({ mediaKind: "", effect: "", processing: "" });
 
   assert.equal(params.toString(), "");
 });

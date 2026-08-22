@@ -379,6 +379,7 @@ export const vi: Messages = {
     blurSettingsHelp:
       "Kiểm tra độ che phủ trên một khung hình và đặt độ rộng vùng mờ",
     effectsHelp: "Xếp chồng hiệu ứng lên tệp này mà không đụng đến bản gốc",
+    mediaTags: "Thẻ nội dung",
     selectToBegin: "Chọn một tệp hoặc nhập tệp từ máy để bắt đầu.",
   },
 
@@ -1225,6 +1226,15 @@ export const vi: Messages = {
     bySource: "Lọc theo nguồn",
     byMediaKind: "Lọc theo loại nội dung",
     byEffect: "Lọc theo hiệu ứng",
+    processing: "Xử lý",
+    anyProcessing: "Mọi trạng thái xử lý",
+    byProcessing: "Lọc theo xử lý",
+    transcriptReviewed: "Bản chép lời đã duyệt",
+    transcriptDraft: "Bản chép lời nháp",
+    textReviewed: "Văn bản trên màn hình đã duyệt",
+    textDraft: "Văn bản trên màn hình nháp",
+    captions: "Phụ đề",
+    voiceover: "Lồng tiếng",
     byLength: "Lọc theo thời lượng",
   },
 

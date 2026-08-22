@@ -383,6 +383,7 @@ export const en = {
     blurSettingsHelp:
       "Check coverage on one frame and set how wide the blur sits",
     effectsHelp: "Stack effects on this asset without touching the original",
+    mediaTags: "Media tags",
     selectToBegin: "Select an asset or import a local file to begin.",
   },
 
@@ -1228,6 +1229,15 @@ export const en = {
     bySource: "Filter by source",
     byMediaKind: "Filter by media kind",
     byEffect: "Filter by effect",
+    processing: "Processing",
+    anyProcessing: "Any processing",
+    byProcessing: "Filter by processing",
+    transcriptReviewed: "Transcript reviewed",
+    transcriptDraft: "Transcript draft",
+    textReviewed: "On-screen text reviewed",
+    textDraft: "On-screen text draft",
+    captions: "Captions",
+    voiceover: "Voiceover",
     byLength: "Filter by length",
   },
 

@@ -382,6 +382,7 @@ export const ru: Messages = {
     blurSettingsHelp:
       "Проверьте охват на одном кадре и задайте ширину размытия",
     effectsHelp: "Наложите эффекты на этот материал, не трогая оригинал",
+    mediaTags: "Теги медиа",
     selectToBegin:
       "Выберите материал или импортируйте локальный файл, чтобы начать.",
   },
@@ -1244,6 +1245,15 @@ export const ru: Messages = {
     bySource: "Фильтровать по источнику",
     byMediaKind: "Фильтровать по типу материала",
     byEffect: "Фильтровать по эффекту",
+    processing: "Обработка",
+    anyProcessing: "Любая обработка",
+    byProcessing: "Фильтровать по обработке",
+    transcriptReviewed: "Расшифровка проверена",
+    transcriptDraft: "Черновик расшифровки",
+    textReviewed: "Текст на экране проверен",
+    textDraft: "Черновик текста на экране",
+    captions: "Субтитры",
+    voiceover: "Закадровый голос",
     byLength: "Фильтровать по длительности",
   },
 
