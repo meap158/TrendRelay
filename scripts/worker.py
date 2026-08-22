@@ -46,6 +46,7 @@ from trendrelay_api.jobs import (  # noqa: E402
     settle_expired_cancellations,
     upgrade_active_job_recovery,
 )
+from trendrelay_api.worker_pool import run_job_batch  # noqa: E402
 
 
 #: Campaign autopilot is time-driven rather than queue-driven, so it is asked
@@ -135,20 +136,14 @@ def process_available() -> int:
         run_ingest_job(job_id)
     for job_id in blur_ids:
         run_blur_job(job_id)
-    for job_id in effect_ids:
-        run_effect_render_job(job_id)
+    run_job_batch(effect_ids, run_effect_render_job, label="Effect render")
     for job_id in enrich_ids:
         run_enrich_job(job_id)
-    for job_id in caption_ids:
-        run_caption_job(job_id)
-    for job_id in enrichment_ids:
-        # Transcribing a clip fails for ordinary reasons - a provider switched
-        # off between queueing and running, a file that moved - and the job row
-        # carries the reason to the operator's screen. The loop keeps going.
-        try:
-            run_enrichment_job(job_id)
-        except Exception as error:
-            print(f"Transcription {job_id} failed: {error}", flush=True)
+    run_job_batch(caption_ids, run_caption_job, label="Caption render")
+    # Local inference is serialized inside each shared model, while frame/audio
+    # extraction and hosted transcription can overlap. This bounded lane gives
+    # both paths throughput without loading another model per asset.
+    run_job_batch(enrichment_ids, run_enrichment_job, label="Transcription")
     for job_id in media_ai_setup_ids:
         # A download the operator is watching, so a failure belongs on their
         # screen rather than in this console. The job row already carries it.
