@@ -24,8 +24,14 @@ from trendrelay_api.integrations.effect_render import (  # noqa: E402
 from trendrelay_api.integrations.last30days import run_job  # noqa: E402
 from trendrelay_api.integrations.openmontage_runtime import run_render_job  # noqa: E402
 from trendrelay_api.integrations.publishing import run_publish_job  # noqa: E402
-from trendrelay_api.media_ai import JOB_KIND as ENRICHMENT_JOB_KIND  # noqa: E402
-from trendrelay_api.media_ai import SETUP_JOB_KIND as MEDIA_AI_SETUP_KIND  # noqa: E402
+from trendrelay_api.media_ai import (  # noqa: E402
+    ENRICHMENT_LEASE_SECONDS,
+    ENRICHMENT_MAX_ATTEMPTS,
+    JOB_KIND as ENRICHMENT_JOB_KIND,
+    SETUP_JOB_KIND as MEDIA_AI_SETUP_KIND,
+    SETUP_LEASE_SECONDS,
+    SETUP_MAX_ATTEMPTS,
+)
 from trendrelay_api.media_ai import run_enrichment_job  # noqa: E402
 from trendrelay_api.media_ai import run_setup_job as run_media_ai_setup_job  # noqa: E402
 from trendrelay_api.media_library import run_ingest_job  # noqa: E402
@@ -86,6 +92,16 @@ def process_available() -> int:
     )
     for job_id in upgraded:
         print(f"Prepared interrupted effect job {job_id} for recovery.", flush=True)
+    for kind, attempts, lease in (
+        (MEDIA_AI_SETUP_KIND, SETUP_MAX_ATTEMPTS, SETUP_LEASE_SECONDS),
+        (ENRICHMENT_JOB_KIND, ENRICHMENT_MAX_ATTEMPTS, ENRICHMENT_LEASE_SECONDS),
+    ):
+        for job_id in upgrade_active_job_recovery(
+            kind,
+            max_attempts=attempts,
+            maximum_lease_seconds=lease,
+        ):
+            print(f"Prepared interrupted {kind} job {job_id} for recovery.", flush=True)
     # Before claiming anything: a job whose worker died with no attempts left
     # is invisible to the recovery below, and stays "running" until somebody
     # notices it never finished. Giving it a terminal state is what puts it in

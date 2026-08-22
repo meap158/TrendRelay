@@ -146,6 +146,7 @@ def get_job_record(
 def requeue_terminal_job(
     job_id: str,
     *,
+    max_attempts: int | None = None,
     factory: SessionMaker = SessionFactory,
 ) -> dict[str, Any]:
     """Put an identical failed/cancelled request back in the durable queue.
@@ -167,6 +168,8 @@ def requeue_terminal_job(
         item.result = None
         item.last_error = None
         item.attempt_count = 0
+        if max_attempts is not None:
+            item.max_attempts = max(1, max_attempts)
         item.cancellation_requested = False
         item.progress = None
         item.progress_stage = "Queued again"

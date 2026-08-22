@@ -66,6 +66,23 @@ def test_the_worker_upgrades_legacy_effect_jobs_before_sweeping(monkeypatch) -> 
     assert ("abandon", worker.EFFECT_JOB_KIND) in events
     assert ("cancel", worker.EFFECT_JOB_KIND) in events
 
+    assert (
+        "upgrade",
+        worker.MEDIA_AI_SETUP_KIND,
+        {
+            "max_attempts": worker.SETUP_MAX_ATTEMPTS,
+            "maximum_lease_seconds": worker.SETUP_LEASE_SECONDS,
+        },
+    ) in events
+    assert (
+        "upgrade",
+        worker.ENRICHMENT_JOB_KIND,
+        {
+            "max_attempts": worker.ENRICHMENT_MAX_ATTEMPTS,
+            "maximum_lease_seconds": worker.ENRICHMENT_LEASE_SECONDS,
+        },
+    ) in events
+
 
 def test_the_worker_settles_orphaned_cancellations_before_recovery(monkeypatch) -> None:
     events: list[tuple[str, str]] = []

@@ -38,6 +38,9 @@ from trendrelay_api.tool_registry import PROJECT_ROOT, list_tools
 
 JOB_KIND = "media_enrichment"
 JOB_SESSION_FACTORY = SessionFactory
+ENRICHMENT_MAX_ATTEMPTS = 3
+ENRICHMENT_LEASE_SECONDS = 120
+ENRICHMENT_HEARTBEAT_SECONDS = 30
 RUNTIME_ROOT = PROJECT_ROOT / ".tools" / "media-ai" / "runtime"
 MODEL_ROOT = PROJECT_ROOT / ".data" / "media-ai" / "models"
 WORK_ROOT = PROJECT_ROOT / ".data" / "media-ai" / "work"
@@ -592,6 +595,11 @@ def create_setup_job(provider: str, *, actor_user_id: str, factory=None) -> dict
     unfinished = _unfinished_setup_job(provider, factory=factory)
     if unfinished:
         return unfinished
+    latest = latest_setup_jobs(factory=factory).get(provider)
+    if latest and latest["status"] in {"failed", "cancelled"}:
+        return requeue_terminal_job(
+            latest["id"], max_attempts=SETUP_MAX_ATTEMPTS, factory=factory
+        )
     job_id = (
         "mediaaisetup_"
         + hashlib.sha256(
@@ -618,7 +626,7 @@ def _unfinished_setup_job(provider: str, *, factory) -> dict[str, Any] | None:
     for record in list_job_records(SETUP_WORKSPACE_KEY, SETUP_JOB_KIND, 20, factory=factory):
         if record["payload"].get("provider") != provider:
             continue
-        if record["status"] in {"queued", "running"} and not record["stalled"]:
+        if record["status"] in {"queued", "running"}:
             return record
         # Only the newest attempt per provider decides; an older running row
         # whose worker died is history, not a reason to refuse.
@@ -1076,7 +1084,11 @@ def create_enrichment_job(
         existing = session.get(DurableJob, job_id)
         if existing:
             if existing.status in {"failed", "cancelled"}:
-                return requeue_terminal_job(job_id, factory=factory)
+                return requeue_terminal_job(
+                    job_id,
+                    max_attempts=ENRICHMENT_MAX_ATTEMPTS,
+                    factory=factory,
+                )
             return get_job_record(job_id, factory=factory)
     return create_job_record(
         job_id,
@@ -1092,7 +1104,7 @@ def create_enrichment_job(
             "speech_provider": f"faster-whisper@{SPEECH_VERSION}",
             "ocr_provider": f"rapidocr@{OCR_VERSION}",
         },
-        max_attempts=2,
+        max_attempts=ENRICHMENT_MAX_ATTEMPTS,
         factory=factory,
     )
 
@@ -1104,7 +1116,7 @@ def run_enrichment_job(
     factory=None,
 ) -> dict[str, Any]:
     factory = factory or JOB_SESSION_FACTORY
-    lease_seconds = 300
+    lease_seconds = ENRICHMENT_LEASE_SECONDS
     claimed = claim_job(job_id, worker_id, lease_seconds=lease_seconds, factory=factory)
     payload = dict(claimed["payload"])
     work = WORK_ROOT / job_id
@@ -1114,7 +1126,7 @@ def run_enrichment_job(
             worker_id,
             factory=factory,
             lease_seconds=lease_seconds,
-            interval_seconds=60,
+            interval_seconds=ENRICHMENT_HEARTBEAT_SECONDS,
         ):
             report_progress(job_id, 0.03, "Checking local providers", factory=factory)
             status = provider_status()
@@ -1219,7 +1231,17 @@ def run_enrichment_job(
                 factory=factory,
             )
     except Exception as error:
-        fail_job(job_id, worker_id, str(error), factory=factory)
+        # A handled provider/media error is actionable and normally
+        # deterministic (no text, missing media, provider switched off). Show
+        # it immediately; the spare attempts are reserved for a worker process
+        # that disappears without reaching this handler.
+        fail_job(
+            job_id,
+            worker_id,
+            str(error),
+            retry_allowed=False,
+            factory=factory,
+        )
         raise
     finally:
         if work.is_dir():

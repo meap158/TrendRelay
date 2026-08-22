@@ -16,6 +16,7 @@ import json
 import socket
 import sys
 import time
+from datetime import timedelta
 
 import httpx
 import pytest
@@ -23,8 +24,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from trendrelay_api import media_ai
+from trendrelay_api.jobs import claim_job, now_utc
 from trendrelay_api.main import app
-from trendrelay_api.models import Base
+from trendrelay_api.models import Base, DurableJob
 
 
 async def request(method: str, path: str, **kwargs) -> httpx.Response:
@@ -93,8 +95,22 @@ def test_asking_twice_joins_the_download_already_running(jobs) -> None:
     assert other["id"] != first["id"]
 
 
-def test_a_finished_attempt_does_not_block_the_next_one(jobs, monkeypatch) -> None:
-    """A download that failed must be retryable, or the app is a dead end."""
+def test_a_stalled_setup_is_joined_until_the_worker_recovers_it(jobs) -> None:
+    """A second click must not launch pip beside an expired first attempt."""
+    first = media_ai.create_setup_job("speech", actor_user_id="tester", factory=jobs)
+    claim_job(first["id"], "worker", lease_seconds=1, factory=jobs)
+    with jobs.begin() as session:
+        session.get(DurableJob, first["id"]).lease_expires_at = now_utc() - timedelta(seconds=1)
+
+    joined = media_ai.create_setup_job("speech", actor_user_id="tester", factory=jobs)
+
+    assert joined["id"] == first["id"]
+    assert joined["status"] == "running"
+    assert joined["stalled"] is True
+
+
+def test_a_finished_attempt_resumes_with_the_current_retry_policy(jobs, monkeypatch) -> None:
+    """A failed partial download resumes its durable request instead of forking it."""
     monkeypatch.setattr(
         media_ai,
         "prepare_provider",
@@ -103,9 +119,16 @@ def test_a_finished_attempt_does_not_block_the_next_one(jobs, monkeypatch) -> No
     first = media_ai.create_setup_job("speech", actor_user_id="tester", factory=jobs)
     with pytest.raises(RuntimeError):
         media_ai.run_setup_job(first["id"], factory=jobs)
+    # Simulate the one-attempt setup rows created by an older TrendRelay build.
+    with jobs.begin() as session:
+        session.get(DurableJob, first["id"]).max_attempts = 1
 
     again = media_ai.create_setup_job("speech", actor_user_id="tester", factory=jobs)
-    assert again["id"] != first["id"]
+    assert again["id"] == first["id"]
+    assert again["status"] == "queued"
+    assert again["attempt_count"] == 0
+    assert again["max_attempts"] == media_ai.SETUP_MAX_ATTEMPTS
+    assert again["error"] is None
 
 
 def test_a_failure_is_recorded_where_the_operator_can_read_it(jobs, monkeypatch) -> None:

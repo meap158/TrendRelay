@@ -19,6 +19,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
+import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -139,6 +140,7 @@ def test_asking_for_a_reading_queues_a_job(tmp_path, monkeypatch) -> None:
     job = response.json()["job"]
     assert job["kind"] == media_ai.JOB_KIND
     assert job["status"] == "queued"
+    assert job["max_attempts"] == media_ai.ENRICHMENT_MAX_ATTEMPTS
     assert job["payload"]["modes"] == ["ocr", "speech"]
     assert job["payload"]["asset_id"] == asset_id
 
@@ -195,7 +197,38 @@ def test_asking_again_resumes_the_same_failed_reading(tmp_path, monkeypatch) -> 
     assert resumed["id"] == first["id"]
     assert resumed["status"] == "queued"
     assert resumed["attempt_count"] == 0
+    assert resumed["max_attempts"] == media_ai.ENRICHMENT_MAX_ATTEMPTS
     assert resumed["error"] is None
+
+
+def test_a_handled_ocr_failure_waits_for_an_explicit_retry(tmp_path, monkeypatch) -> None:
+    """No-text is deterministic; spending all recovery attempts only hides it."""
+    from trendrelay_api.jobs import get_job_record
+
+    workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)
+    monkeypatch.setattr(media_ai, "provider_status", lambda: READY)
+    monkeypatch.setattr(
+        media_ai,
+        "OCR_RUNNER",
+        lambda asset, source, work: (_ for _ in ()).throw(
+            RuntimeError("The OCR provider found no on-screen text.")
+        ),
+    )
+    queued = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+            json={"modes": ["ocr"]},
+        )
+    ).json()["job"]
+
+    with pytest.raises(RuntimeError, match="no on-screen text"):
+        media_ai.run_enrichment_job(queued["id"], factory=TestingSession)
+
+    failed = get_job_record(queued["id"], factory=TestingSession)
+    assert failed["status"] == "failed"
+    assert failed["attempt_count"] == 1
+    assert "no on-screen text" in failed["error"]
 
 
 def test_a_provider_that_is_off_is_refused_at_the_click(tmp_path, monkeypatch) -> None:

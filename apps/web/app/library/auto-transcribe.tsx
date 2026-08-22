@@ -211,7 +211,11 @@ export function AutoTranscribe({
               : "You do not have permission to analyse here"
           }
           onClick={() => void start()}
-        >{isRunning(job) ? "Reading…" : "Read this clip"}</Button>
+        >{isRunning(job)
+            ? "Reading…"
+            : job?.status === "failed"
+              ? "Retry reading"
+              : "Read this clip"}</Button>
       </div>
 
       {missing.map((mode) => (

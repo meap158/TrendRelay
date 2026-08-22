@@ -314,7 +314,13 @@ export function ProviderSwitch({
           disabled={working}
           onClick={() => onPrepare(provider)}
         >
-          {job?.stalled ? "Recovering…" : downloading ? "Downloading…" : "Set up"}
+          {job?.stalled
+            ? "Recovering…"
+            : downloading
+              ? "Downloading…"
+              : job?.status === "failed" || job?.status === "cancelled"
+                ? "Resume setup"
+                : "Set up"}
         </Button>
       )}
 
