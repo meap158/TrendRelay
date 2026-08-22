@@ -1283,6 +1283,15 @@ export const zh: Messages = {
     markRead: "标为已读",
     close: "关闭通知",
     unreadCount: "通知，{count} 条未读",
+    filterLabel: "按状态筛选通知",
+    filterAll: "全部",
+    filter_running: "运行中",
+    filter_waiting: "等待中",
+    filter_paused: "已暂停",
+    filter_succeeded: "已成功",
+    filter_failed: "失败",
+    filterEmpty: "此筛选下没有内容",
+    filterEmptyHelp: "清除筛选即可查看全部通知。",
   },
 
   session: {

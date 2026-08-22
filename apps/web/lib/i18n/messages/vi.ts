@@ -1308,6 +1308,15 @@ export const vi: Messages = {
     markRead: "Đánh dấu đã đọc",
     close: "Đóng thông báo",
     unreadCount: "Thông báo, {count} chưa đọc",
+    filterLabel: "Lọc thông báo theo trạng thái",
+    filterAll: "Tất cả",
+    filter_running: "Đang chạy",
+    filter_waiting: "Đang chờ",
+    filter_paused: "Tạm dừng",
+    filter_succeeded: "Thành công",
+    filter_failed: "Thất bại",
+    filterEmpty: "Không có mục nào với bộ lọc này",
+    filterEmptyHelp: "Xóa bộ lọc để xem tất cả thông báo.",
   },
 
   session: {

@@ -1322,12 +1322,21 @@ export const fr: Messages = {
   notifications: {
     heading: "Notifications",
     markAllRead: "Tout marquer comme lu",
-    empty: "Aucune notification",
+    empty: "Aucune notification pour le moment",
     emptyHelp: "Les mises à jour des tâches apparaîtront ici.",
     read: "Lu",
     markRead: "Marquer comme lu",
     close: "Fermer les notifications",
     unreadCount: "Notifications, {count} non lues",
+    filterLabel: "Filtrer les notifications par statut",
+    filterAll: "Tout",
+    filter_running: "En cours",
+    filter_waiting: "En attente",
+    filter_paused: "En pause",
+    filter_succeeded: "Terminé",
+    filter_failed: "Échec",
+    filterEmpty: "Rien sous ce filtre",
+    filterEmptyHelp: "Effacez le filtre pour tout afficher.",
   },
 
   session: {

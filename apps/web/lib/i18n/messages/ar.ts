@@ -1311,6 +1311,15 @@ export const ar: Messages = {
     markRead: "تعليم كمقروء",
     close: "إغلاق الإشعارات",
     unreadCount: "الإشعارات، {count} غير مقروء",
+    filterLabel: "تصفية الإشعارات حسب الحالة",
+    filterAll: "الكل",
+    filter_running: "قيد التشغيل",
+    filter_waiting: "في الانتظار",
+    filter_paused: "متوقف مؤقتًا",
+    filter_succeeded: "نجح",
+    filter_failed: "فشل",
+    filterEmpty: "لا شيء ضمن هذا الفلتر",
+    filterEmptyHelp: "أزل الفلتر لعرض كل الإشعارات.",
   },
 
   session: {

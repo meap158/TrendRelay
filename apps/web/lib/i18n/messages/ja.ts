@@ -1301,6 +1301,15 @@ export const ja: Messages = {
     markRead: "既読にする",
     close: "通知を閉じる",
     unreadCount: "通知、未読 {count} 件",
+    filterLabel: "ステータスで通知を絞り込む",
+    filterAll: "すべて",
+    filter_running: "実行中",
+    filter_waiting: "待機中",
+    filter_paused: "一時停止",
+    filter_succeeded: "成功",
+    filter_failed: "失敗",
+    filterEmpty: "このフィルターに該当するものはありません",
+    filterEmptyHelp: "フィルターを解除するとすべての通知が表示されます。",
   },
 
   session: {

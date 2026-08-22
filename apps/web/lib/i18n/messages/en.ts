@@ -1311,6 +1311,15 @@ export const en = {
     markRead: "Mark read",
     close: "Close notifications",
     unreadCount: "Notifications, {count} unread",
+    filterLabel: "Filter notifications by status",
+    filterAll: "All",
+    filter_running: "Running",
+    filter_waiting: "Waiting",
+    filter_paused: "Paused",
+    filter_succeeded: "Succeeded",
+    filter_failed: "Failed",
+    filterEmpty: "Nothing under this filter",
+    filterEmptyHelp: "Clear the filter to see every notification.",
   },
 
   session: {

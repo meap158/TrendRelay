@@ -1327,6 +1327,15 @@ export const ru: Messages = {
     markRead: "Отметить прочитанным",
     close: "Закрыть уведомления",
     unreadCount: "Уведомления, непрочитанных: {count}",
+    filterLabel: "Фильтровать уведомления по статусу",
+    filterAll: "Все",
+    filter_running: "Выполняется",
+    filter_waiting: "Ожидание",
+    filter_paused: "Пауза",
+    filter_succeeded: "Готово",
+    filter_failed: "Ошибка",
+    filterEmpty: "Под этим фильтром ничего нет",
+    filterEmptyHelp: "Сбросьте фильтр, чтобы увидеть все уведомления.",
   },
 
   session: {

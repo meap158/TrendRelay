@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Clock, Languages, Settings } from "lucide-react";
 import { notificationHref } from "../lib/job-links";
 
@@ -17,6 +17,8 @@ import { useWorkspace } from "./workspace-provider";
 
 const READ_NOTIFICATIONS_KEY = "trendrelay:read-notifications:";
 const MAX_STORED_READ_KEYS = 300;
+/** Pointer travel before a press becomes a drag, so a click still clicks. */
+const DRAG_THRESHOLD_PX = 6;
 
 function notificationKey(job: BaseJob): string {
   return `${job.id}:${job.status}`;
@@ -24,6 +26,181 @@ function notificationKey(job: BaseJob): string {
 
 function statusLabel(status: string): string {
   return status.replaceAll("_", " ");
+}
+
+/**
+ * The states a notification row can be filtered by.
+ *
+ * Coarser than the badges on the rows themselves: a row tagged Queued is
+ * waiting for its turn just as much as a batch tagged Waiting, and somebody
+ * looking for what has not happened yet should find both under one chip.
+ */
+type NotificationFilter = "all" | "running" | "waiting" | "paused" | "succeeded" | "failed";
+const NOTIFICATION_FILTERS: Exclude<NotificationFilter, "all">[] = [
+  "running", "waiting", "paused", "succeeded", "failed",
+];
+
+/**
+ * Which chip a notification answers to - its displayed state, not its raw
+ * status word. Batches read their own roll-up, exactly as their badge does;
+ * a lone job reads its own.
+ */
+function groupFilter(group: NotificationGroup): Exclude<NotificationFilter, "all"> {
+  const batch = batchProgress(group);
+  if (batch) {
+    if (batch.working) return "running";
+    if (batch.stalled) return "paused";
+    if (batch.running) return "waiting";
+    return batch.short || batch.failed ? "failed" : "succeeded";
+  }
+  const job = group.latest;
+  if (job.stalled) return "paused";
+  if (["failed", "cancelled"].includes(job.status)) return "failed";
+  if (["running", "in_progress"].includes(job.status)) return "running";
+  // Anything holding for a turn - queued, planned, scheduled - is waiting.
+  if (!["succeeded"].includes(job.status)) return "waiting";
+  return "succeeded";
+}
+
+/**
+ * Drag-to-scroll for a strip too narrow for its content.
+ *
+ * Mouse users get the gesture every touch surface has taught them; touch and
+ * pen keep the browser's native pan with its momentum, because a hand-rolled
+ * copy of that feels worse everywhere it differs. A press that travels less
+ * than the threshold stays a click, and the click that follows a real drag is
+ * swallowed - releasing a drag over a chip must not also press it.
+ */
+function NotificationFilterStrip({
+  chips,
+  selected,
+  onChange,
+}: {
+  chips: { key: NotificationFilter; count: number }[];
+  selected: NotificationFilter;
+  onChange: (next: NotificationFilter) => void;
+}) {
+  const t = useT();
+  const frameRef = useRef<HTMLDivElement>(null);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const drag = useRef({ pointerId: -1, startX: 0, startScrollLeft: 0, active: false });
+  const suppressClick = useRef(false);
+
+  /**
+   * Which ends still hold chips, written as attributes on the frame for its
+   * fade pseudo-elements. Read straight off the DOM rather than through state:
+   * this runs on every scroll tick, and a render per pixel of travel is a
+   * price the list behind the strip should not pay.
+   */
+  const applyEdges = useCallback(() => {
+    const strip = stripRef.current;
+    const frame = frameRef.current;
+    if (!strip || !frame) return;
+    const overflow = strip.scrollWidth - strip.clientWidth > 1;
+    // scrollLeft runs negative in RTL, so distance from the start is |value|.
+    const fromStart = Math.abs(strip.scrollLeft);
+    frame.toggleAttribute("data-can-start", overflow && fromStart > 1);
+    frame.toggleAttribute(
+      "data-can-end",
+      overflow && fromStart < strip.scrollWidth - strip.clientWidth - 1,
+    );
+  }, []);
+
+  // Measured when the chips change, since that is what changes their width,
+  // and again on resize. Only DOM attributes move here, not React state.
+  useEffect(() => {
+    applyEdges();
+    window.addEventListener("resize", applyEdges);
+    return () => window.removeEventListener("resize", applyEdges);
+  }, [applyEdges, chips]);
+
+  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== "mouse" || event.button !== 0) return;
+    drag.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScrollLeft: stripRef.current?.scrollLeft ?? 0,
+      active: false,
+    };
+  };
+
+  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const state = drag.current;
+    if (state.pointerId !== event.pointerId) return;
+    const delta = event.clientX - state.startX;
+    if (!state.active) {
+      if (Math.abs(delta) < DRAG_THRESHOLD_PX) return;
+      state.active = true;
+      stripRef.current?.classList.add("dragging");
+      // Capturing keeps the drag alive when the cursor leaves the strip.
+      try {
+        stripRef.current?.setPointerCapture(event.pointerId);
+      } catch {
+        // The pointer was already gone; the native pan takes over instead.
+      }
+    }
+    // Assigned, not nudged by deltas: RTL scrollLeft runs negative, and
+    // `start - travelled` holds in both directions without special cases.
+    if (stripRef.current) {
+      stripRef.current.scrollLeft = state.startScrollLeft - delta;
+      applyEdges();
+    }
+  };
+
+  const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    const state = drag.current;
+    if (state.pointerId !== event.pointerId) return;
+    if (state.active) {
+      suppressClick.current = true;
+      // Cleared one macrotask out: the click following pointerup fires before
+      // any timer, so it is eaten, while a genuine later click never is.
+      window.setTimeout(() => { suppressClick.current = false; }, 0);
+      stripRef.current?.classList.remove("dragging");
+      try {
+        stripRef.current?.releasePointerCapture(event.pointerId);
+      } catch {
+        // Already released with the pointer itself; nothing to clean up.
+      }
+    }
+    drag.current = { pointerId: -1, startX: 0, startScrollLeft: 0, active: false };
+  };
+
+  const onClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!suppressClick.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  return (
+    <div className="notification-filters" ref={frameRef}>
+      <div
+        ref={stripRef}
+        role="group"
+        aria-label={t("notifications.filterLabel")}
+        className="notification-filter-strip"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onClickCapture={onClickCapture}
+        onScroll={applyEdges}
+      >
+        {chips.map(({ key, count }) => (
+          <button
+            key={key}
+            type="button"
+            data-filter={key}
+            aria-pressed={selected === key}
+            className={`notification-filter${selected === key ? " selected" : ""}`}
+            onClick={() => onChange(key)}
+          >
+            {key === "all" ? t("notifications.filterAll") : t(`notifications.filter_${key}`)}
+            <span className="notification-filter-count">{count}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /** Progress needs a few percent behind it before an estimate means anything. */
@@ -197,6 +374,8 @@ export function GlobalNav() {
   const t = useT();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  /** Which status chip the list is narrowed to; reset when the drawer closes. */
+  const [statusFilter, setStatusFilter] = useState<NotificationFilter>("all");
   /**
    * A clock, so an estimate counts down between polls rather than sitting still
    * for four seconds at a time. Zero until the drawer is open: reading the real
@@ -222,6 +401,39 @@ export function GlobalNav() {
   const unreadCount = readStateReady
     ? groups.filter((group) => group.jobs.some((job) => !readKeys.has(notificationKey(job)))).length
     : 0;
+  // Only the states actually present get a chip - an empty filter is a
+  // promise with nothing behind it, and dropping it keeps the strip short
+  // enough to skip scrolling on a quiet day.
+  const filterChips = useMemo(() => {
+    const counts = new Map<Exclude<NotificationFilter, "all">, number>();
+    for (const group of groups) {
+      const key = groupFilter(group);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return [
+      { key: "all" as const, count: groups.length },
+      ...NOTIFICATION_FILTERS
+        .filter((key) => (counts.get(key) ?? 0) > 0)
+        .map((key) => ({ key, count: counts.get(key) ?? 0 })),
+    ];
+  }, [groups]);
+  const visibleGroups = useMemo(
+    () => statusFilter === "all"
+      ? groups
+      : groups.filter((group) => groupFilter(group) === statusFilter),
+    [groups, statusFilter],
+  );
+
+  /**
+   * The filter lives only as long as the drawer it serves. Reset on the way
+   * into the drawer rather than on the way out: closing has several doors -
+   * the X, Escape, a click outside, toggling the bell - and every one of them
+   * opens again through this single path.
+   */
+  function openDrawer() {
+    setStatusFilter("all");
+    setDrawerOpen(true);
+  }
 
   /**
    * Stop what is left of a batch.
@@ -520,7 +732,8 @@ export function GlobalNav() {
             aria-controls="notification-panel"
             onClick={() => {
               setWorkspaceMenuOpen(false);
-              setDrawerOpen((current) => !current);
+              if (drawerOpen) setDrawerOpen(false);
+              else openDrawer();
             }}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -542,12 +755,24 @@ export function GlobalNav() {
                 </div>
               </header>
 
+              {/* Status chips. The strip hides its scrollbar and drags with the
+                  mouse instead; on a touch screen it pans natively. */}
+              {filterChips.length > 1 && (
+                <NotificationFilterStrip
+                  chips={filterChips}
+                  selected={statusFilter}
+                  onChange={setStatusFilter}
+                />
+              )}
+
               {groups.length === 0 ? (
                 <div className="notification-empty"><strong>{t("notifications.empty")}</strong><span>{t("notifications.emptyHelp")}</span></div>
+              ) : visibleGroups.length === 0 ? (
+                <div className="notification-empty"><strong>{t("notifications.filterEmpty")}</strong><span>{t("notifications.filterEmptyHelp")}</span></div>
               ) : (
                 <ol className="notification-list">
                   {cancelError && <li className="notification-error" role="alert">{cancelError}</li>}
-                  {groups.slice(0, 15).map((group) => {
+                  {visibleGroups.slice(0, 15).map((group) => {
                     const job = group.latest;
                     const batch = batchProgress(group);
                     const destination = notificationHref(group.jobs, { title: job.title }) ?? job.href;

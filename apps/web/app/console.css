@@ -183,6 +183,42 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .notification-mark-all:disabled { color: var(--muted); cursor: default; opacity: .55; }
 .notification-close { display: grid; width: 28px; height: 28px; place-items: center; border-radius: var(--radius-sm); color: var(--muted); font-size: 20px; font-weight: 400; }
 .notification-close:hover { color: var(--text); background: var(--panel-raised); }
+/* Status filter chips. The strip scrolls horizontally but draws no scrollbar:
+ * it is dragged with the mouse (see useDragToScroll) and pans natively on a
+ * touch screen, so a visible track would only spend height the list needs. */
+.notification-filters { position: relative; flex: 0 0 auto; border-bottom: 1px solid var(--line-strong); background: var(--panel); }
+/* Fades over each end while that end still holds chips - the affordance that
+ * says "there is more to drag toward" without spending a scrollbar's height. */
+.notification-filters::before, .notification-filters::after { content: ""; position: absolute; z-index: 1; top: 0; bottom: 0; width: 20px; pointer-events: none; opacity: 0; transition: opacity .15s ease; }
+.notification-filters::before { inset-inline-start: 0; background: linear-gradient(to right, var(--panel), transparent); }
+.notification-filters::after { inset-inline-end: 0; background: linear-gradient(to left, var(--panel), transparent); }
+[dir="rtl"] .notification-filters::before { background: linear-gradient(to left, var(--panel), transparent); }
+[dir="rtl"] .notification-filters::after { background: linear-gradient(to right, var(--panel), transparent); }
+.notification-filters[data-can-start]::before, .notification-filters[data-can-end]::after { opacity: 1; }
+.notification-filter-strip { display: flex; gap: 6px; overflow-x: auto; width: 100%; box-sizing: border-box; padding: 9px 16px; scrollbar-width: none; touch-action: pan-x; user-select: none; -webkit-user-select: none; overscroll-behavior-x: contain; }
+.notification-filter-strip::-webkit-scrollbar { display: none; }
+.notification-filter-strip.dragging { cursor: grabbing; scroll-behavior: auto; }
+/* Each chip wears the colours of the row badges it stands for, so "what does
+ * this chip show me" is answered by the palette before the word is read.
+ * Selection is an inner ring in the chip's own colour - no second accent is
+ * invented for it. */
+.notification-filter { flex: 0 0 auto; display: inline-flex; gap: 5px; align-items: center; min-height: 24px; border: 1px solid transparent; border-radius: 999px; padding: 2px 10px; cursor: pointer; font: inherit; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.notification-filter:not([data-filter="all"]) { border-color: color-mix(in srgb, currentColor 26%, transparent); }
+.notification-filter:hover { filter: brightness(.96); }
+.notification-filter.selected { box-shadow: 0 0 0 1px currentColor; }
+/* Waiting holds amber - the default a row badge wears while nothing has
+ * happened to it yet. Running is blue on purpose: it is the live colour of the
+ * progress bars, and sharing amber with Waiting would read as more of the same
+ * stillness rather than work in motion. */
+.notification-filter[data-filter="running"] { color: var(--link); background: var(--link-bg); }
+.notification-filter[data-filter="waiting"] { color: #876300; background: #fff4cc; }
+.notification-filter[data-filter="succeeded"] { color: var(--green); background: var(--green-dark); }
+.notification-filter[data-filter="failed"] { color: var(--bad); background: var(--bad-bg); }
+.notification-filter[data-filter="paused"] { color: #6b5a2e; background: #f2ece0; }
+/* The everything-chip is ink-on-inverse so it reads as chrome rather than as
+ * one more state among the states. */
+.notification-filter[data-filter="all"] { color: var(--on-ink); background: var(--ink); }
+.notification-filter-count { opacity: .72; font-variant-numeric: tabular-nums; }
 .notification-list { display: block; flex: 1 1 auto; overflow-x: hidden; overflow-y: auto; width: 100%; min-width: 0; min-height: 0; margin: 0; padding: 0; list-style: none; background: transparent; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .notification-item { position: relative; display: grid; width: 100%; min-width: 0; box-sizing: border-box; gap: 7px; border-bottom: 1px solid var(--line-strong); padding: 12px 16px 11px 19px; }
 .notification-item:last-child { border-bottom: 0; }
@@ -197,6 +233,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .notification-status { flex: 0 0 auto; border-radius: 999px; padding: 3px 6px; color: #876300; background: #fff4cc; font-size: 9px; font-weight: 700; text-transform: capitalize; }
 .notification-status.status-succeeded { color: var(--green); background: var(--green-dark); }
 .notification-status.status-failed { color: var(--bad); background: var(--bad-bg); }
+/* Live work wears the blue the progress bars use, so a running row and its
+ * bar read as one moving thing - and amber stays reserved for what is only
+ * waiting for its turn. */
+.notification-status.status-running, .notification-status.status-in_progress { color: var(--link); background: var(--link-bg); }
 .notification-title, .notification-error { min-width: 0; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
 .notification-title { color: var(--text); font-size: 12px; font-weight: 600; line-height: 1.4; }
 .notification-error { max-height: 4.2em; overflow-y: auto; margin: 0; color: var(--bad); font-size: 10px; line-height: 1.4; }
@@ -393,6 +433,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .app-brand strong { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .toolbar-actions { justify-content: flex-end; gap: 6px; }
   .notification-panel { width: min(390px, calc(100vw - 40px)); }
+  /* Finger-sized chips: the strip is panned by touch here, so the targets it
+     carries have to clear the comfortable minimum rather than the mouse one. */
+  .notification-filter { min-height: 30px; padding: 4px 12px; font-size: 11px; }
   .workspace-session-trigger { width: min(190px, calc(100vw - 82px)); }
   .workspace-session-panel { inset-inline-end: 10px; width: min(320px, calc(100vw - 20px)); }
 }
