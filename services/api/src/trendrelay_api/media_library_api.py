@@ -2445,6 +2445,113 @@ def transcribe_asset(
     return {"job": job}
 
 
+class VoiceRequest(BaseModel):
+    """What to say, in whose voice. The script is optional on purpose.
+
+    Left out, it comes from the asset's reviewed transcript - which is the
+    common case and the one worth making frictionless. Typed in, it wins.
+    """
+
+    voice_id: str = Field(min_length=1, max_length=64)
+    model_id: str | None = Field(default=None, max_length=64)
+    #: An override, not the source. Capped well above any sensible voiceover
+    #: because it is billed per character and a runaway paste is money.
+    text: str | None = Field(default=None, max_length=20_000)
+    transcript_id: str | None = Field(default=None, max_length=64)
+    language_code: str | None = Field(default=None, max_length=16)
+    #: The sound on its own, the clip with it on, or both - the same word the
+    #: caption request uses for the same choice. Audio alone by default: it is
+    #: the half worth hearing before committing to a render.
+    deliver: Literal["audio", "video", "both"] = "audio"
+
+
+@router.post("/assets/{asset_id}/voiceover", status_code=202)
+def generate_voiceover(
+    workspace_id: str,
+    asset_id: str,
+    body: VoiceRequest,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Queue a spoken take of this clip's words.
+
+    Refused here rather than in the worker when the plan cannot pay for it: at
+    this moment the answer can still be "this needs 4,200 characters and 900 are
+    left", which is actionable. The same refusal from a worker twenty minutes
+    later is a failed row somebody has to reconstruct.
+    """
+    require_role(
+        membership(session, workspace_id, user.id),
+        {"owner", "editor", "analyst"},
+    )
+    item = _asset_record(session, workspace_id, asset_id)
+    from trendrelay_api.integrations.elevenlabs import AllowanceExceeded, ElevenLabsUnavailable
+    from trendrelay_api.voice_jobs import queue as queue_voice
+
+    try:
+        job = queue_voice(
+            workspace_id,
+            item.id,
+            actor_user_id=user.id,
+            request=body.model_dump(exclude_none=True),
+        )
+    except AllowanceExceeded as error:
+        # Its own status: this is not a malformed request and not a broken
+        # service. There is simply not enough allowance left to pay for it.
+        raise HTTPException(status_code=402, detail=str(error)) from error
+    except ElevenLabsUnavailable as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    audit(
+        session,
+        request,
+        workspace_id,
+        user.id,
+        "media.voiceover.queued",
+        "media_asset",
+        item.id,
+        {
+            "voice_id": body.voice_id,
+            "characters": job["payload"].get("characters"),
+            "job_id": job["id"],
+        },
+    )
+    return {"job": job}
+
+
+@router.get("/voice/jobs")
+def voice_jobs(
+    workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
+) -> dict[str, Any]:
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.voice_jobs import list_voice_jobs
+
+    return {"jobs": list_voice_jobs(workspace_id)}
+
+
+@router.get("/voice/voices")
+def available_voices(
+    workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
+) -> dict[str, Any]:
+    """The voices this key may use, plus what is left to spend.
+
+    Both in one answer because the picker needs both: choosing a voice and
+    knowing whether there is allowance to use it are the same moment.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations import elevenlabs
+
+    status = elevenlabs.provider_status(probe=True)
+    if not status["reachable"]:
+        return {"voices": [], "status": status}
+    try:
+        return {"voices": elevenlabs.voices(), "status": status}
+    except elevenlabs.ElevenLabsUnavailable as error:
+        return {"voices": [], "status": {**status, "reason": str(error)}}
+
+
 @router.get("/transcription/jobs")
 def transcription_jobs(
     workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
