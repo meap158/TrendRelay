@@ -84,6 +84,14 @@ export const en = {
       "This should take a moment. If it does not, the API may not be running.",
     none: "No workspace yet",
     select: "Workspace",
+    settings: "Workspace & settings",
+    settingsHelp: "Switch workspace or configure regional preferences.",
+    workspaceSection: "Workspace",
+    workspaceHelp: "Choose where this work and its schedule belong.",
+    preferences: "Regional preferences",
+    preferencesHelp: "These settings apply across the workspace.",
+    timezoneHelp: "Controls when scheduled posts run.",
+    languageHelp: "Changes the interface language.",
   },
 
   discover: {

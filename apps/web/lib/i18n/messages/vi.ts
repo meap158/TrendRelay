@@ -78,6 +78,14 @@ export const vi: Messages = {
       "Việc này chỉ mất một lát. Nếu lâu hơn, có thể API chưa chạy.",
     none: "Chưa có không gian làm việc",
     select: "Không gian làm việc",
+    settings: "Không gian làm việc & cài đặt",
+    settingsHelp: "Chuyển không gian làm việc hoặc cấu hình tùy chọn khu vực.",
+    workspaceSection: "Không gian làm việc",
+    workspaceHelp: "Chọn nơi công việc và lịch đăng này thuộc về.",
+    preferences: "Tùy chọn khu vực",
+    preferencesHelp: "Các cài đặt này áp dụng cho toàn bộ không gian làm việc.",
+    timezoneHelp: "Quyết định thời điểm bài đăng đã lên lịch được chạy.",
+    languageHelp: "Thay đổi ngôn ngữ giao diện.",
   },
 
   discover: {

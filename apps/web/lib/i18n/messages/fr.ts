@@ -78,6 +78,14 @@ export const fr: Messages = {
       "Cela ne devrait prendre qu'un instant. Sinon, l'API n'est peut-être pas démarrée.",
     none: "Aucun espace de travail",
     select: "Espace de travail",
+    settings: "Espace de travail et réglages",
+    settingsHelp: "Changez d’espace ou configurez les préférences régionales.",
+    workspaceSection: "Espace de travail",
+    workspaceHelp: "Choisissez où résident ce travail et son calendrier.",
+    preferences: "Préférences régionales",
+    preferencesHelp: "Ces réglages s’appliquent à tout l’espace de travail.",
+    timezoneHelp: "Détermine quand les publications planifiées sont diffusées.",
+    languageHelp: "Change la langue de l’interface.",
   },
 
   discover: {

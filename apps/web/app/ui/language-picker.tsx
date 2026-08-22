@@ -38,6 +38,8 @@ export function LanguagePicker({ compact = false }: { compact?: boolean }) {
         // No search box: seven languages are a list you read, and a field
         // asking to be typed in is in the way of an answer already on screen.
         searchable={false}
+        clearable={false}
+        ariaLabel={t("nav.language")}
         placeholder={t("nav.chooseLanguage")}
         options={LOCALES.map((item) => ({ value: item.code, label: item.label }))}
         onChange={(next) => { if (isLocale(next)) setLocale(next as Locale); }}

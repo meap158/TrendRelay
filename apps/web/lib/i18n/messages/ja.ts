@@ -78,6 +78,14 @@ export const ja: Messages = {
       "通常はすぐに終わります。終わらない場合は API が起動していない可能性があります。",
     none: "ワークスペースがありません",
     select: "ワークスペース",
+    settings: "ワークスペースと設定",
+    settingsHelp: "ワークスペースの切り替えや地域設定を変更します。",
+    workspaceSection: "ワークスペース",
+    workspaceHelp: "この作業と投稿予定の保存先を選びます。",
+    preferences: "地域設定",
+    preferencesHelp: "これらの設定はワークスペース全体に適用されます。",
+    timezoneHelp: "予約投稿が実行される時刻を決めます。",
+    languageHelp: "画面の表示言語を変更します。",
   },
 
   discover: {

@@ -77,6 +77,14 @@ export const zh: Messages = {
     loadingHelp: "通常很快就好。如果一直加载，可能是 API 没有启动。",
     none: "暂无工作区",
     select: "工作区",
+    settings: "工作区与设置",
+    settingsHelp: "切换工作区或配置区域偏好。",
+    workspaceSection: "工作区",
+    workspaceHelp: "选择此工作及其排期所属的位置。",
+    preferences: "区域偏好",
+    preferencesHelp: "这些设置适用于整个工作区。",
+    timezoneHelp: "决定定时帖子何时发布。",
+    languageHelp: "更改界面语言。",
   },
 
   discover: {

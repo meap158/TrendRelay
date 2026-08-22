@@ -139,6 +139,8 @@ export function TimezonePicker({ compact = false }: { compact?: boolean }) {
         options={options}
         disabled={saving}
         dense
+        clearable={false}
+        ariaLabel={t("nav.timezone")}
         placeholder={t("nav.chooseTimezone")}
         searchPlaceholder={t("nav.searchTimezone")}
         onChange={(next) => {

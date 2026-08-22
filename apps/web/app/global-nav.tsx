@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Clock, Languages, Settings } from "lucide-react";
 
 import { useAuth } from "./auth-provider";
 import { type BaseJob, useJobs } from "./jobs-provider";
@@ -327,6 +328,7 @@ export function GlobalNav() {
       if (!workspaceShellRef.current?.contains(event.target as Node)) setWorkspaceMenuOpen(false);
     }
     function closeFromKeyboard(event: KeyboardEvent) {
+      if (event.defaultPrevented) return;
       if (event.key === "Escape") {
         setWorkspaceMenuOpen(false);
         workspaceButtonRef.current?.focus();
@@ -425,7 +427,8 @@ export function GlobalNav() {
             ref={workspaceButtonRef}
             type="button"
             className="workspace-session-trigger"
-            aria-label={t("workspace.select")}
+            aria-label={t("workspace.settings")}
+            title={t("workspace.settingsHelp")}
             aria-expanded={workspaceMenuOpen}
             aria-controls="workspace-session-panel"
             onClick={() => {
@@ -437,35 +440,66 @@ export function GlobalNav() {
               <strong>{selectedWorkspace?.name ?? (workspaceLoading ? t("workspace.loading") : t("workspace.none"))}</strong>
               <small>{localMode ? t("session.localAdmin") : user.email ?? user.id}{selectedWorkspace?.role ? ` · ${selectedWorkspace.role}` : ""}</small>
             </span>
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+            <span className="workspace-session-trigger-icons" aria-hidden="true">
+              <Settings />
+              <svg viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" /></svg>
+            </span>
           </button>
           {workspaceMenuOpen && (
-            <section id="workspace-session-panel" className="workspace-session-panel" aria-label={t("workspace.select")}>
-              <header><strong>{t("workspace.select")}</strong></header>
-              {workspaceError && <p className="workspace-session-error">{workspaceError}</p>}
-              <div className="workspace-session-list" role="listbox" aria-label={t("workspace.select")}>
-                {workspaces.map((workspace) => (
-                  <button
-                    key={workspace.id}
-                    type="button"
-                    role="option"
-                    aria-selected={workspace.id === workspaceId}
-                    className={workspace.id === workspaceId ? "selected" : ""}
-                    onClick={() => {
-                      setWorkspaceId(workspace.id);
-                      setWorkspaceMenuOpen(false);
-                      workspaceButtonRef.current?.focus();
-                    }}
-                  >
-                    <span><strong>{workspace.name}</strong><small>{workspace.role}</small></span>
-                    {workspace.id === workspaceId && <span className="workspace-session-check" aria-hidden="true">✓</span>}
-                  </button>
-                ))}
-              </div>
-              <div className="workspace-session-preferences">
-                <TimezonePicker />
-                <LanguagePicker />
-              </div>
+            <section id="workspace-session-panel" className="workspace-session-panel workspace-settings-menu" aria-label={t("workspace.settings")}>
+              <header className="workspace-settings-heading">
+                <span className="workspace-settings-heading-icon" aria-hidden="true"><Settings /></span>
+                <span>
+                  <strong>{t("workspace.settings")}</strong>
+                  <small>{t("workspace.settingsHelp")}</small>
+                </span>
+              </header>
+              <section className="workspace-settings-section" aria-labelledby="workspace-settings-workspace">
+                <header>
+                  <strong id="workspace-settings-workspace">{t("workspace.workspaceSection")}</strong>
+                  <small>{t("workspace.workspaceHelp")}</small>
+                </header>
+                {workspaceError && <p className="workspace-session-error">{workspaceError}</p>}
+                <div className="workspace-session-list" role="listbox" aria-label={t("workspace.select")}>
+                  {workspaces.map((workspace) => (
+                    <button
+                      key={workspace.id}
+                      type="button"
+                      role="option"
+                      aria-selected={workspace.id === workspaceId}
+                      className={workspace.id === workspaceId ? "selected" : ""}
+                      onClick={() => {
+                        setWorkspaceId(workspace.id);
+                        setWorkspaceMenuOpen(false);
+                        workspaceButtonRef.current?.focus();
+                      }}
+                    >
+                      <span><strong>{workspace.name}</strong><small>{workspace.role}</small></span>
+                      {workspace.id === workspaceId && <span className="workspace-session-check" aria-hidden="true">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              </section>
+              <section className="workspace-session-preferences" aria-labelledby="workspace-settings-preferences">
+                <header>
+                  <strong id="workspace-settings-preferences">{t("workspace.preferences")}</strong>
+                  <small>{t("workspace.preferencesHelp")}</small>
+                </header>
+                <div className="workspace-preference-row">
+                  <span className="workspace-preference-icon" aria-hidden="true"><Clock /></span>
+                  <div>
+                    <TimezonePicker />
+                    <small>{t("workspace.timezoneHelp")}</small>
+                  </div>
+                </div>
+                <div className="workspace-preference-row">
+                  <span className="workspace-preference-icon" aria-hidden="true"><Languages /></span>
+                  <div>
+                    <LanguagePicker />
+                    <small>{t("workspace.languageHelp")}</small>
+                  </div>
+                </div>
+              </section>
               {!localMode && <Button variant="link" size="sm" onClick={() => void signOut()}>{t("session.signOut")}</Button>}
             </section>
           )}
