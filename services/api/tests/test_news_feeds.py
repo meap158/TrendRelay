@@ -94,6 +94,33 @@ def test_atom_entries_are_read_from_the_href() -> None:
     assert found[0].published_at == datetime(2026, 8, 20, 9, 30, tzinfo=UTC)
 
 
+def test_summary_markup_becomes_plain_text() -> None:
+    document = (
+        '<rss><channel><title>Example News</title><item>'
+        '<title>A bridge opens</title><link>https://example.test/bridge</link>'
+        '<description><![CDATA[<p>A useful <strong>short summary</strong>.</p>]]></description>'
+        '</item></channel></rss>'
+    )
+
+    _title, found = parse_feed(document)
+
+    assert found[0].summary == "A useful short summary."
+
+
+def test_feed_summary_that_repeats_the_title_is_omitted() -> None:
+    document = (
+        '<rss><channel><title>Example News</title><item>'
+        '<title>A bridge opens</title><link>https://example.test/bridge</link>'
+        '<description><![CDATA[<ol><li><a href="https://example.test/bridge">'
+        'A bridge opens</a> <font>Example News</font></li></ol>]]></description>'
+        '</item></channel></rss>'
+    )
+
+    _title, found = parse_feed(document)
+
+    assert found[0].summary == ""
+
+
 def test_a_curated_label_beats_the_feed_s_own_title() -> None:
     # Feeds introduce themselves at length: "World news | The Guardian", and a
     # CNBC feed that calls itself "Business News" and never says CNBC.

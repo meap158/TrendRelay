@@ -334,11 +334,11 @@ export function PopularPosts({
           variant="primary"
           onClick={load}
           busy={busy}
-          aria-label={board ? t("discover.news.refresh") : t("discover.buildHotPosts")}
-          title={board ? t("discover.news.refresh") : t("discover.buildHotPosts")}
+          aria-label={t("discover.news.refresh")}
+          title={t("discover.news.refreshTitle")}
         >
           <RefreshCw size={15} aria-hidden />
-          <span>{board ? t("discover.news.refresh") : t("discover.buildHotPosts")}</span>
+          <span>{t("discover.news.refresh")}</span>
         </Button>
       </div>
 

@@ -39,6 +39,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
+from html.parser import HTMLParser
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -252,6 +253,38 @@ def _text(node: ElementTree.Element | None) -> str:
     return "".join(node.itertext()).strip()
 
 
+class _SummaryText(HTMLParser):
+    """Collect visible text from the small HTML fragments RSS summaries use."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+
+def _plain_summary(raw: str, title: str) -> str:
+    """Return useful summary prose, never a feed's markup or title duplicate.
+
+    Google News descriptions are HTML lists whose first item repeats the title,
+    outlet, and link. Showing that fragment makes one story look like several
+    broken rows, so a title-leading fragment is omitted. Real prose wrapped in
+    harmless markup is retained as plain text.
+    """
+    parser = _SummaryText()
+    try:
+        parser.feed(raw)
+        parser.close()
+    except (AssertionError, ValueError):
+        return ""
+    text = " ".join(" ".join(parser.parts).split())
+    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    if text.casefold().startswith(title.strip().casefold()):
+        return ""
+    return text
+
+
 def _tag(node: ElementTree.Element) -> str:
     """The local tag name, with any XML namespace dropped."""
     return node.tag.rsplit("}", 1)[-1]
@@ -359,7 +392,10 @@ def parse_feed(document: str, *, outlet: str = "") -> tuple[str, list[Headline]]
                 url=link,
                 outlet=outlet or per_item_outlet or _outlet(feed_title, link),
                 published_at=_published(stamp),
-                summary=fields.get("description") or fields.get("summary") or "",
+                summary=_plain_summary(
+                    fields.get("description") or fields.get("summary") or "",
+                    title,
+                ),
             )
         )
     return feed_title, headlines

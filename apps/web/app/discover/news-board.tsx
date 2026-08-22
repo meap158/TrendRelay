@@ -26,7 +26,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Cpu, Globe, Newspaper, Plus, RefreshCw, Zap } from "lucide-react";
+import { Building2, Check, Cpu, Globe, Newspaper, Plus, RefreshCw, Zap } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import {
@@ -57,7 +57,11 @@ function Row({
   onAdd: () => void;
 }) {
   const { t } = useLocale();
-  const since = sinceLabel(story.published_at, Date.now(), {
+  // Stable for this mounted board: an unrelated re-render must not make every
+  // row's relative time change by a minute and invalidate otherwise identical
+  // output.
+  const [readAt] = useState(() => Date.now());
+  const since = sinceLabel(story.published_at, readAt, {
     justNow: t("discover.news.sinceJustNow"),
     minutes: t("discover.news.sinceMinutes"),
     hours: t("discover.news.sinceHours"),
@@ -99,8 +103,13 @@ function Row({
         size="sm"
         disabled={added}
         onClick={onAdd}
+        aria-label={added ? t("discover.news.added") : t("discover.news.add")}
+        title={added ? t("discover.news.added") : t("discover.news.add")}
       >
-        {added ? t("discover.news.added") : <><Plus size={13} aria-hidden="true" /> {t("discover.news.add")}</>}
+        {added ? <Check size={13} aria-hidden="true" /> : <Plus size={13} aria-hidden="true" />}
+        <span className="news-add-label">
+          {added ? t("discover.news.added") : t("discover.news.add")}
+        </span>
       </Button>
     </li>
   );

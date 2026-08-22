@@ -354,11 +354,27 @@
 .news-shelf ul[data-density="headlines"] .news-row { padding: 4px 8px; }
 
 @media (max-width: 560px) {
-  /* The action drops beneath the headline rather than squeezing it to a few
-     characters; a truncated headline is not worth keeping a button beside. */
-  .news-row { grid-template-columns: minmax(0, 1fr); }
-  .news-row > button { justify-self: start; }
+  /* Every density uses the same compact phone row. The more-specific Cards
+     rule used to win here and reserve roughly 125px for the action, leaving
+     the headline in a narrow column that grew to five or six lines. */
+  .news-shelf { gap: 6px; padding: 10px 8px; }
+  .news-shelf ul[data-density] .news-row {
+    grid-template-columns: minmax(0, 1fr) 30px;
+    gap: 6px;
+    align-items: start;
+    padding: 7px 4px;
+  }
+  .news-row > button {
+    inline-size: 30px;
+    min-inline-size: 30px;
+    block-size: 30px;
+    min-block-size: 30px;
+    justify-self: end;
+    padding: 0;
+  }
+  .news-add-label { display: none; }
   .news-headline { white-space: normal; }
+  .news-meta { gap: 3px 7px; }
 }
 
 @media (max-width: 640px) {
