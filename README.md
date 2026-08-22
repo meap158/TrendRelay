@@ -194,7 +194,7 @@ apps/web       Next.js interface
 services/api   FastAPI control plane and media catalog
 scripts        Development supervisor and Douyin integration
 workers        Background media and publishing workers
-SOP            Canonical MCP guide, control tower, and action procedures
+SOP            Canonical MCP guide/control tower and action procedures
 ```
 
 See [DESIGN.md](DESIGN.md) for interaction principles, [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidance, and [SECURITY.md](SECURITY.md) for private vulnerability reporting.

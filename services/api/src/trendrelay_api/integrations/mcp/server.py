@@ -99,15 +99,6 @@ def build_server(workspace_id: str) -> FastMCP:
         return sops.mcp_guide_markdown()
 
     @server.resource(
-        "trendrelay://mcp/control-tower",
-        name="TrendRelay MCP control tower",
-        description="Routes an intended action to the reviewed SOP and first live operation.",
-        mime_type="text/markdown",
-    )
-    def mcp_control_tower() -> str:
-        return sops.control_tower_markdown()
-
-    @server.resource(
         "trendrelay://sops",
         name="TrendRelay SOP catalog",
         description="Reviewed operating procedures, indexed by the action being performed.",

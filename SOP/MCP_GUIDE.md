@@ -1,12 +1,25 @@
 # TrendRelay MCP guide
 
-This file is the operating entry point for an AI connected to TrendRelay over
-MCP. The server reads this exact file into its initialization instructions and
-also exposes it at `trendrelay://mcp/guide`.
+This file is the control tower and operating entry point for an AI connected to
+TrendRelay over MCP. The server reads this exact file into its initialization
+instructions and exposes it at `trendrelay://mcp/guide`.
+
+## Route the action first
+
+Identify the intended action before choosing a tool. Do not begin with whichever
+write operation looks convenient.
+
+| Intended action | Canonical action | First live operation |
+| --- | --- | --- |
+| Fill missing Campaigns copy | `campaigns.fill-needs-copy` | `list_posts_needing_copy` |
+
+For an action not listed here, call `list_sops`. Match its canonical action or
+an alias. If no reviewed SOP exists, follow current explicit user direction and
+the MCP server's general policy; do not invent a procedure or broaden authority.
 
 ## Start here
 
-1. Read `trendrelay://mcp/control-tower` to identify the action being attempted.
+1. Identify the action using the routing table above.
 2. Call `list_sops` to discover reviewed action procedures.
 3. Call `get_sop` with the canonical action or read
    `trendrelay://sops/{action}` before using action-specific tools.
@@ -15,6 +28,10 @@ also exposes it at `trendrelay://mcp/guide`.
 5. Use the narrowest allowed operation that achieves the requested change.
 6. Re-read the relevant live state after writing and verify the requested result
    before declaring completion.
+
+For `campaigns.fill-needs-copy`, load the SOP, read the live campaign and each
+post's context, write only fields reported as missing, refresh after each batch,
+and use a final fresh queue read as completion evidence.
 
 ## Authority and safety
 

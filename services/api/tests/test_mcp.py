@@ -140,7 +140,6 @@ def test_the_server_exposes_the_sop_catalog_and_action_template() -> None:
     resources = asyncio.run(built.list_resources())
     templates = asyncio.run(built.list_resource_templates())
     assert {str(resource.uri) for resource in resources} == {
-        "trendrelay://mcp/control-tower",
         "trendrelay://mcp/guide",
         "trendrelay://sops",
     }
@@ -148,19 +147,16 @@ def test_the_server_exposes_the_sop_catalog_and_action_template() -> None:
         "trendrelay://sops/{action}"
     }
     guide = asyncio.run(built.read_resource("trendrelay://mcp/guide"))
-    control_tower = asyncio.run(
-        built.read_resource("trendrelay://mcp/control-tower")
-    )
     catalog = asyncio.run(built.read_resource("trendrelay://sops"))
     procedure = asyncio.run(
         built.read_resource("trendrelay://sops/campaigns.fill-needs-copy")
     )
-    assert "operating entry point" in guide[0].content
-    assert "Identify the action first" in control_tower[0].content
+    assert "control tower and operating entry point" in guide[0].content
+    assert "Route the action first" in guide[0].content
     assert "campaigns.fill-needs-copy" in catalog[0].content
     assert "Connect to TrendRelay MCP first" in procedure[0].content
-    assert "operating entry point" in built.instructions
-    assert "Identify the action first" in built.instructions
+    assert "control tower and operating entry point" in built.instructions
+    assert "Route the action first" in built.instructions
 
 
 # --- the caption surface ------------------------------------------------------

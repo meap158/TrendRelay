@@ -55,8 +55,8 @@ reconciling two maps.
 
 **Operating guidance is selected by action.** Reviewed Markdown procedures live
 under the top-level `SOP/` directory, with a canonical action and unique aliases
-in front matter. `SOP/MCP_GUIDE.md` and `SOP/CONTROL_TOWER.md` are loaded into
-MCP initialization and exposed as resources, so a connected AI starts from the
+in front matter. `SOP/MCP_GUIDE.md` is the control tower loaded into MCP
+initialization and exposed as a resource, so a connected AI starts from the
 same canonical files people review.
 One validated loader exposes them through both MCP tools (`list_sops`, `get_sop`)
 and resources (`trendrelay://sops`, `trendrelay://sops/{action}`). Adding another

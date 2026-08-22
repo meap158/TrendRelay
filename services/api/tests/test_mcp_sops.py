@@ -59,17 +59,16 @@ def test_missing_front_matter_is_rejected(monkeypatch, tmp_path) -> None:
 
 def test_server_guidance_is_loaded_from_the_canonical_files(monkeypatch, tmp_path) -> None:
     guide = tmp_path / "MCP_GUIDE.md"
-    control_tower = tmp_path / "CONTROL_TOWER.md"
-    guide.write_text("# Test guide\n\nRead the route.\n", encoding="utf-8")
-    control_tower.write_text("# Test control tower\n\nChoose the action.\n", encoding="utf-8")
+    guide.write_text(
+        "# Test guide and control tower\n\nRead the route and choose the action.\n",
+        encoding="utf-8",
+    )
     monkeypatch.setattr(sops, "MCP_GUIDE_PATH", guide)
-    monkeypatch.setattr(sops, "CONTROL_TOWER_PATH", control_tower)
 
     instructions = sops.server_instructions("Base MCP policy")
 
     assert "Base MCP policy" in instructions
-    assert "Read the route." in instructions
-    assert "Choose the action." in instructions
+    assert "Read the route and choose the action." in instructions
 
 
 def test_missing_canonical_guidance_fails_clearly(monkeypatch, tmp_path) -> None:

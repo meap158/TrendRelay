@@ -17,10 +17,7 @@ from trendrelay_api.tool_registry import PROJECT_ROOT
 
 SOP_ROOT = PROJECT_ROOT / "SOP"
 MCP_GUIDE_PATH = SOP_ROOT / "MCP_GUIDE.md"
-CONTROL_TOWER_PATH = SOP_ROOT / "CONTROL_TOWER.md"
-_CATALOG_RESERVED = frozenset(
-    {"README.md", MCP_GUIDE_PATH.name, CONTROL_TOWER_PATH.name}
-)
+_CATALOG_RESERVED = frozenset({"README.md", MCP_GUIDE_PATH.name})
 _REQUIRED_TEXT = ("id", "action", "title", "summary")
 
 
@@ -160,12 +157,6 @@ def mcp_guide_markdown() -> str:
     return _guidance_file(MCP_GUIDE_PATH, "MCP guide")
 
 
-def control_tower_markdown() -> str:
-    return _guidance_file(CONTROL_TOWER_PATH, "MCP control tower")
-
-
 def server_instructions(base: str) -> str:
-    """Initialization guidance read from the same files MCP resources expose."""
-    return "\n\n".join(
-        [base.strip(), mcp_guide_markdown().strip(), control_tower_markdown().strip()]
-    )
+    """Initialization guidance read from the same file MCP resources expose."""
+    return "\n\n".join([base.strip(), mcp_guide_markdown().strip()])

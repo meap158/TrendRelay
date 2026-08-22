@@ -20,8 +20,7 @@ reads and writes are allowed.
 ## Adding an SOP
 
 Place a `.md` file anywhere below this directory, except the reserved
-`README.md`, `MCP_GUIDE.md`, and `CONTROL_TOWER.md` files, with this front
-matter:
+`README.md` and `MCP_GUIDE.md` files, with this front matter:
 
 ```yaml
 ---
@@ -41,7 +40,7 @@ such as `campaigns.fill-needs-copy`; keep aliases for natural task variants.
 Increment `version` when behavior changes materially. The catalog loader rejects
 missing metadata, empty bodies, invalid lists, and ambiguous selectors.
 
-`MCP_GUIDE.md` is the AI's general operating entry point and
-`CONTROL_TOWER.md` routes intended actions to SOPs. The MCP server reads those
-exact files into its initialization instructions and exposes them as resources;
-keep detailed action procedures in separately cataloged files.
+`MCP_GUIDE.md` is the AI's control tower and general operating entry point. The
+MCP server reads that exact file into its initialization instructions and
+exposes it as a resource; keep detailed action procedures in separately
+cataloged files.

@@ -23,8 +23,8 @@ Before acting, it discovers the reviewed procedure for that action:
 - `get_sop` returns the full procedure for the selected action.
 - MCP resources expose the same source as `trendrelay://sops` and
   `trendrelay://sops/{action}` for clients that consume resources directly.
-- `trendrelay://mcp/guide` and `trendrelay://mcp/control-tower` expose the exact
-  general guidance files also included in the MCP initialization instructions.
+- `trendrelay://mcp/guide` exposes the exact guide/control-tower file also
+  included in the MCP initialization instructions.
 
 The catalog is backed by the top-level [`SOP/`](../../SOP/README.md) directory.
 Adding a validated
