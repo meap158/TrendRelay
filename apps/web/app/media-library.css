@@ -400,7 +400,6 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
    the buttons only exist once something is ticked, so without this the bar
    grew and moved the grid under the cursor that had just ticked it. */
 .library-selection-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: calc(var(--control-sm) + 16px); padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
-.library-selection-bar:not(.active) { min-height: var(--control-sm); padding-block: 3px; }
 .library-selection-bar.active { border-color: var(--link); background: #f4f7fd; }
 .library-selection-bar > strong { font-size: 11px; font-weight: 600; }
 .library-selection-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-inline-start: auto; }
