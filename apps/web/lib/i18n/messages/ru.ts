@@ -332,6 +332,8 @@ export const ru: Messages = {
     selectionActionsLabel: "Действия с выбранными медиа",
     selectionActionEffects: "Набор эффектов",
     selectionActionEffectsHelp: "Создайте один набор и примените его ко всем совместимым выбранным объектам.",
+    selectionActionTranscribe: "Расшифровать",
+    selectionActionTranscribeHelp: "Прочитать речь и текст на экране в каждом выбранном клипе.",
     selectionActionCaptions: "Субтитры",
     selectionActionCaptionsHelp: "Создайте файлы субтитров или ролики с субтитрами из расшифровки каждого клипа.",
     selectionActionVoiceover: "Закадровый голос",

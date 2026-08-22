@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AudioLines,
   CalendarPlus,
   Archive,
   Check,
@@ -47,6 +48,10 @@ export const ACTION_ICONS = {
   blur: EyeOff,
   blurSettings: SlidersHorizontal,
   edit: Pencil,
+  // Reading words off a soundtrack. Distinct from `edit` because
+  // transcribing and captioning sit next to each other in the same menu,
+  // and one pencil for both would make them the same action twice.
+  transcribe: AudioLines,
   clip: Scissors,
   openFolder: FolderOpen,
   publish: Send,

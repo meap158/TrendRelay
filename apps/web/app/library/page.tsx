@@ -19,6 +19,7 @@ import { WaitingScreen } from "../ui/waiting-screen";
 import { Dialog } from "../ui/dialog";
 import { SegmentedControl } from "../ui/segmented";
 import { ActionIcon, bulkActionIcon } from "../ui/action-icons";
+import type { ActionName } from "../ui/action-icons";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Select } from "../ui/select";
 import { Badge } from "../ui/primitives";
@@ -45,6 +46,7 @@ import {
 const CaptionEditor = dynamic(() => import("./caption-editor").then((m) => m.CaptionEditor), { ssr: false });
 const VoiceEditor = dynamic(() => import("./voice-editor").then((m) => m.VoiceEditor), { ssr: false });
 const BulkVoiceEditor = dynamic(() => import("./bulk-voice-editor").then((m) => m.BulkVoiceEditor), { ssr: false });
+const BatchTranscribe = dynamic(() => import("./batch-transcribe").then((m) => m.BatchTranscribe), { ssr: false });
 const ClipEditor = dynamic(() => import("./clip-editor").then((m) => m.ClipEditor), { ssr: false });
 const EffectEditor = dynamic(() => import("./effect-editor").then((m) => m.EffectEditor), { ssr: false });
 const AutoTranscribe = dynamic(() => import("./auto-transcribe").then((m) => m.AutoTranscribe), { ssr: false });
@@ -78,6 +80,27 @@ type Version = {
  * *watching* the result none of that matters: each is a render of this asset,
  * so the previewer takes them together and names the result by what made it.
  */
+/**
+ * The message-key suffix and icon for each selection action.
+ *
+ * Maps rather than the ternary chain they replace: that grew a branch per
+ * action and sent anything unrecognised to Voiceover, so a newly declared
+ * action would have quietly worn another action's name and icon.
+ */
+const SELECTION_ACTION_KEY: Record<LibrarySelectionActionId, string> = {
+  effects: "Effects",
+  transcribe: "Transcribe",
+  captions: "Captions",
+  voiceover: "Voiceover",
+};
+
+const SELECTION_ACTION_ICON: Record<LibrarySelectionActionId, ActionName> = {
+  effects: "edit",
+  transcribe: "transcribe",
+  captions: "edit",
+  voiceover: "play",
+};
+
 const RENDERED_KINDS = new Set(["blurred", "edited", "captioned"]);
 
 /**
@@ -1242,12 +1265,9 @@ function LibraryContent() {
   }));
   const selectionActionItems: ActionMenuItem[] = LIBRARY_SELECTION_ACTIONS.map((action) => {
     const state = selectionActionState(action, selectionTargets);
-    const label = t(`library.selectionAction${action.id === "effects"
-      ? "Effects"
-      : action.id === "captions" ? "Captions" : "Voiceover"}`);
-    const description = t(`library.selectionAction${action.id === "effects"
-      ? "Effects"
-      : action.id === "captions" ? "Captions" : "Voiceover"}Help`);
+    const suffix = SELECTION_ACTION_KEY[action.id];
+    const label = t(`library.selectionAction${suffix}`);
+    const description = t(`library.selectionAction${suffix}Help`);
     const disabledReason = state.compatible.length === 0
       ? t("library.actionNoCompatible")
       : state.overLimit && action.maxItems
@@ -1259,7 +1279,7 @@ function LibraryContent() {
       description,
       disabled: !canImport || !state.enabled,
       disabledReason,
-      icon: <ActionIcon name={action.id === "voiceover" ? "play" : "edit"} />,
+      icon: <ActionIcon name={SELECTION_ACTION_ICON[action.id]} />,
     };
   });
 
@@ -2232,6 +2252,18 @@ function LibraryContent() {
             setSelection(new Set());
             setMessage(text);
           }}
+        />
+      )}
+      {workspaceId && selectionList.length > 0 && (
+        <BatchTranscribe
+          key={`bulk-transcribe-${selectionList.map((asset) => asset.id).join("-")}`}
+          open={selectionAction === "transcribe"}
+          workspaceId={workspaceId}
+          targets={selectionTargets}
+          canEdit={canImport}
+          apiFetch={apiFetch}
+          onClose={() => setSelectionAction(null)}
+          onQueued={finishSelectionAction}
         />
       )}
       {workspaceId && selectionList.length > 0 && (

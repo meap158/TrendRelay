@@ -327,6 +327,8 @@ export const ar: Messages = {
     selectionActionsLabel: "إجراءات الوسائط المحددة",
     selectionActionEffects: "حزمة التأثيرات",
     selectionActionEffectsHelp: "أنشئ حزمة واحدة وطبّقها على كل العناصر المحددة المتوافقة.",
+    selectionActionTranscribe: "تفريغ نصي",
+    selectionActionTranscribeHelp: "قراءة الكلام والنص الظاهر على الشاشة من كل مقطع محدد.",
     selectionActionCaptions: "التسميات التوضيحية",
     selectionActionCaptionsHelp: "أنشئ ملفات ترجمة أو مقاطع معنونة من نص كل مقطع.",
     selectionActionVoiceover: "التعليق الصوتي",

@@ -334,6 +334,8 @@ export const fr: Messages = {
     selectionActionsLabel: "Actions pour les médias sélectionnés",
     selectionActionEffects: "Pile d'effets",
     selectionActionEffectsHelp: "Créez une pile et appliquez-la à chaque élément compatible sélectionné.",
+    selectionActionTranscribe: "Transcrire",
+    selectionActionTranscribeHelp: "Lire la parole et le texte à l'écran de chaque clip sélectionné.",
     selectionActionCaptions: "Sous-titres",
     selectionActionCaptionsHelp: "Créez des fichiers de sous-titres ou des clips sous-titrés depuis chaque transcription.",
     selectionActionVoiceover: "Voix off",

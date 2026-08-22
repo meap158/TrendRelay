@@ -329,6 +329,8 @@ export const vi: Messages = {
     selectionActionsLabel: "Hành động cho nội dung đã chọn",
     selectionActionEffects: "Chuỗi hiệu ứng",
     selectionActionEffectsHelp: "Tạo một chuỗi và áp dụng cho mọi mục đã chọn tương thích.",
+    selectionActionTranscribe: "Chép lời",
+    selectionActionTranscribeHelp: "Đọc lời thoại và chữ trên hình từ mỗi clip đã chọn.",
     selectionActionCaptions: "Phụ đề",
     selectionActionCaptionsHelp: "Tạo tệp phụ đề hoặc video có phụ đề từ bản chép lời của từng clip.",
     selectionActionVoiceover: "Lồng tiếng",

@@ -333,6 +333,8 @@ export const en = {
     selectionActionsLabel: "Actions for selected media",
     selectionActionEffects: "Effect stack",
     selectionActionEffectsHelp: "Build one stack and apply it to every compatible selected item.",
+    selectionActionTranscribe: "Transcribe",
+    selectionActionTranscribeHelp: "Read speech and on-screen text from each selected clip.",
     selectionActionCaptions: "Captions",
     selectionActionCaptionsHelp: "Create subtitle files or captioned cuts from each clip's transcript.",
     selectionActionVoiceover: "Voiceover",

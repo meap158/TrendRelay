@@ -321,6 +321,8 @@ export const zh: Messages = {
     selectionActionsLabel: "所选媒体的操作",
     selectionActionEffects: "效果组合",
     selectionActionEffectsHelp: "创建一组效果并应用于所有兼容的所选项目。",
+    selectionActionTranscribe: "转写",
+    selectionActionTranscribeHelp: "从每个选中的片段中读取语音和画面文字。",
     selectionActionCaptions: "字幕",
     selectionActionCaptionsHelp: "根据每个片段的文字稿生成字幕文件或带字幕成片。",
     selectionActionVoiceover: "配音",

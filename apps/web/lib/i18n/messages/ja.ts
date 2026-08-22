@@ -327,6 +327,8 @@ export const ja: Messages = {
     selectionActionsLabel: "選択したメディアの操作",
     selectionActionEffects: "エフェクトスタック",
     selectionActionEffectsHelp: "1つのスタックを作り、互換性のある選択項目すべてに適用します。",
+    selectionActionTranscribe: "文字起こし",
+    selectionActionTranscribeHelp: "選択した各クリップから音声と画面上の文字を読み取ります。",
     selectionActionCaptions: "字幕",
     selectionActionCaptionsHelp: "各クリップの文字起こしから字幕ファイルまたは字幕付き動画を作成します。",
     selectionActionVoiceover: "ボイスオーバー",

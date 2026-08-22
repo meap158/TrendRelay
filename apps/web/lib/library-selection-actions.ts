@@ -9,7 +9,8 @@
  */
 
 export type LibraryMediaKind = "video" | "image" | "audio";
-export type LibrarySelectionActionId = "effects" | "captions" | "voiceover";
+export type LibrarySelectionActionId =
+  | "effects" | "transcribe" | "captions" | "voiceover";
 
 export type LibrarySelectionTarget = {
   id: string;
@@ -30,6 +31,20 @@ export const LIBRARY_SELECTION_ACTIONS: readonly LibrarySelectionAction[] = [
     // The effect registry makes the final compatibility decision per step.
     mediaKinds: ["video", "image", "audio"],
     maxItems: null,
+  },
+  {
+    // Above captions because it comes before them: a caption is built from a
+    // transcript, and so is a voiceover. Reading a selection is usually the
+    // first thing done to it, not an afterthought once the others are greyed
+    // out for want of a transcript.
+    id: "transcribe",
+    // OCR reads frames, so an image is a legitimate target even though it has
+    // nothing to say out loud. The dialog narrows the modes per selection.
+    mediaKinds: ["video", "image", "audio"],
+    // The same ceiling as captions. This runs on the machine rather than on a
+    // metered API, so the limit is about how much work one click should start,
+    // not about money.
+    maxItems: 100,
   },
   {
     id: "captions",
