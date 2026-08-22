@@ -88,7 +88,13 @@ packages = ["src/trendrelay_api"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+# The repository root as well as the package. Several tests read the worker to
+# check that the queue kind they enqueue is one it actually drains - a check
+# worth having, since a kind nothing drains is a job that sits forever - and
+# `import scripts.worker` needs the root on the path. Without it the suite
+# passed from the repository root and failed from this directory, which is the
+# directory the config lives in.
+pythonpath = ["src", "../.."]
 
 [tool.ruff]
 target-version = "py312"
