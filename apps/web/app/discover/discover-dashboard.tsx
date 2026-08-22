@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
-import { fetchWorkspaces } from "../../lib/workspaces";
 import { REGIONS, isRegion } from "../../lib/regions";
 import type { DiscoverySeed } from "../../lib/discovery-ideas";
 import { searchTerm, type Topic } from "../../lib/trend-shapes";
@@ -30,6 +29,7 @@ import { ActionIcon } from "../ui/action-icons";
 import { SearchSelect } from "../ui/search-select";
 import { numberIn, oneOf, usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 import { useJobs } from "../jobs-provider";
+import { useWorkspace } from "../workspace-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { DiscoveryFeed } from "./discovery-feed";
 import { CampaignIdeaComposer } from "./campaign-idea-composer";
@@ -45,7 +45,6 @@ const PopularPosts = dynamic(() => import("./popular-posts").then((m) => m.Popul
 const TrendingTopics = dynamic(() => import("./trending-topics").then((m) => m.TrendingTopics), { ssr: false });
 const StandoutBoard = dynamic(() => import("./standout-board").then((m) => m.StandoutBoard), { ssr: false });
 
-type Workspace = { id: string; name: string; role: string };
 type ReachChannel = {
   id: string;
   status: "ready" | "setup-required" | "unavailable";
@@ -373,9 +372,8 @@ const RESEARCH_MAX_AGE = 8 * 60 * 60 * 1000;
 export default function ResearchDashboard() {
   const { apiFetch } = useAuth();
   const { t, rich } = useLocale();
-  const { jobs: allJobs, refresh: refreshJobs, setActiveWorkspaceId } = useJobs();
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [workspaceId, setWorkspaceId] = useState("");
+  const { jobs: allJobs, refresh: refreshJobs } = useJobs();
+  const { workspaces, workspaceId } = useWorkspace();
   const [providers, setProviders] = useState<ResearchProviders | null>(null);
   const [query, setQuery] = useState("");
   const [queryMode, setQueryMode] = useState<"trends" | "ads">("trends");
@@ -643,27 +641,6 @@ export default function ResearchDashboard() {
     [jobs],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchWorkspaces(apiFetch)
-      .then((body) => {
-        if (cancelled) return;
-        setWorkspaces(body.workspaces);
-        const first = body.workspaces[0]?.id ?? "";
-        setWorkspaceId(first);
-        setActiveWorkspaceId(first || null);
-        setError(null);
-      })
-      .catch((reason: unknown) => {
-        if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : "Could not load workspaces.");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [apiFetch, setActiveWorkspaceId]);
-
   const refreshProviders = useCallback(async () => {
     const response = await fetch(`${apiBaseUrl()}/api/research/status`, {
       cache: "no-store",
@@ -793,11 +770,6 @@ export default function ResearchDashboard() {
   const metaReady = Boolean(providers?.meta_ads.ready);
 
   const readinessCount = [last30Ready, collectorReady, metaReady].filter(Boolean).length;
-
-  function selectWorkspace(id: string) {
-    setWorkspaceId(id);
-    setActiveWorkspaceId(id || null);
-  }
 
   function exploreTopic(topic: string) {
     setQuery(topic);
@@ -1021,17 +993,6 @@ export default function ResearchDashboard() {
 
       <div className="dsc-top-bar">
         <div className="dsc-row">
-          <select
-            className="dsc-ws-select"
-            value={workspaceId}
-            onChange={(event) => selectWorkspace(event.target.value)}
-          >
-            {workspaces.map((ws) => (
-              <option key={ws.id} value={ws.id}>
-                {ws.name}
-              </option>
-            ))}
-          </select>
           <span>
             <span style={statusDot(last30Ready)} />
             {readinessCount}/3 research tools ready

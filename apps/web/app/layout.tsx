@@ -12,6 +12,7 @@ import { HYDRATION_RESCUE_SCRIPT, HydrationBeacon } from "./hydration-rescue";
 import { GlobalNav } from "./global-nav";
 import { LocaleProvider } from "./i18n-provider";
 import { JobsProvider } from "./jobs-provider";
+import { WorkspaceProvider } from "./workspace-provider";
 
 export const metadata: Metadata = {
   title: "TrendRelay",
@@ -23,7 +24,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   // language is known. They start as English so the server-rendered markup and
   // the first client render agree; a mismatch here blanks the page.
   return (
-    <html lang="en" dir="ltr">
+    <html lang="en" dir="ltr" data-scroll-behavior="smooth">
       <body>
         {/* Runs while this HTML is parsed, which is the point: it is the only
             recovery left when React never starts. See hydration-rescue.tsx.
@@ -33,10 +34,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <HydrationBeacon />
         <LocaleProvider>
           <AuthProvider>
-            <JobsProvider>
-              <GlobalNav />
-              {children}
-            </JobsProvider>
+            <WorkspaceProvider>
+              <JobsProvider>
+                <GlobalNav />
+                {children}
+              </JobsProvider>
+            </WorkspaceProvider>
           </AuthProvider>
         </LocaleProvider>
       </body>

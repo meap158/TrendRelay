@@ -162,7 +162,7 @@ Research integrations, ad collection, opportunity scoring, and additional produc
 
 ## Interface conventions
 
-- Primary workspaces use the same compact top navigation, page heading, workspace control, status language, and action hierarchy.
+- Primary workspaces use the same compact top navigation, page heading, status language, and action hierarchy. The active workspace and session live in one persistent top-right context control; switching it updates every workspace-scoped screen and the global job feed.
 - Familiar actions use the shared Lucide icon vocabulary; icons supplement readable labels and icon-only controls retain accessible names and tooltips.
 - Dense operational screens favor short toolbars, compact cards, sticky context only where it helps, and responsive icon-first navigation on narrow screens.
 - Table search, selection counts, and bulk actions share a stable toolbar slot; changing selection state must not insert controls that shift the rows below.

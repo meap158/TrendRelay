@@ -11,6 +11,7 @@ import { Button } from "./ui/button";
 import { ActionIcon } from "./ui/action-icons";
 import { LanguagePicker } from "./ui/language-picker";
 import { TimezonePicker } from "./ui/timezone-picker";
+import { useWorkspace } from "./workspace-provider";
 
 const READ_NOTIFICATIONS_KEY = "trendrelay:read-notifications:";
 const MAX_STORED_READ_KEYS = 300;
@@ -184,9 +185,11 @@ function groupNotifications(jobs: BaseJob[]): NotificationGroup[] {
 export function GlobalNav() {
   const { user, signOut, localMode, apiFetch } = useAuth();
   const { jobs, refresh: refreshJobs } = useJobs();
+  const { workspaces, workspaceId, setWorkspaceId, loading: workspaceLoading, error: workspaceError } = useWorkspace();
   const pathname = usePathname();
   const t = useT();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   /**
    * A clock, so an estimate counts down between polls rather than sitting still
    * for four seconds at a time. Zero until the drawer is open: reading the real
@@ -200,6 +203,10 @@ export function GlobalNav() {
   const [cancelError, setCancelError] = useState("");
   const notificationShellRef = useRef<HTMLDivElement>(null);
   const notificationButtonRef = useRef<HTMLButtonElement>(null);
+  const workspaceShellRef = useRef<HTMLDivElement>(null);
+  const workspaceButtonRef = useRef<HTMLButtonElement>(null);
+
+  const selectedWorkspace = workspaces.find((workspace) => workspace.id === workspaceId);
 
   const storageKey = user ? READ_NOTIFICATIONS_KEY + user.id : null;
   const groups = useMemo(() => groupNotifications(jobs), [jobs]);
@@ -314,6 +321,25 @@ export function GlobalNav() {
     };
   }, [drawerOpen]);
 
+  useEffect(() => {
+    if (!workspaceMenuOpen) return;
+    function closeFromOutside(event: PointerEvent) {
+      if (!workspaceShellRef.current?.contains(event.target as Node)) setWorkspaceMenuOpen(false);
+    }
+    function closeFromKeyboard(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setWorkspaceMenuOpen(false);
+        workspaceButtonRef.current?.focus();
+      }
+    }
+    document.addEventListener("pointerdown", closeFromOutside);
+    document.addEventListener("keydown", closeFromKeyboard);
+    return () => {
+      document.removeEventListener("pointerdown", closeFromOutside);
+      document.removeEventListener("keydown", closeFromKeyboard);
+    };
+  }, [workspaceMenuOpen]);
+
   function saveReadKeys(next: Set<string>) {
     const bounded = new Set(Array.from(next).slice(-MAX_STORED_READ_KEYS));
     setReadKeys(bounded);
@@ -394,11 +420,56 @@ export function GlobalNav() {
     <header className="app-toolbar">
       {frame}
       <div className="toolbar-actions">
-        {/* Beside the language, because they are the same kind of setting:
-            one says what the workspace reads in, the other what clock it
-            keeps. Both decide how everything else is presented. */}
-        <TimezonePicker compact />
-        <LanguagePicker compact />
+        <div className="workspace-session-shell" ref={workspaceShellRef}>
+          <button
+            ref={workspaceButtonRef}
+            type="button"
+            className="workspace-session-trigger"
+            aria-label={t("workspace.select")}
+            aria-expanded={workspaceMenuOpen}
+            aria-controls="workspace-session-panel"
+            onClick={() => {
+              setDrawerOpen(false);
+              setWorkspaceMenuOpen((current) => !current);
+            }}
+          >
+            <span>
+              <strong>{selectedWorkspace?.name ?? (workspaceLoading ? t("workspace.loading") : t("workspace.none"))}</strong>
+              <small>{localMode ? t("session.localAdmin") : user.email ?? user.id}{selectedWorkspace?.role ? ` · ${selectedWorkspace.role}` : ""}</small>
+            </span>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+          </button>
+          {workspaceMenuOpen && (
+            <section id="workspace-session-panel" className="workspace-session-panel" aria-label={t("workspace.select")}>
+              <header><strong>{t("workspace.select")}</strong></header>
+              {workspaceError && <p className="workspace-session-error">{workspaceError}</p>}
+              <div className="workspace-session-list" role="listbox" aria-label={t("workspace.select")}>
+                {workspaces.map((workspace) => (
+                  <button
+                    key={workspace.id}
+                    type="button"
+                    role="option"
+                    aria-selected={workspace.id === workspaceId}
+                    className={workspace.id === workspaceId ? "selected" : ""}
+                    onClick={() => {
+                      setWorkspaceId(workspace.id);
+                      setWorkspaceMenuOpen(false);
+                      workspaceButtonRef.current?.focus();
+                    }}
+                  >
+                    <span><strong>{workspace.name}</strong><small>{workspace.role}</small></span>
+                    {workspace.id === workspaceId && <span className="workspace-session-check" aria-hidden="true">✓</span>}
+                  </button>
+                ))}
+              </div>
+              <div className="workspace-session-preferences">
+                <TimezonePicker />
+                <LanguagePicker />
+              </div>
+              {!localMode && <Button variant="link" size="sm" onClick={() => void signOut()}>{t("session.signOut")}</Button>}
+            </section>
+          )}
+        </div>
         <div className="notification-shell" ref={notificationShellRef}>
           <button
             ref={notificationButtonRef}
@@ -407,7 +478,10 @@ export function GlobalNav() {
             aria-label={unreadCount ? t("notifications.unreadCount", { count: unreadCount }) : t("notifications.heading")}
             aria-expanded={drawerOpen}
             aria-controls="notification-panel"
-            onClick={() => setDrawerOpen((current) => !current)}
+            onClick={() => {
+              setWorkspaceMenuOpen(false);
+              setDrawerOpen((current) => !current);
+            }}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
@@ -590,7 +664,6 @@ export function GlobalNav() {
             </section>
           )}
         </div>
-        {localMode ? <span className="local-admin-badge" title={t("session.loopbackOnly")}>{t("session.localAdmin")}</span> : <Button variant="link" size="sm" onClick={() => void signOut()}>{t("session.signOut")}</Button>}
       </div>
     </header>
   );

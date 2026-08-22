@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { AUTHORITIES } from "./authority-options";
 import { useAuth } from "../auth-provider";
+import { useWorkspace } from "../workspace-provider";
 import { useLocale } from "../i18n-provider";
 import { LOCALES } from "../../lib/i18n/locales";
 import { apiBaseUrl } from "../../lib/api";
@@ -49,7 +50,6 @@ const AutopilotPanel = dynamic(
   { ssr: false, loading: () => <PanelWaiting /> },
 );
 
-type Workspace = { id: string; name: string; role: string };
 type Campaign = {
   id: string;
   name: string;
@@ -229,9 +229,13 @@ function planPlatformLabel(platform: PublicationPlan["platform"]): string {
 export default function CampaignsPage() {
   const { t, locale } = useLocale();
   const { loading, user, apiFetch } = useAuth();
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [workspaceId, setWorkspaceId] = useState("");
+  const { workspaces, workspaceId } = useWorkspace();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  // Whether the campaign list has answered at least once. `loading` above is the
+  // auth probe, which only runs on first load, so on a tab switch it is already
+  // false and the empty "create a campaign" hero would paint over the fetch.
+  // This tells "still loading" apart from "loaded, and there are none".
+  const [campaignsLoaded, setCampaignsLoaded] = useState(false);
   const [campaignId, setCampaignId] = useState("");
   const requestedCampaign = useRef("");
   const [plans, setPlans] = useState<PublicationPlan[]>([]);
@@ -302,26 +306,6 @@ export default function CampaignsPage() {
       requestedCampaign.current = params.get("campaign") ?? "";
     });
   }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    apiFetch("/api/workspaces")
-      .then((response) => json<{ workspaces: Workspace[] }>(response))
-      .then((body) => {
-        if (cancelled) return;
-        setWorkspaces(body.workspaces);
-        setWorkspaceId(body.workspaces[0]?.id ?? "");
-      })
-      .catch((reason: unknown) => {
-        if (!cancelled) {
-          fail(reason instanceof Error ? reason.message : "Could not load workspaces.");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [apiFetch, user, fail]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -591,16 +575,6 @@ export default function CampaignsPage() {
               summary sentence restates it with this campaign's numbers, and
               a third telling on every visit was fuss. */}
         </div>
-        <label className="workspace-control">
-          Workspace
-          <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
-            {workspaces.map((workspace) => (
-              <option key={workspace.id} value={workspace.id}>
-                {workspace.name} / {workspace.role}
-              </option>
-            ))}
-          </select>
-        </label>
       </header>
 
       <section className="campaign-layout">

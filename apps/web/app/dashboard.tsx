@@ -6,7 +6,6 @@ import { RefreshCw } from "lucide-react";
 
 import { useAuth } from "./auth-provider";
 import { useT } from "./i18n-provider";
-import { fetchWorkspaces } from "../lib/workspaces";
 import { Button, buttonClass } from "./ui/button";
 import { LoadingMark } from "./ui/loading-mark";
 import { ActionIcon } from "./ui/action-icons";
@@ -15,8 +14,8 @@ import { numberIn, oneOf, subsetOf, usePersistedState } from "./ui/use-persisted
 
 const isDownloadMode = oneOf("post", "like", "mix", "music");
 import { useJobs } from "./jobs-provider";
+import { useWorkspace } from "./workspace-provider";
 
-type Workspace = { id: string; name: string; role: string };
 type Artifact = { path: string; name: string; size_bytes: number };
 type DownloadProgress = {
   folder_exists: boolean;
@@ -232,9 +231,8 @@ function isVisibleForFilter(job: DownloadJob, filter: QueueFilter): boolean {
 export default function Dashboard() {
   const t = useT();
   const { loading, user, apiFetch, retryAuth, probeError } = useAuth();
-  const { jobs: allJobs, busy: jobsBusy, setActiveWorkspaceId, refresh: refreshJobs } = useJobs();
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [workspaceId, setWorkspaceId] = useState("");
+  const { jobs: allJobs, busy: jobsBusy, refresh: refreshJobs } = useJobs();
+  const { workspaces, workspaceId } = useWorkspace();
   const [input, setInput] = useState("");
   // Download options are a standing preference, not a per-visit choice. The
   // same guard checks what is restored and what the select hands back.
@@ -314,10 +312,6 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    setActiveWorkspaceId(workspaceId || null);
-  }, [workspaceId, setActiveWorkspaceId]);
-
-  useEffect(() => {
     // Discover hands a trending video over as ?add=, so arriving here means
     // the link box should already hold it rather than asking for a paste.
     queueMicrotask(() => {
@@ -357,16 +351,6 @@ export default function Dashboard() {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [apiFetch, workspaceId, fail]);
-
-  useEffect(() => {
-    if (!user) return;
-    fetchWorkspaces(apiFetch)
-      .then((body) => {
-        setWorkspaces(body.workspaces);
-        setWorkspaceId((current) => current || body.workspaces[0]?.id || "");
-      })
-      .catch((reason: unknown) => fail(reason instanceof Error ? reason.message : "Could not load workspaces."));
-  }, [apiFetch, user, fail]);
 
   const selectedWorkspace = workspaces.find((item) => item.id === workspaceId);
   const providerReady = Boolean(status?.douyin.installed && status?.douyin.active);
@@ -578,12 +562,6 @@ export default function Dashboard() {
         <h1>{t("downloads.heading")}</h1>
         <p>{t("downloads.intro")}</p>
       </div>
-      <label className="workspace-control">
-        <span>{t("workspace.select")}</span>
-        <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
-          {workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} · {workspace.role}</option>)}
-        </select>
-      </label>
     </section>
 
     {!workspaceId && <section className="empty-console"><h2>{t("downloads.workspaceFirst")}</h2><p>{t("downloads.workspaceOwns")}</p><Link className={buttonClass({ variant: "primary" })} href="/workspaces">{t("downloads.createWorkspace")}</Link></section>}

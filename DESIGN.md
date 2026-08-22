@@ -61,6 +61,7 @@ Concise, confident, implementation-focused.
 - Include spacing and typography token requirements.
 - Include long-content, overflow, and empty-state handling.
 - Include known page component density: buttons (71), links (17), inputs (6), navigation (1), lists (1).
+- Keep app-wide context such as workspace, account, language, and timezone in the global toolbar. A page must not repeat a global workspace selector or keep an independent workspace selection.
 
 ## Responsive acceptance
 - Verify every primary workspace at 320px, 390px, and 768px after its asynchronous content has loaded; opening dialogs and global menus is part of the check.

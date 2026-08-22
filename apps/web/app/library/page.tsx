@@ -9,6 +9,7 @@ import { apiBaseUrl } from "../../lib/api";
 import { effectLabel, effectTag } from "../../lib/i18n/effects";
 import { useAuth } from "../auth-provider";
 import { type BaseJob, useJobs } from "../jobs-provider";
+import { useWorkspace } from "../workspace-provider";
 import { useT } from "../i18n-provider";
 import { blurredVersion, handoffPath, openingCut } from "../../lib/media-rules";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
@@ -40,7 +41,6 @@ const AutoTranscribe = dynamic(() => import("./auto-transcribe").then((m) => m.A
 const TranscriptDraft = dynamic(() => import("./auto-transcribe").then((m) => m.TranscriptDraft), { ssr: false });
 const TranscriptionSwitch = dynamic(() => import("./transcription-setup").then((m) => m.TranscriptionSwitch), { ssr: false });
 
-type Workspace = { id: string; name: string; role: string };
 type ViewMode = "gallery" | "list";
 type GroupBy = "none" | "channel" | "source";
 
@@ -899,8 +899,7 @@ const isViewMode = oneOf("gallery", "list");
 export default function LibraryPage() {
   const t = useT();
   const { loading, user, apiFetch } = useAuth();
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [workspaceId, setWorkspaceId] = useState("");
+  const { workspaces, workspaceId } = useWorkspace();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -946,7 +945,6 @@ export default function LibraryPage() {
   const {
     jobs: notificationJobs,
     refresh: refreshJobs,
-    setActiveWorkspaceId,
   } = useJobs();
   const previousEffectJobStates = useRef<Map<string, string>>(new Map());
   const [message, setMessage] = useState("");
@@ -1000,10 +998,6 @@ export default function LibraryPage() {
   useEffect(() => { latestFilters.current = filters; }, [filters]);
   useEffect(() => { latestSortOrder.current = sortOrder; }, [sortOrder]);
   useEffect(() => { latestWorkspaceId.current = workspaceId; }, [workspaceId]);
-  useEffect(() => {
-    setActiveWorkspaceId(workspaceId || null);
-  }, [setActiveWorkspaceId, workspaceId]);
-
   const refresh = useCallback(async (nextWorkspace = workspaceId) => {
     if (!nextWorkspace) return;
     if (nextWorkspace !== latestWorkspaceId.current) return;
@@ -1271,20 +1265,6 @@ export default function LibraryPage() {
       window.history.replaceState({}, "", window.location.pathname);
     });
   }, [assets]);
-
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    apiFetch("/api/workspaces")
-      .then((response) => json<{ workspaces: Workspace[] }>(response))
-      .then((body) => {
-        if (cancelled) return;
-        setWorkspaces(body.workspaces);
-        setWorkspaceId(body.workspaces[0]?.id ?? "");
-      })
-      .catch((reason) => fail(reason instanceof Error ? reason.message : "Workspaces unavailable."));
-    return () => { cancelled = true; };
-  }, [apiFetch, user, fail]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -1565,11 +1545,6 @@ export default function LibraryPage() {
             </h1>
             <p>{t("library.intro")}</p>
           </div>
-          <label>{t("workspace.select")}
-            <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
-              {workspaces.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.role}</option>)}
-            </select>
-          </label>
         </header>
       </div>
 

@@ -24,7 +24,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "../auth-provider";
-import { fetchWorkspaces } from "../../lib/workspaces";
+import { useWorkspace } from "../workspace-provider";
 import { ProductTable } from "./product-table";
 import { ShopeeImport } from "./shopee-import";
 import { buttonClass } from "../ui/button";
@@ -37,7 +37,6 @@ import { useT } from "../i18n-provider";
 import { money } from "./format";
 import type { ProductRow, ProductsPayload } from "./types";
 
-type Workspace = { id: string; name: string; role: string };
 type Campaign = { id: string; name: string; affiliate_url?: string | null };
 type Plan = { id: string; campaign_id: string; title: string; platform: string; state: string };
 type Summary = {
@@ -74,8 +73,7 @@ async function json<T>(response: Response): Promise<T> {
 export default function AttributionPage() {
   const t = useT();
   const { loading, user, apiFetch } = useAuth();
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [workspaceId, setWorkspaceId] = useState("");
+  const { workspaces, workspaceId } = useWorkspace();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -157,19 +155,6 @@ export default function AttributionPage() {
       fail(reason instanceof Error ? reason.message : "Those tags could not be saved.");
     }
   }, [apiFetch, fail, succeed, workspaceId]);
-
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    fetchWorkspaces(apiFetch)
-      .then((body) => {
-        if (cancelled) return;
-        setWorkspaces(body.workspaces);
-        setWorkspaceId(body.workspaces[0]?.id ?? "");
-      })
-      .catch((reason) => fail(reason instanceof Error ? reason.message : "Workspaces unavailable."));
-    return () => { cancelled = true; };
-  }, [apiFetch, user, fail]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -256,13 +241,6 @@ export default function AttributionPage() {
         </button>
 
         <div className="attribution-bar-actions">
-          <select
-            aria-label={t("workspace.select")}
-            value={workspaceId}
-            onChange={(event) => setWorkspaceId(event.target.value)}
-          >
-            {workspaces.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
           {canImport && (
             <button
               type="button"

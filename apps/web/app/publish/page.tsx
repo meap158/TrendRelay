@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl } from "../../lib/api";
-import { fetchWorkspaces } from "../../lib/workspaces";
 import { channelUrl, displayHandle } from "../../lib/channel-links";
 import { useAuth } from "../auth-provider";
 import { useT } from "../i18n-provider";
 import { useJobs } from "../jobs-provider";
+import { useWorkspace } from "../workspace-provider";
 import {
   FeatureReach,
   PlatformIcon,
@@ -70,7 +70,6 @@ import { useCampaignUpcoming } from "./campaign-upcoming";
 type Delivery = "draft" | "schedule" | "now";
 const isDelivery = oneOf<Delivery>("draft", "schedule", "now");
 
-type Workspace = { id: string; name: string; role: string };
 /** How much a figure can be trusted, which is as important as the figure. */
 type Confidence = "measured" | "counted" | "published";
 type Allowance = {
@@ -279,9 +278,8 @@ const DISCLOSURE_KEY = "trendrelay.publish.disclosure";
 export default function PublishPage() {
   const t = useT();
   const { loading, user, apiFetch } = useAuth();
-  const { jobs: allJobs, setActiveWorkspaceId, refresh: refreshJobs } = useJobs();
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [workspaceId, setWorkspaceId] = useState("");
+  const { jobs: allJobs, refresh: refreshJobs } = useJobs();
+  const { workspaces, workspaceId } = useWorkspace();
   // Every campaign's upcoming posts, gathered off the critical path. Deployed
   // ones are named from `campaignNames`; planned ones arrive in `campaignPlanned`.
   const {
@@ -1089,10 +1087,6 @@ export default function PublishPage() {
   }, [caption, title, videoPath, mediaUrl, firstComment, thread, disclosure]);
 
   useEffect(() => {
-    setActiveWorkspaceId(workspaceId || null);
-  }, [workspaceId, setActiveWorkspaceId]);
-
-  useEffect(() => {
     if (!workspaceId) return;
     let cancelled = false;
     apiFetch(`/api/workspaces/${workspaceId}/publishing/slots`)
@@ -1112,16 +1106,6 @@ export default function PublishPage() {
       .catch(() => undefined);
     return () => { cancelled = true; };
   }, [apiFetch, workspaceId]);
-
-  useEffect(() => {
-    if (!user) return;
-    fetchWorkspaces(apiFetch)
-      .then((body) => {
-        setWorkspaces(body.workspaces);
-        setWorkspaceId(body.workspaces[0]?.id ?? "");
-      })
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load workspaces."));
-  }, [apiFetch, user]);
 
   const loadConnection = useCallback(async () => {
     const body = await json<{ connection: Connection }>(
@@ -2590,12 +2574,6 @@ export default function PublishPage() {
                 ? `via ${activeProvider.label}`
                 : "no destinations chosen"}</span>
           </div>
-
-          <label>{t("workspace.select")}
-            <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} required>
-              {workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} / {workspace.role}</option>)}
-            </select>
-          </label>
 
           {/* Where it goes, before what it says.
 

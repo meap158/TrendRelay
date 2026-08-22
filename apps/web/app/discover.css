@@ -237,7 +237,6 @@
    it, so it sits with the page's other top-level switches, not inside a board. */
 .dsc-country { --search-select-trigger-min-height: var(--control-sm); --search-select-trigger-padding: 4px 10px; display: grid; flex: 0 0 auto; grid-template-columns: auto 190px; align-items: center; gap: 6px; margin-inline-start: auto; color: var(--muted); font-size: 11px; font-weight: 600; }
 .dsc-top-bar { display: flex; align-items: center; justify-content: space-between; max-width: var(--dsc-measure); margin: 0 auto; padding: 10px 24px; border-bottom: 1px solid var(--panel-raised); font-size: 13px; color: var(--muted); }
-.dsc-ws-select { border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 4px 8px; font-size: 13px; background: var(--panel); color: var(--text); font-family: inherit; }
 .dsc-error { background: var(--bad-bg); color: var(--bad); padding: 12px 24px; font-size: 14px; text-align: center; margin: 0px; }
 .dsc-section { max-width: var(--dsc-measure); margin: 0 auto; padding: var(--dsc-space-3) var(--dsc-inset); }
 .dsc-section-title { font-size: 20px; font-weight: 400; color: var(--text); margin: 0 0 4px; }

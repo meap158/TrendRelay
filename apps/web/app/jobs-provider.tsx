@@ -3,10 +3,10 @@
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 import { useAuth } from "./auth-provider";
 import { apiBaseUrl } from "../lib/api";
-import { fetchWorkspaces } from "../lib/workspaces";
 import { effectLabel } from "../lib/i18n/effects";
 import { assetHref } from "../lib/job-links";
 import { useT } from "./i18n-provider";
+import { useWorkspace } from "./workspace-provider";
 
 type Translate = (path: string, values?: Record<string, string | number>) => string;
 type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
@@ -110,7 +110,6 @@ type JobsContextValue = {
   jobs: BaseJob[];
   busy: boolean;
   activeWorkspaceId: string | null;
-  setActiveWorkspaceId: (id: string | null) => void;
   announceEffectJobs: (jobs: any[]) => void;
   refresh: () => Promise<void>;
 };
@@ -119,27 +118,11 @@ const JobsContext = createContext<JobsContextValue | null>(null);
 
 export function JobsProvider({ children }: { children: ReactNode }) {
   const { user, apiFetch } = useAuth();
+  const { workspaceId } = useWorkspace();
   const t = useT();
   const [jobs, setJobs] = useState<BaseJob[]>([]);
   const [busy, setBusy] = useState(false);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
-
-  // Notifications are global, so their workspace cannot depend on first
-  // visiting Library, Download, or Publish. Resolve a default as soon as the
-  // signed-in shell mounts; page-level selectors can still replace it later.
-  useEffect(() => {
-    if (!user || activeWorkspaceId) return;
-    let cancelled = false;
-    void fetchWorkspaces(apiFetch)
-      .then((body) => {
-        const first = body.workspaces?.[0]?.id;
-        if (!cancelled && first) {
-          setActiveWorkspaceId((current) => current || first);
-        }
-      })
-      .catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [activeWorkspaceId, apiFetch, user]);
+  const activeWorkspaceId = workspaceId || null;
 
   const effectJob = useCallback((job: any): BaseJob => ({
     id: job.id,
@@ -365,7 +348,6 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       jobs,
       busy,
       activeWorkspaceId,
-      setActiveWorkspaceId,
       announceEffectJobs,
       refresh,
     }}>
