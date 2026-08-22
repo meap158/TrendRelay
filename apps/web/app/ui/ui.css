@@ -107,6 +107,21 @@ a.ui-button { text-decoration: none; }
 .ui-button:disabled { cursor: not-allowed; opacity: .5; }
 .ui-button:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
 
+/* --- action menu ---------------------------------------------------------- */
+/* Commands, not a selected value. The panel overlays the page so revealing
+ * more actions never moves the selected rows underneath it. */
+.ui-action-menu { position: relative; display: inline-flex; min-inline-size: 0; }
+.ui-action-menu-panel { position: fixed; z-index: 130; display: grid; padding: 5px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); box-shadow: 0 14px 34px rgb(15 23 42 / 16%); }
+.ui-action-menu-panel > button { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; inline-size: 100%; border: 0; border-radius: var(--radius-sm); padding: 9px; color: var(--text); background: transparent; text-align: start; cursor: pointer; }
+.ui-action-menu-panel > button:hover, .ui-action-menu-panel > button:focus-visible { outline: 0; background: var(--panel-raised); }
+.ui-action-menu-panel > button:focus-visible { box-shadow: inset 3px 0 0 var(--link); }
+[dir="rtl"] .ui-action-menu-panel > button:focus-visible { box-shadow: inset -3px 0 0 var(--link); }
+.ui-action-menu-panel > button[aria-disabled="true"] { cursor: not-allowed; opacity: .52; }
+.ui-action-menu-panel > button > span:last-child { display: grid; gap: 2px; min-inline-size: 0; }
+.ui-action-menu-panel strong { font-size: 12px; font-weight: 600; }
+.ui-action-menu-panel small { color: var(--muted); font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
+.ui-action-menu-icon { display: grid; place-items: center; block-size: 20px; color: var(--muted); }
+
 .ui-button-spinner {
   width: 11px;
   height: 11px;

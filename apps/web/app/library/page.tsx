@@ -29,12 +29,20 @@ import {
   type AssetFilterValues,
 } from "../ui/asset-filters";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
+import { ActionMenu, type ActionMenuItem } from "../ui/action-menu";
+import {
+  LIBRARY_SELECTION_ACTIONS,
+  selectionActionState,
+  type LibrarySelectionActionId,
+  type LibrarySelectionTarget,
+} from "../../lib/library-selection-actions";
 
 // The editors are heavy and only render inside their dialogs, so their code is
 // loaded when one opens rather than in the Library page's first bundle. ssr:false
 // because they are client-only anyway - there is nothing to render on the server.
 const CaptionEditor = dynamic(() => import("./caption-editor").then((m) => m.CaptionEditor), { ssr: false });
 const VoiceEditor = dynamic(() => import("./voice-editor").then((m) => m.VoiceEditor), { ssr: false });
+const BulkVoiceEditor = dynamic(() => import("./bulk-voice-editor").then((m) => m.BulkVoiceEditor), { ssr: false });
 const ClipEditor = dynamic(() => import("./clip-editor").then((m) => m.ClipEditor), { ssr: false });
 const EffectEditor = dynamic(() => import("./effect-editor").then((m) => m.EffectEditor), { ssr: false });
 const AutoTranscribe = dynamic(() => import("./auto-transcribe").then((m) => m.AutoTranscribe), { ssr: false });
@@ -981,7 +989,7 @@ export default function LibraryPage() {
   const [captionsOpen, setCaptionsOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [effectsOpen, setEffectsOpen] = useState(false);
-  const [batchEffectsOpen, setBatchEffectsOpen] = useState(false);
+  const [selectionAction, setSelectionAction] = useState<LibrarySelectionActionId | null>(null);
   const [cancellingEffectJobId, setCancellingEffectJobId] = useState("");
   const [clearingHistory, setClearingHistory] = useState(false);
 
@@ -1123,6 +1131,39 @@ export default function LibraryPage() {
   // stackable editor as every other effect; keeping both buttons would restore
   // the special tier this workflow removes.
   const visibleBulkActions = bulkActions.filter((action) => action.id !== "face_blur");
+  const selectionTargets: LibrarySelectionTarget[] = selectionList.map((asset) => ({
+    id: asset.id,
+    title: asset.title,
+    mediaKind: asset.media_kind,
+  }));
+  const selectionActionItems: ActionMenuItem[] = LIBRARY_SELECTION_ACTIONS.map((action) => {
+    const state = selectionActionState(action, selectionTargets);
+    const label = t(`library.selectionAction${action.id === "effects"
+      ? "Effects"
+      : action.id === "captions" ? "Captions" : "Voiceover"}`);
+    const description = t(`library.selectionAction${action.id === "effects"
+      ? "Effects"
+      : action.id === "captions" ? "Captions" : "Voiceover"}Help`);
+    const disabledReason = state.compatible.length === 0
+      ? t("library.actionNoCompatible")
+      : state.overLimit && action.maxItems
+        ? t("library.actionLimit", { count: action.maxItems })
+        : undefined;
+    return {
+      id: action.id,
+      label,
+      description,
+      disabled: !canImport || !state.enabled,
+      disabledReason,
+      icon: <ActionIcon name={action.id === "voiceover" ? "play" : "edit"} />,
+    };
+  });
+
+  function finishSelectionAction(text: string, completedIds: string[]) {
+    const completed = new Set(completedIds);
+    setSelection((current) => new Set([...current].filter((id) => !completed.has(id))));
+    setMessage(text);
+  }
 
   function toggleSelection(assetId: string, extend: boolean) {
     const next = new Set(selection);
@@ -1672,16 +1713,14 @@ export default function LibraryPage() {
                     Clear
                   </Button>
                   <span className="library-selection-tools">
-                    <Button
-                      variant="secondary"
-                      size="sm"
+                    <ActionMenu
+                      label={t("library.selectionActions")}
+                      ariaLabel={t("library.selectionActionsLabel")}
+                      icon={<ActionIcon name="edit" />}
+                      items={selectionActionItems}
                       disabled={!canImport || selectionList.length === 0}
-                      title="Build one stack of effects and apply it to every compatible selected item"
-                      onClick={() => setBatchEffectsOpen(true)}
-                    >
-                      <ActionIcon name="edit" />
-                      Apply effect stack
-                    </Button>
+                      onSelect={(id) => setSelectionAction(id as LibrarySelectionActionId)}
+                    />
                     {visibleBulkActions.map((action) => (
                       <Button
                         key={action.id}
@@ -2036,7 +2075,7 @@ export default function LibraryPage() {
       )}
       {workspaceId && selectionList.length > 0 && (
         <EffectEditor
-          open={batchEffectsOpen}
+          open={selectionAction === "effects"}
           workspaceId={workspaceId}
           targets={selectionList.map((asset) => ({
             id: asset.id,
@@ -2047,11 +2086,35 @@ export default function LibraryPage() {
           assetIds={Array.from(selection)}
           canEdit={canImport}
           apiFetch={apiFetch}
-          onClose={() => setBatchEffectsOpen(false)}
+          onClose={() => setSelectionAction(null)}
           onRendered={(text) => {
             setSelection(new Set());
             setMessage(text);
           }}
+        />
+      )}
+      {workspaceId && selectionList.length > 0 && (
+        <CaptionEditor
+          key={`bulk-captions-${selectionList.map((asset) => asset.id).join("-")}`}
+          open={selectionAction === "captions"}
+          workspaceId={workspaceId}
+          targets={selectionTargets}
+          canEdit={canImport}
+          apiFetch={apiFetch}
+          onClose={() => setSelectionAction(null)}
+          onQueued={finishSelectionAction}
+        />
+      )}
+      {workspaceId && selectionList.length > 0 && (
+        <BulkVoiceEditor
+          key={`bulk-voice-${selectionList.map((asset) => asset.id).join("-")}`}
+          open={selectionAction === "voiceover"}
+          workspaceId={workspaceId}
+          targets={selectionTargets}
+          canEdit={canImport}
+          apiFetch={apiFetch}
+          onClose={() => setSelectionAction(null)}
+          onQueued={finishSelectionAction}
         />
       )}
       {workspaceId && selected && (

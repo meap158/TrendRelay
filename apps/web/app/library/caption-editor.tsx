@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
 import { ProviderSwitch, providerOf, useMediaAi } from "./transcription-setup";
+import { useT } from "../i18n-provider";
 
 /**
  * Captions: their own class of work, not an effect.
@@ -86,18 +87,35 @@ export function CaptionEditor({
   workspaceId,
   assetId,
   assetTitle,
+  targets,
+  onQueued,
   onClose,
   apiFetch,
   canEdit,
 }: {
   open: boolean;
   workspaceId: string;
-  assetId: string;
-  assetTitle: string;
+  assetId?: string;
+  assetTitle?: string;
+  targets?: { id: string; title: string; mediaKind: string }[];
+  onQueued?: (message: string, assetIds: string[]) => void;
   onClose: () => void;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   canEdit: boolean;
 }) {
+  const t = useT();
+  const requestedTargets = useMemo(() => targets?.length
+    ? targets
+    : assetId
+      ? [{ id: assetId, title: assetTitle ?? "Media", mediaKind: "video" }]
+      : [], [assetId, assetTitle, targets]);
+  const compatibleTargets = useMemo(() => requestedTargets.filter((target) =>
+    ["video", "audio"].includes(target.mediaKind),
+  ), [requestedTargets]);
+  const skippedTargets = requestedTargets.length - compatibleTargets.length;
+  const primary = compatibleTargets[0];
+  const primaryAssetId = primary?.id ?? "";
+  const batch = requestedTargets.length > 1;
   const [catalogue, setCatalogue] = useState<StylesResponse | null>(null);
   const [styleId, setStyleId] = useState("broadcast");
   const [translateTo, setTranslateTo] = useState("");
@@ -131,12 +149,12 @@ export function CaptionEditor({
   }, [open, workspaceId, apiFetch]);
 
   const load = useCallback(async () => {
-    if (!open || !workspaceId || !assetId) return;
+    if (!open || !workspaceId || !primaryAssetId) return;
     const ticket = ++latest.current;
     setBusy(true);
     try {
       const response = await apiFetch(
-        `/api/workspaces/${workspaceId}/media/library/assets/${assetId}/captions/preview`,
+        `/api/workspaces/${workspaceId}/media/library/assets/${primaryAssetId}/captions/preview`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -160,7 +178,7 @@ export function CaptionEditor({
     } finally {
       if (ticket === latest.current) setBusy(false);
     }
-  }, [open, workspaceId, assetId, styleId, translateTo, apiFetch]);
+  }, [open, workspaceId, primaryAssetId, styleId, translateTo, apiFetch]);
 
   useEffect(() => {
     // Deferred out of the effect body: `load` sets state on its first line, and
@@ -170,14 +188,14 @@ export function CaptionEditor({
   }, [load]);
 
   const loadFiles = useCallback(async () => {
-    if (!open || !workspaceId || !assetId) return;
+    if (!open || !workspaceId || !primaryAssetId) return;
     const response = await apiFetch(
-      `/api/workspaces/${workspaceId}/media/library/assets/${assetId}/captions/files`,
+      `/api/workspaces/${workspaceId}/media/library/assets/${primaryAssetId}/captions/files`,
     );
     if (!response.ok) return;
     const body = await response.json();
     setFiles((body.files ?? []) as CaptionFile[]);
-  }, [open, workspaceId, assetId, apiFetch]);
+  }, [open, workspaceId, primaryAssetId, apiFetch]);
 
   useEffect(() => {
     queueMicrotask(() => void loadFiles());
@@ -189,7 +207,7 @@ export function CaptionEditor({
       // and carries the session, and a bare href would resolve against the web
       // app instead - a link that looks right and 404s.
       const response = await apiFetch(
-        `/api/workspaces/${workspaceId}/media/library/assets/${assetId}` +
+        `/api/workspaces/${workspaceId}/media/library/assets/${primaryAssetId}` +
           `/captions/file?path=${encodeURIComponent(file.path)}`,
       );
       if (!response.ok) {
@@ -203,38 +221,59 @@ export function CaptionEditor({
       anchor.click();
       URL.revokeObjectURL(url);
     },
-    [workspaceId, assetId, apiFetch],
+    [workspaceId, primaryAssetId, apiFetch],
   );
 
   const render = useCallback(async () => {
     setRendering(true);
     setQueued(null);
+    setProblem(null);
     try {
-      const response = await apiFetch(
-        `/api/workspaces/${workspaceId}/media/library/assets/${assetId}/captions`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            style_id: styleId,
-            translate_to: translateTo || null,
-            delivery,
-          }),
-        },
-      );
-      const body = await response.json();
-      if (!response.ok) {
-        setProblem(typeof body?.detail === "string" ? body.detail : "That did not work.");
-        return;
+      const queuedIds: string[] = [];
+      const failures: string[] = [];
+      // Four at a time keeps a large selection from turning into a browser-side
+      // request storm while still making a configured batch quick to queue.
+      for (let at = 0; at < compatibleTargets.length; at += 4) {
+        const group = compatibleTargets.slice(at, at + 4);
+        const results = await Promise.all(group.map(async (target) => {
+          const response = await apiFetch(
+            `/api/workspaces/${workspaceId}/media/library/assets/${target.id}/captions`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                style_id: styleId,
+                translate_to: translateTo || null,
+                delivery,
+              }),
+            },
+          );
+          const body = await response.json().catch(() => ({}));
+          return { target, response, body };
+        }));
+        for (const result of results) {
+          if (result.response.ok) queuedIds.push(result.target.id);
+          else failures.push(
+            typeof result.body?.detail === "string"
+              ? `${result.target.title}: ${result.body.detail}`
+              : `${result.target.title}: ${t("library.actionCouldNotStart")}`,
+          );
+        }
       }
-      setProblem(null);
       // Burning re-encodes every frame, so the honest answer is that it has
       // been queued rather than that it is done.
-      setQueued(
-        delivery === "sidecar"
+      const summary = batch
+        ? t("library.captionBatchQueued", { count: queuedIds.length })
+        : delivery === "sidecar"
           ? "Subtitle files are being written."
-          : "Queued. The captioned cut appears here when the render finishes.",
-      );
+          : "Queued. The captioned cut appears here when the render finishes.";
+      setQueued(summary);
+      if (failures.length) {
+        setProblem(
+          `${t("library.actionBatchFailed", { count: failures.length })} ${failures[0]}`,
+        );
+      }
+      if (queuedIds.length) onQueued?.(summary, queuedIds);
       // Sidecars are written almost immediately; a burn is not. Looking once
       // shortly after covers the first without pretending to wait for the
       // second, which the jobs drawer is already following.
@@ -244,7 +283,18 @@ export function CaptionEditor({
     } finally {
       setRendering(false);
     }
-  }, [workspaceId, assetId, styleId, translateTo, delivery, apiFetch, loadFiles]);
+  }, [
+    apiFetch,
+    batch,
+    compatibleTargets,
+    delivery,
+    loadFiles,
+    onQueued,
+    styleId,
+    t,
+    translateTo,
+    workspaceId,
+  ]);
 
   const chosen = catalogue?.styles.find((item) => item.id === styleId);
   // The catalogue is fetched once when the dialog opens; the provider hook keeps
@@ -274,7 +324,12 @@ export function CaptionEditor({
       open={open}
       onClose={onClose}
       title="Captions"
-      description={assetTitle}
+      description={batch && primary
+        ? t("library.selectionDialogDescription", {
+            count: compatibleTargets.length,
+            title: primary.title,
+          })
+        : primary?.title ?? assetTitle}
       size="wide"
       footer={
         <>
@@ -297,7 +352,7 @@ export function CaptionEditor({
           </label>
           <Button
             variant="primary"
-            disabled={!canEdit || !preview}
+            disabled={!canEdit || (!batch && !preview) || compatibleTargets.length === 0}
             busy={rendering}
             title={
               canEdit
@@ -306,12 +361,19 @@ export function CaptionEditor({
             }
             onClick={() => void render()}
           >
-            Create captions
+            {batch
+              ? t("library.createCaptionsFor", { count: compatibleTargets.length })
+              : "Create captions"}
           </Button>
         </>
       }
     >
       <div className="caption-editor">
+        {batch && skippedTargets > 0 && (
+          <p className="caption-editor-note">
+            {t("library.actionSkippedIncompatible", { count: skippedTargets })}
+          </p>
+        )}
         {/* The runtime is the first thing to say, because every control below
             depends on it and an empty style list would otherwise read as a
             missing feature rather than a missing install. */}
