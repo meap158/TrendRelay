@@ -32,24 +32,79 @@ def _needs_copy(item: CampaignQueueItem) -> bool:
     return item.body == _placeholder_body()
 
 
-def _asset_title(session: Session, item: CampaignQueueItem) -> str | None:
+def _asset_for(session: Session, item: CampaignQueueItem) -> Any | None:
+    """The Library asset this post is made from, if it is still in the Library.
+
+    A post can outlive its asset - the file is what gets published, and the
+    Library row is what describes it - so this answers None rather than raising
+    when the description is gone.
+    """
+    if not item.asset_id:
+        return None
+    from trendrelay_api.media_models import MediaAsset
+
+    return session.scalar(
+        select(MediaAsset).where(
+            MediaAsset.id == item.asset_id,
+            MediaAsset.workspace_id == item.workspace_id,
+        )
+    )
+
+
+def _asset_index(session: Session, items: list[CampaignQueueItem]) -> dict[str, Any]:
+    """Every asset behind a page of posts, in one query.
+
+    The title lookup below only reached the Library when a queue item had no
+    title of its own, so most cards cost nothing. Duration always needs the
+    asset, and a hundred posts needing copy would otherwise be a hundred
+    queries to draw one list.
+    """
+    ids = {item.asset_id for item in items if item.asset_id}
+    if not ids:
+        return {}
+    from trendrelay_api.media_models import MediaAsset
+
+    found = session.scalars(
+        select(MediaAsset).where(
+            MediaAsset.id.in_(ids),
+            MediaAsset.workspace_id == items[0].workspace_id,
+        )
+    ).all()
+    return {asset.id: asset for asset in found}
+
+
+def _duration_seconds(asset: Any | None) -> float | None:
+    """How long the clip runs, or None when nothing knows.
+
+    None rather than zero: a post whose asset has left the Library and a clip
+    that is genuinely empty are different answers, and rounding the first to
+    "0 seconds" would have an assistant write for a length nobody measured.
+
+    Seconds rather than milliseconds because it is read by something deciding
+    how much copy fits, and a tenth is finer than that decision needs.
+    """
+    if asset is None or asset.duration_ms is None:
+        return None
+    return round(asset.duration_ms / 1000, 1)
+
+
+def _asset_title(
+    session: Session, item: CampaignQueueItem, asset: Any | None = None
+) -> str | None:
     """The clip's own name, for the assistant to describe what it is writing for.
 
     Prefers the queue item's title, then the Library asset's title, then the
     file's own name - a path is not a name, so the extension is dropped.
+
+    `asset` is passed in by callers that have already loaded it, so a page of
+    cards does not look the same row up twice.
     """
     candidate = ""
     if item.title and item.title.strip():
         candidate = item.title.strip()
     elif item.asset_id:
-        from trendrelay_api.media_models import MediaAsset
-
-        asset = session.scalar(
-            select(MediaAsset).where(
-                MediaAsset.id == item.asset_id,
-                MediaAsset.workspace_id == item.workspace_id,
-            )
-        )
+        if asset is None:
+            asset = _asset_for(session, item)
         if asset and (asset.title or "").strip():
             candidate = asset.title.strip()
     if not candidate:
@@ -259,7 +314,10 @@ def list_campaigns(session: Session, workspace_id: str) -> list[dict[str, Any]]:
 
 
 def _post_summary(
-    session: Session, item: CampaignQueueItem, campaign: Campaign | None
+    session: Session,
+    item: CampaignQueueItem,
+    campaign: Campaign | None,
+    asset: Any | None = None,
 ) -> dict[str, Any]:
     products = _resolve_products(session, item)
     return {
@@ -267,7 +325,11 @@ def _post_summary(
         "campaign_id": item.campaign_id,
         "campaign_name": campaign.name if campaign else None,
         "media_kind": "carousel" if item.image_paths else "video",
-        "video_title": _asset_title(session, item),
+        "video_title": _asset_title(session, item, asset),
+        # How long there is to say it. A seven-second cut wants its hook in the
+        # first word and a minute-long one can breathe, and the assistant was
+        # being asked to write for a clip whose length it could not learn.
+        "duration_seconds": _duration_seconds(asset),
         "products": [
             {"product_name": p["product_name"], "commission": p["commission"]}
             for p in products
@@ -300,7 +362,14 @@ def list_posts_needing_copy(
             select(Campaign).where(Campaign.workspace_id == workspace_id)
         ).all()
     }
-    return [_post_summary(session, item, campaigns.get(item.campaign_id)) for item in items]
+    assets = _asset_index(session, list(items))
+    return [
+        _post_summary(
+            session, item, campaigns.get(item.campaign_id),
+            assets.get(item.asset_id) if item.asset_id else None,
+        )
+        for item in items
+    ]
 
 
 def get_campaign_config(session: Session, workspace_id: str, campaign_id: str) -> dict[str, Any]:
@@ -362,6 +431,7 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
     campaign = session.scalar(
         select(Campaign).where(Campaign.id == item.campaign_id)
     )
+    asset = _asset_for(session, item)
     destinations = _destinations(session, item.campaign_id, workspace_id)
     follow_up = _follow_up_landing(destinations)
     # Composed here so every destination carries a one-line "where it posts"
@@ -390,7 +460,10 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
         "campaign": get_campaign_config(session, workspace_id, item.campaign_id)
         if campaign else None,
         "media_kind": "carousel" if item.image_paths else "video",
-        "video_title": _asset_title(session, item),
+        "video_title": _asset_title(session, item, asset),
+        #: None when the asset has left the Library or never carried a
+        #: duration - which is a different answer from a clip of no length.
+        "duration_seconds": _duration_seconds(asset),
         "products": _resolve_products(session, item),
         "destinations": destination_views,
         "follow_up_landing": follow_up,

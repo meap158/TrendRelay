@@ -444,3 +444,61 @@ def test_the_tools_tab_offers_the_tunnel_test_once_configured(monkeypatch) -> No
     assert "test-tunnel" in {action["id"] for action in report["actions"]}
     # The credentials are surfaced the way every other key on the page is.
     assert "CONTROL_PLANE_API_KEY" in report["supported_secret_names"]
+
+
+def clip_with_duration(session, *, duration_ms: int | None) -> str:
+    """A queue item made from a Library asset, which is where a length lives."""
+    from trendrelay_api.media_models import MediaAsset
+
+    asset = MediaAsset(
+        workspace_id="ws", title="A studied clip", media_kind="video",
+        source_type="test", original_path=r"S:\media\studied.mp4",
+        original_sha256=f"sha{duration_ms}", mime_type="video/mp4", size_bytes=10,
+        duration_ms=duration_ms, created_by="local-admin",
+    )
+    session.add(asset)
+    session.flush()
+    session.add(CampaignQueueItem(
+        id=f"q-dur-{duration_ms}", workspace_id="ws", campaign_id="camp",
+        state="approved", created_by="local-admin",
+        video_path=r"S:\media\studied.mp4", asset_id=asset.id,
+        title="studied.mp4", body=PLACEHOLDER_BODY, hashtags=[], position=1,
+        offer_ids=[], last_posted_by_destination={},
+    ))
+    session.commit()
+    return f"q-dur-{duration_ms}"
+
+
+def test_a_post_needing_copy_says_how_long_the_clip_runs(session) -> None:
+    """How long there is to say it, which decides how the copy is written.
+
+    A seven-second cut wants its hook in the first word and a minute-long one
+    can breathe. The assistant was being asked to write for a clip whose length
+    it had no way to learn.
+    """
+    item_id = clip_with_duration(session, duration_ms=7400)
+
+    card = next(
+        post for post in context.list_posts_needing_copy(session, "ws")
+        if post["item_id"] == item_id
+    )
+    full = context.get_post_context(session, "ws", item_id)
+
+    assert card["duration_seconds"] == 7.4
+    # The same answer from both, so picking a post and writing for it never
+    # disagree about what is being written for.
+    assert full["duration_seconds"] == 7.4
+
+
+def test_an_unmeasured_clip_says_nothing_rather_than_zero(session) -> None:
+    """None is not "no length".
+
+    A post whose asset has left the Library and a clip of genuinely no length
+    are different answers, and reporting the first as zero seconds would have
+    an assistant write for a length nobody measured.
+    """
+    unmeasured = clip_with_duration(session, duration_ms=None)
+
+    assert context.get_post_context(session, "ws", unmeasured)["duration_seconds"] is None
+    # The fixture's own post is made from a path with no Library row behind it.
+    assert context.get_post_context(session, "ws", "q1")["duration_seconds"] is None

@@ -159,7 +159,8 @@ def build_server(workspace_id: str) -> FastMCP:
         name="list_posts_needing_copy",
         description=(
             "Posts that are queued but have no caption written yet. Pass a "
-            "campaign_id to narrow it. Each entry says what the clip is and what it sells."
+            "campaign_id to narrow it. Each entry says what the clip is, how "
+            "long it runs, and what it sells."
         ),
     )
     def list_posts_needing_copy(campaign_id: str | None = None) -> list[dict[str, Any]]:
@@ -171,9 +172,10 @@ def build_server(workspace_id: str) -> FastMCP:
     @server.tool(
         name="get_post_context",
         description=(
-            "Everything needed to write one post's copy: the video, the attached "
-            "product and its commission, every destination and where a follow-up "
-            "lands there, the campaign brief, and any copy already written."
+            "Everything needed to write one post's copy: the video and how long "
+            "it runs, the attached product and its commission, every destination "
+            "and where a follow-up lands there, the campaign brief, and any copy "
+            "already written."
         ),
     )
     def get_post_context(item_id: str) -> dict[str, Any]:
