@@ -110,3 +110,17 @@ def test_a_card_can_ask_for_the_form_by_name() -> None:
         "ELEVENLABS_API_KEY"
     ]
     assert fields_for("faster-whisper") == []
+
+
+def test_the_form_is_attached_by_the_route_not_by_each_card(env_file) -> None:
+    """So a tool that declares settings is configurable the moment it does.
+
+    Every card that wanted a form had to remember to ask for one, which is the
+    kind of wiring forgotten exactly once - and then a tool tells somebody to
+    edit .env from a screen built to save them that.
+    """
+    from trendrelay_api.main import _with_settings
+
+    assert [field["key"] for field in _with_settings("mcp-server")["settings"]]
+    # A model configured by being downloaded still has nothing to type.
+    assert "settings" not in _with_settings("faster-whisper")

@@ -182,10 +182,31 @@ async def tool_documentation(tool_id: str) -> dict[str, str]:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
+def _with_settings(tool_id: str) -> dict[str, object]:
+    """A tool's setup report, with its settings form attached if it has one.
+
+    Attached here rather than by each report, so a tool that needs a key is
+    configurable the moment it declares one. Every card that wanted a form had
+    to remember to ask for it, which is the kind of wiring that gets forgotten
+    exactly once - and then a tool tells somebody to edit `.env` from a screen
+    built to save them that.
+
+    A report that already carries its own settings keeps them; nothing here
+    overrides a tool that has something more particular to say.
+    """
+    from trendrelay_api.tool_settings import fields_for
+
+    report = setup_report(tool_id)
+    fields = fields_for(tool_id)
+    if fields and not report.get("settings"):
+        report["settings"] = fields
+    return report
+
+
 @app.get("/api/tools/{tool_id}/setup", tags=["tools"])
 async def tool_setup(tool_id: str) -> dict[str, object]:
     try:
-        return {"setup": await asyncio.to_thread(setup_report, tool_id)}
+        return {"setup": await asyncio.to_thread(_with_settings, tool_id)}
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Tool not found.") from error
 
@@ -257,7 +278,7 @@ async def save_tool_settings(
     # what is now stored rather than from what was typed into it.
     return {
         "written": written,
-        "setup": await asyncio.to_thread(setup_report, tool_id),
+        "setup": await asyncio.to_thread(_with_settings, tool_id),
     }
 
 
