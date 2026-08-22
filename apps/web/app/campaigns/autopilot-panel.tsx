@@ -640,12 +640,12 @@ function displayTitle(value: string | null): string | null {
  * own time rather than called done the moment the job returned. (A post still
  * in TrendRelay's queue is Planned, and is labelled where it is rendered.)
  */
-function deliveredStatus(entry: TimelineEntry): { label: string; tone: "good" | "warn" | "neutral" } {
+function deliveredStatus(entry: TimelineEntry): { label: string; tone: "good" | "warn" | "neutral" | "info" } {
   if (entry.status === "failed") return { label: "Failed", tone: "warn" };
   if (entry.status === "succeeded") {
     return new Date(entry.at).getTime() <= Date.now()
       ? { label: "Published", tone: "good" }
-      : { label: "Scheduled", tone: "good" };
+      : { label: "Scheduled", tone: "info" };
   }
   const raw = entry.status ?? "delivered";
   return { label: raw.charAt(0).toUpperCase() + raw.slice(1), tone: "neutral" };

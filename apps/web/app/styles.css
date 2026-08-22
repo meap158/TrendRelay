@@ -575,9 +575,10 @@ nav strong { color: var(--text); }
  * where it gets read. */
 .upcoming-post strong { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 12px; font-weight: 500; line-height: 1.4; }
 .upcoming-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-/* A campaign post's own label, so it is not read as a standalone one. Kept to
-   a pill and truncated, since a long campaign name should not shove the row. */
-.upcoming-campaign { overflow: hidden; max-inline-size: 14ch; padding: 1px 7px; border-radius: 999px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+/* A campaign post's own label, so it is not read as a standalone one. Shown in
+   full: the meta row wraps, so a long name drops to its own line rather than
+   being clipped when there is width to spare. */
+.upcoming-campaign { padding: 1px 7px; border-radius: 999px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-weight: 500; white-space: nowrap; }
 /* Sits beside the heading and keeps the calendar button on the right. */
 .upcoming-loading { margin-inline-end: auto; color: var(--muted); font-size: 11px; }
 

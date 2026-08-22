@@ -9,7 +9,7 @@ export function Badge({
   title,
   children,
 }: {
-  tone?: "neutral" | "good" | "warn" | "bad" | "accent";
+  tone?: "neutral" | "good" | "warn" | "bad" | "accent" | "info";
   /** For a badge one screen needs to single out among its siblings. */
   className?: string;
   /**

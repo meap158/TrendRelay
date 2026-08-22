@@ -148,6 +148,9 @@ a.ui-button { text-decoration: none; }
 .ui-badge-warn { background: #fdf5db; color: #7a5c00; }
 .ui-badge-bad { background: #f8d7da; color: #a3162a; }
 .ui-badge-accent { background: var(--green); color: #fff; }
+/* Distinct from the green "good": a blue for an upcoming, not-yet-done state
+   (Scheduled), so it never reads as the same thing as Published. */
+.ui-badge-info { background: color-mix(in srgb, var(--link) 16%, transparent); color: var(--link); }
 
 /* --- card ------------------------------------------------------------------ */
 .ui-card {

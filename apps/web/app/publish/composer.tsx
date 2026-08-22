@@ -497,13 +497,22 @@ export function localValue(value: Date) {
  * Published, and a failed one is Failed - the same vocabulary the campaign
  * timeline uses, so the two surfaces agree.
  */
-export function scheduleLabel(state: string): { label: string; tone: "good" | "warn" | "neutral" } {
+export function scheduleLabel(
+  state: string, at: Date,
+): { label: string; tone: "good" | "warn" | "neutral" | "info" } {
   switch (state) {
-    case "succeeded": return { label: "Published", tone: "good" };
     case "failed": return { label: "Failed", tone: "warn" };
     case "cancelled": return { label: "Cancelled", tone: "neutral" };
     case "planned": return { label: "Planned", tone: "neutral" };
-    default: return { label: "Scheduled", tone: "neutral" };
+    // Handed to the engine is not published: it stays Scheduled until its time
+    // comes, and is Published only once it has passed - read against the clock,
+    // not called done the moment the job returned. Scheduled gets its own tone
+    // so the two do not look alike at a glance.
+    case "succeeded":
+      return at.getTime() <= Date.now()
+        ? { label: "Published", tone: "good" }
+        : { label: "Scheduled", tone: "info" };
+    default: return { label: "Scheduled", tone: "info" };
   }
 }
 
@@ -665,8 +674,8 @@ export function UpcomingPosts({
                   {(entry.platforms ?? []).map((platform) => (
                     <PlatformIcon key={platform} platform={platform} size={14} />
                   ))}
-                  <Badge tone={scheduleLabel(entry.state).tone}>
-                    {scheduleLabel(entry.state).label}
+                  <Badge tone={scheduleLabel(entry.state, entry.at).tone}>
+                    {scheduleLabel(entry.state, entry.at).label}
                   </Badge>
                   {/* Which campaign this post belongs to, when it is one, so a
                       campaign post is not mistaken for a standalone one. */}
