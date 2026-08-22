@@ -5,8 +5,13 @@ runtime - which is the point. The reasoning being tested is about timing and
 readability, not about translation quality.
 """
 
+import sys
+import types
+
+import pytest
+
 from trendrelay_api.subtitle_formats import PRESETS, to_ass
-from trendrelay_api.subtitle_translate import installed_pairs, translate_cues
+from trendrelay_api.subtitle_translate import installed_pairs, live_translator, translate_cues
 from trendrelay_api.subtitles import Cue, Layout, Word
 
 
@@ -14,10 +19,16 @@ def cue(text: str, start_ms: int, end_ms: int) -> Cue:
     words = text.split()
     span = (end_ms - start_ms) / max(1, len(words))
     return Cue(
-        index=1, start_ms=start_ms, end_ms=end_ms, lines=[text],
+        index=1,
+        start_ms=start_ms,
+        end_ms=end_ms,
+        lines=[text],
         words=[
-            Word(text=word, start_ms=round(start_ms + span * index),
-                 end_ms=round(start_ms + span * (index + 1)))
+            Word(
+                text=word,
+                start_ms=round(start_ms + span * index),
+                end_ms=round(start_ms + span * (index + 1)),
+            )
             for index, word in enumerate(words)
         ],
     )
@@ -34,9 +45,7 @@ def test_timing_is_inherited_exactly() -> None:
 
     translated, _ = translate_cues(source, shout)
 
-    assert [(item.start_ms, item.end_ms) for item in translated] == [
-        (1500, 3200), (4000, 5100)
-    ]
+    assert [(item.start_ms, item.end_ms) for item in translated] == [(1500, 3200), (4000, 5100)]
 
 
 def test_the_text_is_actually_replaced() -> None:
@@ -125,3 +134,32 @@ def test_pairs_are_listed_from_what_is_installed() -> None:
 def test_no_runtime_means_no_pairs_rather_than_a_crash() -> None:
     """The interface asks this before offering a choice, so it must always answer."""
     assert isinstance(installed_pairs(), list)
+
+
+def test_a_downloaded_translator_still_honours_its_off_switch(monkeypatch) -> None:
+    class Translation:
+        @staticmethod
+        def translate(text):
+            return text.upper()
+
+    class Language:
+        def __init__(self, code):
+            self.code = code
+
+        def get_translation(self, other):
+            return Translation() if (self.code, other.code) == ("en", "vi") else None
+
+    english, vietnamese = Language("en"), Language("vi")
+    installed = types.ModuleType("argostranslate.translate")
+    installed.get_installed_languages = lambda: [english, vietnamese]
+    package = types.ModuleType("argostranslate")
+    package.translate = installed
+    monkeypatch.setitem(sys.modules, "argostranslate", package)
+    monkeypatch.setitem(sys.modules, "argostranslate.translate", installed)
+    monkeypatch.setattr(
+        "trendrelay_api.tool_registry.list_tools",
+        lambda: [{"id": "argos-translate", "active": False}],
+    )
+
+    with pytest.raises(RuntimeError, match="switched off"):
+        live_translator("en", "vi")

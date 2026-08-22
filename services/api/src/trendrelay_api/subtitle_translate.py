@@ -148,8 +148,20 @@ def live_translator(source_language: str, target_language: str) -> Callable[[str
         )
     translation = source.get_translation(target)
     if translation is None:
+        raise RuntimeError(f"Argos has no path from {source_language} to {target_language}.")
+    # A downloaded provider can deliberately be switched off. Honour the same
+    # switch here that speech/OCR jobs honour; otherwise Library still
+    # translates even while its control says Off.
+    from trendrelay_api.tool_registry import list_tools  # noqa: PLC0415
+
+    active = next(
+        (bool(item["active"]) for item in list_tools() if item["id"] == "argos-translate"),
+        False,
+    )
+    if not active:
         raise RuntimeError(
-            f"Argos has no path from {source_language} to {target_language}."
+            "Argos Translate is switched off. Turn it on from the transcription "
+            "switch in the Library."
         )
     return translation.translate
 
@@ -175,9 +187,11 @@ def installed_pairs(*, argos: Any = None) -> list[dict[str, str]]:
             if language.code == other.code:
                 continue
             if language.get_translation(other) is not None:
-                found.append({
-                    "from": language.code,
-                    "to": other.code,
-                    "label": f"{language.name} to {other.name}",
-                })
+                found.append(
+                    {
+                        "from": language.code,
+                        "to": other.code,
+                        "label": f"{language.name} to {other.name}",
+                    }
+                )
     return found

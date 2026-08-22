@@ -253,8 +253,21 @@ export function CaptionEditor({
   // without asking the operator to close it and come back.
   const liveSpeech = providerOf(mediaAi.state, "speech");
   const liveTranslate = providerOf(mediaAi.state, "translate");
-  const pairs = liveTranslate?.ready ? liveTranslate.pairs ?? [] : catalogue?.translation.pairs ?? [];
+  const pairs = liveTranslate
+    ? liveTranslate.ready
+      ? liveTranslate.pairs ?? []
+      : []
+    : catalogue?.translation.ready
+      ? catalogue.translation.pairs ?? []
+      : [];
   const speechReady = liveSpeech?.ready ?? catalogue?.speech.ready ?? false;
+  // The provider reports every reachable direction. The selector is for this
+  // transcript, so offering directions whose source is another language made
+  // duplicate targets and choices that could never apply to this clip.
+  const sourceLanguage = preview?.source_language ?? null;
+  const availableTranslations = sourceLanguage
+    ? pairs.filter((pair) => pair.from === sourceLanguage && pair.to !== sourceLanguage)
+    : [];
 
   return (
     <Dialog
@@ -353,18 +366,22 @@ export function CaptionEditor({
                 onToggle={(provider, on) => void mediaAi.setActive(provider, on)}
               />
             </div>
-          ) : (
+          ) : availableTranslations.length > 0 ? (
             <select
               value={translateTo}
               onChange={(event) => setTranslateTo(event.target.value)}
             >
               <option value="">As spoken — no translation</option>
-              {pairs.map((pair) => (
+              {availableTranslations.map((pair) => (
                 <option key={`${pair.from}-${pair.to}`} value={pair.to}>
-                  {pair.label}
+                  {pair.label.replace(/^.*? to /, "")}
                 </option>
               ))}
             </select>
+          ) : (
+            <p className="caption-editor-note">
+              No installed translation starts from {sourceLanguage ?? "this transcript's language"}.
+            </p>
           )}
           {translateTo && chosen?.needs_word_timings && (
             <p className="caption-editor-note">
