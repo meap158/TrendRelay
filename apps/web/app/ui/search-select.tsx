@@ -43,7 +43,7 @@ export function SearchSelect({
   value, options, onChange, placeholder, searchPlaceholder = "Search…",
   emptyLabel = "No matches", ariaLabel, disabled, searchable = true,
   clearable = true, dense = false, required = false, invalid = false,
-  triggerRef,
+  triggerRef, preferredSide = "auto",
 }: {
   value: string;
   options: SearchSelectOption[];
@@ -56,6 +56,8 @@ export function SearchSelect({
   required?: boolean;
   invalid?: boolean;
   triggerRef?: (node: HTMLButtonElement | null) => void;
+  /** Pin menus in known edge positions; auto remains the general default. */
+  preferredSide?: "auto" | "above" | "below";
   /**
    * Whether to offer the search box.
    *
@@ -185,9 +187,11 @@ export function SearchSelect({
     const above = rect.top - bounds.top - gap - margin;
     // Stay below whenever a usable list fits there, so the control keeps its
     // habitual behaviour and only flips when it would otherwise be cut off.
-    const side = below < 220 && above > below ? "above" : "below";
+    const side = preferredSide === "auto"
+      ? below < 220 && above > below ? "above" : "below"
+      : preferredSide;
     setPlacement({ side, maxHeight: Math.max(140, Math.min(320, side === "above" ? above : below)) });
-  }, []);
+  }, [preferredSide]);
 
   useLayoutEffect(() => { if (open) place(); }, [open, place]);
 

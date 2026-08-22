@@ -28,6 +28,8 @@ export type SelectProps = NativeProps & {
   value?: string | number;
   /** Search becomes useful once a list is no longer readable at a glance. */
   searchable?: boolean;
+  /** Use above for controls anchored in a fixed dialog footer. */
+  preferredSide?: "auto" | "above" | "below";
 };
 
 function optionText(node: ReactNode): string {
@@ -62,6 +64,7 @@ export function Select({
   defaultValue,
   disabled,
   onChange,
+  preferredSide,
   required,
   searchable,
   style,
@@ -156,6 +159,7 @@ export function Select({
         searchable={searchable ?? options.length > 8}
         clearable={false}
         triggerRef={(node) => { trigger.current = node; }}
+        preferredSide={preferredSide}
       />
     </span>
   );

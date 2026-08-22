@@ -345,6 +345,7 @@ export function CaptionEditor({
             <Select
               value={delivery}
               onChange={(event) => setDelivery(event.target.value)}
+              preferredSide="above"
             >
               <option value="sidecar">Subtitle files only</option>
               <option value="burned">Burned into the video</option>
