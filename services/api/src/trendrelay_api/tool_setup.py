@@ -358,6 +358,10 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                 }
             ],
         )
+    elif tool_id == "elevenlabs":
+        from trendrelay_api.integrations.elevenlabs_setup import setup_report
+
+        report.update(setup_report())
     elif tool_id == "mediacrawler":
         report.update(
             summary=(

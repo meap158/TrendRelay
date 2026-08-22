@@ -16,6 +16,7 @@ TrendRelay is a local-first Windows workspace for collecting reference media fro
 - **Avoid duplicate work** through local metadata, file checks, and incremental downloading.
 - **Review media locally** using thumbnails, filters, gallery/list views, and an in-page video player.
 - **Transcribe and translate locally** with faster-whisper speech drafts and Argos caption language packs; machine text stays separate until it is reviewed.
+- **Generate governed voiceovers** from reviewed transcripts with optional ElevenLabs setup, live free/paid allowance, regional voice search, current models, and per-take voice controls before a metered job is queued.
 - **Apply non-destructive effects** to one clip or a campaign-sized selection while keeping every original immutable.
 - **Deploy campaigns from one workspace** by filtering and selecting Library clips, applying effects, assigning social accounts, writing captions, attaching imported affiliate offers, setting posting times, previewing, and launching without leaving Campaigns.
 - **Hand approved plans to Publish** with media, copy, disclosure, affiliate placement, and schedule restored together.

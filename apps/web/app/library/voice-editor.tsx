@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
+import { SearchSelect } from "../ui/search-select";
 import { SegmentedControl } from "../ui/segmented";
+import { useT } from "../i18n-provider";
 
 /**
  * A spoken take of a clip's words.
@@ -36,6 +38,26 @@ type Voice = {
   name: string;
   category?: string | null;
   labels?: Record<string, string>;
+  description?: string | null;
+  languages: string[];
+  locales: string[];
+  regions: string[];
+  accents: string[];
+  compatible_model_ids: string[];
+  preview_url?: string | null;
+};
+
+type VoiceModel = {
+  model_id: string;
+  name: string;
+  description?: string | null;
+  languages: Array<{ language_id: string; name: string }>;
+  can_use_style: boolean;
+  can_use_speaker_boost: boolean;
+  character_cost_multiplier: number;
+  max_characters_free?: number | null;
+  max_characters_paid?: number | null;
+  maximum_text_length?: number | null;
 };
 
 type VoiceStatus = {
@@ -44,7 +66,27 @@ type VoiceStatus = {
   reason?: string | null;
   tier?: string | null;
   characters_remaining?: number | null;
+  plan_is_free?: boolean;
+  next_reset_unix?: number | null;
 };
+
+type VoiceSettings = {
+  stability: number;
+  similarity_boost: number;
+  style: number;
+  use_speaker_boost: boolean;
+  speed: number;
+};
+
+const DEFAULT_SETTINGS: VoiceSettings = {
+  stability: 0.5,
+  similarity_boost: 0.75,
+  style: 0,
+  use_speaker_boost: true,
+  speed: 1,
+};
+const NO_VOICES: Voice[] = [];
+const NO_MODELS: VoiceModel[] = [];
 
 type Transcript = {
   id: string;
@@ -53,6 +95,14 @@ type Transcript = {
   language?: string | null;
   text?: string | null;
 };
+
+type VoiceTarget = {
+  id: string;
+  title: string;
+  mediaKind: string;
+};
+
+type PreparedVoiceTarget = VoiceTarget & { transcript: Transcript | null };
 
 type Job = {
   id: string;
@@ -78,20 +128,38 @@ export function VoiceEditor({
   assetId,
   assetTitle,
   mediaKind,
+  targets,
+  onQueued,
   canEdit,
   apiFetch,
   onClose,
 }: {
   open: boolean;
   workspaceId: string;
-  assetId: string;
-  assetTitle: string;
+  assetId?: string;
+  assetTitle?: string;
   /** Only a video has a picture to put a voiceover on. */
-  mediaKind: string;
+  mediaKind?: string;
+  targets?: VoiceTarget[];
+  onQueued?: (message: string, assetIds: string[]) => void;
   canEdit: boolean;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   onClose: () => void;
 }) {
+  const t = useT();
+  const requestedTargets = useMemo<VoiceTarget[]>(() => targets?.length
+    ? targets
+    : assetId
+      ? [{ id: assetId, title: assetTitle ?? "Media", mediaKind: mediaKind ?? "video" }]
+      : [], [assetId, assetTitle, mediaKind, targets]);
+  const compatibleTargets = useMemo(
+    () => requestedTargets.filter((target) => ["video", "audio"].includes(target.mediaKind)),
+    [requestedTargets],
+  );
+  const skippedTargets = requestedTargets.length - compatibleTargets.length;
+  const primaryTarget = compatibleTargets[0];
+  const primaryAssetId = primaryTarget?.id ?? "";
+  const batch = requestedTargets.length > 1;
   /**
    * Everything the form is drawn from, in one piece.
    *
@@ -102,12 +170,18 @@ export function VoiceEditor({
    */
   const [data, setData] = useState<{
     voices: Voice[];
+    models: VoiceModel[];
     status: VoiceStatus | null;
-    transcript: Transcript | null;
+    preparedTargets: PreparedVoiceTarget[];
   } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const [voiceId, setVoiceId] = useState("");
+  const [modelId, setModelId] = useState("");
+  const [languageCode, setLanguageCode] = useState("");
+  const [languageFilter, setLanguageFilter] = useState("");
+  const [regionFilter, setRegionFilter] = useState("");
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(DEFAULT_SETTINGS);
   /** The override. Empty means "use the transcript", which is the common case. */
   const [script, setScript] = useState("");
   const [deliver, setDeliver] = useState<Deliver>("audio");
@@ -123,30 +197,48 @@ export function VoiceEditor({
     Promise.all([
       apiFetch(`/api/workspaces/${workspaceId}/media/library/voice/voices`,
         { signal: controller.signal }),
-      apiFetch(`/api/workspaces/${workspaceId}/media/library/assets/${assetId}`,
-        { signal: controller.signal }),
+      Promise.all(compatibleTargets.map((target) =>
+        apiFetch(`/api/workspaces/${workspaceId}/media/library/assets/${target.id}`,
+          { signal: controller.signal })
+          .then(async (response) => ({
+            target,
+            response,
+            payload: (await response.json()) as { transcripts?: Transcript[]; detail?: string },
+          })),
+      )),
     ])
-      .then(async ([voiceResponse, assetResponse]) => {
+      .then(async ([voiceResponse, assetResponses]) => {
         const voicePayload = (await voiceResponse.json()) as {
-          voices?: Voice[]; status?: VoiceStatus; detail?: string;
+          voices?: Voice[]; models?: VoiceModel[]; status?: VoiceStatus; detail?: string;
         };
         if (!voiceResponse.ok) {
           throw new Error(voicePayload.detail ?? "The voices could not be read.");
         }
-        const assetPayload = (await assetResponse.json()) as { transcripts?: Transcript[] };
-        // Reviewed only. A machine draft is deliberately not offered here -
-        // see the note at the top of this file.
-        const reviewed = (assetPayload.transcripts ?? []).find(
-          (item) => item.kind === "speech" && item.status === "reviewed"
-            && (item.text ?? "").trim(),
-        );
+        const preparedTargets = assetResponses.map(({ target, response, payload }) => {
+          if (!response.ok) throw new Error(payload.detail ?? `${target.title} could not be read.`);
+          // Reviewed only. A machine draft is deliberately not offered here -
+          // see the note at the top of this file.
+          const transcript = (payload.transcripts ?? []).find(
+            (item) => item.kind === "speech" && item.status === "reviewed"
+              && (item.text ?? "").trim(),
+          ) ?? null;
+          return { ...target, transcript };
+        });
+        const reviewed = preparedTargets[0]?.transcript ?? null;
         setData({
           voices: voicePayload.voices ?? [],
+          models: voicePayload.models ?? [],
           status: voicePayload.status ?? null,
-          transcript: reviewed ?? null,
+          preparedTargets,
         });
         setLoadError(null);
         setVoiceId((current) => current || voicePayload.voices?.[0]?.voice_id || "");
+        const firstModel = voicePayload.models?.[0];
+        setModelId((current) => current || firstModel?.model_id || "");
+        const transcriptLanguage = reviewed?.language?.split("-")[0]?.toLowerCase() ?? "";
+        if (transcriptLanguage && firstModel?.languages.some(
+          (item) => item.language_id === transcriptLanguage,
+        )) setLanguageCode((current) => current || transcriptLanguage);
       })
       .catch((reason: unknown) => {
         if (reason instanceof DOMException && reason.name === "AbortError") return;
@@ -156,7 +248,7 @@ export function VoiceEditor({
       });
 
     return () => controller.abort();
-  }, [open, reload, apiFetch, workspaceId, assetId]);
+  }, [open, reload, apiFetch, workspaceId, compatibleTargets]);
 
   // A job left running must not keep a timer alive behind a closed screen.
   useEffect(() => () => {
@@ -167,7 +259,7 @@ export function VoiceEditor({
     try {
       const response = await apiFetch(`/api/workspaces/${workspaceId}/media/library/voice/jobs`);
       const payload = (await response.json()) as { jobs?: Job[] };
-      const mine = (payload.jobs ?? []).find((item) => item.payload?.asset_id === assetId);
+      const mine = (payload.jobs ?? []).find((item) => item.payload?.asset_id === primaryAssetId);
       if (!mine) return;
       setJob(mine);
       if (["succeeded", "failed", "cancelled"].includes(mine.status) && polling.current) {
@@ -179,53 +271,139 @@ export function VoiceEditor({
     } catch {
       // A missed poll is not worth reporting; the next one answers.
     }
-  }, [apiFetch, workspaceId, assetId]);
+  }, [apiFetch, workspaceId, primaryAssetId]);
 
   // A recording has no picture, so the mux cannot run and the API refuses it
   // at the queue. Not offering it here means that refusal is never reached -
   // the same reason the character count is on screen beside the button.
-  const canMux = mediaKind === "video";
+  const canMux = (data?.preparedTargets ?? compatibleTargets).every(
+    (target) => target.mediaKind === "video",
+  );
   const delivery = canMux ? DELIVERY : DELIVERY.slice(0, 1);
 
-  const voices = data?.voices ?? [];
+  const voices = data?.voices ?? NO_VOICES;
+  const models = data?.models ?? NO_MODELS;
   const status = data?.status ?? null;
-  const transcript = data?.transcript ?? null;
+  const preparedTargets = data?.preparedTargets ?? [];
+  const transcript = preparedTargets[0]?.transcript ?? null;
+  const voicableTargets = preparedTargets.filter((target) => target.transcript);
+  const missingTranscripts = preparedTargets.length - voicableTargets.length;
   const loading = open && !data && !loadError;
 
   const typed = script.trim();
   const spoken = typed || (transcript?.text ?? "").trim();
-  const characters = spoken.length;
+  const scripts = batch
+    ? voicableTargets.map((target) => (target.transcript?.text ?? "").trim())
+    : [spoken];
+  const characters = scripts.reduce((sum, text) => sum + text.length, 0);
+  const largestScript = scripts.reduce((largest, text) => Math.max(largest, text.length), 0);
+  const selectedVoice = voices.find((voice) => voice.voice_id === voiceId) ?? null;
+  const selectedModel = models.find((model) => model.model_id === modelId) ?? null;
+  const languages = useMemo(
+    () => [...new Set(voices.flatMap((voice) => voice.languages))].sort(),
+    [voices],
+  );
+  const regions = useMemo(
+    () => [...new Set(voices.flatMap((voice) => voice.regions))].sort(),
+    [voices],
+  );
+  const regionNames = useMemo(() => {
+    const names = new Intl.DisplayNames(["en"], { type: "region" });
+    return Object.fromEntries(regions.map((region) => [region, names.of(region) ?? region]));
+  }, [regions]);
+  const filteredVoices = useMemo(
+    () => voices.filter((voice) =>
+      (!languageFilter || voice.languages.includes(languageFilter))
+      && (!regionFilter || voice.regions.includes(regionFilter))),
+    [voices, languageFilter, regionFilter],
+  );
+  const voiceOptions = useMemo(() => filteredVoices.map((voice) => {
+    const qualifiers = [
+      voice.accents[0],
+      voice.labels?.gender,
+      voice.labels?.age,
+      ...voice.regions.map((region) => regionNames[region]),
+      voice.category,
+    ].filter(Boolean);
+    return {
+      value: voice.voice_id,
+      label: voice.name,
+      description: qualifiers.join(" · "),
+      keywords: [voice.description, ...voice.languages, ...voice.locales,
+        ...Object.values(voice.labels ?? {})].filter(Boolean).join(" "),
+    };
+  }), [filteredVoices, regionNames]);
   const remaining = status?.characters_remaining ?? null;
+  const estimatedCredits = Math.ceil(
+    characters * (selectedModel?.character_cost_multiplier ?? 1),
+  );
+  const requestLimit = status?.plan_is_free
+    ? selectedModel?.max_characters_free
+    : selectedModel?.max_characters_paid;
+  const effectiveRequestLimit = requestLimit ?? selectedModel?.maximum_text_length ?? null;
   // Known and short is the only state worth blocking on. An unknown allowance
   // must not read as an empty account: a flaky status call is not a refusal.
-  const tooLong = remaining !== null && characters > remaining;
-  const ready = Boolean(voiceId) && characters > 0 && !tooLong && canEdit;
+  const tooLong = remaining !== null && estimatedCredits > remaining;
+  const exceedsRequest = effectiveRequestLimit !== null
+    && effectiveRequestLimit !== undefined && largestScript > effectiveRequestLimit;
+  const ready = Boolean(voiceId) && Boolean(modelId) && characters > 0
+    && !tooLong && !exceedsRequest && canEdit;
 
   async function generate() {
     setQueueing(true);
     setError(null);
     try {
-      const response = await apiFetch(
-        `/api/workspaces/${workspaceId}/media/library/assets/${assetId}/voiceover`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            voice_id: voiceId,
-            deliver,
-            // Sent only when it is an override. Left out, the API reads the
-            // reviewed transcript itself - which keeps one rule in one place
-            // rather than two that can disagree.
-            ...(typed ? { text: typed } : {}),
-            ...(!typed && transcript ? { transcript_id: transcript.id } : {}),
-          }),
-        },
-      );
-      const payload = (await response.json()) as { job?: Job; detail?: string };
-      if (!response.ok) throw new Error(payload.detail ?? "The voiceover could not be queued.");
-      setJob(payload.job ?? null);
+      const queueTargets = batch
+        ? voicableTargets
+        : preparedTargets.slice(0, 1);
+      const queuedIds: string[] = [];
+      const failures: string[] = [];
+      let firstJob: Job | null = null;
+      for (let at = 0; at < queueTargets.length; at += 4) {
+        const results = await Promise.all(queueTargets.slice(at, at + 4).map(async (target) => {
+          const response = await apiFetch(
+            `/api/workspaces/${workspaceId}/media/library/assets/${target.id}/voiceover`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                voice_id: voiceId,
+                model_id: modelId,
+                ...(languageCode ? { language_code: languageCode } : {}),
+                voice_settings: voiceSettings,
+                deliver,
+                ...(batch
+                  ? { transcript_id: target.transcript!.id }
+                  : typed
+                    ? { text: typed }
+                    : target.transcript
+                      ? { transcript_id: target.transcript.id }
+                      : {}),
+              }),
+            },
+          );
+          const payload = await response.json().catch(() => ({})) as { job?: Job; detail?: string };
+          return { target, response, payload };
+        }));
+        for (const result of results) {
+          if (result.response.ok) {
+            queuedIds.push(result.target.id);
+            firstJob ??= result.payload.job ?? null;
+          } else {
+            failures.push(`${result.target.title}: ${result.payload.detail ?? t("library.actionCouldNotStart")}`);
+          }
+        }
+      }
+      if (!queuedIds.length) throw new Error(failures[0] ?? "The voiceover could not be queued.");
+      if (batch) {
+        const summary = t("library.voiceBatchQueued", { count: queuedIds.length });
+        if (failures.length) setError(`${t("library.actionBatchFailed", { count: failures.length })} ${failures[0]}`);
+        onQueued?.(summary, queuedIds);
+      } else {
+        setJob(firstJob);
+      }
       if (polling.current) window.clearInterval(polling.current);
-      polling.current = window.setInterval(() => void refreshJob(), 2000);
+      if (!batch) polling.current = window.setInterval(() => void refreshJob(), 2000);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The voiceover could not be queued.");
     } finally {
@@ -239,7 +417,12 @@ export function VoiceEditor({
     <Dialog
       open={open}
       title="Voiceover"
-      description={assetTitle}
+      description={batch && primaryTarget
+        ? t("library.selectionDialogDescription", {
+            count: compatibleTargets.length,
+            title: primaryTarget.title,
+          })
+        : primaryTarget?.title ?? assetTitle}
       onClose={onClose}
       footer={
         <>
@@ -249,7 +432,9 @@ export function VoiceEditor({
             busy={queueing}
             disabled={!ready || queueing || Boolean(unavailable)}
             onClick={() => void generate()}
-          >Generate</Button>
+          >{batch
+            ? t("library.generateVoiceoversFor", { count: voicableTargets.length })
+            : "Generate"}</Button>
         </>
       }
     >
@@ -265,19 +450,91 @@ export function VoiceEditor({
 
       {!loading && !unavailable && (
         <>
-          <label className="voice-field">
-            <span>Voice</span>
-            <select value={voiceId} onChange={(event) => setVoiceId(event.target.value)}>
-              {voices.length === 0 && <option value="">No voices on this key</option>}
-              {voices.map((voice) => (
-                <option key={voice.voice_id} value={voice.voice_id}>
-                  {voice.name}{voice.category ? ` · ${voice.category}` : ""}
-                </option>
-              ))}
-            </select>
-          </label>
+          {batch && skippedTargets > 0 && (
+            <p className="voice-note">{t("library.actionSkippedIncompatible", { count: skippedTargets })}</p>
+          )}
+          {batch && (
+            <p className="voice-note">
+              {t("library.voiceBatchTranscriptNote")}{" "}
+              {missingTranscripts > 0
+                ? t("library.voiceBatchMissingTranscript", { count: missingTranscripts })
+                : null}
+            </p>
+          )}
+          <div className="voice-filter-grid">
+            <label className="voice-field">
+              <span>Voice language</span>
+              <select value={languageFilter} onChange={(event) => {
+                setLanguageFilter(event.target.value);
+                setVoiceId("");
+              }}>
+                <option value="">All languages</option>
+                {languages.map((language) => <option key={language} value={language}>{language}</option>)}
+              </select>
+            </label>
+            <label className="voice-field">
+              <span>Voice region</span>
+              <select value={regionFilter} onChange={(event) => {
+                setRegionFilter(event.target.value);
+                setVoiceId("");
+              }}>
+                <option value="">All countries and regions</option>
+                {regions.map((region) => (
+                  <option key={region} value={region}>{regionNames[region]} · {region}</option>
+                ))}
+              </select>
+            </label>
+          </div>
 
-          <label className="voice-field">
+          <div className="voice-field">
+            <span>Voice <em>{filteredVoices.length} available</em></span>
+            <SearchSelect
+              value={voiceId}
+              options={voiceOptions}
+              onChange={setVoiceId}
+              placeholder={voiceOptions.length ? "Choose a voice" : "No voices match these filters"}
+              searchPlaceholder="Search name, accent, country, gender, or use case…"
+              emptyLabel="No matching voices"
+              ariaLabel="ElevenLabs voice"
+              clearable={false}
+              disabled={!voiceOptions.length}
+            />
+            {selectedVoice?.description && <small>{selectedVoice.description}</small>}
+          </div>
+
+          <div className="voice-filter-grid">
+            <label className="voice-field">
+              <span>Model</span>
+              <select value={modelId} onChange={(event) => {
+                const next = event.target.value;
+                setModelId(next);
+                const supported = models.find((model) => model.model_id === next)?.languages ?? [];
+                if (languageCode && !supported.some((item) => item.language_id === languageCode)) {
+                  setLanguageCode("");
+                }
+              }}>
+                {models.length === 0 && <option value="">No TTS models available</option>}
+                {models.map((model) => (
+                  <option key={model.model_id} value={model.model_id}>{model.name}</option>
+                ))}
+              </select>
+              {selectedModel?.description && <small>{selectedModel.description}</small>}
+            </label>
+            <label className="voice-field">
+              <span>Spoken language</span>
+              <select value={languageCode} onChange={(event) => setLanguageCode(event.target.value)}>
+                <option value="">Detect from text</option>
+                {(selectedModel?.languages ?? []).map((language) => (
+                  <option key={language.language_id} value={language.language_id}>
+                    {language.name} · {language.language_id}
+                  </option>
+                ))}
+              </select>
+              <small>Restricts normalization where the selected model supports it.</small>
+            </label>
+          </div>
+
+          {!batch && <label className="voice-field">
             <span>
               Script
               {/* Which of the two is about to be spoken, said rather than
@@ -303,7 +560,7 @@ export function VoiceEditor({
                 ? "Typed words override the transcript."
                 : "Leave empty to speak the reviewed transcript. A machine draft is never voiced."}
             </small>
-          </label>
+          </label>}
 
           <div className="voice-field">
             <span>Deliver</span>
@@ -324,19 +581,59 @@ export function VoiceEditor({
             </small>
           </div>
 
+          <details className="voice-controls">
+            <summary>Voice controls</summary>
+            <div className="voice-slider-grid">
+              {([
+                ["stability", "Stability", 0, 1, 0.05],
+                ["similarity_boost", "Similarity", 0, 1, 0.05],
+                ["speed", "Speed", 0.7, 1.2, 0.05],
+                ...(selectedModel?.can_use_style
+                  ? [["style", "Style", 0, 1, 0.05] as const] : []),
+              ] as const).map(([key, label, min, max, step]) => (
+                <label key={key}>
+                  <span>{label}<output>{voiceSettings[key].toFixed(2)}</output></span>
+                  <input type="range" min={min} max={max} step={step}
+                    value={voiceSettings[key]}
+                    onChange={(event) => setVoiceSettings((current) => ({
+                      ...current, [key]: Number(event.target.value),
+                    }))} />
+                </label>
+              ))}
+              {selectedModel?.can_use_speaker_boost && (
+                <label className="voice-boost">
+                  <input type="checkbox" checked={voiceSettings.use_speaker_boost}
+                    onChange={(event) => setVoiceSettings((current) => ({
+                      ...current, use_speaker_boost: event.target.checked,
+                    }))} />
+                  <span>Speaker boost<small>Closer to the original voice; slightly slower.</small></span>
+                </label>
+              )}
+            </div>
+          </details>
+
           {/* The cost, beside what is left to spend. This is the whole reason
               the refusal lives at the queue rather than in the worker: at this
               moment it is still a number somebody can act on. */}
-          <p className={`voice-cost${tooLong ? " problem" : ""}`}>
+          <p className={`voice-cost${tooLong || exceedsRequest ? " problem" : ""}`}>
             <strong>{characters.toLocaleString()} characters</strong>
+            {selectedModel && selectedModel.character_cost_multiplier !== 1
+              ? ` · about ${estimatedCredits.toLocaleString()} credits`
+              : ""}
             {remaining === null
               ? " · allowance unknown"
-              : ` · ${remaining.toLocaleString()} left on this key`}
+              : ` · ${remaining.toLocaleString()} left on the ${status?.tier ?? "current"} plan`}
+            {status?.next_reset_unix
+              ? ` · resets ${new Date(status.next_reset_unix * 1000).toLocaleDateString()}`
+              : ""}
             {tooLong && (
               <>
-                {" "}— {(characters - remaining!).toLocaleString()} more than the plan has.
+                {" "}— {(estimatedCredits - remaining!).toLocaleString()} more than the plan has.
                 Shorten the script, or top up the plan.
               </>
+            )}
+            {exceedsRequest && effectiveRequestLimit && (
+              <> — This model accepts {effectiveRequestLimit.toLocaleString()} characters per request on this plan.</>
             )}
           </p>
 

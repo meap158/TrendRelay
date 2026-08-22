@@ -41,6 +41,7 @@ type Tool = {
   integration_status: string;
   commercial_use: "allowed" | "conditional" | "blocked";
   install_allowed: boolean;
+  install_strategy: string;
   activation_allowed: boolean;
   present: boolean;
   installed: boolean;
@@ -80,7 +81,12 @@ const SURFACES: { id: string; label: string; blurb: string; compact?: boolean }[
   {
     id: "library",
     label: "nav.library",
-    blurb: "Models that read and edit your media, on this machine.",
+    // Was "Models that read and edit your media, on this machine." That was
+    // true of every model here until one of them was a hosted service, and a
+    // group heading that promises locality over a card that reaches a third
+    // party is the page telling somebody something false about their data.
+    // Each card still says which it is; the heading no longer speaks for them.
+    blurb: "Models that read and edit your media. Each says whether it runs here or reaches out.",
   },
 ];
 
@@ -157,6 +163,9 @@ const guidedSetup = new Set([
   // The MCP server: Setup starts and stops it and shows where an assistant
   // connects and what it may do.
   "mcp-server",
+  // Hosted rather than installed: Setup owns the API key, validates it live,
+  // and shows the plan allowance before Library can spend it.
+  "elevenlabs",
 ]);
 
 /** How often to re-read a setup report while its download is running. */
@@ -735,8 +744,12 @@ export default function ToolsPage() {
             <h2>{tool.name}</h2>
             <p className="tool-summary">{tool.summary}</p>
             <div className="tool-meta">
-              <span>{tool.version === "revision-pinned" ? tool.version : `v${tool.version}`}</span>
-              <span>{tool.revision.slice(0, 12)}</span>
+              <span>{tool.install_strategy === "hosted-api"
+                ? "Hosted API"
+                : tool.version === "revision-pinned" ? tool.version : `v${tool.version}`}</span>
+              <span>{tool.install_strategy === "hosted-api"
+                ? tool.revision
+                : tool.revision.slice(0, 12)}</span>
               <a href={tool.license_url} target="_blank" rel="noreferrer">{tool.license}</a>
             </div>
             <div className="capabilities">
@@ -745,8 +758,12 @@ export default function ToolsPage() {
             {tool.block_reason && <p className="block-reason">{tool.block_reason}</p>}
             <div className="tool-footer">
               <div className="status-stack">
-                <span>{tool.installed ? "Installed" : "Not installed"}</span>
-                <span>{tool.active ? "Active" : tool.integration_status}</span>
+                <span>{tool.install_strategy === "hosted-api"
+                  ? "Hosted service"
+                  : tool.installed ? "Installed" : "Not installed"}</span>
+                <span>{tool.install_strategy === "hosted-api"
+                  ? "Key & live quota"
+                  : tool.active ? "Active" : tool.integration_status}</span>
               </div>
               <div className="tool-actions">
                 <a className={buttonClass({ variant: "quiet", size: "sm" })} href={tool.repository} target="_blank" rel="noreferrer"><ActionIcon name="link" />GitHub</a>

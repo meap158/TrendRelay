@@ -31,7 +31,9 @@ before anything can spend it - for the pre-flight check stage two owes.
 from __future__ import annotations
 
 import json
+import math
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -43,7 +45,8 @@ from trendrelay_api.integrations.engine_limits import Allowance
 #: registry here.
 API_KEY_ENV = "ELEVENLABS_API_KEY"
 
-API_ROOT = "https://api.elevenlabs.io/v1"
+API_ORIGIN = "https://api.elevenlabs.io"
+API_ROOT = f"{API_ORIGIN}/v1"
 #: Their own header name. Not `Authorization`, and not a bearer token.
 AUTH_HEADER = "xi-api-key"
 #: Long enough for a slow answer, short enough that a Tools card does not hang
@@ -73,8 +76,9 @@ def _request(path: str) -> Any:
     key = api_key()
     if not key:
         raise ElevenLabsUnavailable("No ElevenLabs API key is saved.")
+    url = f"{API_ORIGIN}{path}" if path.startswith(("/v1/", "/v2/")) else f"{API_ROOT}{path}"
     request = urllib.request.Request(
-        f"{API_ROOT}{path}",
+        url,
         headers={AUTH_HEADER: key, "Accept": "application/json"},
         method="GET",
     )
@@ -193,6 +197,9 @@ def provider_status(*, probe: bool = True) -> dict[str, Any]:
             for item in limits
         ],
         characters_remaining=limits[0].remaining if limits else None,
+        subscription_status=payload.get("status"),
+        plan_is_free=str(payload.get("tier") or "").casefold() == "free",
+        next_reset_unix=_int_or_none(payload, "next_character_count_reset_unix"),
     )
     return status
 
@@ -208,25 +215,134 @@ DEFAULT_MODEL = "eleven_multilingual_v2"
 DEFAULT_OUTPUT_FORMAT = "mp3_44100_128"
 
 
-def voices() -> list[dict[str, Any]]:
-    """The voices this key may use, trimmed to what a picker needs.
+def _region_from_locale(locale: str) -> str | None:
+    """The ISO region in a BCP-47 locale, without mistaking a script for one."""
+    for part in locale.replace("_", "-").split("-")[1:]:
+        if (len(part) == 2 and part.isalpha()) or (len(part) == 3 and part.isdigit()):
+            return part.upper()
+    return None
 
-    Whole voice objects carry sample URLs, fine-tuning state and settings that
-    nothing here reads. A picker needs a name, an id and enough to tell two
-    apart.
-    """
-    payload = _request("/voices")
-    found = payload.get("voices") if isinstance(payload, dict) else None
-    return [
+
+def _voice_view(item: dict[str, Any]) -> dict[str, Any]:
+    labels = item.get("labels") if isinstance(item.get("labels"), dict) else {}
+    verified = item.get("verified_languages")
+    languages = [row for row in (verified or []) if isinstance(row, dict)]
+    locales = sorted({str(row.get("locale")) for row in languages if row.get("locale")})
+    accents = sorted(
         {
-            "voice_id": item.get("voice_id"),
-            "name": item.get("name"),
-            "category": item.get("category"),
-            "labels": item.get("labels") or {},
+            str(value)
+            for value in [labels.get("accent"), *(row.get("accent") for row in languages)]
+            if value
+        },
+        key=str.casefold,
+    )
+    preview = item.get("preview_url") or next(
+        (row.get("preview_url") for row in languages if row.get("preview_url")), None
+    )
+    return {
+        "voice_id": item.get("voice_id"),
+        "name": item.get("name") or "Unnamed voice",
+        "category": item.get("category"),
+        "description": item.get("description"),
+        "labels": labels,
+        "languages": sorted(
+            {str(row.get("language")) for row in languages if row.get("language")}
+        ),
+        "locales": locales,
+        "regions": sorted(
+            {region for locale in locales if (region := _region_from_locale(locale))}
+        ),
+        "accents": accents,
+        "verified_languages": languages,
+        "compatible_model_ids": sorted(
+            {
+                str(value)
+                for value in [
+                    *(item.get("high_quality_base_model_ids") or []),
+                    *(row.get("model_id") for row in languages),
+                ]
+                if value
+            }
+        ),
+        "preview_url": preview,
+    }
+
+
+def voices() -> list[dict[str, Any]]:
+    """Every voice this key may use, through the current paginated v2 API."""
+    collected: list[dict[str, Any]] = []
+    next_page_token: str | None = None
+    seen_tokens: set[str] = set()
+    while True:
+        query: dict[str, str | int] = {
+            "page_size": 100,
+            "include_total_count": "false",
+            "sort": "name",
+            "sort_direction": "asc",
         }
-        for item in (found or [])
-        if isinstance(item, dict) and item.get("voice_id")
-    ]
+        if next_page_token:
+            query["next_page_token"] = next_page_token
+        payload = _request(f"/v2/voices?{urllib.parse.urlencode(query)}")
+        if not isinstance(payload, dict):
+            raise ElevenLabsUnavailable("ElevenLabs returned an invalid voice catalog.")
+        found = payload.get("voices")
+        collected.extend(item for item in (found or []) if isinstance(item, dict))
+        token = payload.get("next_page_token")
+        if not payload.get("has_more") or not isinstance(token, str) or not token:
+            break
+        if token in seen_tokens:
+            raise ElevenLabsUnavailable("ElevenLabs repeated a voice-catalog page token.")
+        seen_tokens.add(token)
+        next_page_token = token
+    return [_voice_view(item) for item in collected if item.get("voice_id")]
+
+
+def models() -> list[dict[str, Any]]:
+    """The live text-to-speech models and limits available to this key."""
+    payload = _request("/models")
+    if not isinstance(payload, list):
+        raise ElevenLabsUnavailable("ElevenLabs returned an invalid model catalog.")
+    available: list[dict[str, Any]] = []
+    for item in payload:
+        if not isinstance(item, dict) or not item.get("model_id"):
+            continue
+        if item.get("can_do_text_to_speech") is False:
+            continue
+        rates = item.get("model_rates") if isinstance(item.get("model_rates"), dict) else {}
+        available.append(
+            {
+                "model_id": item["model_id"],
+                "name": item.get("name") or item["model_id"],
+                "description": item.get("description"),
+                "languages": [
+                    {
+                        "language_id": row.get("language_id"),
+                        "name": row.get("name") or row.get("language_id"),
+                    }
+                    for row in (item.get("languages") or [])
+                    if isinstance(row, dict) and row.get("language_id")
+                ],
+                "can_use_style": bool(item.get("can_use_style")),
+                "can_use_speaker_boost": bool(item.get("can_use_speaker_boost")),
+                "character_cost_multiplier": rates.get("character_cost_multiplier")
+                if isinstance(rates.get("character_cost_multiplier"), (int, float))
+                else 1,
+                "max_characters_free": _int_or_none(item, "max_characters_request_free_user"),
+                "max_characters_paid": _int_or_none(
+                    item, "max_characters_request_subscribed_user"
+                ),
+                "maximum_text_length": _int_or_none(item, "maximum_text_length_per_request"),
+            }
+        )
+    return sorted(available, key=lambda item: (item["model_id"] != DEFAULT_MODEL, item["name"]))
+
+
+def voice_catalog() -> dict[str, Any]:
+    """One live picker payload: plan, voices and models from the same key."""
+    status = provider_status(probe=True)
+    if not status["reachable"]:
+        return {"voices": [], "models": [], "status": status}
+    return {"voices": voices(), "models": models(), "status": status}
 
 
 class AllowanceExceeded(ElevenLabsUnavailable):
@@ -244,7 +360,12 @@ def characters_in(text: str) -> int:
     return len(text)
 
 
-def check_allowance(text: str, *, status: dict[str, Any] | None = None) -> int:
+def check_allowance(
+    text: str,
+    *,
+    status: dict[str, Any] | None = None,
+    model: dict[str, Any] | None = None,
+) -> int:
     """Refuse before spending, not after. Returns what it will cost.
 
     The reason this exists at all: speech is billed per character and this
@@ -257,10 +378,28 @@ def check_allowance(text: str, *, status: dict[str, Any] | None = None) -> int:
     failed would make a flaky network look like an empty account, and the
     generation itself reports the real answer.
     """
-    cost = characters_in(text)
-    if not cost:
+    characters = characters_in(text)
+    if not characters:
         raise ElevenLabsUnavailable("There is nothing to say: the script is empty.")
     found = status if status is not None else provider_status(probe=True)
+    if model:
+        limit = model.get("max_characters_free") if found.get("plan_is_free") else model.get(
+            "max_characters_paid"
+        )
+        if not isinstance(limit, int):
+            limit = model.get("maximum_text_length")
+        if isinstance(limit, int) and characters > limit:
+            raise AllowanceExceeded(
+                f"This model accepts at most {limit:,} characters per request on the "
+                f"{found.get('tier') or 'current'} plan. This script has {characters:,}; "
+                "nothing was sent."
+            )
+    multiplier = model.get("character_cost_multiplier", 1) if model else 1
+    cost = (
+        math.ceil(characters * multiplier)
+        if isinstance(multiplier, (int, float))
+        else characters
+    )
     remaining = found.get("characters_remaining")
     if isinstance(remaining, int) and cost > remaining:
         raise AllowanceExceeded(
@@ -277,6 +416,7 @@ def synthesise(
     model_id: str = DEFAULT_MODEL,
     output_format: str = DEFAULT_OUTPUT_FORMAT,
     language_code: str | None = None,
+    voice_settings: dict[str, Any] | None = None,
 ) -> bytes:
     """One block of text as audio. Returns the bytes; writes nothing.
 
@@ -291,6 +431,8 @@ def synthesise(
     body: dict[str, Any] = {"text": text, "model_id": model_id}
     if language_code:
         body["language_code"] = language_code
+    if voice_settings:
+        body["voice_settings"] = voice_settings
     request = urllib.request.Request(
         f"{API_ROOT}/text-to-speech/{voice_id}?output_format={output_format}",
         data=json.dumps(body).encode("utf-8"),

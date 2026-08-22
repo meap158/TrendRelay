@@ -35,6 +35,7 @@ file to check; one is a cut somebody can post.
 from __future__ import annotations
 
 import hashlib
+import json
 import subprocess
 import tempfile
 from pathlib import Path
@@ -153,11 +154,24 @@ def queue(
         raise ValueError("Choose a voice before generating.")
     model_id = str(request.get("model_id") or elevenlabs.DEFAULT_MODEL)
 
+    selected_model = None
+    if request.get("model_id"):
+        selected_model = next(
+            (item for item in elevenlabs.models() if item["model_id"] == model_id), None
+        )
+        if selected_model is None:
+            raise ValueError("Choose a text-to-speech model available on this ElevenLabs key.")
+
     # Before the job exists, so a refusal is a sentence with a number in it
     # rather than a failed row somebody finds later.
-    cost = elevenlabs.check_allowance(script)
+    cost = elevenlabs.check_allowance(script, model=selected_model)
 
-    signature = ":".join([workspace_id, asset_id, voice_id, model_id, script])
+    voice_settings = request.get("voice_settings") or {}
+    settings_signature = json.dumps(voice_settings, sort_keys=True, separators=(",", ":"))
+    signature = ":".join(
+        [workspace_id, asset_id, voice_id, model_id, str(request.get("language_code") or language),
+         settings_signature, script]
+    )
     job_id = "voice_" + hashlib.sha256(signature.encode("utf-8")).hexdigest()[:24]
     with factory() as session:
         if session.get(DurableJob, job_id):
@@ -174,6 +188,7 @@ def queue(
             "voice_id": voice_id,
             "model_id": model_id,
             "language_code": request.get("language_code") or language,
+            "voice_settings": voice_settings,
             "text": script,
             # The same word the caption job uses for the same choice, so the
             # two read alike: the sound on its own, the clip with it on, or
@@ -207,6 +222,7 @@ def run_voice_job(
             voice_id=payload["voice_id"],
             model_id=payload["model_id"],
             language_code=payload.get("language_code"),
+            voice_settings=payload.get("voice_settings"),
         )
         if not audio:
             raise RuntimeError("ElevenLabs returned no audio.")

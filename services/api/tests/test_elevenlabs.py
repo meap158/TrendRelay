@@ -125,6 +125,22 @@ def test_the_allowance_is_measured_and_says_what_is_left(saved_key, monkeypatch)
     assert status["characters_remaining"] == 180_000
 
 
+def test_the_free_plan_and_reset_are_reported_live(saved_key, monkeypatch) -> None:
+    answering(
+        {
+            **PLAN,
+            "tier": "free",
+            "next_character_count_reset_unix": 1_800_000_000,
+        },
+        monkeypatch,
+    )
+
+    status = elevenlabs.provider_status()
+
+    assert status["plan_is_free"] is True
+    assert status["next_reset_unix"] == 1_800_000_000
+
+
 def test_an_unlimited_allowance_is_not_reported_as_zero(saved_key, monkeypatch) -> None:
     """No cap is a real answer, and a different one from "we do not know"."""
     answering({**PLAN, "character_limit": None}, monkeypatch)
@@ -206,3 +222,108 @@ def test_the_catalogue_says_it_reaches_out_and_needs_no_install() -> None:
     # Nothing to install: the key is the switch.
     assert tool["install_allowed"] is False
     assert tool["activation_allowed"] is False
+
+
+def test_voice_catalog_uses_the_paginated_v2_api_and_keeps_locale_metadata(
+    saved_key, monkeypatch,
+) -> None:
+    requests: list[urllib.request.Request] = []
+
+    def fake_urlopen(request, timeout=None):
+        requests.append(request)
+        url = request.full_url
+        if url.endswith("/v1/user/subscription"):
+            payload = PLAN
+        elif "/v2/voices?" in url and "next_page_token=" not in url:
+            payload = {
+                "voices": [{
+                    "voice_id": "vietnam-voice",
+                    "name": "Lan",
+                    "category": "professional",
+                    "labels": {"gender": "female", "accent": "southern"},
+                    "verified_languages": [{
+                        "language": "vi", "locale": "vi-VN", "accent": "southern",
+                        "model_id": "eleven_multilingual_v2", "preview_url": "https://audio/lan.mp3",
+                    }],
+                    "high_quality_base_model_ids": ["eleven_multilingual_v2"],
+                }],
+                "has_more": True,
+                "next_page_token": "page-2",
+            }
+        elif "/v2/voices?" in url:
+            payload = {
+                "voices": [{"voice_id": "us-voice", "name": "Alex", "labels": {}}],
+                "has_more": False,
+                "next_page_token": None,
+            }
+        elif url.endswith("/v1/models"):
+            payload = [{
+                "model_id": "eleven_multilingual_v2",
+                "name": "Multilingual v2",
+                "can_do_text_to_speech": True,
+                "languages": [{"language_id": "vi", "name": "Vietnamese"}],
+                "model_rates": {"character_cost_multiplier": 1},
+                "max_characters_request_free_user": 2_500,
+            }]
+        else:
+            raise AssertionError(url)
+        body = io.BytesIO(json.dumps(payload).encode("utf-8"))
+        body.__enter__ = lambda: body  # type: ignore[method-assign]
+        body.__exit__ = lambda *args: None  # type: ignore[method-assign]
+        return body
+
+    monkeypatch.setattr(elevenlabs.urllib.request, "urlopen", fake_urlopen)
+
+    catalog = elevenlabs.voice_catalog()
+
+    assert [voice["voice_id"] for voice in catalog["voices"]] == [
+        "vietnam-voice", "us-voice",
+    ]
+    lan = catalog["voices"][0]
+    assert lan["languages"] == ["vi"]
+    assert lan["regions"] == ["VN"]
+    assert lan["locales"] == ["vi-VN"]
+    assert lan["preview_url"] == "https://audio/lan.mp3"
+    assert catalog["models"][0]["max_characters_free"] == 2_500
+    voice_requests = [request.full_url for request in requests if "/v2/voices?" in request.full_url]
+    assert len(voice_requests) == 2
+    assert "page_size=100" in voice_requests[0]
+
+
+def test_model_cost_and_free_request_limit_are_checked_before_generation() -> None:
+    model = {
+        "character_cost_multiplier": 0.5,
+        "max_characters_free": 4,
+        "max_characters_paid": 10,
+    }
+    status = {"plan_is_free": True, "tier": "free", "characters_remaining": 10}
+
+    assert elevenlabs.check_allowance("four", status=status, model=model) == 2
+    with pytest.raises(elevenlabs.AllowanceExceeded, match="at most 4"):
+        elevenlabs.check_allowance("five!", status=status, model=model)
+
+
+def test_generation_sends_the_selected_model_language_and_voice_controls(
+    saved_key, monkeypatch,
+) -> None:
+    seen: list[urllib.request.Request] = []
+
+    def fake_urlopen(request, timeout=None):
+        seen.append(request)
+        body = io.BytesIO(b"ID3")
+        body.__enter__ = lambda: body  # type: ignore[method-assign]
+        body.__exit__ = lambda *args: None  # type: ignore[method-assign]
+        return body
+
+    monkeypatch.setattr(elevenlabs.urllib.request, "urlopen", fake_urlopen)
+
+    audio = elevenlabs.synthesise(
+        "Xin chào", voice_id="voice-vn", model_id="eleven_flash_v2_5",
+        language_code="vi", voice_settings={"stability": 0.4, "speed": 1.1},
+    )
+
+    assert audio == b"ID3"
+    payload = json.loads(seen[0].data)
+    assert payload["model_id"] == "eleven_flash_v2_5"
+    assert payload["language_code"] == "vi"
+    assert payload["voice_settings"] == {"stability": 0.4, "speed": 1.1}

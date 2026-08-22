@@ -2496,6 +2496,16 @@ def transcribe_asset(
     return {"job": job}
 
 
+class VoiceSettings(BaseModel):
+    """Per-take controls supported by ElevenLabs' text-to-speech endpoint."""
+
+    stability: float = Field(default=0.5, ge=0, le=1)
+    similarity_boost: float = Field(default=0.75, ge=0, le=1)
+    style: float = Field(default=0, ge=0, le=1)
+    use_speaker_boost: bool = True
+    speed: float = Field(default=1, ge=0.7, le=1.2)
+
+
 class VoiceRequest(BaseModel):
     """What to say, in whose voice. The script is optional on purpose.
 
@@ -2510,6 +2520,7 @@ class VoiceRequest(BaseModel):
     text: str | None = Field(default=None, max_length=20_000)
     transcript_id: str | None = Field(default=None, max_length=64)
     language_code: str | None = Field(default=None, max_length=16)
+    voice_settings: VoiceSettings | None = None
     #: The sound on its own, the clip with it on, or both - the same word the
     #: caption request uses for the same choice. Audio alone by default: it is
     #: the half worth hearing before committing to a render.
@@ -2594,13 +2605,15 @@ def available_voices(
     membership(session, workspace_id, user.id)
     from trendrelay_api.integrations import elevenlabs
 
-    status = elevenlabs.provider_status(probe=True)
-    if not status["reachable"]:
-        return {"voices": [], "status": status}
     try:
-        return {"voices": elevenlabs.voices(), "status": status}
+        return elevenlabs.voice_catalog()
     except elevenlabs.ElevenLabsUnavailable as error:
-        return {"voices": [], "status": {**status, "reason": str(error)}}
+        status = elevenlabs.provider_status(probe=False)
+        return {
+            "voices": [],
+            "models": [],
+            "status": {**status, "reachable": False, "reason": str(error)},
+        }
 
 
 @router.get("/transcription/jobs")

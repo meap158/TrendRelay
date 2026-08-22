@@ -178,6 +178,38 @@ def test_asking_twice_for_the_same_take_does_not_bill_twice() -> None:
     assert other["id"] != first["id"]
 
 
+def test_model_language_and_voice_controls_are_part_of_the_take(monkeypatch) -> None:
+    monkeypatch.setattr(
+        elevenlabs,
+        "models",
+        lambda: [{
+            "model_id": "eleven_flash_v2_5",
+            "character_cost_multiplier": 0.5,
+            "max_characters_paid": 10_000,
+        }],
+    )
+    item = asset()
+
+    first = queue(
+        item,
+        model_id="eleven_flash_v2_5",
+        language_code="vi",
+        voice_settings={"stability": 0.4, "speed": 1.1},
+    )
+    changed = queue(
+        item,
+        model_id="eleven_flash_v2_5",
+        language_code="vi",
+        voice_settings={"stability": 0.8, "speed": 1.1},
+    )
+
+    assert first["id"] != changed["id"]
+    assert first["payload"]["model_id"] == "eleven_flash_v2_5"
+    assert first["payload"]["language_code"] == "vi"
+    assert first["payload"]["voice_settings"]["stability"] == 0.4
+    assert first["payload"]["characters"] == (len(REVIEWED) + 1) // 2
+
+
 def test_a_finished_job_files_a_voiceover_version() -> None:
     """Its own kind. `edited` is deleted by "Remove effects", and `audio` is the
     clip's own extracted track - writing there would destroy the original's

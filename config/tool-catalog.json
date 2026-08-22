@@ -464,6 +464,34 @@
       "block_reason": "Ships in the API environment as an extra: pip install -e services/api[mcp]. Start and stop the server from Setup; it serves one workspace on loopback, and a tunnel you configure reaches it from outside.",
       "surface": "assistant",
       "runs": "local"
+    },
+    {
+      "id": "elevenlabs",
+      "name": "ElevenLabs",
+      "repository": "https://elevenlabs.io",
+      "revision": "v2 voices · v1 TTS",
+      "version": "current",
+      "license": "Commercial service terms",
+      "license_url": "https://elevenlabs.io/terms-of-use",
+      "category": "Voice generation",
+      "summary": "Hosted text-to-speech for voicing a clip from its own transcript. Metered per character, so the allowance is read live rather than assumed.",
+      "capabilities": [
+        "Text to speech",
+        "Searchable voices by language, region, accent, and profile",
+        "Live text-to-speech models and free-plan request limits",
+        "Character allowance and reset reported by the service",
+        "Per-generation voice controls"
+      ],
+      "integration_status": "key-and-quota",
+      "commercial_use": "allowed",
+      "install_strategy": "hosted-api",
+      "install_allowed": false,
+      "activation_allowed": false,
+      "default_active": false,
+      "block_reason": "Nothing to install: it is a hosted service and the API key is the switch.",
+      "documentation": "docs/third-party/elevenlabs.md",
+      "surface": "library",
+      "runs": "network"
     }
   ]
 }
