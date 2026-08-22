@@ -33,6 +33,7 @@ import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 // loaded when one opens rather than in the Library page's first bundle. ssr:false
 // because they are client-only anyway - there is nothing to render on the server.
 const CaptionEditor = dynamic(() => import("./caption-editor").then((m) => m.CaptionEditor), { ssr: false });
+const VoiceEditor = dynamic(() => import("./voice-editor").then((m) => m.VoiceEditor), { ssr: false });
 const ClipEditor = dynamic(() => import("./clip-editor").then((m) => m.ClipEditor), { ssr: false });
 const EffectEditor = dynamic(() => import("./effect-editor").then((m) => m.EffectEditor), { ssr: false });
 const AutoTranscribe = dynamic(() => import("./auto-transcribe").then((m) => m.AutoTranscribe), { ssr: false });
@@ -45,7 +46,12 @@ type GroupBy = "none" | "channel" | "source";
 
 type VersionEffect = { id: string; label: string };
 type Version = {
-  kind: "original" | "proxy" | "thumbnail" | "audio" | "blurred" | "edited" | "captioned";
+  kind: "original" | "proxy" | "thumbnail" | "audio" | "blurred" | "edited" | "captioned"
+    // The speech alone, and the clip carrying it. Two kinds because they are
+    // produced at different moments - the audio always, the cut only when
+    // asked for - and because "is this ready to post" is answered from this
+    // list, which one kind could not do.
+    | "voiceover" | "voiced";
   path: string;
   size_bytes: number;
   /** What produced this cut, in the order it was applied. */
@@ -110,6 +116,12 @@ function cutLabel(t: Translate, version: Version): string {
   // `blurred` cut covered a face, so saying that much is accurate where naming
   // an effect would be a guess.
   if (version.kind === "captioned") return "Captions burned in";
+  // The two halves of a voiceover, told apart. "Is this ready to post" is
+  // answered from this list, and both kinds falling through to "edited cut"
+  // made the speech and the clip carrying it indistinguishable - which is the
+  // one thing they are kept as separate kinds to avoid.
+  if (version.kind === "voiceover") return "Voiceover, on its own";
+  if (version.kind === "voiced") return "Clip with the voiceover on";
   return version.kind === "blurred"
     ? t("library.cutFacesCovered")
     : t("library.cutEdited");
@@ -944,6 +956,7 @@ export default function LibraryPage() {
   const [bulkActions, setBulkActions] = useState<BulkAction[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
   const [captionsOpen, setCaptionsOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const [effectsOpen, setEffectsOpen] = useState(false);
   const [batchEffectsOpen, setBatchEffectsOpen] = useState(false);
   const [cancellingEffectJobId, setCancellingEffectJobId] = useState("");
@@ -1873,6 +1886,19 @@ export default function LibraryPage() {
                           : "Captions need an asset with audio"}
                         onClick={() => setCaptionsOpen(true)}
                       ><ActionIcon name="edit" />Captions</Button>
+                      {/* Its own button for the same reason captions have one:
+                          it comes from the words rather than the picture, and
+                          does not stack with anything. Video or audio, because
+                          a voiceover replaces a sound track and both kinds
+                          have one. */}
+                      <Button
+                        variant="secondary"
+                        disabled={!["video", "audio"].includes(selected.media_kind)}
+                        title={["video", "audio"].includes(selected.media_kind)
+                          ? "Speak this asset's reviewed transcript in a chosen voice"
+                          : "A voiceover needs a clip to put it on"}
+                        onClick={() => setVoiceOpen(true)}
+                      ><ActionIcon name="play" />Voiceover</Button>
                     </div>
                     <EffectActivity
                       assetId={selected.id}
@@ -2045,6 +2071,18 @@ export default function LibraryPage() {
           canEdit={canImport}
           apiFetch={apiFetch}
           onClose={() => setCaptionsOpen(false)}
+        />
+      )}
+      {workspaceId && selected && (
+        <VoiceEditor
+          open={voiceOpen}
+          workspaceId={workspaceId}
+          assetId={selected.id}
+          assetTitle={selected.title}
+          mediaKind={selected.media_kind}
+          canEdit={canImport}
+          apiFetch={apiFetch}
+          onClose={() => setVoiceOpen(false)}
         />
       )}
       {workspaceId && selected && (

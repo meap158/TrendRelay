@@ -312,6 +312,14 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
   .library-list > button > span:not(.library-pick) > small { margin-inline-start: 0; }
 }
 
+@media (max-width: 360px) {
+  /* Leave room for the browser's persistent vertical scrollbar. Percentage
+     widths are resolved against the layout viewport, which can be wider than
+     its scrollable client area on Windows at this size. */
+  .library-page { width: min(100% - 32px, 1480px); }
+  .library-preview-card, .library-summary { min-inline-size: 0; max-inline-size: 100%; }
+}
+
 /* Studio face-blur tool */
 .blur-tool { display: grid; gap: 12px; }
 .blur-actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -623,6 +631,24 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
    stack. The layout follows the shape of the decision: pick a look, pick a
    language, then read the track that comes out of both. */
 .caption-editor { display: grid; gap: 18px; }
+/* The voiceover form. Laid out like the caption editor beside it, because they
+   are the same kind of thing - work that comes from the words rather than the
+   picture - and two shapes for that would be two things to learn. */
+.voice-field { display: grid; gap: 5px; margin-block-end: 14px; }
+.voice-field > span { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; color: var(--text); font-size: 11px; font-weight: 600; }
+/* Which source is about to be spoken, as a quiet aside to the label rather
+   than a badge competing with it. */
+.voice-field > span > em { color: var(--muted); font-size: 10px; font-style: normal; font-weight: 400; }
+.voice-field :is(select, textarea) { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; font-size: 12px; }
+.voice-field textarea { resize: vertical; line-height: 1.5; }
+.voice-field > small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+/* The number that decides whether to press the button, so it is the heaviest
+   line in the form rather than a footnote under it. */
+.voice-cost { display: block; margin: 0 0 12px; padding: 8px 11px; border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--muted); font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.voice-cost > strong { color: var(--text); font-size: 12px; }
+.voice-cost.problem { border-inline-start: 3px solid var(--amber); background: var(--warn-bg); }
+.voice-note { display: block; margin: 0 0 12px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.voice-note.problem { padding: 8px 11px; border-inline-start: 3px solid var(--bad); border-radius: var(--radius-sm); background: var(--bad-bg); color: var(--bad); }
 .caption-editor h4 { margin: 0 0 8px; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .caption-editor-setup { display: grid; gap: 8px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-raised); color: var(--muted); font-size: 12px; }
 .caption-editor-setup > p { margin: 0; }
