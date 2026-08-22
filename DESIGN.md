@@ -62,6 +62,14 @@ Concise, confident, implementation-focused.
 - Include long-content, overflow, and empty-state handling.
 - Include known page component density: buttons (71), links (17), inputs (6), navigation (1), lists (1).
 
+## Responsive acceptance
+- Verify every primary workspace at 320px, 390px, and 768px after its asynchronous content has loaded; opening dialogs and global menus is part of the check.
+- The document must not scroll horizontally. Wide data tables, tab strips, and dense filter rails may scroll inside an explicitly bounded region with a visible or familiar interaction pattern.
+- Let grid and flex children shrink with `min-inline-size: 0`; wrap or stack actions before allowing their labels to clip or push a panel wider than the viewport.
+- Keep narrow-screen gutters and card padding compact through shared tokens or component variables. Do not remove separation that communicates grouping merely to save pixels.
+- Dropdown panels must fit the viewport while remaining wide enough to read their longest common option. Prefer logical inset properties so the same rule works in left-to-right and right-to-left locales.
+- Test the fully loaded, error, empty, and selected states. A layout that fits only before data arrives is not responsive.
+
 - Extraction diagnostics: Limited typography variety detected; size scale may need manual refinement. Audience and product surface inference confidence is low; verify generated brand context.
 
 ## Quality Gates

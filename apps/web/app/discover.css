@@ -191,7 +191,7 @@
 .dsc-tagline { font-size: 13px; color: var(--muted); margin: 0 0 var(--dsc-space-2); font-weight: 400; }
 .dsc-search-form { display: flex; align-items: center; width: 100%; max-width: 620px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 999px; padding: 6px 8px 6px 16px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; }
 .dsc-search-form:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-line); }
-.dsc-search-input { flex: 1; border: none; outline: none; font-size: 16px; padding: 10px 8px; background: transparent; color: var(--text); font-family: inherit; }
+.dsc-search-input { flex: 1 1 auto; min-inline-size: 0; border: none; outline: none; font-size: 16px; padding: 10px 8px; background: transparent; color: var(--text); font-family: inherit; }
 .dsc-tiktok-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .dsc-tiktok-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .dsc-tiktok-select { border: 1px solid var(--line-strong); border-radius: 16px; padding: 6px 12px; font-size: 12px; background: var(--panel); color: var(--text); font-family: inherit; cursor: pointer; }
@@ -349,4 +349,12 @@
   .dsc-country { grid-template-columns: auto minmax(0, 1fr); margin-inline-start: 0; }
   .dsc-tiktok-row { grid-template-columns: 24px minmax(0, 1fr); gap: 8px; padding: 10px; }
   .dsc-tiktok-metrics, .dsc-tiktok-row > .dsc-board-actions { grid-column: 2; justify-self: start; flex-wrap: wrap; white-space: normal; }
+}
+
+@media (max-width: 360px) {
+  .dsc-hero { min-inline-size: 0; padding-inline: 8px; }
+  .dsc-search-form { min-inline-size: 0; padding-inline: 10px 6px; }
+  .dsc-pill-row { min-inline-size: 0; max-inline-size: 100%; }
+  .news-board, .news-board-head, .news-board-controls { min-inline-size: 0; max-inline-size: 100%; }
+  .news-board-controls > [role="group"] button { padding-inline: 6px; }
 }

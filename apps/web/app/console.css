@@ -130,7 +130,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
    adjacent dropdowns that differ by a few pixels read as two different kinds of
    thing. They were a native select with hardcoded greys beside an app-styled
    one, which is exactly how that looks. */
-.toolbar-picker { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); font-size: 12px; }
+.toolbar-picker { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; min-width: 0; color: var(--muted); font-size: 12px; }
 .toolbar-picker .search-select-trigger { min-height: 30px; padding: 4px 8px; font-size: 12px; }
 /* Compact hides the word, not the label: an unlabelled control announces only
    its current value to a screen reader. */
@@ -143,6 +143,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
    "Buenos Aires · UTC-3", so the reserve comes down with it - toolbar width is
    the scarcest space on the page and it was being held for a string nobody
    reads. */
+.timezone-picker { --search-select-popover-inset-inline: 0 auto; --search-select-popover-width: min(280px, calc(100vw - 24px)); }
+.language-picker { --search-select-popover-inset-inline: auto 0; --search-select-popover-width: min(210px, calc(100vw - 24px)); }
 .timezone-picker .search-select { width: clamp(124px, 13vw, 168px); }
 .language-picker .search-select { width: clamp(96px, 10vw, 128px); }
 .notification-shell { position: relative; }
@@ -350,6 +352,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 
 @media (max-width: 640px) {
   main { width: min(100% - 16px, 1240px); }
+  .research-page, .tools-page, .publish-page, .auth-page, .workspace-page { padding-top: 12px; }
   .console-heading { display: grid; padding-top: 16px; }
   .workspace-control { min-width: 0; }
   .pipeline-steps { grid-template-columns: 1fr; }
@@ -361,6 +364,25 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .app-nav a { flex: 1 1 auto; justify-content: center; min-width: 40px; padding-inline: 8px; }
   .app-nav a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .app-nav a svg { width: 18px; height: 18px; }
+}
+
+@media (max-width: 430px) {
+  .app-toolbar { grid-template-columns: 24px minmax(0, 1fr); gap: 8px; padding-inline: 10px; }
+  .app-brand strong { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .toolbar-actions { justify-content: flex-end; gap: 6px; }
+  .notification-panel { width: min(390px, calc(100vw - 40px)); }
+  .timezone-picker .search-select { width: 124px; }
+  .language-picker .search-select { width: 96px; }
+}
+
+@media (max-width: 360px) {
+  .app-toolbar { gap: 6px; padding-inline: 8px; }
+  .toolbar-actions { gap: 4px; }
+  .timezone-picker { --search-select-popover-width: min(240px, calc(100vw - 16px)); }
+  .language-picker { --search-select-popover-width: min(180px, calc(100vw - 16px)); }
+  .timezone-picker .search-select { width: 112px; }
+  .language-picker .search-select { width: 80px; }
+  .local-admin-badge { display: none; }
 }
 
 .local-admin-badge {
@@ -1505,13 +1527,15 @@ html { scroll-behavior: smooth; }
 }
 @media (max-width: 600px) {
   .campaign-heading, .campaign-summary { display: grid; }
+  .campaign-layout, .campaign-workspace, .campaign-summary, .autopilot,
+  .campaign-one-off-handoff, .autopilot-run-row, .autopilot-delivery { min-inline-size: 0; }
+  .autopilot-delivery { display: grid; grid-template-columns: minmax(0, 1fr); inline-size: 100%; }
+  .autopilot-delivery select { inline-size: 100%; min-inline-size: 0; }
   .campaign-dialog-grid { grid-template-columns: 1fr; }
   .campaign-media-grid { grid-template-columns: 1fr; }
-  /* Back to two lines where one will not fit: the gloss beside the count
-     needs the width, and a tab strip that wraps to four rows is worse than
-     one that is two lines tall. */
-  .campaign-work-tabs button { grid-template-columns: auto auto; }
-  .campaign-work-tabs small { grid-column: 1 / -1; }
+  .campaign-work-tabs { flex-wrap: nowrap; }
+  .campaign-work-tabs button { flex: 1 1 0; grid-template-columns: auto auto; justify-content: center; min-inline-size: 0; }
+  .campaign-work-tabs small { display: none; }
   .campaign-one-off-handoff { display: grid; }
   .campaign-reply-editor > div { grid-template-columns: 1fr; }
 }
@@ -1632,6 +1656,14 @@ html { scroll-behavior: smooth; }
 .autopilot-queue > li.just-linked { outline: 2px solid var(--link); outline-offset: 2px; border-radius: var(--radius-sm); }
 @media (prefers-reduced-motion: no-preference) {
   .autopilot-queue > li.just-linked { transition: outline-color .3s ease-out; }
+}
+
+@media (max-width: 360px) {
+  article.ui-card:has(.campaign-pipeline) .ui-card-aside, .campaign-timeline-tools { inline-size: 100%; min-inline-size: 0; max-inline-size: 100%; }
+  .campaign-timeline-tools { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .campaign-timeline-tools > [role="group"] { display: flex; inline-size: 100%; }
+  .campaign-timeline-tools > [role="group"] button { flex: 1 1 0; justify-content: center; min-inline-size: 0; padding-inline: 5px; }
+  .campaign-timeline-tools > .ui-button { inline-size: 100%; }
 }
 /* The absence of a product is a fact about the post, so it is set apart from
    the products themselves rather than dressed as one. */

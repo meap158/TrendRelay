@@ -156,8 +156,9 @@ a.ui-button { text-decoration: none; }
 .ui-card {
   display: grid;
   align-content: start;
+  min-inline-size: 0;
   gap: 12px;
-  padding: 14px;
+  padding: var(--ui-card-padding, 14px);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
   background: var(--panel);
@@ -298,8 +299,8 @@ a.ui-button { text-decoration: none; }
    measures the space against whatever ancestor would cut the list off and sets
    the height. The search box keeps its own height while the list underneath
    takes what is left, so a constrained list scrolls rather than overflowing. */
-.search-select-popover { position: absolute; z-index: 80; inset: calc(100% + 4px) 0 auto; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; padding: 8px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); box-shadow: 0 14px 34px rgb(15 23 42 / 16%); }
-.search-select-popover[data-side="above"] { inset: auto 0 calc(100% + 4px); box-shadow: 0 -14px 34px rgb(15 23 42 / 16%); }
+.search-select-popover { position: absolute; z-index: 80; inset-block: calc(100% + 4px) auto; inset-inline: var(--search-select-popover-inset-inline, 0); inline-size: var(--search-select-popover-width, auto); display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; padding: 8px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); box-shadow: 0 14px 34px rgb(15 23 42 / 16%); }
+.search-select-popover[data-side="above"] { inset-block: auto calc(100% + 4px); inset-inline: var(--search-select-popover-inset-inline, 0); box-shadow: 0 -14px 34px rgb(15 23 42 / 16%); }
 .search-select-popover > input { width: 100%; min-height: 36px; padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--text); font: inherit; }
 .search-select-list { display: grid; overflow-y: auto; overscroll-behavior: contain; }
 .search-select-list button { display: grid; gap: 2px; width: 100%; padding: 8px 9px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text); text-align: start; cursor: pointer; }

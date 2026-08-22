@@ -228,9 +228,21 @@
 
 @media (max-width: 700px) {
   .product-toolbar { align-items: stretch; }
-  .product-search { flex-basis: 100%; }
-  .product-bulk { inline-size: 100%; padding: 8px 0 0; border-inline-start: 0; border-block-start: 1px solid var(--line); }
-  .product-bulk-count { margin-inline-end: auto; }
+  .product-search { flex-basis: 100%; min-inline-size: 0; }
+  .product-filters { display: grid; grid-template-columns: minmax(0, 1fr); inline-size: 100%; min-inline-size: 0; }
+  .product-filter { inline-size: 100%; max-inline-size: none; min-inline-size: 0; }
+  .product-filter-dates { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+  .product-bulk { flex-wrap: wrap; inline-size: 100%; min-inline-size: 0; padding: 8px 0 0; border-inline-start: 0; border-block-start: 1px solid var(--line); }
+  .product-bulk-count { flex: 1 1 auto; min-inline-size: 0; margin-inline-end: auto; }
+  .product-tag-campaign { flex: 1 1 180px; inline-size: auto; max-inline-size: none; min-inline-size: 0; }
+}
+
+@media (max-width: 430px) {
+  .attribution-page { width: min(100% - 16px, 1480px); padding-block-start: 8px; }
+  .attribution-heading { gap: 8px 12px; margin-block-end: 10px; padding: 10px 12px; }
+  .attribution-view { gap: 10px; --ui-card-padding: 10px; }
+  .product-toolbar { gap: 8px; margin-block-end: 8px; }
+  .product-table th, .product-table td { padding: 8px; }
 }
 
 /* The picture, which is what the offer page leads every card with: a product
