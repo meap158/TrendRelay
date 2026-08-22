@@ -1,7 +1,7 @@
 """Action-oriented operating procedures exposed to MCP callers.
 
 The catalogue is intentionally filesystem-backed: adding a reviewed Markdown
-file under ``docs/sops`` is enough to make a new procedure discoverable.  The
+file under ``SOP`` is enough to make a new procedure discoverable.  The
 front matter is validated on every read so duplicate action names or malformed
 entries fail visibly instead of sending an assistant ambiguous instructions.
 """
@@ -15,7 +15,12 @@ import yaml
 
 from trendrelay_api.tool_registry import PROJECT_ROOT
 
-SOP_ROOT = PROJECT_ROOT / "docs" / "sops"
+SOP_ROOT = PROJECT_ROOT / "SOP"
+MCP_GUIDE_PATH = SOP_ROOT / "MCP_GUIDE.md"
+CONTROL_TOWER_PATH = SOP_ROOT / "CONTROL_TOWER.md"
+_CATALOG_RESERVED = frozenset(
+    {"README.md", MCP_GUIDE_PATH.name, CONTROL_TOWER_PATH.name}
+)
 _REQUIRED_TEXT = ("id", "action", "title", "summary")
 
 
@@ -71,7 +76,11 @@ def _read(path: Path) -> dict[str, Any]:
 def _entries() -> list[dict[str, Any]]:
     if not SOP_ROOT.is_dir():
         return []
-    entries = [_read(path) for path in sorted(SOP_ROOT.rglob("*.md")) if path.name != "README.md"]
+    entries = [
+        _read(path)
+        for path in sorted(SOP_ROOT.rglob("*.md"))
+        if path.name not in _CATALOG_RESERVED
+    ]
     owners: dict[str, str] = {}
     for entry in entries:
         for candidate in (entry["id"], entry["action"], *entry["aliases"]):
@@ -90,7 +99,10 @@ def list_sops(action: str | None = None) -> list[dict[str, Any]]:
     if action:
         wanted = _selector(action)
         entries = [entry for entry in entries if wanted in _selectors(entry)]
-    return [{key: value for key, value in entry.items() if key != "markdown"} for entry in entries]
+    return [
+        {key: value for key, value in entry.items() if key != "markdown"}
+        for entry in entries
+    ]
 
 
 def get_sop(action: str) -> dict[str, Any]:
@@ -132,3 +144,28 @@ def catalogue_markdown() -> str:
     if not entries:
         lines.append("No SOPs are installed.\n")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _guidance_file(path: Path, label: str) -> str:
+    """Read a canonical MCP guidance file, failing clearly if it was omitted."""
+    if not path.is_file():
+        raise FileNotFoundError(f"The canonical {label} file is missing: {path}")
+    content = path.read_text(encoding="utf-8").strip()
+    if not content:
+        raise ValueError(f"The canonical {label} file is empty: {path}")
+    return content + "\n"
+
+
+def mcp_guide_markdown() -> str:
+    return _guidance_file(MCP_GUIDE_PATH, "MCP guide")
+
+
+def control_tower_markdown() -> str:
+    return _guidance_file(CONTROL_TOWER_PATH, "MCP control tower")
+
+
+def server_instructions(base: str) -> str:
+    """Initialization guidance read from the same files MCP resources expose."""
+    return "\n\n".join(
+        [base.strip(), mcp_guide_markdown().strip(), control_tower_markdown().strip()]
+    )

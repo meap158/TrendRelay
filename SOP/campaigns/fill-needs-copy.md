@@ -7,7 +7,7 @@ version: 1
 tags: [campaigns, copywriting, needs-copy]
 aliases: [fill-campaign-needs-copy, campaigns.needs-copy, write-campaign-copy]
 ---
-# Adaptive TrendRelay campaign copy workflow
+# Adaptive campaign copy workflow for TrendRelay
 
 This SOP applies to every TrendRelay campaign, with campaign-specific behavior determined dynamically from the live MCP context.
 

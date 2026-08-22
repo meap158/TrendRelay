@@ -26,7 +26,7 @@ never approves or publishes them; that stays a person's decision, in the app.
 | Exposure policy | `integrations/mcp/policy.py` | Which operations an MCP caller may invoke. Default is refusal. |
 | Read context | `integrations/mcp/context.py` | The reads: the posts needing copy, and the context to write it. |
 | Copy writes | `integrations/mcp/writes.py` | The one kind of write — a post's copy — through the interface's own edit helper. |
-| SOP catalog | `integrations/mcp/sops.py`, `docs/sops/` | Validated action metadata and reviewed Markdown procedures, exposed as tools and resources. |
+| SOP catalog | `integrations/mcp/sops.py`, `SOP/` | Canonical MCP guide, control tower, and validated action procedures exposed as instructions, tools, and resources. |
 | MCP server | `integrations/mcp/server.py` | Serves the allowed tools over Streamable HTTP on `127.0.0.1`. |
 | Server supervision | `integrations/mcp/service.py` | Starts/stops the server subprocess, an atomic status file, a status reader. |
 | Tunnel config & health | `integrations/mcp/tunnel.py` | The tunnel's settings, command line and `doctor` check, in one place. |
@@ -89,7 +89,10 @@ added.
 
 ### SOPs are selected by action
 
-Reviewed procedures live as Markdown under `docs/sops/`. Each file declares a
+Reviewed procedures live as Markdown under the repository's top-level `SOP/`
+directory. `MCP_GUIDE.md` and `CONTROL_TOWER.md` are loaded into the server's
+initialization instructions and exposed at `trendrelay://mcp/guide` and
+`trendrelay://mcp/control-tower`. Each action file declares a
 canonical action plus unique aliases in YAML front matter. `list_sops` and
 `get_sop` expose the catalog as read-only tools; `trendrelay://sops` and
 `trendrelay://sops/{action}` expose the same source as MCP resources. Both paths

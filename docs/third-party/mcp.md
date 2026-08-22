@@ -23,8 +23,11 @@ Before acting, it discovers the reviewed procedure for that action:
 - `get_sop` returns the full procedure for the selected action.
 - MCP resources expose the same source as `trendrelay://sops` and
   `trendrelay://sops/{action}` for clients that consume resources directly.
+- `trendrelay://mcp/guide` and `trendrelay://mcp/control-tower` expose the exact
+  general guidance files also included in the MCP initialization instructions.
 
-The catalog is backed by [`docs/sops`](../sops/README.md). Adding a validated
+The catalog is backed by the top-level [`SOP/`](../../SOP/README.md) directory.
+Adding a validated
 Markdown entry there exposes it without adding another server handler. The
 first action is `campaigns.fill-needs-copy`.
 
@@ -126,7 +129,7 @@ than a 404 that reads as broken.
 | --- | --- |
 | Exposure policy | `services/api/src/trendrelay_api/integrations/mcp/policy.py` |
 | Read context | `services/api/src/trendrelay_api/integrations/mcp/context.py` |
-| SOP catalog | `services/api/src/trendrelay_api/integrations/mcp/sops.py`, `docs/sops/` |
+| SOP catalog and guidance | `services/api/src/trendrelay_api/integrations/mcp/sops.py`, `SOP/` |
 | Copy writes | `services/api/src/trendrelay_api/integrations/mcp/writes.py` |
 | Server | `services/api/src/trendrelay_api/integrations/mcp/server.py` |
 | Supervisor + status | `services/api/src/trendrelay_api/integrations/mcp/service.py` |

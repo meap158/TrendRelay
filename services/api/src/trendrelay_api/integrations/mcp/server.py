@@ -56,7 +56,7 @@ def build_server(workspace_id: str) -> FastMCP:
     mcp_port = service.port()
     server = FastMCP(
         name="TrendRelay",
-        instructions=INSTRUCTIONS,
+        instructions=sops.server_instructions(INSTRUCTIONS),
         host="127.0.0.1",
         port=mcp_port,
         # Stateful Streamable HTTP, the mode a standard MCP client and the tunnel
@@ -88,6 +88,24 @@ def build_server(workspace_id: str) -> FastMCP:
     )
     for _path in _well_known:
         server.custom_route(_path, methods=["GET"])(_resource_metadata)
+
+    @server.resource(
+        "trendrelay://mcp/guide",
+        name="TrendRelay MCP guide",
+        description="The canonical instructions for an AI connected to TrendRelay MCP.",
+        mime_type="text/markdown",
+    )
+    def mcp_guide() -> str:
+        return sops.mcp_guide_markdown()
+
+    @server.resource(
+        "trendrelay://mcp/control-tower",
+        name="TrendRelay MCP control tower",
+        description="Routes an intended action to the reviewed SOP and first live operation.",
+        mime_type="text/markdown",
+    )
+    def mcp_control_tower() -> str:
+        return sops.control_tower_markdown()
 
     @server.resource(
         "trendrelay://sops",
