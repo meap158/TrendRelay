@@ -663,19 +663,21 @@ export default function CampaignsPage() {
           <div className="card-heading">
             <div>
               <p className="section-kicker">{t("campaigns.listHeading")}</p>
-              <h2>{campaignsReady ? currentCampaigns.length : "—"} current</h2>
+              <h2>{campaignsReady
+                ? t("campaigns.currentCount", { count: currentCampaigns.length })
+                : "—"}</h2>
             </div>
             {campaignsReady && (
               <label className="campaign-scope-filter">
-                <span className="sr-only">Campaign visibility</span>
+                <span className="sr-only">{t("campaigns.visibility")}</span>
                 <select
-                  aria-label="Campaign visibility"
+                  aria-label={t("campaigns.visibility")}
                   value={campaignScope}
                   onChange={(event) => changeCampaignScope(event.target.value as CampaignScope)}
                 >
-                  <option value="current">Current ({currentCampaigns.length})</option>
-                  <option value="archived">Archived ({archivedCampaigns.length})</option>
-                  <option value="all">All ({campaigns.length})</option>
+                  <option value="current">{t("campaigns.scopeCurrent", { count: currentCampaigns.length })}</option>
+                  <option value="archived">{t("campaigns.scopeArchived", { count: archivedCampaigns.length })}</option>
+                  <option value="all">{t("campaigns.scopeAll", { count: campaigns.length })}</option>
                 </select>
               </label>
             )}
@@ -703,9 +705,9 @@ export default function CampaignsPage() {
             ))}
             {campaignsReady && !visibleCampaigns.length && (
               <p>{campaignScope === "archived"
-                ? "No archived campaigns."
+                ? t("campaigns.noArchived")
                 : campaignScope === "current" && archivedCampaigns.length
-                  ? "No current campaigns. Archived campaigns are available above."
+                  ? t("campaigns.archivedAvailable")
                   : t("campaigns.empty")}</p>
             )}
           </div>
@@ -731,7 +733,7 @@ export default function CampaignsPage() {
                 <div className="campaign-status-actions">
                   <Link href={`/attribution?campaign=${encodeURIComponent(selectedCampaign.id)}`}><ActionIcon name="link" />{t("campaigns.measureRevenue")}</Link>
                   {canCreateCampaign && selectedCampaign.status === "archived" && (
-                    <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("draft")}><ActionIcon name="play" />Restore</Button>
+                    <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("draft")}><ActionIcon name="play" />{t("campaigns.restore")}</Button>
                   )}
                   {canCreateCampaign && selectedCampaign.status !== "archived" && (
                     <Button variant="secondary" size="sm" onClick={() => void setCampaignStatus("archived")}><ActionIcon name="archive" />{t("campaigns.archive")}</Button>
@@ -785,16 +787,18 @@ export default function CampaignsPage() {
           ) : (
             <section className="empty-console">
               <h2>{campaignScope === "archived"
-                ? "No archived campaigns"
+                ? t("campaigns.noArchived")
                 : campaignScope === "current" && archivedCampaigns.length
-                  ? "No current campaigns"
+                  ? t("campaigns.noCurrent")
                   : t("campaigns.createToStart")}</h2>
               <p>{campaignScope === "current" && archivedCampaigns.length
-                ? "Archived campaigns stay hidden from daily operations until you choose to review or restore them."
+                ? t("campaigns.archivedHiddenHelp")
                 : t("campaigns.whatItConnects")}</p>
               {campaignScope === "current" && archivedCampaigns.length > 0 && (
                 <Button variant="secondary" onClick={() => changeCampaignScope("archived")}>
-                  <ActionIcon name="archive" />View archived ({archivedCampaigns.length})
+                  <ActionIcon name="archive" />{t("campaigns.viewArchived", {
+                    count: archivedCampaigns.length,
+                  })}
                 </Button>
               )}
             </section>
