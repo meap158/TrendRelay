@@ -141,8 +141,7 @@ def check_provider() -> int:
     elif cookie_status["ready"]:
         print(
             f"Douyin cookies ready, anonymous ({cookie_status['source']}). "
-            "Single links download in full; a profile fetches its first page "
-            "(about 20 videos), Douyin's ceiling without an account. A "
+            "Whole profiles and single links download. A "
             "connected account fetches whole profiles and topic search."
         )
     else:
@@ -219,7 +218,7 @@ def cookie_readiness() -> dict[str, object]:
     return {
         "ready": cookies_are_ready(cookies),
         # `sessionid` is set only by an actual login. Without it Douyin serves
-        # one page of a profile (about 20 posts) and refuses the rest.
+        # a signed-out visitor its web page only; the API still paginates.
         "signed_in": bool(cookies.get("sessionid")),
         "source": source,
         "keys": sorted(cookies),
@@ -443,7 +442,7 @@ def build_config(args: argparse.Namespace, urls: list[str]) -> dict[str, object]
         "music": bool(getattr(args, "music", False)),
         # Off: the provider's browser fallback opens a window that Douyin's
         # anti-bot caps or challenges anyway, so it added a popup mid-download
-        # for no gain. A profile is fetched to its first page over the signed
+        # for no gain. A profile is paginated whole over the signed
         # API instead; whole profiles need a signed-in account.
         "browser_fallback": {"enabled": False},
         "progress": {"quiet_logs": not args.verbose},
@@ -782,8 +781,8 @@ def skip_downloaded_videos(urls: list[str]) -> list[str]:
     return kept
 
 
-# A profile URL is left as-is for the provider, which fetches its first page
-# (~20 videos) through the signed API - the reliable ceiling Douyin serves an
+# A profile URL is left as-is for the provider, which paginates the whole
+# profile through the signed API - measured at 297 of 308 videos for an
 # anonymous caller. The browser enumerator that once tried to scroll past it was
 # retired: Douyin's anti-bot caps or challenges any automated browser, so it
 # only ever harvested an unpredictable 8-26 and added a popup window mid-run for

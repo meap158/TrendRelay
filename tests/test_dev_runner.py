@@ -1,6 +1,8 @@
+import io
 import json
 import os
 import types
+
 import pytest
 from pathlib import Path
 
@@ -215,6 +217,105 @@ def test_reload_service_stops_after_repeated_exits(monkeypatch) -> None:
     )
 
     assert dev.restart_exited_service(running, now=100.0) is None
+
+
+def _http_500(body: bytes):
+    def raise_it(*_args, **_kwargs):
+        raise dev.urllib.error.HTTPError(
+            "http://127.0.0.1:3001/", 500, "Internal Server Error", None, io.BytesIO(body)
+        )
+
+    return raise_it
+
+
+def test_a_bare_500_means_the_build_directory_is_gone(monkeypatch) -> None:
+    service = dev.Service("Frontend", ["npm"], "green", "http://127.0.0.1:3001/")
+    monkeypatch.setattr(dev.urllib.request, "urlopen", _http_500(b"Internal Server Error"))
+
+    assert dev.service_answers_bare_500(service) is True
+
+
+def test_an_error_page_is_the_apps_problem_not_the_runners(monkeypatch) -> None:
+    # A compile or render error answers 500 too, but wrapped in the dev
+    # overlay's HTML. Restarting on that would wipe a working build over a typo.
+    service = dev.Service("Frontend", ["npm"], "green", "http://127.0.0.1:3001/")
+    monkeypatch.setattr(
+        dev.urllib.request,
+        "urlopen",
+        _http_500(b"<!DOCTYPE html><html>the dev overlay</html>"),
+    )
+
+    assert dev.service_answers_bare_500(service) is False
+
+
+def test_a_server_busy_compiling_is_not_wedged(monkeypatch) -> None:
+    service = dev.Service("Frontend", ["npm"], "green", "http://127.0.0.1:3001/")
+    monkeypatch.setattr(
+        dev.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("no answer yet")),
+    )
+
+    assert dev.service_answers_bare_500(service) is False
+
+
+def test_a_wedged_frontend_is_restarted_with_a_clean_build(monkeypatch) -> None:
+    calls: list[str] = []
+    service = dev.Service(
+        "Frontend",
+        ["npm"],
+        "green",
+        "http://127.0.0.1:3001/",
+        port=3001,
+        restart_on_exit=True,
+        clean_build_when_wedged=True,
+    )
+    monkeypatch.setattr(dev, "stop_service", lambda _running: calls.append("stop"))
+    monkeypatch.setattr(dev, "_cleanup_stale_nextjs", lambda: calls.append("clean"))
+    monkeypatch.setattr(
+        dev,
+        "start_service",
+        lambda definition: calls.append("start") or dev.RunningService(definition, None, None),
+    )
+
+    replacement = dev.restart_wedged_service(
+        dev.RunningService(service, None, None), now=100.0
+    )
+
+    # Stopped before cleaning: deleting the directory under a live server is
+    # the disease this is meant to cure, not a step of the cure.
+    assert calls == ["stop", "clean", "start"]
+    assert replacement is not None
+    assert replacement.restart_times == [100.0]
+
+
+def test_a_service_that_keeps_wedging_exhausts_the_shared_budget(monkeypatch) -> None:
+    service = dev.Service(
+        "Frontend",
+        ["npm"],
+        "green",
+        "http://127.0.0.1:3001/",
+        restart_on_exit=True,
+        restart_limit=2,
+        restart_window=30,
+    )
+    monkeypatch.setattr(
+        dev,
+        "stop_service",
+        lambda _running: (_ for _ in ()).throw(AssertionError("must not restart")),
+    )
+    running = dev.RunningService(service, None, None, [90.0, 95.0])
+
+    assert dev.restart_wedged_service(running, now=100.0) is None
+
+
+def test_only_the_frontend_cleans_its_build_when_wedged() -> None:
+    services = dev.build_services(False)
+    flags = {service.name: service.clean_build_when_wedged for service in services}
+
+    assert flags == {
+        "Backend": False, "Frontend": True, "Worker": False, "Tunnel": False,
+    }
 
 
 def test_backend_frontend_and_worker_are_reload_resilient() -> None:
@@ -658,6 +759,8 @@ def test_releasing_only_removes_a_lock_this_process_holds(monkeypatch, tmp_path)
     dev.release_runner_lock()
 
     assert lock.exists(), "another runner's lock must survive"
+
+
 # --- the schema the services are about to serve -------------------------------
 #
 # `start.cmd` has always migrated before starting anything; `scripts/dev.py`
@@ -739,6 +842,13 @@ def test_production_serves_the_build_and_development_compiles_on_demand() -> Non
     """
     assert "start" in frontend(production=True).command
     assert "dev" in frontend(production=False).command
+
+
+def test_a_production_frontend_is_never_cleaned_when_it_looks_wedged() -> None:
+    """The wedge that clears is a half-written dev bundle. In production the
+    directory it would delete is the build being served."""
+    assert frontend(production=True).clean_build_when_wedged is False
+    assert frontend(production=False).clean_build_when_wedged is True
 
 
 def test_a_missing_build_is_stale(monkeypatch, tmp_path) -> None:

@@ -38,9 +38,34 @@ def _split_line(raw_line: str) -> tuple[str, str] | None:
 
 
 def _unquote(value: str) -> str:
+    """Undo `_quote`, escaping included.
+
+    Stripping the quotes was not enough and the gap was silent. `_quote` writes
+    a value containing a quote or a backslash escaped - it has to, or the line
+    could not be read back - and this only ever removed the wrapping, so every
+    such value came back with its escapes still in it. Anything JSON-shaped was
+    therefore corrupt on the way out: `PUBLISHING_CONNECTIONS` is a JSON list
+    and came back reading `\"id\"` rather than `"id"`, which is not JSON at all,
+    so a second login for an engine was written correctly and then vanished on
+    the next read.
+
+    Single quotes are stripped and nothing else, which is what a shell does with
+    them and therefore what somebody hand-editing this file will expect. Only
+    double-quoted values carry escapes, because only those are ones this module
+    wrote.
+    """
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-        return value[1:-1]
+        inner = value[1:-1]
+        if value[0] == "'":
+            return inner
+        return _UNESCAPE.sub(lambda match: match.group(1), inner)
     return value
+
+
+#: A backslash followed by one of the two characters `_quote` escapes. Matched
+#: as a pair, left to right, so an escaped backslash is consumed whole and the
+#: quote after it is left alone rather than being read as escaped too.
+_UNESCAPE = re.compile(r'\\([\\"])')
 
 
 def _quote(value: str) -> str:

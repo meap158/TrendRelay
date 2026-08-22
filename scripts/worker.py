@@ -39,6 +39,8 @@ from trendrelay_api.shopee_enrichment import run_enrich_job  # noqa: E402
 from trendrelay_api.campaign_runner import tick as campaign_tick  # noqa: E402
 from trendrelay_api.caption_jobs import JOB_KIND as CAPTION_JOB_KIND  # noqa: E402
 from trendrelay_api.caption_jobs import run_caption_job  # noqa: E402
+from trendrelay_api.voice_jobs import JOB_KIND as VOICE_JOB_KIND  # noqa: E402
+from trendrelay_api.voice_jobs import run_voice_job  # noqa: E402
 from trendrelay_api.database import SessionFactory  # noqa: E402
 from trendrelay_api.jobs import (  # noqa: E402
     abandon_expired_jobs,
@@ -82,6 +84,7 @@ JOB_KINDS = (
     CAPTION_JOB_KIND,
     MEDIA_AI_SETUP_KIND,
     ENRICHMENT_JOB_KIND,
+    VOICE_JOB_KIND,
 )
 
 
@@ -124,6 +127,7 @@ def process_available() -> int:
     caption_ids = recoverable_job_ids(CAPTION_JOB_KIND)
     media_ai_setup_ids = recoverable_job_ids(MEDIA_AI_SETUP_KIND)
     enrichment_ids = recoverable_job_ids(ENRICHMENT_JOB_KIND)
+    voice_ids = recoverable_job_ids(VOICE_JOB_KIND)
     for job_id in download_ids:
         run_download_job(job_id)
     for job_id in research_ids:
@@ -140,6 +144,12 @@ def process_available() -> int:
     for job_id in enrich_ids:
         run_enrich_job(job_id)
     run_job_batch(caption_ids, run_caption_job, label="Caption render")
+    # ElevenLabs plans enforce their own concurrency limits. Two requests keep
+    # ordinary plans moving without turning a large selection into a burst of
+    # paid requests; deterministic job IDs still prevent duplicate billing.
+    run_job_batch(
+        voice_ids, run_voice_job, label="Voice generation", workers=2
+    )
     # Local inference is serialized inside each shared model, while frame/audio
     # extraction and hosted transcription can overlap. This bounded lane gives
     # both paths throughput without loading another model per asset.
@@ -163,6 +173,7 @@ def process_available() -> int:
         + len(caption_ids)
         + len(media_ai_setup_ids)
         + len(enrichment_ids)
+        + len(voice_ids)
     )
 
 
@@ -170,7 +181,7 @@ def worker_main() -> None:
     print(
         "Durable worker ready: douyin_download, trend_research, social_publish, "
         "openmontage_render, media_ingest, media_face_blur, media_effect_render, "
-        "caption_render, media_ai_setup, media_enrichment, "
+        "caption_render, media_ai_setup, media_enrichment, voice_render, "
         "campaign_autopilot",
         flush=True,
     )

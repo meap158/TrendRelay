@@ -233,10 +233,16 @@ def cookie_status() -> dict[str, Any]:
     missing = [key for key in REQUIRED_COOKIE_KEYS if not cookies.get(key)]
     return {
         "ready": not missing,
-        # `sessionid` exists only after an actual login. Douyin serves an
-        # anonymous session one page of a profile (about 20 posts) and returns
-        # empty pages after it, so the difference decides whether a profile
-        # downloads whole or truncated - worth naming, not just "connected".
+        # `sessionid` exists only after an actual login.
+        #
+        # It used to be claimed here that without it a profile stopped at its
+        # first page, about twenty posts. Measured against a 308-video profile
+        # on 2026-08-19 that is simply not true: an anonymous session with a
+        # valid `ttwid` and `odin_tt` paginated the whole thing, 297 videos
+        # spanning a year. The wall somebody sees signed out is in the *web
+        # page*, and the downloader does not read the web page.
+        #
+        # What signing in still buys is topic search, which is walled outright.
         "signed_in": bool(cookies.get("sessionid")),
         "source": source,
         "missing": missing,
@@ -316,13 +322,25 @@ def connection_status() -> dict[str, Any]:
     if cookies["ready"]:
         return {
             "state": "connected",
+            # A line, and the reasoning behind it kept separate.
+            #
+            # The short one is what is true and what to do about it. The long
+            # one answers "but I just tried it signed out and Douyin stopped
+            # me", which is a real and reasonable objection - and a paragraph
+            # nobody asked for, sitting permanently in a callout, is a paragraph
+            # that stops being read.
             "message": (
-                "Douyin session is signed in and ready."
+                "Signed in. Everything is available."
                 if cookies.get("signed_in")
-                else "Douyin session is anonymous. Single links download in "
-                "full; a profile fetches its first page (about 20 videos), "
-                "which is all Douyin serves an anonymous caller. A connected "
-                "account fetches whole profiles and topic search."
+                else "Whole profiles and single links download. Sign in for topic search."
+            ),
+            "detail": (
+                None
+                if cookies.get("signed_in")
+                else "Douyin's own web page shows signed-out visitors a login "
+                "wall, so a profile looks capped in a browser. The downloader "
+                "reads Douyin's API rather than that page and is not affected. "
+                "Topic search is the one thing that needs an account."
             ),
             "updated_at": None,
         }
@@ -614,17 +632,36 @@ def _download_source(url: str, output_root: Path, request: dict[str, Any]) -> tu
         command.append("--music")
     if request["incremental"]:
         command.append("--incremental")
-    completed = subprocess.run(
-        command,
-        cwd=PROJECT_ROOT,
-        env=_environment(),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-        timeout=SOURCE_TIMEOUT_SECONDS,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=PROJECT_ROOT,
+            env=_environment(),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=SOURCE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        # A profile large enough to outrun the half-hour cap used to escape as
+        # `TimeoutExpired`, which only the job's outer catch-all saw: the job
+        # failed with Python's own wording and the whole command line in it, and
+        # the files already on disk were never scanned into the Library because
+        # the scan runs after this returns.
+        #
+        # Reported as a source error instead. The loop then does what it does
+        # for any other failed source - keeps what downloaded, ingests it, and
+        # moves on - so a run that ran out of time is a resumable stop rather
+        # than a crash, and `--incremental` means resuming starts where this
+        # left off.
+        minutes = SOURCE_TIMEOUT_SECONDS // 60
+        return 1, (
+            f"This source ran past the {minutes}-minute limit for one fetch. "
+            "Everything downloaded so far is kept - resume the job to carry on "
+            "from where it stopped."
+        )
     return completed.returncode, (completed.stderr or completed.stdout or "").strip()
 
 
@@ -1008,18 +1045,6 @@ def run_download_job(job_id: str, worker_id: str = "douyin-worker") -> dict[str,
         summary = f"Fetched {len(artifacts)} media file(s)"
         if source_errors:
             summary = f"{summary}; {len(source_errors)} source(s) failed"
-        # Douyin serves an anonymous caller only the first page of a profile
-        # (~20 videos), so name that ceiling rather than letting the count look
-        # like the whole list. A connected account fetches the rest.
-        if (
-            any("/user/" in url for url in request["urls"])
-            and not cookie_status().get("signed_in")
-        ):
-            summary = (
-                f"{summary}. Anonymous fetch stops at a profile's first page "
-                "(about 20 videos) - Douyin's ceiling without an account. "
-                "Connect an account to fetch the whole profile."
-            )
         result = {
             **payload,
             "status": "succeeded",

@@ -105,3 +105,29 @@ def test_the_worker_settles_orphaned_cancellations_before_recovery(monkeypatch) 
         ("cancel", worker.EFFECT_JOB_KIND),
         ("abandon", worker.EFFECT_JOB_KIND),
     ]
+
+
+def test_the_worker_drains_voice_jobs_in_a_bounded_paid_lane(monkeypatch) -> None:
+    voiced: list[str] = []
+    batches: list[tuple[str, int | None]] = []
+    monkeypatch.setattr(worker, "upgrade_active_job_recovery", lambda *a, **k: [])
+    monkeypatch.setattr(worker, "settle_expired_cancellations", lambda *a, **k: [])
+    monkeypatch.setattr(worker, "abandon_expired_jobs", lambda *a, **k: [])
+    monkeypatch.setattr(
+        worker,
+        "recoverable_job_ids",
+        lambda kind: ["voice_one", "voice_two"] if kind == worker.VOICE_JOB_KIND else [],
+    )
+    monkeypatch.setattr(worker, "run_voice_job", lambda job_id: voiced.append(job_id))
+
+    def run_batch(ids, runner, *, label, workers=None):
+        batches.append((label, workers))
+        for job_id in ids:
+            runner(job_id)
+        return len(ids)
+
+    monkeypatch.setattr(worker, "run_job_batch", run_batch)
+
+    assert worker.process_available() == 2
+    assert voiced == ["voice_one", "voice_two"]
+    assert ("Voice generation", 2) in batches

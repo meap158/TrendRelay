@@ -48,6 +48,14 @@ class Service:
     restart_limit: int = 5
     restart_window: float = 60
     required: bool = True
+    #: Delete the Next.js dev build directory before a wedged restart.
+    #:
+    #: A frontend that lost its build directory keeps running and keeps
+    #: answering, so restarting the process is only half the cure: `next dev`
+    #: writes `routes-manifest.json` on startup, but a webpack cache that
+    #: disagrees with the tree survives a plain restart and starts the next
+    #: failure. Only the frontend builds anything, so only it sets this.
+    clean_build_when_wedged: bool = False
     #: Directories whose .py files should restart this service when they change.
     #:
     #: uvicorn's own --reload works, and then quietly stops: a backend left
@@ -68,6 +76,9 @@ class RunningService:
     restart_times: list[float] = field(default_factory=list)
     #: The source this process was started from, for comparison later.
     sources: tuple[tuple[str, int, int], ...] = ()
+    #: Consecutive health probes that came back as a bare 500. See
+    #: `service_answers_bare_500` for what that means and why it is counted.
+    wedged_probes: int = 0
 
 
 COLORS = {
@@ -459,6 +470,81 @@ def service_is_healthy(service: Service, timeout: float | None = None) -> bool:
         return False
 
 
+def service_answers_bare_500(service: Service) -> bool:
+    """Whether the health URL answered 500 with nothing but the words.
+
+    A dev server whose build directory went away under it - the second runner
+    that deleted first and freed second, a kill mid-write - stays up and
+    answers every request, real route or nonsense, with the literal text
+    "Internal Server Error". The failure happens before rendering, so there is
+    no error page around it, and it never recovers on its own because Next
+    writes `routes-manifest.json` on a successful first build and not again.
+
+    The bare body is what separates that terminal state from the recoverable
+    ones this must not touch: an error in the app's own code answers 500 with
+    a full HTML document carrying the dev overlay, and a server busy with a
+    compile does not answer at all. Restarting the frontend on either of those
+    would throw away a working build because somebody made a typo.
+    """
+    if not service.health_url:
+        return False
+    try:
+        request = urllib.request.Request(service.health_url, method="GET")
+        with urllib.request.urlopen(request, timeout=service.health_probe_timeout):
+            return False
+    except urllib.error.HTTPError as error:
+        if error.code < 500:
+            return False
+        try:
+            body = error.read(64)
+        except OSError:
+            return False
+        return body.strip() == b"Internal Server Error"
+    except (OSError, urllib.error.URLError):
+        return False
+
+
+def restart_wedged_service(
+    running: RunningService, now: float | None = None
+) -> RunningService | None:
+    """Replace a service that is alive but past saving.
+
+    Shares the exit-restart budget rather than keeping its own: a service that
+    alternates between crashing and wedging is one failing service, not two
+    healthy-ish ones, and the budget exists to notice exactly that.
+    """
+    service = running.definition
+    restarted_at = time.monotonic() if now is None else now
+    recent_restarts = [
+        timestamp
+        for timestamp in running.restart_times
+        if restarted_at - timestamp < service.restart_window
+    ]
+    if len(recent_restarts) >= service.restart_limit:
+        print(
+            f"{service.name} was restarted {service.restart_limit} times within "
+            f"{service.restart_window:g} seconds and is still answering bare "
+            "500s; stopping TrendRelay."
+        )
+        return None
+
+    attempt = len(recent_restarts) + 1
+    print(
+        f"{service.name} is answering every request with a bare 500 - its dev "
+        f"build is gone and a running server never rewrites it. Restarting "
+        f"({attempt}/{service.restart_limit})..."
+    )
+    stop_service(running)
+    if service.clean_build_when_wedged:
+        _cleanup_stale_nextjs()
+    if service.port and not _port_is_free(service.port):
+        print(f"Freeing port {service.port} before restarting {service.name}...")
+        _kill_port_holders(service.port)
+    replacement = start_service(service)
+    replacement.restart_times = [*recent_restarts, restarted_at]
+    return replacement
+
+
 def build_services(
     include_desktop: bool, *, may_terminate: bool = True, production: bool = False
 ) -> list[Service]:
@@ -554,6 +640,9 @@ def build_services(
             # first compile to wait through, which is most of what the dev
             # server's two minutes are for.
             health_timeout=30 if production else 120,
+            # Never in production: the wedge this clears is a half-written dev
+            # bundle, and the directory it would delete is the build itself.
+            clean_build_when_wedged=not production,
         ),
     ]
     services.append(
@@ -1028,7 +1117,29 @@ def main() -> int:
                         )
                         stop_service(replacement)
                 index += 1
-            if reused and time.monotonic() >= next_health_check:
+            if time.monotonic() >= next_health_check:
+                # Services this runner started are watched for exits above, but
+                # a server can fail without exiting: the frontend that lost its
+                # build directory keeps its port and answers everything with a
+                # bare 500, forever. That state is terminal from the outside -
+                # only a restart with a clean build comes back from it - so it
+                # is probed for here, with enough consecutive confirmations
+                # that a single garbled response cannot recycle a healthy
+                # service.
+                for index, item in enumerate(running):
+                    service = item.definition
+                    if not service.health_url:
+                        continue
+                    if service_answers_bare_500(service):
+                        item.wedged_probes += 1
+                    else:
+                        item.wedged_probes = 0
+                    if item.wedged_probes < service.health_failure_limit:
+                        continue
+                    replacement = restart_wedged_service(item)
+                    if replacement is None:
+                        return 1
+                    running[index] = replacement
                 for service in list(reused):
                     if service_is_healthy(service):
                         reused_failures[service.name] = 0

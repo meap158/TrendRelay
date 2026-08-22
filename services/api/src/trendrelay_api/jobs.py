@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from time import monotonic
 from typing import Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, case, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from trendrelay_api.database import SessionFactory
@@ -240,6 +240,55 @@ def list_job_records(
             .limit(limit)
         ).all()
         return [serialize_job(item) for item in items]
+
+
+def list_job_records_for_kinds(
+    workspace_key: str,
+    kinds: set[str] | frozenset[str],
+    limit: int = 100,
+    *,
+    factory: SessionMaker = SessionFactory,
+    session: Session | None = None,
+) -> list[dict[str, Any]]:
+    """Read one time-ordered activity stream spanning related job kinds.
+
+    Media work used to expose a separate endpoint for every feature. That made
+    the global notification poll know about effects but miss caption,
+    transcription and voice jobs created by the same Library. Keeping the kind
+    registry at the API boundary gives the client one stable contract; a new
+    asset-processing kind is added once here rather than wired into every UI
+    surface independently.
+    """
+    if not kinds:
+        return []
+    query = (
+        select(DurableJob)
+        .where(
+            DurableJob.workspace_key == workspace_key,
+            DurableJob.kind.in_(kinds),
+        )
+        # Unfinished work first, then the newest of what is done.
+        #
+        # Newest-first alone meant a batch could push older *running* batches
+        # out of the window entirely: with four batches going, the newest two
+        # filled the limit and the other two - still queued, still going to
+        # run - were absent from the answer, so the page could not show them
+        # and they looked as though the new batch had replaced them. Finished
+        # jobs were taking up room ahead of running ones for no better reason
+        # than having been created more recently.
+        #
+        # A job nobody is waiting on is history; one still to run is the thing
+        # the list exists for. History yields.
+        .order_by(
+            case((DurableJob.status.in_(("queued", "running")), 0), else_=1),
+            DurableJob.created_at.desc(),
+        )
+        .limit(limit)
+    )
+    if session is not None:
+        return [serialize_job(item) for item in session.scalars(query).all()]
+    with factory() as owned:
+        return [serialize_job(item) for item in owned.scalars(query).all()]
 
 
 def record_completed_job(

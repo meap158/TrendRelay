@@ -16,6 +16,7 @@ from trendrelay_api.jobs import (
     get_job_record,
     heartbeat_job,
     list_job_records,
+    list_job_records_for_kinds,
     list_job_records_including_active,
     now_utc,
     RETRY_BASE_SECONDS,
@@ -481,6 +482,41 @@ def test_keep_spares_the_rows_it_names() -> None:
         job["id"]
         for job in list_job_records("workspace-1", "media_effect_render", factory=sessions)
     ] == ["edit_b"]
+
+
+def test_a_newer_batch_does_not_push_older_running_work_out_of_the_window() -> None:
+    """Finished work yields the window to work still to be done.
+
+    Found with four effect batches going at once: ordered by age alone, the
+    newest two filled the limit and the other two - still queued, still going
+    to run - were not in the answer at all. Nothing had cancelled them; the
+    page simply never received them, so a new batch looked like it had
+    replaced the running ones.
+    """
+    sessions = factory()
+    # Older, and still to run: the batch that kept disappearing.
+    for index in range(3):
+        create_job_record(
+            f"old-live-{index}", "ws", "media_effect_render",
+            {"batch": {"id": "older-run"}}, factory=sessions,
+        )
+    # Newer, and finished: history, which used to win on recency alone.
+    for index in range(10):
+        create_job_record(
+            f"new-done-{index}", "ws", "media_effect_render",
+            {"batch": {"id": "newer-run"}}, factory=sessions,
+        )
+        claim_job(f"new-done-{index}", "worker", factory=sessions)
+        complete_job(f"new-done-{index}", "worker", {"ok": True}, factory=sessions)
+
+    # A window too small to hold both, which is the whole situation.
+    window = list_job_records_for_kinds("ws", {"media_effect_render"}, 5, factory=sessions)
+
+    running = [job for job in window if job["status"] == "queued"]
+    assert len(running) == 3, "every unfinished job belongs in the window"
+    assert {job["payload"]["batch"]["id"] for job in running} == {"older-run"}
+    # And the leftover room still goes to the most recent history.
+    assert len(window) == 5
 
 
 def test_each_retry_waits_longer_than_the_one_before() -> None:
