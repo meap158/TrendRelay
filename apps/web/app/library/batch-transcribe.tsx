@@ -119,6 +119,14 @@ export function BatchTranscribe({
       const queuedIds: string[] = [];
       const queuedJobs: unknown[] = [];
       const failures: string[] = [];
+      // One identity for this run, sent with every request in it.
+      //
+      // These are queued one request per asset, so the API cannot tell which
+      // of them were one action - and without being told, the notification
+      // list groups by category, status and title, which are identical for
+      // every reading ever queued. Two runs merged into one row, and starting
+      // one while another was still going looked like it had replaced it.
+      const batchId = `transcribe-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
       // Four at a time, the same as the caption batch: enough to make a
       // configured run quick without turning a large selection into a request
       // storm from the browser.
@@ -133,6 +141,10 @@ export function BatchTranscribe({
               body: JSON.stringify({
                 modes: item.modes,
                 ...(language.trim() ? { language: language.trim() } : {}),
+                // `total` is what the row counts towards before the last
+                // request has even been sent, so it is the size of the run
+                // rather than of this slice of four.
+                batch: { id: batchId, total: work.length },
               }),
             },
           );

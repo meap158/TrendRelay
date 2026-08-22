@@ -237,6 +237,11 @@ export function CaptionEditor({
     try {
       const queuedIds: string[] = [];
       const failures: string[] = [];
+      // One identity for this run, sent with every request in it. These are
+      // queued one per asset, so without being told, the notification list
+      // groups them by category, status and title - identical for every job
+      // of a kind - and two runs merge into one row.
+      const batchId = `captions-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
       // Four at a time keeps a large selection from turning into a browser-side
       // request storm while still making a configured batch quick to queue.
       for (let at = 0; at < compatibleTargets.length; at += 4) {
@@ -251,6 +256,7 @@ export function CaptionEditor({
                 style_id: styleId,
                 translate_to: translateTo || null,
                 delivery,
+                batch: { id: batchId, total: compatibleTargets.length },
               }),
             },
           );

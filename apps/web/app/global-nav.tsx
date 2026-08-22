@@ -104,6 +104,11 @@ function batchProgress(group: NotificationGroup): {
 } | null {
   const batch = batchOf(group.latest);
   if (!batch) return null;
+  // A batch of one is a job. Marking it is still worth doing - the identity is
+  // what keeps it from merging with the next single render of the same kind -
+  // but "0 of 1 done" is progress chrome around something that has none to
+  // report, so it reads as the plain row it was before batches existed.
+  if (Math.max(batch.total, group.jobs.length) <= 1) return null;
   const settled = group.jobs.filter(
     (job) => ["succeeded", "failed", "cancelled"].includes(job.status),
   ).length;

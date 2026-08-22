@@ -547,3 +547,75 @@ def test_the_worker_drains_the_kind_this_endpoint_queues() -> None:
 
     assert media_ai.JOB_KIND in worker.JOB_KINDS
     assert media_ai.SETUP_JOB_KIND in worker.JOB_KINDS
+
+
+def test_a_batch_says_which_batch_it_is(tmp_path, monkeypatch) -> None:
+    """The marker reaches the stored payload, not only the reply.
+
+    The reply puts the row on screen at once and every later poll reads the
+    stored payload, so a marker on only one of them would group correctly until
+    the first refresh and then come apart.
+    """
+    workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)
+    monkeypatch.setattr(media_ai, "provider_status", lambda: READY)
+
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+            json={"modes": ["speech"], "batch": {"id": "run-a", "total": 40}},
+        )
+    )
+
+    assert response.status_code == 202, response.text
+    assert response.json()["job"]["payload"]["batch"] == {"id": "run-a", "total": 40}
+
+    listed = asyncio.run(
+        request("GET", f"/api/workspaces/{workspace_id}/media/library/transcription/jobs")
+    ).json()["jobs"]
+    assert listed[0]["payload"]["batch"] == {"id": "run-a", "total": 40}
+
+
+def test_two_runs_of_the_same_kind_are_two_batches(tmp_path, monkeypatch) -> None:
+    """The whole point of the marker.
+
+    Without it these two jobs are told apart only by category, status and
+    title - identical for every reading ever queued - so the notification list
+    merged them into one row and starting the second while the first ran looked
+    like the second had replaced it.
+    """
+    workspace_id, first = workspace_with_asset(tmp_path, monkeypatch)
+    monkeypatch.setattr(media_ai, "provider_status", lambda: READY)
+
+    def queue(asset_id: str, batch_id: str, language: str) -> dict:
+        return asyncio.run(request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+            # The language differs so the two are distinct jobs rather than one
+            # content-addressed job answered twice, which is what a real second
+            # batch over different clips would be.
+            json={"modes": ["speech"], "language": language,
+                  "batch": {"id": batch_id, "total": 1}},
+        )).json()["job"]
+
+    one = queue(first, "run-a", "en")
+    two = queue(first, "run-b", "fr")
+
+    assert one["id"] != two["id"]
+    assert one["payload"]["batch"]["id"] == "run-a"
+    assert two["payload"]["batch"]["id"] == "run-b"
+
+
+def test_a_job_queued_on_its_own_carries_no_batch(tmp_path, monkeypatch) -> None:
+    # The single-asset control sends no marker, and inventing one there would
+    # put every lone reading in a batch of one.
+    workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)
+    monkeypatch.setattr(media_ai, "provider_status", lambda: READY)
+
+    job = asyncio.run(request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+        json={"modes": ["speech"]},
+    )).json()["job"]
+
+    assert "batch" not in (job.get("payload") or {})

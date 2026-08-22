@@ -1536,6 +1536,52 @@ def list_effects(
     return {"effects": describe()}
 
 
+class BatchMarker(BaseModel):
+    """Which queued-together action a job belongs to.
+
+    Effects queue a whole selection in one request and can mint this
+    themselves. Captions, voiceovers and transcriptions queue one request per
+    asset - by design, because each is separately cancellable and separately
+    billed - so the only party that knows two requests were one action is the
+    client that sent them both.
+
+    Without it the notification list groups by category, status and title,
+    which are identical for every job of a kind. Two batches of the same kind
+    therefore collapsed into a single row, and starting one while another ran
+    looked like the new one had replaced it.
+    """
+
+    id: str = Field(min_length=1, max_length=64)
+    #: How many jobs the client is queueing, so the row can say "8 of 40"
+    #: before the fortieth request has been made.
+    total: int = Field(default=0, ge=0, le=10_000)
+
+
+def _stamp_batch(session: Session, job: dict[str, Any], marker: BatchMarker | None) -> dict[str, Any]:
+    """Record a job's batch on the job itself.
+
+    Written to the stored payload as well as the returned copy: the returned
+    one puts the row on screen immediately, and the stored one is what every
+    later poll reads, so a marker on only one of them would group correctly
+    until the first refresh and then come apart.
+    """
+    if marker is None:
+        return job
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from trendrelay_api.models import DurableJob
+
+    payload_batch = {"id": marker.id, "total": marker.total}
+    record = session.get(DurableJob, job.get("id"))
+    if record is not None:
+        payload = dict(record.payload or {})
+        payload["batch"] = payload_batch
+        record.payload = payload
+        flag_modified(record, "payload")
+    job.setdefault("payload", {})["batch"] = payload_batch
+    return job
+
+
 class CaptionRequest(BaseModel):
     """What a caption track is built from, and how it should look."""
 
@@ -1558,6 +1604,10 @@ class CaptionRequest(BaseModel):
     #: both, which is the useful default once an encode is being paid for
     #: anyway - the files cost a kilobyte beside it.
     delivery: Literal["sidecar", "burned", "both"] = "sidecar"
+    #: Set when this is one of several queued together, so the three of
+    #: them group as one action rather than merging with every other batch
+    #: of their kind. See `BatchMarker`.
+    batch: BatchMarker | None = None
 
 
 @router.get("/captions/styles")
@@ -1781,7 +1831,7 @@ def render_captions(
         )
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    return {"job": job}
+    return {"job": _stamp_batch(session, job, body.batch)}
 
 
 def _caption_transcript(
@@ -2532,6 +2582,10 @@ class TranscriptionRequest(BaseModel):
     #: worse than letting it detect one, but a clip with music over speech
     #: detects badly and the operator usually knows the answer.
     language: str | None = Field(default=None, max_length=40)
+    #: Set when this is one of several queued together, so the three of
+    #: them group as one action rather than merging with every other batch
+    #: of their kind. See `BatchMarker`.
+    batch: BatchMarker | None = None
 
 
 @router.post("/assets/{asset_id}/transcription", status_code=202)
@@ -2598,7 +2652,7 @@ def transcribe_asset(
         item.id,
         {"modes": sorted(body.modes), "job_id": job["id"]},
     )
-    return {"job": job}
+    return {"job": _stamp_batch(session, job, body.batch)}
 
 
 class VoiceSettings(BaseModel):
@@ -2630,6 +2684,10 @@ class VoiceRequest(BaseModel):
     #: caption request uses for the same choice. Audio alone by default: it is
     #: the half worth hearing before committing to a render.
     deliver: Literal["audio", "video", "both"] = "audio"
+    #: Set when this is one of several queued together, so the three of
+    #: them group as one action rather than merging with every other batch
+    #: of their kind. See `BatchMarker`.
+    batch: BatchMarker | None = None
 
 
 class VoicePreviewRequest(BaseModel):
@@ -2738,7 +2796,7 @@ def generate_voiceover(
             "job_id": job["id"],
         },
     )
-    return {"job": job}
+    return {"job": _stamp_batch(session, job, body.batch)}
 
 
 @router.get("/voice/jobs")

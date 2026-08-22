@@ -125,6 +125,11 @@ export function BulkVoiceEditor({
     setProblem(null);
     const queued: string[] = [];
     const failures: string[] = [];
+    // One identity for this run, sent with every request in it. These are
+    // queued one per asset, so without being told, the notification list
+    // groups them by category, status and title - identical for every job
+    // of a kind - and two runs merge into one row.
+    const batchId = `voice-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     try {
       for (let at = 0; at < readyTargets.length; at += 4) {
         const results = await Promise.all(readyTargets.slice(at, at + 4).map(async (target) => {
@@ -137,6 +142,7 @@ export function BulkVoiceEditor({
                 voice_id: voiceId,
                 deliver,
                 transcript_id: target.transcript!.id,
+                batch: { id: batchId, total: readyTargets.length },
               }),
             },
           );
