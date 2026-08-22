@@ -72,6 +72,13 @@ def test_the_filter_gets_a_bare_filename(tmp_path: Path, monkeypatch) -> None:
     seen: dict[str, object] = {}
 
     def fake_run(command, **kwargs):
+        # The burn is no longer the first thing FFmpeg is asked to do:
+        # `encode_h264` probes for a hardware encoder first, with a command
+        # carrying no filter and no working directory. Answered as a failure
+        # so the burn falls back to the software encoder this test is about,
+        # rather than crashing on the missing `-vf`.
+        if "-vf" not in command:
+            return type("Done", (), {"returncode": 1, "stderr": "", "stdout": ""})()
         seen["filter"] = command[command.index("-vf") + 1]
         seen["cwd"] = Path(kwargs["cwd"])
         # Stand in for the encoder by producing the file it would have written.

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "../ui/button";
+import { useJobs } from "../jobs-provider";
 import { ProviderSwitch, providerOf, useMediaAi } from "./transcription-setup";
 import type { ProviderKey } from "./transcription-setup";
 
@@ -83,6 +84,7 @@ export function AutoTranscribe({
   /** A new draft landed, so the asset needs re-reading to show it. */
   onFinished: () => void;
 }) {
+  const { announceMediaJobs, refresh: refreshJobs } = useJobs();
   // What each mode can even apply to. An audio-less clip has no speech to
   // transcribe and OCR needs frames, so the control says so rather than
   // offering a choice the API will refuse.
@@ -158,6 +160,8 @@ export function AutoTranscribe({
       );
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.detail ?? "The reading could not be started.");
+      announceMediaJobs(body.job ? [body.job] : []);
+      void refreshJobs();
       running.current = true;
       settled.current = null;
       await read();
@@ -166,7 +170,7 @@ export function AutoTranscribe({
     } finally {
       setBusy(false);
     }
-  }, [apiFetch, assetId, chosen, read, workspaceId]);
+  }, [announceMediaJobs, apiFetch, assetId, chosen, read, refreshJobs, workspaceId]);
 
   // A mode the operator has chosen whose provider is not ready yet. Offered as
   // the download rather than as an error, because that is the actual answer.

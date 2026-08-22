@@ -24,7 +24,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from trendrelay_api import media_ai, media_library, media_library_api
+from trendrelay_api import caption_jobs, media_ai, media_library, media_library_api
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
@@ -163,6 +163,40 @@ def test_the_queued_job_is_listed_for_the_page_that_has_to_watch_it(tmp_path, mo
     assert listed.status_code == 200
     jobs = listed.json()["jobs"]
     assert [job["payload"]["asset_id"] for job in jobs] == [asset_id]
+
+
+def test_the_queued_job_joins_the_library_processing_stream(tmp_path, monkeypatch) -> None:
+    from trendrelay_api.jobs import create_job_record
+
+    workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)
+    monkeypatch.setattr(media_ai, "provider_status", lambda: READY)
+    queued = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+            json={"modes": ["speech"]},
+        )
+    ).json()["job"]
+    create_job_record(
+        "caption-visible",
+        workspace_id,
+        caption_jobs.JOB_KIND,
+        {"asset_id": asset_id, "delivery": "both"},
+        factory=TestingSession,
+    )
+
+    listed = asyncio.run(
+        request("GET", f"/api/workspaces/{workspace_id}/media/library/processing/jobs")
+    )
+
+    assert listed.status_code == 200
+    observed = {
+        (job["id"], job["kind"], job["payload"]["asset_id"]) for job in listed.json()["jobs"]
+    }
+    assert observed == {
+        (queued["id"], media_ai.JOB_KIND, asset_id),
+        ("caption-visible", caption_jobs.JOB_KIND, asset_id),
+    }
 
 
 def test_asking_again_resumes_the_same_failed_reading(tmp_path, monkeypatch) -> None:

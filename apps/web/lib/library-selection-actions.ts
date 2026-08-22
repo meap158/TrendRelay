@@ -8,6 +8,8 @@
  * effect recipe, caption style, and billed voice are different decisions.
  */
 
+import type { ActionName } from "../app/ui/action-icons";
+
 export type LibraryMediaKind = "video" | "image" | "audio";
 export type LibrarySelectionActionId =
   | "effects" | "transcribe" | "captions" | "voiceover";
@@ -77,3 +79,28 @@ export function selectionActionState(
     enabled: compatible.length > 0 && !overLimit,
   };
 }
+
+/**
+ * The message-key suffix and icon for each action.
+ *
+ * Here rather than in the page, because more than one surface offers these:
+ * the Library and the campaign picker both read them, and a copy per surface
+ * is how the two drift into calling the same action different things.
+ *
+ * Maps rather than the ternary chain they replace: that grew a branch per
+ * action and sent anything unrecognised to Voiceover, so a newly declared
+ * action would have quietly worn another action's name and icon.
+ */
+export const SELECTION_ACTION_KEY: Record<LibrarySelectionActionId, string> = {
+  effects: "Effects",
+  transcribe: "Transcribe",
+  captions: "Captions",
+  voiceover: "Voiceover",
+};
+
+export const SELECTION_ACTION_ICON: Record<LibrarySelectionActionId, ActionName> = {
+  effects: "edit",
+  transcribe: "transcribe",
+  captions: "edit",
+  voiceover: "play",
+};

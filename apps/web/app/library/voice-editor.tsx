@@ -9,6 +9,7 @@ import { SearchSelect } from "../ui/search-select";
 import { Select } from "../ui/select";
 import { SegmentedControl } from "../ui/segmented";
 import { useT } from "../i18n-provider";
+import { useJobs } from "../jobs-provider";
 
 /**
  * A spoken take of a clip's words.
@@ -155,6 +156,7 @@ export function VoiceEditor({
   onClose: () => void;
 }) {
   const t = useT();
+  const { announceMediaJobs, refresh: refreshJobs } = useJobs();
   const requestedTargets = useMemo<VoiceTarget[]>(() => targets?.length
     ? targets
     : assetId
@@ -386,6 +388,7 @@ export function VoiceEditor({
         : preparedTargets.slice(0, 1);
       const queuedIds: string[] = [];
       const failures: string[] = [];
+      const queuedJobs: Job[] = [];
       let firstJob: Job | null = null;
       for (let at = 0; at < queueTargets.length; at += 4) {
         const results = await Promise.all(queueTargets.slice(at, at + 4).map(async (target) => {
@@ -417,12 +420,15 @@ export function VoiceEditor({
           if (result.response.ok) {
             queuedIds.push(result.target.id);
             firstJob ??= result.payload.job ?? null;
+            if (result.payload.job) queuedJobs.push(result.payload.job);
           } else {
             failures.push(`${result.target.title}: ${result.payload.detail ?? t("library.actionCouldNotStart")}`);
           }
         }
       }
       if (!queuedIds.length) throw new Error(failures[0] ?? "The voiceover could not be queued.");
+      announceMediaJobs(queuedJobs);
+      void refreshJobs();
       if (batch) {
         const summary = t("library.voiceBatchQueued", { count: queuedIds.length });
         if (failures.length) setError(`${t("library.actionBatchFailed", { count: failures.length })} ${failures[0]}`);

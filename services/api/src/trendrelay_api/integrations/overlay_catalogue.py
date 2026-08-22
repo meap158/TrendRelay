@@ -1166,6 +1166,55 @@ def _draw(cv2: Any, np: Any, layer: Any, shape: Shape, width: int, height: int) 
         cv2.polylines(layer, [polygon], True, stroke, thickness)
 
 
+def _shape_bounds(shape: Shape, width: int, height: int) -> tuple[int, int, int, int] | None:
+    """The rectangle of the canvas a shape can possibly touch, or None.
+
+    An eye is a fiftieth of a face and used to cost the same as one, because
+    every shape was premultiplied and blended across the whole canvas. This says
+    where it actually lands so that work happens over a few thousand pixels
+    instead of half a million.
+
+    Deliberately generous. It pads for the stroke straddling the outline and for
+    OpenCV's own rounding rather than reproducing that arithmetic exactly: a box
+    a pixel too large costs nothing measurable, and one a pixel too small
+    silently clips an edge off the sticker.
+    """
+    pad = max(1, int(round(shape.stroke_width * width))) + 2
+
+    if shape.kind == "ellipse":
+        centre_x, centre_y = shape.centre[0] * width, shape.centre[1] * height
+        # Rotation can swing either axis into either direction, so the longer
+        # one bounds both. The extra pixel covers `_draw` refusing a zero axis.
+        reach = max(shape.size[0] * width, shape.size[1] * height) / 2 + 1
+        left, top, right, bottom = (
+            centre_x - reach, centre_y - reach, centre_x + reach, centre_y + reach,
+        )
+    else:
+        points = (
+            _rounded_rect_points(shape.centre, shape.size, shape.radius)
+            if shape.kind == "rect"
+            else list(shape.points)
+        )
+        # The same "nothing to draw" case `_draw` returns on.
+        if len(points) < 2:
+            return None
+        horizontal = [point[0] * width for point in points]
+        vertical = [point[1] * height for point in points]
+        left, top = min(horizontal), min(vertical)
+        right, bottom = max(horizontal), max(vertical)
+
+    box = (
+        max(0, math.floor(left) - pad),
+        max(0, math.floor(top) - pad),
+        min(width, math.ceil(right) + pad),
+        min(height, math.ceil(bottom) + pad),
+    )
+    # Entirely off the canvas.
+    if box[0] >= box[2] or box[1] >= box[3]:
+        return None
+    return box
+
+
 def premultiply(np: Any, image: Any) -> Any:
     """A straight-alpha BGRA image as premultiplied float, 0 to 1.
 
@@ -1174,10 +1223,16 @@ def premultiply(np: Any, image: Any) -> Any:
     of a transparent pixel is not grey — and the artefact it produces is a dark
     halo that looks like a badly cut-out sticker, which is exactly what this
     feature must not look like.
+
+    Written in place on the one array the conversion already had to allocate.
+    Stated the obvious way — divide, slice, multiply, concatenate — it builds
+    four full-size float arrays to produce one, and this runs once per shape per
+    sprite, which made it the single most expensive thing in the gallery.
     """
-    values = image.astype(np.float32) / 255.0
-    alpha = values[:, :, 3:4]
-    return np.concatenate([values[:, :, :3] * alpha, alpha], axis=2)
+    values = image.astype(np.float32)
+    values /= 255.0
+    values[:, :, :3] *= values[:, :, 3:4]
+    return values
 
 
 def unpremultiply(np: Any, image: Any) -> Any:
@@ -1219,10 +1274,24 @@ def render_sprite(cv2: Any, np: Any, overlay: Overlay, width: int) -> Any:
     factor = max(1, min(SUPERSAMPLE, MAX_DRAW_WIDTH // width))
     big_width, big_height = width * factor, height * factor
     canvas = np.zeros((big_height, big_width, 4), dtype=np.float32)
+    # One scratch layer for all of them rather than one each, and the blend runs
+    # only over the rectangle the shape reaches. Cleared whole between shapes
+    # rather than only within that rectangle: if a bound were ever short of what
+    # was drawn, the stray pixel would otherwise turn up inside a later shape's
+    # rectangle wearing the wrong colour, and a memset is far too cheap to trade
+    # that risk away for.
+    layer = np.zeros((big_height, big_width, 4), dtype=np.uint8)
     for shape in overlay.shapes:
-        layer = np.zeros((big_height, big_width, 4), dtype=np.uint8)
+        box = _shape_bounds(shape, big_width, big_height)
+        if box is None:
+            continue
+        left, top, right, bottom = box
         _draw(cv2, np, layer, shape, big_width, big_height)
-        _over(canvas, premultiply(np, layer))
+        _over(
+            canvas[top:bottom, left:right],
+            premultiply(np, layer[top:bottom, left:right]),
+        )
+        layer.fill(0)
     # INTER_AREA averages the block each output pixel came from, which is both
     # the antialiasing and, in premultiplied space, the correct average.
     return unpremultiply(np, cv2.resize(canvas, (width, height), interpolation=cv2.INTER_AREA))
@@ -1242,6 +1311,18 @@ def _read_png(cv2: Any, np: Any, path: Path, width: int, height: int) -> Any:
     return cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA)
 
 
+#: Encoded built-in sprites, keyed by id and width. A built-in is declared in
+#: this file, so its bytes at a given width cannot change while the process
+#: runs, and the gallery asks for the whole pack every time it opens — once per
+#: operator per page load, all thirty-six at once. A drop-in is never kept: it
+#: is a file on somebody's disk that they may be editing, and handing them a
+#: stale copy of their own work is the one failure this feature must not have.
+_SPRITE_CACHE: dict[tuple[str, int], bytes] = {}
+#: Sprites are a few kilobytes each and only a handful of widths are ever asked
+#: for, so this is a guard against a pathological caller rather than a budget.
+_SPRITE_CACHE_LIMIT = 512
+
+
 def sprite_png(overlay: Overlay, width: int = 256) -> bytes:
     """The overlay as PNG bytes, for the picker.
 
@@ -1250,6 +1331,16 @@ def sprite_png(overlay: Overlay, width: int = 256) -> bytes:
     """
     from trendrelay_api.integrations.face_blur import _load_opencv
 
+    # Clamped here as well as in the renderer so two widths that come out the
+    # same size share one cache entry rather than rendering twice.
+    width = max(8, min(int(width), MAX_SPRITE_WIDTH))
+    key = (overlay.id, width)
+    reusable = overlay.image is None
+    if reusable:
+        cached = _SPRITE_CACHE.get(key)
+        if cached is not None:
+            return cached
+
     cv2 = _load_opencv()
     import numpy as np
 
@@ -1257,4 +1348,10 @@ def sprite_png(overlay: Overlay, width: int = 256) -> bytes:
     encoded, buffer = cv2.imencode(".png", sprite)
     if not encoded:
         raise ValueError(f"{overlay.id} could not be encoded.")
-    return bytes(buffer)
+    image = bytes(buffer)
+    if reusable:
+        if len(_SPRITE_CACHE) >= _SPRITE_CACHE_LIMIT:
+            # Oldest first, which insertion order gives for free.
+            del _SPRITE_CACHE[next(iter(_SPRITE_CACHE))]
+        _SPRITE_CACHE[key] = image
+    return image

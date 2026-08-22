@@ -121,3 +121,5 @@ def test_a_preview_shows_the_opening_cues_with_their_reading_speed() -> None:
 
     assert len(shown) <= 2
     assert shown[0]["lines"] and isinstance(shown[0]["cps"], float)
+    assert shown[0]["words"]
+    assert {"text", "start_ms", "end_ms"} <= set(shown[0]["words"][0])

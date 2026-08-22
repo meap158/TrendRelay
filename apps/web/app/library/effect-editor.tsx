@@ -67,7 +67,7 @@ export function EffectEditor({
   const t = useT();
   // The drawer polls every few seconds; a render that has just been asked for
   // should be in it before the operator has finished reading the toast.
-  const { announceEffectJobs, refresh: refreshJobs } = useJobs();
+  const { announceMediaJobs, refresh: refreshJobs } = useJobs();
   const [effects, setEffects] = useState<EffectDefinition[]>([]);
   const [steps, setSteps] = useState<Step[]>([]);
   const [busy, setBusy] = useState("");
@@ -260,7 +260,7 @@ export function EffectEditor({
           }
         }
         setBusyDetail("");
-        announceEffectJobs(queuedJobs);
+        announceMediaJobs(queuedJobs);
         const details = [`${totals.queued} queued`];
         if (totals.skipped) details.push(`${totals.skipped} skipped`);
         if (totals.failed) details.push(`${totals.failed} failed`);
@@ -288,7 +288,7 @@ export function EffectEditor({
         });
         const body = await response.json();
         if (!response.ok) throw new Error(body.detail ?? "The render could not start.");
-        announceEffectJobs(body.job ? [body.job] : []);
+        announceMediaJobs(body.job ? [body.job] : []);
         onRendered(t("effectEditor.renderStarted"));
       }
       await refreshJobs();

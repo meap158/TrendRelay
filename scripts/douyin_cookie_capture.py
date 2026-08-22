@@ -59,9 +59,9 @@ def can_download(cookies: dict[str, str]) -> bool:
 
 
 ANONYMOUS_MESSAGE = (
-    "Douyin session saved. Single links and the hot board work; a profile "
-    "fetches its first page (about 20 videos), which is all Douyin serves an "
-    "anonymous caller. A connected account fetches whole profiles and search."
+    "Douyin session saved. Whole profiles, single links and the hot board all "
+    "download; the login wall a signed-out visitor meets is on Douyin's web "
+    "page, which the downloader does not read. Sign in for topic search."
 )
 SIGNED_IN_MESSAGE = "Signed in to Douyin. Downloads and topic search are both available."
 

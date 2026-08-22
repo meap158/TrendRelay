@@ -292,6 +292,47 @@ class PublishingSlot(Base):
     created_at: Mapped[datetime] = mapped_column(default=utc_now)
 
 
+class PostingSchedulePreset(Base):
+    """A reusable, named set of posting times owned by one workspace."""
+
+    __tablename__ = "posting_schedule_presets"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "label", name="unique_schedule_preset_label"),
+    )
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: new_id("preset")
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    label: Mapped[str] = mapped_column(String(120))
+    summary: Mapped[str] = mapped_column(String(300), default="")
+    slots: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(default=utc_now)
+
+
+class PagePostingSchedule(Base):
+    """The reusable schedule assigned to one consolidated social page."""
+
+    __tablename__ = "page_posting_schedules"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "page_key", name="unique_page_posting_schedule"),
+    )
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: new_id("page_schedule")
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    # A platform + normalised handle when one is known; otherwise the engine
+    # and account id. This is the same identity Publish uses to merge pages.
+    page_key: Mapped[str] = mapped_column(String(300))
+    preset_id: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(default=utc_now)
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("audit"))

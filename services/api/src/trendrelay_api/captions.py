@@ -321,6 +321,10 @@ def preview(cues: Sequence[Cue], limit: int = 8) -> list[dict[str, Any]]:
             "start_ms": cue.start_ms,
             "end_ms": cue.end_ms,
             "lines": list(cue.lines),
+            # The visual preview follows playback and highlights the same word
+            # the ASS render will. Keeping the measured timings here avoids a
+            # client-side guess that drifts from the finished caption.
+            "words": [asdict(word) for word in cue.words],
             # Rounded, because this is shown to a person rather than compared.
             "cps": round(cue.cps, 1),
         }

@@ -19,6 +19,7 @@ kilobyte, and the alternative is discovering after a ten-minute render that the
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,7 @@ from trendrelay_api.jobs import (
     create_job_record,
     fail_job,
     get_job_record,
+    report_progress,
     requeue_terminal_job,
 )
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion, MediaTranscript
@@ -126,14 +128,28 @@ def run_caption_job(
     claimed = claim_job(job_id, worker_id, lease_seconds=LEASE_SECONDS, factory=factory)
     payload = dict(claimed["payload"])
     try:
-        result = _render(payload, factory=factory, burn=burn or subtitle_render.burn_in)
+        def progress(fraction: float, stage: str) -> None:
+            report_progress(job_id, fraction, stage, factory=factory)
+        progress(0.04, "Reading the transcript")
+        result = _render(
+            payload,
+            factory=factory,
+            burn=burn or subtitle_render.burn_in,
+            progress=progress,
+        )
         return complete_job(job_id, worker_id, result, factory=factory)
     except Exception as error:
         fail_job(job_id, worker_id, str(error), factory=factory)
         raise
 
 
-def _render(payload: dict[str, Any], *, factory: Any, burn: Any) -> dict[str, Any]:
+def _render(
+    payload: dict[str, Any],
+    *,
+    factory: Any,
+    burn: Any,
+    progress: Callable[[float, str], None],
+) -> dict[str, Any]:
     workspace_id = payload["workspace_id"]
     asset_id = payload["asset_id"]
     delivery = payload.get("delivery", "sidecar")
@@ -154,6 +170,7 @@ def _render(payload: dict[str, Any], *, factory: Any, burn: Any) -> dict[str, An
         source_path = Path(asset.original_path)
         transcript_id = transcript.id
 
+    progress(0.16, "Building caption cues")
     translator = None
     target = payload.get("translate_to")
     if target:
@@ -173,6 +190,7 @@ def _render(payload: dict[str, Any], *, factory: Any, burn: Any) -> dict[str, An
     if not cues:
         raise RuntimeError("The transcript produced no captions.")
 
+    progress(0.42, "Writing subtitle files")
     # Named for the track rather than the job, so two languages of the same clip
     # sit beside each other and read as what they are.
     stem = f"{asset_id}.{target or source_language}"
@@ -182,10 +200,14 @@ def _render(payload: dict[str, Any], *, factory: Any, burn: Any) -> dict[str, An
 
     burned_path: str | None = None
     if delivery in {"burned", "both"}:
+        progress(0.58, "Encoding captions into the video")
         output = destination / f"{stem}.captioned.mp4"
         burned_path = str(burn(source_path, cues, output, style=built["style"]))
+        progress(0.92, "Filing the captioned cut")
         _record_version(workspace_id, asset_id, Path(burned_path), factory=factory)
         produced["burned"] = burned_path
+    else:
+        progress(0.92, "Filing subtitle tracks")
 
     return {
         "asset_id": asset_id,

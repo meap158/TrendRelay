@@ -71,6 +71,12 @@ That is why `characters_remaining` is reported before anything can spend it.
 The durable job records the source character count, estimated metered cost,
 model, language, voice, and voice controls used for the take.
 
+Bulk voiceover requests retain one deterministic durable job per asset, script,
+voice, model, language, and settings combination, so asking twice cannot spend
+twice. The supervised worker runs at most two generations concurrently: enough
+to remove serial network latency without sending a large selection at a paid
+provider all at once or assuming a higher plan concurrency limit.
+
 ## Voice and model selection
 
 The Library reads the current endpoints rather than maintaining a stale local

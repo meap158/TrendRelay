@@ -65,12 +65,18 @@ def workspace() -> str:
     return response.json()["workspace"]["id"]
 
 
-def add_asset(workspace_id: str, *, with_transcript: bool = True, **transcript) -> str:
+def add_asset(
+    workspace_id: str,
+    *,
+    with_transcript: bool = True,
+    media_kind: str = "video",
+    **transcript,
+) -> str:
     with TestingSession() as db:
         asset = MediaAsset(
             workspace_id=workspace_id,
             title="A clip",
-            media_kind="video",
+            media_kind=media_kind,
             original_path="clips/a.mp4",
             original_sha256="0" * 64,
             source_type="upload",
@@ -151,6 +157,9 @@ def test_a_preview_comes_back_without_rendering_anything(workspace) -> None:
 
     assert body["cue_count"] >= 1
     assert body["cues"][0]["lines"]
+    assert body["cues"][0]["words"][0] == {
+        "text": "hello", "start_ms": 0, "end_ms": 1000, "probability": 0.9,
+    }
     assert body["source_language"] == "en"
 
 
@@ -199,6 +208,31 @@ def test_a_misspelled_override_is_refused_rather_than_dropped(workspace) -> None
 
     assert response.status_code == 422
     assert "fontsize" in response.json()["detail"]
+
+
+def test_burned_captions_are_refused_for_audio_before_a_job_is_queued(
+    workspace, monkeypatch
+) -> None:
+    """An audio sidecar is useful; an audio-only video encode is not."""
+    from trendrelay_api import caption_jobs
+
+    asset_id = add_asset(workspace, media_kind="audio")
+    queued = False
+
+    def queue(*args, **kwargs):
+        nonlocal queued
+        queued = True
+
+    monkeypatch.setattr(caption_jobs, "queue", queue)
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/assets/{asset_id}/captions",
+        json={"style_id": "broadcast", "delivery": "burned"},
+    )
+
+    assert response.status_code == 422
+    assert "video" in response.json()["detail"].lower()
+    assert queued is False
 
 
 def test_asking_for_a_translation_with_no_runtime_says_what_to_do(

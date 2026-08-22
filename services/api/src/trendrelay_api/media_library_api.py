@@ -439,6 +439,35 @@ def ingestion_jobs(
     return {"jobs": list_ingest_jobs(workspace_id)}
 
 
+@router.get("/processing/jobs")
+def media_processing_jobs(
+    workspace_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    limit: int = Query(default=250, ge=1, le=500),
+) -> dict[str, Any]:
+    """One notification and thumbnail stream for long-running asset work.
+
+    The job payload is the shared contract: every item carries ``asset_id`` and
+    the serialized durable record carries its ``kind``. Consumers can therefore
+    associate work with a Library card without knowing which editor queued it.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.caption_jobs import JOB_KIND as CAPTION_JOB_KIND
+    from trendrelay_api.integrations.effect_render import JOB_KIND as EFFECT_JOB_KIND
+    from trendrelay_api.jobs import list_job_records_for_kinds
+    from trendrelay_api.media_ai import JOB_KIND as ENRICHMENT_JOB_KIND
+    from trendrelay_api.voice_jobs import JOB_KIND as VOICE_JOB_KIND
+
+    kinds = {
+        EFFECT_JOB_KIND,
+        CAPTION_JOB_KIND,
+        ENRICHMENT_JOB_KIND,
+        VOICE_JOB_KIND,
+    }
+    return {"jobs": list_job_records_for_kinds(workspace_id, kinds, limit, session=session)}
+
+
 @router.post("/imports", status_code=202)
 def import_asset(
     workspace_id: str,
@@ -536,7 +565,7 @@ def _rendered_exists():
     return select(MediaAssetVersion.id).where(
         MediaAssetVersion.asset_id == MediaAsset.id,
         MediaAssetVersion.version_kind.in_(RENDERED_KINDS),
-    ).exists()
+    ).correlate(MediaAsset).exists()
 
 
 def _effect_condition(wanted: str) -> Any:
@@ -564,7 +593,7 @@ def _effect_condition(wanted: str) -> Any:
         return select(MediaAssetVersion.id).where(
             MediaAssetVersion.asset_id == MediaAsset.id,
             MediaAssetVersion.version_kind == wanted,
-        ).exists()
+        ).correlate(MediaAsset).exists()
     # A JSON array of ids. Compared as text because the column is portable JSON
     # rather than a Postgres array, and the ids are constrained to a shape that
     # cannot contain the quotes this looks for.
@@ -575,7 +604,7 @@ def _effect_condition(wanted: str) -> Any:
         cast(MediaAssetVersion.effect_ids, String).like(
             f'%"{escaped}"%', escape="\\"
         ),
-    ).exists()
+    ).correlate(MediaAsset).exists()
 
 
 def _processing_condition(wanted: str) -> Any:
@@ -743,6 +772,12 @@ def list_assets(
     asset_ids: Annotated[str | None, Query(max_length=16_000)] = None,
     sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    # Without this a caller could read the first hundred matches and no more,
+    # whatever `total` told it were there. The Library works around that with
+    # the ids endpoint because its bulk actions need only ids; anything that
+    # needs whole assets - the campaign picker - had no way past the first
+    # page at all.
+    offset: Annotated[int, Query(ge=0, le=MAX_SELECTABLE)] = 0,
 ) -> dict[str, Any]:
     membership(session, workspace_id, user.id)
     filters = AssetFilter(
@@ -766,8 +801,16 @@ def list_assets(
     total = session.scalar(
         select(func.count(MediaAsset.id)).where(*conditions())
     ) or 0
+    # Every sort ends in a unique tiebreaker so paging cannot repeat or skip a
+    # row: `collected_at` and `duration_ms` are both non-unique, and two rows
+    # sharing one leave the database free to order them differently between
+    # requests - which, across a page boundary, silently drops assets.
     items = session.scalars(
-        select(MediaAsset).where(*conditions()).order_by(*order_by).limit(limit)
+        select(MediaAsset)
+        .where(*conditions())
+        .order_by(*order_by, MediaAsset.id.asc())
+        .limit(limit)
+        .offset(offset)
     ).all()
     views = _asset_views(session, list(items))
 
@@ -1792,8 +1835,14 @@ def render_captions(
         membership(session, workspace_id, user.id),
         {"owner", "editor"},
     )
-    _asset_record(session, workspace_id, asset_id)
+    asset = _asset_record(session, workspace_id, asset_id)
     from trendrelay_api import caption_jobs, captions
+
+    if body.delivery in {"burned", "both"} and asset.media_kind != "video":
+        raise HTTPException(
+            status_code=422,
+            detail="Burned captions require a video asset; use subtitle files for audio.",
+        )
 
     # Refused here rather than inside the worker, so a misspelled style is a
     # complaint on the button rather than a job that fails a minute later.

@@ -8,6 +8,7 @@ import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState 
 
 import { apiBaseUrl } from "../../lib/api";
 import { effectLabel, effectTag } from "../../lib/i18n/effects";
+import { LOCALES } from "../../lib/i18n/locales";
 import { useAuth } from "../auth-provider";
 import { type BaseJob, useJobs } from "../jobs-provider";
 import { useWorkspace } from "../workspace-provider";
@@ -16,6 +17,7 @@ import { blurredVersion, handoffPath, openingCut } from "../../lib/media-rules";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, buttonClass } from "../ui/button";
 import { WaitingScreen } from "../ui/waiting-screen";
+import { WaitingBlock } from "../ui/waiting-block";
 import { Dialog } from "../ui/dialog";
 import { SegmentedControl } from "../ui/segmented";
 import { ActionIcon, bulkActionIcon } from "../ui/action-icons";
@@ -35,6 +37,8 @@ import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 import { ActionMenu, type ActionMenuItem } from "../ui/action-menu";
 import {
   LIBRARY_SELECTION_ACTIONS,
+  SELECTION_ACTION_ICON,
+  SELECTION_ACTION_KEY,
   selectionActionState,
   type LibrarySelectionActionId,
   type LibrarySelectionTarget,
@@ -80,27 +84,6 @@ type Version = {
  * *watching* the result none of that matters: each is a render of this asset,
  * so the previewer takes them together and names the result by what made it.
  */
-/**
- * The message-key suffix and icon for each selection action.
- *
- * Maps rather than the ternary chain they replace: that grew a branch per
- * action and sent anything unrecognised to Voiceover, so a newly declared
- * action would have quietly worn another action's name and icon.
- */
-const SELECTION_ACTION_KEY: Record<LibrarySelectionActionId, string> = {
-  effects: "Effects",
-  transcribe: "Transcribe",
-  captions: "Captions",
-  voiceover: "Voiceover",
-};
-
-const SELECTION_ACTION_ICON: Record<LibrarySelectionActionId, ActionName> = {
-  effects: "edit",
-  transcribe: "transcribe",
-  captions: "edit",
-  voiceover: "play",
-};
-
 const RENDERED_KINDS = new Set(["blurred", "edited", "captioned"]);
 
 /**
@@ -235,7 +218,7 @@ function timeAgo(when: string | null | undefined, now: number): string {
   return new Date(when).toLocaleDateString();
 }
 
-type ThumbnailEffectActivity = {
+type ThumbnailMediaActivity = {
   label: string;
   detail: string;
   progress: number | null;
@@ -244,30 +227,32 @@ type ThumbnailEffectActivity = {
 };
 
 /** The single most useful active render state to show on an asset card. */
-function thumbnailEffectActivity(
+function thumbnailMediaActivity(
   t: Translate,
   jobs: BaseJob[],
   assetId: string,
   cancellingJobId = "",
-): ThumbnailEffectActivity | null {
+): ThumbnailMediaActivity | null {
   const active = jobs.filter((job) =>
-    job.category === "edit"
-    && !isEffectPreviewJob(job)
-    && assetIdForEffectJob(job) === assetId
+    job.assetId === assetId
+    && !(job.category === "edit" && isEffectPreviewJob(job))
     && ["queued", "running"].includes(job.status),
   );
   const job = active.find((candidate) => candidate.status === "running") ?? active[0];
   if (!job) return null;
 
-  const effectNames = ((job.raw?.payload?.effects ?? []) as string[])
-    .map((id) => effectLabel(t, id, id));
+  const effectNames = job.category === "edit"
+    ? ((job.raw?.payload?.effects ?? []) as string[]).map((id) => effectLabel(t, id, id))
+    : [];
   const stopping = job.id === cancellingJobId;
   const progress = typeof job.progress === "number"
     ? Math.max(0, Math.min(1, job.progress))
     : null;
 
   return {
-    label: stopping
+    label: job.category !== "edit"
+      ? job.stalled ? "Paused" : job.status === "queued" ? `${job.activityLabel ?? "Processing"} queued` : job.activityLabel ?? "Processing"
+      : stopping
       ? "Stopping"
       : job.status === "queued"
         ? "Queued"
@@ -279,7 +264,9 @@ function thumbnailEffectActivity(
           : Number(job.raw?.attempt_count ?? 0) > 1
             ? "Resuming"
             : "Applying",
-    detail: effectNames.join(" + ") || "Effect stack",
+    detail: job.category === "edit"
+      ? effectNames.join(" + ") || "Effect stack"
+      : job.progressStage || job.activityDetail || job.title,
     progress,
     stalled: Boolean(job.stalled),
   };
@@ -664,12 +651,12 @@ function Thumbnail({
   asset,
   workspaceId,
   apiFetch,
-  effectActivity,
+  mediaActivity,
 }: {
   asset: Asset;
   workspaceId: string;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
-  effectActivity?: ThumbnailEffectActivity | null;
+  mediaActivity?: ThumbnailMediaActivity | null;
 }) {
   const [source, setSource] = useState("");
   const hasThumbnail = asset.versions.some((version) => version.kind === "thumbnail");
@@ -702,30 +689,30 @@ function Thumbnail({
           <img className="library-thumbnail" src={source} alt={`${asset.title} thumbnail`} loading="lazy" />
         </>
       ) : <div className="library-thumbnail library-thumbnail-empty">{asset.media_kind}</div>}
-      {effectActivity ? (
+      {mediaActivity ? (
         <span
-          className={`library-effect-processing${effectActivity.stalled ? " stalled" : ""}`}
-          aria-label={`${effectActivity.label}: ${effectActivity.detail}`}
-          title={effectActivity.stalled
-            ? `${effectActivity.detail} — paused. Nothing is working on this; it resumes when the worker is back.`
-            : `${effectActivity.label}: ${effectActivity.detail}`}
+          className={`library-effect-processing${mediaActivity.stalled ? " stalled" : ""}`}
+          aria-label={`${mediaActivity.label}: ${mediaActivity.detail}`}
+          title={mediaActivity.stalled
+            ? `${mediaActivity.detail} — paused. Nothing is working on this; it resumes when the worker is back.`
+            : `${mediaActivity.label}: ${mediaActivity.detail}`}
         >
           <span className="library-effect-processing-label">
             {/* A spinner on a job nobody is working on is the animation that
                 made a ten-hour-dead render look alive. */}
-            {effectActivity.stalled
+            {mediaActivity.stalled
               ? <CirclePause size={15} aria-hidden="true" />
               : <LoaderCircle className="is-spinning" size={15} aria-hidden="true" />}
-            <strong>{effectActivity.label}</strong>
-            {effectActivity.progress !== null && <small>{Math.round(effectActivity.progress * 100)}%</small>}
+            <strong>{mediaActivity.label}</strong>
+            {mediaActivity.progress !== null && <small>{Math.round(mediaActivity.progress * 100)}%</small>}
           </span>
           <span
             className={`library-effect-processing-progress ${
-              effectActivity.progress === null && !effectActivity.stalled ? "indeterminate" : ""
+              mediaActivity.progress === null && !mediaActivity.stalled ? "indeterminate" : ""
             }`}
             aria-hidden="true"
           >
-            <span style={effectActivity.progress === null ? undefined : { width: `${Math.round(effectActivity.progress * 100)}%` }} />
+            <span style={mediaActivity.progress === null ? undefined : { width: `${Math.round(mediaActivity.progress * 100)}%` }} />
           </span>
         </span>
       ) : (
@@ -1063,6 +1050,10 @@ function LibraryContent() {
   const [facets, setFacets] = useState<AssetFacets>(EMPTY_FACETS);
   const [total, setTotal] = useState(0);
   const [loadingAssets, setLoadingAssets] = useState(false);
+  // Keep "not answered yet" separate from a genuine empty library. On route
+  // entry the asset array is necessarily empty; treating that as real data
+  // flashes the empty collection and detail prompts before the request lands.
+  const [loadedWorkspaceId, setLoadedWorkspaceId] = useState("");
   // Background syncs, filter changes and job completion can all request a
   // refresh. They must all read the latest selection, and an older response
   // must never put an unfiltered list back after a newer filtered one arrived.
@@ -1092,7 +1083,7 @@ function LibraryContent() {
     () => notificationScopeProgress(notificationJobs, notificationAssetIds, notificationTitle),
     [notificationAssetIds, notificationJobs, notificationTitle],
   );
-  const previousEffectJobStates = useRef<Map<string, string>>(new Map());
+  const previousMediaJobStates = useRef<Map<string, string>>(new Map());
   const [message, setMessage] = useState("");
   const [selection, setSelection] = useState<Set<string>>(new Set());
   /** Anchor for shift-click range selection. */
@@ -1209,19 +1200,22 @@ function LibraryContent() {
           : (assetBody.assets[0]?.id ?? ""),
       );
     } finally {
-      if (sequence === refreshSequence.current) setLoadingAssets(false);
+      if (sequence === refreshSequence.current) {
+        setLoadingAssets(false);
+        setLoadedWorkspaceId(nextWorkspace);
+      }
     }
   }, [apiFetch, notificationAssetIds, workspaceId]);
 
   useEffect(() => {
-    const effectJobs = notificationJobs.filter((job) => job.category === "edit");
-    const previous = previousEffectJobStates.current;
-    const settledNow = effectJobs.some((job) =>
+    const mediaJobs = notificationJobs.filter((job) => Boolean(job.assetId));
+    const previous = previousMediaJobStates.current;
+    const settledNow = mediaJobs.some((job) =>
       ["succeeded", "failed", "cancelled"].includes(job.status)
       && ["queued", "running"].includes(previous.get(job.id) ?? ""),
     );
-    previousEffectJobStates.current = new Map(
-      effectJobs.map((job) => [job.id, job.status]),
+    previousMediaJobStates.current = new Map(
+      mediaJobs.map((job) => [job.id, job.status]),
     );
     // The notification announces completion; refresh the same screen at that
     // moment so its new cut, exact tags, and effect facet appear without a
@@ -1413,7 +1407,7 @@ function LibraryContent() {
   }
 
   function renderAsset(asset: Asset) {
-    const effectActivity = thumbnailEffectActivity(
+    const mediaActivity = thumbnailMediaActivity(
       t,
       notificationJobs,
       asset.id,
@@ -1421,7 +1415,7 @@ function LibraryContent() {
     );
     const tags = assetTags(t, asset);
     return (
-      <button className={`${selectedId === asset.id ? "selected" : ""}${renderedCut(asset.versions) ? " has-versions" : ""}${selection.has(asset.id) ? " picked" : ""}`} key={asset.id} aria-label={`Open ${asset.title}${effectActivity ? `. ${effectActivity.label}: ${effectActivity.detail}` : ""}`} aria-pressed={selectedId === asset.id} onClick={() => setSelectedId(asset.id)}>
+      <button className={`${selectedId === asset.id ? "selected" : ""}${renderedCut(asset.versions) ? " has-versions" : ""}${selection.has(asset.id) ? " picked" : ""}`} key={asset.id} aria-label={`Open ${asset.title}${mediaActivity ? `. ${mediaActivity.label}: ${mediaActivity.detail}` : ""}`} aria-pressed={selectedId === asset.id} onClick={() => setSelectedId(asset.id)}>
         {/* A separate control, so selecting never hijacks opening a clip. */}
         <span
           className="library-pick"
@@ -1437,7 +1431,7 @@ function LibraryContent() {
             toggleSelection(asset.id, event.shiftKey);
           }}
         >{selection.has(asset.id) && <Check size={12} strokeWidth={3.5} aria-hidden="true" />}</span>
-        <Thumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} effectActivity={effectActivity} />
+        <Thumbnail asset={asset} workspaceId={workspaceId} apiFetch={apiFetch} mediaActivity={mediaActivity} />
         <span>
           <strong>{asset.title}</strong>
           <small>{asset.creator ? `${asset.creator} · ` : ""}{asset.platform ?? asset.source_type} · {displayDuration(asset.duration_ms)} · {displaySize(asset.size_bytes)}</small>
@@ -1694,6 +1688,8 @@ function LibraryContent() {
   if (loading) return <WaitingScreen className="library-page" message={t("library.opening")} />;
   if (!user) return <main className="library-page"><Link className={buttonClass({ variant: "primary" })} href="/sign-in?next=%2Flibrary">{t("library.signInPrompt")}</Link></main>;
 
+  const initialAssetsPending = Boolean(workspaceId) && loadedWorkspaceId !== workspaceId;
+
   return (
     <main className="library-page">
       <WorkspaceSectionNav area="library" />
@@ -1899,7 +1895,9 @@ function LibraryContent() {
               </div>
             )}
           </div>
-          <div className={`library-collection ${groupBy === "none" ? `library-${viewMode}` : "library-grouped"}`}>
+          {initialAssetsPending ? (
+            <WaitingBlock className="library-collection-wait" message={t("common.loading")} />
+          ) : <div className={`library-collection ${groupBy === "none" ? `library-${viewMode}` : "library-grouped"}`}>
             {groupBy === "none"
               ? assets.map(renderAsset)
               : groupedAssets.map(([label, groupAssets]) => (
@@ -1911,7 +1909,7 @@ function LibraryContent() {
                 </section>
               ))}
             {!assets.length && <p>{t("library.empty")}</p>}
-          </div>
+          </div>}
           {canImport && (
             <details className="library-import">
               <summary>{t("library.importLocal")}</summary>
@@ -1947,7 +1945,9 @@ function LibraryContent() {
         </aside>
 
         <section className="library-detail">
-          {selected ? (
+          {initialAssetsPending ? (
+            <WaitingBlock className="library-detail-wait" message={t("common.loading")} />
+          ) : selected ? (
             <>
               <MediaPreview
                 key={selected.id}
@@ -2178,7 +2178,27 @@ function LibraryContent() {
                       <section>
                         <div className="library-enrichment-section-head">
                           <h4>Reviewed text</h4>
-                          <label>{t("recipe.language")}<input name="language" defaultValue={reviewedLanguage(selected)} placeholder="en, vi, zh…" /></label>
+                          <label className="library-language-field">
+                            {t("recipe.language")}
+                            <Select
+                              name="language"
+                              defaultValue={reviewedLanguage(selected)}
+                              aria-label={t("recipe.language")}
+                              title={t("recipe.languageAutomaticHelp")}
+                              searchable={false}
+                            >
+                              <option value="und">{t("recipe.languageAutomatic")}</option>
+                              {!LOCALES.some((item) => item.code === reviewedLanguage(selected))
+                                && reviewedLanguage(selected) !== "und" && (
+                                <option value={reviewedLanguage(selected)}>
+                                  {reviewedLanguage(selected).toUpperCase()}
+                                </option>
+                              )}
+                              {LOCALES.map((item) => (
+                                <option key={item.code} value={item.code}>{item.label}</option>
+                              ))}
+                            </Select>
+                          </label>
                         </div>
                         <label>{t("recipe.reviewedSpeech")}<textarea ref={speechField} name="speech_text" rows={5} defaultValue={reviewedText(selected, "speech")} /></label>
                         <TranscriptDraft

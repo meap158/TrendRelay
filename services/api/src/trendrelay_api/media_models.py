@@ -64,8 +64,13 @@ class MediaAssetVersion(Base):
             name="unique_asset_version_hash",
         ),
         CheckConstraint(
+            # `voiceover` is generated speech, and deliberately not `audio`:
+            # that is the clip's own extracted track, and writing a generated
+            # voice there would destroy the original's sound while claiming
+            # to add to it.
             "version_kind IN "
-            "('original','proxy','thumbnail','audio','blurred','edited','captioned')",
+            "('original','proxy','thumbnail','audio','blurred','edited',"
+            "'captioned','voiceover','voiced')",
             name="valid_media_version_kind",
         ),
     )

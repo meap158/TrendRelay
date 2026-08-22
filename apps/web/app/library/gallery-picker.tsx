@@ -445,7 +445,7 @@ export function GalleryPanel({
         <div className="overlay-choices">
           <div className="overlay-discovery">
             <label className="overlay-search">
-              <span className="ui-visually-hidden">{t("overlayPicker.search")}</span>
+              <span className="sr-only">{t("overlayPicker.search")}</span>
               <input
                 type="search"
                 value={search}
@@ -534,7 +534,7 @@ export function GalleryPanel({
               {folder.import_from_library && (
                 <div className="overlay-import">
                   <label>
-                    <span className="ui-visually-hidden">{t("overlayPicker.addFromLibrary")}</span>
+                    <span className="sr-only">{t("overlayPicker.addFromLibrary")}</span>
                     <Select
                       value={importing}
                       disabled={!canEdit || adding}

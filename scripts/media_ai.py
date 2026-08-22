@@ -1,11 +1,20 @@
-"""Install and verify TrendRelay's isolated local transcription and OCR runtimes."""
+"""Prepare TrendRelay's isolated local transcription, OCR and translation runtimes.
+
+The app does this itself now - Tools, or the transcription switch in the Library
+- and that is the path to use, because it shows progress and says why something
+failed. This stays for the case the interface cannot cover: a headless machine
+being provisioned before anyone opens a browser at it.
+
+It is deliberately a shell around `trendrelay_api.media_ai` rather than a second
+implementation. The version pins, the language pairs and the order the steps run
+in all live there, so what a terminal installs and what the button installs
+cannot drift apart.
+"""
 
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -14,130 +23,31 @@ API_SOURCE = ROOT / "services" / "api" / "src"
 sys.path.insert(0, str(API_SOURCE))
 
 from trendrelay_api.media_ai import (  # noqa: E402
-    MODEL_ROOT,
-    OCR_VERSION,
-    ONNX_VERSION,
-    RUNTIME_ROOT,
-    SPEECH_VERSION,
-    TRANSLATE_VERSION,
+    PROVIDER_TOOL,
+    prepare_provider,
     provider_status,
 )
-
-PACKAGES = {
-    "speech": [f"faster-whisper=={SPEECH_VERSION}"],
-    "ocr": [f"rapidocr=={OCR_VERSION}", f"onnxruntime=={ONNX_VERSION}"],
-    "translate": [f"argostranslate=={TRANSLATE_VERSION}"],
-}
-
-#: Installed by default because they are the directions TrendRelay's own
-#: interface implies: the languages it is translated into, paired with English,
-#: which is the hub Argos routes most pairs through anyway.
-DEFAULT_PAIRS = [
-    ("en", "vi"), ("vi", "en"),
-    ("en", "ja"), ("ja", "en"),
-    ("en", "fr"), ("fr", "en"),
-    ("en", "zh"), ("zh", "en"),
-    ("en", "ru"), ("ru", "en"),
-    ("en", "ar"), ("ar", "en"),
-]
-
-
-def _install(provider: str) -> None:
-    RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
-    command = [
-        sys.executable,
-        "-m",
-        "pip",
-        "install",
-        "--upgrade",
-        "--target",
-        str(RUNTIME_ROOT),
-        *PACKAGES[provider],
-    ]
-    completed = subprocess.run(command, cwd=ROOT, check=False)
-    if completed.returncode != 0:
-        raise RuntimeError(f"{provider.title()} runtime installation failed.")
-
-
-def _prepare_speech() -> None:
-    value = str(RUNTIME_ROOT)
-    if value not in sys.path:
-        sys.path.insert(0, value)
-    from faster_whisper import WhisperModel
-
-    from trendrelay_api.config import get_settings
-
-    settings = get_settings()
-    model_root = MODEL_ROOT / "faster-whisper"
-    model_root.mkdir(parents=True, exist_ok=True)
-    WhisperModel(
-        settings.media_ai_speech_model,
-        device="cpu",
-        compute_type="int8",
-        download_root=str(model_root),
-    )
-
-
-def _prepare_translate() -> None:
-    """Fetch the language packages. This is the only step that needs network.
-
-    A pair that will not download is reported and skipped rather than failing
-    the run: eleven working directions and one missing is a better outcome than
-    none, and the status page lists what actually installed.
-    """
-    value = str(RUNTIME_ROOT)
-    if value not in sys.path:
-        sys.path.insert(0, value)
-    from argostranslate import package
-
-    package.update_package_index()
-    available = package.get_available_packages()
-    installed = {(item.from_code, item.to_code) for item in package.get_installed_packages()}
-    for source, target in DEFAULT_PAIRS:
-        if (source, target) in installed:
-            continue
-        match = next(
-            (item for item in available
-             if item.from_code == source and item.to_code == target),
-            None,
-        )
-        if match is None:
-            print(f"  no package published for {source} to {target}; skipped")
-            continue
-        try:
-            package.install_from_path(match.download())
-            print(f"  installed {source} to {target}")
-        except Exception as error:
-            print(f"  {source} to {target} failed: {type(error).__name__}; skipped")
-
-
-def _prepare_ocr() -> None:
-    value = str(RUNTIME_ROOT)
-    if value not in sys.path:
-        sys.path.insert(0, value)
-    if importlib.util.find_spec("rapidocr") is None:
-        raise RuntimeError("RapidOCR was not installed.")
-    from rapidocr import RapidOCR
-
-    RapidOCR()
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "command",
-        choices=["status", "install-speech", "install-ocr", "install-translate"],
+        choices=["status", *(f"install-{provider}" for provider in PROVIDER_TOOL)],
     )
     args = parser.parse_args()
     if args.command == "status":
         print(json.dumps(provider_status(), indent=2))
         return 0
+
     provider = args.command.removeprefix("install-")
-    _install(provider)
-    {"speech": _prepare_speech, "ocr": _prepare_ocr, "translate": _prepare_translate}[
-        provider
-    ]()
-    print(f"{provider.title()} runtime is ready. Return to TrendRelay and refresh Tools.")
+    skipped = prepare_provider(
+        provider,
+        on_stage=lambda fraction, label: print(f"  {int(fraction * 100):3d}%  {label}", flush=True),
+    )
+    for note in skipped:
+        print(f"  skipped {note}")
+    print(f"{provider.title()} is ready and switched on.")
     return 0
 
 
