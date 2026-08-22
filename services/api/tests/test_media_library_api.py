@@ -720,3 +720,60 @@ def test_preview_edited_cut_serves_a_captions_only_asset(tmp_path: Path) -> None
     assert body["mime_type"] == "video/mp4"
     import base64 as _base64
     assert _base64.b64decode(body["content_base64"]) == b"captioned bytes"
+
+
+def test_an_oversize_captioned_cut_streams_instead_of_refusing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Base64 caps at 100 MB by design; streaming is how long burns answer.
+
+    The JSON preview must keep refusing - pushing a gigabyte through a JSON
+    parser helps nobody - but it now names the stream route, and that route
+    serves the same cut with range requests.
+    """
+    workspace_id = create_workspace()
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"original")
+    burned = tmp_path / "clip.captioned.mp4"
+    burned.write_bytes(b"long captioned render")
+    with TestingSession() as session:
+        asset = MediaAsset(
+            workspace_id=workspace_id,
+            title="Clip",
+            media_kind="video",
+            source_type="upload",
+            original_path=str(clip),
+            original_sha256="d" * 64,
+            mime_type="video/mp4",
+            size_bytes=clip.stat().st_size,
+            created_by="library-owner",
+        )
+        session.add(asset)
+        session.flush()
+        session.add(MediaAssetVersion(
+            workspace_id=workspace_id,
+            asset_id=asset.id,
+            version_kind="captioned",
+            path=str(burned),
+            sha256="e" * 64,
+            mime_type="video/mp4",
+            size_bytes=burned.stat().st_size,
+        ))
+        session.commit()
+        asset_id = asset.id
+    monkeypatch.setattr(media_library_api, "PREVIEW_SIZE_LIMIT", 8)
+
+    refused = asyncio.run(request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/preview?cut=edited",
+    ))
+    streamed = asyncio.run(request(
+        "GET",
+        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/preview/stream?cut=edited",
+    ))
+
+    assert refused.status_code == 413
+    assert refused.headers["X-Preview-Stream"] == "/stream"
+    assert streamed.status_code == 200
+    assert streamed.headers["content-type"].startswith("video/mp4")
+    assert streamed.content == b"long captioned render"

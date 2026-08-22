@@ -813,6 +813,15 @@ function MediaPreview({
       .then((url) => { if (active) setSource(url); })
       .catch((reason) => {
         if (active && reason instanceof DOMException && reason.name === "AbortError") return;
+        // Caption burns re-encode the full-length source, so long clips pass
+        // the base64 preview's size cap. The stream endpoint answers the same
+        // cut with range requests, which is what a long video wanted anyway.
+        if (active && playable && reason instanceof Error && /too large/i.test(reason.message)) {
+          setSource(
+            `${apiBaseUrl()}/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/preview/stream?cut=${wanted}`,
+          );
+          return;
+        }
         if (active) setError(reason instanceof Error ? reason.message : t("library.previewUnavailable"));
       });
     return () => {

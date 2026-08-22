@@ -1143,12 +1143,53 @@ def asset_preview(
         raise HTTPException(status_code=404, detail="Preview is unavailable.") from error
     if path.stat().st_size > PREVIEW_SIZE_LIMIT:
         raise HTTPException(
-            status_code=413, detail="This file is too large to preview safely."
+            status_code=413,
+            detail="This file is too large to preview safely.",
+            headers={"X-Preview-Stream": "/stream"},
         )
     return {
         "mime_type": version.mime_type,
         "content_base64": base64.b64encode(path.read_bytes()).decode("ascii"),
     }
+
+
+@router.get("/assets/{asset_id}/preview/stream")
+def asset_preview_stream(
+    workspace_id: str,
+    asset_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    cut: Annotated[Literal["original", "edited"], Query()] = "original",
+) -> FileResponse:
+    """Stream one cut of an asset that is too big to base64 into a JSON body.
+
+    The default preview reads the whole file into memory twice - once here,
+    once in the browser's JSON parser - which caps it at PREVIEW_SIZE_LIMIT.
+    Caption burns re-encode the full-length source, so they blow past that cap
+    the moment a clip runs long. Streaming answers with range requests so the
+    player pulls what it plays and seeks without downloading everything first.
+
+    Same resolution rules as the JSON preview, including preferring the
+    captioned cut for `edited`; only the transport differs.
+    """
+    membership(session, workspace_id, user.id)
+    asset = _asset_record(session, workspace_id, asset_id)
+    if asset.media_kind not in PREVIEWABLE_KINDS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{asset.media_kind} assets have no preview.",
+        )
+    if cut == "original":
+        version = _preferred_version(session, asset_id, ("proxy", "original"))
+    else:
+        version = _rendered_cut(session, asset_id, kinds=(*RENDERED_KINDS, "captioned"))
+    if not version:
+        raise HTTPException(status_code=404, detail="Preview not found.")
+    try:
+        path = Path(version.path).resolve(strict=True)
+    except OSError as error:
+        raise HTTPException(status_code=404, detail="Preview is unavailable.") from error
+    return FileResponse(path, media_type=version.mime_type)
 
 @router.get("/face-blur/status")
 def face_blur_status(
