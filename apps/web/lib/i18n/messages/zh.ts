@@ -1283,6 +1283,8 @@ export const zh: Messages = {
     markRead: "标为已读",
     close: "关闭通知",
     unreadCount: "通知，{count} 条未读",
+    scheduledFor: "定时发布 {when}",
+    destinations: "{count, plural, other {# 个目的地}}",
     filterLabel: "按状态筛选通知",
     filterAll: "全部",
     filter_running: "运行中",

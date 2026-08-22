@@ -8,6 +8,7 @@ import { notificationHref } from "../lib/job-links";
 
 import { useAuth } from "./auth-provider";
 import { type BaseJob, useJobs } from "./jobs-provider";
+import { NotificationContext } from "./notification-context";
 import { useT } from "./i18n-provider";
 import { Button } from "./ui/button";
 import { ActionIcon } from "./ui/action-icons";
@@ -777,6 +778,12 @@ export function GlobalNav() {
                     const batch = batchProgress(group);
                     const destination = notificationHref(group.jobs, { title: job.title }) ?? job.href;
                     const read = group.jobs.every((item) => readKeys.has(notificationKey(item)));
+                    // One face for the row only when every job in it worked
+                    // on the same asset; a mixed batch gets no favourite.
+                    const assetIds = [...new Set(
+                      group.jobs.map((item) => item.assetId).filter(Boolean),
+                    )] as string[];
+                    const sharedAssetId = assetIds.length === 1 ? assetIds[0] : null;
                     return (
                       <li className={read ? "notification-item read" : "notification-item unread"} key={group.key}>
                         <div className="notification-item-topline">
@@ -828,6 +835,16 @@ export function GlobalNav() {
                         ) : (
                           <strong className="notification-title">{job.title}</strong>
                         )}
+                        {/* What the row is about, not just what happened to
+                            it: the post that went out, or the clip it worked
+                            on - shown only when every job in the group agrees
+                            on which asset that is. */}
+                        <NotificationContext
+                          job={job}
+                          workspaceId={workspaceId}
+                          apiFetch={apiFetch}
+                          assetId={sharedAssetId}
+                        />
                         {/* A render is minutes of work, and between "running"
                             and "succeeded" there was nothing to distinguish it
                             from a job that had hung. Only while it is running:

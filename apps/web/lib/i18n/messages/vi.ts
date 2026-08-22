@@ -1308,6 +1308,8 @@ export const vi: Messages = {
     markRead: "Đánh dấu đã đọc",
     close: "Đóng thông báo",
     unreadCount: "Thông báo, {count} chưa đọc",
+    scheduledFor: "Đã lên lịch {when}",
+    destinations: "{count, plural, other {# điểm gửi}}",
     filterLabel: "Lọc thông báo theo trạng thái",
     filterAll: "Tất cả",
     filter_running: "Đang chạy",

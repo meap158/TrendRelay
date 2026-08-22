@@ -1301,6 +1301,8 @@ export const ja: Messages = {
     markRead: "既読にする",
     close: "通知を閉じる",
     unreadCount: "通知、未読 {count} 件",
+    scheduledFor: "予約済み {when}",
+    destinations: "{count, plural, other {# 件の宛先}}",
     filterLabel: "ステータスで通知を絞り込む",
     filterAll: "すべて",
     filter_running: "実行中",

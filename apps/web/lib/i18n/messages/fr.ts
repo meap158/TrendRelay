@@ -1328,6 +1328,8 @@ export const fr: Messages = {
     markRead: "Marquer comme lu",
     close: "Fermer les notifications",
     unreadCount: "Notifications, {count} non lues",
+    scheduledFor: "Prévu {when}",
+    destinations: "{count, plural, one {# destination} other {# destinations}}",
     filterLabel: "Filtrer les notifications par statut",
     filterAll: "Tout",
     filter_running: "En cours",

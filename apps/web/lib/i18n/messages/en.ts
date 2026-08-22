@@ -1311,6 +1311,8 @@ export const en = {
     markRead: "Mark read",
     close: "Close notifications",
     unreadCount: "Notifications, {count} unread",
+    scheduledFor: "Scheduled {when}",
+    destinations: "{count, plural, one {# destination} other {# destinations}}",
     filterLabel: "Filter notifications by status",
     filterAll: "All",
     filter_running: "Running",

@@ -1327,6 +1327,8 @@ export const ru: Messages = {
     markRead: "Отметить прочитанным",
     close: "Закрыть уведомления",
     unreadCount: "Уведомления, непрочитанных: {count}",
+    scheduledFor: "Запланировано на {when}",
+    destinations: "{count, plural, one {# назначение} few {# назначения} many {# назначений} other {# назначения}}",
     filterLabel: "Фильтровать уведомления по статусу",
     filterAll: "Все",
     filter_running: "Выполняется",

@@ -1311,6 +1311,8 @@ export const ar: Messages = {
     markRead: "تعليم كمقروء",
     close: "إغلاق الإشعارات",
     unreadCount: "الإشعارات، {count} غير مقروء",
+    scheduledFor: "مجدول {when}",
+    destinations: "{count, plural, one {وجهة واحدة} other {# وجهات}}",
     filterLabel: "تصفية الإشعارات حسب الحالة",
     filterAll: "الكل",
     filter_running: "قيد التشغيل",
