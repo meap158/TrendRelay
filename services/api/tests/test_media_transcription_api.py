@@ -66,7 +66,9 @@ def setup_function() -> None:
     media_ai.JOB_SESSION_FACTORY = TestingSession
     app.dependency_overrides[get_session] = session_override
     app.dependency_overrides[current_user] = lambda: CurrentUser(
-        id="library-owner", email="owner@example.com", assurance_level="aal2",
+        id="library-owner",
+        email="owner@example.com",
+        assurance_level="aal2",
     )
 
 
@@ -79,37 +81,43 @@ def workspace_with_asset(tmp_path: Path, monkeypatch, *, has_audio: bool = True)
     source = tmp_path / "clip.mp4"
     source.write_bytes(b"immutable-video")
     monkeypatch.setattr(
-        media_library, "get_settings",
+        media_library,
+        "get_settings",
         lambda: SimpleNamespace(publishing_media_root_list=[str(tmp_path)]),
     )
+    monkeypatch.setattr(media_library_api, "create_ingest_job", media_library.create_ingest_job)
     monkeypatch.setattr(
-        media_library_api, "create_ingest_job", media_library.create_ingest_job
-    )
-    monkeypatch.setattr(
-        media_library, "process_media",
+        media_library,
+        "process_media",
         lambda path, _workspace, digest: {
             "original": str(path),
             "media_kind": "video",
             "mime_type": "video/mp4",
             "size_bytes": path.stat().st_size,
             "metadata": {"duration_ms": 12_000, "has_audio": has_audio},
-            "versions": [{
-                "version_kind": "original",
-                "path": str(path),
-                "sha256": digest,
-                "mime_type": "video/mp4",
-                "size_bytes": path.stat().st_size,
-                "duration_ms": 12_000,
-            }],
+            "versions": [
+                {
+                    "version_kind": "original",
+                    "path": str(path),
+                    "sha256": digest,
+                    "mime_type": "video/mp4",
+                    "size_bytes": path.stat().st_size,
+                    "duration_ms": 12_000,
+                }
+            ],
         },
     )
-    created = asyncio.run(request("POST", "/api/workspaces", json={"name": "Vault", "slug": "vault"}))
+    created = asyncio.run(
+        request("POST", "/api/workspaces", json={"name": "Vault", "slug": "vault"})
+    )
     workspace_id = created.json()["workspace"]["id"]
-    queued = asyncio.run(request(
-        "POST",
-        f"/api/workspaces/{workspace_id}/media/library/imports",
-        json={"path": str(source), "title": "A clip", "confirm_external_action": True},
-    ))
+    queued = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/imports",
+            json={"path": str(source), "title": "A clip", "confirm_external_action": True},
+        )
+    )
     media_library.run_ingest_job(queued.json()["job"]["id"], factory=TestingSession)
     listing = asyncio.run(request("GET", f"/api/workspaces/{workspace_id}/media/library/assets"))
     return workspace_id, listing.json()["assets"][0]["id"]
@@ -119,11 +127,13 @@ def test_asking_for_a_reading_queues_a_job(tmp_path, monkeypatch) -> None:
     workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)
     monkeypatch.setattr(media_ai, "provider_status", lambda: READY)
 
-    response = asyncio.run(request(
-        "POST",
-        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
-        json={"modes": ["speech", "ocr"]},
-    ))
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+            json={"modes": ["speech", "ocr"]},
+        )
+    )
 
     assert response.status_code == 202, response.text
     job = response.json()["job"]
@@ -133,24 +143,59 @@ def test_asking_for_a_reading_queues_a_job(tmp_path, monkeypatch) -> None:
     assert job["payload"]["asset_id"] == asset_id
 
 
-def test_the_queued_job_is_listed_for_the_page_that_has_to_watch_it(
-    tmp_path, monkeypatch
-) -> None:
+def test_the_queued_job_is_listed_for_the_page_that_has_to_watch_it(tmp_path, monkeypatch) -> None:
     workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)
     monkeypatch.setattr(media_ai, "provider_status", lambda: READY)
-    asyncio.run(request(
-        "POST",
-        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
-        json={"modes": ["speech"]},
-    ))
+    asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+            json={"modes": ["speech"]},
+        )
+    )
 
-    listed = asyncio.run(request(
-        "GET", f"/api/workspaces/{workspace_id}/media/library/transcription/jobs"
-    ))
+    listed = asyncio.run(
+        request("GET", f"/api/workspaces/{workspace_id}/media/library/transcription/jobs")
+    )
 
     assert listed.status_code == 200
     jobs = listed.json()["jobs"]
     assert [job["payload"]["asset_id"] for job in jobs] == [asset_id]
+
+
+def test_asking_again_resumes_the_same_failed_reading(tmp_path, monkeypatch) -> None:
+    from trendrelay_api.jobs import claim_job, fail_job
+
+    workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)
+    monkeypatch.setattr(media_ai, "provider_status", lambda: READY)
+    first = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+            json={"modes": ["speech"]},
+        )
+    ).json()["job"]
+    claim_job(first["id"], "worker", factory=TestingSession)
+    fail_job(
+        first["id"],
+        "worker",
+        "Provider was off.",
+        retry_allowed=False,
+        factory=TestingSession,
+    )
+
+    resumed = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+            json={"modes": ["speech"]},
+        )
+    ).json()["job"]
+
+    assert resumed["id"] == first["id"]
+    assert resumed["status"] == "queued"
+    assert resumed["attempt_count"] == 0
+    assert resumed["error"] is None
 
 
 def test_a_provider_that_is_off_is_refused_at_the_click(tmp_path, monkeypatch) -> None:
@@ -160,16 +205,22 @@ def test_a_provider_that_is_off_is_refused_at_the_click(tmp_path, monkeypatch) -
     running. This is the check that can still say what to do about it.
     """
     workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)
-    monkeypatch.setattr(media_ai, "provider_status", lambda: {
-        "speech": {"ready": False, "prepared": True, "provider": "faster-whisper 1.2.1"},
-        "ocr": READY["ocr"],
-    })
+    monkeypatch.setattr(
+        media_ai,
+        "provider_status",
+        lambda: {
+            "speech": {"ready": False, "prepared": True, "provider": "faster-whisper 1.2.1"},
+            "ocr": READY["ocr"],
+        },
+    )
 
-    response = asyncio.run(request(
-        "POST",
-        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
-        json={"modes": ["speech"]},
-    ))
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+            json={"modes": ["speech"]},
+        )
+    )
 
     assert response.status_code == 409
     assert "switched off" in response.json()["detail"]
@@ -178,16 +229,22 @@ def test_a_provider_that_is_off_is_refused_at_the_click(tmp_path, monkeypatch) -
 def test_a_provider_never_downloaded_says_so_differently(tmp_path, monkeypatch) -> None:
     """Off and never-installed need different answers from the operator."""
     workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)
-    monkeypatch.setattr(media_ai, "provider_status", lambda: {
-        "speech": {"ready": False, "prepared": False, "provider": "faster-whisper 1.2.1"},
-        "ocr": READY["ocr"],
-    })
+    monkeypatch.setattr(
+        media_ai,
+        "provider_status",
+        lambda: {
+            "speech": {"ready": False, "prepared": False, "provider": "faster-whisper 1.2.1"},
+            "ocr": READY["ocr"],
+        },
+    )
 
-    response = asyncio.run(request(
-        "POST",
-        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
-        json={"modes": ["speech"]},
-    ))
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+            json={"modes": ["speech"]},
+        )
+    )
 
     assert response.status_code == 409
     assert "not downloaded" in response.json()["detail"]
@@ -197,28 +254,30 @@ def test_a_silent_clip_is_refused_rather_than_transcribed(tmp_path, monkeypatch)
     workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch, has_audio=False)
     monkeypatch.setattr(media_ai, "provider_status", lambda: READY)
 
-    response = asyncio.run(request(
-        "POST",
-        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
-        json={"modes": ["speech"]},
-    ))
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+            json={"modes": ["speech"]},
+        )
+    )
 
     assert response.status_code == 422
     assert "no audio" in response.json()["detail"]
 
 
 def test_asking_for_nothing_is_refused() -> None:
-    response = asyncio.run(request(
-        "POST",
-        "/api/workspaces/ws/media/library/assets/asset/transcription",
-        json={"modes": []},
-    ))
+    response = asyncio.run(
+        request(
+            "POST",
+            "/api/workspaces/ws/media/library/assets/asset/transcription",
+            json={"modes": []},
+        )
+    )
     assert response.status_code == 422
 
 
-def test_what_comes_back_is_a_draft_and_says_which_machine_made_it(
-    tmp_path, monkeypatch
-) -> None:
+def test_what_comes_back_is_a_draft_and_says_which_machine_made_it(tmp_path, monkeypatch) -> None:
     """The whole point of the machine/reviewed split.
 
     A transcript nobody has read must be distinguishable from one somebody
@@ -227,17 +286,23 @@ def test_what_comes_back_is_a_draft_and_says_which_machine_made_it(
     """
     workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)
     monkeypatch.setattr(media_ai, "provider_status", lambda: READY)
-    monkeypatch.setattr(media_ai, "SPEECH_RUNNER", lambda path, language: {
-        "language": "vi",
-        "provider": "faster-whisper@1.2.1",
-        "text": "một chiếc máy pha cà phê",
-        "segments": [{"start_ms": 0, "end_ms": 1200, "text": "một chiếc"}],
-    })
-    queued = asyncio.run(request(
-        "POST",
-        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
-        json={"modes": ["speech"]},
-    ))
+    monkeypatch.setattr(
+        media_ai,
+        "SPEECH_RUNNER",
+        lambda path, language: {
+            "language": "vi",
+            "provider": "faster-whisper@1.2.1",
+            "text": "một chiếc máy pha cà phê",
+            "segments": [{"start_ms": 0, "end_ms": 1200, "text": "một chiếc"}],
+        },
+    )
+    queued = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+            json={"modes": ["speech"]},
+        )
+    )
 
     media_ai.run_enrichment_job(queued.json()["job"]["id"], factory=TestingSession)
 
@@ -252,41 +317,47 @@ def test_what_comes_back_is_a_draft_and_says_which_machine_made_it(
 
     # And the asset carries it out to the page, labelled, beside anything
     # reviewed rather than instead of it.
-    detail = asyncio.run(request(
-        "GET", f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}"
-    )).json()["asset"]
+    detail = asyncio.run(
+        request("GET", f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}")
+    ).json()["asset"]
     drafts = [item for item in detail["transcripts"] if item["status"] == "machine"]
     assert [item["kind"] for item in drafts] == ["speech"]
     assert drafts[0]["provider"] == "faster-whisper@1.2.1"
 
 
-def test_a_reviewed_transcript_is_not_replaced_by_a_machine_one(
-    tmp_path, monkeypatch
-) -> None:
+def test_a_reviewed_transcript_is_not_replaced_by_a_machine_one(tmp_path, monkeypatch) -> None:
     """Both are kept. The reviewed one is the answer; the draft is a candidate."""
     workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)
-    asyncio.run(request(
-        "POST",
-        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/enrichment",
-        json={"language": "vi", "speech_text": "checked by a person"},
-    ))
+    asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/enrichment",
+            json={"language": "vi", "speech_text": "checked by a person"},
+        )
+    )
     monkeypatch.setattr(media_ai, "provider_status", lambda: READY)
-    monkeypatch.setattr(media_ai, "SPEECH_RUNNER", lambda path, language: {
-        "language": "vi",
-        "provider": "faster-whisper@1.2.1",
-        "text": "read by a machine",
-        "segments": [],
-    })
-    queued = asyncio.run(request(
-        "POST",
-        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
-        json={"modes": ["speech"]},
-    ))
+    monkeypatch.setattr(
+        media_ai,
+        "SPEECH_RUNNER",
+        lambda path, language: {
+            "language": "vi",
+            "provider": "faster-whisper@1.2.1",
+            "text": "read by a machine",
+            "segments": [],
+        },
+    )
+    queued = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+            json={"modes": ["speech"]},
+        )
+    )
     media_ai.run_enrichment_job(queued.json()["job"]["id"], factory=TestingSession)
 
-    detail = asyncio.run(request(
-        "GET", f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}"
-    )).json()["asset"]
+    detail = asyncio.run(
+        request("GET", f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}")
+    ).json()["asset"]
     by_status = {item["status"]: item["text"] for item in detail["transcripts"]}
     assert by_status["reviewed"] == "checked by a person"
     assert by_status["machine"] == "read by a machine"
@@ -302,3 +373,4 @@ def test_the_worker_drains_the_kind_this_endpoint_queues() -> None:
     import scripts.worker as worker
 
     assert media_ai.JOB_KIND in worker.JOB_KINDS
+    assert media_ai.SETUP_JOB_KIND in worker.JOB_KINDS

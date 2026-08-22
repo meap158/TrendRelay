@@ -20,6 +20,7 @@ from trendrelay_api.jobs import (
     now_utc,
     recoverable_job_ids,
     request_job_cancellation,
+    requeue_terminal_job,
     settle_expired_cancellations,
     upgrade_active_job_recovery,
 )
@@ -66,12 +67,11 @@ def test_durable_job_retries_and_requires_the_active_lease_owner() -> None:
         claimed_again["id"], "worker-b", {"observations": [1]}, factory=sessions
     )
     assert completed["status"] == "succeeded"
-    assert get_job_record(completed["id"], factory=sessions)["result"] == {
-        "observations": [1]
-    }
-    assert list_job_records("workspace-1", "trend_research", factory=sessions)[0][
-        "id"
-    ] == completed["id"]
+    assert get_job_record(completed["id"], factory=sessions)["result"] == {"observations": [1]}
+    assert (
+        list_job_records("workspace-1", "trend_research", factory=sessions)[0]["id"]
+        == completed["id"]
+    )
 
 
 def test_a_definite_failure_can_end_without_spending_recovery_attempts() -> None:
@@ -100,13 +100,27 @@ def test_a_definite_failure_can_end_without_spending_recovery_attempts() -> None
     assert recoverable_job_ids("media_ai_setup", factory=sessions) == []
 
 
+def test_a_terminal_content_addressed_job_can_be_queued_again() -> None:
+    sessions = factory()
+    job_id = "mediaai_1234567890abcdef"
+    create_job_record(job_id, "workspace-1", "media_enrichment", {}, factory=sessions)
+    claim_job(job_id, "worker", factory=sessions)
+    fail_job(job_id, "worker", "Provider was off.", retry_allowed=False, factory=sessions)
+
+    resumed = requeue_terminal_job(job_id, factory=sessions)
+
+    assert resumed["status"] == "queued"
+    assert resumed["attempt_count"] == 0
+    assert resumed["error"] is None
+    assert resumed["completed_at"] is None
+    assert recoverable_job_ids("media_enrichment", factory=sessions) == [job_id]
+
+
 def test_queued_job_cancellation_is_terminal_and_unclaimable() -> None:
     sessions = factory()
     create_job_record("production_1234567890abcdef", "local", "production", {}, factory=sessions)
 
-    cancelled = request_job_cancellation(
-        "production_1234567890abcdef", factory=sessions
-    )
+    cancelled = request_job_cancellation("production_1234567890abcdef", factory=sessions)
 
     assert cancelled["status"] == "cancelled"
     assert claim_next_job("production", "worker-a", factory=sessions) is None
@@ -116,20 +130,22 @@ def test_an_expired_cancelled_job_stops_saying_it_is_running() -> None:
     sessions = factory()
     job_id = "edit_cancelled_worker_gone"
     create_job_record(
-        job_id, "workspace-1", "media_effect_render", {},
-        max_attempts=3, factory=sessions,
+        job_id,
+        "workspace-1",
+        "media_effect_render",
+        {},
+        max_attempts=3,
+        factory=sessions,
     )
     claim_job(job_id, "effect-worker", factory=sessions)
     request_job_cancellation(job_id, factory=sessions)
     with sessions.begin() as session:
-        session.get(DurableJob, job_id).lease_expires_at = (
-            now_utc().replace(tzinfo=None) - timedelta(minutes=1)
-        )
+        session.get(DurableJob, job_id).lease_expires_at = now_utc().replace(
+            tzinfo=None
+        ) - timedelta(minutes=1)
 
     assert recoverable_job_ids("media_effect_render", factory=sessions) == []
-    assert settle_expired_cancellations(
-        "media_effect_render", factory=sessions
-    ) == [job_id]
+    assert settle_expired_cancellations("media_effect_render", factory=sessions) == [job_id]
 
     settled = get_job_record(job_id, factory=sessions)
     assert settled["status"] == "cancelled"
@@ -141,15 +157,11 @@ def test_an_expired_cancelled_job_stops_saying_it_is_running() -> None:
 def test_a_cancelled_job_with_a_live_worker_is_left_to_stop_safely() -> None:
     sessions = factory()
     job_id = "edit_cancelling_live"
-    create_job_record(
-        job_id, "workspace-1", "media_effect_render", {}, factory=sessions
-    )
+    create_job_record(job_id, "workspace-1", "media_effect_render", {}, factory=sessions)
     claim_job(job_id, "effect-worker", lease_seconds=120, factory=sessions)
     request_job_cancellation(job_id, factory=sessions)
 
-    assert settle_expired_cancellations(
-        "media_effect_render", factory=sessions
-    ) == []
+    assert settle_expired_cancellations("media_effect_render", factory=sessions) == []
     assert get_job_record(job_id, factory=sessions)["status"] == "running"
 
 
@@ -160,9 +172,9 @@ def stranded(sessions, *, max_attempts: int = 1, kind: str = "douyin_download") 
     for _ in range(max_attempts):
         claim_next_job(kind, "douyin-worker", factory=sessions)
     with sessions.begin() as session:
-        session.get(DurableJob, job_id).lease_expires_at = (
-            now_utc().replace(tzinfo=None) - timedelta(hours=2)
-        )
+        session.get(DurableJob, job_id).lease_expires_at = now_utc().replace(
+            tzinfo=None
+        ) - timedelta(hours=2)
     return job_id
 
 
@@ -207,8 +219,14 @@ def test_a_job_that_can_still_retry_is_left_for_recovery() -> None:
 def test_a_live_lease_is_never_touched() -> None:
     # A worker still holding its lease is working, however long it has taken.
     sessions = factory()
-    create_job_record("download_1111111111111111", "workspace-1", "douyin_download", {},
-                      max_attempts=1, factory=sessions)
+    create_job_record(
+        "download_1111111111111111",
+        "workspace-1",
+        "douyin_download",
+        {},
+        max_attempts=1,
+        factory=sessions,
+    )
     claim_next_job("douyin_download", "douyin-worker", factory=sessions)
 
     assert abandon_expired_jobs("douyin_download", factory=sessions) == []
@@ -275,12 +293,15 @@ def test_recovery_policy_never_reopens_a_finished_job() -> None:
     claim_job(job_id, "worker", factory=sessions)
     complete_job(job_id, "worker", {}, factory=sessions)
 
-    assert upgrade_active_job_recovery(
-        "media_effect_render",
-        max_attempts=3,
-        maximum_lease_seconds=120,
-        factory=sessions,
-    ) == []
+    assert (
+        upgrade_active_job_recovery(
+            "media_effect_render",
+            max_attempts=3,
+            maximum_lease_seconds=120,
+            factory=sessions,
+        )
+        == []
+    )
     assert get_job_record(job_id, factory=sessions)["max_attempts"] == 1
 
 
@@ -394,8 +415,12 @@ def test_clearing_history_forgets_finished_jobs_only() -> None:
         create_job_record(job_id, "workspace-1", "media_effect_render", {}, factory=sessions)
     # One attempt, so the failure is terminal rather than a requeue.
     create_job_record(
-        "edit_failed", "workspace-1", "media_effect_render", {},
-        max_attempts=1, factory=sessions,
+        "edit_failed",
+        "workspace-1",
+        "media_effect_render",
+        {},
+        max_attempts=1,
+        factory=sessions,
     )
     claim_job("edit_done", "worker", factory=sessions)
     complete_job("edit_done", "worker", {}, factory=sessions)
@@ -405,9 +430,7 @@ def test_clearing_history_forgets_finished_jobs_only() -> None:
 
     assert clear_settled_jobs("workspace-1", "media_effect_render", factory=sessions) == 2
 
-    left = list_job_records_including_active(
-        "workspace-1", "media_effect_render", factory=sessions
-    )
+    left = list_job_records_including_active("workspace-1", "media_effect_render", factory=sessions)
     assert {job["id"] for job in left} == {"edit_running", "edit_queued"}
 
 
@@ -434,7 +457,10 @@ def test_keep_spares_the_rows_it_names() -> None:
     sessions = factory()
     for job_id, asset in (("edit_a", "asset-1"), ("edit_b", "asset-2")):
         create_job_record(
-            job_id, "workspace-1", "media_effect_render", {"asset_id": asset},
+            job_id,
+            "workspace-1",
+            "media_effect_render",
+            {"asset_id": asset},
             factory=sessions,
         )
         claim_job(job_id, "worker", factory=sessions)
@@ -448,5 +474,7 @@ def test_keep_spares_the_rows_it_names() -> None:
     )
 
     assert removed == 1
-    assert [job["id"] for job in
-            list_job_records("workspace-1", "media_effect_render", factory=sessions)] == ["edit_b"]
+    assert [
+        job["id"]
+        for job in list_job_records("workspace-1", "media_effect_render", factory=sessions)
+    ] == ["edit_b"]

@@ -143,6 +143,43 @@ def get_job_record(
         return serialize_job(item)
 
 
+def requeue_terminal_job(
+    job_id: str,
+    *,
+    factory: SessionMaker = SessionFactory,
+) -> dict[str, Any]:
+    """Put an identical failed/cancelled request back in the durable queue.
+
+    Several media jobs use a content-derived id to prevent duplicate model or
+    render work. That same identity must not make a fixed provider error
+    permanent: after installing a missing runtime, pressing the same button is
+    a request to resume the same work, not merely redisplay its old failure.
+    Succeeded and active rows remain untouched.
+    """
+    timestamp = now_utc()
+    with factory.begin() as session:
+        item = session.get(DurableJob, job_id)
+        if not item:
+            raise FileNotFoundError(job_id)
+        if item.status not in {"failed", "cancelled"}:
+            return serialize_job(item)
+        item.status = "queued"
+        item.result = None
+        item.last_error = None
+        item.attempt_count = 0
+        item.cancellation_requested = False
+        item.progress = None
+        item.progress_stage = "Queued again"
+        item.available_at = timestamp
+        item.lease_owner = None
+        item.lease_expires_at = None
+        item.updated_at = timestamp
+        item.started_at = None
+        item.completed_at = None
+        session.flush()
+        return serialize_job(item)
+
+
 def list_job_records(
     workspace_key: str,
     kind: str,
@@ -748,8 +785,8 @@ def fail_job(
             and not item.cancellation_requested
             and item.attempt_count < item.max_attempts
         )
-        item.status = "queued" if retry else (
-            "cancelled" if item.cancellation_requested else "failed"
+        item.status = (
+            "queued" if retry else ("cancelled" if item.cancellation_requested else "failed")
         )
         item.last_error = error[-4000:]
         item.available_at = timestamp + timedelta(seconds=retry_delay_seconds)
@@ -798,9 +835,7 @@ def request_job_cancellation(
         return serialize_job(item)
 
 
-def cancellation_requested(
-    job_id: str, *, factory: SessionMaker = SessionFactory
-) -> bool:
+def cancellation_requested(job_id: str, *, factory: SessionMaker = SessionFactory) -> bool:
     """Whether a stop has been asked for - the one field a long worker polls.
 
     Kept separate from the full record read so a download loop can check it

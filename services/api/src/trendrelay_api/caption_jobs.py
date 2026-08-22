@@ -32,6 +32,7 @@ from trendrelay_api.jobs import (
     create_job_record,
     fail_job,
     get_job_record,
+    requeue_terminal_job,
 )
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion, MediaTranscript
 from trendrelay_api.models import DurableJob
@@ -71,21 +72,29 @@ def queue(
         )
         if asset is None:
             raise LookupError("That asset is not in this workspace.")
-        signature = ":".join([
-            workspace_id,
-            asset_id,
-            asset.original_sha256,
-            str(request.get("style_id")),
-            str(request.get("translate_to") or ""),
-            str(request.get("delivery")),
-            # Overrides change the output, so they change the identity.
-            repr(sorted((request.get("style_overrides") or {}).items())),
-            repr(sorted((request.get("layout_overrides") or {}).items())),
-        ])
+        signature = ":".join(
+            [
+                workspace_id,
+                asset_id,
+                asset.original_sha256,
+                str(request.get("style_id")),
+                str(request.get("translate_to") or ""),
+                str(request.get("delivery")),
+                # Overrides change the output, so they change the identity.
+                repr(sorted((request.get("style_overrides") or {}).items())),
+                repr(sorted((request.get("layout_overrides") or {}).items())),
+            ]
+        )
         job_id = "caption_" + hashlib.sha256(signature.encode()).hexdigest()[:24]
         # Already asked for. Hand back the job doing it rather than colliding
         # on the id - which is what a deterministic id is for.
-        if session.get(DurableJob, job_id):
+        existing = session.get(DurableJob, job_id)
+        if existing:
+            if existing.status in {"failed", "cancelled"}:
+                # The request is content-addressed. Once its missing provider or
+                # source has been repaired, asking again should resume it rather
+                # than returning the same terminal error forever.
+                return requeue_terminal_job(job_id, factory=factory)
             return get_job_record(job_id, factory=factory)
     return create_job_record(
         job_id,
@@ -209,9 +218,7 @@ def _transcript(session: Any, workspace_id: str, asset_id: str, transcript_id: s
     )
 
 
-def _record_version(
-    workspace_id: str, asset_id: str, path: Path, *, factory: Any
-) -> None:
+def _record_version(workspace_id: str, asset_id: str, path: Path, *, factory: Any) -> None:
     """File the captioned cut as its own kind of version.
 
     Not `edited`: the interface finds an effects render by that kind and

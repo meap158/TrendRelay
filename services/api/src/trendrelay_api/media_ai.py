@@ -30,6 +30,7 @@ from trendrelay_api.jobs import (
     list_job_records,
     now_utc,
     report_progress,
+    requeue_terminal_job,
 )
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion, MediaTranscript
 from trendrelay_api.models import DurableJob
@@ -102,6 +103,7 @@ def provider_status() -> dict[str, Any]:
     speech_runtime = runtime_ready("speech")
     ocr_runtime = runtime_ready("ocr")
     translate_runtime = runtime_ready("translate")
+    translation_pairs = _translation_pairs() if translate_runtime else []
     return {
         "speech": {
             "provider": f"faster-whisper {SPEECH_VERSION}",
@@ -115,9 +117,7 @@ def provider_status() -> dict[str, Any]:
             # separates "not set up yet", which costs a download, from "turned
             # off", which is one click either way.
             "prepared": bool(speech_runtime and model_cached),
-            "ready": bool(
-                active.get("faster-whisper", False) and speech_runtime and model_cached
-            ),
+            "ready": bool(active.get("faster-whisper", False) and speech_runtime and model_cached),
             "network_during_analysis": False,
         },
         "ocr": {
@@ -138,12 +138,10 @@ def provider_status() -> dict[str, Any]:
             # a separate download, so a ready runtime with no packages can
             # still translate nothing - and offering a target that will fail is
             # worse than not offering it.
-            "pairs": _translation_pairs(),
-            "prepared": bool(translate_runtime and _translation_pairs()),
+            "pairs": translation_pairs,
+            "prepared": bool(translate_runtime and translation_pairs),
             "ready": bool(
-                active.get("argos-translate", False)
-                and translate_runtime
-                and _translation_pairs()
+                active.get("argos-translate", False) and translate_runtime and translation_pairs
             ),
             "network_during_analysis": False,
         },
@@ -204,12 +202,18 @@ PROVIDER_PACKAGES: dict[str, tuple[str, ...]] = {
 #: interface implies: the languages it is translated into, paired with English,
 #: which is the hub Argos routes most pairs through anyway.
 DEFAULT_TRANSLATION_PAIRS: tuple[tuple[str, str], ...] = (
-    ("en", "vi"), ("vi", "en"),
-    ("en", "ja"), ("ja", "en"),
-    ("en", "fr"), ("fr", "en"),
-    ("en", "zh"), ("zh", "en"),
-    ("en", "ru"), ("ru", "en"),
-    ("en", "ar"), ("ar", "en"),
+    ("en", "vi"),
+    ("vi", "en"),
+    ("en", "ja"),
+    ("ja", "en"),
+    ("en", "fr"),
+    ("fr", "en"),
+    ("en", "zh"),
+    ("zh", "en"),
+    ("en", "ru"),
+    ("ru", "en"),
+    ("en", "ar"),
+    ("ar", "en"),
 )
 
 
@@ -224,8 +228,14 @@ def pip_install(packages: tuple[str, ...] | list[str]) -> None:
     RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
     completed = subprocess.run(
         [
-            sys.executable, "-m", "pip", "install", "--upgrade",
-            "--target", str(RUNTIME_ROOT), *packages,
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "--target",
+            str(RUNTIME_ROOT),
+            *packages,
         ],
         cwd=PROJECT_ROOT,
         capture_output=True,
@@ -512,8 +522,7 @@ def _install_translation_packages(package: Any, stage: Any = None) -> list[str]:
         if (source, target) in installed:
             continue
         match = next(
-            (item for item in available
-             if item.from_code == source and item.to_code == target),
+            (item for item in available if item.from_code == source and item.to_code == target),
             None,
         )
         if match is None:
@@ -570,9 +579,7 @@ def prepare_provider(provider: str, *, on_stage: Any = None) -> list[str]:
     return skipped
 
 
-def create_setup_job(
-    provider: str, *, actor_user_id: str, factory=None
-) -> dict[str, Any]:
+def create_setup_job(provider: str, *, actor_user_id: str, factory=None) -> dict[str, Any]:
     """Queue the preparation, or hand back the one already running.
 
     Asking twice is what an operator does when a download looks stuck, and two
@@ -585,9 +592,12 @@ def create_setup_job(
     unfinished = _unfinished_setup_job(provider, factory=factory)
     if unfinished:
         return unfinished
-    job_id = "mediaaisetup_" + hashlib.sha256(
-        f"{provider}:{PROVIDER_PACKAGES[provider]}:{now_utc().isoformat()}".encode()
-    ).hexdigest()[:20]
+    job_id = (
+        "mediaaisetup_"
+        + hashlib.sha256(
+            f"{provider}:{PROVIDER_PACKAGES[provider]}:{now_utc().isoformat()}".encode()
+        ).hexdigest()[:20]
+    )
     return create_job_record(
         job_id,
         SETUP_WORKSPACE_KEY,
@@ -656,11 +666,17 @@ SETUP_FAILURES: tuple[tuple[tuple[str, ...], str], ...] = (
         "The disk is full. Free some space and try again.",
     ),
     (
-        ("getaddrinfo", "name or service not known", "temporary failure in name",
-         "connection refused", "connection aborted", "network is unreachable",
-         "timed out", "timeout"),
-        "The download could not reach the internet. Check the connection and try "
-        "again.",
+        (
+            "getaddrinfo",
+            "name or service not known",
+            "temporary failure in name",
+            "connection refused",
+            "connection aborted",
+            "network is unreachable",
+            "timed out",
+            "timeout",
+        ),
+        "The download could not reach the internet. Check the connection and try again.",
     ),
     (
         ("no module named", "cannot be imported"),
@@ -699,14 +715,15 @@ def setup_failure(error: BaseException) -> str:
 
 
 @contextmanager
-def _keep_setup_lease(
+def _keep_job_lease(
     job_id: str,
     worker_id: str,
     *,
     factory: Any,
-    interval_seconds: float = SETUP_HEARTBEAT_SECONDS,
+    lease_seconds: int,
+    interval_seconds: float,
 ):
-    """Hold a setup lease while a dependency performs opaque network I/O.
+    """Hold a durable lease while a dependency performs opaque work.
 
     Pip, Hugging Face, and Argos do not expose one common progress callback. A
     stage can therefore spend several minutes inside a single call. Keeping the
@@ -721,7 +738,7 @@ def _keep_setup_lease(
                 heartbeat_job(
                     job_id,
                     worker_id,
-                    lease_seconds=SETUP_LEASE_SECONDS,
+                    lease_seconds=lease_seconds,
                     factory=factory,
                 )
             except Exception:
@@ -747,7 +764,13 @@ def run_setup_job(
     claimed = claim_job(job_id, worker_id, lease_seconds=SETUP_LEASE_SECONDS, factory=factory)
     provider = claimed["payload"]["provider"]
     try:
-        with _keep_setup_lease(job_id, worker_id, factory=factory):
+        with _keep_job_lease(
+            job_id,
+            worker_id,
+            factory=factory,
+            lease_seconds=SETUP_LEASE_SECONDS,
+            interval_seconds=SETUP_HEARTBEAT_SECONDS,
+        ):
             skipped = prepare_provider(
                 provider,
                 on_stage=lambda fraction, label: report_progress(
@@ -1052,6 +1075,8 @@ def create_enrichment_job(
         job_id = "mediaai_" + hashlib.sha256(signature.encode()).hexdigest()[:24]
         existing = session.get(DurableJob, job_id)
         if existing:
+            if existing.status in {"failed", "cancelled"}:
+                return requeue_terminal_job(job_id, factory=factory)
             return get_job_record(job_id, factory=factory)
     return create_job_record(
         job_id,
@@ -1079,99 +1104,120 @@ def run_enrichment_job(
     factory=None,
 ) -> dict[str, Any]:
     factory = factory or JOB_SESSION_FACTORY
-    claimed = claim_job(job_id, worker_id, lease_seconds=3600, factory=factory)
+    lease_seconds = 300
+    claimed = claim_job(job_id, worker_id, lease_seconds=lease_seconds, factory=factory)
     payload = dict(claimed["payload"])
     work = WORK_ROOT / job_id
     try:
-        status = provider_status()
-        for mode in payload["modes"]:
-            if not status[mode]["ready"]:
-                raise RuntimeError(
-                    f"{status[mode]['provider']} is "
-                    + (
-                        "switched off. Turn it on from the transcription switch in "
-                        "the Library."
-                        if status[mode]["prepared"]
-                        else "not downloaded yet. Set it up from the transcription "
-                        "switch in the Library, or its card in Tools."
-                    )
-                )
-        # Read what the models need, then let the connection go. Transcribing a
-        # clip is minutes of inference, and doing it inside the session held a
-        # pooled database connection open for every one of them - so a few
-        # concurrent jobs could exhaust the pool while none of them were
-        # touching the database at all. Nothing below here needs a session
-        # until there are results to write.
-        audio: Path | None = None
-        source: Path | None = None
-        with factory() as session:
-            asset = session.scalar(
-                select(MediaAsset).where(
-                    MediaAsset.id == payload["asset_id"],
-                    MediaAsset.workspace_id == payload["workspace_id"],
-                )
-            )
-            if not asset:
-                raise RuntimeError("Media asset was removed before analysis.")
-            if "speech" in payload["modes"]:
-                audio = _version_path(session, asset.id, "audio") or _version_path(
-                    session, asset.id, "original"
-                )
-            if "ocr" in payload["modes"]:
-                source = _version_path(session, asset.id, "original")
-            # Detached, but its loaded values stay readable. The OCR pass wants
-            # `media_kind` and nothing else, so this keeps the answer without
-            # keeping the row - and without a lazy load firing on a closed
-            # session halfway through a render.
-            session.expunge(asset)
-
-        drafts: list[tuple[Mode, dict[str, Any]]] = []
-        if "speech" in payload["modes"]:
-            if not audio:
-                raise RuntimeError("The audio version is unavailable.")
-            drafts.append(("speech", SPEECH_RUNNER(audio, payload.get("language"))))
-        if "ocr" in payload["modes"]:
-            if not source:
-                raise RuntimeError("The original version is unavailable.")
-            drafts.append(("ocr", OCR_RUNNER(asset, source, work)))
-        transcript_ids = []
-        with factory.begin() as session:
-            for kind, draft in drafts:
-                existing = session.scalar(
-                    select(MediaTranscript).where(
-                        MediaTranscript.asset_id == payload["asset_id"],
-                        MediaTranscript.job_id == job_id,
-                        MediaTranscript.kind == kind,
-                    )
-                )
-                if existing:
-                    transcript_ids.append(existing.id)
-                    continue
-                transcript = MediaTranscript(
-                    workspace_id=payload["workspace_id"],
-                    asset_id=payload["asset_id"],
-                    kind=kind,
-                    language=draft["language"],
-                    provider=draft["provider"],
-                    status="machine",
-                    text=draft["text"],
-                    segments=draft["segments"],
-                    job_id=job_id,
-                    created_by=payload["actor_user_id"],
-                )
-                session.add(transcript)
-                session.flush()
-                transcript_ids.append(transcript.id)
-        return complete_job(
+        with _keep_job_lease(
             job_id,
             worker_id,
-            {
-                "asset_id": payload["asset_id"],
-                "transcript_ids": transcript_ids,
-                "review_required": True,
-            },
             factory=factory,
-        )
+            lease_seconds=lease_seconds,
+            interval_seconds=60,
+        ):
+            report_progress(job_id, 0.03, "Checking local providers", factory=factory)
+            status = provider_status()
+            for mode in payload["modes"]:
+                if not status[mode]["ready"]:
+                    raise RuntimeError(
+                        f"{status[mode]['provider']} is "
+                        + (
+                            "switched off. Turn it on from the transcription switch in the Library."
+                            if status[mode]["prepared"]
+                            else "not downloaded yet. Set it up from the transcription "
+                            "switch in the Library, or its card in Tools."
+                        )
+                    )
+            # Read what the models need, then let the connection go. Transcribing a
+            # clip is minutes of inference, and doing it inside the session held a
+            # pooled database connection open for every one of them - so a few
+            # concurrent jobs could exhaust the pool while none of them were
+            # touching the database at all. Nothing below here needs a session
+            # until there are results to write.
+            report_progress(job_id, 0.08, "Reading the media", factory=factory)
+            audio: Path | None = None
+            source: Path | None = None
+            with factory() as session:
+                asset = session.scalar(
+                    select(MediaAsset).where(
+                        MediaAsset.id == payload["asset_id"],
+                        MediaAsset.workspace_id == payload["workspace_id"],
+                    )
+                )
+                if not asset:
+                    raise RuntimeError("Media asset was removed before analysis.")
+                if "speech" in payload["modes"]:
+                    audio = _version_path(session, asset.id, "audio") or _version_path(
+                        session, asset.id, "original"
+                    )
+                if "ocr" in payload["modes"]:
+                    source = _version_path(session, asset.id, "original")
+                # Detached, but its loaded values stay readable. The OCR pass wants
+                # `media_kind` and nothing else, so this keeps the answer without
+                # keeping the row - and without a lazy load firing on a closed
+                # session halfway through a render.
+                session.expunge(asset)
+
+            drafts: list[tuple[Mode, dict[str, Any]]] = []
+            mode_count = len(payload["modes"])
+            for index, mode in enumerate(payload["modes"]):
+                start = 0.12 + (0.76 * index / mode_count)
+                label = "Transcribing speech" if mode == "speech" else "Reading on-screen text"
+                report_progress(job_id, start, label, factory=factory)
+                if mode == "speech":
+                    if not audio:
+                        raise RuntimeError("The audio version is unavailable.")
+                    drafts.append(("speech", SPEECH_RUNNER(audio, payload.get("language"))))
+                else:
+                    if not source:
+                        raise RuntimeError("The original version is unavailable.")
+                    drafts.append(("ocr", OCR_RUNNER(asset, source, work)))
+                report_progress(
+                    job_id,
+                    0.12 + (0.76 * (index + 1) / mode_count),
+                    f"{label} complete",
+                    factory=factory,
+                )
+            report_progress(job_id, 0.92, "Saving machine drafts", factory=factory)
+            transcript_ids = []
+            with factory.begin() as session:
+                for kind, draft in drafts:
+                    existing = session.scalar(
+                        select(MediaTranscript).where(
+                            MediaTranscript.asset_id == payload["asset_id"],
+                            MediaTranscript.job_id == job_id,
+                            MediaTranscript.kind == kind,
+                        )
+                    )
+                    if existing:
+                        transcript_ids.append(existing.id)
+                        continue
+                    transcript = MediaTranscript(
+                        workspace_id=payload["workspace_id"],
+                        asset_id=payload["asset_id"],
+                        kind=kind,
+                        language=draft["language"],
+                        provider=draft["provider"],
+                        status="machine",
+                        text=draft["text"],
+                        segments=draft["segments"],
+                        job_id=job_id,
+                        created_by=payload["actor_user_id"],
+                    )
+                    session.add(transcript)
+                    session.flush()
+                    transcript_ids.append(transcript.id)
+            return complete_job(
+                job_id,
+                worker_id,
+                {
+                    "asset_id": payload["asset_id"],
+                    "transcript_ids": transcript_ids,
+                    "review_required": True,
+                },
+                factory=factory,
+            )
     except Exception as error:
         fail_job(job_id, worker_id, str(error), factory=factory)
         raise

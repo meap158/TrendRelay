@@ -87,7 +87,7 @@ export function useMediaAi(
     if (!response.ok) throw new Error("Provider status is unavailable.");
     const payload = (await response.json()) as MediaAiState;
     running.current = Object.values(payload.setup_jobs).some(
-      (job) => job && !job.stalled && (job.status === "queued" || job.status === "running"),
+      (job) => job && (job.status === "queued" || job.status === "running"),
     );
     setState(payload);
     return payload;
@@ -282,7 +282,10 @@ export function ProviderSwitch({
 }) {
   const status = providerOf(state, provider);
   const job = state?.setup_jobs[provider];
-  const downloading = Boolean(job && !job.stalled && (job.status === "queued" || job.status === "running"));
+  // A lapsed lease is recoverable work, not a settled failure. Keep polling
+  // while the durable worker reclaims it so a resumed session updates without
+  // requiring a manual page refresh.
+  const downloading = Boolean(job && (job.status === "queued" || job.status === "running"));
   const working = busy === provider || downloading;
 
   if (!status) return null;
@@ -311,7 +314,7 @@ export function ProviderSwitch({
           disabled={working}
           onClick={() => onPrepare(provider)}
         >
-          {downloading ? "Downloading…" : "Set up"}
+          {job?.stalled ? "Recovering…" : downloading ? "Downloading…" : "Set up"}
         </Button>
       )}
 
@@ -320,7 +323,7 @@ export function ProviderSwitch({
       {downloading && (
         <span className="provider-switch-progress">
           <progress max={1} value={job?.progress ?? undefined} />
-          <small>{job?.progress_stage ?? "Starting…"}</small>
+          <small>{job?.stalled ? "Waiting for the worker to resume" : job?.progress_stage ?? "Starting…"}</small>
         </span>
       )}
       {/* A failed setup attempt is history once the runtime is demonstrably

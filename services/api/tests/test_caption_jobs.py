@@ -15,13 +15,12 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from trendrelay_api import caption_jobs
+from trendrelay_api.jobs import claim_job, fail_job
 from trendrelay_api.main import app  # noqa: F401  registers every model for create_all
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion, MediaTranscript
 from trendrelay_api.models import Base, Workspace
 
-engine = create_engine(
-    "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-)
+engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
 Factory = sessionmaker(bind=engine, expire_on_commit=False)
 
 
@@ -38,27 +37,49 @@ def database(tmp_path, monkeypatch):
 def add_asset(*, transcript: bool = True, video: Path | None = None) -> str:
     with Factory.begin() as session:
         asset = MediaAsset(
-            id="asset1", workspace_id="ws1", title="A clip", media_kind="video",
-            source_type="upload", original_path=str(video or "clips/a.mp4"),
-            original_sha256="a" * 64, mime_type="video/mp4", size_bytes=10,
-            has_audio=True, created_by="owner",
+            id="asset1",
+            workspace_id="ws1",
+            title="A clip",
+            media_kind="video",
+            source_type="upload",
+            original_path=str(video or "clips/a.mp4"),
+            original_sha256="a" * 64,
+            mime_type="video/mp4",
+            size_bytes=10,
+            has_audio=True,
+            created_by="owner",
         )
         session.add(asset)
         if transcript:
             words = ["hello", "there", "friend"]
-            session.add(MediaTranscript(
-                workspace_id="ws1", asset_id="asset1", kind="speech", language="en",
-                provider="faster-whisper", status="machine", text=" ".join(words),
-                segments=[{
-                    "text": " ".join(words), "start_ms": 0, "end_ms": 3000,
-                    "words": [
-                        {"text": word, "start_ms": i * 1000, "end_ms": (i + 1) * 1000,
-                         "probability": 0.9}
-                        for i, word in enumerate(words)
+            session.add(
+                MediaTranscript(
+                    workspace_id="ws1",
+                    asset_id="asset1",
+                    kind="speech",
+                    language="en",
+                    provider="faster-whisper",
+                    status="machine",
+                    text=" ".join(words),
+                    segments=[
+                        {
+                            "text": " ".join(words),
+                            "start_ms": 0,
+                            "end_ms": 3000,
+                            "words": [
+                                {
+                                    "text": word,
+                                    "start_ms": i * 1000,
+                                    "end_ms": (i + 1) * 1000,
+                                    "probability": 0.9,
+                                }
+                                for i, word in enumerate(words)
+                            ],
+                        }
                     ],
-                }],
-                created_by="owner",
-            ))
+                    created_by="owner",
+                )
+            )
     return "asset1"
 
 
@@ -98,6 +119,30 @@ def test_the_same_request_twice_is_the_same_job() -> None:
     assert first["id"] == second["id"]
 
 
+def test_the_same_request_resumes_after_its_failure_is_fixed() -> None:
+    add_asset()
+    failed = caption_jobs.queue(
+        "ws1", "asset1", actor_user_id="owner", request=request(), factory=Factory
+    )
+    claim_job(failed["id"], "worker", factory=Factory)
+    fail_job(
+        failed["id"],
+        "worker",
+        "Translation was switched off.",
+        retry_allowed=False,
+        factory=Factory,
+    )
+
+    resumed = caption_jobs.queue(
+        "ws1", "asset1", actor_user_id="owner", request=request(), factory=Factory
+    )
+
+    assert resumed["id"] == failed["id"]
+    assert resumed["status"] == "queued"
+    assert resumed["attempt_count"] == 0
+    assert resumed["error"] is None
+
+
 def test_a_different_style_is_a_different_job() -> None:
     add_asset()
 
@@ -105,8 +150,11 @@ def test_a_different_style_is_a_different_job() -> None:
         "ws1", "asset1", actor_user_id="owner", request=request(), factory=Factory
     )
     popped = caption_jobs.queue(
-        "ws1", "asset1", actor_user_id="owner",
-        request=request(style_id="word-pop"), factory=Factory,
+        "ws1",
+        "asset1",
+        actor_user_id="owner",
+        request=request(style_id="word-pop"),
+        factory=Factory,
     )
 
     assert plain["id"] != popped["id"]
@@ -142,17 +190,18 @@ def test_a_burn_files_a_captioned_version_not_an_edited_one(tmp_path) -> None:
     """`edited` is what "Remove effects" deletes. A caption is not that."""
     add_asset()
     job = caption_jobs.queue(
-        "ws1", "asset1", actor_user_id="owner",
-        request=request(delivery="burned"), factory=Factory,
+        "ws1",
+        "asset1",
+        actor_user_id="owner",
+        request=request(delivery="burned"),
+        factory=Factory,
     )
 
     caption_jobs.run_caption_job(job["id"], factory=Factory, burn=fake_burn)
 
     with Factory() as session:
         kinds = session.scalars(
-            select(MediaAssetVersion.version_kind).where(
-                MediaAssetVersion.asset_id == "asset1"
-            )
+            select(MediaAssetVersion.version_kind).where(MediaAssetVersion.asset_id == "asset1")
         ).all()
     assert kinds == ["captioned"]
 
@@ -161,8 +210,11 @@ def test_sidecars_are_kept_even_when_burning(tmp_path) -> None:
     """They cost a kilobyte. Discovering afterwards that they were not is worse."""
     add_asset()
     job = caption_jobs.queue(
-        "ws1", "asset1", actor_user_id="owner",
-        request=request(delivery="both"), factory=Factory,
+        "ws1",
+        "asset1",
+        actor_user_id="owner",
+        request=request(delivery="both"),
+        factory=Factory,
     )
 
     done = caption_jobs.run_caption_job(job["id"], factory=Factory, burn=fake_burn)

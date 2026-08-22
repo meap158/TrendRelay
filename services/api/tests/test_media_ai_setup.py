@@ -65,8 +65,12 @@ def test_a_long_setup_keeps_its_lease_alive(jobs, monkeypatch) -> None:
         ),
     )
 
-    with media_ai._keep_setup_lease(
-        job["id"], "worker", factory=jobs, interval_seconds=0.01
+    with media_ai._keep_job_lease(
+        job["id"],
+        "worker",
+        factory=jobs,
+        lease_seconds=media_ai.SETUP_LEASE_SECONDS,
+        interval_seconds=0.01,
     ):
         time.sleep(0.03)
 
@@ -92,9 +96,9 @@ def test_asking_twice_joins_the_download_already_running(jobs) -> None:
 def test_a_finished_attempt_does_not_block_the_next_one(jobs, monkeypatch) -> None:
     """A download that failed must be retryable, or the app is a dead end."""
     monkeypatch.setattr(
-        media_ai, "prepare_provider", lambda provider, on_stage=None: (_ for _ in ()).throw(
-            RuntimeError("no network")
-        )
+        media_ai,
+        "prepare_provider",
+        lambda provider, on_stage=None: (_ for _ in ()).throw(RuntimeError("no network")),
     )
     first = media_ai.create_setup_job("speech", actor_user_id="tester", factory=jobs)
     with pytest.raises(RuntimeError):
@@ -107,9 +111,11 @@ def test_a_finished_attempt_does_not_block_the_next_one(jobs, monkeypatch) -> No
 def test_a_failure_is_recorded_where_the_operator_can_read_it(jobs, monkeypatch) -> None:
     """pip's reason, not "exit code 1" — they never saw the console it ran in."""
     monkeypatch.setattr(
-        media_ai, "prepare_provider", lambda provider, on_stage=None: (_ for _ in ()).throw(
+        media_ai,
+        "prepare_provider",
+        lambda provider, on_stage=None: (_ for _ in ()).throw(
             RuntimeError("No matching distribution found for faster-whisper==1.2.1")
-        )
+        ),
     )
     job = media_ai.create_setup_job("speech", actor_user_id="tester", factory=jobs)
     with pytest.raises(RuntimeError):
@@ -128,9 +134,7 @@ def test_preparing_ends_with_the_provider_switched_on(monkeypatch) -> None:
     feature is unavailable, with nothing on screen joining the two.
     """
     calls: dict[str, object] = {}
-    monkeypatch.setattr(
-        media_ai, "list_job_records", lambda *args, **kwargs: []
-    )
+    monkeypatch.setattr(media_ai, "list_job_records", lambda *args, **kwargs: [])
     monkeypatch.setattr(
         "trendrelay_api.tool_registry.list_tools",
         lambda: [{"id": "faster-whisper", "installed": False, "active": False}],
@@ -421,10 +425,12 @@ def test_the_api_wraps_the_catalogue_in_base64() -> None:
     # The two mirrors do not answer with the same shape: GitHub's contents
     # endpoint returns the file encoded inside a JSON envelope.
     catalogue = json.dumps([{"from_code": "en", "to_code": "vi"}]).encode()
-    envelope = json.dumps({
-        "encoding": "base64",
-        "content": base64.b64encode(catalogue).decode(),
-    }).encode()
+    envelope = json.dumps(
+        {
+            "encoding": "base64",
+            "content": base64.b64encode(catalogue).decode(),
+        }
+    ).encode()
 
     assert json.loads(media_ai._argos_index_payload(envelope)) == [
         {"from_code": "en", "to_code": "vi"}
@@ -455,9 +461,12 @@ def test_what_is_not_a_catalogue_is_refused(body) -> None:
 def test_an_operators_own_index_is_never_swapped_for_a_mirror(tmp_path) -> None:
     # Mirroring the default catalogue is help; mirroring a source somebody
     # chose deliberately is overriding them.
-    assert media_ai._fetch_argos_index(
-        "https://mirror.example.internal/argos/index.json", tmp_path / "index.json"
-    ) is False
+    assert (
+        media_ai._fetch_argos_index(
+            "https://mirror.example.internal/argos/index.json", tmp_path / "index.json"
+        )
+        is False
+    )
 
 
 # --- what a failure says to the operator ---------------------------------------
@@ -471,7 +480,7 @@ HF_401 = (
     "Please make sure you specified the correct `repo_id` and `repo_type`.\n"
     "If you are trying to access a private or gated repo, make sure you are "
     "authenticated and your token has the required permissions.\n"
-    'For more details, see https://huggingface.co/docs/huggingface_hub/'
+    "For more details, see https://huggingface.co/docs/huggingface_hub/"
     'authentication\nUser Access Token "First" is expired'
 )
 
@@ -627,9 +636,7 @@ def test_each_language_download_says_which_one_it_is(monkeypatch) -> None:
     monkeypatch.setattr(media_ai, "_argos_available_packages", lambda p: p.available)
     labels: list[str] = []
 
-    media_ai._install_translation_packages(
-        packages, lambda fraction, label: labels.append(label)
-    )
+    media_ai._install_translation_packages(packages, lambda fraction, label: labels.append(label))
 
     assert len(labels) == len(pairs)
     assert labels[0] == f"Downloading {pairs[0][0]}->{pairs[0][1]} (1 of {len(pairs)})"
@@ -644,9 +651,7 @@ def test_progress_climbs_across_the_downloads(monkeypatch) -> None:
     monkeypatch.setattr(media_ai, "_argos_available_packages", lambda p: [])
     seen: list[float] = []
 
-    media_ai._install_translation_packages(
-        packages, lambda fraction, label: seen.append(fraction)
-    )
+    media_ai._install_translation_packages(packages, lambda fraction, label: seen.append(fraction))
 
     assert seen == sorted(seen)
     assert seen[0] == 0.0
@@ -662,6 +667,7 @@ def test_the_prepare_step_reports_across_the_rest_of_the_bar(monkeypatch) -> Non
     )
     monkeypatch.setattr("trendrelay_api.tool_registry.set_active", lambda tool_id, active: None)
     monkeypatch.setattr(media_ai, "runtime_ready", lambda provider: True)
+
     def report_both_ends(stage):
         stage(0.0, "first")
         stage(1.0, "last")

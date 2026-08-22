@@ -57,7 +57,10 @@ const MODE_PROVIDER: Record<"speech" | "ocr", ProviderKey> = {
 };
 
 function isRunning(job: EnrichmentJob | null): boolean {
-  return Boolean(job && !job.stalled && ["queued", "running"].includes(job.status));
+  // A running row with an expired lease is waiting to be reclaimed. It is
+  // still active from the operator's perspective, so keep watching it across
+  // worker/app restarts rather than freezing until the page is refreshed.
+  return Boolean(job && ["queued", "running"].includes(job.status));
 }
 
 export function AutoTranscribe({
@@ -226,10 +229,12 @@ export function AutoTranscribe({
       {isRunning(job) && (
         <span className="auto-transcribe-progress">
           <progress max={1} value={job?.progress ?? undefined} />
-          <small>{job?.progress_stage ?? "Queued…"}</small>
+          <small>
+            {job?.stalled ? "Waiting for the worker to resume" : job?.progress_stage ?? "Queued…"}
+          </small>
         </span>
       )}
-      {job?.stalled && (
+      {isRunning(job) && job?.stalled && (
         <p className="auto-transcribe-problem">
           The worker stopped holding this job. It resumes on its own when one is back.
         </p>

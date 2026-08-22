@@ -24,6 +24,10 @@ from trendrelay_api.integrations.effect_render import (  # noqa: E402
 from trendrelay_api.integrations.last30days import run_job  # noqa: E402
 from trendrelay_api.integrations.openmontage_runtime import run_render_job  # noqa: E402
 from trendrelay_api.integrations.publishing import run_publish_job  # noqa: E402
+from trendrelay_api.media_ai import JOB_KIND as ENRICHMENT_JOB_KIND  # noqa: E402
+from trendrelay_api.media_ai import SETUP_JOB_KIND as MEDIA_AI_SETUP_KIND  # noqa: E402
+from trendrelay_api.media_ai import run_enrichment_job  # noqa: E402
+from trendrelay_api.media_ai import run_setup_job as run_media_ai_setup_job  # noqa: E402
 from trendrelay_api.media_library import run_ingest_job  # noqa: E402
 from trendrelay_api.shopee_enrichment import run_enrich_job  # noqa: E402
 from trendrelay_api.campaign_runner import tick as campaign_tick  # noqa: E402
@@ -69,6 +73,8 @@ JOB_KINDS = (
     EFFECT_JOB_KIND,
     "shopee_enrich",
     CAPTION_JOB_KIND,
+    MEDIA_AI_SETUP_KIND,
+    ENRICHMENT_JOB_KIND,
 )
 
 
@@ -99,6 +105,8 @@ def process_available() -> int:
     effect_ids = recoverable_job_ids(EFFECT_JOB_KIND)
     enrich_ids = recoverable_job_ids("shopee_enrich")
     caption_ids = recoverable_job_ids(CAPTION_JOB_KIND)
+    media_ai_setup_ids = recoverable_job_ids(MEDIA_AI_SETUP_KIND)
+    enrichment_ids = recoverable_job_ids(ENRICHMENT_JOB_KIND)
     for job_id in download_ids:
         run_download_job(job_id)
     for job_id in research_ids:
@@ -117,6 +125,21 @@ def process_available() -> int:
         run_enrich_job(job_id)
     for job_id in caption_ids:
         run_caption_job(job_id)
+    for job_id in enrichment_ids:
+        # Transcribing a clip fails for ordinary reasons - a provider switched
+        # off between queueing and running, a file that moved - and the job row
+        # carries the reason to the operator's screen. The loop keeps going.
+        try:
+            run_enrichment_job(job_id)
+        except Exception as error:
+            print(f"Transcription {job_id} failed: {error}", flush=True)
+    for job_id in media_ai_setup_ids:
+        # A download the operator is watching, so a failure belongs on their
+        # screen rather than in this console. The job row already carries it.
+        try:
+            run_media_ai_setup_job(job_id)
+        except Exception as error:
+            print(f"Media analysis setup {job_id} failed: {error}", flush=True)
     return (
         len(download_ids)
         + len(research_ids)
@@ -127,6 +150,8 @@ def process_available() -> int:
         + len(effect_ids)
         + len(enrich_ids)
         + len(caption_ids)
+        + len(media_ai_setup_ids)
+        + len(enrichment_ids)
     )
 
 
@@ -134,7 +159,7 @@ def worker_main() -> None:
     print(
         "Durable worker ready: douyin_download, trend_research, social_publish, "
         "openmontage_render, media_ingest, media_face_blur, media_effect_render, "
-        "caption_render, "
+        "caption_render, media_ai_setup, media_enrichment, "
         "campaign_autopilot",
         flush=True,
     )
