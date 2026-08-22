@@ -21,8 +21,13 @@ class Settings(BaseSettings):
     attribution_public_url: str = "http://localhost:8080"
     attribution_hash_secret: SecretStr = SecretStr("")
     media_ai_speech_model: str = "base"
-    media_ai_device: Literal["cpu", "cuda", "auto"] = "cpu"
-    media_ai_compute_type: str = "int8"
+    # Auto is capability-tested by the media worker: CUDA when CTranslate2 can
+    # actually see it, otherwise an optimized CPU path. Explicit values remain
+    # useful for diagnostics and reproducible deployments.
+    media_ai_device: Literal["cpu", "cuda", "auto"] = "auto"
+    media_ai_compute_type: str = "auto"
+    media_ai_cpu_threads: int = Field(default=0, ge=0, le=64)
+    media_ai_speech_batch_size: int = Field(default=8, ge=1, le=32)
     media_ai_ocr_interval_seconds: float = 2.0
     media_ai_max_ocr_frames: int = 60
     smtp_host: str = ""

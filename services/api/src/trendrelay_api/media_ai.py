@@ -7,6 +7,7 @@ import binascii
 import hashlib
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -869,6 +870,7 @@ def _version_path(session: Any, asset_id: str, kind: str) -> Path | None:
 #: rather than a cache: holding a second model doubles the memory to serve a
 #: setting nobody changes between two jobs.
 _SPEECH_MODEL: tuple[tuple[str, str, str], Any] | None = None
+_SPEECH_PIPELINE: tuple[tuple[int, int], Any] | None = None
 
 #: Guards the load, and the transcription itself.
 #:
@@ -877,6 +879,47 @@ _SPEECH_MODEL: tuple[tuple[str, str, str], Any] | None = None
 #: Serialising costs nothing real: inference already saturates the device it
 #: runs on, so two at once on one machine is slower than two in turn.
 _SPEECH_LOCK = Lock()
+
+
+def _resolved_speech_runtime(settings: Any, runtime: Any = None) -> tuple[str, str]:
+    """Resolve `auto` against what this CTranslate2 build can really execute."""
+    if runtime is None:
+        _runtime_path()
+        import ctranslate2 as runtime
+
+    requested_device = settings.media_ai_device
+    device = requested_device
+    if requested_device == "auto":
+        try:
+            device = "cuda" if runtime.get_cuda_device_count() > 0 else "cpu"
+        except Exception:
+            device = "cpu"
+
+    requested_compute = str(settings.media_ai_compute_type).strip().lower()
+    if requested_compute != "auto":
+        return device, requested_compute
+    try:
+        supported = set(runtime.get_supported_compute_types(device))
+    except Exception:
+        supported = set()
+    preferred = (
+        ("float16", "int8_float16", "int8", "float32")
+        if device == "cuda"
+        else ("int8", "int8_float32", "float32")
+    )
+    return device, next((item for item in preferred if item in supported), "default")
+
+
+def _speech_cpu_threads(settings: Any, device: str) -> int:
+    if device != "cpu":
+        return 0
+    configured = int(getattr(settings, "media_ai_cpu_threads", 0) or 0)
+    if configured:
+        return configured
+    # Leave headroom for FFmpeg, the API, and the browser while still improving
+    # substantially on machines where CTranslate2's default four threads leave
+    # most cores idle.
+    return max(1, min(8, (os.cpu_count() or 4) // 2))
 
 
 def _speech_model(settings: Any) -> Any:
@@ -892,22 +935,33 @@ def _speech_model(settings: Any) -> Any:
             "Open the transcription switch in the Library, or the faster-whisper "
             "card in Tools, and choose Download and switch on."
         )
-    wanted = (
-        settings.media_ai_speech_model,
-        settings.media_ai_device,
-        settings.media_ai_compute_type,
-    )
+    device, compute_type = _resolved_speech_runtime(settings)
+    wanted = (settings.media_ai_speech_model, device, compute_type)
     if _SPEECH_MODEL is not None and _SPEECH_MODEL[0] == wanted:
         return _SPEECH_MODEL[1]
     model = WhisperModel(
         wanted[0],
         device=wanted[1],
         compute_type=wanted[2],
+        cpu_threads=_speech_cpu_threads(settings, device),
         download_root=str(model_root),
         local_files_only=True,
     )
     _SPEECH_MODEL = (wanted, model)
     return model
+
+
+def _speech_pipeline(model: Any, batch_size: int) -> Any:
+    """Cache faster-whisper's chunk-batching wrapper beside the base model."""
+    global _SPEECH_PIPELINE
+    wanted = (id(model), batch_size)
+    if _SPEECH_PIPELINE is not None and _SPEECH_PIPELINE[0] == wanted:
+        return _SPEECH_PIPELINE[1]
+    from faster_whisper import BatchedInferencePipeline
+
+    pipeline = BatchedInferencePipeline(model=model)
+    _SPEECH_PIPELINE = (wanted, pipeline)
+    return pipeline
 
 
 def _speech_draft(path: Path, language: str | None) -> dict[str, Any]:
@@ -918,7 +972,12 @@ def _speech_draft(path: Path, language: str | None) -> dict[str, Any]:
     # the lock decorative.
     with _SPEECH_LOCK:
         model = _speech_model(settings)
-        segments, info = model.transcribe(
+        batch_size = int(getattr(settings, "media_ai_speech_batch_size", 8) or 8)
+        transcriber = _speech_pipeline(model, batch_size) if batch_size > 1 else model
+        options: dict[str, Any] = {}
+        if transcriber is not model:
+            options["batch_size"] = batch_size
+        segments, info = transcriber.transcribe(
             str(path),
             language=None if not language or language == "auto" else language,
             beam_size=5,
@@ -931,6 +990,7 @@ def _speech_draft(path: Path, language: str | None) -> dict[str, Any]:
             # costs a little coherence across a sentence boundary and removes a
             # failure that ruins a whole transcript.
             condition_on_previous_text=False,
+            **options,
         )
         records, text_parts = _speech_records(segments)
     text = " ".join(text_parts).strip()
@@ -1028,36 +1088,53 @@ def _rapidocr_text(result: Any) -> tuple[list[str], list[float]]:
     return [str(value) for value in texts], scores
 
 
-def _ocr_draft(asset: MediaAsset, source: Path, work: Path) -> dict[str, Any]:
+_OCR_ENGINE: Any | None = None
+_OCR_LOCK = Lock()
+
+
+def _ocr_engine() -> Any:
+    """Load RapidOCR once; its three ONNX sessions are expensive to rebuild."""
+    global _OCR_ENGINE
     _runtime_path()
     from rapidocr import RapidOCR
 
-    engine = RapidOCR()
+    if _OCR_ENGINE is None:
+        _OCR_ENGINE = RapidOCR()
+    return _OCR_ENGINE
+
+
+def _ocr_draft(asset: MediaAsset, source: Path, work: Path) -> dict[str, Any]:
+    # Frame extraction is independent and can overlap other native work once
+    # the worker has more than one lane. The shared ONNX sessions themselves
+    # remain serialized because RapidOCR does not promise thread safety.
     frames = _extract_ocr_frames(asset, source, work)
+
     records = []
     unique: list[str] = []
     seen: set[str] = set()
     interval_ms = round(get_settings().media_ai_ocr_interval_seconds * 1000)
-    for index, frame in enumerate(frames):
-        result = engine(str(frame))
-        texts, scores = _rapidocr_text(result)
-        kept = []
-        for text, score in zip(texts, scores or [1.0] * len(texts), strict=False):
-            normalized = " ".join(text.strip().split())
-            if not normalized or score < 0.45:
-                continue
-            key = normalized.casefold()
-            kept.append({"text": normalized, "confidence": round(score, 4)})
-            if key not in seen:
-                seen.add(key)
-                unique.append(normalized)
-        if kept:
-            records.append(
-                {
-                    "timestamp_ms": 0 if asset.media_kind == "image" else index * interval_ms,
-                    "lines": kept,
-                }
-            )
+    with _OCR_LOCK:
+        engine = _ocr_engine()
+        for index, frame in enumerate(frames):
+            result = engine(str(frame))
+            texts, scores = _rapidocr_text(result)
+            kept = []
+            for text, score in zip(texts, scores or [1.0] * len(texts), strict=False):
+                normalized = " ".join(text.strip().split())
+                if not normalized or score < 0.45:
+                    continue
+                key = normalized.casefold()
+                kept.append({"text": normalized, "confidence": round(score, 4)})
+                if key not in seen:
+                    seen.add(key)
+                    unique.append(normalized)
+            if kept:
+                records.append(
+                    {
+                        "timestamp_ms": 0 if asset.media_kind == "image" else index * interval_ms,
+                        "lines": kept,
+                    }
+                )
     text = "\n".join(unique).strip()
     if not text:
         raise RuntimeError("The OCR provider found no on-screen text.")
