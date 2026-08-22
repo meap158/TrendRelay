@@ -271,7 +271,10 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .library-list .library-effect-processing-label small { display: none; }
 .library-collection > button { color: var(--text); background: var(--panel); text-align: start; cursor: pointer; }
 .library-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.library-gallery > button { display: grid; min-width: 0; overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); padding: 0; }
+/* text-align: start, because a button's UA default is centre - which showed
+ * every title and its size line floating mid-card instead of lining up with
+ * the thumbnail's edge. */
+.library-gallery > button { display: grid; min-width: 0; overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); padding: 0; text-align: start; }
 .library-gallery > button.selected { border-color: var(--link); box-shadow: 0 0 0 2px rgba(26, 86, 219, 0.14); }
 /* The tick is also a direct span of the card, and this rule is the more
  * specific of the two, so it was giving the checkbox the caption's padding. */
