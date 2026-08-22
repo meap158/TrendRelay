@@ -81,10 +81,17 @@ export const vi: Messages = {
   },
 
   discover: {
+    heading: "Khám phá",
+    toolsReady: "{ready}/{total} nguồn sẵn sàng",
+    searchPlaceholder: "Tìm chủ đề, bài đăng hoặc nhà sáng tạo…",
+    hotPostsHeading: "Bài đăng nổi bật nhất lúc này",
+    buildHotPosts: "Tạo bảng bài đăng nổi bật",
+    showMorePosts: "Hiện thêm {count} bài đăng",
+    showTopPosts: "Hiện {count} bài đăng đầu",
     workspaceTabs: {
       overview: "Tổng quan",
-      trends: "Xu hướng",
-      posts: "Bài đăng",
+      trends: "Chủ đề",
+      posts: "Bài đăng nổi bật",
       signals: "Quảng cáo & tín hiệu",
       opportunities: "Cơ hội",
     },
@@ -92,7 +99,7 @@ export const vi: Messages = {
       addToCampaign: "Thêm vào chiến dịch",
       addedToCampaign: "Đã thêm",
       searchThis: "Tìm nội dung này",
-      researchMode: "Xu hướng",
+      researchMode: "Nghiên cứu",
       metaAdsMode: "Quảng cáo",
     },
     sourceModes: "Nguồn khám phá",
@@ -115,6 +122,8 @@ export const vi: Messages = {
     heat: "{value} lượt quan tâm",
     views: "{value} lượt xem",
     emptyBoard: "Bảng xếp hạng đang trống. Vui lòng thử lại sau ít phút.",
+    showMoreTopics: "Hiện thêm {count} chủ đề",
+    showTopTopics: "Hiện {count} chủ đề đầu",
     topicQueued:
       "Đã thêm {count, plural, other {# video}} cho “{term}” vào hàng đợi. Theo dõi ở mục Tải xuống.",
     topicFailed: "Không lấy được chủ đề này.",

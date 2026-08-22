@@ -29,6 +29,34 @@ export type PopularPost = {
   published_at?: string | null;
 };
 
+/**
+ * Keep every provider visible near the top of a mixed board.
+ *
+ * Native view and reaction counts are not comparable across networks, so a
+ * global numeric sort would be false precision. The useful ordering is each
+ * network's first post, then each network's second, and so on. Source order is
+ * stable and ranks within a source are respected even when a provider returns
+ * an unsorted response.
+ */
+export function sourceFairPosts(posts: PopularPost[]): PopularPost[] {
+  const sourceOrder = [...new Set(posts.map((post) => post.source))];
+  const buckets = new Map(
+    sourceOrder.map((source) => [
+      source,
+      posts.filter((post) => post.source === source).sort((a, b) => a.rank - b.rank),
+    ]),
+  );
+  const result: PopularPost[] = [];
+  const longest = Math.max(0, ...[...buckets.values()].map((bucket) => bucket.length));
+  for (let index = 0; index < longest; index += 1) {
+    for (const source of sourceOrder) {
+      const post = buckets.get(source)?.[index];
+      if (post) result.push(post);
+    }
+  }
+  return result;
+}
+
 /** `12M`, `156.1K`. Counts on this board are read at a glance, not audited. */
 export function compactCount(value: number | null | undefined): string {
   if (value === null || value === undefined) return "";

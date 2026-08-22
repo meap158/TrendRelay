@@ -80,10 +80,17 @@ export const zh: Messages = {
   },
 
   discover: {
+    heading: "发现",
+    toolsReady: "{ready}/{total} 个来源已就绪",
+    searchPlaceholder: "搜索话题、帖子或创作者…",
+    hotPostsHeading: "当前热门帖子",
+    buildHotPosts: "生成热门帖子榜",
+    showMorePosts: "再显示 {count} 个帖子",
+    showTopPosts: "显示前 {count} 个帖子",
     workspaceTabs: {
       overview: "概览",
-      trends: "趋势",
-      posts: "帖子",
+      trends: "话题",
+      posts: "热门帖子",
       signals: "广告与信号",
       opportunities: "机会",
     },
@@ -91,7 +98,7 @@ export const zh: Messages = {
       addToCampaign: "添加到活动",
       addedToCampaign: "已添加",
       searchThis: "搜索此内容",
-      researchMode: "趋势",
+      researchMode: "研究",
       metaAdsMode: "广告",
     },
     sourceModes: "发现来源",
@@ -113,6 +120,8 @@ export const zh: Messages = {
     heat: "热度 {value}",
     views: "{value} 次播放",
     emptyBoard: "热搜榜暂时为空，请稍后再试。",
+    showMoreTopics: "再显示 {count} 个话题",
+    showTopTopics: "显示前 {count} 个",
     topicQueued:
       "已将“{term}”的 {count, plural, other {# 个视频}}加入队列，可在下载中查看进度。",
     topicFailed: "无法获取该话题。",

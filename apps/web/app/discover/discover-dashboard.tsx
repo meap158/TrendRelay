@@ -8,7 +8,6 @@ import {
   Download,
   Flame,
   Hash,
-  LayoutDashboard,
   Megaphone,
   Music2,
   RefreshCw,
@@ -31,19 +30,15 @@ import { numberIn, oneOf, usePersistedCache, usePersistedState } from "../ui/use
 import { useJobs } from "../jobs-provider";
 import { useWorkspace } from "../workspace-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
-import { DiscoveryFeed } from "./discovery-feed";
 import { CampaignIdeaComposer } from "./campaign-idea-composer";
 import { NewsBoard } from "./news-board";
-import { rankEngagedPosts, type ResearchPostJob } from "../../lib/engaged-posts";
 
-// The secondary boards sit below the merged feed and the news lead, so their
-// code loads as its own chunk while the lead paints rather than in Discover's
-// first bundle. ssr:false - they are client-only. The feed, the news board and
-// the idea composer stay static, being the first thing on screen.
+// The source-heavy boards load only when their workspace is selected. The
+// news board and campaign composer stay static because they are light and
+// preserve their state while the operator moves between views.
 const OpportunityScoring = dynamic(() => import("./opportunity-scoring").then((m) => m.OpportunityScoring), { ssr: false });
 const PopularPosts = dynamic(() => import("./popular-posts").then((m) => m.PopularPosts), { ssr: false });
 const TrendingTopics = dynamic(() => import("./trending-topics").then((m) => m.TrendingTopics), { ssr: false });
-const StandoutBoard = dynamic(() => import("./standout-board").then((m) => m.StandoutBoard), { ssr: false });
 
 type ReachChannel = {
   id: string;
@@ -166,15 +161,14 @@ const DISCOVER_TIKTOK_CATEGORIES: TikTokCategory[] = [
   { id: "video", label: "Videos", description: "", available: true, unavailable_reason: "" },
 ];
 
-type DiscoverView = "overview" | "trends" | "posts" | "signals" | "opportunities";
+type DiscoverView = "posts" | "trends" | "signals" | "opportunities";
 
 const DISCOVER_VIEWS: ReadonlyArray<{
   id: DiscoverView;
   icon: LucideIcon;
 }> = [
-  { id: "overview", icon: LayoutDashboard },
-  { id: "trends", icon: TrendingUp },
   { id: "posts", icon: Video },
+  { id: "trends", icon: TrendingUp },
   { id: "signals", icon: Megaphone },
   { id: "opportunities", icon: Target },
 ];
@@ -186,6 +180,7 @@ const TIKTOK_PERIODS: ReadonlyArray<readonly [number, string]> = [
 ];
 
 const TIKTOK_PREFERENCE_KEY = "trendrelay.discover.tiktok";
+const DOUYIN_PREVIEW_ITEMS = 5;
 
 /** Where "Score it" sends you. */
 const SCORING_ANCHOR = "score-the-case";
@@ -399,9 +394,9 @@ export default function ResearchDashboard() {
     "trendrelay.discover.briefing", RESEARCH_MAX_AGE, isBriefing);
   const [feedFilter, setFeedFilter] = useState<"all" | "trend" | "ad" | "account">("all");
   const [activeView, setActiveView] = usePersistedState<DiscoverView>(
-    "trendrelay.discover.view",
-    "overview",
-    oneOf("overview", "trends", "posts", "signals", "opportunities"),
+    "trendrelay.discover.view.v2",
+    "posts",
+    oneOf("posts", "trends", "signals", "opportunities"),
   );
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -411,6 +406,7 @@ export default function ResearchDashboard() {
   const [douyinView, setDouyinView] = usePersistedState<"gallery" | "list">(
     "trendrelay.discover.douyinView", "gallery", isBoardView,
   );
+  const [douyinExpanded, setDouyinExpanded] = useState(false);
   /** Read once per visit; the ref is what stops a re-render asking again. */
   const douyinAutoRead = useRef(false);
   /** Which term is being fetched, so only that card shows the wait. */
@@ -422,22 +418,10 @@ export default function ResearchDashboard() {
     "trendrelay.discover.topicCount", 5, numberIn(...TOPIC_COUNTS),
   );
   const [ideaSeeds, setIdeaSeeds] = useState<DiscoverySeed[]>([]);
-  /**
-   * Every post research has turned up, ranked for the shelves above.
-   *
-   * The same jobs "Winning posts" reads further down, so the two can never
-   * disagree about what was found - they disagree only about what is worth
-   * leading with.
-   */
-  const standoutPosts = useMemo(
-    () => rankEngagedPosts(
-      allJobs
-        .filter((job) => job.category === "research")
-        .map((job) => job.raw as ResearchPostJob),
-    ),
-    [allJobs],
-  );
   const ideaSeedIds = useMemo(() => new Set(ideaSeeds.map((seed) => seed.id)), [ideaSeeds]);
+  const visibleDouyinItems = douyinExpanded
+    ? douyinBoard?.items ?? []
+    : (douyinBoard?.items ?? []).slice(0, DOUYIN_PREVIEW_ITEMS);
 
   function toggleIdeaSeed(seed: DiscoverySeed) {
     setIdeaSeeds((current) => current.some((item) => item.id === seed.id)
@@ -446,7 +430,6 @@ export default function ResearchDashboard() {
   }
 
   function viewLabel(view: DiscoverView): string {
-    if (view === "overview") return t("discover.workspaceTabs.overview");
     if (view === "trends") return t("discover.workspaceTabs.trends");
     if (view === "posts") return t("discover.workspaceTabs.posts");
     if (view === "signals") return t("discover.workspaceTabs.signals");
@@ -511,6 +494,7 @@ export default function ResearchDashboard() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.detail ?? "The Douyin board could not be read.");
       setDouyinBoard(body);
+      setDouyinExpanded(false);
     } catch (reason) {
       setDouyinError(
         reason instanceof Error ? reason.message : "The Douyin board could not be read.",
@@ -991,101 +975,68 @@ export default function ResearchDashboard() {
     <main className={`dsc-page${ideaSeeds.length ? " has-idea-tray" : ""}`}>
       <WorkspaceSectionNav area="discover" />
 
-      <div className="dsc-top-bar">
-        <div className="dsc-row">
-          <span>
-            <span style={statusDot(last30Ready)} />
-            {readinessCount}/3 research tools ready
-          </span>
-        </div>
-        {metaReady && (
-          <button
-            type="button"
-            className="secondary-link dsc-pill-row"
-            disabled={busy !== null}
-            onClick={() => void runAccountValidation()}
-          >
-            {busy === "account" ? "Reading…" : (
-              <>
-                <Download size={14} strokeWidth={2} />
-                Import account signals
-              </>
-            )}
-          </button>
-        )}
-      </div>
-
       {error && <p className="dsc-error" role="alert">{error}</p>}
 
       <div className="dsc-hero">
-        <h1 className="dsc-logo">Discovery command center</h1>
-        <p className="dsc-tagline">{t("app.tagline")}</p>
-
-        <form className="dsc-search-form" onSubmit={runQuery}>
-          <input
-            className="dsc-search-input"
-            required
-            minLength={1}
-            maxLength={300}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={
-              queryMode === "trends"
-                ? "Search trends..."
-                : "Search competitor ads..."
-            }
-          />
-          <button
-            type="submit"
-            className={buttonClass({ variant: "primary" })}
-            disabled={!canSearch}
-          >
-            <ActionIcon name="search" />{busy === queryMode ? "Searching…" : "Search"}
-          </button>
-        </form>
-
-        <div className="dsc-command-row">
-          <div className="dsc-source-modes" role="group" aria-label={t("discover.sourceModes")}>
-            {(
-              [
-                ["trends", t("discover.actions.researchMode")],
-                ["ads", t("discover.actions.metaAdsMode")],
-              ] as const
-            ).map(([val, label]) => (
-              <Button
-                key={val}
-                size="sm"
-                variant="quiet"
-                selected={queryMode === val}
-                aria-pressed={queryMode === val}
-                onClick={() => setQueryMode(val)}
-              >
-                {label}
-              </Button>
-            ))}
-            {tiktokSourceModes.map((category) => (
-              <Button
-                key={category.id}
-                size="sm"
-                variant="quiet"
-                selected={activeView === "trends" && tiktokResult?.category === category.id}
-                aria-pressed={activeView === "trends" && tiktokResult?.category === category.id}
-                disabled={!category.available}
-                busy={busy === "tiktok" && activeView === "trends" && tiktokResult?.category === category.id}
-                title={category.available ? category.description : category.unavailable_reason}
-                onClick={() => {
-                  setActiveView("trends");
-                  void fetchTiktokDiscovery(category.id);
-                }}
-              >
-                <TikTokCategoryIcon id={category.id} />
-                {category.id === "hashtag" ? t("discover.tiktokCategories.hashtags") : t("discover.tiktokCategories.videos")}
-              </Button>
-            ))}
+        <div className="dsc-hero-head">
+          <div>
+            <h1 className="dsc-logo">{t("discover.heading")}</h1>
+            <p className="dsc-tagline">{t("app.tagline")}</p>
           </div>
-          {/* One country for the whole page. Trends, popular posts, TikTok and
-              the news board all follow it; Douyin stays China and the
-              network-wide sources (Bluesky, Hacker News) are unaffected. */}
+          <div className="dsc-hero-status">
+            <span className="dsc-readiness">
+              <span style={statusDot(readinessCount === 3)} />
+              {t("discover.toolsReady", { ready: readinessCount, total: 3 })}
+            </span>
+            {metaReady && (
+              <button
+                type="button"
+                className="secondary-link dsc-pill-row"
+                aria-label="Import account signals"
+                title="Import account signals"
+                disabled={busy !== null}
+                onClick={() => void runAccountValidation()}
+              >
+                {busy === "account" ? "Reading…" : (
+                  <>
+                    <Download size={14} strokeWidth={2} />
+                    <span>Import account signals</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="dsc-discovery-toolbar">
+          <form className="dsc-search-form" onSubmit={runQuery}>
+            <select
+              className="dsc-search-mode"
+              aria-label={t("discover.sourceModes")}
+              value={queryMode}
+              onChange={(event) => setQueryMode(event.target.value as "trends" | "ads")}
+            >
+              <option value="trends">{t("discover.actions.researchMode")}</option>
+              <option value="ads">{t("discover.actions.metaAdsMode")}</option>
+            </select>
+            <input
+              className="dsc-search-input"
+              required
+              minLength={1}
+              maxLength={300}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={queryMode === "trends" ? t("discover.searchPlaceholder") : "Search competitor ads..."}
+            />
+            <button
+              type="submit"
+              className={buttonClass({ variant: "primary" })}
+              disabled={!canSearch}
+            >
+              <ActionIcon name="search" />{busy === queryMode ? "Searching…" : "Search"}
+            </button>
+          </form>
+
           <div className="dsc-country">
             <span>{t("discover.country")}</span>
             <SearchSelect
@@ -1100,7 +1051,6 @@ export default function ResearchDashboard() {
             />
           </div>
         </div>
-
       </div>
 
       <nav className="dsc-view-nav" aria-label="Discover workspace">
@@ -1110,6 +1060,8 @@ export default function ResearchDashboard() {
             type="button"
             className="dsc-view-tab"
             aria-current={activeView === id ? "page" : undefined}
+            aria-label={viewLabel(id)}
+            title={viewLabel(id)}
             onClick={() => setActiveView(id)}
           >
             <Icon size={15} aria-hidden="true" />
@@ -1135,48 +1087,18 @@ export default function ResearchDashboard() {
         onClear={() => setIdeaSeeds([])}
       />
 
-      {/* One list first, because the question anyone opens this page with is
-          "what is hot", not "what did TikTok say". Seven sources on seven
-          boards is fourteen answers to read before knowing anything. */}
-      {activeView === "overview" && (
+      {activeView === "posts" && (
         <>
-          <DiscoveryFeed country={country} selectedIds={ideaSeedIds} onToggle={toggleIdeaSeed} />
-
-      {/* News leads. It reads public feeds rather than this workspace's own
-          history, so it is reliably full on a first visit before any research
-          has run - which is what stops Discover opening as an empty form. */}
+          <div className="dsc-section">
+            <PopularPosts
+              country={country}
+              onResearch={exploreTopic}
+              selectedIds={ideaSeedIds}
+              onToggle={toggleIdeaSeed}
+            />
+          </div>
           <NewsBoard country={country} seeds={ideaSeeds} onSeed={toggleIdeaSeed} />
         </>
-      )}
-
-      {/* Folded, not deleted. A hashtag and a video are different evidence,
-          and these two boards answer what the merged list cannot: what shape a
-          topic has over time, which posts earn their engagement, and what the
-          research jobs found. A summary that replaces its own detail is one
-          nobody can check. */}
-      {activeView === "trends" && <div className="dsc-section">
-        <TrendingTopics
-          country={country}
-          onResearch={exploreTopic}
-          onScore={scoreTopic}
-          selectedIds={ideaSeedIds}
-          onToggle={toggleIdeaSeed}
-        />
-      </div>}
-
-      {activeView === "posts" && <div className="dsc-section">
-        <PopularPosts
-          country={country}
-          onResearch={exploreTopic}
-          selectedIds={ideaSeedIds}
-          onToggle={toggleIdeaSeed}
-        />
-      </div>}
-
-      {/* The raw source boards, no longer hidden behind a disclosure. Douyin
-          hot search and TikTok Creative Center, before consolidation. */}
-      {activeView === "overview" && (
-        <StandoutBoard posts={standoutPosts} seeds={ideaSeeds} onSeed={toggleIdeaSeed} />
       )}
 
       {activeView === "trends" && <div className="dsc-section">
@@ -1249,7 +1171,7 @@ export default function ResearchDashboard() {
 
         {douyinBoard && douyinBoard.items.length > 0 && douyinView === "gallery" && (
           <div className="dsc-board-grid">
-            {douyinBoard.items.map((item) => (
+            {visibleDouyinItems.map((item) => (
               <article key={`${item.rank}-${item.term}`} className="dsc-board-card">
                 <div className="dsc-board-thumb">
                   {item.cover_url ? (
@@ -1320,7 +1242,7 @@ export default function ResearchDashboard() {
 
         {douyinBoard && douyinBoard.items.length > 0 && douyinView === "list" && (
           <div className="dsc-tiktok-list">
-            {douyinBoard.items.map((item) => (
+            {visibleDouyinItems.map((item) => (
               <div key={`${item.rank}-${item.term}`} className="dsc-tiktok-row">
                 <span className="dsc-tiktok-rank">{item.rank}</span>
                 <div className="dsc-tiktok-body">
@@ -1387,6 +1309,27 @@ export default function ResearchDashboard() {
         {douyinBoard && douyinBoard.items.length === 0 && !douyinError && (
           <p className="dsc-tiktok-note">{t("discover.emptyBoard")}</p>
         )}
+        {douyinBoard && douyinBoard.items.length > DOUYIN_PREVIEW_ITEMS && (
+          <button
+            type="button"
+            className="discovery-feed-more"
+            onClick={() => setDouyinExpanded((current) => !current)}
+          >
+            {douyinExpanded
+              ? t("discover.showTopTopics", { count: DOUYIN_PREVIEW_ITEMS })
+              : t("discover.showMoreTopics", { count: douyinBoard.items.length - DOUYIN_PREVIEW_ITEMS })}
+          </button>
+        )}
+      </div>}
+
+      {activeView === "trends" && <div className="dsc-section dsc-topic-analysis">
+        <TrendingTopics
+          country={country}
+          onResearch={exploreTopic}
+          onScore={scoreTopic}
+          selectedIds={ideaSeedIds}
+          onToggle={toggleIdeaSeed}
+        />
       </div>}
 
       {activeView === "trends" && (tiktokResult || busy === "tiktok") && (
@@ -1410,6 +1353,24 @@ export default function ResearchDashboard() {
               </p>
             </div>
             <div className="dsc-tiktok-controls">
+              <div className="dsc-source-modes" role="group" aria-label={t("discover.sourceModes")}>
+                {tiktokSourceModes.map((category) => (
+                  <Button
+                    key={category.id}
+                    size="sm"
+                    variant="quiet"
+                    selected={tiktokResult?.category === category.id}
+                    aria-pressed={tiktokResult?.category === category.id}
+                    disabled={!category.available}
+                    busy={busy === "tiktok" && tiktokResult?.category === category.id}
+                    title={category.available ? category.description : category.unavailable_reason}
+                    onClick={() => void fetchTiktokDiscovery(category.id)}
+                  >
+                    <TikTokCategoryIcon id={category.id} />
+                    {category.id === "hashtag" ? t("discover.tiktokCategories.hashtags") : t("discover.tiktokCategories.videos")}
+                  </Button>
+                ))}
+              </div>
               <select
                 aria-label={t("research.tiktokPeriod")}
                 className="dsc-tiktok-select"

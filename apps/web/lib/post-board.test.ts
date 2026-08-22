@@ -6,6 +6,7 @@ import {
   coverageNote,
   creatorSearchUrl,
   postMetrics,
+  sourceFairPosts,
   type PopularPost,
 } from "./post-board.ts";
 
@@ -83,6 +84,34 @@ test("the coverage line names the country and the window", () => {
 
 test("an empty board says so rather than claiming a top nothing", () => {
   assert.equal(coverageNote("VN", 30, 0), "Nothing came back for VN.");
+});
+
+test("a mixed board leads with every source before one source's second post", () => {
+  const ordered = sourceFairPosts([
+    post({ source: "tiktok", rank: 2, creator: "TikTok two" }),
+    post({ source: "tiktok", rank: 1, creator: "TikTok one" }),
+    post({ source: "bluesky", rank: 2, creator: "Bluesky two" }),
+    post({ source: "bluesky", rank: 1, creator: "Bluesky one" }),
+    post({ source: "hackernews", rank: 1, creator: "HN one" }),
+  ]);
+
+  assert.deepEqual(
+    ordered.map((item) => item.creator),
+    ["TikTok one", "Bluesky one", "HN one", "TikTok two", "Bluesky two"],
+  );
+});
+
+test("source-fair ordering does not drop a quieter provider's remaining posts", () => {
+  const input = [
+    post({ source: "bluesky", rank: 1, creator: "Blue one" }),
+    post({ source: "bluesky", rank: 2, creator: "Blue two" }),
+    post({ source: "tiktok", rank: 1, creator: "TikTok one" }),
+  ];
+  assert.deepEqual(sourceFairPosts(input).map((item) => item.creator), [
+    "Blue one",
+    "TikTok one",
+    "Blue two",
+  ]);
 });
 
 test("mixed providers keep their different time bases visible", () => {

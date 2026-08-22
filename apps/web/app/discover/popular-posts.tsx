@@ -30,6 +30,7 @@ import {
   coverageNote,
   creatorSearchUrl,
   postMetrics,
+  sourceFairPosts,
   type PopularPost,
 } from "../../lib/post-board";
 import { Button } from "../ui/button";
@@ -82,6 +83,8 @@ const PERIODS: ReadonlyArray<readonly [number, string]> = [
   [30, "Last 30 days"],
   [120, "Last 120 days"],
 ];
+
+const PREVIEW_POSTS = 15;
 
 const S: Record<string, React.CSSProperties> = {
   section: { padding: "8px 0 4px" },
@@ -231,6 +234,7 @@ export function PopularPosts({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const [engagementSort, setEngagementSort] = usePersistedState<EngagedPostSort>(
     "trendrelay.discover.research-posts.sort",
     "balanced",
@@ -260,6 +264,8 @@ export function PopularPosts({
     () => rankEngagedPosts(researchJobs, engagementSort, visibleEngagementSource).slice(0, 12),
     [engagementSort, researchJobs, visibleEngagementSource],
   );
+  const orderedPosts = useMemo(() => sourceFairPosts(board?.posts ?? []), [board]);
+  const visiblePosts = expanded ? orderedPosts : orderedPosts.slice(0, PREVIEW_POSTS);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -304,24 +310,30 @@ export function PopularPosts({
   }, [region, period, platform]);
 
   return (
-    <section style={S.section} aria-labelledby="popular-posts-heading">
-      <div style={S.head}>
+    <section className="popular-posts" style={S.section} aria-labelledby="popular-posts-heading">
+      <div className="popular-posts-head" style={S.head}>
         <div>
           <h2 id="popular-posts-heading" style={S.heading}>
-            Popular right now
+            {t("discover.hotPostsHeading")}
           </h2>
           <p style={S.sub}>
             Real posts and public videos actually doing well. Compare sources, choose evidence,
             then turn it into an editable Campaign brief.
           </p>
         </div>
-        <Button variant="primary" onClick={load} busy={busy}>
+        <Button
+          variant="primary"
+          onClick={load}
+          busy={busy}
+          aria-label={board ? t("discover.news.refresh") : t("discover.buildHotPosts")}
+          title={board ? t("discover.news.refresh") : t("discover.buildHotPosts")}
+        >
           <RefreshCw size={15} aria-hidden />
-          {board ? "Refresh" : "Build the board"}
+          <span>{board ? t("discover.news.refresh") : t("discover.buildHotPosts")}</span>
         </Button>
       </div>
 
-      <div style={S.researchBoard}>
+      {engagedPosts.length > 0 && <div className="popular-posts-research" style={S.researchBoard}>
         <div style={S.researchHead}>
           <div>
             <h3 style={{ ...S.heading, fontSize: "15px" }}>Top posts from your research</h3>
@@ -362,7 +374,6 @@ export function PopularPosts({
             </label>
           </div>
         </div>
-        {engagedPosts.length ? (
           <ol style={S.list}>
             {engagedPosts.map((post, index) => {
               const seed = seedFromEngagedPost(post);
@@ -412,19 +423,13 @@ export function PopularPosts({
               );
             })}
           </ol>
-        ) : (
-          <p style={S.empty}>
-            Run a Discover search to collect linked Reddit, YouTube, TikTok, X, Instagram, Hacker
-            News, or web evidence. Posts with public interaction counts will rank here.
-          </p>
-        )}
         <p style={S.coverage}>
           “Top in each source” is the fair default: it compares rank within a network. Raw comments
           and interactions can be sorted when you explicitly want a count-based view.
         </p>
-      </div>
+      </div>}
 
-      <div style={S.controls}>
+      <div className="popular-posts-filters" style={S.controls}>
         <label style={S.control}>
           <span style={S.controlLabel}>Platform</span>
           <select
@@ -468,27 +473,25 @@ export function PopularPosts({
 
       {board && (
         <>
-          <p style={S.coverage}>
-            {coverageNote(board.region, board.period_days, board.post_count, board.sources)}
-          </p>
-          {board.providers?.some((provider) => !provider.available) && (
-            <p style={S.coverage}>
-              {board.providers.filter((provider) => !provider.available)
-                .map((provider) => `${provider.label}: ${provider.reason}`).join(" ")}
-            </p>
-          )}
-          {/* A board cut short by the source looks exactly like a small week,
-              so what could not be read is said rather than left as an absence. */}
-          {board.notes.length > 0 && (
-            <ul style={board.complete ? S.notes : { ...S.notes, ...S.notesWarn }}>
-              {board.notes.map((note) => <li key={note}>{note}</li>)}
-            </ul>
-          )}
+          <details className="popular-posts-coverage">
+            <summary>{coverageNote(board.region, board.period_days, board.post_count, board.sources)}</summary>
+            {board.providers?.some((provider) => !provider.available) && (
+              <p>
+                {board.providers.filter((provider) => !provider.available)
+                  .map((provider) => `${provider.label}: ${provider.reason}`).join(" ")}
+              </p>
+            )}
+            {board.notes.length > 0 && (
+              <ul data-incomplete={!board.complete || undefined}>
+                {board.notes.map((note) => <li key={note}>{note}</li>)}
+              </ul>
+            )}
+          </details>
           {board.posts.length === 0 ? (
             <p style={S.empty}>The source answered; it just had nothing for {board.region}.</p>
           ) : (
             <ol style={S.list}>
-              {board.posts.map((post) => {
+              {visiblePosts.map((post) => {
                 const link = creatorSearchUrl(post);
                 const metrics = postMetrics(post);
                 const seed = seedFromPost(post);
@@ -554,6 +557,17 @@ export function PopularPosts({
                 );
               })}
             </ol>
+          )}
+          {orderedPosts.length > PREVIEW_POSTS && (
+            <button
+              type="button"
+              className="discovery-feed-more"
+              onClick={() => setExpanded((current) => !current)}
+            >
+              {expanded
+                ? t("discover.showTopPosts", { count: PREVIEW_POSTS })
+                : t("discover.showMorePosts", { count: orderedPosts.length - PREVIEW_POSTS })}
+            </button>
           )}
         </>
       )}

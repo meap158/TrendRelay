@@ -83,10 +83,17 @@ export const ar: Messages = {
   },
 
   discover: {
+    heading: "اكتشاف",
+    toolsReady: "{ready}/{total} مصادر جاهزة",
+    searchPlaceholder: "ابحث عن موضوعات أو منشورات أو منشئين…",
+    hotPostsHeading: "المنشورات الأكثر رواجًا الآن",
+    buildHotPosts: "إنشاء لوحة المنشورات الرائجة",
+    showMorePosts: "عرض {count} منشورات إضافية",
+    showTopPosts: "عرض أول {count} منشورات",
     workspaceTabs: {
       overview: "نظرة عامة",
-      trends: "الاتجاهات",
-      posts: "المنشورات",
+      trends: "الموضوعات",
+      posts: "المنشورات الرائجة",
       signals: "الإعلانات والإشارات",
       opportunities: "الفرص",
     },
@@ -94,7 +101,7 @@ export const ar: Messages = {
       addToCampaign: "أضف إلى الحملة",
       addedToCampaign: "أُضيف",
       searchThis: "ابحث عن هذا",
-      researchMode: "الروائج",
+      researchMode: "بحث",
       metaAdsMode: "الإعلانات",
     },
     sourceModes: "مصادر الاكتشاف",
@@ -116,6 +123,8 @@ export const ar: Messages = {
     heat: "درجة الرواج {value}",
     views: "{value} مشاهدة",
     emptyBoard: "القائمة فارغة حاليًا. حاول مرة أخرى بعد قليل.",
+    showMoreTopics: "عرض {count} موضوعات إضافية",
+    showTopTopics: "عرض أول {count}",
     topicQueued:
       "تمت إضافة {count, plural, one {مقطع واحد} two {مقطعين} few {# مقاطع} many {# مقطعًا} other {# مقطع}} عن «{term}» إلى قائمة الانتظار. تابع التقدم في التنزيلات.",
     topicFailed: "تعذّر جلب هذا الموضوع.",

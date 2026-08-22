@@ -82,10 +82,17 @@ export const ru: Messages = {
   },
 
   discover: {
+    heading: "Обзор",
+    toolsReady: "{ready}/{total} источников готово",
+    searchPlaceholder: "Искать темы, публикации или авторов…",
+    hotPostsHeading: "Самые популярные публикации",
+    buildHotPosts: "Собрать доску горячих публикаций",
+    showMorePosts: "Показать ещё {count} публикаций",
+    showTopPosts: "Показать первые {count} публикаций",
     workspaceTabs: {
       overview: "Обзор",
-      trends: "Тренды",
-      posts: "Публикации",
+      trends: "Темы",
+      posts: "Горячие публикации",
       signals: "Реклама и сигналы",
       opportunities: "Возможности",
     },
@@ -93,7 +100,7 @@ export const ru: Messages = {
       addToCampaign: "Добавить в кампанию",
       addedToCampaign: "Добавлено",
       searchThis: "Искать это",
-      researchMode: "Тренды",
+      researchMode: "Исследование",
       metaAdsMode: "Реклама",
     },
     sourceModes: "Источники обзора",
@@ -116,6 +123,8 @@ export const ru: Messages = {
     heat: "Популярность: {value}",
     views: "{value} просмотров",
     emptyBoard: "Подборка пуста. Попробуйте ещё раз чуть позже.",
+    showMoreTopics: "Показать ещё {count} тем",
+    showTopTopics: "Показать первые {count}",
     topicQueued:
       "{count, plural, one {# видео добавлено} few {# видео добавлено} many {# видео добавлено} other {# видео добавлено}} по запросу «{term}». Следите за ходом в разделе «Загрузки».",
     topicFailed: "Не удалось получить эту тему.",

@@ -316,24 +316,19 @@ function Result({
   const topics = filterTopics(result.topics, { shapes, platform });
   return (
     <>
-      <p style={S.coverage}>
-        {windowSummary(result.windows)}{" "}
-        {result.sources.length > 0
-          ? `Sources: ${result.sources.join(", ")}.`
-          : "No source contributed."}
-      </p>
-
-      {/* A list quietly missing a window looks exactly like a list where nothing
-          held, so what could not be read is said rather than left as an absence. */}
-      {result.notes.length > 0 && (
-        <ul style={result.complete ? S.notes : { ...S.notes, ...S.notesWarn }}>
-          {result.notes.map((note) => (
-            <li key={note} style={S.note}>
-              {note}
-            </li>
-          ))}
-        </ul>
-      )}
+      <details className="topic-analysis-coverage">
+        <summary>
+          {windowSummary(result.windows)}{" "}
+          {result.sources.length > 0
+            ? `Sources: ${result.sources.join(", ")}.`
+            : "No source contributed."}
+        </summary>
+        {result.notes.length > 0 && (
+          <ul data-incomplete={!result.complete || undefined}>
+            {result.notes.map((note) => <li key={note}>{note}</li>)}
+          </ul>
+        )}
+      </details>
 
       {topics.length === 0 ? (
         <p style={S.empty}>

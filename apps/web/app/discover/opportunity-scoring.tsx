@@ -260,7 +260,7 @@ export function OpportunityScoring({
           <p className="eyebrow">{t("opportunities.stepScore")}</p>
           <h2>{t("opportunities.buildCase")}</h2>
         </div>
-        <Button variant="quiet" size="sm" onClick={() => setOpen((current) => !current)}>
+        <Button variant={open ? "quiet" : "primary"} size="sm" onClick={() => setOpen((current) => !current)}>
           {open ? t("common.close") : t("opportunities.scoreATrend")}
         </Button>
       </div>

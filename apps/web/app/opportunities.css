@@ -59,10 +59,10 @@
    needs its own width and rhythm instead of inheriting a page layout. */
 .opportunity-scoring {
   display: grid;
-  gap: 16px;
+  gap: 10px;
   max-width: 960px;
   margin: 0 auto;
-  padding: 8px 0 16px;
+  padding: 8px 0;
 }
 .opportunity-scoring .opportunity-results {
   display: grid;

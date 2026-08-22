@@ -87,10 +87,17 @@ export const en = {
   },
 
   discover: {
+    heading: "Discover",
+    toolsReady: "{ready}/{total} sources ready",
+    searchPlaceholder: "Search topics, posts, or creators…",
+    hotPostsHeading: "Hottest posts right now",
+    buildHotPosts: "Build the hottest-post board",
+    showMorePosts: "Show {count} more posts",
+    showTopPosts: "Show top {count}",
     workspaceTabs: {
       overview: "Overview",
-      trends: "Trends",
-      posts: "Posts",
+      trends: "Topics",
+      posts: "Hot posts",
       signals: "Ads & signals",
       opportunities: "Opportunities",
     },
@@ -98,7 +105,7 @@ export const en = {
       addToCampaign: "Add to campaign",
       addedToCampaign: "Added",
       searchThis: "Search this",
-      researchMode: "Trends",
+      researchMode: "Research",
       metaAdsMode: "Ads",
     },
     sourceModes: "Discovery sources",
@@ -121,6 +128,8 @@ export const en = {
     heat: "{value} heat",
     views: "{value} views",
     emptyBoard: "The board came back empty. Try again shortly.",
+    showMoreTopics: "Show {count} more topics",
+    showTopTopics: "Show top {count}",
     topicQueued:
       "Queued {count, plural, one {# video} other {# videos}} for “{term}”. Watch it in Downloads.",
     topicFailed: "The topic could not be fetched.",

@@ -81,10 +81,17 @@ export const ja: Messages = {
   },
 
   discover: {
+    heading: "発見",
+    toolsReady: "{ready}/{total} 件のソースが準備完了",
+    searchPlaceholder: "トピック、投稿、クリエイターを検索…",
+    hotPostsHeading: "今注目の投稿",
+    buildHotPosts: "注目の投稿ボードを作成",
+    showMorePosts: "さらに {count} 件の投稿を表示",
+    showTopPosts: "上位 {count} 件の投稿を表示",
     workspaceTabs: {
       overview: "概要",
-      trends: "トレンド",
-      posts: "投稿",
+      trends: "トピック",
+      posts: "注目の投稿",
       signals: "広告とシグナル",
       opportunities: "機会",
     },
@@ -92,7 +99,7 @@ export const ja: Messages = {
       addToCampaign: "キャンペーンに追加",
       addedToCampaign: "追加済み",
       searchThis: "これを検索",
-      researchMode: "トレンド",
+      researchMode: "リサーチ",
       metaAdsMode: "広告",
     },
     sourceModes: "検出ソース",
@@ -115,6 +122,8 @@ export const ja: Messages = {
     heat: "話題度 {value}",
     views: "{value} 回視聴",
     emptyBoard: "ランキングが空でした。しばらくしてからお試しください。",
+    showMoreTopics: "さらに {count} 件のトピックを表示",
+    showTopTopics: "上位 {count} 件を表示",
     topicQueued:
       "「{term}」の動画を {count, plural, other {# 件}} 登録しました。ダウンロードで進行状況を確認できます。",
     topicFailed: "このトピックを取得できませんでした。",

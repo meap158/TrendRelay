@@ -81,10 +81,17 @@ export const fr: Messages = {
   },
 
   discover: {
+    heading: "Découvrir",
+    toolsReady: "{ready}/{total} sources prêtes",
+    searchPlaceholder: "Rechercher des sujets, publications ou créateurs…",
+    hotPostsHeading: "Publications les plus populaires",
+    buildHotPosts: "Créer le tableau des publications populaires",
+    showMorePosts: "Afficher {count} publications de plus",
+    showTopPosts: "Afficher les {count} premières",
     workspaceTabs: {
       overview: "Vue d’ensemble",
-      trends: "Tendances",
-      posts: "Publications",
+      trends: "Sujets",
+      posts: "Publications populaires",
       signals: "Publicités et signaux",
       opportunities: "Opportunités",
     },
@@ -92,7 +99,7 @@ export const fr: Messages = {
       addToCampaign: "Ajouter à la campagne",
       addedToCampaign: "Ajouté",
       searchThis: "Rechercher ceci",
-      researchMode: "Tendances",
+      researchMode: "Recherche",
       metaAdsMode: "Publicités",
     },
     sourceModes: "Sources de découverte",
@@ -115,6 +122,8 @@ export const fr: Messages = {
     heat: "{value} d'intérêt",
     views: "{value} vues",
     emptyBoard: "Le classement est vide. Réessayez dans quelques instants.",
+    showMoreTopics: "Afficher {count} sujets de plus",
+    showTopTopics: "Afficher les {count} premiers",
     topicQueued:
       "{count, plural, one {# vidéo mise en file} other {# vidéos mises en file}} pour « {term} ». Suivez la progression dans Téléchargements.",
     topicFailed: "Impossible de récupérer ce sujet.",
