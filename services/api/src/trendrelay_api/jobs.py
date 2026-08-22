@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import zlib
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from time import monotonic
@@ -18,6 +19,47 @@ SessionMaker = sessionmaker[Session]
 
 def now_utc() -> datetime:
     return datetime.now(UTC)
+
+
+#: How long the first retry waits, and the ceiling every later one approaches.
+#:
+#: Thirty seconds is what every retry used to wait, whichever attempt it was.
+#: It is kept as the first step so nothing that was tuned around it changes,
+#: and doubled from there: a failure that a moment's wait would fix is over by
+#: the first retry, and one that is not gets progressively more room rather
+#: than the same thirty seconds again.
+RETRY_BASE_SECONDS = 30
+RETRY_MAX_SECONDS = 600
+
+
+def retry_delay_for(job_id: str, attempt: int) -> int:
+    """How long this job waits before its next attempt.
+
+    Doubling per attempt, capped, and spread by a fraction derived from the
+    job's own id.
+
+    The spread matters because failures in a batch are usually one cause: a
+    full disk, a missing encoder, a provider refusing everyone. Without it the
+    whole batch fails together, waits the same interval together, and comes
+    back together to fail against the same cause in lockstep - which is the
+    behaviour that makes an outage look like a stuck queue. Derived from the id
+    rather than drawn at random so a given job's wait is reproducible, and so
+    this stays testable.
+
+    The delay also decides ordering: the queue is claimed by `available_at`, so
+    pushing a failed job into the future is what puts it behind every attempt
+    that has not been tried yet. A batch finishes what it has never touched
+    before coming back to what has already refused once.
+    """
+    step = min(RETRY_BASE_SECONDS * 2 ** max(attempt - 1, 0), RETRY_MAX_SECONDS)
+    # 0.0 to 1.0, stable for a given id. CRC32 rather than a sum of bytes:
+    # ids in one batch differ by a character or two, and a sum maps those to
+    # neighbouring values - eight consecutive ids all landed within a second
+    # of each other, which is not a spread.
+    spread = (zlib.crc32(job_id.encode()) % 1000) / 999
+    # 75% to 125% of the step, so the order within one batch is shuffled
+    # without any job waiting appreciably longer than the schedule says.
+    return max(1, round(step * (0.75 + spread * 0.5)))
 
 
 def as_utc(value: datetime) -> datetime:
@@ -774,7 +816,9 @@ def fail_job(
     worker_id: str,
     error: str,
     *,
-    retry_delay_seconds: int = 30,
+    #: Left unset, the wait doubles per attempt - see `retry_delay_for`. A
+    #: caller that knows better than the schedule may still name one.
+    retry_delay_seconds: int | None = None,
     retry_allowed: bool = True,
     factory: SessionMaker = SessionFactory,
 ) -> dict[str, Any]:
@@ -792,7 +836,11 @@ def fail_job(
             "queued" if retry else ("cancelled" if item.cancellation_requested else "failed")
         )
         item.last_error = error[-4000:]
-        item.available_at = timestamp + timedelta(seconds=retry_delay_seconds)
+        delay = (
+            retry_delay_seconds if retry_delay_seconds is not None
+            else retry_delay_for(item.id, item.attempt_count)
+        )
+        item.available_at = timestamp + timedelta(seconds=delay)
         item.lease_owner = None
         item.lease_expires_at = None
         item.completed_at = None if retry else timestamp

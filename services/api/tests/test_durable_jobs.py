@@ -18,7 +18,10 @@ from trendrelay_api.jobs import (
     list_job_records,
     list_job_records_including_active,
     now_utc,
+    RETRY_BASE_SECONDS,
+    RETRY_MAX_SECONDS,
     recoverable_job_ids,
+    retry_delay_for,
     request_job_cancellation,
     requeue_terminal_job,
     settle_expired_cancellations,
@@ -478,3 +481,70 @@ def test_keep_spares_the_rows_it_names() -> None:
         job["id"]
         for job in list_job_records("workspace-1", "media_effect_render", factory=sessions)
     ] == ["edit_b"]
+
+
+def test_each_retry_waits_longer_than_the_one_before() -> None:
+    delays = [retry_delay_for("edit_abc123", attempt) for attempt in range(1, 6)]
+
+    assert delays == sorted(delays), "a retry must not come back sooner than the last"
+    # Doubling, within the spread each one is allowed.
+    for attempt, delay in enumerate(delays, start=1):
+        step = min(RETRY_BASE_SECONDS * 2 ** (attempt - 1), RETRY_MAX_SECONDS)
+        assert 0.75 * step <= delay <= 1.25 * step
+
+
+def test_the_wait_is_capped_however_many_attempts_are_allowed() -> None:
+    # A job configured with many attempts must not end up waiting a day.
+    assert retry_delay_for("edit_abc123", 40) <= RETRY_MAX_SECONDS * 1.25
+
+
+def test_a_batch_failing_on_one_cause_does_not_come_back_in_lockstep() -> None:
+    """The spread, and why it is there.
+
+    Failures in a batch are usually one cause - a full disk, a missing
+    encoder - so without a spread the whole batch fails together, waits the
+    same interval, and returns together to fail against the same cause again.
+    """
+    delays = {retry_delay_for(f"edit_{index:04d}aaaa", 1) for index in range(40)}
+
+    assert len(delays) > 5, "forty jobs should not share a handful of wake-up times"
+
+
+def test_a_job_that_failed_is_tried_again_after_the_work_never_attempted() -> None:
+    """The point of pushing a failure into the future.
+
+    The queue is claimed by `available_at`, so a failed job waiting its backoff
+    sits behind everything still untouched. A batch finishes what it has never
+    tried before coming back to what has already refused once - which is what
+    keeps one bad clip from being retried ahead of forty good ones.
+    """
+    sessions = factory()
+    for name in ("first", "second", "third"):
+        create_job_record(name, "ws", "media_effect_render", {}, max_attempts=3, factory=sessions)
+
+    claimed = claim_next_job("media_effect_render", "worker", factory=sessions)
+    assert claimed["id"] == "first"
+    fail_job("first", "worker", "ffmpeg said no", factory=sessions)
+
+    # The two that have never been tried come first, in order.
+    assert claim_next_job("media_effect_render", "worker", factory=sessions)["id"] == "second"
+    assert claim_next_job("media_effect_render", "worker", factory=sessions)["id"] == "third"
+    # And the failure is not available yet at all.
+    assert claim_next_job("media_effect_render", "worker", factory=sessions) is None
+
+    requeued = get_job_record("first", factory=sessions)
+    assert requeued["status"] == "queued"
+    assert requeued["attempt_count"] == 1
+
+
+def test_a_caller_that_names_a_delay_still_gets_it() -> None:
+    # One caller schedules its own retry against a provider's window; the
+    # schedule is a default, not a policy imposed on work that knows better.
+    sessions = factory()
+    create_job_record("job", "ws", "media_effect_render", {}, max_attempts=3, factory=sessions)
+    claim_next_job("media_effect_render", "worker", factory=sessions)
+
+    failed = fail_job("job", "worker", "later", retry_delay_seconds=5, factory=sessions)
+
+    waited = failed["available_at"] - now_utc()
+    assert waited.total_seconds() <= 6
