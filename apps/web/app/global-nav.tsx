@@ -545,7 +545,7 @@ export function GlobalNav() {
                   {groups.slice(0, 15).map((group) => {
                     const job = group.latest;
                     const batch = batchProgress(group);
-                    const destination = notificationHref(group.jobs) ?? job.href;
+                    const destination = notificationHref(group.jobs, { title: job.title }) ?? job.href;
                     const read = group.jobs.every((item) => readKeys.has(notificationKey(item)));
                     return (
                       <li className={read ? "notification-item read" : "notification-item unread"} key={group.key}>

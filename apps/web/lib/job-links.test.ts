@@ -54,11 +54,12 @@ test("a grouped notification opens every distinct affected asset", () => {
     { payload: { asset_id: "asset_one" } },
     { result: { asset_id: "asset_two" } },
     { result: { asset_id: "asset_one" } },
-  ])!;
+  ], { title: "Cover a face with an object · 3 items" })!;
   const params = new URLSearchParams(href.split("?")[1]);
   assert.equal(href.split("?")[0], "/library");
   assert.equal(params.get("assets"), "asset_one,asset_two");
   assert.equal(params.get("from"), "notifications");
+  assert.equal(params.get("notice"), "Cover a face with an object");
 });
 
 test("a grouped notification accepts the normalized job shape used by the drawer", () => {
@@ -71,7 +72,10 @@ test("a grouped notification accepts the normalized job shape used by the drawer
 
 test("a one-item notification remains a direct asset link", () => {
   assert.equal(
-    notificationHref([{ payload: { asset_id: "asset_one" } }]),
-    "/library?asset=asset_one&assets=asset_one",
+    notificationHref(
+      [{ payload: { asset_id: "asset_one" } }],
+      { title: "Captions ready" },
+    ),
+    "/library?asset=asset_one&assets=asset_one&from=notifications&notice=Captions+ready",
   );
 });

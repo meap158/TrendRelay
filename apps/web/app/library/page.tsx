@@ -972,6 +972,42 @@ function notificationAssetsFromQuery(value: string): string[] {
   return [...new Set(value.split(",").map((id) => id.trim()).filter(Boolean))].slice(0, 200);
 }
 
+function notificationActionTitle(value: string): string {
+  return value.trim().replace(/\s*·\s*\d+\s+items?\s*$/i, "").slice(0, 140);
+}
+
+function notificationScopeProgress(
+  jobs: BaseJob[],
+  assetIds: string[],
+  title: string,
+): { settled: number; retrying: number; fraction: number } | null {
+  if (!assetIds.length || !title) return null;
+  const wanted = new Set(assetIds);
+  const byAsset = new Map<string, BaseJob>();
+  jobs.forEach((job) => {
+    if (
+      job.assetId
+      && wanted.has(job.assetId)
+      && notificationActionTitle(job.title) === title
+      && !byAsset.has(job.assetId)
+    ) {
+      byAsset.set(job.assetId, job);
+    }
+  });
+  if (!byAsset.size) return null;
+  const related = [...byAsset.values()];
+  const settled = related.filter((job) => ["succeeded", "failed", "cancelled"].includes(job.status)).length;
+  const retrying = related.filter((job) =>
+    job.stalled
+    && Number(job.raw?.attempt_count ?? 0) < Number(job.raw?.max_attempts ?? 0)
+  ).length;
+  return {
+    settled,
+    retrying,
+    fraction: Math.max(0, Math.min(1, settled / assetIds.length)),
+  };
+}
+
 function LibraryContent() {
   const t = useT();
   const router = useRouter();
@@ -986,6 +1022,7 @@ function LibraryContent() {
   // and the Publish picker all describe a filter the same way.
   const [filters, setFilters] = useState<AssetFilterValues>({});
   const notificationAssetQuery = searchParams.get("assets") ?? "";
+  const notificationTitle = notificationActionTitle(searchParams.get("notice") ?? "");
   const notificationAssetIds = useMemo(
     () => notificationAssetsFromQuery(notificationAssetQuery),
     [notificationAssetQuery],
@@ -1028,6 +1065,10 @@ function LibraryContent() {
     jobs: notificationJobs,
     refresh: refreshJobs,
   } = useJobs();
+  const notificationProgress = useMemo(
+    () => notificationScopeProgress(notificationJobs, notificationAssetIds, notificationTitle),
+    [notificationAssetIds, notificationJobs, notificationTitle],
+  );
   const previousEffectJobStates = useRef<Map<string, string>>(new Map());
   const [message, setMessage] = useState("");
   const [selection, setSelection] = useState<Set<string>>(new Set());
@@ -1174,6 +1215,7 @@ function LibraryContent() {
     url.searchParams.delete("asset");
     url.searchParams.delete("assets");
     url.searchParams.delete("from");
+    url.searchParams.delete("notice");
     router.replace(`${url.pathname}${url.search}${url.hash}`, { scroll: false });
   }
 
@@ -1673,12 +1715,24 @@ function LibraryContent() {
             <div className="library-browser-toolbar">
           {notificationAssetIds.length > 0 && (
             <div className="library-notification-view" role="status">
-              <span>{t(
-                notificationAssetIds.length === 1
-                  ? "library.notificationViewOne"
-                  : "library.notificationView",
-                { count: notificationAssetIds.length },
-              )}</span>
+              <span className="library-notification-copy">
+                <strong>{notificationTitle || t("library.fromNotifications")}</strong>
+                <small>
+                  {notificationProgress
+                    ? `${notificationProgress.settled}/${notificationAssetIds.length} ${t("library.itemsDone")}${notificationProgress.retrying ? ` · ${notificationProgress.retrying} ${t("library.toRetry")}` : ""}`
+                    : t(
+                      notificationAssetIds.length === 1
+                        ? "library.notificationViewOne"
+                        : "library.notificationView",
+                      { count: notificationAssetIds.length },
+                    )}
+                </small>
+                {notificationProgress && (
+                  <span className="library-notification-progress" aria-hidden="true">
+                    <span style={{ width: `${notificationProgress.fraction * 100}%` }} />
+                  </span>
+                )}
+              </span>
               <Button variant="quiet" size="sm" onClick={clearNotificationView}>
                 {t("library.showAllMedia")}
               </Button>

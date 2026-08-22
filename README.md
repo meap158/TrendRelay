@@ -164,7 +164,7 @@ Research integrations, ad collection, opportunity scoring, and additional produc
 ## Interface conventions
 
 - Primary workspaces use the same compact top navigation, page heading, status language, and action hierarchy. The active workspace and session live in one persistent top-right context control; switching it updates every workspace-scoped screen and the global job feed.
-- Notification links preserve the scope of the work they report: one-media jobs open that exact Library item, while grouped and batch jobs open a removable temporary Library view containing the affected media only.
+- Notification links preserve the scope of the work they report: one-media jobs open that exact Library item, while grouped and batch jobs open a removable temporary Library view containing the affected media only. That view keeps the originating action name and live completion/retry progress visible in one compact row.
 - Familiar actions use the shared Lucide icon vocabulary; icons supplement readable labels and icon-only controls retain accessible names and tooltips.
 - Dense operational screens favor short toolbars, compact cards, sticky context only where it helps, and responsive icon-first navigation on narrow screens.
 - Table search, selection counts, and bulk actions share a stable toolbar slot; changing selection state must not insert controls that shift the rows below.

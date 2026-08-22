@@ -284,8 +284,15 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .library-browser-sticky-controls { position: sticky; top: -10px; z-index: 80; display: grid; gap: 8px; margin: -10px -2px 0; padding: 10px 2px 0; background: var(--panel); }
 .library-browser-toolbar { display: grid; gap: 7px; padding-bottom: 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .library-notification-view { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-inline-size: 0; border: 1px solid var(--line); border-inline-start: 3px solid var(--link); border-radius: var(--radius-sm); padding: 6px 8px; color: var(--text); background: var(--link-bg); font-size: 11px; font-weight: 600; }
-.library-notification-view > span { min-inline-size: 0; overflow-wrap: anywhere; }
+.library-notification-copy { display: flex; align-items: center; gap: 7px; min-inline-size: 0; overflow: hidden; }
+.library-notification-copy > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library-notification-copy > small { flex: 0 0 auto; color: var(--muted); font-size: 10px; font-weight: 600; }
+.library-notification-progress { flex: 0 0 64px; height: 3px; overflow: hidden; border-radius: 999px; background: var(--line-strong); }
+.library-notification-progress > span { display: block; height: 100%; border-radius: inherit; background: var(--link); }
 .library-notification-view .ui-button { flex: 0 0 auto; }
+@media (max-width: 720px) {
+  .library-notification-progress { display: none; }
+}
 .library-browser-toolbar > [role="group"] { margin: 0; }
 .library-category-bar, .library-collection-toolbar { width: 100%; min-width: 0; box-sizing: border-box; }
 /* Not full-width. The actions are pushed right by `margin-inline-start: auto`,

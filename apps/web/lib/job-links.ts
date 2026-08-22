@@ -50,12 +50,29 @@ export function assetHref(job: JobRecord | null | undefined): string | undefined
  * job's href loses every other result. The explicit ids form a temporary,
  * shareable Library view; a single job still opens directly on its asset.
  */
-export function notificationHref(jobs: JobRecord[]): string | undefined {
+export function notificationHref(
+  jobs: JobRecord[],
+  context: { title?: string } = {},
+): string | undefined {
   const ids = [...new Set(jobs.map(assetId).filter((id): id is string => Boolean(id)))];
-  if (ids.length === 0) return jobs.length === 1 ? assetHref(jobs[0]) : undefined;
-  if (ids.length === 1) return assetHref({ asset_id: ids[0] });
-  const params = new URLSearchParams();
-  params.set("assets", ids.join(","));
+  const fallback = ids.length === 0 && jobs.length === 1 ? assetHref(jobs[0]) : undefined;
+  if (ids.length === 0 && !fallback) return undefined;
+  const [path, query = ""] = (fallback ?? "/library").split("?");
+  const params = new URLSearchParams(query);
+  if (ids.length === 1) {
+    params.set("asset", ids[0]);
+    params.set("assets", ids[0]);
+  } else if (ids.length > 1) {
+    params.set("assets", ids.join(","));
+  }
   params.set("from", "notifications");
-  return `/library?${params}`;
+  // Batch titles already include their count in the drawer. Library has a live
+  // count beside the title, so carrying that suffix would say "100 items"
+  // twice and consume the space this compact context row is meant to save.
+  const title = context.title
+    ?.trim()
+    .replace(/\s*·\s*\d+\s+items?\s*$/i, "")
+    .slice(0, 140);
+  if (title) params.set("notice", title);
+  return `${path}?${params}`;
 }
