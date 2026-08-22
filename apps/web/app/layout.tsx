@@ -10,6 +10,7 @@ import "./ui/ui.css";
 import { AuthProvider } from "./auth-provider";
 import { HYDRATION_RESCUE_SCRIPT, HydrationBeacon } from "./hydration-rescue";
 import { GlobalNav } from "./global-nav";
+import { StickyOffsets } from "./ui/sticky-offsets";
 import { LocaleProvider } from "./i18n-provider";
 import { JobsProvider } from "./jobs-provider";
 import { WorkspaceProvider } from "./workspace-provider";
@@ -36,6 +37,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <AuthProvider>
             <WorkspaceProvider>
               <JobsProvider>
+                {/* Measures the sticky rows so the stylesheets can stack them
+                    without guessing at each other's heights. Renders nothing. */}
+                <StickyOffsets />
                 <GlobalNav />
                 {children}
               </JobsProvider>

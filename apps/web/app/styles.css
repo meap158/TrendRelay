@@ -1165,7 +1165,10 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .campaign-pipeline-summary .good strong { color: var(--green); }
 .campaign-pipeline { display: grid; gap: 18px; margin-block-start: 14px; }
 .campaign-pipeline-day { display: grid; grid-template-columns: 126px minmax(0, 1fr); align-items: start; }
-.campaign-pipeline-day > header { position: sticky; top: 58px; display: grid; gap: 2px; padding: 4px 18px 0 0; }
+/* Below the heading, measured rather than assumed. At 58px this sat behind
+   the page heading instead of under it, so the day label a reader scrolls
+   by to find a date was hidden by the header the whole way down. */
+.campaign-pipeline-day > header { position: sticky; top: var(--page-heading-offset, 58px); display: grid; gap: 2px; padding: 4px 18px 0 0; }
 .campaign-pipeline-day > header strong { font-size: 12px; }
 .campaign-pipeline-day > header span { color: var(--muted); font-size: 10px; }
 .campaign-pipeline-day > ol { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 0; list-style: none; }
