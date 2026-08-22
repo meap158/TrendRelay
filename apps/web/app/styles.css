@@ -1249,7 +1249,9 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
   .campaign-pipeline-summary span:nth-child(odd) { border-inline-start: 0; }
   .campaign-pipeline-summary span:nth-child(n + 3) { border-block-start: 1px solid var(--line); }
   .campaign-pipeline, .campaign-pipeline-day { min-inline-size: 0; max-inline-size: 100%; }
-  .campaign-pipeline-day > ol > li { grid-template-columns: 58px minmax(0, 1fr); }
+  /* Reserve the timestamp's actual width plus breathing room. The previous
+     58px track made a seven-character time overflow into the card border. */
+  .campaign-pipeline-day > ol > li { grid-template-columns: 76px minmax(0, 1fr); }
   .campaign-pipeline-time { grid-row: 1 / span 2; }
   .campaign-pipeline-thumb { grid-column: 2; justify-content: start; border-inline-end: 0; border-block-end: 1px solid var(--line); }
   .campaign-pipeline-thumb .picker-thumb, .campaign-pipeline-thumb-empty { inline-size: 86px; block-size: 58px; }

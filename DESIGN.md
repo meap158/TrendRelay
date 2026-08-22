@@ -70,6 +70,7 @@ Concise, confident, implementation-focused.
 - Keep narrow-screen gutters and card padding compact through shared tokens or component variables. Do not remove separation that communicates grouping merely to save pixels.
 - Dropdown panels must fit the viewport while remaining wide enough to read their longest common option. Prefer logical inset properties so the same rule works in left-to-right and right-to-left locales.
 - Test the fully loaded, error, empty, and selected states. A layout that fits only before data arrives is not responsive.
+- Fixed-width mobile metadata rails, including timeline timestamps, must be sized for their longest formatted value plus the standard inset. Text must not touch or overflow a card edge or decorative rail.
 
 - Extraction diagnostics: Limited typography variety detected; size scale may need manual refinement. Audience and product surface inference confidence is low; verify generated brand context.
 
