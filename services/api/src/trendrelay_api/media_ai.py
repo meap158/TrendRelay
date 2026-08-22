@@ -1072,6 +1072,7 @@ def _run_transcribe_pass(
 ) -> dict[str, Any]:
     model = _speech_model(settings, force_device=force_device)
     batch_size = int(getattr(settings, "media_ai_speech_batch_size", 8) or 8)
+    beam_size = int(getattr(settings, "media_ai_speech_beam_size", 5) or 5)
     transcriber = _speech_pipeline(model, batch_size) if batch_size > 1 else model
     options: dict[str, Any] = {}
     if transcriber is not model:
@@ -1079,7 +1080,7 @@ def _run_transcribe_pass(
     segments, info = transcriber.transcribe(
         str(path),
         language=None if not language or language == "auto" else language,
-        beam_size=5,
+        beam_size=beam_size,
         vad_filter=True,
         word_timestamps=True,
         # Whisper conditions each window on the text it just produced,
@@ -1164,9 +1165,18 @@ def _extract_ocr_frames(asset: MediaAsset, source: Path, work: Path) -> list[Pat
     completed = subprocess.run(
         [
             str(FFMPEG),
+            "-nostdin",
             "-y",
+            # Extraction overlaps transcription and renders in the worker
+            # lanes, so it must not fight them for cores: one decode thread is
+            # plenty for a scaled JPEG every few seconds, and skipping the
+            # audio track avoids decoding sound nobody reads.
+            "-threads",
+            "1",
             "-i",
             str(source),
+            "-an",
+            "-sn",
             "-vf",
             f"fps=1/{interval},scale=w='min(1280,iw)':h=-2",
             "-frames:v",

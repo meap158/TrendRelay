@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     media_ai_compute_type: str = "auto"
     media_ai_cpu_threads: int = Field(default=0, ge=0, le=64)
     media_ai_speech_batch_size: int = Field(default=8, ge=1, le=32)
+    media_ai_speech_beam_size: int = Field(default=5, ge=1, le=5)
     media_ai_ocr_interval_seconds: float = 2.0
     media_ai_max_ocr_frames: int = 60
     smtp_host: str = ""
