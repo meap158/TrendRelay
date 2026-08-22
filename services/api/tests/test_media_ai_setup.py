@@ -15,6 +15,7 @@ import base64
 import json
 import socket
 import sys
+import time
 
 import httpx
 import pytest
@@ -50,6 +51,27 @@ def test_a_provider_can_be_queued_without_naming_a_command(jobs) -> None:
     # Pinned to the versions the status page reports, so what a card says is
     # running is what was asked for.
     assert job["payload"]["packages"] == [f"faster-whisper=={media_ai.SPEECH_VERSION}"]
+    assert job["max_attempts"] == media_ai.SETUP_MAX_ATTEMPTS
+
+
+def test_a_long_setup_keeps_its_lease_alive(jobs, monkeypatch) -> None:
+    job = media_ai.create_setup_job("translate", actor_user_id="tester", factory=jobs)
+    pulses: list[tuple[str, str, int]] = []
+    monkeypatch.setattr(
+        media_ai,
+        "heartbeat_job",
+        lambda job_id, worker_id, *, lease_seconds, factory: pulses.append(
+            (job_id, worker_id, lease_seconds)
+        ),
+    )
+
+    with media_ai._keep_setup_lease(
+        job["id"], "worker", factory=jobs, interval_seconds=0.01
+    ):
+        time.sleep(0.03)
+
+    assert pulses
+    assert all(pulse == (job["id"], "worker", media_ai.SETUP_LEASE_SECONDS) for pulse in pulses)
 
 
 def test_asking_twice_joins_the_download_already_running(jobs) -> None:
@@ -154,10 +176,10 @@ def test_a_language_pack_that_will_not_download_is_reported_not_fatal(monkeypatc
     monkeypatch.setattr("trendrelay_api.tool_registry.set_active", lambda tool_id, active: None)
     monkeypatch.setattr(media_ai, "runtime_ready", lambda provider: True)
     monkeypatch.setitem(
-        media_ai.PROVIDER_PREPARE, "translate", lambda stage: ["en→ar: no package published"]
+        media_ai.PROVIDER_PREPARE, "translate", lambda stage: ["en->ar: no package published"]
     )
 
-    assert media_ai.prepare_provider("translate") == ["en→ar: no package published"]
+    assert media_ai.prepare_provider("translate") == ["en->ar: no package published"]
 
 
 def test_an_unknown_provider_is_refused_rather_than_queued() -> None:
@@ -610,10 +632,10 @@ def test_each_language_download_says_which_one_it_is(monkeypatch) -> None:
     )
 
     assert len(labels) == len(pairs)
-    assert labels[0] == f"Downloading {pairs[0][0]}→{pairs[0][1]} (1 of {len(pairs)})"
+    assert labels[0] == f"Downloading {pairs[0][0]}->{pairs[0][1]} (1 of {len(pairs)})"
     assert labels[-1].endswith(f"({len(pairs)} of {len(pairs)})")
     # The slow one is named rather than hidden behind a count.
-    assert any("ru→en" in label for label in labels)
+    assert any("ru->en" in label for label in labels)
 
 
 def test_progress_climbs_across_the_downloads(monkeypatch) -> None:

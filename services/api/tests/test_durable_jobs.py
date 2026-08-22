@@ -74,6 +74,32 @@ def test_durable_job_retries_and_requires_the_active_lease_owner() -> None:
     ] == completed["id"]
 
 
+def test_a_definite_failure_can_end_without_spending_recovery_attempts() -> None:
+    """Process-loss recovery and provider-error retry are separate policies."""
+    sessions = factory()
+    create_job_record(
+        "setup_1234567890abcdef",
+        "local-machine",
+        "media_ai_setup",
+        {},
+        max_attempts=3,
+        factory=sessions,
+    )
+    claim_job("setup_1234567890abcdef", "worker", factory=sessions)
+
+    failed = fail_job(
+        "setup_1234567890abcdef",
+        "worker",
+        "The access token is expired.",
+        retry_allowed=False,
+        factory=sessions,
+    )
+
+    assert failed["status"] == "failed"
+    assert failed["attempt_count"] == 1
+    assert recoverable_job_ids("media_ai_setup", factory=sessions) == []
+
+
 def test_queued_job_cancellation_is_terminal_and_unclaimable() -> None:
     sessions = factory()
     create_job_record("production_1234567890abcdef", "local", "production", {}, factory=sessions)

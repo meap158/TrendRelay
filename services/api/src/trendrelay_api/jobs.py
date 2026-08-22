@@ -735,6 +735,7 @@ def fail_job(
     error: str,
     *,
     retry_delay_seconds: int = 30,
+    retry_allowed: bool = True,
     factory: SessionMaker = SessionFactory,
 ) -> dict[str, Any]:
     timestamp = now_utc()
@@ -742,7 +743,11 @@ def fail_job(
         item = session.get(DurableJob, job_id)
         if not item or item.status != "running" or item.lease_owner != worker_id:
             raise PermissionError("Worker does not hold this job lease.")
-        retry = not item.cancellation_requested and item.attempt_count < item.max_attempts
+        retry = (
+            retry_allowed
+            and not item.cancellation_requested
+            and item.attempt_count < item.max_attempts
+        )
         item.status = "queued" if retry else (
             "cancelled" if item.cancellation_requested else "failed"
         )

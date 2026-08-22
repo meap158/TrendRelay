@@ -12,7 +12,7 @@ import subprocess
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock, Thread
 from typing import Any, Literal
 
 from sqlalchemy import select
@@ -26,6 +26,7 @@ from trendrelay_api.jobs import (
     create_job_record,
     fail_job,
     get_job_record,
+    heartbeat_job,
     list_job_records,
     now_utc,
     report_progress,
@@ -171,10 +172,16 @@ SETUP_JOB_KIND = "media_ai_setup"
 #: runtime, shared by every workspace signed in to it. Sharing a key is what
 #: stops two workspaces queueing the same multi-hundred-megabyte download twice.
 SETUP_WORKSPACE_KEY = "local-machine"
-#: The runtime is downloaded once and then kept, so a stalled attempt should
-#: report itself rather than silently spending another twenty minutes.
-SETUP_MAX_ATTEMPTS = 1
-SETUP_LEASE_SECONDS = 3600
+#: Provider preparation is incremental: pip reuses the runtime, Hugging Face
+#: resumes its cache, and Argos skips language packages already installed. A
+#: worker reload must therefore resume the same durable job rather than turn a
+#: harmless source edit into a terminal setup failure.
+SETUP_MAX_ATTEMPTS = 3
+#: Kept alive below while preparation is running. If the process disappears,
+#: two minutes is long enough to rule out a delayed heartbeat and short enough
+#: that the interface does not look stuck for an hour before recovery.
+SETUP_LEASE_SECONDS = 120
+SETUP_HEARTBEAT_SECONDS = 30
 
 #: Which catalog entry gates each provider. Preparing a runtime is also
 #: accepting a third-party tool, so the switch flipped here is the same one the
@@ -497,7 +504,11 @@ def _install_translation_packages(package: Any, stage: Any = None) -> list[str]:
         # and fifty minutes. Against a bar that said only "Preparing the model"
         # that is indistinguishable from a hang, and it is the reason somebody
         # gives up on a download that was going to finish.
-        say(index / total, f"Downloading {source}→{target} ({index + 1} of {total})")
+        # ASCII on purpose: the headless Windows setup command can inherit the
+        # legacy cp1252 console even when the app and database are UTF-8. A
+        # progress label must never be able to abort the download it describes.
+        pair = f"{source}->{target}"
+        say(index / total, f"Downloading {pair} ({index + 1} of {total})")
         if (source, target) in installed:
             continue
         match = next(
@@ -506,12 +517,12 @@ def _install_translation_packages(package: Any, stage: Any = None) -> list[str]:
             None,
         )
         if match is None:
-            skipped.append(f"{source}→{target}: no package published")
+            skipped.append(f"{pair}: no package published")
             continue
         try:
             package.install_from_path(match.download())
         except Exception as error:
-            skipped.append(f"{source}→{target}: {type(error).__name__}")
+            skipped.append(f"{pair}: {type(error).__name__}")
     return skipped
 
 
@@ -687,6 +698,48 @@ def setup_failure(error: BaseException) -> str:
     return f"{type(error).__name__}: {first}." if first else f"{type(error).__name__}."
 
 
+@contextmanager
+def _keep_setup_lease(
+    job_id: str,
+    worker_id: str,
+    *,
+    factory: Any,
+    interval_seconds: float = SETUP_HEARTBEAT_SECONDS,
+):
+    """Hold a setup lease while a dependency performs opaque network I/O.
+
+    Pip, Hugging Face, and Argos do not expose one common progress callback. A
+    stage can therefore spend several minutes inside a single call. Keeping the
+    lease in a small daemon thread makes a live download unclaimable by another
+    worker while still letting a killed/reloaded worker recover promptly.
+    """
+    stopped = Event()
+
+    def pulse() -> None:
+        while not stopped.wait(interval_seconds):
+            try:
+                heartbeat_job(
+                    job_id,
+                    worker_id,
+                    lease_seconds=SETUP_LEASE_SECONDS,
+                    factory=factory,
+                )
+            except Exception:
+                # Completion may win the final race, or the database may be
+                # briefly busy. The claimed lease remains valid and the next
+                # pulse can try again; background reporting must not abort the
+                # download it protects.
+                continue
+
+    thread = Thread(target=pulse, name=f"setup-heartbeat-{job_id}", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stopped.set()
+        thread.join(timeout=max(1.0, interval_seconds + 1.0))
+
+
 def run_setup_job(
     job_id: str, worker_id: str = "media-ai-worker", *, factory=None
 ) -> dict[str, Any]:
@@ -694,12 +747,13 @@ def run_setup_job(
     claimed = claim_job(job_id, worker_id, lease_seconds=SETUP_LEASE_SECONDS, factory=factory)
     provider = claimed["payload"]["provider"]
     try:
-        skipped = prepare_provider(
-            provider,
-            on_stage=lambda fraction, label: report_progress(
-                job_id, fraction, label, factory=factory
-            ),
-        )
+        with _keep_setup_lease(job_id, worker_id, factory=factory):
+            skipped = prepare_provider(
+                provider,
+                on_stage=lambda fraction, label: report_progress(
+                    job_id, fraction, label, factory=factory
+                ),
+            )
         status = provider_status()
         return complete_job(
             job_id,
@@ -712,7 +766,17 @@ def run_setup_job(
             factory=factory,
         )
     except Exception as error:
-        fail_job(job_id, worker_id, setup_failure(error), factory=factory)
+        # A returned error is actionable and should be shown immediately. The
+        # spare attempts are for a worker process that disappears without
+        # reaching this handler; retrying a definite 401/429/install failure in
+        # a tight loop only hides the real cause and repeats network work.
+        fail_job(
+            job_id,
+            worker_id,
+            setup_failure(error),
+            retry_allowed=False,
+            factory=factory,
+        )
         raise
 
 
