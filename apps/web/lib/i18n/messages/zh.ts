@@ -397,6 +397,8 @@ export const zh: Messages = {
     reviewedIntro:
       "粘贴已审核的口播与画面文字。TrendRelay 会生成可搜索、带版本的配方，且不会把机器输出当作人工审核的结果。",
     language: "语言",
+    languageAutomatic: "自动",
+    languageAutomaticHelp: "自动模式会在可用时使用从媒体中检测到的语言。",
     productShown: "出现的商品",
     creativeFormat: "创意形式",
     reviewedSpeech: "已审核口播",

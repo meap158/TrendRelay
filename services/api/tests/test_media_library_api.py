@@ -1,5 +1,6 @@
 import asyncio
 import base64
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -591,3 +592,71 @@ def test_pinned_media_runtime_creates_hash_addressed_derivatives(
         for item in versions.values()
     )
     assert processed["metadata"]["duration_ms"] > 0
+
+
+def test_paging_reaches_every_match_without_repeating_one() -> None:
+    """The whole point of an offset: a caller can get past the first page.
+
+    Selecting "everything that matches" is a promise, and without paging the
+    picker could only ever keep the first hundred - quietly, because `total`
+    still reported the real number.
+
+    The rows here deliberately share one `collected_at`, the shape a bulk
+    import leaves behind. Note that SQLite happens to scan them in a stable
+    order, so this passes with or without the query's `id` tiebreaker - it
+    covers the paging arithmetic, not the ordering guarantee. The tiebreaker
+    is there for a database that may reorder equal sort keys between requests,
+    where a row would otherwise land on two pages and another on none.
+    """
+    workspace_id = create_workspace()
+    stamped = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
+    with TestingSession.begin() as session:
+        for index in range(25):
+            session.add(
+                MediaAsset(
+                    workspace_id=workspace_id,
+                    title=f"Clip {index:02d}",
+                    media_kind="video",
+                    source_type="test",
+                    original_path=f"/clips/{index}.mp4",
+                    original_sha256=f"sha{index}",
+                    mime_type="video/mp4",
+                    size_bytes=10,
+                    created_by="library-owner",
+                    # Deliberately identical, which is what a bulk import looks
+                    # like and exactly where an unstable order loses rows.
+                    collected_at=stamped,
+                )
+            )
+
+    seen: list[str] = []
+    for offset in (0, 10, 20):
+        response = asyncio.run(
+            request(
+                "GET",
+                f"/api/workspaces/{workspace_id}/media/library/assets"
+                f"?limit=10&offset={offset}",
+            )
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 25
+        seen.extend(asset["id"] for asset in body["assets"])
+
+    assert len(seen) == 25
+    assert len(set(seen)) == 25, "a row was served on two pages"
+
+
+def test_paging_past_the_end_is_empty_rather_than_an_error() -> None:
+    """A picker that pages until it runs out must be able to run out."""
+    workspace_id = create_workspace()
+
+    response = asyncio.run(
+        request(
+            "GET",
+            f"/api/workspaces/{workspace_id}/media/library/assets?limit=10&offset=500",
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.json()["assets"] == []

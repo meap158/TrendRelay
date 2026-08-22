@@ -373,7 +373,9 @@ export default function ResearchDashboard() {
   const { workspaces, workspaceId } = useWorkspace();
   const [providers, setProviders] = useState<ResearchProviders | null>(null);
   const [query, setQuery] = useState("");
-  const [queryMode, setQueryMode] = useState<"trends" | "ads">("trends");
+  const [queryMode, setQueryMode] = usePersistedState<"trends" | "ads">(
+    "trendrelay.discover.queryMode", "trends", oneOf("trends", "ads"),
+  );
   const [adResult, setAdResult] = usePersistedCache<AdSearchResult>(
     "trendrelay.discover.ads", RESEARCH_MAX_AGE, isAdSearch);
   const [tiktokResult, setTiktokResult] = usePersistedCache<TikTokResult>(
@@ -391,10 +393,18 @@ export default function ResearchDashboard() {
   const [country, setCountry] = usePersistedState(
     "trendrelay.discover.country", "US", isRegion,
   );
-  const [tiktokPeriod, setTiktokPeriod] = useState(7);
+  const [tiktokPeriod, setTiktokPeriod] = usePersistedState<number>(
+    "trendrelay.discover.tiktok.period",
+    7,
+    numberIn(...TIKTOK_PERIODS.map(([period]) => period)),
+  );
   const [briefing, setBriefing] = usePersistedCache<MetaBriefing>(
     "trendrelay.discover.briefing", RESEARCH_MAX_AGE, isBriefing);
-  const [feedFilter, setFeedFilter] = useState<"all" | "trend" | "ad" | "account">("all");
+  const [feedFilter, setFeedFilter] = usePersistedState<"all" | "trend" | "ad" | "account">(
+    "trendrelay.discover.feedFilter",
+    "all",
+    oneOf("all", "trend", "ad", "account"),
+  );
   const [activeView, setActiveView] = usePersistedState<DiscoverView>(
     "trendrelay.discover.view.v2",
     "posts",

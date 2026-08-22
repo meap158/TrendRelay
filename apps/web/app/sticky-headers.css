@@ -90,9 +90,19 @@
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   :root {
-    --app-toolbar-offset: 113px;
+    --app-toolbar-offset: 131px;
+  }
+
+  /* The responsive toolbar has two rows and its natural height varies with
+     the available width (121-131px in the supported phone/tablet range).
+     Pinning this full introductory card to a guessed offset made its top edge
+     disappear beneath the toolbar and left very little room for the form.
+     Keep the toolbar sticky, but let the Publish introduction scroll away. */
+  .publish-page > header:first-child {
+    position: static;
+    top: auto;
   }
 
   .tools-sticky-header {
@@ -101,6 +111,21 @@
 
   .tools-sticky-header .registry-summary {
     justify-content: flex-start;
+  }
+}
+
+/* Hiding the wordmark below 430px shortens the toolbar's first row. Keep the
+   shared offset matched to the measured chrome rather than letting sticky
+   page sections disappear beneath it. */
+@media (max-width: 430px) {
+  :root {
+    --app-toolbar-offset: 123px;
+  }
+}
+
+@media (max-width: 360px) {
+  :root {
+    --app-toolbar-offset: 121px;
   }
 }
 
@@ -122,6 +147,24 @@
     overflow: hidden;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
+  }
+
+  /* Once the Publish introduction is no longer persistent chrome, its short
+     explanation can render in full instead of ending mid-sentence. */
+  .publish-page > header:first-child .lede {
+    display: block;
+    overflow: visible;
+    -webkit-line-clamp: unset;
+  }
+}
+
+@media (max-width: 900px) {
+  /* The queue controls are the useful persistent context on a narrow Campaign
+     page. Let the introductory hero leave the screen so the two do not stack
+     into almost half a phone viewport. */
+  .campaign-page > .campaign-heading {
+    position: static;
+    top: auto;
   }
 }
 

@@ -413,6 +413,8 @@ export const fr: Messages = {
     reviewedIntro:
       "Collez le discours et le texte à l'écran après relecture. TrendRelay en tire une recette consultable et versionnée, sans faire passer une sortie machine pour une relecture humaine.",
     language: "Langue",
+    languageAutomatic: "Automatique",
+    languageAutomaticHelp: "Le mode automatique utilise la langue détectée dans le média lorsqu'elle est disponible.",
     productShown: "Produit montré",
     creativeFormat: "Format créatif",
     reviewedSpeech: "Discours relu",

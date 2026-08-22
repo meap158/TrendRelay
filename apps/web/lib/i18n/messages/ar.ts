@@ -403,6 +403,8 @@ export const ar: Messages = {
     reviewedIntro:
       "الصق الكلام والنص الظاهر بعد مراجعتهما. يستخلص TrendRelay وصفة قابلة للبحث ومحفوظة بالإصدارات، دون اعتبار مُخرجات الآلة مراجَعة بشريًا.",
     language: "اللغة",
+    languageAutomatic: "تلقائي",
+    languageAutomaticHelp: "يستخدم الوضع التلقائي اللغة المكتشفة من الوسائط عند توفرها.",
     productShown: "المنتج الظاهر",
     creativeFormat: "الشكل الإبداعي",
     reviewedSpeech: "الكلام المراجَع",

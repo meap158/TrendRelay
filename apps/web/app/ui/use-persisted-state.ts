@@ -1,15 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 /**
  * State that survives a reload.
  *
- * The save deliberately skips its first run. On mount the value is still the
- * default, and writing that would erase the stored one before the restore has
- * read it - the save would win the race against its own restore. That cost a
- * debugging round the first time it was written by hand, which is why every
- * persisted option now goes through here instead.
+ * A user change is written immediately instead of waiting for a later effect.
+ * That matters when a selection is followed straight away by navigation or a
+ * closed tab: the preference has already reached storage before this component
+ * can unmount. Restoring uses the internal state setter, so it never writes the
+ * server-rendered default over the saved value.
  *
  * Restore happens in a microtask rather than during render because the stored
  * value is not available while the server renders the page, and reading it
@@ -22,7 +22,6 @@ export function usePersistedState<T>(
   isValid: (value: unknown) => value is T,
 ): [T, (next: T) => void] {
   const [value, setValue] = useState<T>(initial);
-  const restored = useRef(false);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -35,8 +34,6 @@ export function usePersistedState<T>(
       } catch {
         // A preference that cannot be read is not worth reporting; the default
         // is always a usable answer.
-      } finally {
-        restored.current = true;
       }
     });
     // Restoring once per key is the whole point; isValid is a predicate whose
@@ -44,17 +41,17 @@ export function usePersistedState<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  useEffect(() => {
-    if (!restored.current) return;
+  const store = useCallback((next: T) => {
+    setValue(next);
     try {
-      window.localStorage.setItem(key, JSON.stringify(value));
+      window.localStorage.setItem(key, JSON.stringify(next));
     } catch {
       // Storage can be full or blocked; losing a preference is not an error
       // worth interrupting anyone over.
     }
-  }, [key, value]);
+  }, [key]);
 
-  return [value, setValue];
+  return [value, store];
 }
 
 /** Accepts one of a fixed set of options, so a stale stored value cannot stick. */
@@ -107,7 +104,6 @@ export function usePersistedCache<T>(
   const [value, setValue] = useState<T | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [ready, setReady] = useState(false);
-  const restored = useRef(false);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -128,7 +124,6 @@ export function usePersistedCache<T>(
       } catch {
         // Unreadable cache is not worth reporting; a refetch is always correct.
       } finally {
-        restored.current = true;
         setReady(true);
       }
     });

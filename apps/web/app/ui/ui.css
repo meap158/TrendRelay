@@ -180,6 +180,7 @@ a.ui-button { text-decoration: none; }
 }
 .ui-card-good { box-shadow: inset 3px 0 0 var(--green); }
 .ui-card-warn { border-color: var(--amber, #d8a200); box-shadow: inset 3px 0 0 var(--amber, #d8a200); }
+.ui-card-head-region { display: grid; gap: 8px; }
 .ui-card-head { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 12px; }
 .ui-card-head h2 { margin: 0; font-size: 15px; font-weight: 500; }
 .ui-card-eyebrow { margin: 0 0 2px; color: var(--green); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }

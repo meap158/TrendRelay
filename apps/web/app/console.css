@@ -107,9 +107,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .app-nav a svg { flex: 0 0 auto; width: 14px; height: 14px; }
 .app-nav a:hover { background: var(--panel-raised); }
 .app-nav a.active { border-bottom-color: var(--link); color: var(--link); background: transparent; }
-.workspace-section-nav { position: sticky; top: 52px; z-index: 90; display: flex; flex-wrap: wrap; align-items: center; gap: 0; margin: 12px 0 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.workspace-section-nav { position: sticky; top: var(--app-toolbar-offset, 52px); z-index: 90; display: flex; flex-wrap: wrap; align-items: center; gap: 0; margin: 12px 0 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: 0 1px 2px rgba(0,0,0,.04); }
 @media (max-width: 900px) {
-  .workspace-section-nav { top: 92px; }
+  .workspace-section-nav { top: var(--app-toolbar-offset, 52px); }
 }
 .workspace-section-context { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-inline-end: 1px solid var(--line-strong); }
 .workspace-section-context span { color: var(--green); font-size: 10px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
@@ -165,7 +165,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
    reads. */
 .timezone-picker { --search-select-popover-inset-inline: 0 auto; --search-select-popover-width: min(280px, calc(100vw - 24px)); }
 .language-picker { --search-select-popover-inset-inline: auto 0; --search-select-popover-width: min(210px, calc(100vw - 24px)); }
-.notification-shell { position: relative; }
+/* Alerts are the transient action and sit before the larger workspace
+   switcher, so the bell remains visually separate from the switcher's
+   chevron/settings controls instead of looking like part of that field. */
+.notification-shell { position: relative; order: -1; }
 .notification-trigger { position: relative; display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; padding: 0; color: var(--muted); background: var(--panel); cursor: pointer; }
 .notification-trigger:hover, .notification-trigger[aria-expanded="true"] { border-color: var(--line); color: var(--text); background: var(--panel-raised); }
 .notification-trigger:focus-visible, .notification-panel button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
@@ -359,12 +362,15 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .tool-card { min-height: 0; border-radius: var(--radius); }
 .publish-form, .publish-side article, .management-card, .audit-panel, .workspace-sidebar, .empty-panel { border-radius: var(--radius); }
 
-@media (max-width: 900px) {
+/* The full desktop toolbar needs just under 1,000px before viewport chrome.
+   Collapse it with breathing room instead of waiting until it has already
+   widened the document and introduced a page-level horizontal scrollbar. */
+@media (max-width: 1100px) {
   .app-toolbar { grid-template-columns: 1fr auto; height: auto; padding: 8px 16px; }
   .app-nav { grid-column: 1 / -1; order: 3; overflow-x: auto; padding-bottom: 4px; height: 48px; border-top: 1px solid var(--line-strong); margin-top: 8px; }
   .console-grid { grid-template-columns: 1fr; }
   .quick-actions { grid-template-columns: repeat(2, 1fr); }
-  .workspace-section-nav { top: 112px; }
+  .workspace-section-nav { top: var(--app-toolbar-offset, 52px); }
 }
 
 @media (max-width: 640px) {
@@ -526,7 +532,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .campaign-list { display: grid; gap: 6px; }
 .campaign-list > button { display: grid; gap: 4px; width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 10px; color: var(--text); background: var(--panel); text-align: start; cursor: pointer; }
 .campaign-list > button.selected { border-color: var(--link); background: var(--link-bg); }
-.campaign-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-list strong { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.campaign-status-icon { display: grid; flex: 0 0 auto; place-items: center; width: 17px; height: 17px; border-radius: 50%; color: var(--muted); }
+.campaign-status-icon.active { background: var(--link-bg); color: var(--link); }
+.campaign-status-icon.archived { background: var(--panel-raised); color: var(--muted-soft); }
+.campaign-list-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-list span, .campaign-list > p { color: var(--muted); font-size: 11px; }
 .campaign-create { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
 .campaign-create summary, .plan-create summary { color: var(--link); font-weight: 600; cursor: pointer; }
@@ -584,16 +594,16 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .campaign-list, .plan-form-grid { grid-template-columns: 1fr; }
   .calendar-entry { grid-template-columns: 1fr; }
 }
-/* Douyin batch downloader */
-html { scroll-behavior: smooth; }
+/* Always reserve the scrollbar's gutter, so a page whose content grows past
+   the viewport once it loads does not shove everything left by the scrollbar's
+   width the moment the bar appears. Reserved on every page, so switching from a
+   short one to a tall one is not a sideways jump either. */
+html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .downloader-heading { align-items: center; padding: 28px 14px 20px; }
 .downloader-heading > div { max-width: 700px; }
 .downloader-heading .eyebrow, .step-kicker { margin: 0 0 5px; color: var(--green); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .downloader-heading h1 { margin: 0 0 7px; font-size: 26px; font-weight: 600; letter-spacing: -.02em; }
 .downloader-heading > div > p:last-child { max-width: 670px; line-height: 1.5; }
-.downloader-heading .workspace-control { min-width: 230px; }
-.downloader-heading .workspace-control span { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.downloader-heading .workspace-control select { min-height: 34px; }
 
 .console-messages:empty { display: none; }
 .console-messages { display: grid; gap: 8px; margin-bottom: 16px; }
@@ -874,7 +884,7 @@ html { scroll-behavior: smooth; }
 }
 
 @media (max-width: 700px) {
-  .workspace-section-nav { margin: 12px 0 0; top: 92px; z-index: 90; }
+  .workspace-section-nav { margin: 12px 0 0; top: var(--app-toolbar-offset, 52px); z-index: 90; }
   .workspace-section-context { width: 100%; border-inline-end: 0; border-bottom: 1px solid var(--line-strong); padding: 8px 12px; }
   .workspace-section-links { width: 100%; }
   .workspace-section-links a { flex: 1 1 auto; justify-content: center; text-align: center; flex-direction: column; gap: 2px; padding: 8px; }
@@ -1103,6 +1113,31 @@ html { scroll-behavior: smooth; }
 .campaign-queue-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: calc(var(--control-sm) + 16px); margin-bottom: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .campaign-queue-bar.active { border-color: var(--link); background: var(--link-bg); }
 .campaign-queue-bar > strong { margin-inline-end: auto; font-size: 11px; font-weight: 600; }
+.campaign-queue-card > .ui-card-head-region {
+  position: sticky;
+  top: var(--app-toolbar-offset, 52px);
+  z-index: 12;
+  margin: -14px -14px 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: 14px 14px 10px;
+  background: var(--panel);
+  box-shadow: 0 12px 18px -20px rgba(17, 24, 39, 0.75);
+}
+.campaign-queue-card > .ui-card-head-region .campaign-queue-bar { margin-bottom: 0; }
+@media (min-width: 901px) {
+  /* The campaign heading occupies the sticky row below the app toolbar on
+     desktop. Derive this offset from that toolbar instead of assuming its
+     one-row height: between 901px and 1100px the toolbar itself has two rows. */
+  .campaign-queue-card > .ui-card-head-region {
+    /* The measured bottom of the heading above, so the two meet exactly.
+       This was `+ 74px` - a heading measured once, in English - and the
+       leftover band was where the page could be seen scrolling between two
+       things that were both standing still. The old number is the fallback,
+       which is what the first paint uses before the measurement lands. */
+    top: var(--page-heading-offset, calc(var(--app-toolbar-offset, 52px) + 74px));
+  }
+}
 /* A carousel picture's slot, holding its place while the bytes arrive. The
    strip is a flex row, so without this the row reflows as each one lands. */
 .timeline-media-slot { display: inline-flex; align-items: center; justify-content: center; min-width: 48px; min-height: 48px; }
@@ -1156,6 +1191,61 @@ html { scroll-behavior: smooth; }
 .autopilot-placement-choice select:hover { border-color: color-mix(in srgb, var(--link) 45%, var(--line-strong)); }
 .autopilot-placement-choice select:focus-visible { outline: 2px solid color-mix(in srgb, var(--link) 38%, transparent); outline-offset: 1px; border-color: var(--link); }
 [dir="rtl"] .autopilot-placement-choice select { padding: 5px 10px 5px 28px; background-position: left 10px center; }
+
+/* Named posting presets are only useful when their real wall-clock times are
+   available at the decision. A small leading disclosure keeps the menu terse;
+   hover/focus previews it, while tap pins it until outside click or Escape. */
+.posting-preset-select { position: relative; min-width: 0; width: 100%; }
+.posting-preset-trigger { width: 100%; min-width: 0; }
+.posting-preset-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.posting-preset-menu {
+  position: absolute;
+  inset-inline-end: 0;
+  z-index: 140;
+  display: grid;
+  /* The list takes what is left and scrolls; the detail below it keeps its own
+     height. Without the explicit rows the list refuses to shrink inside the
+     capped menu and simply overflows it. */
+  grid-template-rows: minmax(0, 1fr) auto;
+  inline-size: min(320px, calc(100vw - 24px));
+  min-inline-size: 100%;
+  max-block-size: min(420px, calc(100vh - 24px));
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 5px;
+  background: var(--panel);
+  box-shadow: 0 10px 28px rgb(17 31 44 / 18%);
+}
+.posting-preset-list { min-block-size: 0; overflow-y: auto; }
+.posting-preset-menu[data-side="below"] { inset-block-start: calc(100% + 4px); }
+.posting-preset-menu[data-side="above"] { inset-block-end: calc(100% + 4px); }
+.posting-preset-option { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; border-radius: 4px; }
+/* The row is the target now, so the row lights up - including the icon
+   beside the label, which used to sit outside the highlight it belonged to. */
+.posting-preset-option:hover,
+.posting-preset-option:has(.posting-preset-choice:focus-visible) { background: var(--panel-raised); }
+.posting-preset-info,
+.posting-preset-choice { min-block-size: 34px; border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.posting-preset-info { display: grid; place-items: center; padding: 0; border-radius: 999px; color: var(--muted); }
+.posting-preset-info:hover,
+.posting-preset-info:focus-visible,
+/* Pressed, not expanded: the icon no longer opens anything - the row
+   does - and what it toggles is whether the times stay up. */
+.posting-preset-info[aria-pressed="true"] { color: var(--link); }
+.posting-preset-info:focus-visible,
+.posting-preset-choice:focus-visible { outline: 2px solid var(--link); outline-offset: -2px; }
+.posting-preset-choice { min-width: 0; padding: 7px 8px 7px 2px; overflow: hidden; text-align: start; text-overflow: ellipsis; white-space: nowrap; }
+.posting-preset-choice[aria-checked="true"] { color: var(--link); font-weight: 600; }
+/* Always in the markup so it can be the option's `aria-describedby`
+   target, shown only when the row is under the pointer, holds focus, or
+   is pinned. */
+/* A footer, not an expansion. Always present and always showing something,
+   so the list above it never moves; `min-block-size` keeps it from
+   resizing as schedules of different lengths pass under the pointer. */
+.posting-preset-detail { display: grid; align-content: start; gap: 3px; min-block-size: 62px; margin: 5px 4px 0; padding: 8px 10px; border-inline-start: 3px solid var(--link); border-radius: 4px; background: var(--link-bg); white-space: normal; }
+.posting-preset-detail p { margin: 0 0 2px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.posting-preset-detail strong { color: var(--text); font-size: 11px; font-weight: 600; line-height: 1.4; }
+.posting-preset-detail small { color: var(--muted); font-size: 10px; }
 
 /* The timeline as a month. Quiet grid, day chips coloured by outcome, the
    current day outlined - the shape Buffer and Zernio both use for the same
@@ -1618,17 +1708,55 @@ html { scroll-behavior: smooth; }
 /* Out-specifies `.autopilot-destinations li > div`, which lays out the
    identity block as a grid and caught this wrapper by being a div too. */
 .autopilot-destinations li > .autopilot-destination-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  align-items: end;
   gap: 10px;
 }
-/* Shrink to the label and its select. Left to grow it filled the row and
-   pushed the remove button onto a line of its own. */
-.autopilot-destinations li > .autopilot-destination-controls > .autopilot-placement-choice { flex: 0 0 auto; }
+.autopilot-destinations li > .autopilot-destination-controls > .autopilot-placement-choice {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  white-space: normal;
+}
+.autopilot-destinations li > .autopilot-destination-controls .ui-select,
+.autopilot-destinations li > .autopilot-destination-controls .posting-preset-select,
+.autopilot-destinations li > .autopilot-destination-controls select {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+.autopilot-schedule-reason { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.autopilot-schedule-reason strong { color: var(--ink); font-weight: 600; }
+.campaign-account-schedule { color: var(--muted); }
 .ui-button[data-destination-remove] {
   min-height: 30px;
   padding-inline: 8px;
+}
+
+@media (max-width: 600px) {
+  .autopilot-destinations > li {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+  .autopilot-destinations > li > .ui-badge {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .autopilot-destinations li > .autopilot-destination-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .autopilot-destinations li > .autopilot-destination-controls > .ui-button {
+    justify-self: start;
+  }
+  .posting-preset-menu {
+    inset-inline: 0 auto;
+    inline-size: min(100%, calc(100vw - 32px));
+    min-inline-size: 0;
+  }
+  .posting-preset-info,
+  .posting-preset-choice { min-block-size: 40px; }
 }
 
 /* --- One row per package in the campaign composer ------------------------- */

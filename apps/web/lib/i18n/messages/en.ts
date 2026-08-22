@@ -410,6 +410,8 @@ export const en = {
     reviewedIntro:
       "Review machine-read speech and on-screen text before using them for captions, voiceovers, search, campaign matching, and creative analysis.",
     language: "Language",
+    languageAutomatic: "Automatic",
+    languageAutomaticHelp: "Automatic uses the language detected from the media when available.",
     productShown: "Product shown",
     creativeFormat: "Creative format",
     reviewedSpeech: "Reviewed speech",

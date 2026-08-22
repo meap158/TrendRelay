@@ -44,26 +44,36 @@ export function Card({
   title,
   eyebrow,
   aside,
+  toolbar,
   children,
   tone,
+  className,
 }: {
   title?: ReactNode;
   eyebrow?: ReactNode;
   aside?: ReactNode;
+  toolbar?: ReactNode;
   children: ReactNode;
   tone?: "default" | "good" | "warn";
+  className?: string;
 }) {
+  const heading = (title || aside) && (
+    <header className="ui-card-head">
+      <div>
+        {eyebrow && <p className="ui-card-eyebrow">{eyebrow}</p>}
+        {title && <h2>{title}</h2>}
+      </div>
+      {aside && <div className="ui-card-aside">{aside}</div>}
+    </header>
+  );
   return (
-    <article className={`ui-card${tone && tone !== "default" ? ` ui-card-${tone}` : ""}`}>
-      {(title || aside) && (
-        <header className="ui-card-head">
-          <div>
-            {eyebrow && <p className="ui-card-eyebrow">{eyebrow}</p>}
-            {title && <h2>{title}</h2>}
-          </div>
-          {aside && <div className="ui-card-aside">{aside}</div>}
-        </header>
-      )}
+    <article className={`ui-card${tone && tone !== "default" ? ` ui-card-${tone}` : ""}${className ? ` ${className}` : ""}`}>
+      {toolbar ? (
+        <div className="ui-card-head-region">
+          {heading}
+          {toolbar}
+        </div>
+      ) : heading}
       {children}
     </article>
   );

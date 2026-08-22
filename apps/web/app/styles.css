@@ -330,6 +330,7 @@ nav strong { color: var(--text); }
 .publish-heading h1 { margin: 2px 0 4px; font-size: 20px; font-weight: 500; line-height: 1.25; letter-spacing: normal; }
 .publish-heading .lede { max-width: 78ch; margin: 0; font-size: 13px; line-height: 1.45; }
 .publish-heading-side { display: grid; justify-items: end; gap: 6px; }
+.publish-heading-side:empty { display: none; }
 .active-engine-chip { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 8px; border: 1px solid var(--line); border-inline-start: 3px solid var(--engine-accent, var(--green)); border-radius: var(--radius-lg); background: var(--panel); }
 .active-engine-chip > div { display: grid; gap: 1px; }
 .active-engine-chip strong { font-size: .84rem; line-height: 1.2; }
@@ -358,8 +359,8 @@ nav strong { color: var(--text); }
 .connection-badge { align-self: center; border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; color: var(--muted); font-size: 11px; font-weight: 500; }
 .connection-badge.ready { border-color: var(--green); color: var(--green); background: var(--green-dark); }
 
-.engine-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; align-items: start; }
-.engine-card { display: grid; align-content: start; gap: 10px; padding: 14px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel-raised); }
+.engine-grid { display: grid; min-width: 0; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 12px; align-items: start; }
+.engine-card { display: grid; min-width: 0; align-content: start; gap: 10px; padding: 14px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel-raised); }
 /* Ready engines carry their accent; the rest are visibly not carrying posts.
    The state is on the card itself, not only in a word beside the title. */
 .engine-card.engine-ready { border-color: var(--engine-accent, var(--green)); background: var(--panel); box-shadow: inset 3px 0 0 var(--engine-accent, var(--green)); }
@@ -447,10 +448,11 @@ nav strong { color: var(--text); }
 .engine-credentials input { min-height: 32px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 10px; }
 .engine-credentials small { color: var(--muted); font-size: 11px; line-height: 1.45; }
 .engine-credential-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.hosting-card { display: grid; gap: 12px; margin-top: 12px; padding: 14px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel-raised); }
+.hosting-card { display: grid; min-width: 0; gap: 12px; margin-top: 12px; padding: 14px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel-raised); }
 .hosting-card.ready { box-shadow: inset 3px 0 0 var(--green); }
 .hosting-card.needed { border-color: var(--amber); box-shadow: inset 3px 0 0 var(--amber); }
-.hosting-head { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 12px; }
+.hosting-head { display: flex; min-width: 0; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 12px; }
+.hosting-head > div { min-width: 0; }
 .hosting-head h3 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 4px; font-size: 14px; font-weight: 500; }
 .hosting-head h3 span { color: var(--muted); font-size: 11px; font-weight: 400; }
 .hosting-head p { max-width: 68ch; margin: 0; color: var(--muted); line-height: 1.5; }
@@ -464,7 +466,7 @@ nav strong { color: var(--text); }
 .hosting-probe li.ok b { color: var(--green); }
 .hosting-probe li.bad b { color: #c0392b; }
 .hosting-probe li span { color: var(--muted); }
-.hosting-status { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.hosting-status { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px; }
 .hosting-status b { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .hosting-status b.configured { color: var(--green); }
 .hosting-status b.missing { color: var(--muted); }
@@ -567,9 +569,12 @@ nav strong { color: var(--text); }
 .upcoming-day i.empty { background: none; }
 
 .upcoming-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
-.upcoming-list > li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 8px 2px; border-top: 1px solid var(--line); }
+.upcoming-list > li { display: grid; grid-template-columns: auto 38px minmax(0, 1fr); gap: 8px; align-items: center; padding: 6px 2px; border-top: 1px solid var(--line); }
 .upcoming-list > li:first-child { border-top: 0; }
 .upcoming-list time { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.upcoming-thumb { display: grid; place-items: center; width: 38px; height: 42px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); color: var(--muted); }
+.upcoming-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.upcoming-thumb .action-icon { width: 14px; height: 14px; }
 .upcoming-post { display: grid; gap: 4px; min-width: 0; }
 /* Two lines, then an ellipsis: a caption is long by nature and the rail is not
  * where it gets read. */
@@ -645,6 +650,17 @@ nav strong { color: var(--text); }
 .slot-presets button b { font-size: 12px; font-weight: 500; }
 .slot-presets button small { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .slot-presets > p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.slot-preset-save { display: flex; gap: 6px; align-items: center; }
+.slot-preset-save input { min-width: 0; flex: 1; height: 32px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: inherit; }
+.page-schedule-assignments { display: grid; gap: 8px; margin: 0 12px 12px; padding: 12px; border-top: 1px solid var(--line); }
+.page-schedule-assignments h4 { margin: 0 0 2px; font-size: 13px; font-weight: 600; }
+.page-schedule-assignments p { margin: 0; color: var(--muted); font-size: 11px; }
+.page-schedule-assignments ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.page-schedule-assignments li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 260px); gap: 10px; align-items: center; }
+.page-schedule-assignments li > span { display: grid; min-width: 0; }
+.page-schedule-assignments li strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.page-schedule-assignments li small { color: var(--muted); font-size: 10px; }
+@media (max-width: 620px) { .page-schedule-assignments li { grid-template-columns: 1fr; } }
 @media (max-width: 900px) { .week-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .setup-note, .account-picker > p { margin: 0; color: var(--muted); line-height: 1.5; }
 .step-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
@@ -1172,15 +1188,30 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .campaign-pipeline-day > header strong { font-size: 12px; }
 .campaign-pipeline-day > header span { color: var(--muted); font-size: 10px; }
 .campaign-pipeline-day > ol { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 0; list-style: none; }
-.campaign-pipeline-day > ol > li { display: grid; grid-template-columns: 72px 116px minmax(0, 1fr); min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); box-shadow: 0 1px 2px rgb(20 35 50 / 4%); }
+/* The thumbnail column is narrower than it was: a 9:16 still standing to the
+   row's full height needs about 44px, and the 116px it used to hold was mostly
+   empty. The forty pixels went to the title, which carries long filenames. */
+.campaign-pipeline-day > ol > li { display: grid; grid-template-columns: 72px 76px minmax(0, 1fr); min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); box-shadow: 0 1px 2px rgb(20 35 50 / 4%); }
 .campaign-pipeline-day > ol > li.refused { border-inline-start: 3px solid var(--bad); }
 .campaign-pipeline-time { position: relative; display: flex; justify-content: flex-end; padding: 14px 18px 0 8px; border-inline-end: 1px solid var(--line); }
 .campaign-pipeline-time::after { position: absolute; inset-block: 0; inset-inline-end: 8px; inline-size: 1px; content: ""; background: var(--line); }
 .campaign-pipeline-time time { color: var(--text); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .campaign-pipeline-time i { position: absolute; z-index: 1; inset-block-start: 17px; inset-inline-end: 4px; inline-size: 9px; block-size: 9px; border: 2px solid var(--panel); border-radius: 50%; background: var(--link); }
-.campaign-pipeline-thumb { display: grid; place-items: center; padding: 12px; border-inline-end: 1px solid var(--line); background: var(--panel-raised); }
-.campaign-pipeline-thumb .picker-thumb, .campaign-pipeline-thumb-empty { display: grid; place-items: center; inline-size: 92px; block-size: 72px; overflow: hidden; border-radius: var(--radius-sm); background: var(--line); color: var(--muted); }
-.campaign-pipeline-thumb .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.campaign-pipeline-thumb { display: grid; place-items: center; padding: 12px 8px; border-inline-end: 1px solid var(--line); background: var(--panel-raised); }
+/* The clip's own shape, not a landscape box it gets cropped into.
+ *
+ * These are 720x1280 vertical videos and this was a fixed 92x72 landscape slot
+ * with `object-fit: cover`, so 44% of each frame survived - a horizontal strip
+ * through the middle, which for a fashion clip is a torso and no face. The box
+ * takes its ratio from the media now and stands to the row's height instead.
+ *
+ * `contain` rather than `cover` as the backstop: the box already matches the
+ * media, so nothing is letterboxed in the normal case, and an unusually wide
+ * clip that hits the width cap stays honest rather than being cut. */
+.campaign-pipeline-thumb .picker-thumb, .campaign-pipeline-thumb-empty { display: grid; place-items: center; inline-size: auto; block-size: 78px; aspect-ratio: var(--thumb-ratio, 92 / 72); max-inline-size: 100%; overflow: hidden; border-radius: var(--radius-sm); background: var(--line); color: var(--muted); }
+.campaign-pipeline-thumb .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: contain; }
+/* No media to measure, so it keeps the old landscape placeholder shape. */
+.campaign-pipeline-thumb-empty { inline-size: 52px; aspect-ratio: 9 / 16; }
 .campaign-pipeline-thumb .picker-thumb b { font-size: 13px; }
 .campaign-pipeline-thumb .picker-thumb i { display: none; }
 .campaign-pipeline article { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 8px; padding: 12px 14px; }

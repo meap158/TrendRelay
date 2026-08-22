@@ -405,6 +405,8 @@ export const ja: Messages = {
     reviewedIntro:
       "確認済みの音声とテロップを貼り付けてください。TrendRelay は検索可能でバージョン管理されたレシピを作りますが、機械の出力を人が確認したものとして扱うことはありません。",
     language: "言語",
+    languageAutomatic: "自動",
+    languageAutomaticHelp: "自動では、利用できる場合にメディアから検出された言語を使用します。",
     productShown: "登場する商品",
     creativeFormat: "クリエイティブ形式",
     reviewedSpeech: "確認済みの音声",

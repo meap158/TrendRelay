@@ -406,6 +406,8 @@ export const vi: Messages = {
     reviewedIntro:
       "Dán lời thoại và chữ trên màn hình đã kiểm duyệt. TrendRelay sẽ tạo công thức có thể tìm kiếm và lưu phiên bản, mà không coi kết quả của máy là đã được người kiểm duyệt.",
     language: "Ngôn ngữ",
+    languageAutomatic: "Tự động",
+    languageAutomaticHelp: "Chế độ tự động sử dụng ngôn ngữ phát hiện từ nội dung khi có.",
     productShown: "Sản phẩm xuất hiện",
     creativeFormat: "Định dạng sáng tạo",
     reviewedSpeech: "Lời thoại đã kiểm duyệt",

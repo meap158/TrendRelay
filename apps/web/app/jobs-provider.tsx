@@ -10,7 +10,8 @@ import { useWorkspace } from "./workspace-provider";
 
 type Translate = (path: string, values?: Record<string, string | number>) => string;
 type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-type JobCategory = "fetch" | "media" | "render" | "publish" | "research" | "blur" | "edit";
+type JobCategory = "fetch" | "media" | "render" | "publish" | "research" | "blur"
+  | "edit" | "captions" | "transcription" | "voice" | "processing";
 
 /**
  * What an editing-suite render is called while it runs, and once it is done.
@@ -101,6 +102,11 @@ export type BaseJob = {
    * to, not where it is. It resumes on its own once a worker is back.
    */
   stalled?: boolean;
+  /** Library asset this work belongs to, independent of the feature that queued it. */
+  assetId?: string | null;
+  /** Compact text for the progress layer drawn over that asset's thumbnail. */
+  activityLabel?: string;
+  activityDetail?: string;
   // Specific payloads preserved for UI needs
   raw: any;
 };
@@ -110,7 +116,7 @@ type JobsContextValue = {
   jobs: BaseJob[];
   busy: boolean;
   activeWorkspaceId: string | null;
-  announceEffectJobs: (jobs: any[]) => void;
+  announceMediaJobs: (jobs: any[]) => void;
   refresh: () => Promise<void>;
 };
 
@@ -139,9 +145,66 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       : job.progress_stage,
     startedAt: job.started_at,
     stalled: Boolean(job.stalled),
+    assetId: job?.payload?.asset_id ?? job?.result?.asset_id ?? null,
     href: assetHref(job),
     raw: job,
   }), [t]);
+
+  const mediaJob = useCallback((job: any): BaseJob => {
+    if (job?.kind === "media_effect_render") return effectJob(job);
+    const active = ["queued", "running"].includes(job?.status);
+    const definitions: Record<string, {
+      category: JobCategory; working: string; done: string; detail: string;
+    }> = {
+      caption_render: {
+        category: "captions",
+        working: job?.payload?.delivery === "sidecar" ? "Writing subtitles" : "Adding captions",
+        done: job?.payload?.delivery === "sidecar" ? "Subtitle files ready" : "Captions ready",
+        detail: job?.payload?.translate_to ? `Translating to ${job.payload.translate_to}` : "Caption track",
+      },
+      media_enrichment: {
+        category: "transcription",
+        working: "Reading media",
+        done: "Transcript ready to review",
+        detail: Array.isArray(job?.payload?.modes)
+          ? job.payload.modes.map((mode: string) => mode === "ocr" ? "On-screen text" : "Speech").join(" + ")
+          : "Speech and text",
+      },
+      voice_render: {
+        category: "voice",
+        working: "Generating voiceover",
+        done: "Voiceover ready",
+        detail: "Voiceover",
+      },
+    };
+    const definition = definitions[job?.kind] ?? {
+      category: "processing" as JobCategory,
+      working: "Processing media",
+      done: "Media processing finished",
+      detail: String(job?.kind ?? "Media processing").replaceAll("_", " "),
+    };
+    const failed = job?.status === "failed";
+    const cancelled = job?.status === "cancelled";
+    return {
+      id: job.id,
+      category: definition.category,
+      status: job.status,
+      created_at: job.created_at,
+      title: failed ? `${definition.working} failed`
+        : cancelled ? `${definition.working} cancelled`
+          : active ? definition.working : definition.done,
+      error: job.error,
+      progress: job.progress,
+      progressStage: job.progress_stage,
+      startedAt: job.started_at,
+      stalled: Boolean(job.stalled),
+      assetId: job?.payload?.asset_id ?? job?.result?.asset_id ?? null,
+      activityLabel: definition.working,
+      activityDetail: definition.detail,
+      href: assetHref(job) ?? "/library",
+      raw: job,
+    };
+  }, [effectJob]);
 
   /**
    * Put a job returned by a mutating request on screen immediately.
@@ -151,13 +214,15 @@ export function JobsProvider({ children }: { children: ReactNode }) {
    * there was no notification, thumbnail overlay, or detail-card activity in
    * the interval. Replacing by id also lets cancellation update the same row.
    */
-  const announceEffectJobs = useCallback((incoming: any[]) => {
-    const announced = incoming.filter((job) => job?.id).map(effectJob);
+  const announceMediaJobs = useCallback((incoming: any[]) => {
+    const announced = incoming.filter((job) => job?.id).map(mediaJob);
     if (!announced.length) return;
+    hasActiveJobs.current = announced.some((job) =>
+      ["queued", "running", "in_progress", "pending"].includes(job.status));
     const ids = new Set(announced.map((job) => job.id));
     setJobs((current) => [...announced, ...current.filter((job) => !ids.has(job.id))]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
-  }, [effectJob]);
+  }, [mediaJob]);
 
   const refresh = useCallback(async () => {
     if (refreshInFlight.current) return refreshInFlight.current;
@@ -236,25 +301,30 @@ export function JobsProvider({ children }: { children: ReactNode }) {
             progressStage: j.progress_stage,
             startedAt: j.started_at,
             stalled: Boolean(j.stalled),
+            assetId: j?.payload?.asset_id ?? j?.result?.asset_id ?? null,
+            activityLabel: "Blurring faces",
+            activityDetail: "Face privacy",
             // The asset it produced, which it only knows once it has one.
             href: assetHref(j),
             raw: j,
           })))
           .catch(() => []);
         fetchPromises.push(fetchBlur);
-        // Everything the editing suite renders. Face blur had notifications
-        // because it was the first long render here; a recipe render takes just
-        // as long, produces the cut that Publish will send, and used to finish
-        // in silence — the editor said "it will appear as a version" and left
-        // the operator to keep reopening the asset to find out whether it had.
-        // A batch can contain 200 independently tracked items. Fetch enough
-        // history for every selected asset to keep its inline activity visible;
-        // the notification drawer still groups and presents this same stream.
-        const fetchEdits = apiFetch(`/api/workspaces/${activeWorkspaceId}/media/library/effects/jobs?limit=250`)
+        // One asset-processing stream drives both notifications and thumbnail
+        // overlays. Effects, captions, transcription and voice therefore share
+        // the same lifecycle, and a new server-registered media kind needs no
+        // new poll or UI state. Keep enough history for a 200-item batch.
+        // The endpoint's maximum, because unfinished work is what this list is
+      // for and there can legitimately be a lot of it: four batches going at
+      // once is over three hundred jobs, and at 250 two of those batches were
+      // absent from the answer entirely. The endpoint puts unfinished work
+      // first, so this ceiling now bites on history rather than on anything
+      // still to run.
+      const fetchProcessing = apiFetch(`/api/workspaces/${activeWorkspaceId}/media/library/processing/jobs?limit=500`)
           .then(res => res.json())
-          .then(data => (data.jobs || []).map(effectJob))
+          .then(data => (data.jobs || []).map(mediaJob))
           .catch(() => []);
-        fetchPromises.push(fetchEdits);
+        fetchPromises.push(fetchProcessing);
         // Studio renders
         const fetchRenders = apiFetch(`/api/workspaces/${activeWorkspaceId}/studio/productions`)
           .then(res => res.json())
@@ -306,7 +376,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     } finally {
       if (refreshInFlight.current === request) refreshInFlight.current = null;
     }
-  }, [activeWorkspaceId, apiFetch, effectJob, user]);
+  }, [activeWorkspaceId, apiFetch, mediaJob, user]);
 
   useEffect(() => {
     // Deferred, not immediate. This poll fans out to seven endpoints and lives
@@ -366,7 +436,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       jobs,
       busy,
       activeWorkspaceId,
-      announceEffectJobs,
+      announceMediaJobs,
       refresh,
     }}>
       {children}
