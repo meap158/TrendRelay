@@ -17,7 +17,7 @@ import { WaitingScreen } from "../ui/waiting-screen";
 import { Dialog } from "../ui/dialog";
 import { SearchSelect } from "../ui/search-select";
 import { Select } from "../ui/select";
-import { ActionIcon } from "../ui/action-icons";
+import { ActionIcon, type ActionName } from "../ui/action-icons";
 import { WaitingBlock } from "../ui/waiting-block";
 import { handoffPath } from "../../lib/media-rules";
 import { isDefaultScaffolding, scaffoldingFor } from "../../lib/campaign-scaffolding";
@@ -175,6 +175,12 @@ const POST_LANGUAGES = LOCALES.map((item) => ({ value: item.code, label: item.la
 /** What a post attaches when it does not pin its own product. */
 type OfferMode = "smart" | "manual" | "none";
 type CampaignScope = "current" | "archived" | "all";
+
+const CAMPAIGN_STATUS_ICON: Record<Campaign["status"], ActionName> = {
+  draft: "edit",
+  active: "play",
+  archived: "archive",
+};
 type CampaignsSnapshot = { campaigns: Campaign[]; plans: PublicationPlan[] };
 
 const OFFER_MODES: readonly (readonly [OfferMode, string, string])[] = [
@@ -693,7 +699,12 @@ export default function CampaignsPage() {
                 onClick={() => setCampaignId(campaign.id)}
                 type="button"
               >
-                <strong>{campaign.name}</strong>
+                <strong>
+                  <span className={`campaign-status-icon ${campaign.status}`} aria-hidden="true">
+                    <ActionIcon name={CAMPAIGN_STATUS_ICON[campaign.status]} size={14} />
+                  </span>
+                  <span className="campaign-list-name">{campaign.name}</span>
+                </strong>
                 {/* The language it posts in, not the market it was never asked
                     for. Every campaign reported "global" once markets stopped
                     being collected, which is a word that told you nothing. */}
@@ -923,11 +934,11 @@ export default function CampaignsPage() {
             </summary>
             <div className="campaign-dialog-grid">
               <label>Products per post
-                <input type="number" name="max_products_per_post" min={1} max={5} defaultValue={2} />
+                <input type="number" name="max_products_per_post" min={1} max={5} defaultValue={1} />
                 <small>Bio-only networks still use one and rotate across posts.</small>
               </label>
               <label>Posts per account per day
-                <input type="number" name="daily_cap_per_account" min={1} max={24} defaultValue={2} />
+                <input type="number" name="daily_cap_per_account" min={1} max={24} defaultValue={5} />
                 <small>A ceiling, not a target.</small>
               </label>
               <label>Weekly post cap

@@ -553,26 +553,36 @@ def plan_campaign(
     if not destinations:
         return [], "No destinations chosen. Add the accounts this campaign should feed."
 
-    slots = session.scalars(
-        select(PublishingSlot).where(PublishingSlot.workspace_id == autopilot.workspace_id)
-    ).all()
-    if not slots:
-        return [], (
-            "No posting times set for this workspace. Autopilot does not invent a "
-            "schedule; add slots on the Publish screen."
-        )
-
     workspace = session.get(Workspace, autopilot.workspace_id)
-    upcoming = due_slots(
-        list(slots),
-        now=now,
-        until=now + horizon,
-        timezone=workspace.timezone if workspace else "UTC",
-    )
+    timezone = workspace.timezone if workspace else "UTC"
+    from trendrelay_api.integrations import posting_slots
+
+    # A slot belongs to the page it feeds. Resolve every destination first,
+    # then walk the union of their moments; an account is only considered at a
+    # moment in its own rhythm. This preserves ranking while making a page
+    # assignment an actual scheduling rule rather than UI-only metadata.
+    moments_by_destination: dict[str, set[datetime]] = {}
+    for destination in destinations:
+        resolved, _schedule = posting_slots.resolved_slots(
+            autopilot.workspace_id,
+            session=session,
+            page_key=destination.page_key,
+            override_preset_id=destination.posting_preset_id,
+        )
+        moments_by_destination[destination.id] = set(due_slots(
+            list(resolved), now=now, until=now + horizon, timezone=timezone
+        ))
+    upcoming = sorted({
+        moment for moments in moments_by_destination.values() for moment in moments
+    })
     if not upcoming:
         hours = max(1, round(horizon.total_seconds() / 3600))
         window = f"{hours // 24} days" if hours >= 48 and hours % 24 == 0 else f"{hours} hours"
-        return [], f"No slot falls inside the next {window}."
+        return [], (
+            f"No posting time assigned to these accounts falls inside the next {window}. "
+            "Autopilot does not invent a schedule; add workspace times or assign "
+            "a page preset on Publish."
+        )
 
     # Read once for the whole horizon. Both the cap and the rest interval are
     # asked per slot, and each used to go back to the database for the same rows.
@@ -675,11 +685,15 @@ def plan_campaign(
         # that could not take one slot was offered every remaining slot as
         # well - and a campaign whose leading account was resting posted
         # nothing at all, while the account beside it sat idle and eligible.
-        chosen = choose_destination(ranks, posts_so_far=counter)
+        scheduled_ranks = [
+            rank for rank in ranks
+            if moment in moments_by_destination.get(rank.destination_id, set())
+        ]
+        chosen = choose_destination(scheduled_ranks, posts_so_far=counter)
         if chosen is None:
-            break
+            continue
         candidates = [chosen] + [
-            rank for rank in ranks if rank.destination_id != chosen.destination_id
+            rank for rank in scheduled_ranks if rank.destination_id != chosen.destination_id
         ]
         # Two buffers, both flushed once the slot is settled, because the run
         # note counts a reason as "N of M slots" and a slot now tries several

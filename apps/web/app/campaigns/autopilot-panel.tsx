@@ -15,9 +15,11 @@
  * scheduler should feel like delegating, not gambling.
  */
 
+import dynamic from "next/dynamic";
 import { clipLength, handoffPath } from "../../lib/media-rules";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Info } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { AUTHORITIES } from "./authority-options";
@@ -37,6 +39,20 @@ import { Select } from "../ui/select";
 import { useT } from "../i18n-provider";
 import { LOCALES } from "../../lib/i18n/locales";
 import { EffectEditor } from "../library/effect-editor";
+import { ActionMenu, type ActionMenuItem } from "../ui/action-menu";
+import {
+  LIBRARY_SELECTION_ACTIONS,
+  SELECTION_ACTION_ICON,
+  SELECTION_ACTION_KEY,
+  selectionActionState,
+  type LibraryMediaKind,
+  type LibrarySelectionActionId,
+  type LibrarySelectionTarget,
+} from "../../lib/library-selection-actions";
+
+const CaptionEditor = dynamic(() => import("../library/caption-editor").then((m) => m.CaptionEditor), { ssr: false });
+const BulkVoiceEditor = dynamic(() => import("../library/bulk-voice-editor").then((m) => m.BulkVoiceEditor), { ssr: false });
+const BatchTranscribe = dynamic(() => import("../library/batch-transcribe").then((m) => m.BatchTranscribe), { ssr: false });
 import { TimelineImage, TimelinePlayer } from "./timeline-player";
 import { accountIdentity, type EngineAccount } from "../publishing-account";
 import { profileUrl } from "../../lib/social-profile";
@@ -86,7 +102,232 @@ type Account = {
   connection_account?: EngineAccount;
   available?: boolean;
   unavailable_reason?: string | null;
+  page_key?: string;
 };
+
+type PostingPreset = {
+  id: string;
+  label: string;
+  summary: string;
+  kind: "builtin" | "custom";
+  slots: { weekday: number; time: string }[];
+};
+
+const POSTING_DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function scheduleLines(slots: { weekday: number; time: string }[]): string[] {
+  const groups = new Map<number, string[]>();
+  for (const slot of slots) {
+    const times = groups.get(slot.weekday) ?? [];
+    if (!times.includes(slot.time)) times.push(slot.time);
+    groups.set(slot.weekday, times);
+  }
+  const displayTime = (value: string) => {
+    const [hour = 0, minute = 0] = value.split(":").map(Number);
+    return new Date(2000, 0, 1, hour, minute).toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
+  if (groups.has(-1)) {
+    return [(groups.get(-1) ?? []).map(displayTime).join(" · ")];
+  }
+  return [...groups.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([weekday, times]) => `${POSTING_DAY_NAMES[weekday] ?? "Day"}: ${times.map(displayTime).join(" · ")}`);
+}
+
+/** A schedule picker whose named presets explain the wall-clock times they
+ *  represent. The explanation is hover/focus help on desktop and a tap-open
+ *  disclosure on touch screens; either the menu or the disclosure closes on
+ *  outside click or Escape. */
+function PostingPresetSelect({
+  value,
+  presets,
+  timezone,
+  workspaceSlots,
+  pagePresetId,
+  onChange,
+}: {
+  value: string;
+  presets: PostingPreset[];
+  timezone: string;
+  workspaceSlots: Slot[];
+  pagePresetId?: string;
+  onChange: (value: string) => void;
+}) {
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [side, setSide] = useState<"above" | "below">("below");
+  const [shownInfo, setShownInfo] = useState<string | null>(null);
+  const [pinnedInfo, setPinnedInfo] = useState<string | null>(null);
+  const pagePreset = presets.find((preset) => preset.id === pagePresetId);
+  const inheritedSlots = pagePreset?.slots ?? workspaceSlots;
+  const choices = [
+    {
+      id: "",
+      label: "Inherit page / workspace schedule",
+      summary: pagePreset
+        ? `Uses “${pagePreset.label}”, assigned to this page.`
+        : "Uses the workspace posting times.",
+      slots: inheritedSlots,
+    },
+    ...presets,
+  ];
+  const selected = choices.find((choice) => choice.id === value) ?? choices[0]!;
+  /* Never empty, so the panel's presence is not itself a layout change: the row
+     being hovered or arrowed onto, else one held up for comparison, else the
+     schedule already chosen - which is the useful thing to see on opening. */
+  const detailed = choices.find(
+    (choice) => choice.id === (shownInfo ?? pinnedInfo ?? value),
+  ) ?? selected;
+  const detailLines = scheduleLines(detailed.slots);
+
+  function close() {
+    setOpen(false);
+    setShownInfo(null);
+    setPinnedInfo(null);
+  }
+
+  function reveal() {
+    const rect = trigger.current?.getBoundingClientRect();
+    if (rect) {
+      const below = window.innerHeight - rect.bottom;
+      setSide(below < 260 && rect.top > below ? "above" : "below");
+    }
+    setOpen(true);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) close();
+    };
+    const resized = () => close();
+    document.addEventListener("pointerdown", outside);
+    window.addEventListener("resize", resized);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      window.removeEventListener("resize", resized);
+    };
+  }, [open]);
+
+  function keys(event: React.KeyboardEvent) {
+    if (event.key === "Escape" && open) {
+      event.preventDefault();
+      close();
+      trigger.current?.focus();
+      return;
+    }
+    if (!open && ["ArrowDown", "Enter", " "].includes(event.key)) {
+      event.preventDefault();
+      reveal();
+      requestAnimationFrame(() => root.current?.querySelector<HTMLButtonElement>(".posting-preset-choice")?.focus());
+      return;
+    }
+    if (!open || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const items = [...(root.current?.querySelectorAll<HTMLButtonElement>(".posting-preset-choice") ?? [])];
+    if (!items.length) return;
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    const next = event.key === "Home" ? 0
+      : event.key === "End" ? items.length - 1
+        : event.key === "ArrowUp" ? Math.max(0, current - 1)
+          : Math.min(items.length - 1, current + 1);
+    items[next]?.focus();
+  }
+
+  return (
+    <div className="posting-preset-select" ref={root} onKeyDown={keys}>
+      <button
+        type="button"
+        ref={trigger}
+        className="search-select-trigger posting-preset-trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => open ? close() : reveal()}
+      >
+        <span>{selected.label}</span>
+        <ChevronDown size={15} aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="posting-preset-menu" data-side={side}>
+          {/* The list and the detail are siblings, not nested.
+            *
+            * Expanding the times inside the hovered row pushed every row under
+            * it down by about eighty pixels - so hovering one option moved the
+            * next one out from under the pointer heading for it. One panel
+            * below the list instead: it is always present, always showing
+            * something, so revealing times never changes the list's layout. */}
+          <div className="posting-preset-list" role="menu" aria-label="Posting-time presets">
+            {choices.map((choice) => (
+              <div
+                className="posting-preset-option"
+                key={choice.id || "__inherit"}
+                /* The whole row shows its times, not just the icon.
+                 *
+                 * Reading five schedules meant hitting a 30px target five times
+                 * to learn what any of them meant - and arrowing through with a
+                 * keyboard revealed nothing at all, because only the icon
+                 * carried the handlers. `onFocus` sits here rather than on the
+                 * button because React's focus events bubble, so arrowing onto
+                 * a choice shows its times the way hovering does. */
+                onMouseEnter={() => setShownInfo(choice.id)}
+                onMouseLeave={() => setShownInfo(null)}
+                onFocus={() => setShownInfo(choice.id)}
+                onBlur={() => setShownInfo(null)}
+              >
+                <button
+                  type="button"
+                  className="posting-preset-info"
+                  /* No longer the way in - the row is. What is left is pinning:
+                     holding one schedule up while the pointer goes elsewhere,
+                     which is how two of them get compared. */
+                  aria-label={`${pinnedInfo === choice.id ? "Unpin" : "Pin"} times for ${choice.label}`}
+                  aria-pressed={pinnedInfo === choice.id}
+                  onClick={() => setPinnedInfo(pinnedInfo === choice.id ? null : choice.id)}
+                >
+                  <Info size={14} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="posting-preset-choice"
+                  role="menuitemradio"
+                  aria-checked={choice.id === value}
+                  /* Its own hidden description rather than the shared panel: one
+                     node whose text changes as the pointer moves would describe
+                     whichever option was last hovered, not this one. */
+                  aria-describedby={`posting-preset-times-${choice.id || "inherit"}`}
+                  onClick={() => {
+                    onChange(choice.id);
+                    close();
+                    trigger.current?.focus();
+                  }}
+                >
+                  {choice.label}
+                </button>
+                <span className="sr-only" id={`posting-preset-times-${choice.id || "inherit"}`}>
+                  {`${choice.summary} ${scheduleLines(choice.slots).join(", ") || "No posting times set"}. ${timezone}.`}
+                </span>
+              </div>
+            ))}
+          </div>
+          {/* Announced through each option's own description above, so this is
+              the sighted reader's copy and is skipped by a screen reader rather
+              than read out a second time. */}
+          <div className="posting-preset-detail" aria-hidden="true">
+            <p>{detailed.summary}</p>
+            {detailLines.length
+              ? detailLines.map((line) => <strong key={line}>{line}</strong>)
+              : <strong>No posting times set</strong>}
+            <small>{timezone}</small>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 type Destination = {
   id: string;
@@ -103,6 +344,15 @@ type Destination = {
   integration_id: string;
   platform: PublishingPlatform;
   label: string;
+  page_key?: string | null;
+  /** Null inherits the page assignment and then the workspace schedule. */
+  posting_preset_id?: string | null;
+  posting_schedule?: {
+    source: "campaign" | "page" | "workspace";
+    preset_id: string | null;
+    label: string;
+    slot_count: number;
+  };
   enabled: boolean;
   /** What this account posts as - a Reel, a Story - where it has been set. */
   post_type?: string | null;
@@ -457,6 +707,19 @@ const TAGGED_PER_PAGE = 20;
 
 const QUEUE_BATCH = 8;
 
+/** One request's worth of clips, which is the assets endpoint's own ceiling. */
+const PICKER_PAGE = 100;
+
+/**
+ * How many clips the picker will hold at once.
+ *
+ * A select-all pages until it has them, so this is a request count as much as
+ * a row count: ten pages, held as whole assets because the composer renders
+ * each one. Beyond it the filter is the better tool, and the bar says so
+ * rather than stopping short and letting the number look like the whole match.
+ */
+const PICKER_CEILING = 1_000;
+
 /** What one queued package is written with, before it is sent. */
 type PostCopy = { body: string; hashtags: string };
 
@@ -788,7 +1051,13 @@ function PostingStrategy({
   onChange: (changes: Partial<Autopilot>) => void;
 }) {
   const accounts = destinations.length;
-  const perDay = slots.length;
+  const assigned = destinations.filter((item) => item.posting_schedule?.preset_id);
+  const scheduleLabels = [...new Set(destinations.map(
+    (item) => item.posting_schedule?.label ?? "Workspace posting times",
+  ))];
+  const perDay = slots.length || assigned.reduce(
+    (count, item) => Math.max(count, item.posting_schedule?.slot_count ?? 0), 0,
+  );
   return (
     <ol className="campaign-strategy">
       <li>
@@ -798,7 +1067,18 @@ function PostingStrategy({
             in this workspace" underneath a rule that had just said it - two
             headers and two ledes to list five times. */}
         <span>
-          {perDay ? (
+          {assigned.length ? (
+            <>
+              <span className="campaign-strategy-times">
+                {scheduleLabels.map(
+                  (label) => <em key={label}>{label}</em>,
+                )}
+                <em className="zone">{timezone}</em>
+              </span>
+              Assigned per page; each account is considered only at its own times. {" "}
+              <Link className="campaign-strategy-link" href="/publish">Edit in Publish</Link>
+            </>
+          ) : perDay ? (
             <>
               <span className="campaign-strategy-times">
                 {slots.map((slot) => (
@@ -1031,10 +1311,12 @@ function QueueRehearsal({
                       : "in the caption"}</span>
             </p>
           ))}
-          {slots.length > 0 && (
+          {destinations.length > 0 && (
             <p className="campaign-would-when">
-              This campaign posts at {slots.map(
-                (slot) => `${slot.weekday_label} ${slot.time}`).join(", ")}.
+              Posting schedules: {destinations.map((destination) => (
+                `${destination.label} — ${destination.posting_schedule?.label
+                  ?? "Workspace posting times"}`
+              )).join("; ")}.
             </p>
           )}
           {!destinations.length && (
@@ -1178,6 +1460,8 @@ export function AutopilotPanel({
   const [firstLoadFailed, setFirstLoadFailed] = useState(false);
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  /** The queued posts by id, shared by timeline actions and schedule labels. */
+  const queueById = new Map(queue.map((item) => [item.id, item]));
   /**
    * The queued posts ticked for a batch action.
    *
@@ -1215,6 +1499,8 @@ export function AutopilotPanel({
   const [productSearch, setProductSearch] = useState("");
   const [pinnedOffers, setPinnedOffers] = useState<Set<string>>(new Set());
   const [slots, setSlots] = useState<Slot[]>([]);
+  const [postingPresets, setPostingPresets] = useState<PostingPreset[]>([]);
+  const [pageAssignments, setPageAssignments] = useState<Record<string, string>>({});
   const [scheduleTimezone, setScheduleTimezone] = useState("UTC");
   /**
    * Every moment on this page is read on the workspace's clock.
@@ -1246,6 +1532,12 @@ export function AutopilotPanel({
   // invisible even after the queue learned to hold them.
   const [libraryFilters, setLibraryFilters] = useState<AssetFilterValues>({});
   const [libraryTotal, setLibraryTotal] = useState(0);
+  /**
+   * How many rows have been asked of the API, which is not `library.length`.
+   * Audio is dropped on arrival, so the count on screen runs behind the count
+   * fetched - and paging from the wrong one would skip a clip per sound file.
+   */
+  const [libraryOffset, setLibraryOffset] = useState(0);
   /** The clips sharing this campaign copy. Empty when the composer is closed. */
   const [drafting, setDrafting] = useState<LibraryAsset[]>([]);
   // The product decision is part of the package, made when it is added:
@@ -1327,6 +1619,16 @@ export function AutopilotPanel({
     }));
   const [selectedAssets, setSelectedAssets] = useState<Record<string, LibraryAsset>>({});
   const [effectOpen, setEffectOpen] = useState(false);
+  /**
+   * Which Library editor the picked clips were sent to.
+   *
+   * The same registry the Library reads, so an action declared once is offered
+   * in both places. Choosing media for a campaign is exactly when somebody
+   * notices a clip needs reading, captioning or voicing, and sending them back
+   * to the Library to do it - then back here to find the selection gone - was
+   * the whole friction.
+   */
+  const [selectionAction, setSelectionAction] = useState<LibrarySelectionActionId | null>(null);
   const [editing, setEditing] = useState<QueueItem | null>(null);
   const [editingReplies, setEditingReplies] = useState<string[]>([]);
   // The campaign's own wording, overridden for this post. Empty means the
@@ -1501,9 +1803,14 @@ export function AutopilotPanel({
       // different subsystem, and the point of the checklist is that it names
       // which one is missing rather than reporting a single blank "not ready".
       void apiFetch(`/api/workspaces/${workspaceId}/publishing/slots`)
-        .then((response) => json<{ slots: Slot[]; timezone: string }>(response))
+        .then((response) => json<{
+          slots: Slot[]; timezone: string; presets: PostingPreset[];
+          page_assignments?: Record<string, string>;
+        }>(response))
         .then((body) => {
           setSlots(body.slots);
+          setPostingPresets(body.presets ?? []);
+          setPageAssignments(body.page_assignments ?? {});
           setScheduleTimezone(body.timezone || "UTC");
         })
         .catch(() => { setSlots([]); });
@@ -1609,11 +1916,19 @@ export function AutopilotPanel({
   async function loadAccounts() {
     setBusy("accounts");
     try {
-      const body = await json<{ accounts: Account[] }>(await apiFetch(
-        `/api/workspaces/${workspaceId}/publishing/integrations/all`,
+      const body = await json<{ accounts: Array<Omit<Account, "id"> & {
+        integration_id: string;
+      }> }>(await apiFetch(
+        `${base}/autopilot/account-recommendations`,
         { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
       ));
-      setAccounts(body.accounts);
+      setAccounts(body.accounts.map((account) => ({
+        ...account, id: account.integration_id,
+      })));
+      // Account discovery is also when legacy destinations learn the stable
+      // consolidated page key. Refresh so their inherited schedule is shown
+      // immediately, rather than on the next visit.
+      await refresh();
       setSelectedAccounts(new Set());
       setAdding(true);
     } catch (reason) {
@@ -1623,29 +1938,95 @@ export function AutopilotPanel({
     }
   }
 
+  /**
+   * One page of the library, as the API hands it over.
+   *
+   * Videos and pictures both: a campaign can post a carousel now, and a picker
+   * that only offers clips cannot express one. Still only what the library
+   * considers ready - the queue posts unattended, so an asset mid processing
+   * has no business in it.
+   */
+  async function fetchLibraryPage(filters: AssetFilterValues, offset: number) {
+    const params = assetFilterParams(filters);
+    params.set("limit", String(PICKER_PAGE));
+    if (offset) params.set("offset", String(offset));
+    return json<{
+      assets: LibraryAsset[]; facets?: AssetFacets; total?: number;
+    }>(await apiFetch(
+      `/api/workspaces/${workspaceId}/media/library/assets?${params.toString()}`,
+    ));
+  }
+
+  /**
+   * A campaign posts a clip or a carousel, so a sound file has nothing to
+   * become here. Dropped on arrival rather than offered and then refused.
+   */
+  const postableOnly = (assets: LibraryAsset[] = []) =>
+    assets.filter((asset) => asset.media_kind !== "audio");
+
   async function loadLibrary(filters: AssetFilterValues = libraryFilters) {
     setBusy("library");
     try {
-      // Videos and pictures both: a campaign can post a carousel now, and a
-      // picker that only offers clips cannot express one. Still only what the
-      // library considers ready - the queue posts unattended, so an asset mid
-      // processing has no business in it.
-      const params = assetFilterParams(filters);
-      params.set("limit", "100");
-      const body = await json<{
-        assets: LibraryAsset[]; facets?: AssetFacets; total?: number;
-      }>(await apiFetch(
-        `/api/workspaces/${workspaceId}/media/library/assets?${params.toString()}`,
-      ));
-      // A campaign posts a clip or a carousel, so a sound file has nothing to
-      // become here. Dropped on arrival rather than offered and then refused.
-      setLibrary((body.assets ?? []).filter((asset) => asset.media_kind !== "audio"));
+      const body = await fetchLibraryPage(filters, 0);
+      setLibrary(postableOnly(body.assets));
+      setLibraryOffset(body.assets?.length ?? 0);
       if (body.facets) setLibraryFacets(body.facets);
       setLibraryTotal(body.total ?? body.assets?.length ?? 0);
       setDrafting([]);
       setPicking(true);
     } catch (reason) {
       fail(explainFailure(reason, "The library could not be read."));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  /** The next page, appended. What "showing 100 of 131" was missing. */
+  async function loadMoreLibrary() {
+    setBusy("library-more");
+    try {
+      const body = await fetchLibraryPage(libraryFilters, libraryOffset);
+      const arrived = body.assets ?? [];
+      setLibrary((current) => [...current, ...postableOnly(arrived)]);
+      setLibraryOffset((current) => current + arrived.length);
+      if (body.total !== undefined) setLibraryTotal(body.total);
+    } catch (reason) {
+      fail(explainFailure(reason, "The rest of the library could not be read."));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  /**
+   * Tick everything the filter matches, not merely everything on screen.
+   *
+   * Pages until the matches run out, because the composer is handed whole
+   * assets rather than ids - the Library's own select-all can stop at ids and
+   * so needs only one request. Bounded, and the bound is stated rather than
+   * implied: a selection that quietly stopped short is the bug this replaces.
+   */
+  async function selectAllMatching() {
+    setBusy("library-all");
+    try {
+      let collected = [...library];
+      let offset = libraryOffset;
+      let total = libraryTotal;
+      while (offset < Math.min(total, PICKER_CEILING)) {
+        const body = await fetchLibraryPage(libraryFilters, offset);
+        const arrived = body.assets ?? [];
+        // No progress means the end, whatever the count said. Without this a
+        // total that disagrees with the rows on hand spins forever.
+        if (!arrived.length) break;
+        collected = [...collected, ...postableOnly(arrived)];
+        offset += arrived.length;
+        if (body.total !== undefined) total = body.total;
+      }
+      setLibrary(collected);
+      setLibraryOffset(offset);
+      setLibraryTotal(total);
+      setSelectedAssets(Object.fromEntries(collected.map((asset) => [asset.id, asset])));
+    } catch (reason) {
+      fail(explainFailure(reason, "The whole selection could not be read."));
     } finally {
       setBusy("");
     }
@@ -2157,16 +2538,15 @@ export function AutopilotPanel({
   /** The open day's tickable posts - the planned, deletable ones. A delivered
       post is not among them, so "select all" never picks something it cannot
       act on. */
-  function selectableDayIds() {
-    return openDayEntries
+  function selectableDayIds(entries: TimelineEntry[]) {
+    return entries
       .filter((entry) => entry.kind === "planned" && entry.queue_item_id
         && canEdit && queueById.has(entry.queue_item_id))
       .map((entry) => entry.queue_item_id as string);
   }
 
   /** Tick every selectable post, or clear them if all are already ticked. */
-  function toggleAllDayPosts() {
-    const ids = selectableDayIds();
+  function toggleAllDayPosts(ids: string[]) {
     setSelectedDayPosts((current) => {
       const all = ids.length > 0 && ids.every((id) => current.has(id));
       return all ? new Set() : new Set(ids);
@@ -2191,7 +2571,16 @@ export function AutopilotPanel({
     }
   }
 
-  const ready = useMemo(() => {
+  const destinationSlotCounts = destinations.map((item) => (
+    item.posting_schedule?.slot_count ?? slots.length
+  ));
+  const hasPostingTimes = slots.length > 0
+    || destinationSlotCounts.some((count) => count > 0);
+  const dailyScheduleCapacity = destinationSlotCounts.reduce(
+    (total, count) => total + Math.min(count, autopilot?.daily_cap_per_account ?? count), 0,
+  );
+
+  const ready = (() => {
     // Each row is a separate thing that can be missing, and each names where to
     // go and fix it. A single "not ready" would be true and useless.
     const rows = [
@@ -2217,7 +2606,7 @@ export function AutopilotPanel({
       },
       {
         id: "slots",
-        met: slots.length > 0,
+        met: hasPostingTimes,
         label: t("autopilot.needSlots"),
         section: "schedule" as const,
       },
@@ -2227,7 +2616,7 @@ export function AutopilotPanel({
       all: rows.every((row) => row.met),
       configured: rows.filter((row) => row.id !== "active").every((row) => row.met),
     };
-  }, [campaignStatus, destinations.length, autopilot?.queue_ready, slots.length, t]);
+  })();
 
   useEffect(() => {
     if (
@@ -2302,8 +2691,6 @@ export function AutopilotPanel({
    * from the one on the Schedule tab. Empty until a preview has been loaded,
    * which is honest - nothing is due until the plan says so.
    */
-  /** The queued posts by id, so the schedule can name the one it came from. */
-  const queueById = new Map(queue.map((item) => [item.id, item]));
   /**
    * Every planned outing, by the post it came from.
    *
@@ -2350,12 +2737,11 @@ export function AutopilotPanel({
   /**
    * Whether every clip on screen is ticked.
    *
-   * "Loaded" rather than "matching", and the difference is stated in the bar
-   * beside it. The Library can offer a true select-all because its bulk
-   * actions work from ids alone, and its id endpoint answers with up to ten
-   * thousand of them. This picker hands whole assets to the composer, and the
-   * assets endpoint caps at a hundred with no offset to page past it - so
-   * there is no honest way to tick more than is here.
+   * "Loaded" rather than "matching": this is the box beside the grid, and it
+   * ticks what is on screen. Everything the filter matches is its own control,
+   * because reaching the rest means fetching it - the picker hands whole
+   * assets to the composer, so it pages rather than collecting ids the way the
+   * Library's select-all can.
    */
   const allLoadedSelected = library.length > 0
     && library.every((asset) => Boolean(selectedAssets[asset.id]));
@@ -2457,6 +2843,43 @@ export function AutopilotPanel({
     setRowMatches({});
     resetDraftProducts();
   }
+
+  /**
+   * What the picked clips are, in the shape every Library editor takes.
+   *
+   * `handoffPath` rather than the original for the effect editor, so a clip
+   * that already carries a rendered cut is stacked onto that cut instead of
+   * silently starting again from the source.
+   */
+  const selectionTargets: LibrarySelectionTarget[] = selectedLibrary.map((asset) => ({
+    id: asset.id,
+    title: asset.title,
+    mediaKind: (asset.media_kind === "image" || asset.media_kind === "audio" ? asset.media_kind : "video") as LibraryMediaKind,
+  }));
+
+  /**
+   * The same menu the Library carries, built from the same registry.
+   *
+   * Only "Apply effects" was offered here, so choosing media for a campaign
+   * meant leaving for the Library to caption or voice a clip and coming back
+   * to a selection that no longer existed.
+   */
+  const selectionActionItems: ActionMenuItem[] = LIBRARY_SELECTION_ACTIONS.map((action) => {
+    const state = selectionActionState(action, selectionTargets);
+    const suffix = SELECTION_ACTION_KEY[action.id];
+    return {
+      id: action.id,
+      label: t(`library.selectionAction${suffix}`),
+      description: t(`library.selectionAction${suffix}Help`),
+      disabled: !canEdit || !state.enabled,
+      disabledReason: state.compatible.length === 0
+        ? t("library.actionNoCompatible")
+        : state.overLimit && action.maxItems
+          ? t("library.actionLimit", { count: action.maxItems })
+          : undefined,
+      icon: <ActionIcon name={SELECTION_ACTION_ICON[action.id]} />,
+    };
+  });
 
   /** Replace the selection with everything loaded, or clear it - as the Library does. */
   function toggleAllLoaded() {
@@ -2577,7 +3000,7 @@ export function AutopilotPanel({
     : [];
   // The day's tickable posts and whether all / some are ticked, so the drawer's
   // "select all" can show a full, an indeterminate, or an empty box.
-  const daySelectableIds = openDay ? selectableDayIds() : [];
+  const daySelectableIds = openDay ? selectableDayIds(openDayEntries) : [];
   const allDaySelected = daySelectableIds.length > 0
     && daySelectableIds.every((id) => selectedDayPosts.has(id));
   const someDaySelected = selectedDayPosts.size > 0 && !allDaySelected;
@@ -2675,11 +3098,10 @@ export function AutopilotPanel({
          * "Up to", not "will": the rest interval, the daily cap and how many
          * packages are approved all pull the real number down, and a promise
          * that overshoots is worse than a bound that holds. */}
-        {destinations.length > 0 && slots.length > 0 && (
+        {destinations.length > 0 && dailyScheduleCapacity > 0 && (
           <p className="autopilot-expansion" role="status">
             {(() => {
-              const perAccount = Math.min(slots.length, autopilot.daily_cap_per_account);
-              const perDay = perAccount * destinations.length;
+              const perDay = dailyScheduleCapacity;
               const posts = autopilot.queue_ready;
               return (
                 <>
@@ -2688,9 +3110,7 @@ export function AutopilotPanel({
                   <strong>{destinations.length} {destinations.length === 1 ? "account" : "accounts"}</strong>
                   {", up to "}
                   <strong>{perDay} {perDay === 1 ? "post" : "posts"} a day</strong>
-                  {perAccount < slots.length
-                    ? ` (${perAccount} per account, your daily cap).`
-                    : ` (one per posting time, per account).`}
+                  {` (bounded by each page’s posting times and the per-account daily cap).`}
                   {autopilot.offer_mode === "none"
                     ? " No affiliate link is attached."
                     : " Each post carries its affiliate link where that link can be clicked."}
@@ -2749,7 +3169,7 @@ export function AutopilotPanel({
             <span>Schedule</span><strong>{preview
               ? preview.posts.length + preview.deployed.filter((item) =>
                   item.status === "queued" || item.status === "running").length
-              : slots.length}</strong>
+              : Math.max(slots.length, ...destinationSlotCounts, 0)}</strong>
             <small>{preview ? "upcoming" : "posting times"}</small>
           </button>
 
@@ -3074,6 +3494,7 @@ export function AutopilotPanel({
         <div className="campaign-work-split">
           <div className="campaign-work-main">
       {<Card
+        className="campaign-queue-card"
         eyebrow={t("autopilot.queueEyebrow")}
         title={t("autopilot.queue", {
           ready: autopilot.queue_ready, total: autopilot.queue_total,
@@ -3081,6 +3502,56 @@ export function AutopilotPanel({
         aside={canEdit ? (
           <Button variant="secondary" size="sm" busy={busy === "library"}
             onClick={() => void loadLibrary()}><ActionIcon name="clip" />{t("autopilot.addFromLibrary")}</Button>
+        ) : undefined}
+        toolbar={canEdit && queue.length > 0 ? (
+          <div className={`campaign-queue-bar${pickedQueue.length ? " active" : ""}`}>
+            <span
+              className="library-pick"
+              role="checkbox"
+              tabIndex={0}
+              aria-checked={allQueueSelected}
+              aria-label={allQueueSelected
+                ? "Clear selection"
+                : `Select all ${queue.length} queued posts`}
+              onClick={toggleAllQueue}
+              onKeyDown={(event) => {
+                if (event.key !== " " && event.key !== "Enter") return;
+                event.preventDefault();
+                toggleAllQueue();
+              }}
+            >{allQueueSelected && <ActionIcon name="confirm" size={12} />}</span>
+            <strong>
+              {pickedQueue.length
+                ? `${pickedQueue.length} selected`
+                : `Select from ${queue.length} post${queue.length === 1 ? "" : "s"}`}
+            </strong>
+            {pickedQueue.length > 0 && (
+              <>
+                {pickedQueue.some((item) => item.state !== "approved") && (
+                  <Button variant="secondary" size="sm"
+                    busy={busy === "queue-batch-approve"}
+                    onClick={() => void batchQueue("approve")}>
+                    {t("autopilot.approve")}
+                  </Button>
+                )}
+                {pickedQueue.some((item) => item.state === "approved") && (
+                  <Button variant="quiet" size="sm"
+                    busy={busy === "queue-batch-hold"}
+                    onClick={() => void batchQueue("hold")}>
+                    Hold back
+                  </Button>
+                )}
+                <Button variant="danger" size="sm"
+                  busy={busy === "queue-batch-remove"}
+                  onClick={() => void batchQueue("remove")}>
+                  {t("common.delete")}
+                </Button>
+                <Button variant="quiet" size="sm" onClick={() => setQueuePicked(new Set())}>
+                  Clear selection
+                </Button>
+              </>
+            )}
+          </div>
         ) : undefined}
       >
         {/* The rules moved to "How this campaign posts", beside this card.
@@ -3168,7 +3639,11 @@ export function AutopilotPanel({
                     // without counting ticks.
                     selectedPictures > 1 ? `${selectedPictures} pictures as one carousel` : "",
                     matchingCount > library.length
-                      ? `${library.length} of ${matchingCount.toLocaleString()} loaded — narrow the filter to reach the rest`
+                      ? `${library.length} of ${matchingCount.toLocaleString()} loaded`
+                      : "",
+                    // Only past the ceiling is narrowing still the answer.
+                    matchingCount > PICKER_CEILING
+                      ? `${PICKER_CEILING.toLocaleString()} at a time — narrow the filter to reach the rest`
                       : "",
                   ].filter(Boolean).join(" · ")
                 : `Select clips to edit or add to the campaign${
@@ -3176,8 +3651,28 @@ export function AutopilotPanel({
                       ? ` · showing ${library.length} of ${matchingCount.toLocaleString()}`
                       : ""
                   }`}</span>
-              <Button variant="secondary" size="sm" disabled={!selectedLibrary.length}
-                onClick={() => setEffectOpen(true)}>Apply effects</Button>
+              {/* The pair the Library carries: the box ticks what is loaded,
+                  this reaches the rest. Named with the real number so it is
+                  never mistaken for the count already on screen. */}
+              {matchingCount > library.length && library.length < PICKER_CEILING && (
+                <Button variant="secondary" size="sm" busy={busy === "library-all"}
+                  onClick={() => void selectAllMatching()}>
+                  Select all {Math.min(matchingCount, PICKER_CEILING).toLocaleString()} matching
+                </Button>
+              )}
+              {matchingCount > library.length && library.length < PICKER_CEILING && (
+                <Button variant="quiet" size="sm" busy={busy === "library-more"}
+                  onClick={() => void loadMoreLibrary()}>Load more</Button>
+              )}
+              {/* Every editing action the Library offers, not only effects. */}
+              <ActionMenu
+                label={t("library.selectionActions")}
+                ariaLabel={t("library.selectionActionsLabel")}
+                icon={<ActionIcon name="edit" />}
+                items={selectionActionItems}
+                disabled={!canEdit || !selectedLibrary.length}
+                onSelect={(id) => setSelectionAction(id as LibrarySelectionActionId)}
+              />
               <Button variant="primary" size="sm" disabled={!selectedLibrary.length}
                 onClick={() => {
                   setDrafting(selectedLibrary);
@@ -3527,64 +4022,6 @@ export function AutopilotPanel({
           <p className="autopilot-empty">{t("autopilot.noQueue")}</p>
         ) : (
           <>
-          {/* Approving and removing were per-row only, so a campaign that took
-              twenty clips from the Library in one go had to be curated twenty
-              times over. The same two-state box the Library and the media
-              picker carry, and the same actions the rows already offer - this
-              adds no power, only a way to use it more than once. */}
-          {canEdit && (
-            <div className={`campaign-queue-bar${pickedQueue.length ? " active" : ""}`}>
-              <span
-                className="library-pick"
-                role="checkbox"
-                tabIndex={0}
-                aria-checked={allQueueSelected}
-                aria-label={allQueueSelected
-                  ? "Clear selection"
-                  : `Select all ${queue.length} queued posts`}
-                onClick={toggleAllQueue}
-                onKeyDown={(event) => {
-                  if (event.key !== " " && event.key !== "Enter") return;
-                  event.preventDefault();
-                  toggleAllQueue();
-                }}
-              >{allQueueSelected && <ActionIcon name="confirm" size={12} />}</span>
-              <strong>
-                {pickedQueue.length
-                  ? `${pickedQueue.length} selected`
-                  : `Select from ${queue.length} post${queue.length === 1 ? "" : "s"}`}
-              </strong>
-              {pickedQueue.length > 0 && (
-                <>
-                  {/* Only offered when it would change something. A batch that
-                      approves what is already approved reports a number that
-                      did not happen. */}
-                  {pickedQueue.some((item) => item.state !== "approved") && (
-                    <Button variant="secondary" size="sm"
-                      busy={busy === "queue-batch-approve"}
-                      onClick={() => void batchQueue("approve")}>
-                      {t("autopilot.approve")}
-                    </Button>
-                  )}
-                  {pickedQueue.some((item) => item.state === "approved") && (
-                    <Button variant="quiet" size="sm"
-                      busy={busy === "queue-batch-hold"}
-                      onClick={() => void batchQueue("hold")}>
-                      Hold back
-                    </Button>
-                  )}
-                  <Button variant="danger" size="sm"
-                    busy={busy === "queue-batch-remove"}
-                    onClick={() => void batchQueue("remove")}>
-                    {t("common.delete")}
-                  </Button>
-                  <Button variant="quiet" size="sm" onClick={() => setQueuePicked(new Set())}>
-                    Clear selection
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
           <ul className={canEdit ? "autopilot-queue selectable" : "autopilot-queue"}>
             {queue.map((item) => (
               <li key={item.id} id={`queued-${item.id}`} className={item.state}>
@@ -3735,7 +4172,7 @@ export function AutopilotPanel({
                         ? "Held back: add it to the rotation and the plan appears here."
                         : !destinations.length
                           ? "Nowhere to post it yet. Add an account."
-                          : !slots.length
+                          : !hasPostingTimes
                             ? "No posting times yet. Add one and the plan appears here."
                             : preview
                               // Says which window is full, and that being
@@ -3780,7 +4217,7 @@ export function AutopilotPanel({
                           }));
                           if ((autopilot.queue_approved ?? 0) === 0) {
                             if (!destinations.length) jumpTo("revenue");
-                            else if (!slots.length) jumpTo("schedule");
+                            else if (!hasPostingTimes) jumpTo("schedule");
                             else jumpTo("revenue");
                           }
                           return t("autopilot.itemApproved");
@@ -4164,8 +4601,37 @@ export function AutopilotPanel({
                   {t(`autopilot.placement.${item.link_placement}`)}
                 </Badge>
                 <p className="autopilot-placement-reason">{item.link_reason}</p>
+                <p className="autopilot-schedule-reason">
+                  Posting schedule: <strong>{item.posting_schedule?.label
+                    ?? "Workspace posting times"}</strong>
+                  {item.posting_schedule?.source === "page" ? " · assigned to this page" : ""}
+                  {item.posting_schedule?.source === "campaign" ? " · campaign override" : ""}
+                </p>
                 {canEdit && (
                   <div className="autopilot-destination-controls">
+                  <label className="autopilot-placement-choice">
+                    Posting times
+                    <PostingPresetSelect
+                      value={item.posting_preset_id ?? ""}
+                      presets={postingPresets}
+                      timezone={scheduleTimezone}
+                      workspaceSlots={slots}
+                      pagePresetId={pageAssignments[item.page_key ?? ""]}
+                      onChange={(postingPresetId) => void run("schedule", async () => {
+                        await json(await apiFetch(
+                          `${base}/destinations/${item.id}/schedule`,
+                          {
+                            method: "POST",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({
+                              posting_preset_id: postingPresetId || null,
+                            }),
+                          },
+                        ));
+                        return `Posting schedule updated for ${item.label}.`;
+                      })}
+                    />
+                  </label>
                   <label className="autopilot-placement-choice">
                     Link placement
                     <Select
@@ -4251,13 +4717,16 @@ export function AutopilotPanel({
                         integration_id: account.id,
                         platform: account.platform,
                         label: account.label,
+                        page_key: account.page_key,
                       }),
                     }))));
                   setSelectedAccounts(new Set());
                   setAdding(false);
                   // The product decision is in this same area now, so the
                   // only move left is on to the schedule.
-                  if (slots.length) void loadRecommendations();
+                  if (slots.length || chosen.some((account) => (
+                    Boolean(pageAssignments[account.page_key ?? ""])
+                  ))) void loadRecommendations();
                   else jumpTo("schedule");
                   return `${chosen.length} ${chosen.length === 1 ? "account" : "accounts"} assigned.`;
                 })}>Assign selected accounts</Button>
@@ -4290,6 +4759,11 @@ export function AutopilotPanel({
                           {accountIdentity({ account: account.connection_account })
                             ? ` · ${accountIdentity({ account: account.connection_account })}`
                             : ""}</small>
+                        <small className="campaign-account-schedule">
+                          Posting schedule: {postingPresets.find((preset) => (
+                            preset.id === pageAssignments[account.page_key ?? ""]
+                          ))?.label ?? "Workspace posting times"}
+                        </small>
                       </span>
                     </label>
                   </li>
@@ -4702,7 +5176,7 @@ export function AutopilotPanel({
       )}
 
       <EffectEditor
-        open={effectOpen}
+        open={effectOpen || selectionAction === "effects"}
         workspaceId={workspaceId}
         targets={selectedLibrary.map((asset) => ({
           id: asset.id,
@@ -4713,9 +5187,47 @@ export function AutopilotPanel({
         assetIds={selectedLibrary.map((asset) => asset.id)}
         canEdit={canEdit}
         apiFetch={apiFetch}
-        onClose={() => setEffectOpen(false)}
+        onClose={() => { setEffectOpen(false); setSelectionAction(null); }}
         onRendered={succeed}
       />
+      {/* Keyed on the selection so reopening with different clips builds the
+          dialog again rather than reusing the last run's state. */}
+      {selectedLibrary.length > 0 && (
+        <BatchTranscribe
+          key={`picker-transcribe-${selectedLibrary.map((asset) => asset.id).join("-")}`}
+          open={selectionAction === "transcribe"}
+          workspaceId={workspaceId}
+          targets={selectionTargets}
+          canEdit={canEdit}
+          apiFetch={apiFetch}
+          onClose={() => setSelectionAction(null)}
+          onQueued={(text: string) => succeed(text)}
+        />
+      )}
+      {selectedLibrary.length > 0 && (
+        <CaptionEditor
+          key={`picker-captions-${selectedLibrary.map((asset) => asset.id).join("-")}`}
+          open={selectionAction === "captions"}
+          workspaceId={workspaceId}
+          targets={selectionTargets}
+          canEdit={canEdit}
+          apiFetch={apiFetch}
+          onClose={() => setSelectionAction(null)}
+          onQueued={(text: string) => succeed(text)}
+        />
+      )}
+      {selectedLibrary.length > 0 && (
+        <BulkVoiceEditor
+          key={`picker-voice-${selectedLibrary.map((asset) => asset.id).join("-")}`}
+          open={selectionAction === "voiceover"}
+          workspaceId={workspaceId}
+          targets={selectionTargets}
+          canEdit={canEdit}
+          apiFetch={apiFetch}
+          onClose={() => setSelectionAction(null)}
+          onQueued={(text: string) => succeed(text)}
+        />
+      )}
 
       {view === "posts" && <>
       {/* "Posting timeline", not "Upcoming posts": the committed section below
@@ -5105,7 +5617,7 @@ export function AutopilotPanel({
                 <input type="checkbox"
                   ref={(el) => { if (el) el.indeterminate = someDaySelected; }}
                   checked={allDaySelected}
-                  onChange={toggleAllDayPosts}
+                  onChange={() => toggleAllDayPosts(daySelectableIds)}
                   aria-label="Select all planned posts this day" />
                 Select all
               </label>

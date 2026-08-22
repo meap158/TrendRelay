@@ -109,3 +109,49 @@ def test_too_many_slots_is_refused(slots) -> None:
 
     with pytest.raises(ValueError, match="or fewer"):
         posting_slots.replace_slots("w1", entries, factory=slots)
+
+
+def test_custom_presets_are_saved_and_join_the_built_ins(slots) -> None:
+    with slots() as session, session.begin():
+        saved = posting_slots.create_preset(
+            "w1", "Launch rhythm", "Weekday mornings", [
+                {"weekday": 0, "time": "09:15"},
+                {"weekday": 2, "time": "09:15"},
+            ], session=session,
+        )
+        available = posting_slots.preset_payload("w1", session=session)
+
+    assert saved["kind"] == "custom"
+    assert saved["slots"] == [
+        {"weekday": 0, "time": "09:15"},
+        {"weekday": 2, "time": "09:15"},
+    ]
+    assert {item["id"] for item in available} >= {"commute", saved["id"]}
+
+
+def test_schedule_resolution_prefers_campaign_then_page_then_workspace(slots) -> None:
+    posting_slots.replace_slots("w1", [{"time": "11:00"}], factory=slots)
+    with slots() as session, session.begin():
+        custom = posting_slots.create_preset(
+            "w1", "Page prime time", "", [{"time": "19:30"}], session=session
+        )
+        posting_slots.assign_page(
+            "w1", "instagram:@brand", custom["id"], session=session
+        )
+        page_slots, page_rule = posting_slots.resolved_slots(
+            "w1", session=session, page_key="instagram:@brand"
+        )
+        campaign_slots, campaign_rule = posting_slots.resolved_slots(
+            "w1", session=session, page_key="instagram:@brand",
+            override_preset_id="commute",
+        )
+        fallback_slots, fallback_rule = posting_slots.resolved_slots(
+            "w1", session=session, page_key="youtube:@other"
+        )
+
+    assert [(item.hour, item.minute) for item in page_slots] == [(19, 30)]
+    assert page_rule["source"] == "page"
+    assert campaign_rule["source"] == "campaign"
+    assert [(item.hour, item.minute) for item in campaign_slots][0] == (7, 30)
+    assert fallback_rule["source"] == "workspace"
+    assert [(item.hour, item.minute) for item in fallback_slots] == [(11, 0)]

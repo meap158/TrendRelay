@@ -25,7 +25,14 @@ from trendrelay_api.campaign_scheduler import (
     record_scheduled,
 )
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
-from trendrelay_api.models import Base, Campaign, PublishingSlot, UserProfile, Workspace
+from trendrelay_api.models import (
+    Base,
+    Campaign,
+    PagePostingSchedule,
+    PublishingSlot,
+    UserProfile,
+    Workspace,
+)
 from trendrelay_api.opportunity_models import Product, ProductOffer
 from trendrelay_api.publication_models import PublicationExecution
 
@@ -209,6 +216,31 @@ def test_an_outlook_can_look_beyond_the_workers_safe_window(session) -> None:
     assert worker_posts == []
     assert len(outlook_posts) == 1
     assert outlook_posts[0].at.weekday() == 2
+
+
+def test_each_destination_is_only_considered_at_its_resolved_schedule(session) -> None:
+    """A page preset is a scheduler rule, not merely a label in Campaigns."""
+    destination(
+        session, "evening-page", "youtube", page_key="youtube:@evening"
+    )
+    destination(
+        session, "midday-override", "youtube", page_key="youtube:@midday",
+        posting_preset_id="spread",
+    )
+    session.add(PagePostingSchedule(
+        workspace_id="ws", page_key="youtube:@evening", preset_id="evening"
+    ))
+    session.commit()
+    queue_item(session, "q1")
+
+    posts, _ = plan_campaign(
+        session, autopilot(session), now=NOW + timedelta(minutes=30), link_for=None,
+        horizon=timedelta(hours=4),
+    )
+
+    assert len(posts) == 1
+    assert posts[0].destination_id == "midday-override"
+    assert posts[0].at.hour == 12
 
 
 def test_no_destinations_is_explained_rather_than_silent(session) -> None:

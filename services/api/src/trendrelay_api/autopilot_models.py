@@ -114,7 +114,7 @@ class CampaignAutopilot(Base):
     candidate_offer_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     #: Multiple products are useful on link-friendly networks; bio-only
     #: networks deliberately receive one primary product per post.
-    max_products_per_post: Mapped[int] = mapped_column(Integer, default=2)
+    max_products_per_post: Mapped[int] = mapped_column(Integer, default=1)
     #: Whether a disclosure is added at all.
     #:
     #: Off by default, by the operator's decision. The wording below is still
@@ -154,7 +154,7 @@ class CampaignAutopilot(Base):
     #: Rotation takes the best product that has not had its turn, which is the
     #: same ranking asked a fairer question.
     rotate_products: Mapped[bool] = mapped_column(Boolean, default=True)
-    daily_cap_per_account: Mapped[int] = mapped_column(Integer, default=2)
+    daily_cap_per_account: Mapped[int] = mapped_column(Integer, default=5)
     #: The whole campaign's ceiling for a rolling week, counted across every
     #: destination. None means the per-account caps are the only limit. This is
     #: the budget shape organic posting actually has - posts, not money.
@@ -211,6 +211,10 @@ class CampaignDestination(Base):
     provider: Mapped[str] = mapped_column(String(32), index=True)
     integration_id: Mapped[str] = mapped_column(String(200))
     platform: Mapped[str] = mapped_column(String(24), index=True)
+    #: The page identity survives changing which publishing engine carries it.
+    page_key: Mapped[str | None] = mapped_column(String(300), index=True)
+    #: Null inherits the page assignment, then the workspace schedule.
+    posting_preset_id: Mapped[str | None] = mapped_column(String(64))
     #: Where the post lands within the account, for the two networks that ask.
     #: Per destination rather than per package: the same copy goes to different
     #: subreddits on different accounts, and a board belongs to one profile.

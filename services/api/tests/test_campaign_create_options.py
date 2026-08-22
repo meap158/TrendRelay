@@ -152,8 +152,8 @@ def test_saying_nothing_still_gets_the_defaults() -> None:
     policy = policy_of(response.json()["campaign"]["id"])
     assert policy.authority == "run_by_exception"
     assert policy.priority == "balanced"
-    assert policy.max_products_per_post == 2
-    assert policy.daily_cap_per_account == 2
+    assert policy.max_products_per_post == 1
+    assert policy.daily_cap_per_account == 5
     assert policy.weekly_post_cap is None
 
 

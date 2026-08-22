@@ -45,6 +45,17 @@ def normalise_handle(value: str | None) -> str | None:
     return handle.casefold() or None if len(handle) > 1 else None
 
 
+def stable_page_key(
+    platform: str, handle: str | None, provider: str, integration_id: str
+) -> str:
+    """The same durable page identity used by the consolidated Publish picker."""
+    normalised = normalise_handle(handle)
+    return (
+        f"{platform}:@{normalised}" if normalised
+        else f"{platform}:{provider}:{integration_id}"
+    )
+
+
 @dataclass
 class ConsolidatedPage:
     """One social page, and every engine that can reach it."""
@@ -94,10 +105,7 @@ def consolidate(accounts: list[dict[str, Any]]) -> list[ConsolidatedPage]:
         }
         # A handle-less account is unmergeable and kept that way: its key
         # includes the engine and id, so it can never collide with another.
-        key = (
-            f"{platform}:@{handle}" if handle
-            else f"{platform}:{reach['provider']}:{reach['id']}"
-        )
+        key = stable_page_key(platform, handle, reach["provider"], reach["id"])
         found = pages.get(key)
         if found is None:
             pages[key] = ConsolidatedPage(
