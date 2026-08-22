@@ -1389,6 +1389,10 @@ html { scroll-behavior: smooth; }
 .campaign-layout { grid-template-columns: 224px minmax(0, 1fr); gap: 12px; }
 .campaign-sidebar { top: 64px; padding: 10px; box-shadow: var(--shadow-sm); }
 .campaign-sidebar .card-heading { padding: 2px 4px 8px; }
+.campaign-sidebar .card-heading { align-items: end; gap: 8px; }
+.campaign-scope-filter { min-width: 0; }
+.campaign-scope-filter select { width: 100%; max-width: 112px; min-height: 30px; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 4px 24px 4px 8px; color: var(--text); background: var(--panel); font: inherit; font-size: 11px; }
+.campaign-scope-filter select:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .campaign-sidebar > .ui-button { width: 100%; margin-top: 10px; }
 .campaign-list { gap: 3px; }
 .campaign-list > button { min-height: 52px; border-color: transparent; border-radius: var(--radius); padding: 8px 10px; }

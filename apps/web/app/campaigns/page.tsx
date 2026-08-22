@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AUTHORITIES } from "./authority-options";
 import { useAuth } from "../auth-provider";
@@ -173,6 +173,7 @@ const POST_LANGUAGES = LOCALES.map((item) => ({ value: item.code, label: item.la
 
 /** What a post attaches when it does not pin its own product. */
 type OfferMode = "smart" | "manual" | "none";
+type CampaignScope = "current" | "archived" | "all";
 type CampaignsSnapshot = { campaigns: Campaign[]; plans: PublicationPlan[] };
 
 const OFFER_MODES: readonly (readonly [OfferMode, string, string])[] = [
@@ -242,6 +243,14 @@ export default function CampaignsPage() {
   // This tells "still loading" apart from "loaded, and there are none".
   const [loadedCampaignWorkspaceId, setLoadedCampaignWorkspaceId] = useState("");
   const [campaignId, setCampaignId] = useState("");
+  // Archived work stays out of the operating list until somebody explicitly
+  // asks for it. "Current" includes drafts and active campaigns: both still
+  // need attention, while an archive is historical by definition.
+  const [campaignScope, setCampaignScope] = useState<CampaignScope>("current");
+  // Refresh is a network concern and must not rerun when this local filter
+  // changes. The ref lets a completed refresh respect the latest view without
+  // turning the view switch into another request.
+  const campaignScopeRef = useRef<CampaignScope>("current");
   const requestedCampaign = useRef("");
   const [plans, setPlans] = useState<PublicationPlan[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -279,6 +288,19 @@ export default function CampaignsPage() {
 
   const selectedWorkspace = workspaces.find((item) => item.id === workspaceId);
   const selectedCampaign = campaigns.find((item) => item.id === campaignId);
+  const currentCampaigns = useMemo(
+    () => campaigns.filter((item) => item.status !== "archived"),
+    [campaigns],
+  );
+  const archivedCampaigns = useMemo(
+    () => campaigns.filter((item) => item.status === "archived"),
+    [campaigns],
+  );
+  const visibleCampaigns = campaignScope === "all"
+    ? campaigns
+    : campaignScope === "archived"
+      ? archivedCampaigns
+      : currentCampaigns;
   const canCreateCampaign = ["owner", "editor"].includes(selectedWorkspace?.role ?? "");
   const canCreatePlan = ["owner", "editor", "approver"].includes(selectedWorkspace?.role ?? "");
   const canApprove = ["owner", "approver"].includes(selectedWorkspace?.role ?? "");
@@ -305,13 +327,25 @@ export default function CampaignsPage() {
     );
     setCampaigns(snapshot.campaigns);
     setPlans(snapshot.plans);
-    setCampaignId((current) =>
-      snapshot.campaigns.some((item) => item.id === requestedCampaign.current)
-        ? requestedCampaign.current
-        : snapshot.campaigns.some((item) => item.id === current)
-        ? current
-        : (snapshot.campaigns[0]?.id ?? ""),
+    const requested = snapshot.campaigns.find(
+      (item) => item.id === requestedCampaign.current,
     );
+    // A URL target chooses the initial view; it is not a permanent filter lock.
+    // Once consumed, the operator can switch back to Current normally.
+    if (requested) requestedCampaign.current = "";
+    const effectiveScope = requested?.status === "archived"
+      ? "archived"
+      : campaignScopeRef.current;
+    if (effectiveScope !== campaignScopeRef.current) {
+      campaignScopeRef.current = effectiveScope;
+      setCampaignScope(effectiveScope);
+    }
+    const visible = snapshot.campaigns.filter((item) =>
+      effectiveScope === "all"
+      || (effectiveScope === "archived") === (item.status === "archived"),
+    );
+    setCampaignId((current) => requested?.id
+      ?? (visible.some((item) => item.id === current) ? current : visible[0]?.id ?? ""));
   }, [apiFetch]);
 
   useEffect(() => {
@@ -330,8 +364,25 @@ export default function CampaignsPage() {
         if (cancelled) return;
         setCampaigns(cached.campaigns);
         setPlans(cached.plans);
-        setCampaignId((current) => cached.campaigns.some((item) => item.id === current)
-          ? current : (cached.campaigns[0]?.id ?? ""));
+        const requested = cached.campaigns.find(
+          (item) => item.id === requestedCampaign.current,
+        );
+        if (requested) requestedCampaign.current = "";
+        const effectiveScope = requested?.status === "archived"
+          ? "archived"
+          : campaignScopeRef.current;
+        if (effectiveScope !== campaignScopeRef.current) {
+          campaignScopeRef.current = effectiveScope;
+          setCampaignScope(effectiveScope);
+        }
+        const visible = cached.campaigns.filter((item) =>
+          effectiveScope === "all"
+          || (effectiveScope === "archived") === (item.status === "archived"),
+        );
+        setCampaignId((current) => requested?.id
+          ?? (visible.some((item) => item.id === current)
+            ? current
+            : visible[0]?.id ?? ""));
         setLoadedCampaignWorkspaceId(workspaceId);
       });
     }
@@ -567,6 +618,17 @@ export default function CampaignsPage() {
     }
   }
 
+  function changeCampaignScope(next: CampaignScope) {
+    campaignScopeRef.current = next;
+    setCampaignScope(next);
+    const visible = campaigns.filter((item) =>
+      next === "all" || (next === "archived") === (item.status === "archived"),
+    );
+    if (!visible.some((item) => item.id === campaignId)) {
+      setCampaignId(visible[0]?.id ?? "");
+    }
+  }
+
   // The same two gates every other tab has, and this one had until a refactor
   // took them out with the hand-planned posts. Without them the page drew its
   // whole chrome - an empty workspace picker, an empty campaign list, a panel
@@ -599,12 +661,29 @@ export default function CampaignsPage() {
       <section className="campaign-layout">
         <aside className="campaign-sidebar">
           <div className="card-heading">
-            <div><p className="section-kicker">{t("campaigns.listHeading")}</p><h2>{campaignsReady ? campaigns.length : "—"} total</h2></div>
+            <div>
+              <p className="section-kicker">{t("campaigns.listHeading")}</p>
+              <h2>{campaignsReady ? currentCampaigns.length : "—"} current</h2>
+            </div>
+            {campaignsReady && (
+              <label className="campaign-scope-filter">
+                <span className="sr-only">Campaign visibility</span>
+                <select
+                  aria-label="Campaign visibility"
+                  value={campaignScope}
+                  onChange={(event) => changeCampaignScope(event.target.value as CampaignScope)}
+                >
+                  <option value="current">Current ({currentCampaigns.length})</option>
+                  <option value="archived">Archived ({archivedCampaigns.length})</option>
+                  <option value="all">All ({campaigns.length})</option>
+                </select>
+              </label>
+            )}
           </div>
           <div className="campaign-list">
             {!campaignsReady ? (
               <WaitingBlock className="waiting-block-compact" message={t("common.loading")} />
-            ) : campaigns.map((campaign) => (
+            ) : visibleCampaigns.map((campaign) => (
               <button
                 className={campaign.id === campaignId ? "selected" : ""}
                 key={campaign.id}
@@ -622,7 +701,13 @@ export default function CampaignsPage() {
                 } · {t("attribution.productCount", { count: campaign.tagged_products ?? 0 })}</span>
               </button>
             ))}
-            {campaignsReady && !campaigns.length && <p>{t("campaigns.empty")}</p>}
+            {campaignsReady && !visibleCampaigns.length && (
+              <p>{campaignScope === "archived"
+                ? "No archived campaigns."
+                : campaignScope === "current" && archivedCampaigns.length
+                  ? "No current campaigns. Archived campaigns are available above."
+                  : t("campaigns.empty")}</p>
+            )}
           </div>
           {campaignsReady && canCreateCampaign && (
             <Button variant="primary" onClick={() => setNewCampaignOpen(true)}>
@@ -699,8 +784,19 @@ export default function CampaignsPage() {
             </>
           ) : (
             <section className="empty-console">
-              <h2>{t("campaigns.createToStart")}</h2>
-              <p>{t("campaigns.whatItConnects")}</p>
+              <h2>{campaignScope === "archived"
+                ? "No archived campaigns"
+                : campaignScope === "current" && archivedCampaigns.length
+                  ? "No current campaigns"
+                  : t("campaigns.createToStart")}</h2>
+              <p>{campaignScope === "current" && archivedCampaigns.length
+                ? "Archived campaigns stay hidden from daily operations until you choose to review or restore them."
+                : t("campaigns.whatItConnects")}</p>
+              {campaignScope === "current" && archivedCampaigns.length > 0 && (
+                <Button variant="secondary" onClick={() => changeCampaignScope("archived")}>
+                  <ActionIcon name="archive" />View archived ({archivedCampaigns.length})
+                </Button>
+              )}
             </section>
           )}
         </div>
