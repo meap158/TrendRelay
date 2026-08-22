@@ -47,6 +47,89 @@ def _requirement(identifier: str, label: str, status: str, detail: str) -> dict[
     return {"id": identifier, "label": label, "status": status, "detail": detail}
 
 
+MEDIA_AI_TOOLS = {
+    "faster-whisper": ("speech", "speech"),
+    "rapidocr": ("ocr", "ocr"),
+    "argos-translate": ("translate", "translation"),
+}
+
+
+def _media_ai_report(tool_id: str, prerequisites: list[dict[str, str]]) -> dict[str, Any]:
+    from trendrelay_api.media_ai import latest_setup_jobs, provider_status
+
+    provider, status_key = MEDIA_AI_TOOLS[tool_id]
+    status = provider_status()[status_key]
+    running = latest_setup_jobs().get(provider)
+    in_flight = bool(running and running["status"] in {"queued", "running"})
+
+    requirements = [
+        _requirement(
+            "runtime",
+            "Runtime downloaded",
+            "ready" if status["runtime_ready"] else "setup-required",
+            f"The pinned {status['provider']} wheels are in the isolated runtime."
+            if status["runtime_ready"]
+            else "Downloaded once, into TrendRelay's own folder rather than the system Python.",
+        ),
+    ]
+    if provider == "speech":
+        requirements.append(
+            _requirement(
+                "model",
+                f"Model “{status['model']}” cached",
+                "ready" if status["model_cached"] else "setup-required",
+                "Transcription runs entirely offline from here."
+                if status["model_cached"]
+                else "Fetched once; after that nothing leaves the machine during analysis.",
+            )
+        )
+    if provider == "translate":
+        pairs = status["pairs"]
+        requirements.append(
+            _requirement(
+                "language-pairs",
+                "Language packages",
+                "ready" if pairs else "setup-required",
+                f"{len(pairs)} directions installed."
+                if pairs
+                else "Each direction is a separate download; the app's own languages are fetched.",
+            )
+        )
+    requirements.append(
+        _requirement(
+            "activation",
+            "Switched on",
+            "ready" if status["source_active"] else "setup-required",
+            "TrendRelay may route work to this provider."
+            if status["source_active"]
+            else "Turned on for you when the download finishes; reversible from this card.",
+        )
+    )
+
+    checkout = [prerequisites[0]] if tool_id == "faster-whisper" else []
+    return {
+        "summary": (
+            f"{status['provider']} runs locally. Nothing is uploaded during analysis, "
+            "and everything it produces is a draft for review."
+        ),
+        "requirements": [*checkout, *requirements],
+        "actions": [
+            {
+                "id": f"prepare-{provider}",
+                "label": (
+                    "Downloading…" if in_flight
+                    else "Download again" if status["prepared"]
+                    else "Download and switch on"
+                ),
+                "kind": "prepare-media-ai",
+                "provider": provider,
+                "requires_confirmation": True,
+            }
+        ],
+        "media_ai": {"provider": provider, "status": status, "job": running},
+    }
+
+
 def setup_report(tool_id: str) -> dict[str, Any]:
     tools = {tool["id"]: tool for tool in list_tools()}
     if tool_id not in tools:
@@ -79,7 +162,60 @@ def setup_report(tool_id: str) -> dict[str, Any]:
         "credential_values_exposed": False,
     }
 
-    if tool_id == "douyin-downloader":
+    if tool_id in MEDIA_AI_TOOLS:
+        return _media_ai_report(tool_id, prerequisites)
+    elif tool_id == "insightface":
+        from trendrelay_api.integrations.face_identity import runtime_status as identity_status
+
+        status = identity_status()
+        report.update(
+            summary=(
+                "Powers selective face blurring (creator vs passers-by). "
+                "InsightFace code is MIT; pretrained models require licence acknowledgement."
+            ),
+            requirements=[
+                _requirement(
+                    "runtime",
+                    "InsightFace runtime",
+                    "ready" if status["runtime_installed"] else "setup-required",
+                    f"Hardware acceleration: {status['provider']} ({'GPU DirectML/CUDA' if status['gpu_accelerated'] else 'CPU'})."
+                    if status["runtime_installed"]
+                    else status["install_hint"],
+                ),
+                _requirement(
+                    "licence",
+                    "Research licence terms",
+                    "ready" if status["licence_acknowledged"] else "setup-required",
+                    "Licence acknowledged for this workspace."
+                    if status["licence_acknowledged"]
+                    else "Confirm you hold the right to use InsightFace models.",
+                ),
+            ],
+            actions=[
+                {
+                    "id": "open-library",
+                    "label": "Open Library",
+                    "kind": "navigate",
+                    "href": "/library",
+                }
+            ],
+        )
+    elif tool_id == "face-anon-simple":
+        report.update(
+            summary=(
+                "Replaces a face with a generated one that preserves expression, pose and gaze. "
+                "Runs in an isolated virtualenv under AGPL-3.0."
+            ),
+            actions=[
+                {
+                    "id": "open-library",
+                    "label": "Open Library",
+                    "kind": "navigate",
+                    "href": "/library",
+                }
+            ],
+        )
+    elif tool_id == "douyin-downloader":
         status = douyin_status()
         cookies_ready = bool(status["cookies_ready"])
         report.update(

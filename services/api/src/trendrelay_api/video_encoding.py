@@ -130,3 +130,36 @@ def encode_h264(
             return last, profile
     assert last is not None
     return last, profiles[-1]
+
+
+def open_h264_stream_writer(
+    ffmpeg: Path,
+    destination: Path,
+    width: int,
+    height: int,
+    fps: float,
+    *,
+    quality: int = 20,
+    preset: str = "p4",
+) -> subprocess.Popen[bytes]:
+    """Stream raw BGR24 frames directly into FFmpeg H.264 hardware encoder."""
+    selected = preferred_encoder(str(ffmpeg.resolve()))
+    destination.unlink(missing_ok=True)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    args = [
+        str(ffmpeg), "-y", "-hide_banner", "-loglevel", "error",
+        "-f", "rawvideo", "-vcodec", "rawvideo",
+        "-s", f"{width}x{height}", "-pix_fmt", "bgr24",
+        "-r", str(fps), "-i", "-",
+        *selected.arguments(quality=quality, preset="veryfast"),
+        "-pix_fmt", "yuv420p",
+        str(destination),
+    ]
+    return subprocess.Popen(
+        args,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+    )
+

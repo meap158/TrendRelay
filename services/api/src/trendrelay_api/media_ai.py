@@ -61,6 +61,79 @@ def _runtime_path() -> None:
     value = str(RUNTIME_ROOT)
     if value not in sys.path:
         sys.path.insert(0, value)
+    _ensure_dll_directories()
+
+
+_DLL_DIRS_REGISTERED: set[str] = set()
+
+
+def _ensure_dll_directories() -> None:
+    """Ensure Windows dynamic loader can find CUDA / CTranslate2 DLLs."""
+    if os.name != "nt":
+        return
+    search_roots = [RUNTIME_ROOT]
+    try:
+        import site
+
+        for p in site.getsitepackages():
+            path_obj = Path(p)
+            if path_obj.is_dir() and path_obj not in search_roots:
+                search_roots.append(path_obj)
+    except Exception:
+        pass
+
+    for root in search_roots:
+        nvidia_dir = root / "nvidia"
+        if nvidia_dir.is_dir():
+            for bin_dir in nvidia_dir.glob("*/bin"):
+                bin_str = str(bin_dir.resolve())
+                if bin_dir.is_dir() and bin_str not in _DLL_DIRS_REGISTERED:
+                    try:
+                        os.add_dll_directory(bin_str)
+                        _DLL_DIRS_REGISTERED.add(bin_str)
+                        if bin_str not in os.environ.get("PATH", ""):
+                            os.environ["PATH"] = bin_str + os.pathsep + os.environ.get("PATH", "")
+                    except Exception:
+                        pass
+        torch_lib = root / "torch" / "lib"
+        torch_str = str(torch_lib.resolve())
+        if torch_lib.is_dir() and torch_str not in _DLL_DIRS_REGISTERED:
+            try:
+                os.add_dll_directory(torch_str)
+                _DLL_DIRS_REGISTERED.add(torch_str)
+                if torch_str not in os.environ.get("PATH", ""):
+                    os.environ["PATH"] = torch_str + os.pathsep + os.environ.get("PATH", "")
+            except Exception:
+                pass
+
+    cuda_path = os.environ.get("CUDA_PATH")
+    if cuda_path:
+        cuda_bin = Path(cuda_path) / "bin"
+        cuda_str = str(cuda_bin.resolve())
+        if cuda_bin.is_dir() and cuda_str not in _DLL_DIRS_REGISTERED:
+            try:
+                os.add_dll_directory(cuda_str)
+                _DLL_DIRS_REGISTERED.add(cuda_str)
+                if cuda_str not in os.environ.get("PATH", ""):
+                    os.environ["PATH"] = cuda_str + os.pathsep + os.environ.get("PATH", "")
+            except Exception:
+                pass
+
+
+def _cuda_cublas_available() -> bool:
+    """Verify that NVIDIA cuBLAS libraries can actually be loaded on Windows."""
+    _ensure_dll_directories()
+    if os.name != "nt":
+        return True
+    import ctypes
+
+    for dll_name in ("cublas64_12.dll", "cublas64_11.dll"):
+        try:
+            ctypes.CDLL(dll_name)
+            return True
+        except OSError:
+            continue
+    return False
 
 
 def _module_present(name: str) -> bool:
@@ -883,6 +956,7 @@ _SPEECH_LOCK = Lock()
 
 def _resolved_speech_runtime(settings: Any, runtime: Any = None) -> tuple[str, str]:
     """Resolve `auto` against what this CTranslate2 build can really execute."""
+    explicit_runtime = runtime is not None
     if runtime is None:
         _runtime_path()
         import ctranslate2 as runtime
@@ -891,7 +965,17 @@ def _resolved_speech_runtime(settings: Any, runtime: Any = None) -> tuple[str, s
     device = requested_device
     if requested_device == "auto":
         try:
-            device = "cuda" if runtime.get_cuda_device_count() > 0 else "cpu"
+            cuda_ready = bool(
+                runtime.get_cuda_device_count() > 0
+                and (explicit_runtime or _cuda_cublas_available())
+            )
+            device = "cuda" if cuda_ready else "cpu"
+        except Exception:
+            device = "cpu"
+    elif requested_device == "cuda":
+        try:
+            if not explicit_runtime and not _cuda_cublas_available():
+                device = "cpu"
         except Exception:
             device = "cpu"
 
@@ -922,7 +1006,7 @@ def _speech_cpu_threads(settings: Any, device: str) -> int:
     return max(1, min(8, (os.cpu_count() or 4) // 2))
 
 
-def _speech_model(settings: Any) -> Any:
+def _speech_model(settings: Any, force_device: str | None = None) -> Any:
     """The transcription model, loaded once and kept."""
     global _SPEECH_MODEL
     _runtime_path()
@@ -935,18 +1019,37 @@ def _speech_model(settings: Any) -> Any:
             "Open the transcription switch in the Library, or the faster-whisper "
             "card in Tools, and choose Download and switch on."
         )
-    device, compute_type = _resolved_speech_runtime(settings)
+    if force_device:
+        device = force_device
+        compute_type = "int8" if device == "cpu" else "float16"
+    else:
+        device, compute_type = _resolved_speech_runtime(settings)
     wanted = (settings.media_ai_speech_model, device, compute_type)
     if _SPEECH_MODEL is not None and _SPEECH_MODEL[0] == wanted:
         return _SPEECH_MODEL[1]
-    model = WhisperModel(
-        wanted[0],
-        device=wanted[1],
-        compute_type=wanted[2],
-        cpu_threads=_speech_cpu_threads(settings, device),
-        download_root=str(model_root),
-        local_files_only=True,
-    )
+    try:
+        model = WhisperModel(
+            wanted[0],
+            device=wanted[1],
+            compute_type=wanted[2],
+            cpu_threads=_speech_cpu_threads(settings, wanted[1]),
+            download_root=str(model_root),
+            local_files_only=True,
+        )
+    except (RuntimeError, OSError):
+        if wanted[1] == "cuda":
+            # Fall back to CPU
+            wanted = (settings.media_ai_speech_model, "cpu", "int8")
+            model = WhisperModel(
+                wanted[0],
+                device="cpu",
+                compute_type="int8",
+                cpu_threads=_speech_cpu_threads(settings, "cpu"),
+                download_root=str(model_root),
+                local_files_only=True,
+            )
+        else:
+            raise
     _SPEECH_MODEL = (wanted, model)
     return model
 
@@ -964,35 +1067,31 @@ def _speech_pipeline(model: Any, batch_size: int) -> Any:
     return pipeline
 
 
-def _speech_draft(path: Path, language: str | None) -> dict[str, Any]:
-    settings = get_settings()
-    # The whole pass stays inside the lock. `transcribe` hands back a lazy
-    # generator - the inference happens while it is iterated, not when it is
-    # called - so consuming it outside would run the model unguarded and make
-    # the lock decorative.
-    with _SPEECH_LOCK:
-        model = _speech_model(settings)
-        batch_size = int(getattr(settings, "media_ai_speech_batch_size", 8) or 8)
-        transcriber = _speech_pipeline(model, batch_size) if batch_size > 1 else model
-        options: dict[str, Any] = {}
-        if transcriber is not model:
-            options["batch_size"] = batch_size
-        segments, info = transcriber.transcribe(
-            str(path),
-            language=None if not language or language == "auto" else language,
-            beam_size=5,
-            vad_filter=True,
-            word_timestamps=True,
-            # Whisper conditions each window on the text it just produced,
-            # which is what makes it repeat a phrase for minutes once it starts:
-            # the repetition becomes its own context and feeds itself. The
-            # published fix is to stop carrying that context across windows. It
-            # costs a little coherence across a sentence boundary and removes a
-            # failure that ruins a whole transcript.
-            condition_on_previous_text=False,
-            **options,
-        )
-        records, text_parts = _speech_records(segments)
+def _run_transcribe_pass(
+    path: Path, language: str | None, settings: Any, force_device: str | None = None
+) -> dict[str, Any]:
+    model = _speech_model(settings, force_device=force_device)
+    batch_size = int(getattr(settings, "media_ai_speech_batch_size", 8) or 8)
+    transcriber = _speech_pipeline(model, batch_size) if batch_size > 1 else model
+    options: dict[str, Any] = {}
+    if transcriber is not model:
+        options["batch_size"] = batch_size
+    segments, info = transcriber.transcribe(
+        str(path),
+        language=None if not language or language == "auto" else language,
+        beam_size=5,
+        vad_filter=True,
+        word_timestamps=True,
+        # Whisper conditions each window on the text it just produced,
+        # which is what makes it repeat a phrase for minutes once it starts:
+        # the repetition becomes its own context and feeds itself. The
+        # published fix is to stop carrying that context across windows. It
+        # costs a little coherence across a sentence boundary and removes a
+        # failure that ruins a whole transcript.
+        condition_on_previous_text=False,
+        **options,
+    )
+    records, text_parts = _speech_records(segments)
     text = " ".join(text_parts).strip()
     if not text:
         raise RuntimeError("The speech provider found no spoken text.")
@@ -1002,6 +1101,26 @@ def _speech_draft(path: Path, language: str | None) -> dict[str, Any]:
         "segments": records,
         "provider": f"faster-whisper@{SPEECH_VERSION}:{settings.media_ai_speech_model}",
     }
+
+
+def _speech_draft(path: Path, language: str | None) -> dict[str, Any]:
+    settings = get_settings()
+    # The whole pass stays inside the lock. `transcribe` hands back a lazy
+    # generator - the inference happens while it is iterated, not when it is
+    # called - so consuming it outside would run the model unguarded and make
+    # the lock decorative.
+    with _SPEECH_LOCK:
+        try:
+            return _run_transcribe_pass(path, language, settings)
+        except (RuntimeError, OSError) as error:
+            err_msg = str(error).lower()
+            if "cublas" in err_msg or "cuda" in err_msg or "cannot be loaded" in err_msg:
+                # Catch CUDA dynamic library failure on first execution and safely retry on CPU
+                global _SPEECH_MODEL, _SPEECH_PIPELINE
+                _SPEECH_MODEL = None
+                _SPEECH_PIPELINE = None
+                return _run_transcribe_pass(path, language, settings, force_device="cpu")
+            raise
 
 
 def _speech_records(segments: Any) -> tuple[list[dict[str, Any]], list[str]]:

@@ -163,6 +163,8 @@ const guidedSetup = new Set([
   "faster-whisper",
   "rapidocr",
   "argos-translate",
+  "insightface",
+  "face-anon-simple",
   // The MCP server: Setup starts and stops it and shows where an assistant
   // connects and what it may do.
   "mcp-server",

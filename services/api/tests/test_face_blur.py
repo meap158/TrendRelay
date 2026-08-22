@@ -85,7 +85,7 @@ def test_coverage_is_reported_and_a_weak_result_is_named() -> None:
 
 def test_a_detector_is_usable_without_downloading_a_model() -> None:
     """YuNet needs an ONNX file OpenCV does not ship, so a bundled cascade backs it."""
-    import cv2
+    cv2 = face_blur._load_opencv()
 
     assert hasattr(cv2, "FaceDetectorYN")
     cascade = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
@@ -392,6 +392,7 @@ def blur_jobs(monkeypatch, tmp_path):
     # Registering a version touches media_assets; importing the models is what
     # puts their tables into the shared metadata before create_all runs.
     import trendrelay_api.media_models  # noqa: F401
+    import trendrelay_api.opportunity_models  # noqa: F401
     from trendrelay_api.models import Base
 
     engine = create_engine(

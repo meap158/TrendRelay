@@ -251,6 +251,12 @@ INSTALL_HINT = (
 def _load_opencv() -> Any:
     """Import OpenCV on demand, failing with something an operator can act on."""
     try:
+        from trendrelay_api.media_ai import _runtime_path
+
+        _runtime_path()
+    except Exception:
+        pass
+    try:
         import cv2
     except ImportError as error:  # pragma: no cover - exercised via monkeypatch
         raise FaceBlurUnavailable(
@@ -262,6 +268,11 @@ def _load_opencv() -> Any:
             "Face blurring needs 4.10 or newer, because the bundled detector is "
             f"what avoids a separate model download. {INSTALL_HINT}"
         )
+    try:
+        if cv2.ocl.haveOpenCL():
+            cv2.ocl.setUseOpenCL(True)
+    except Exception:
+        pass
     return cv2
 
 
@@ -388,6 +399,17 @@ def _detector(cv2: Any, frame_size: tuple[int, int], settings: BlurSettings) -> 
 
 def detect_boxes(detector: Any, frame: Any) -> list[Box]:
     """Faces in one frame, as integer boxes clamped to non-negative origins."""
+    if isinstance(detector, _CascadeDetector):
+        _, faces = detector.detect(frame)
+        if faces is None:
+            return []
+        return [
+            (max(0, int(round(x))), max(0, int(round(y))), int(round(w)), int(round(h)))
+            for x, y, w, h in faces[:, :4]
+        ]
+    if hasattr(detector, "setInputSize"):
+        height, width = frame.shape[:2]
+        detector.setInputSize((width, height))
     _, faces = detector.detect(frame)
     if faces is None:
         return []
@@ -412,6 +434,12 @@ def detect_landmarked(detector: Any, frame: Any) -> list[tuple[Box, list[tuple[f
     YuNet has been returning them all along at no extra cost, so reading them is
     free where running a second model would not be.
     """
+    if isinstance(detector, _CascadeDetector):
+        boxes = detect_boxes(detector, frame)
+        return [(box, []) for box in boxes]
+    if hasattr(detector, "setInputSize"):
+        height, width = frame.shape[:2]
+        detector.setInputSize((width, height))
     _, faces = detector.detect(frame)
     if faces is None:
         return []
@@ -571,10 +599,20 @@ def render_blurred(
     out_size = (
         (int(width * out_scale), int(height * out_scale)) if out_scale < 1.0 else (width, height)
     )
+    from trendrelay_api.video_encoding import open_h264_stream_writer
+
+    stream_proc = None
+    writer = None
+    if FFMPEG.is_file():
+        try:
+            stream_proc = open_h264_stream_writer(FFMPEG, silent, out_size[0], out_size[1], fps)
+        except Exception:
+            stream_proc = None
+    if stream_proc is None:
+        writer = cv2.VideoWriter(
+            str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, out_size
+        )
     capture = _open()
-    writer = cv2.VideoWriter(
-        str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, out_size
-    )
     covering = (progress or ProgressReporter(None)).stage(
         "Covering faces", DETECT_SHARE, 1.0 - DETECT_SHARE
     )
@@ -590,9 +628,17 @@ def render_blurred(
                     apply_blur(cv2, frame, box, settings)
             if out_scale < 1.0:
                 frame = cv2.resize(frame, out_size, interpolation=cv2.INTER_AREA)
-            writer.write(frame)
+            if stream_proc and stream_proc.stdin:
+                stream_proc.stdin.write(frame.tobytes())
+            elif writer:
+                writer.write(frame)
     finally:
-        writer.release()
+        if stream_proc:
+            if stream_proc.stdin:
+                stream_proc.stdin.close()
+            stream_proc.wait(timeout=30)
+        if writer:
+            writer.release()
         capture.release()
 
     if _remux_audio(silent, source, destination):

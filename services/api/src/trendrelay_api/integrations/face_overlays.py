@@ -726,16 +726,23 @@ def render_overlaid(
     )
     sprites = _SpriteCache(cv2, np, overlay)
 
+    from trendrelay_api.integrations.face_blur import FFMPEG
+    from trendrelay_api.video_encoding import open_h264_stream_writer
+
+    stream_proc = None
+    writer = None
+    if FFMPEG.is_file():
+        try:
+            stream_proc = open_h264_stream_writer(FFMPEG, silent, out_size[0], out_size[1], fps)
+        except Exception:
+            stream_proc = None
+    if stream_proc is None:
+        writer = cv2.VideoWriter(str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, out_size)
+        if not writer.isOpened():
+            raise OverlayUnavailable(
+                f"No encoder was available to write {out_size[0]}x{out_size[1]} video."
+            )
     capture = _open()
-    writer = cv2.VideoWriter(str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, out_size)
-    if not writer.isOpened():
-        capture.release()
-        # OpenCV reports this by writing nothing at all. Unchecked, the render
-        # "succeeds" and produces an empty file that the library then attaches
-        # to the asset as a finished version.
-        raise OverlayUnavailable(
-            f"No encoder was available to write {out_size[0]}x{out_size[1]} video."
-        )
     placed = 0
     covered_frames = 0
     drawing = (progress or ProgressReporter(None)).stage(
@@ -767,9 +774,17 @@ def render_overlaid(
             # Scaled after the object is burned in, so a proxy shows the master.
             if out_scale < 1.0:
                 frame = cv2.resize(frame, out_size, interpolation=cv2.INTER_AREA)
-            writer.write(frame)
+            if stream_proc and stream_proc.stdin:
+                stream_proc.stdin.write(frame.tobytes())
+            elif writer:
+                writer.write(frame)
     finally:
-        writer.release()
+        if stream_proc:
+            if stream_proc.stdin:
+                stream_proc.stdin.close()
+            stream_proc.wait(timeout=30)
+        if writer:
+            writer.release()
         capture.release()
 
     if _remux_audio(silent, source, destination):
