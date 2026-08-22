@@ -229,22 +229,27 @@ async def save_tool_settings(
 ) -> dict[str, object]:
     """Write a tool's own settings to the local .env.
 
-    Only the assistant tunnel has any, and only the keys it declares: without
-    that restriction this is "write any environment variable", behind a button
-    meant for a tunnel id.
+    Only tools that declare settings, and only the keys each one declares:
+    without that restriction this is "write any environment variable" behind a
+    button meant for an API key.
+
+    The list used to be one tool named in an `if`, which is why the second tool
+    to need a key was told to edit `.env` by hand instead.
     """
     require_local_mutation(request)
-    if tool_id != "mcp-server":
+    from trendrelay_api.tool_settings import SettingsError, provider_for
+
+    provider = provider_for(tool_id)
+    if provider is None:
         raise HTTPException(status_code=404, detail="This tool has no editable settings.")
     if not body.confirm_external_action:
         raise HTTPException(status_code=400, detail="Saving settings requires confirmation.")
 
     from trendrelay_api.env_store import EnvWriteError
-    from trendrelay_api.integrations.mcp import tunnel
 
     try:
-        written = await asyncio.to_thread(tunnel.save_settings, body.values)
-    except tunnel.TunnelSettingsError as error:
+        written = await asyncio.to_thread(provider.save, body.values)
+    except SettingsError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except EnvWriteError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error

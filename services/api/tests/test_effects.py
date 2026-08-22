@@ -198,8 +198,20 @@ def test_every_effect_describes_itself_completely() -> None:
 
 
 def test_a_described_default_is_a_value_the_effect_would_accept() -> None:
+    """Whatever the form opens on must survive being submitted unchanged.
+
+    With one deliberate exception: a required choice opens on a prompt rather
+    than an answer, because there is nothing sensible to answer with - the
+    portraits a face swap uses are the operator's own. Those are refused, by
+    name, at submit; the exemption is narrow and stated so the invariant still
+    holds for every value that is a value.
+    """
     for effect in effects.REGISTRY.values():
         defaults = {param.id: param.default for param in effect.params}
+        if any(param.required for param in effect.params):
+            with pytest.raises(EffectError):
+                coerce_params(effect, defaults)
+            continue
         assert coerce_params(effect, defaults) == defaults
 
 
@@ -355,3 +367,43 @@ def test_a_region_nudged_past_the_edge_is_clamped_not_refused() -> None:
 def test_the_new_tools_leave_time_alone() -> None:
     steps = recipe(("zoom", {}), ("fit", {}), ("region_blur", {}))
     assert duration_after(steps, 12.0) == 12.0
+
+
+def test_a_choice_with_no_answer_is_refused_where_it_can_still_be_made() -> None:
+    """The trap at the end of a face swap.
+
+    Some choices have no sensible default - the portraits are the operator's
+    own, and picking one for them is the one thing the effect must not do - so
+    they open on a prompt. The prompt validated like any other option: a job
+    was queued, a model was loaded, and a minute later the render failed with
+    `No portrait named ''`, which reads as a bug rather than as "you have not
+    chosen yet".
+    """
+    from trendrelay_api.integrations import effect_render  # noqa: F401  registers it
+    from trendrelay_api.integrations.effects import REGISTRY
+
+    swap = REGISTRY["face_swap"]
+
+    for values in ({}, {"source_face": ""}, {"source_face": "   "}):
+        with pytest.raises(EffectError) as refused:
+            coerce_params(swap, values)
+        assert "face to use" in str(refused.value).lower()
+        # Names the effect, because a recipe refuses one step at a time.
+        assert swap.label in str(refused.value)
+
+
+def test_the_form_is_told_which_choices_must_be_answered() -> None:
+    """So it can say so before somebody presses Apply and waits."""
+    from trendrelay_api.integrations import effect_render  # noqa: F401
+
+    described = {item["id"]: item for item in describe()}
+    portrait = next(
+        param for param in described["face_swap"]["params"]
+        if param["id"] == "source_face"
+    )
+    assert portrait["required"] is True
+    # And nothing that has a usable default claims to need one.
+    assert all(
+        not param["required"]
+        for param in described["colour"]["params"]
+    )

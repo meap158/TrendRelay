@@ -464,6 +464,10 @@ FACE_SWAP = Effect(
             options_from=_swap_face_options,
             presentation="gallery",
             folder_from=_swap_faces_folder,
+            # There is no face to fall back on, so "none chosen" has to be
+            # refused rather than resolved - and refused here, where somebody
+            # can still pick one, rather than in the render they waited for.
+            required=True,
         ),
         EffectParam(
             id="swap_subject",
@@ -1213,10 +1217,54 @@ def _register_version(
         return {"version_registered": True, "asset_id": asset.id, "version_id": version.id}
 
 
+#: What a listed render carries into the browser.
+#:
+#: The drawer polls this every four seconds and the Library reads it for every
+#: thumbnail, so the whole record went over the wire fifteen times a minute:
+#: 241KB for 250 jobs, measured, of which the screen reads a few fields. Two
+#: items were most of it - the per-effect trace of what happened to each frame
+#: (61KB, of which one number is displayed) and the recipe the request carried
+#: (50KB, none of it displayed). Trimmed here rather than in the browser,
+#: because the browser is where the cost lands.
+#:
+#: The single-job endpoint still returns everything; anything that needs the
+#: full record asks for one.
+def _listed(job: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(job.get("payload") or {})
+    request = payload.get("request")
+    if isinstance(request, dict):
+        # Only whether this was a preview, which decides the wording.
+        payload["request"] = {"preview_seconds": request.get("preview_seconds")}
+    # Absolute paths nothing on screen shows. The Library finds a clip by its
+    # asset id, which stays; these are the render's own filenames, and they are
+    # the single largest thing left once the trace and the recipe are gone.
+    payload.pop("source", None)
+    payload.pop("output", None)
+    result = job.get("result")
+    if isinstance(result, dict):
+        result = dict(result)
+        result.pop("output", None)
+        frames = result.get("frame_effects")
+        if isinstance(frames, list):
+            # The share of frames the effect touched, which is the only part
+            # anything shows. The rest is a per-effect trace with absolute
+            # paths in it.
+            result["frame_effects"] = [
+                {"coverage": entry.get("coverage")}
+                for entry in frames
+                if isinstance(entry, dict)
+            ]
+        job = {**job, "result": result}
+    return {**job, "payload": payload}
+
+
 def list_render_jobs(workspace_id: str, limit: int = 20) -> list[dict[str, Any]]:
-    return list_job_records_including_active(
-        workspace_id, JOB_KIND, limit, factory=JOB_SESSION_FACTORY
-    )
+    return [
+        _listed(job)
+        for job in list_job_records_including_active(
+            workspace_id, JOB_KIND, limit, factory=JOB_SESSION_FACTORY
+        )
+    ]
 
 
 #: Marks a row that records a removal rather than a render. The activity list

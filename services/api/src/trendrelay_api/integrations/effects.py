@@ -26,6 +26,7 @@ import os
 import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from itertools import count
 from pathlib import Path
 from typing import Any, Literal
 
@@ -93,6 +94,15 @@ class EffectParam:
     #: file that failed without knowing which effect it is showing — a file
     #: that silently does not appear is the one case nobody can act on.
     folder_from: Callable[[], dict[str, Any]] | None = None
+    #: Whether the empty value is a prompt rather than an answer.
+    #:
+    #: Some choices have no sensible default - the portraits a face swap uses
+    #: are the operator's own, and picking one for them is the one thing the
+    #: effect must not do. Those declare an empty default labelled "choose
+    #: one", which is honest in the form and was a trap at the end of it: the
+    #: value validated, a job was queued, and the render failed a minute later
+    #: saying `No portrait named ''`. Refused at submit now, by name.
+    required: bool = False
 
     def choices(self) -> tuple[dict[str, Any], ...]:
         """Every option this parameter accepts right now, in one shape."""
@@ -191,6 +201,12 @@ def coerce_params(effect: Effect, raw: dict[str, Any] | None) -> dict[str, Any]:
             values[param.id] = param.default
             continue
         given = supplied[param.id]
+        # A blank answer to a choice is no answer, not a wrong one. Sent as
+        # whitespace it used to reach the option check and be refused with
+        # "must be one of" over a list whose only entry is the prompt itself.
+        if param.kind == "choice" and isinstance(given, str) and not given.strip():
+            values[param.id] = param.default
+            continue
         if param.kind == "number":
             values[param.id] = _number(param, given)
         elif param.kind == "toggle":
@@ -202,6 +218,14 @@ def coerce_params(effect: Effect, raw: dict[str, Any] | None) -> dict[str, Any]:
                     f"{param.label} must be one of {_listed(allowed)}."
                 )
             values[param.id] = str(given)
+    # After the loop, so a value left out entirely is caught as well as one
+    # sent empty: an unset required choice takes its default, and the default
+    # is the prompt.
+    for param in effect.params:
+        if param.required and not str(values.get(param.id, "")).strip():
+            raise EffectError(
+                f"{effect.label} needs a {param.label.lower()} before it can run."
+            )
     return values
 
 
@@ -478,6 +502,163 @@ TRIM = Effect(
     audio_filters=_trim_audio_filters,
 )
 
+#: Filtergraph labels for the effects below that split and overlay the stream.
+#: Numbered per use so two labelled steps in one recipe cannot collide; the
+#: number carries no meaning beyond uniqueness.
+_LABEL_NUMBERS = count()
+
+
+def _zoom_filters(values: dict[str, Any]) -> list[str]:
+    factor = float(values["factor"])
+    # Scaled up first, then cropped back to the source's own size, so the
+    # output keeps its resolution and the punch-in reads as a reframe rather
+    # than an enlargement. Even dimensions for the same yuv420p reason as the
+    # aspect crop.
+    x, y = {
+        "centre": ("(iw-ow)/2", "(ih-oh)/2"),
+        "top": ("(iw-ow)/2", "0"),
+        "bottom": ("(iw-ow)/2", "ih-oh"),
+    }[values["anchor"]]
+    return [
+        f"scale=trunc(iw*{factor:.4g}/2)*2:trunc(ih*{factor:.4g}/2)*2",
+        f"crop=trunc(iw/{factor:.4g}/2)*2:trunc(ih/{factor:.4g}/2)*2:{x}:{y}",
+    ]
+
+
+def _fit_filters(values: dict[str, Any]) -> list[str]:
+    ratio = ASPECT_RATIOS[values["ratio"]]
+    blur = float(values["blur"])
+    n = next(_LABEL_NUMBERS)
+    fg, bg, blurred = f"[fitfg{n}]", f"[fitbg{n}]", f"[fitbl{n}]"
+    # The canvas is the smallest box of the target shape that contains the
+    # whole picture: max() picks whichever dimension has to grow. The
+    # background copy is stretched to that canvas rather than cover-cropped -
+    # a distortion that would be unwatchable as a picture and is invisible
+    # under this much blur - because a stretch needs no second crop whose
+    # expressions would be reading post-scale dimensions.
+    width = rf"trunc(max(iw\,ih*{ratio:.6f})/2)*2"
+    height = rf"trunc(max(ih\,iw/{ratio:.6f})/2)*2"
+    # One fragment, not three filters: the split and the overlay are labelled
+    # chains, and the comma the filtergraph builder joins with only continues
+    # a chain. Inside the fragment the chains separate with ';', and the
+    # fragment starts and ends unlabelled so it composes with whatever the
+    # recipe puts before or after it.
+    return [
+        f"split=2{fg}{bg};"
+        f"{bg}scale={width}:{height},setsar=1,"
+        rf"boxblur=min(w\,h)*{blur:.4g}{blurred};"
+        f"{blurred}{fg}overlay=(W-w)/2:(H-h)/2"
+    ]
+
+
+def _region_blur_filters(values: dict[str, Any]) -> list[str]:
+    # Clamped against the far edge rather than refused: a region nudged past
+    # the border is a slip of a slider, and the visible result - the blur
+    # stopping at the edge - is exactly what was meant.
+    x = min(float(values["x"]), 0.98)
+    y = min(float(values["y"]), 0.98)
+    width = min(float(values["width"]), 1.0 - x)
+    height = min(float(values["height"]), 1.0 - y)
+    blur = float(values["blur"])
+    n = next(_LABEL_NUMBERS)
+    main, region, blurred = f"[rgmain{n}]", f"[rgcut{n}]", f"[rgblur{n}]"
+    crop = (
+        f"crop=trunc(iw*{width:.4f}/2)*2:trunc(ih*{height:.4f}/2)*2"
+        f":trunc(iw*{x:.4f}):trunc(ih*{y:.4f})"
+    )
+    return [
+        f"split=2{main}{region};"
+        f"{region}{crop},"
+        rf"boxblur=max(2\,min(w\,h)*{blur:.4g}){blurred};"
+        f"{main}{blurred}overlay=trunc(W*{x:.4f}):trunc(H*{y:.4f})"
+    ]
+
+
+ZOOM = Effect(
+    id="zoom",
+    label="Zoom",
+    summary="Punch in on the picture, keeping its size and shape.",
+    stage="stream",
+    params=(
+        EffectParam(
+            id="factor", label="Zoom", kind="number", default=1.1,
+            minimum=1.0, maximum=1.5, step=0.05, unit="×",
+            help="1.1 is a subtle reframe; past 1.3 the crop starts to show.",
+        ),
+        EffectParam(
+            id="anchor", label="Keep", kind="choice", default="centre",
+            options=(("centre", "Middle"), ("top", "Top"), ("bottom", "Bottom")),
+            help="Which part of the frame the zoom closes in on.",
+        ),
+    ),
+    video_filters=_zoom_filters,
+    media_kinds=STILL_AND_MOVING,
+)
+
+FIT = Effect(
+    id="fit",
+    label="Fit to shape",
+    summary="Pad to a network's shape with a blurred copy, losing nothing to a crop.",
+    stage="stream",
+    params=(
+        EffectParam(
+            id="ratio", label="Shape", kind="choice", default="9:16",
+            options=(
+                ("9:16", "9:16 vertical"),
+                ("4:5", "4:5 portrait"),
+                ("1:1", "1:1 square"),
+                ("16:9", "16:9 landscape"),
+            ),
+            help="The whole picture stays; a blurred copy of it fills the rest.",
+        ),
+        EffectParam(
+            id="blur", label="Background blur", kind="number", default=0.05,
+            minimum=0.02, maximum=0.12, step=0.01,
+            help="As a share of the frame. Enough that the copy reads as "
+                 "backdrop rather than as a second picture.",
+        ),
+    ),
+    video_filters=_fit_filters,
+    media_kinds=STILL_AND_MOVING,
+)
+
+REGION_BLUR = Effect(
+    id="region_blur",
+    label="Blur a region",
+    summary="Blur one rectangle of the frame — a username, a caption, a plate.",
+    stage="stream",
+    params=(
+        EffectParam(
+            id="x", label="From the left", kind="number", default=0.6,
+            minimum=0.0, maximum=0.98, step=0.01,
+            help="Where the region starts, as a share of the width.",
+        ),
+        EffectParam(
+            id="y", label="From the top", kind="number", default=0.84,
+            minimum=0.0, maximum=0.98, step=0.01,
+            help="Where the region starts, as a share of the height.",
+        ),
+        EffectParam(
+            id="width", label="Width", kind="number", default=0.36,
+            minimum=0.02, maximum=1.0, step=0.01,
+            help="As a share of the frame. Clamped at the right edge.",
+        ),
+        EffectParam(
+            id="height", label="Height", kind="number", default=0.12,
+            minimum=0.02, maximum=1.0, step=0.01,
+            help="As a share of the frame. Clamped at the bottom edge.",
+        ),
+        EffectParam(
+            id="blur", label="Strength", kind="number", default=0.08,
+            minimum=0.02, maximum=0.2, step=0.01,
+            help="Against the region's own size, so a small region is not "
+                 "smeared past its edges.",
+        ),
+    ),
+    video_filters=_region_blur_filters,
+    media_kinds=STILL_AND_MOVING,
+)
+
 VOLUME = Effect(
     id="volume",
     label="Volume",
@@ -498,9 +679,11 @@ VOLUME = Effect(
 )
 
 #: Order is the order the interface offers them in: the cheap, predictable
-#: transforms first, then anything that needs a model.
+#: transforms first — geometry, then framing, then grading and timing — and
+#: anything that needs a model after all of them.
 REGISTRY: dict[str, Effect] = {
-    effect.id: effect for effect in (FLIP, ROTATE, ASPECT, COLOUR, SPEED, TRIM, VOLUME)
+    effect.id: effect
+    for effect in (FLIP, ROTATE, ASPECT, FIT, ZOOM, REGION_BLUR, COLOUR, SPEED, TRIM, VOLUME)
 }
 
 
@@ -518,6 +701,10 @@ def describe() -> list[dict[str, Any]]:
             {
                 "id": effect.id,
                 "label": effect.label,
+                # The short name a finished cut is tagged with. Served so the
+                # interface reads it from the declaration rather than keeping a
+                # second copy of the mapping that can drift from this one.
+                "tag": effect.chip,
                 "summary": effect.summary,
                 "stage": effect.stage,
                 "retimes": effect.retimes,
@@ -531,6 +718,7 @@ def describe() -> list[dict[str, Any]]:
                 "params": [
                     {
                         "id": param.id,
+                        "required": param.required,
                         "label": param.label,
                         "kind": param.kind,
                         "default": param.default,
