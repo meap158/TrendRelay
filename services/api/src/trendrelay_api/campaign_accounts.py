@@ -65,14 +65,10 @@ def recommend_accounts(
     passed in rather than fetched so the reasoning stays testable without a
     network and the caller keeps the external call behind its confirmation.
     """
-    existing = {
-        (item.provider, item.integration_id)
-        for item in session.scalars(
-            select(CampaignDestination).where(
-                CampaignDestination.campaign_id == autopilot.campaign_id
-            )
-        ).all()
-    }
+    destinations = session.scalars(select(CampaignDestination).where(
+        CampaignDestination.campaign_id == autopilot.campaign_id
+    )).all()
+    existing = {(item.provider, item.integration_id): item for item in destinations}
     history = _account_history(session, autopilot.workspace_id)
     commerce = autopilot.offer_mode != "none"
 
@@ -121,6 +117,21 @@ def recommend_accounts(
                 "gather it."
             )
 
+        from trendrelay_api.integrations.account_identity import stable_page_key
+
+        page_key = stable_page_key(
+            str(account.get("platform") or ""),
+            account.get("handle"),
+            str(account.get("provider") or ""),
+            str(account.get("id") or ""),
+        )
+        # Destinations created before page schedules existed learn their stable
+        # identity the next time the operator refreshes connected accounts.
+        # This is the first trustworthy moment because it uses the engine's
+        # current handle rather than guessing from a display label.
+        if key in existing and not existing[key].page_key:
+            existing[key].page_key = page_key
+
         recommendations.append({
             "provider": account.get("provider"),
             "provider_label": account.get("provider_label"),
@@ -128,6 +139,7 @@ def recommend_accounts(
             "platform": account.get("platform"),
             "label": account.get("label"),
             "handle": account.get("handle"),
+            "page_key": page_key,
             "available": available,
             "recommended": available,
             "already_added": key in existing,

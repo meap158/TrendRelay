@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import mimetypes
+from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from trendrelay_api import publishing_connections
@@ -37,6 +39,7 @@ from trendrelay_api.integrations.publishing import (
 )
 from trendrelay_api.integrations.publishing_matrix import capability_matrix
 from trendrelay_api.models import Workspace
+from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/publishing", tags=["publishing"])
 AuthenticatedUser = Annotated[CurrentUser, Depends(current_user)]
@@ -375,6 +378,17 @@ class SlotUpdate(BaseModel):
         return value
 
 
+class PresetCreate(BaseModel):
+    label: str = Field(min_length=1, max_length=120)
+    summary: str = Field(default="", max_length=300)
+    slots: list[SlotEntry] = Field(min_length=1, max_length=40)
+
+
+class PageScheduleUpdate(BaseModel):
+    page_key: str = Field(min_length=1, max_length=300)
+    preset_id: str | None = Field(default=None, max_length=64)
+
+
 @router.get("/slots")
 def publishing_slots(
     workspace_id: str,
@@ -386,7 +400,8 @@ def publishing_slots(
     workspace = session.get(Workspace, workspace_id)
     return {
         "slots": posting_slots.list_slots(workspace_id, session=session),
-        "presets": posting_slots.preset_payload(),
+        "presets": posting_slots.preset_payload(workspace_id, session=session),
+        "page_assignments": posting_slots.page_assignments(workspace_id, session=session),
         "timezone": workspace.timezone if workspace else "UTC",
     }
 
@@ -413,8 +428,55 @@ def save_publishing_slots(
         session.flush()
     return {
         "slots": slots,
-        "presets": posting_slots.preset_payload(),
+        "presets": posting_slots.preset_payload(workspace_id, session=session),
+        "page_assignments": posting_slots.page_assignments(workspace_id, session=session),
         "timezone": body.timezone,
+    }
+
+
+@router.post("/slots/presets", status_code=201)
+def create_posting_preset(
+    workspace_id: str,
+    body: PresetCreate,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Save the current or edited rhythm as a reusable workspace preset."""
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    try:
+        preset = posting_slots.create_preset(
+            workspace_id,
+            body.label,
+            body.summary,
+            [entry.model_dump() for entry in body.slots],
+            session=session,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return {
+        "preset": preset,
+        "presets": posting_slots.preset_payload(workspace_id, session=session),
+    }
+
+
+@router.post("/slots/pages")
+def set_page_posting_preset(
+    workspace_id: str,
+    body: PageScheduleUpdate,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Assign a reusable rhythm to a consolidated social page, or inherit."""
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    try:
+        assignment = posting_slots.assign_page(
+            workspace_id, body.page_key, body.preset_id, session=session
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return {
+        "assignment": assignment,
+        "page_assignments": posting_slots.page_assignments(workspace_id, session=session),
     }
 
 
@@ -492,6 +554,7 @@ def preview_publishing_media(
     user: AuthenticatedUser,
     session: DatabaseSession,
     opaque: bool = False,
+    thumbnail: bool = False,
 ) -> FileResponse:
     """Stream a file this workspace could publish, so it can be seen first.
 
@@ -512,6 +575,35 @@ def preview_publishing_media(
         raise HTTPException(status_code=403, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+    if thumbnail:
+        kind, _encoding = mimetypes.guess_type(resolved.name)
+        if kind and kind.startswith("image/"):
+            return FileResponse(resolved, media_type=kind)
+
+        known_paths = {path, str(resolved)}
+        asset_id = session.scalar(
+            select(MediaAsset.id).where(
+                MediaAsset.workspace_id == workspace_id,
+                MediaAsset.original_path.in_(known_paths),
+            ).limit(1)
+        )
+        if asset_id is None:
+            asset_id = session.scalar(
+                select(MediaAssetVersion.asset_id).where(
+                    MediaAssetVersion.workspace_id == workspace_id,
+                    MediaAssetVersion.path.in_(known_paths),
+                ).limit(1)
+            )
+        still = session.scalar(
+            select(MediaAssetVersion.path).where(
+                MediaAssetVersion.workspace_id == workspace_id,
+                MediaAssetVersion.asset_id == asset_id,
+                MediaAssetVersion.version_kind == "thumbnail",
+            ).order_by(MediaAssetVersion.created_at.desc()).limit(1)
+        ) if asset_id else None
+        if not still or not Path(still).is_file():
+            raise HTTPException(status_code=404, detail="No thumbnail is available for this media.")
+        return FileResponse(Path(still), media_type="image/jpeg")
     # Looked up rather than assembled from the suffix. Spelling the type by
     # hand turned `.jpg` into `image/jpg`, which is not a registered type - so
     # a browser handed one stops trying to display it and downloads the file

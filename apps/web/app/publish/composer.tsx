@@ -3,7 +3,7 @@
 import { zonedInstant, zonedParts } from "../../lib/schedule-time";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { clipLength, fileName, handoffPath, isBlurred } from "../../lib/media-rules";
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 
 import { PlatformIcon, platformLabels, type PublishingPlatform } from "../publishing-icons";
 import {
@@ -117,10 +117,41 @@ export function AssetThumbnail({
   const hasThumbnail = asset.versions.some((version) => version.kind === "thumbnail");
   const source = useAssetPoster(hasThumbnail ? asset.id : null, workspaceId, apiFetch);
 
+  /* The clip's real shape, handed to CSS so a caller with room can honour it.
+   *
+   * Short-form video is 9:16 and every fixed thumbnail box here is landscape, so
+   * `object-fit: cover` was throwing away more than half of every frame - 44% of
+   * a 720x1280 clip survived a 92x72 box. Callers that have the room set their
+   * box from this instead of cropping to a shape the media never had.
+   *
+   * Measured from the still itself rather than taken from the asset. The asset
+   * carries `width`/`height` only where somebody filled them in - the campaign
+   * pipeline builds its rows from a post's `asset_id` and a title, and passes
+   * both as null - whereas the image being rendered always knows its own size.
+   * The declared size is still used first where it exists, so the box is right
+   * before the bytes arrive rather than reflowing when they do. */
+  const declared = asset.width && asset.height ? `${asset.width} / ${asset.height}` : "";
+  const [measured, setMeasured] = useState("");
+  const ratio = declared || measured;
+
   return (
-    <span className="picker-thumb">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      {source ? <img alt="" src={source} /> : <b aria-hidden="true">▶</b>}
+    <span
+      className="picker-thumb"
+      style={ratio ? ({ "--thumb-ratio": ratio } as CSSProperties) : undefined}
+    >
+      {source ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          alt=""
+          src={source}
+          onLoad={(event) => {
+            const image = event.currentTarget;
+            if (image.naturalWidth && image.naturalHeight) {
+              setMeasured(`${image.naturalWidth} / ${image.naturalHeight}`);
+            }
+          }}
+        />
+      ) : <b aria-hidden="true">▶</b>}
       {asset.duration_ms ? <i>{clipLength(asset.duration_ms)}</i> : null}
     </span>
   );
@@ -434,10 +465,57 @@ export type CalendarEntry = {
   /** Where it is going, so the rail can show it without opening the post. */
   platforms?: PublishingPlatform[];
   title?: string | null;
+  /** Library identity when known; path fallback keeps older jobs previewable. */
+  assetId?: string | null;
+  mediaPath?: string | null;
   /** The campaign this post belongs to, when it is a campaign's rather than a
       standalone one - so the rail can say which without opening it. */
   campaign?: { id: string; name: string };
 };
+
+function UpcomingThumbnail({
+  entry,
+  workspaceId,
+  apiFetch,
+}: {
+  entry: CalendarEntry;
+  workspaceId: string;
+  apiFetch: Fetcher;
+}) {
+  const key = entry.assetId || entry.mediaPath || "";
+  const [loaded, setLoaded] = useState<{ key: string; url: string } | null>(null);
+
+  useEffect(() => {
+    if (!key) return;
+    let live = true;
+    let objectUrl = "";
+    const endpoint = entry.assetId
+      ? `/api/workspaces/${workspaceId}/media/library/assets/${entry.assetId}/content/thumbnail`
+      : `/api/workspaces/${workspaceId}/publishing/media/preview?thumbnail=true&path=${encodeURIComponent(entry.mediaPath ?? "")}`;
+    apiFetch(endpoint)
+      .then((response) => response.ok ? response.blob() : Promise.reject(new Error("unavailable")))
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        if (live) setLoaded({ key, url: objectUrl });
+        else URL.revokeObjectURL(objectUrl);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [apiFetch, entry.assetId, entry.mediaPath, key, workspaceId]);
+
+  const source = loaded?.key === key ? loaded.url : "";
+  return (
+    <span className="upcoming-thumb" aria-hidden="true">
+      {source
+        // eslint-disable-next-line @next/next/no-img-element -- authenticated blob URL
+        ? <img src={source} alt="" />
+        : <ActionIcon name="play" />}
+    </span>
+  );
+}
 export type Slot = {
   id: string;
   weekday: number;
@@ -446,7 +524,14 @@ export type Slot = {
   minute: number;
   time: string;
 };
-export type SlotPreset = { id: string; label: string; summary: string; times: string[] };
+export type SlotPreset = {
+  id: string;
+  label: string;
+  summary: string;
+  kind: "builtin" | "custom";
+  times: string[];
+  slots: { weekday: number; time: string }[];
+};
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const WEEKDAY_NAMES = [
@@ -578,6 +663,8 @@ export function UpcomingPosts({
   onPickDay,
   onOpenCalendar,
   loadingCampaigns = false,
+  workspaceId,
+  apiFetch,
 }: {
   entries: CalendarEntry[];
   /** This workspace's posting times, so a new post lands on one of them. */
@@ -589,6 +676,8 @@ export function UpcomingPosts({
   /** True while campaign posts are still being gathered, so the strip can say
       it is not yet the whole picture rather than looking complete early. */
   loadingCampaigns?: boolean;
+  workspaceId: string;
+  apiFetch: Fetcher;
 }) {
   const t = useT();
   const strip = useMemo(() => {
@@ -669,6 +758,7 @@ export function UpcomingPosts({
               <time dateTime={entry.at.toISOString()}>
                 {entry.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </time>
+              <UpcomingThumbnail entry={entry} workspaceId={workspaceId} apiFetch={apiFetch} />
               <div className="upcoming-post">
                 <strong>{entry.title || entry.label}</strong>
                 <span className="upcoming-meta">
@@ -894,6 +984,7 @@ export function SlotEditor({
   canEdit,
   busy,
   onSave,
+  onCreatePreset,
 }: {
   slots: Slot[];
   presets: SlotPreset[];
@@ -901,10 +992,12 @@ export function SlotEditor({
   canEdit: boolean;
   busy: boolean;
   onSave: (entries: { weekday: number; time: string }[]) => void;
+  onCreatePreset: (label: string, entries: { weekday: number; time: string }[]) => void;
 }) {
   const t = useT();
   const [draft, setDraft] = useState("");
   const [weekday, setWeekday] = useState(EVERY_DAY);
+  const [presetName, setPresetName] = useState("");
 
   const entries = slots.map((slot) => ({ weekday: slot.weekday, time: slot.time }));
 
@@ -981,14 +1074,38 @@ export function SlotEditor({
                 className="slot-preset"
                 disabled={busy}
                 title={preset.summary}
-                onClick={() => onSave(preset.times.map((time) => ({ weekday: EVERY_DAY, time })))}
+                onClick={() => onSave(preset.slots)}
               >
                 <b>{preset.label}</b>
-                <small>{preset.times.join(" · ")}</small>
+                <small>{preset.slots.map((entry) => (
+                  entry.weekday === EVERY_DAY
+                    ? entry.time
+                    : `${DAY_NAMES[entry.weekday]} ${entry.time}`
+                )).join(" · ")}</small>
               </button>
             ))}
           </div>
           <p>{t("composer.presetWarning")}</p>
+          {slots.length > 0 && (
+            <div className="slot-preset-save">
+              <input
+                value={presetName}
+                maxLength={120}
+                placeholder="Preset name"
+                aria-label="Preset name"
+                onChange={(event) => setPresetName(event.target.value)}
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy || !presetName.trim()}
+                onClick={() => {
+                  onCreatePreset(presetName.trim(), entries);
+                  setPresetName("");
+                }}
+              >Save current times</Button>
+            </div>
+          )}
         </div>
       )}
     </div>

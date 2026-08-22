@@ -30,6 +30,7 @@ from trendrelay_api.campaign_autopilot import (
     BIO_LINK_PLATFORMS,
     CAPTION_LINK_PLATFORMS,
 )
+from trendrelay_api.integrations import engine_limits
 from trendrelay_api.integrations.publishing import (
     CAROUSEL_LIMITS,
     FIRST_COMMENT_PLATFORMS,
@@ -160,6 +161,9 @@ def _engine_row(engine_id: str) -> dict[str, Any]:
         "ingests_media_url": engine.ingests_media_url,
         "media_note": engine.media_note,
         "supports_approval": engine_id == "buffer",
+        # What the engine sells, so "can this plan post that" is answerable
+        # in the same place as "can this engine reach that".
+        "plans": engine_limits.plan_ladder_payload(engine_id),
     }
 
 

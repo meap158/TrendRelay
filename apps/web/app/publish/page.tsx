@@ -231,6 +231,7 @@ type PublishSnapshot = {
   products: ProductRow[];
   slots: Slot[];
   presets: SlotPreset[];
+  pageAssignments: Record<string, string>;
   timezone: string;
 };
 type PublishingAccountsSnapshot = {
@@ -383,6 +384,7 @@ export default function PublishPage() {
   const [now, setNow] = useState(() => new Date());
   const [slots, setSlots] = useState<Slot[]>([]);
   const [slotPresets, setSlotPresets] = useState<SlotPreset[]>([]);
+  const [pageAssignments, setPageAssignments] = useState<Record<string, string>>({});
   const [pickerOpen, setPickerOpen] = useState(false);
   /**
    * Whether the library picker is choosing the clip or adding carousel images.
@@ -873,6 +875,10 @@ export default function PublishPage() {
             platforms: (job.payload.request.targets ?? [])
               .map((target: { platform: PublishingPlatform }) => target.platform)
               .filter(Boolean),
+            assetId: job.payload.request.asset_id ?? null,
+            mediaPath: job.payload.request.image_paths?.[0]
+              ?? job.payload.request.video_path
+              ?? null,
             ...(campaignId && campaignName
               ? { campaign: { id: campaignId, name: campaignName } }
               : {}),
@@ -1122,6 +1128,7 @@ export default function PublishPage() {
       setLinkableProducts(snapshot.products);
       setSlots(snapshot.slots);
       setSlotPresets(snapshot.presets);
+      setPageAssignments(snapshot.pageAssignments ?? {});
       setWorkspaceZone(snapshot.timezone);
     };
     const cached = readTabSnapshot<PublishSnapshot>(key);
@@ -1131,7 +1138,10 @@ export default function PublishPage() {
       // lets Publish return with its entire working context, not one panel at a
       // time, while the fresh reads still run together in the background.
       const [slotBody, productBody, connectionBody] = await Promise.all([
-        json<{ slots: Slot[]; presets: SlotPreset[]; timezone?: string }>(
+        json<{
+          slots: Slot[]; presets: SlotPreset[]; page_assignments?: Record<string, string>;
+          timezone?: string;
+        }>(
           await apiFetch(`/api/workspaces/${workspaceId}/publishing/slots`),
         ),
         json<ProductsPayload>(
@@ -1146,6 +1156,7 @@ export default function PublishPage() {
         products: productBody.products ?? [],
         slots: slotBody.slots,
         presets: slotBody.presets,
+        pageAssignments: slotBody.page_assignments ?? {},
         timezone: slotBody.timezone ?? "UTC",
       };
     })
@@ -1212,6 +1223,7 @@ export default function PublishPage() {
       // a video it also carries - and which hid a post that had no media at all
       // behind a path that resolved to nothing.
       video_path: wantsCarousel ? "" : localPath,
+      asset_id: wantsCarousel ? null : clip?.id ?? null,
       media_url: mediaUrl || null,
       caption: form.get("caption"),
       first_comment: firstComment.trim() || null,
@@ -1392,7 +1404,9 @@ export default function PublishPage() {
     setBusy("slots");
     setError(null);
     try {
-      const body = await json<{ slots: Slot[]; presets: SlotPreset[] }>(
+      const body = await json<{
+        slots: Slot[]; presets: SlotPreset[]; page_assignments?: Record<string, string>;
+      }>(
         await apiFetch(`/api/workspaces/${workspaceId}/publishing/slots`, {
           method: "POST",
           body: JSON.stringify({ slots: entries, timezone }),
@@ -1400,8 +1414,48 @@ export default function PublishPage() {
       );
       setSlots(body.slots);
       setSlotPresets(body.presets);
+      setPageAssignments(body.page_assignments ?? pageAssignments);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Posting times could not be saved.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function createSlotPreset(
+    label: string,
+    entries: { weekday: number; time: string }[],
+  ) {
+    setBusy("slots");
+    setError(null);
+    try {
+      const body = await json<{ presets: SlotPreset[] }>(await apiFetch(
+        `/api/workspaces/${workspaceId}/publishing/slots/presets`,
+        { method: "POST", body: JSON.stringify({ label, slots: entries }) },
+      ));
+      setSlotPresets(body.presets);
+      setNotice(`Saved “${label}” as a posting preset.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Posting preset could not be saved.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function assignPagePreset(pageKey: string, presetId: string) {
+    setBusy(`page-schedule:${pageKey}`);
+    setError(null);
+    try {
+      const body = await json<{ page_assignments: Record<string, string> }>(await apiFetch(
+        `/api/workspaces/${workspaceId}/publishing/slots/pages`,
+        {
+          method: "POST",
+          body: JSON.stringify({ page_key: pageKey, preset_id: presetId || null }),
+        },
+      ));
+      setPageAssignments(body.page_assignments);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Page schedule could not be saved.");
     } finally {
       setBusy(null);
     }
@@ -3356,7 +3410,7 @@ export default function PublishPage() {
                         disabled={!canExecute}
                         title={preset.summary}
                         onClick={() => void saveSlots(
-                          preset.times.map((time) => ({ weekday: -1, time })))}
+                          preset.slots)}
                       >{preset.label}</Button>
                     ))}
                   </div>
@@ -3374,7 +3428,38 @@ export default function PublishPage() {
                   canEdit={Boolean(canExecute)}
                   busy={busy === "slots"}
                   onSave={(entries) => void saveSlots(entries)}
+                  onCreatePreset={(label, entries) => void createSlotPreset(label, entries)}
                 />
+                {pages.length > 0 && (
+                  <section className="page-schedule-assignments">
+                    <div>
+                      <h4>Schedules by page</h4>
+                      <p>Assign a reusable rhythm to a page. Campaigns inherit it unless overridden.</p>
+                    </div>
+                    <ul>
+                      {pages.map((page) => (
+                        <li key={page.key}>
+                          <span>
+                            <strong>{page.label}</strong>
+                            <small>{platformLabels[page.platform]}
+                              {page.handle ? ` · @${page.handle}` : ""}</small>
+                          </span>
+                          <Select
+                            aria-label={`Posting schedule for ${page.label}`}
+                            value={pageAssignments[page.key] ?? ""}
+                            disabled={!canExecute || busy === `page-schedule:${page.key}`}
+                            onChange={(event) => void assignPagePreset(page.key, event.target.value)}
+                          >
+                            <option value="">Workspace posting times</option>
+                            {slotPresets.map((preset) => (
+                              <option key={preset.id} value={preset.id}>{preset.label}</option>
+                            ))}
+                          </Select>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
               </details>
             </div>
           )}
@@ -3435,6 +3520,8 @@ export default function PublishPage() {
           <UpcomingPosts
             entries={upcomingEntries}
             loadingCampaigns={campaignsLoading}
+            workspaceId={workspaceId}
+            apiFetch={apiFetch}
             slots={slots}
             now={now}
             onPickDay={(at) => { setDelivery("schedule"); setDate(localValue(at)); }}

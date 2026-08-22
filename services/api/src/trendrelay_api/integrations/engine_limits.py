@@ -163,6 +163,130 @@ PLAN_LABELS: dict[str, str] = {"zernio": "Zernio", "woopsocial": "WoopSocial"}
 
 
 @dataclass(frozen=True)
+class PlanTier:
+    """One row of an engine's published pricing.
+
+    Strings, not numbers, because these are quotations. "Unlimited", "3-10" and
+    "$6 per account" are the published answers, and coercing them into integers
+    would mean inventing a reading of them that the engine did not give.
+    """
+
+    name: str
+    price: str
+    accounts: str
+    posts: str
+    note: str = ""
+
+
+#: What each engine sells, from its own pricing page on `PUBLISHED_ON`.
+#:
+#: `FREE_PLAN` above is what an account is assumed to have until the engine
+#: reports otherwise; this is the whole ladder, and it is reference material
+#: rather than a claim about anybody's account. That distinction is why quoting
+#: paid tiers is safe here and is not safe there: nothing below is presented as
+#: the plan in force, so there is no row to pick wrongly.
+#:
+#: Never read from an API. A pricing page can change the day after it is read,
+#: so every figure here is shown with the date it was checked and a link to the
+#: page it came from - which is the only honest way to show a number nobody can
+#: verify from inside the app.
+PLAN_LADDER: dict[str, tuple[PlanTier, ...]] = {
+    "bundle_social": (
+        PlanTier("Free", "$0 / month", "3", "20 / month", "50 comments a month"),
+        PlanTier("Pro", "$100 / month", "Unlimited", "10,000 / month", "5,000 comments a month"),
+        PlanTier(
+            "Business", "$400 / month", "Unlimited", "100,000 / month",
+            "50,000 comments a month",
+        ),
+        PlanTier("Custom", "Priced on request", "Unlimited", "Negotiated", "Enterprise terms"),
+    ),
+    "zernio": (
+        PlanTier(
+            "Free", "$0", "First 2", "Unlimited",
+            "Every feature is on every account; nothing is gated behind a tier",
+        ),
+        PlanTier("3 to 10 accounts", "$6 per account / month", "3-10", "Unlimited"),
+        PlanTier("11 to 100 accounts", "$3 per account / month", "11-100", "Unlimited"),
+        PlanTier("101 and above", "$1 per account / month", "101+", "Unlimited", "No cap above"),
+    ),
+    "woopsocial": (
+        PlanTier("Free", "$0 / month", "2", "Unlimited", "30 AI credits, 1 GB, 1 seat"),
+        PlanTier("Pro", "$19 / month", "20", "Unlimited", "1,000 AI credits, 10 GB, 1 seat"),
+        PlanTier("Business", "$49 / month", "100", "Unlimited", "5,000 AI credits, 25 GB, 3 seats"),
+        PlanTier(
+            "Max", "$799 / month", "2,500", "Unlimited",
+            "42,000 AI credits, 420 GB, 43 seats",
+        ),
+    ),
+    "buffer": (
+        PlanTier(
+            "Free", "$0 / month", "3", "10 queued per channel",
+            "One user; 30 days of analytics history",
+        ),
+        PlanTier(
+            "Essentials", "$5 per channel / month", "Priced per channel", "Unlimited queued",
+            "Adds first comments, advanced analytics, hashtag manager",
+        ),
+        PlanTier(
+            "Team", "$10 per channel / month", "Priced per channel", "Unlimited queued",
+            "Adds approvals and unlimited team members",
+        ),
+    ),
+}
+
+#: What the ladder above means for publishing through TrendRelay specifically.
+#:
+#: A pricing page sells the whole product and most of it is not this. Somebody
+#: comparing tiers here is deciding whether a plan will let them post, so the
+#: line that decides that is worth more than the fourteen features beside it -
+#: and an allowance that sounds binding but is not, like WoopSocial's credits,
+#: is worth naming before it is mistaken for a posting cap.
+PLAN_CAVEATS: dict[str, str] = {
+    "bundle_social": (
+        "Posts and comments are the caps that bite. X is billed separately per "
+        "post on top of the plan, at $0.015, or $0.20 with a link in it."
+    ),
+    "zernio": (
+        "Charged per connected account, never per post. Two accounts cost "
+        "nothing and the third is what starts a bill."
+    ),
+    "woopsocial": (
+        "Credits meter AI content generation, not publishing. TrendRelay writes "
+        "its own captions, so the free tier's thirty are never spent and the "
+        "account limit is the only one that applies."
+    ),
+    "buffer": (
+        "Ten is a queue depth, not a monthly allowance: publishing a post frees "
+        "its slot. First comments need Essentials or above."
+    ),
+}
+
+
+def plan_ladder_payload(provider_id: str) -> dict[str, Any]:
+    """An engine's published tiers, dated and sourced."""
+    tiers = PLAN_LADDER.get(provider_id, ())
+    free = FREE_PLAN.get(provider_id, {})
+    return {
+        "checked_on": PUBLISHED_ON,
+        "source": free.get("source"),
+        "caveat": PLAN_CAVEATS.get(provider_id, ""),
+        "tiers": [
+            {
+                "name": tier.name,
+                "price": tier.price,
+                "accounts": tier.accounts,
+                "posts": tier.posts,
+                "note": tier.note,
+                # The tier an account is on until the engine says otherwise, so
+                # the row somebody is probably reading from is marked as such.
+                "free": tier.name.casefold().startswith("free"),
+            }
+            for tier in tiers
+        ],
+    }
+
+
+@dataclass(frozen=True)
 class Plan:
     """Which plan an account is on, and how that was arrived at.
 

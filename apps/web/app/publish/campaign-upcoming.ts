@@ -26,6 +26,7 @@ type PreviewPost = {
   title: string | null;
   caption: string;
   destination: { platform: PublishingPlatform } | null;
+  asset_id: string | null;
 };
 
 export type CampaignUpcoming = {
@@ -55,20 +56,24 @@ export function useCampaignUpcoming(
   const [state, setState] = useState<CampaignUpcoming>(EMPTY);
 
   useEffect(() => {
+    let live = true;
     if (!workspaceId) {
-      setState(EMPTY);
-      return;
+      queueMicrotask(() => { if (live) setState(EMPTY); });
+      return () => { live = false; };
     }
     const fresh = cache.get(workspaceId);
     if (fresh && Date.now() - fresh.at < CACHE_MS) {
-      setState({ names: fresh.names, planned: fresh.planned, loading: false });
-      return;
+      queueMicrotask(() => {
+        if (live) setState({ names: fresh.names, planned: fresh.planned, loading: false });
+      });
+      return () => { live = false; };
     }
 
-    let live = true;
     // Narrowed to a string here, so the nested fetch/cache calls keep it.
     const ws = workspaceId;
-    setState((current) => ({ ...current, loading: true }));
+    queueMicrotask(() => {
+      if (live) setState((current) => ({ ...current, loading: true }));
+    });
 
     async function load() {
       try {
@@ -109,6 +114,7 @@ export function useCampaignUpcoming(
               // campaign timeline uses for a post still in the rotation.
               state: "planned",
               platforms: post.destination?.platform ? [post.destination.platform] : [],
+              assetId: post.asset_id,
               campaign: { id: campaign.id, name: campaign.name },
             });
           }

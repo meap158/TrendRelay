@@ -123,7 +123,7 @@ class AutopilotSettings(BaseModel):
     offer_id: str | None = Field(default=None, max_length=64)
     offer_mode: str = Field(default="smart", pattern=r"^(smart|manual|none)$")
     candidate_offer_ids: list[str] = Field(default_factory=list, max_length=500)
-    max_products_per_post: int = Field(default=2, ge=1, le=5)
+    max_products_per_post: int = Field(default=1, ge=1, le=5)
     #: Whether a disclosure is added at all. Off by default, and what it turns
     #: off is a legal safeguard - see the model for what that costs and who
     #: carries it.
@@ -136,7 +136,7 @@ class AutopilotSettings(BaseModel):
     repeat_posts: bool = False
     #: Whether smart matching spreads itself across the tagged products.
     rotate_products: bool = True
-    daily_cap_per_account: int = Field(default=2, ge=1, le=24)
+    daily_cap_per_account: int = Field(default=5, ge=1, le=24)
     delivery: str = Field(default="schedule", pattern=r"^(draft|schedule|now)$")
     #: How much the campaign may do alone. Run by exception is the recommended
     #: default: proceed, and hold only what trips a rule.
@@ -169,6 +169,8 @@ class DestinationCreate(BaseModel):
     integration_id: str = Field(min_length=1, max_length=200)
     platform: str = Field(min_length=1, max_length=24)
     label: str = Field(min_length=1, max_length=200)
+    page_key: str | None = Field(default=None, max_length=300)
+    posting_preset_id: str | None = Field(default=None, max_length=64)
     post_type: str | None = Field(default=None, max_length=24)
     #: 'auto' lets the network's behaviour decide, and is the recommendation.
     link_placement: str = Field(
@@ -178,6 +180,12 @@ class DestinationCreate(BaseModel):
 
 class DestinationPlacement(BaseModel):
     link_placement: str = Field(pattern=r"^(auto|caption|first_comment|bio)$")
+
+
+class DestinationSchedule(BaseModel):
+    # Null means use the page assignment, or the workspace schedule when the
+    # page has none. It is inheritance, not a special preset stored in data.
+    posting_preset_id: str | None = Field(default=None, max_length=64)
 
 
 #: A caption is required by every network, so a package with none cannot post -
@@ -287,6 +295,14 @@ def _destination_view(session: Session, item: CampaignDestination) -> dict[str, 
     # had two - which names the connection without saying whose account it is.
     connection = publishing_connections.find(PROVIDERS, item.provider)
     engine = PROVIDERS.get(connection.provider) if connection else None
+    from trendrelay_api.integrations import posting_slots
+
+    _slots, schedule = posting_slots.resolved_slots(
+        item.workspace_id,
+        session=session,
+        page_key=item.page_key,
+        override_preset_id=item.posting_preset_id,
+    )
     return {
         "id": item.id,
         "provider": item.provider,
@@ -314,6 +330,9 @@ def _destination_view(session: Session, item: CampaignDestination) -> dict[str, 
         "takes_title": limits_for(item.platform).title is not None,
         "integration_id": item.integration_id,
         "platform": item.platform,
+        "page_key": item.page_key,
+        "posting_preset_id": item.posting_preset_id,
+        "posting_schedule": schedule,
         "label": item.label,
         "post_type": item.post_type,
         "enabled": item.enabled,
@@ -622,6 +641,7 @@ def add_destination(
         workspace_id=workspace_id, campaign_id=campaign_id, provider=body.provider,
         integration_id=body.integration_id, platform=body.platform, label=body.label,
         post_type=body.post_type, link_placement=body.link_placement,
+        page_key=body.page_key, posting_preset_id=body.posting_preset_id,
     )
     session.add(item)
     session.flush()
@@ -675,6 +695,46 @@ def set_destination_placement(
         {"link_placement": body.link_placement, "recomposed_held": reached["recomposed"]},
     )
     return {"destination": _destination_view(session, item), "held": reached}
+
+
+@router.post("/{campaign_id}/destinations/{destination_id}/schedule")
+def set_destination_schedule(
+    workspace_id: str,
+    campaign_id: str,
+    destination_id: str,
+    body: DestinationSchedule,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Override one campaign destination's page schedule, or inherit it."""
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    _campaign(session, workspace_id, campaign_id)
+    item = session.scalar(select(CampaignDestination).where(
+        CampaignDestination.id == destination_id,
+        CampaignDestination.campaign_id == campaign_id,
+        CampaignDestination.workspace_id == workspace_id,
+    ))
+    if not item:
+        raise HTTPException(status_code=404, detail="Destination not found.")
+    if body.posting_preset_id:
+        from trendrelay_api.integrations import posting_slots
+
+        if not posting_slots.preset_by_id(
+            workspace_id, body.posting_preset_id, session=session
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="That posting preset is not available in this workspace.",
+            )
+    item.posting_preset_id = body.posting_preset_id
+    audit(
+        session, request, workspace_id, user.id,
+        "campaign.destination_schedule", "campaign_destination", item.id,
+        {"posting_preset_id": body.posting_preset_id},
+    )
+    session.flush()
+    return {"destination": _destination_view(session, item)}
 
 
 @router.delete("/{campaign_id}/destinations/{destination_id}")

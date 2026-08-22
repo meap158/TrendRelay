@@ -621,6 +621,9 @@ class PublishRequest(BaseModel):
     #: Optional only because a photo carousel has no video. Every other post
     #: still needs one, which `media_matches_the_post_type` holds to.
     video_path: str = Field(default="", max_length=1000)
+    # Kept with the durable job so compact schedule rows can use the Library's
+    # existing still instead of reading a whole video merely to identify it.
+    asset_id: str | None = Field(default=None, max_length=64)
     #: A TikTok photo carousel's images, in swipe order. Empty for a video post,
     #: which is still what almost every post here is - so `video_path` stays
     #: required rather than becoming one of two optional media fields that a

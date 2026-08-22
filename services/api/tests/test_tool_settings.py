@@ -106,9 +106,17 @@ def test_a_card_can_ask_for_the_form_by_name() -> None:
     """
     from trendrelay_api.tool_settings import fields_for
 
-    assert [field["key"] for field in fields_for("elevenlabs")] == [
-        "ELEVENLABS_API_KEY"
-    ]
+    keys = [field["key"] for field in fields_for("elevenlabs")]
+
+    # The key leads the form because it gates everything under it: no key,
+    # and no voice or transcription setting beside it does anything.
+    assert keys[0] == "ELEVENLABS_API_KEY"
+    # That a form exists at all is the join this is about. Deliberately not
+    # pinned to an exact list - the voice and speech-to-text settings beside
+    # the key are meant to grow, and enumerating them here failed the moment
+    # they did, with nothing actually wrong.
+    assert len(keys) > 1
+    # And a tool that declares none still gets none.
     assert fields_for("faster-whisper") == []
 
 

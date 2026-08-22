@@ -20,6 +20,7 @@ from trendrelay_api import publishing_api
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
+from trendrelay_api.media_models import MediaAsset, MediaAssetVersion
 from trendrelay_api.models import Base
 
 engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
@@ -71,8 +72,11 @@ def _create_workspace() -> str:
     return str(asyncio.run(go()).json()["workspace"]["id"])
 
 
-def preview(workspace_id: str, *, opaque: bool = False) -> httpx.Response:
+def preview(
+    workspace_id: str, *, opaque: bool = False, thumbnail: bool = False
+) -> httpx.Response:
     suffix = "&opaque=true" if opaque else ""
+    suffix += "&thumbnail=true" if thumbnail else ""
     return get(f"/api/workspaces/{workspace_id}/publishing/media/preview?path=clip.mp4{suffix}")
 
 
@@ -113,3 +117,44 @@ def test_a_preview_is_never_offered_as_an_attachment(workspace) -> None:
 
     for response in (preview(workspace_id), preview(workspace_id, opaque=True)):
         assert "attachment" not in response.headers.get("content-disposition", "")
+
+
+def test_a_thumbnail_request_returns_the_library_still_not_the_video(
+    workspace, tmp_path
+) -> None:
+    workspace_id, clip = workspace
+    still = tmp_path / "thumbnail.jpg"
+    still.write_bytes(b"small still")
+    with TestingSession() as session:
+        asset = MediaAsset(
+            workspace_id=workspace_id,
+            title="Scheduled clip",
+            media_kind="video",
+            source_type="upload",
+            original_path=str(clip),
+            original_sha256="0" * 64,
+            mime_type="video/mp4",
+            size_bytes=clip.stat().st_size,
+            has_audio=True,
+            created_by="owner-user",
+        )
+        session.add(asset)
+        session.flush()
+        session.add(MediaAssetVersion(
+            workspace_id=workspace_id,
+            asset_id=asset.id,
+            version_kind="thumbnail",
+            path=str(still),
+            sha256="1" * 64,
+            mime_type="image/jpeg",
+            size_bytes=still.stat().st_size,
+            effect_ids=[],
+        ))
+        session.commit()
+
+    response = preview(workspace_id, thumbnail=True)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/jpeg")
+    assert response.content == still.read_bytes()
+    assert response.content != clip.read_bytes()
