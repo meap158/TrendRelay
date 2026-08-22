@@ -265,6 +265,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
  * events, not a reading surface. The full text rides on the title attribute
  * and lives one click away in Publish. */
 .notification-context-caption { display: -webkit-box; overflow: hidden; margin: 0; color: var(--text); font-size: 10px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+/* A working row's one-line clip name: identification without a second block,
+ * since the bar and its stage already own this row's vertical space. */
+.notification-context-name { overflow: hidden; margin: 0; color: var(--muted); font-size: 10px; font-weight: 600; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
 .notification-context-meta { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; min-width: 0; color: var(--muted); font-size: 10px; line-height: 1; }
 .notification-context-meta .platform-icon { border-radius: 4px; }
 .notification-context-more, .notification-context-when { font-weight: 700; font-variant-numeric: tabular-nums; }
