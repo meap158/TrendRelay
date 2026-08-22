@@ -15,6 +15,7 @@ TrendRelay is a local-first Windows workspace for collecting reference media fro
 - **Keep source provenance** so every Library item can lead back to the Douyin URL that produced it.
 - **Avoid duplicate work** through local metadata, file checks, and incremental downloading.
 - **Review media locally** using thumbnails, filters, gallery/list views, and an in-page video player.
+- **Transcribe and translate locally** with faster-whisper speech drafts and Argos caption language packs; machine text stays separate until it is reviewed.
 - **Apply non-destructive effects** to one clip or a campaign-sized selection while keeping every original immutable.
 - **Deploy campaigns from one workspace** by filtering and selecting Library clips, applying effects, assigning social accounts, writing captions, attaching imported affiliate offers, setting posting times, previewing, and launching without leaving Campaigns.
 - **Hand approved plans to Publish** with media, copy, disclosure, affiliate placement, and schedule restored together.
@@ -32,6 +33,8 @@ TrendRelay is a local-first Windows workspace for collecting reference media fro
 ![TrendRelay Library showing downloaded video thumbnails and preview](docs/assets/trendrelay-library.png)
 
 Library videos use poster thumbnails and load the video stream only after you choose to play it. This keeps browsing fast and avoids triggering external download managers while changing filters or moving between items. Use the previous/next controls or arrow keys to navigate; press Space to play or pause.
+
+Open the transcription status control in Library to set up or switch on local speech transcription and caption translation. Provider downloads run as recoverable background jobs, and completed runtimes are reused after a restart. A stale Hugging Face login is not required for the public faster-whisper model. Automatic transcripts are saved as machine drafts so they can be checked before they become reviewed text; translated caption tracks preserve the original transcript.
 
 ## Quick start on Windows
 
