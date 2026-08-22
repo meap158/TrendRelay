@@ -6,6 +6,7 @@ import { Button } from "../ui/button";
 import { Select } from "../ui/select";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
+import { AutoTranscribe } from "./auto-transcribe";
 import { ProviderSwitch, providerOf, useMediaAi } from "./transcription-setup";
 import { useT } from "../i18n-provider";
 
@@ -89,7 +90,9 @@ export function CaptionEditor({
   assetId,
   assetTitle,
   targets,
+  hasAudio = true,
   onQueued,
+  onTranscribed,
   onClose,
   apiFetch,
   canEdit,
@@ -99,7 +102,9 @@ export function CaptionEditor({
   assetId?: string;
   assetTitle?: string;
   targets?: { id: string; title: string; mediaKind: string }[];
+  hasAudio?: boolean;
   onQueued?: (message: string, assetIds: string[]) => void;
+  onTranscribed?: () => void;
   onClose: () => void;
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   canEdit: boolean;
@@ -312,6 +317,8 @@ export function CaptionEditor({
       ? catalogue.translation.pairs ?? []
       : [];
   const speechReady = liveSpeech?.ready ?? catalogue?.speech.ready ?? false;
+  const needsSpeechTranscript = !batch
+    && Boolean(problem?.toLowerCase().includes("no speech transcript"));
   // The provider reports every reachable direction. The selector is for this
   // transcript, so offering directions whose source is another language made
   // duplicate targets and choices that could never apply to this clip.
@@ -379,7 +386,7 @@ export function CaptionEditor({
         {/* The runtime is the first thing to say, because every control below
             depends on it and an empty style list would otherwise read as a
             missing feature rather than a missing install. */}
-        {catalogue && !speechReady && (
+        {catalogue && !speechReady && !needsSpeechTranscript && (
           <div className="caption-editor-setup">
             <p>
               Automatic transcription is off, so captions can only be built from
@@ -466,6 +473,28 @@ export function CaptionEditor({
             )}
           </h4>
           {problem && <p className="caption-editor-problem">{problem}</p>}
+          {needsSpeechTranscript && primary && (
+            <div className="caption-editor-setup">
+              <p>
+                <strong>Transcribe speech here.</strong>{" "}
+                The machine draft will unlock caption timing automatically when it finishes.
+                Review the wording before publishing.
+              </p>
+              <AutoTranscribe
+                workspaceId={workspaceId}
+                assetId={primary.id}
+                hasAudio={hasAudio}
+                mediaKind={primary.mediaKind}
+                modesAvailable={["speech"]}
+                apiFetch={apiFetch}
+                canEdit={canEdit}
+                onFinished={() => {
+                  void load();
+                  onTranscribed?.();
+                }}
+              />
+            </div>
+          )}
           {queued && <p className="caption-editor-queued">{queued}</p>}
           {busy && !preview && <p className="caption-editor-note">Building…</p>}
           {preview && (

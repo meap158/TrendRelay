@@ -68,6 +68,7 @@ export function AutoTranscribe({
   assetId,
   hasAudio,
   mediaKind,
+  modesAvailable = ["speech", "ocr"],
   apiFetch,
   canEdit,
   onFinished,
@@ -76,6 +77,7 @@ export function AutoTranscribe({
   assetId: string;
   hasAudio: boolean;
   mediaKind: string;
+  modesAvailable?: ("speech" | "ocr")[];
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
   canEdit: boolean;
   /** A new draft landed, so the asset needs re-reading to show it. */
@@ -84,8 +86,9 @@ export function AutoTranscribe({
   // What each mode can even apply to. An audio-less clip has no speech to
   // transcribe and OCR needs frames, so the control says so rather than
   // offering a choice the API will refuse.
-  const speechPossible = hasAudio;
-  const ocrPossible = mediaKind === "video" || mediaKind === "image";
+  const speechPossible = modesAvailable.includes("speech") && hasAudio;
+  const ocrPossible = modesAvailable.includes("ocr")
+    && (mediaKind === "video" || mediaKind === "image");
   const [modes, setModes] = useState<Record<"speech" | "ocr", boolean>>({
     speech: speechPossible,
     ocr: false,

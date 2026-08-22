@@ -2264,8 +2264,10 @@ function LibraryContent() {
           workspaceId={workspaceId}
           assetId={selected.id}
           assetTitle={selected.title}
+          hasAudio={selected.has_audio}
           canEdit={canImport}
           apiFetch={apiFetch}
+          onTranscribed={() => void refresh()}
           onClose={() => setCaptionsOpen(false)}
         />
       )}
