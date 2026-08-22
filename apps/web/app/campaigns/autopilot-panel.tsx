@@ -917,6 +917,25 @@ function deliveredStatus(entry: TimelineEntry): { label: string; tone: "good" | 
   return { label: raw.charAt(0).toUpperCase() + raw.slice(1), tone: "neutral" };
 }
 
+/**
+ * What "Planned" means for this campaign, as the badge's own explanation.
+ *
+ * The badge used to spell the delivery mode out beside the word - "Planned ·
+ * scheduled", "Planned · review draft" - which repeated one campaign-wide
+ * setting on every row that shares it, and made the two-word label the widest
+ * thing in the row. The state a row is in is Planned; how the campaign
+ * delivers reads better as the badge's description than as most of its label.
+ */
+function plannedMeaning(delivery: Autopilot["delivery"]): string {
+  if (delivery === "draft") {
+    return "Planned: waiting for you to approve the draft before it is sent.";
+  }
+  if (delivery === "schedule") {
+    return "Planned: handed to the network to post at this time.";
+  }
+  return "Planned: sent as soon as the campaign reaches it.";
+}
+
 /* Which queue package a held post was frozen from, so approval traces back to
    the row in "What it posts" instead of floating free of it. The frozen title
    matches that row's own name; its clip's filename is the fallback when the
@@ -1663,6 +1682,17 @@ export function AutopilotPanel({
     campaignStatus === "active" ? "posts" : "content",
   );
   const searchTimer = useRef<number | null>(null);
+  /**
+   * Which library query the picker's rows belong to.
+   *
+   * Filtering replaces the rows and paging appends to them, and the two race:
+   * typing in the search box while "Load more" or a select-all was in flight
+   * appended the old query's page onto the new query's first page. That put
+   * rows the filter excludes back on screen, and where the two pages overlap
+   * it listed one asset twice under one React key. Every load takes a number;
+   * a page that comes back under an old one is dropped rather than merged.
+   */
+  const libraryRequest = useRef(0);
   const automaticPreview = useRef(false);
   // The references this mirrors (Buffer, Zernio) offer the same posts as a
   // list and as a calendar; the list answers "what went out", the calendar
@@ -1970,10 +2000,25 @@ export function AutopilotPanel({
   const postableOnly = (assets: LibraryAsset[] = []) =>
     assets.filter((asset) => asset.media_kind !== "audio");
 
+  /**
+   * Rows on screen plus rows just arrived, as a set rather than a list.
+   *
+   * The picker holds each asset once - it is a selection, and an asset chosen
+   * twice means nothing. Appending blind made that reachable, and React saw it
+   * first: two `<li>` under one asset id is the duplicate-key warning, and the
+   * row it drops is a row the operator cannot tick.
+   */
+  const mergeAssets = (current: LibraryAsset[], arrived: LibraryAsset[]) => {
+    const seen = new Set(current.map((asset) => asset.id));
+    return [...current, ...arrived.filter((asset) => !seen.has(asset.id))];
+  };
+
   async function loadLibrary(filters: AssetFilterValues = libraryFilters) {
+    const generation = ++libraryRequest.current;
     setBusy("library");
     try {
       const body = await fetchLibraryPage(filters, 0);
+      if (libraryRequest.current !== generation) return;
       setLibrary(postableOnly(body.assets));
       setLibraryOffset(body.assets?.length ?? 0);
       if (body.facets) setLibraryFacets(body.facets);
@@ -1987,13 +2032,43 @@ export function AutopilotPanel({
     }
   }
 
+  // Arriving from Library's "Add to campaign": open the picker on exactly the
+  // handed-off clips, selected, then scrub the parameter so a refresh or a
+  // shared link does not re-run the hand-off.
+  const addParamRef = useRef(false);
+  useEffect(() => {
+    if (!workspaceId || addParamRef.current) return;
+    const wanted = new URLSearchParams(window.location.search).get("add");
+    if (!wanted) return;
+    addParamRef.current = true;
+    const ids = [...new Set(wanted.split(",").filter(Boolean))];
+    window.history.replaceState(null, "", "/campaigns");
+    setView("content");
+    void (async () => {
+      try {
+        const body = await fetchLibraryPage({ asset_ids: ids } as AssetFilterValues, 0);
+        const assets = postableOnly(body.assets);
+        setLibrary(assets);
+        setSelectedAssets(Object.fromEntries(assets.map((asset) => [asset.id, asset])));
+        setPicking(true);
+      } catch {
+        fail("The handed-off clips could not be loaded.");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per workspace on arrival
+  }, [workspaceId]);
+
   /** The next page, appended. What "showing 100 of 131" was missing. */
   async function loadMoreLibrary() {
+    const generation = libraryRequest.current;
     setBusy("library-more");
     try {
       const body = await fetchLibraryPage(libraryFilters, libraryOffset);
+      // Dropped rather than appended if the filter moved on while this was in
+      // flight: this page was cut against a query nobody is looking at now.
+      if (libraryRequest.current !== generation) return;
       const arrived = body.assets ?? [];
-      setLibrary((current) => [...current, ...postableOnly(arrived)]);
+      setLibrary((current) => mergeAssets(current, postableOnly(arrived)));
       setLibraryOffset((current) => current + arrived.length);
       if (body.total !== undefined) setLibraryTotal(body.total);
     } catch (reason) {
@@ -2012,6 +2087,7 @@ export function AutopilotPanel({
    * implied: a selection that quietly stopped short is the bug this replaces.
    */
   async function selectAllMatching() {
+    const generation = libraryRequest.current;
     setBusy("library-all");
     try {
       let collected = [...library];
@@ -2019,11 +2095,14 @@ export function AutopilotPanel({
       let total = libraryTotal;
       while (offset < Math.min(total, PICKER_CEILING)) {
         const body = await fetchLibraryPage(libraryFilters, offset);
+        // Abandoned mid-page if the filter changed under it, rather than
+        // finishing a walk of a query that is no longer on screen.
+        if (libraryRequest.current !== generation) return;
         const arrived = body.assets ?? [];
         // No progress means the end, whatever the count said. Without this a
         // total that disagrees with the rows on hand spins forever.
         if (!arrived.length) break;
-        collected = [...collected, ...postableOnly(arrived)];
+        collected = mergeAssets(collected, postableOnly(arrived));
         offset += arrived.length;
         if (body.total !== undefined) total = body.total;
       }
@@ -4157,40 +4236,6 @@ export function AutopilotPanel({
                     );
                   })()}
                   </span>
-                  {/* When, where, how it reads there, and what follows it. The
-                      row used to answer only the first of those. */}
-                  <QueueRehearsal
-                    item={item}
-                    outings={outings.get(item.id) ?? []}
-                    workspaceId={workspaceId}
-                    apiFetch={apiFetch}
-                    destinations={destinations}
-                    slots={slots}
-                    /* In the order the scheduler applies them. Copy comes
-                       before everything: an unwritten post is skipped whatever
-                       else is true of it, and guessing "another post holds
-                       every slot" at a post that was never a candidate sent
-                       somebody looking for a scheduling problem that was
-                       really an empty caption. */
-                    noPlanReason={item.needs_copy
-                      ? "Not scheduled: no copy written yet. Write it and this post joins the rotation."
-                      : item.state !== "approved"
-                        ? "Held back: add it to the rotation and the plan appears here."
-                        : !destinations.length
-                          ? "Nowhere to post it yet. Add an account."
-                          : !hasPostingTimes
-                            ? "No posting times yet. Add one and the plan appears here."
-                            : preview
-                              // Says which window is full, and that being
-                              // outside it is normal. "Every slot is taken by
-                              // another post" describes a queue larger than
-                              // the outlook - which is most queues - but reads
-                              // as a fault, so a full week of correct planning
-                              // looked like dozens of posts going nowhere.
-                              ? `Waiting its turn: the next ${preview.horizon_days ?? 7} days are `
-                                + "already full. It stays in rotation and takes the first free slot after that."
-                              : "Loading the plan…"}
-                  />
                 </div>
                 {/* What the row can do, not what column it stores. Every item
                     arrives approved, so an unwritten one wore a green
@@ -4241,6 +4286,42 @@ export function AutopilotPanel({
                     })}>{t("common.delete")}</Button>
                   </div>
                 )}
+                {/* A row of its own, spanning every column. Nested in the copy
+                    column it was 140px wider than the track holding it, so an
+                    open rehearsal drew straight over the status badge and the
+                    buttons beside it. */}
+                <QueueRehearsal
+                  item={item}
+                  outings={outings.get(item.id) ?? []}
+                  workspaceId={workspaceId}
+                  apiFetch={apiFetch}
+                  destinations={destinations}
+                  slots={slots}
+                  /* In the order the scheduler applies them. Copy comes
+                     before everything: an unwritten post is skipped whatever
+                     else is true of it, and guessing "another post holds
+                     every slot" at a post that was never a candidate sent
+                     somebody looking for a scheduling problem that was
+                     really an empty caption. */
+                  noPlanReason={item.needs_copy
+                    ? "Not scheduled: no copy written yet. Write it and this post joins the rotation."
+                    : item.state !== "approved"
+                      ? "Held back: add it to the rotation and the plan appears here."
+                      : !destinations.length
+                        ? "Nowhere to post it yet. Add an account."
+                        : !hasPostingTimes
+                          ? "No posting times yet. Add one and the plan appears here."
+                          : preview
+                            // Says which window is full, and that being
+                            // outside it is normal. "Every slot is taken by
+                            // another post" describes a queue larger than
+                            // the outlook - which is most queues - but reads
+                            // as a fault, so a full week of correct planning
+                            // looked like dozens of posts going nowhere.
+                            ? `Waiting its turn: the next ${preview.horizon_days ?? 7} days are `
+                              + "already full. It stays in rotation and takes the first free slot after that."
+                            : "Loading the plan…"}
+                />
               </li>
             ))}
           </ul>
@@ -5390,10 +5471,9 @@ export function AutopilotPanel({
                                 {deliveredStatus(entry).label}
                               </Badge>
                             ) : (
-                              <Badge tone={entry.problem ? "warn" : "neutral"}>
-                                {autopilot.delivery === "draft" ? "Planned · review draft"
-                                  : autopilot.delivery === "schedule" ? "Planned · scheduled"
-                                  : "Planned · publish now"}
+                              <Badge tone={entry.problem ? "warn" : "neutral"}
+                                title={plannedMeaning(autopilot.delivery)}>
+                                Planned
                               </Badge>
                             )}
                           </div>
@@ -5587,10 +5667,9 @@ export function AutopilotPanel({
                         {deliveredStatus(entry).label}
                       </Badge>
                     ) : (
-                      <Badge tone={entry.problem ? "warn" : "neutral"}>
-                        {autopilot.delivery === "draft" ? "Planned · draft"
-                          : autopilot.delivery === "schedule" ? "Planned · scheduled"
-                          : "Planned · now"}
+                      <Badge tone={entry.problem ? "warn" : "neutral"}
+                        title={plannedMeaning(autopilot.delivery)}>
+                        Planned
                       </Badge>
                     )}
                     {editable ? (
@@ -5731,7 +5810,8 @@ export function AutopilotPanel({
                       {deliveredStatus(entry).label}
                     </Badge>
                   ) : (
-                    <Badge tone={entry.problem ? "warn" : "neutral"}>Planned</Badge>
+                    <Badge tone={entry.problem ? "warn" : "neutral"}
+                      title={plannedMeaning(autopilot.delivery)}>Planned</Badge>
                   )}
                 </li>
               );

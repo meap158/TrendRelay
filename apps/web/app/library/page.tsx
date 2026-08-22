@@ -9,6 +9,7 @@ import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState 
 import { apiBaseUrl } from "../../lib/api";
 import { effectLabel, effectTag } from "../../lib/i18n/effects";
 import { LOCALES } from "../../lib/i18n/locales";
+import { mediaTypeFor, opaquePreviewUrl } from "../../lib/media-preview";
 import { useAuth } from "../auth-provider";
 import { type BaseJob, useJobs } from "../jobs-provider";
 import { useWorkspace } from "../workspace-provider";
@@ -665,13 +666,16 @@ function Thumbnail({
     if (!hasThumbnail) return;
     let active = true;
     let objectUrl = "";
-    apiFetch(`/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/content/thumbnail`)
+    // Asked opaque and retyped here: an honest image/* on the wire is a file
+    // to a grabber configured for pictures, exactly as video/* is to one
+    // configured for clips. Same contract as every other served byte.
+    apiFetch(opaquePreviewUrl(`/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/content/thumbnail`))
       .then((response) => {
         if (!response.ok) throw new Error("Preview unavailable");
-        return response.blob();
+        return response.arrayBuffer();
       })
-      .then((blob) => {
-        objectUrl = URL.createObjectURL(blob);
+      .then((bytes) => {
+        objectUrl = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
         if (active) setSource(objectUrl);
       })
       .catch(() => undefined);
@@ -799,37 +803,66 @@ function MediaPreview({
     let objectUrl = "";
     const controller = new AbortController();
     const wanted = cut === "edited" && rendered ? "edited" : "original";
+    // Hands a finished blob to the row through one guarded door, so both the
+    // base64 path and the streamed fallback revoke correctly on cleanup.
+    const adopt = (url: string) => {
+      if (active) {
+        objectUrl = url;
+        setSource(url);
+      } else {
+        URL.revokeObjectURL(url);
+      }
+    };
     apiFetch(
       `/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/preview?cut=${wanted}`,
       { method: "POST", signal: controller.signal },
     )
       .then((response) => json<{ mime_type: string; content_base64: string }>(response))
       .then((preview) => {
-        objectUrl = URL.createObjectURL(
-          previewBlob(preview.content_base64, preview.mime_type),
-        );
-        return objectUrl;
+        adopt(URL.createObjectURL(previewBlob(preview.content_base64, preview.mime_type)));
       })
-      .then((url) => { if (active) setSource(url); })
       .catch((reason) => {
         if (active && reason instanceof DOMException && reason.name === "AbortError") return;
         // Caption burns re-encode the full-length source, so long clips pass
         // the base64 preview's size cap. The stream endpoint answers the same
-        // cut with range requests, which is what a long video wanted anyway.
-        if (active && playable && reason instanceof Error && /too large/i.test(reason.message)) {
-          setSource(
-            `${apiBaseUrl()}/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/preview/stream?cut=${wanted}`,
-          );
+        // cut with range requests, which is what a long video wanted anyway -
+        // but a progressive video/mp4 over plain GET is precisely the request
+        // a download manager takes, and this surface had the distinction of
+        // being the last one still making it. So the stream is fetched here,
+        // asked for opaque and retyped into a blob like every other served
+        // byte. The cost of buffering before playback is the price of the
+        // player not being a download button.
+        if (!(active && playable && reason instanceof Error && /too large/i.test(reason.message))) {
+          if (active) setError(reason instanceof Error ? reason.message : t("library.previewUnavailable"));
           return;
         }
-        if (active) setError(reason instanceof Error ? reason.message : t("library.previewUnavailable"));
+        apiFetch(
+          opaquePreviewUrl(
+            `${apiBaseUrl()}/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/preview/stream?cut=${wanted}`,
+          ),
+          { signal: controller.signal },
+        )
+          .then((response) => {
+            if (!response.ok) throw new Error(t("library.previewUnavailable"));
+            return response.arrayBuffer();
+          })
+          .then((bytes) => {
+            adopt(URL.createObjectURL(new Blob([bytes], {
+              type: mediaTypeFor(asset.original_path || asset.title, asset.media_kind === "audio" ? "audio/mpeg" : "video/mp4"),
+            })));
+          })
+          .catch((streamReason) => {
+            if (active && !(streamReason instanceof DOMException && streamReason.name === "AbortError")) {
+              setError(streamReason instanceof Error ? streamReason.message : t("library.previewUnavailable"));
+            }
+          });
       });
     return () => {
       active = false;
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [apiFetch, asset.id, rendered, cut, requested, t, workspaceId]);
+  }, [apiFetch, asset.id, asset.original_path, asset.title, asset.media_kind, rendered, cut, requested, t, workspaceId]);
 
   function startPlayback() {
     setError("");
@@ -1868,6 +1901,13 @@ function LibraryContent() {
                     Clear
                   </Button>
                   <span className="library-selection-tools">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={!canImport || selection.size === 0}
+                      title="Queue the selected clips into a campaign"
+                      onClick={() => router.push(`/campaigns?add=${[...selection].slice(0, 200).join(",")}`)}
+                    ><ActionIcon name="clip" />Add to campaign</Button>
                     <ActionMenu
                       label={t("library.selectionActions")}
                       ariaLabel={t("library.selectionActionsLabel")}
@@ -2062,7 +2102,21 @@ function LibraryContent() {
                           ? t("library.clipPlanHelp")
                           : t("library.videoOnlyClip")}
                         onClick={() => setEditorOpen(true)}
-                      ><ActionIcon name="clip" />{t("library.clipPlan")}</Button>
+                        ><ActionIcon name="clip" />{t("library.clipPlan")}</Button>
+                      <Button
+                        variant="secondary"
+                        title="Start or open a campaign with this clip queued"
+                        onClick={() => router.push(`/campaigns?add=${selected.id}`)}
+                      ><ActionIcon name="clip" />Plan campaign</Button>
+                      <Button
+                        variant="secondary"
+                        title="Send this cut to the Publish desk"
+                        onClick={() => {
+                          const rendered = renderedCut(selected.versions);
+                          const path = rendered?.path ?? selected.original_path;
+                          router.push(`/publish?video=${encodeURIComponent(path)}`);
+                        }}
+                      ><ActionIcon name="play" />Prepare to publish</Button>
                       {/* Captions are not an effect: they come from the audio,
                           need not touch the picture, and do not stack. So they
                           get their own button rather than a row in the stack. */}
