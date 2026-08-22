@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildCampaignIdea,
+  campaignSignalKind,
   seedFromEngagedPost,
   seedFromPost,
   seedFromTopic,
@@ -149,4 +150,9 @@ test("a ranked topic retains the platforms that corroborated it", () => {
   assert.equal(result.label, "MorningRoutine");
   assert.equal(result.source, "tiktok + douyin");
   assert.deepEqual(result.tags, ["durable", "tiktok", "douyin"]);
+});
+
+test("news evidence becomes a campaign topic instead of an unsupported signal kind", () => {
+  assert.equal(campaignSignalKind(seed({ kind: "story" })), "topic");
+  assert.equal(campaignSignalKind(seed({ kind: "post" })), "post");
 });

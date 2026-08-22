@@ -82,6 +82,20 @@ export const ru: Messages = {
   },
 
   discover: {
+    workspaceTabs: {
+      overview: "Обзор",
+      trends: "Тренды",
+      posts: "Публикации",
+      signals: "Реклама и сигналы",
+      opportunities: "Возможности",
+    },
+    actions: {
+      addToCampaign: "Добавить в кампанию",
+      addedToCampaign: "Добавлено",
+      searchThis: "Искать это",
+      researchMode: "Исследование за 30 дней",
+      metaAdsMode: "Библиотека рекламы Meta",
+    },
     title: "Популярное в Douyin",
     subtitleEmpty:
       "Что сейчас в тренде на Douyin — по данным вашей подключённой сессии.",
@@ -123,7 +137,7 @@ export const ru: Messages = {
       refresh: "Обновить",
       refreshing: "Чтение…",
       refreshTitle: "Прочитать ленты заново",
-      add: "Добавить в идею",
+      add: "Добавить в кампанию",
       added: "Добавлено",
       newsrooms: "Редакций: {count}",
       covered: "Широко освещается",
@@ -151,7 +165,7 @@ export const ru: Messages = {
       emergingBlurb:
         "Выше своей весовой категории: реагируют быстрее или обсуждают активнее, чем обычно на этой доске.",
       empty: "Пока ничего не выделяется. Запустите исследование ниже, чтобы заполнить доску.",
-      add: "Добавить в идею",
+      add: "Добавить в кампанию",
       added: "Добавлено",
       views: "{count} просмотров",
       reactions: "{count} реакций",
@@ -877,7 +891,7 @@ export const ru: Messages = {
     importHelp:
       "Используйте CSV для Amazon Creators, impact.com, Awin или любой партнёрской ссылки, добавленной вручную.",
     whereAmazonAccess: "Как получить доступ к API Amazon",
-    stepScore: "2 · ОЦЕНИТЬ",
+    stepScore: "ОЦЕНИТЬ",
     buildCase: "Собрать обоснованную возможность",
     trendEntity: "Объект тренда",
     lifecycle: "Стадия",
@@ -888,7 +902,7 @@ export const ru: Messages = {
     noOffers:
       "Предложений пока нет. Сначала импортируйте CSV или оцените данные о тренде без предложения.",
     noPrimaryOffer: "Основного предложения нет",
-    stepDecide: "3 · РЕШИТЬ",
+    stepDecide: "РЕШИТЬ",
     ranked: "Ранжированные возможности",
     gatherMore: "Собрать больше данных",
     noneScored: "Оценённых возможностей пока нет.",

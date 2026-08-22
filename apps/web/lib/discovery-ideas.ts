@@ -7,7 +7,7 @@ import { searchTerm } from "./trend-shapes.ts";
 
 export type DiscoverySeed = {
   id: string;
-  kind: "topic" | "post" | "story";
+  kind: "topic" | "post" | "story" | "creator";
   label: string;
   source: string;
   region: string;
@@ -15,6 +15,20 @@ export type DiscoverySeed = {
   evidence: string;
   tags: string[];
 };
+
+export type CampaignSignalKind = "topic" | "post" | "creator";
+
+/**
+ * Convert the basket's editorial category to the durable Campaign schema.
+ *
+ * A news story is a topic to make content about, not a social post owned by
+ * the workspace. Keeping that distinction here prevents the campaign request
+ * from sending the unsupported `story` value while the basket can still label
+ * news evidence honestly.
+ */
+export function campaignSignalKind(seed: DiscoverySeed): CampaignSignalKind {
+  return seed.kind === "story" ? "topic" : seed.kind;
+}
 
 export type CampaignIdea = {
   name: string;
@@ -152,6 +166,7 @@ export function buildCampaignIdea(seeds: DiscoverySeed[]): CampaignIdea {
   const topics = selected.filter((seed) => seed.kind === "topic");
   const posts = selected.filter((seed) => seed.kind === "post");
   const stories = selected.filter((seed) => seed.kind === "story");
+  const creators = selected.filter((seed) => seed.kind === "creator");
   const focus = labels.slice(0, 3);
   const focusText = list(focus);
   const sourceText = list(sources);
@@ -160,6 +175,7 @@ export function buildCampaignIdea(seeds: DiscoverySeed[]): CampaignIdea {
     topics.length ? `${topics.length} ranked ${topics.length === 1 ? "topic" : "topics"}` : "",
     posts.length ? `${posts.length} popular ${posts.length === 1 ? "post" : "posts"}` : "",
     stories.length ? `${stories.length} news ${stories.length === 1 ? "story" : "stories"}` : "",
+    creators.length ? `${creators.length} creator ${creators.length === 1 ? "signal" : "signals"}` : "",
   ].filter(Boolean).join(" and ") || "selected trend evidence";
 
   const objective = clipped(

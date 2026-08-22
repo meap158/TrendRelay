@@ -81,6 +81,20 @@ export const vi: Messages = {
   },
 
   discover: {
+    workspaceTabs: {
+      overview: "Tổng quan",
+      trends: "Xu hướng",
+      posts: "Bài đăng",
+      signals: "Quảng cáo & tín hiệu",
+      opportunities: "Cơ hội",
+    },
+    actions: {
+      addToCampaign: "Thêm vào chiến dịch",
+      addedToCampaign: "Đã thêm",
+      searchThis: "Tìm nội dung này",
+      researchMode: "Nghiên cứu 30 ngày",
+      metaAdsMode: "Thư viện quảng cáo Meta",
+    },
     title: "Tìm kiếm nổi bật trên Douyin",
     subtitleEmpty:
       "Những gì đang thịnh hành trên Douyin ngay lúc này, từ phiên đã kết nối của bạn.",
@@ -122,7 +136,7 @@ export const vi: Messages = {
       refresh: "Làm mới",
       refreshing: "Đang đọc…",
       refreshTitle: "Đọc lại các nguồn tin",
-      add: "Thêm vào ý tưởng",
+      add: "Thêm vào chiến dịch",
       added: "Đã thêm",
       newsrooms: "{count} tòa soạn",
       covered: "Được đưa tin rộng rãi",
@@ -150,7 +164,7 @@ export const vi: Messages = {
       emergingBlurb:
         "Vượt trên tầm của nó: tương tác nhanh hơn, hoặc được bàn luận nhiều hơn mức thường thấy.",
       empty: "Chưa có gì nổi bật. Chạy nghiên cứu bên dưới để lấp đầy bảng.",
-      add: "Thêm vào ý tưởng",
+      add: "Thêm vào chiến dịch",
       added: "Đã thêm",
       views: "{count} lượt xem",
       reactions: "{count} lượt tương tác",
@@ -864,7 +878,7 @@ export const vi: Messages = {
     importHelp:
       "Dùng CSV thay thế cho Amazon Creators, impact.com, Awin hoặc bất kỳ liên kết tiếp thị thủ công nào.",
     whereAmazonAccess: "Cách lấy quyền truy cập API của Amazon",
-    stepScore: "2 · CHẤM ĐIỂM",
+    stepScore: "CHẤM ĐIỂM",
     buildCase: "Dựng một cơ hội có thể giải thích được",
     trendEntity: "Thực thể xu hướng",
     lifecycle: "Vòng đời",
@@ -875,7 +889,7 @@ export const vi: Messages = {
     noOffers:
       "Chưa có ưu đãi nào. Hãy nhập CSV trước, hoặc chấm điểm bằng chứng xu hướng mà không cần ưu đãi.",
     noPrimaryOffer: "Không có ưu đãi chính",
-    stepDecide: "3 · QUYẾT ĐỊNH",
+    stepDecide: "QUYẾT ĐỊNH",
     ranked: "Cơ hội đã xếp hạng",
     gatherMore: "Thu thập thêm bằng chứng",
     noneScored: "Chưa có cơ hội nào được chấm điểm.",

@@ -35,6 +35,7 @@ import { seedFromPost, seedFromTopic, type DiscoverySeed } from "../../lib/disco
 import type { PopularPost } from "../../lib/post-board";
 import type { Topic } from "../../lib/trend-shapes";
 import { Button } from "../ui/button";
+import { useLocale } from "../i18n-provider";
 import { usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 
 
@@ -78,6 +79,7 @@ export function DiscoveryFeed({
   selectedIds?: ReadonlySet<string>;
   onToggle?: (seed: DiscoverySeed) => void;
 }) {
+  const { t } = useLocale();
   // The page's one country is this board's region; it keeps no selector of its
   // own now that the setting is global.
   const region = country;
@@ -231,12 +233,11 @@ export function DiscoveryFeed({
       {error && <p className="discovery-feed-error">{error}</p>}
 
       {/* The picks land in a composer further down the page. Saying so here is
-          the only feedback a click on "Use" gets, since that panel is below the
-          fold and only exists once something is in it. */}
+          the only feedback a selection needs before the persistent campaign
+          tray appears at the bottom of the workspace. */}
       {picked > 0 && (
         <p className="discovery-feed-picked">
-          <strong>{picked}</strong> selected from this list —{" "}
-          <a href="#discovery-idea-composer">go to the idea builder</a>
+          <strong>{picked}</strong> selected from this list — continue in the campaign tray below.
         </p>
       )}
 
@@ -276,7 +277,7 @@ export function DiscoveryFeed({
                     variant={picked ? "primary" : "quiet"}
                     size="sm"
                     onClick={() => onToggle(seed)}
-                  >{picked ? "Added" : "Use"}</Button>
+                  >{picked ? t("discover.actions.addedToCampaign") : t("discover.actions.addToCampaign")}</Button>
                 )}
                 {row.url && (
                   <a href={row.url} target="_blank" rel="noreferrer" aria-label="Open">

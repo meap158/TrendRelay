@@ -1,13 +1,14 @@
 /* Discover: selected evidence and campaign synthesis ------------------------ */
 .discovery-idea-tray {
-  position: sticky;
-  bottom: 12px;
+  position: fixed;
+  inset-inline: max(var(--dsc-inset, 18px), calc((100vw - var(--dsc-measure, 1180px)) / 2));
+  bottom: 14px;
   z-index: 75;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  margin: 14px 0;
+  margin: 0;
   padding: 10px 12px;
   border: 1px solid #8eaae5;
   border-radius: var(--radius-lg);
@@ -15,6 +16,7 @@
   box-shadow: 0 8px 24px rgba(22, 52, 105, .16);
   backdrop-filter: blur(8px);
 }
+.dsc-page.has-idea-tray { padding-block-end: 84px; }
 .discovery-idea-count { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 7px; min-width: 0; }
 .discovery-idea-count svg { grid-row: 1 / 3; color: var(--link); }
 .discovery-idea-count strong { font-size: 12px; }
@@ -61,7 +63,7 @@
 .discovery-source-boards > div { padding-inline: 14px; }
 
 @media (max-width: 760px) {
-  .discovery-idea-tray { grid-template-columns: minmax(0, 1fr) auto; bottom: 8px; }
+  .discovery-idea-tray { inset-inline: 8px; grid-template-columns: minmax(0, 1fr) auto; bottom: 8px; }
   .discovery-idea-chips { grid-column: 1 / -1; grid-row: 2; }
   .discovery-idea-count small { display: none; }
   .discovery-idea-form { display: block; padding-inline-end: 4px; overflow-y: auto; }
@@ -76,7 +78,7 @@
 /* The merged feed: the page's first screen.
    One list across every source that answered, because seven sources on seven
    boards is fourteen answers to read before knowing anything. */
-.discovery-feed { margin: 0 0 20px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); }
+.discovery-feed { box-sizing: border-box; max-width: var(--dsc-measure); margin: 0 auto 18px; padding: 16px var(--dsc-inset); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); }
 .discovery-feed-head { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 14px 20px; }
 .discovery-feed-head h2 { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
 .discovery-feed-head p { margin: 0; max-width: 62ch; color: var(--muted); font-size: 13px; line-height: 1.5; }
@@ -178,6 +180,12 @@
    The Google Sans override is gone: Discover reads in the app's own Roboto like
    every other tab, rather than in a second typeface that made it a place apart. */
 .dsc-page { --dsc-measure: 1180px; --dsc-inset: 18px; --dsc-space-1: 4px; --dsc-space-2: 8px; --dsc-space-3: 12px; --dsc-space-4: 16px; --dsc-space-6: 24px; background: var(--bg); color: var(--text); min-height: 100vh; }
+.dsc-view-nav { position: sticky; top: 51px; z-index: 30; display: flex; box-sizing: border-box; max-width: var(--dsc-measure); margin: 0 auto 14px; padding: 0 var(--dsc-inset); overflow-x: auto; border-block: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(10px); scrollbar-width: thin; }
+.dsc-view-tab { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 7px; min-height: 44px; border: 0; border-bottom: 2px solid transparent; padding: 0 14px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.dsc-view-tab:hover { color: var(--text); background: var(--panel-raised); }
+.dsc-view-tab[aria-current="page"] { border-bottom-color: var(--link); color: var(--link); }
+.dsc-view-tab small { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; border-radius: 999px; padding: 0 5px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.dsc-view-tab[aria-current="page"] small { background: var(--link-bg); color: var(--link); }
 .dsc-hero { display: flex; flex-direction: column; align-items: stretch; justify-content: center; max-width: var(--dsc-measure); margin: 0 auto; padding: var(--dsc-space-3) var(--dsc-inset) var(--dsc-space-2); text-align: left; }
 .dsc-logo { font-size: 20px; font-weight: 600; letter-spacing: -0.5px; color: var(--text); margin: 0 0 2px; }
 .dsc-tagline { font-size: 13px; color: var(--muted); margin: 0 0 var(--dsc-space-2); font-weight: 400; }
@@ -219,8 +227,11 @@
 .dsc-tiktok-explore { border: 1px solid var(--line-strong); border-radius: 14px; background: var(--panel); color: var(--text); font-size: 11px; font-family: inherit; padding: 4px 10px; cursor: pointer; }
 .dsc-tiktok-source { margin: 12px 0 0; color: var(--muted); font-size: 11px; }
 .dsc-quick-links-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; justify-content: flex-start; max-width: 800px; }
+.dsc-source-switcher { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.dsc-source-switcher > span { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.dsc-source-switcher .dsc-quick-links-row { margin-top: 0; }
 .dsc-quick-link-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--panel-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 6px 14px; font-size: 12px; cursor: pointer; color: var(--text); text-decoration: none; font-weight: 500; transition: all 0.15s; }
-.dsc-mode-row { display: flex; gap: 8px; margin-top: 8px; }
+.dsc-mode-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .dsc-mode-btn { background: transparent; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 6px 16px; font-size: 13px; cursor: pointer; color: var(--muted); font-family: inherit; font-weight: 500; transition: all 0.15s; }
 .dsc-mode-btn-active { background: var(--green-dark); border: 1px solid var(--green); color: var(--green); }
 /* The one country control, at the far end of the mode row: every board follows
@@ -237,7 +248,8 @@
 .dsc-filter-btn { background: transparent; border: 1px solid var(--line-strong); border-radius: 16px; padding: 5px 14px; font-size: 13px; cursor: pointer; color: var(--muted); font-family: inherit; transition: all 0.15s; }
 .dsc-filter-btn-active { background: var(--green-dark); border: 1px solid var(--green); color: var(--green); }
 .dsc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
-.dsc-card { border: 1px solid var(--line); border-radius: 12px; padding: 20px; background: var(--panel); transition: box-shadow 0.2s; cursor: default; display: flex; flex-direction: column; gap: 12px; }
+.dsc-card { border: 1px solid var(--line); border-radius: 12px; padding: 20px; background: var(--panel); transition: border-color 150ms, box-shadow 150ms; cursor: default; display: flex; flex-direction: column; gap: 12px; }
+.dsc-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-sm); }
 .dsc-card-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; color: var(--green); }
 .dsc-card-title { font-size: 15px; font-weight: 500; color: var(--text); margin: 0px; line-height: 1.4; }
 .dsc-card-summary { font-size: 13px; color: var(--muted); margin: 0px; line-height: 1.5; }
@@ -335,4 +347,13 @@
   .news-row { grid-template-columns: minmax(0, 1fr); }
   .news-row > button { justify-self: start; }
   .news-headline { white-space: normal; }
+}
+
+@media (max-width: 640px) {
+  .dsc-view-nav { top: 49px; padding-inline: 8px; }
+  .dsc-view-tab { padding-inline: 11px; }
+  .dsc-country { flex: 1 1 100%; justify-content: space-between; margin-inline-start: 0; }
+  .dsc-country-select { flex: 1 1 auto; min-width: 0; }
+  .dsc-tiktok-row { grid-template-columns: 24px minmax(0, 1fr); gap: 8px; padding: 10px; }
+  .dsc-tiktok-metrics, .dsc-tiktok-row > .dsc-board-actions { grid-column: 2; justify-self: start; flex-wrap: wrap; white-space: normal; }
 }

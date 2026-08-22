@@ -3,7 +3,20 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Crown, Download, Flame, Hash, Music2, RefreshCw, type LucideIcon } from "lucide-react";
+import {
+  Crown,
+  Download,
+  Flame,
+  Hash,
+  LayoutDashboard,
+  Megaphone,
+  Music2,
+  RefreshCw,
+  Target,
+  TrendingUp,
+  Video,
+  type LucideIcon,
+} from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { fetchWorkspaces } from "../../lib/workspaces";
@@ -12,7 +25,7 @@ import type { DiscoverySeed } from "../../lib/discovery-ideas";
 import { searchTerm, type Topic } from "../../lib/trend-shapes";
 import { useAuth } from "../auth-provider";
 import { useLocale } from "../i18n-provider";
-import { buttonClass } from "../ui/button";
+import { Button, buttonClass } from "../ui/button";
 import { ActionIcon } from "../ui/action-icons";
 import { numberIn, oneOf, usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 import { useJobs } from "../jobs-provider";
@@ -147,6 +160,19 @@ type Inspiration = {
   topic?: string;
   relevance?: number;
 };
+
+type DiscoverView = "overview" | "trends" | "posts" | "signals" | "opportunities";
+
+const DISCOVER_VIEWS: ReadonlyArray<{
+  id: DiscoverView;
+  icon: LucideIcon;
+}> = [
+  { id: "overview", icon: LayoutDashboard },
+  { id: "trends", icon: TrendingUp },
+  { id: "posts", icon: Video },
+  { id: "signals", icon: Megaphone },
+  { id: "opportunities", icon: Target },
+];
 
 const TIKTOK_PERIODS: ReadonlyArray<readonly [number, string]> = [
   [7, "Last 7 days"],
@@ -361,6 +387,11 @@ export default function ResearchDashboard() {
   const [briefing, setBriefing] = usePersistedCache<MetaBriefing>(
     "trendrelay.discover.briefing", RESEARCH_MAX_AGE, isBriefing);
   const [feedFilter, setFeedFilter] = useState<"all" | "trend" | "ad" | "account">("all");
+  const [activeView, setActiveView] = usePersistedState<DiscoverView>(
+    "trendrelay.discover.view",
+    "overview",
+    oneOf("overview", "trends", "posts", "signals", "opportunities"),
+  );
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [douyinBoard, setDouyinBoard, , boardReady] = usePersistedCache<DouyinBoard>(
@@ -401,6 +432,60 @@ export default function ResearchDashboard() {
     setIdeaSeeds((current) => current.some((item) => item.id === seed.id)
       ? current.filter((item) => item.id !== seed.id)
       : [...current, seed].slice(-12));
+  }
+
+  function viewLabel(view: DiscoverView): string {
+    if (view === "overview") return t("discover.workspaceTabs.overview");
+    if (view === "trends") return t("discover.workspaceTabs.trends");
+    if (view === "posts") return t("discover.workspaceTabs.posts");
+    if (view === "signals") return t("discover.workspaceTabs.signals");
+    return t("discover.workspaceTabs.opportunities");
+  }
+
+  function seedFromInspiration(item: Inspiration): DiscoverySeed {
+    return {
+      id: `inspiration:${item.id}`,
+      kind: item.kind === "account" ? "creator" : item.kind === "ad" ? "post" : "topic",
+      label: item.title,
+      source: item.source,
+      region: country,
+      url: item.href ?? null,
+      evidence: [item.summary, ...(item.metrics ?? [])].filter(Boolean).join(" · "),
+      tags: [item.kind, item.label, item.topic ?? ""].filter(Boolean),
+    };
+  }
+
+  function seedFromDouyin(item: DouyinTrend): DiscoverySeed {
+    return {
+      id: `topic:CN:douyin:${item.sentence_id ?? item.term}`,
+      kind: "topic",
+      label: item.term,
+      source: "Douyin hot search",
+      region: "CN",
+      url: item.search_url,
+      evidence: [
+        `rank ${item.rank}`,
+        item.hot_value > 0 ? `${compactNumber(item.hot_value)} heat` : "",
+        item.view_count > 0 ? `${compactNumber(item.view_count)} views` : "",
+      ].filter(Boolean).join(" · "),
+      tags: ["douyin", "hot-search"],
+    };
+  }
+
+  function seedFromTikTok(item: TikTokTrendItem, index: number): DiscoverySeed {
+    return {
+      id: `topic:${tiktokResult?.region ?? country}:tiktok:${tiktokResult?.category ?? "trend"}:${item.name}`,
+      kind: "topic",
+      label: item.name,
+      source: `TikTok Creative Center · ${tiktokResult?.category_label ?? "trends"}`,
+      region: tiktokResult?.region ?? country,
+      url: tiktokResult?.final_url ?? null,
+      evidence: [
+        `rank ${item.rank ?? index + 1}`,
+        ...Object.entries(item.metrics).map(([name, value]) => `${compactNumber(value)} ${name}`),
+      ].join(" · "),
+      tags: ["tiktok", tiktokResult?.category ?? "trend", item.category ?? ""].filter(Boolean),
+    };
   }
 
   /** Read once on arrival, then on demand. */
@@ -479,14 +564,20 @@ export default function ResearchDashboard() {
   useEffect(() => {
     // Wait for the restore before deciding there is nothing to show, or the
     // first render would refetch over a perfectly good cached board.
-    if (!workspaceId || !boardReady || douyinBoard || douyinAutoRead.current) return;
+    if (
+      activeView !== "trends"
+      || !workspaceId
+      || !boardReady
+      || douyinBoard
+      || douyinAutoRead.current
+    ) return;
     douyinAutoRead.current = true;
     // Deferred so the read does not run inside the render that scheduled it.
     queueMicrotask(() => void loadDouyinBoard());
     // Once per workspace; the ref is the guard, so the callback's identity
     // changing would only repeat the same read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, boardReady, douyinBoard]);
+  }, [activeView, workspaceId, boardReady, douyinBoard]);
 
   const jobs = useMemo(
     () =>
@@ -698,7 +789,11 @@ export default function ResearchDashboard() {
   function exploreTopic(topic: string) {
     setQuery(topic);
     setQueryMode("trends");
+    setActiveView("signals");
     window.scrollTo({ top: 0, behavior: "smooth" });
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLInputElement>(".dsc-search-input")?.focus();
+    });
   }
 
   /** Carry a ranked topic and the evidence for its position into scoring.
@@ -720,6 +815,7 @@ export default function ResearchDashboard() {
       `${topic.region} market`,
     ].join(" · ");
     setScorePrefill({ trend: term, evidence: `${source} | ${title} |`, job: "" });
+    setActiveView("opportunities");
     requestAnimationFrame(() => {
       document.querySelector(".opportunity-scoring")
         ?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -747,7 +843,7 @@ export default function ResearchDashboard() {
   // let the adapter's cache decide whether that costs a fresh render.
   const autoLoadedRef = useRef(false);
   useEffect(() => {
-    if (autoLoadedRef.current || tiktokCategories.length === 0) return;
+    if (activeView !== "trends" || autoLoadedRef.current || tiktokCategories.length === 0) return;
     autoLoadedRef.current = true;
     const saved = readTikTokPreference();
     const remembered = saved && tiktokCategories.some((item) => item.id === saved.category)
@@ -765,7 +861,7 @@ export default function ResearchDashboard() {
     })();
     // fetchTiktokDiscovery is re-created each render; the ref guards the one run.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiktokCategories]);
+  }, [activeView, tiktokCategories]);
 
   async function fetchTiktokDiscovery(
     category: string,
@@ -839,6 +935,7 @@ export default function ResearchDashboard() {
         const payload = (await response.json()) as { detail?: string };
         if (!response.ok) throw new Error(payload.detail ?? "Research could not start.");
         await refreshJobs();
+        setActiveView("signals");
       } else {
         const response = await fetch(`${apiBaseUrl()}/api/research/meta-ads/library/search`, {
           method: "POST",
@@ -861,6 +958,7 @@ export default function ResearchDashboard() {
         }
         setAdResult(payload.result);
         setFeedFilter("ad");
+        setActiveView("signals");
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Research could not complete.");
@@ -905,7 +1003,7 @@ export default function ResearchDashboard() {
     workspaceId && busy === null && (queryMode === "trends" ? last30Ready : collectorReady);
 
   return (
-    <main className="dsc-page">
+    <main className={`dsc-page${ideaSeeds.length ? " has-idea-tray" : ""}`}>
       <WorkspaceSectionNav area="discover" />
 
       <div className="dsc-top-bar">
@@ -975,8 +1073,8 @@ export default function ResearchDashboard() {
         <div className="dsc-mode-row">
           {(
             [
-              ["trends", "Trends"],
-              ["ads", "Ads"],
+              ["trends", t("discover.actions.researchMode")],
+              ["ads", t("discover.actions.metaAdsMode")],
             ] as const
           ).map(([val, label]) => (
             <button
@@ -1006,59 +1104,28 @@ export default function ResearchDashboard() {
           </label>
         </div>
 
-        <div className="dsc-quick-links-row">
-          {(tiktokCategories.length
-            ? tiktokCategories
-            : [{ id: "hashtag", label: "Hashtags", description: "", available: true, unavailable_reason: "" }]
-          ).map((category) => (
-            <button
-              key={category.id}
-              type="button"
-              disabled={!category.available || busy === "tiktok"}
-              title={category.available ? category.description : category.unavailable_reason}
-              onClick={() => void fetchTiktokDiscovery(category.id)}
-              className={`dsc-quick-link-btn${category.available ? "" : " is-disabled"}`}
-            >
-              <TikTokCategoryIcon id={category.id} />{category.label}
-              {category.available ? "" : " (retired)"}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* One list first, because the question anyone opens this page with is
-          "what is hot", not "what did TikTok say". Seven sources on seven
-          boards is fourteen answers to read before knowing anything. */}
-      <DiscoveryFeed country={country} selectedIds={ideaSeedIds} onToggle={toggleIdeaSeed} />
-
-      {/* News leads. It reads public feeds rather than this workspace's own
-          history, so it is reliably full on a first visit before any research
-          has run - which is what stops Discover opening as an empty form. */}
-      <NewsBoard country={country} seeds={ideaSeeds} onSeed={toggleIdeaSeed} />
-
-      {/* Folded, not deleted. A hashtag and a video are different evidence,
-          and these two boards answer what the merged list cannot: what shape a
-          topic has over time, which posts earn their engagement, and what the
-          research jobs found. A summary that replaces its own detail is one
-          nobody can check. */}
-      <div className="dsc-section">
-        <TrendingTopics
-          country={country}
-          onResearch={exploreTopic}
-          onScore={scoreTopic}
-          selectedIds={ideaSeedIds}
-          onToggle={toggleIdeaSeed}
-        />
-      </div>
-
-      <div className="dsc-section">
-        <PopularPosts
-          country={country}
-          onResearch={exploreTopic}
-          selectedIds={ideaSeedIds}
-          onToggle={toggleIdeaSeed}
-        />
-      </div>
+      <nav className="dsc-view-nav" aria-label="Discover workspace">
+        {DISCOVER_VIEWS.map(({ id, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            className="dsc-view-tab"
+            aria-current={activeView === id ? "page" : undefined}
+            onClick={() => setActiveView(id)}
+          >
+            <Icon size={15} aria-hidden="true" />
+            <span>{viewLabel(id)}</span>
+            {id === "signals" && liveInspirations.length > 0 ? (
+              <small>{liveInspirations.length}</small>
+            ) : null}
+            {id === "opportunities" && unfinished.length > 0 ? (
+              <small>{unfinished.length}</small>
+            ) : null}
+          </button>
+        ))}
+      </nav>
 
       <CampaignIdeaComposer
         seeds={ideaSeeds}
@@ -1071,11 +1138,72 @@ export default function ResearchDashboard() {
         onClear={() => setIdeaSeeds([])}
       />
 
+      {/* One list first, because the question anyone opens this page with is
+          "what is hot", not "what did TikTok say". Seven sources on seven
+          boards is fourteen answers to read before knowing anything. */}
+      {activeView === "overview" && (
+        <>
+          <DiscoveryFeed country={country} selectedIds={ideaSeedIds} onToggle={toggleIdeaSeed} />
+
+      {/* News leads. It reads public feeds rather than this workspace's own
+          history, so it is reliably full on a first visit before any research
+          has run - which is what stops Discover opening as an empty form. */}
+          <NewsBoard country={country} seeds={ideaSeeds} onSeed={toggleIdeaSeed} />
+        </>
+      )}
+
+      {/* Folded, not deleted. A hashtag and a video are different evidence,
+          and these two boards answer what the merged list cannot: what shape a
+          topic has over time, which posts earn their engagement, and what the
+          research jobs found. A summary that replaces its own detail is one
+          nobody can check. */}
+      {activeView === "trends" && <div className="dsc-section">
+        <div className="dsc-source-switcher">
+          <span>TikTok Creative Center</span>
+          <div className="dsc-quick-links-row">
+            {(tiktokCategories.length
+              ? tiktokCategories
+              : [{ id: "hashtag", label: "Hashtags", description: "", available: true, unavailable_reason: "" }]
+            ).map((category) => (
+              <button
+                key={category.id}
+                type="button"
+                disabled={!category.available || busy === "tiktok"}
+                title={category.available ? category.description : category.unavailable_reason}
+                onClick={() => void fetchTiktokDiscovery(category.id)}
+                className={`dsc-quick-link-btn${category.available ? "" : " is-disabled"}`}
+              >
+                <TikTokCategoryIcon id={category.id} />{category.label}
+                {category.available ? "" : " (retired)"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <TrendingTopics
+          country={country}
+          onResearch={exploreTopic}
+          onScore={scoreTopic}
+          selectedIds={ideaSeedIds}
+          onToggle={toggleIdeaSeed}
+        />
+      </div>}
+
+      {activeView === "posts" && <div className="dsc-section">
+        <PopularPosts
+          country={country}
+          onResearch={exploreTopic}
+          selectedIds={ideaSeedIds}
+          onToggle={toggleIdeaSeed}
+        />
+      </div>}
+
       {/* The raw source boards, no longer hidden behind a disclosure. Douyin
           hot search and TikTok Creative Center, before consolidation. */}
-      <StandoutBoard posts={standoutPosts} seeds={ideaSeeds} onSeed={toggleIdeaSeed} />
+      {activeView === "overview" && (
+        <StandoutBoard posts={standoutPosts} seeds={ideaSeeds} onSeed={toggleIdeaSeed} />
+      )}
 
-      <div className="dsc-section">
+      {activeView === "trends" && <div className="dsc-section">
         <div className="dsc-tiktok-head">
           <div>
             <h2 className="dsc-section-title">{t("discover.title")}</h2>
@@ -1087,7 +1215,7 @@ export default function ResearchDashboard() {
           </div>
           <div className="dsc-tiktok-controls">
             <label className="dsc-topic-count-label">
-              Download
+              Save to Library
               <select
                 className="dsc-topic-count-select"
                 value={topicCount}
@@ -1176,27 +1304,37 @@ export default function ResearchDashboard() {
                     {item.view_count > 0 && <>{compactNumber(item.view_count)} views</>}
                   </span>
                   <div className="dsc-board-actions">
-                    <button
-                      type="button"
-                      className="dsc-board-download"
+                    <Button
+                      variant={ideaSeedIds.has(seedFromDouyin(item).id) ? "primary" : "secondary"}
+                      size="sm"
+                      selected={ideaSeedIds.has(seedFromDouyin(item).id)}
+                      onClick={() => toggleIdeaSeed(seedFromDouyin(item))}
+                    >
+                      {ideaSeedIds.has(seedFromDouyin(item).id)
+                        ? t("discover.actions.addedToCampaign")
+                        : t("discover.actions.addToCampaign")}
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
                       disabled={topicBusy !== null || !workspaceId}
                       onClick={() => void downloadTopic(item.term, item.sentence_id)}
-                      title={`Search this term and download its top ${topicCount} videos`}
+                      title={`Save this topic's top ${topicCount} videos to Library`}
                     >
                       {topicBusy === item.term ? "Queueing…" : (
                         <>
                           <Download size={13} strokeWidth={2} />
-                          Download {topicCount}
+                          Save {topicCount}
                         </>
                       )}
-                    </button>
+                    </Button>
                     <a
                       href={item.search_url}
                       target="_blank"
                       rel="noreferrer"
                       className="dsc-board-action"
                       title={t("research.openTermOnDouyin")}
-                    >{t("discover.browse")}</a>
+                    >Open source</a>
                   </div>
                 </div>
               </article>
@@ -1231,20 +1369,30 @@ export default function ResearchDashboard() {
                     first and queues the real videos it finds; the link is for
                     looking at the topic rather than taking it. */}
                 <div className="dsc-board-actions">
-                  <button
-                    type="button"
-                    className="dsc-board-download"
+                  <Button
+                    variant={ideaSeedIds.has(seedFromDouyin(item).id) ? "primary" : "secondary"}
+                    size="sm"
+                    selected={ideaSeedIds.has(seedFromDouyin(item).id)}
+                    onClick={() => toggleIdeaSeed(seedFromDouyin(item))}
+                  >
+                    {ideaSeedIds.has(seedFromDouyin(item).id)
+                      ? t("discover.actions.addedToCampaign")
+                      : t("discover.actions.addToCampaign")}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
                     disabled={topicBusy !== null || !workspaceId}
                     onClick={() => void downloadTopic(item.term, item.sentence_id)}
-                    title={`Search this term and download its top ${topicCount} videos`}
+                    title={`Save this topic's top ${topicCount} videos to Library`}
                   >
                     {topicBusy === item.term ? "Queueing…" : (
                       <>
                         <Download size={13} strokeWidth={2} />
-                        Download {topicCount}
+                        Save {topicCount}
                       </>
                     )}
-                  </button>
+                  </Button>
                   <a
                     href={item.search_url}
                     target="_blank"
@@ -1252,7 +1400,7 @@ export default function ResearchDashboard() {
                     className="dsc-tiktok-explore"
                     title={t("research.openTermOnDouyin")}
                   >
-                    Browse
+                    Open source
                   </a>
                 </div>
               </div>
@@ -1263,9 +1411,9 @@ export default function ResearchDashboard() {
         {douyinBoard && douyinBoard.items.length === 0 && !douyinError && (
           <p className="dsc-tiktok-note">{t("discover.emptyBoard")}</p>
         )}
-      </div>
+      </div>}
 
-      {(tiktokResult || busy === "tiktok") && (
+      {activeView === "trends" && (tiktokResult || busy === "tiktok") && (
         <div className="dsc-section">
           <div className="dsc-tiktok-head">
             <div>
@@ -1339,13 +1487,25 @@ export default function ResearchDashboard() {
                       </span>
                     ))}
                   </div>
-                  <button
-                    type="button"
-                    className="dsc-tiktok-explore"
-                    onClick={() => exploreTopic(item.name.replace(/^#/, ""))}
-                  >
-                    Research
-                  </button>
+                  <div className="dsc-board-actions">
+                    <Button
+                      variant={ideaSeedIds.has(seedFromTikTok(item, index).id) ? "primary" : "secondary"}
+                      size="sm"
+                      selected={ideaSeedIds.has(seedFromTikTok(item, index).id)}
+                      onClick={() => toggleIdeaSeed(seedFromTikTok(item, index))}
+                    >
+                      {ideaSeedIds.has(seedFromTikTok(item, index).id)
+                        ? t("discover.actions.addedToCampaign")
+                        : t("discover.actions.addToCampaign")}
+                    </Button>
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      onClick={() => exploreTopic(item.name.replace(/^#/, ""))}
+                    >
+                      {t("discover.actions.searchThis")}
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1366,7 +1526,7 @@ export default function ResearchDashboard() {
         </div>
       )}
 
-      {visibleInspirations.length > 0 && (
+      {activeView === "signals" && visibleInspirations.length > 0 && (
         <div className="dsc-section">
           <h2 className="dsc-section-title">{t("research.results")}</h2>
           <p className="dsc-section-sub">
@@ -1398,17 +1558,7 @@ export default function ResearchDashboard() {
               const color = COLORS_BY_KIND[item.kind] ?? "var(--muted)";
               const pct = item.relevance ?? 40;
               return (
-                <div
-                  key={item.id}
-                  className="dsc-card"
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLDivElement).style.boxShadow =
-                      "0 1px 6px rgba(32,33,36,0.15)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLDivElement).style.boxShadow = "none";
-                  }}
-                >
+                <article key={item.id} className="dsc-card">
                   <span className="dsc-card-label" style={{ color }}>{item.label}</span>
                   {item.image && (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -1457,10 +1607,20 @@ export default function ResearchDashboard() {
                   <div className="dsc-card-footer">
                     <span className="dsc-card-source" title={item.source}>{item.source}</span>
                     <div className="dsc-card-actions">
+                      <Button
+                        variant={ideaSeedIds.has(seedFromInspiration(item).id) ? "primary" : "secondary"}
+                        size="sm"
+                        selected={ideaSeedIds.has(seedFromInspiration(item).id)}
+                        onClick={() => toggleIdeaSeed(seedFromInspiration(item))}
+                      >
+                        {ideaSeedIds.has(seedFromInspiration(item).id)
+                          ? t("discover.actions.addedToCampaign")
+                          : t("discover.actions.addToCampaign")}
+                      </Button>
                       {item.topic && (
-                        <button
-                          type="button"
-                          className="dsc-card-action"
+                        <Button
+                          variant="quiet"
+                          size="sm"
                           onClick={() => exploreTopic(item.topic!)}
                         >
                           <svg
@@ -1477,8 +1637,8 @@ export default function ResearchDashboard() {
                             <circle cx="11" cy="11" r="7" />
                             <line x1="21" y1="21" x2="16.65" y2="16.65" />
                           </svg>
-                          Research
-                        </button>
+                          {t("discover.actions.searchThis")}
+                        </Button>
                       )}
                       {item.href && (
                         <a
@@ -1487,19 +1647,19 @@ export default function ResearchDashboard() {
                           rel="noreferrer"
                           className="dsc-link"
                         >
-                          Source
+                          Open source
                         </a>
                       )}
                     </div>
                   </div>
-                </div>
+                </article>
               );
             })}
           </div>
         </div>
       )}
 
-      {visibleInspirations.length === 0 && liveInspirations.length > 0 && (
+      {activeView === "signals" && visibleInspirations.length === 0 && liveInspirations.length > 0 && (
         <div className="dsc-empty dsc-section">
           <p>{t("research.noSignals")}</p>
           <button type="button" className={buttonClass({ variant: "quiet" })} onClick={() => setFeedFilter("all")}>
@@ -1508,14 +1668,14 @@ export default function ResearchDashboard() {
         </div>
       )}
 
-      {liveInspirations.length === 0 && !tiktokResult && !busy && (
+      {activeView === "signals" && liveInspirations.length === 0 && !busy && (
         <div className="dsc-empty dsc-section">
           <p className="dsc-note-lead">
             Nothing collected yet.
           </p>
           <p className="dsc-note">
             Search a topic to run 30-day research, switch to Ads to read the public Meta Ad
-            Library, or open a TikTok Creative Center list above. Every card below is read from
+            Library, or open a TikTok Creative Center list in Trends. Every card is read from
             a live source — TrendRelay does not seed the feed with examples.
           </p>
         </div>
@@ -1525,7 +1685,7 @@ export default function ResearchDashboard() {
           separate destination reached by a link carrying the trend, the
           evidence and the job id in a query string - a hand-off that existed
           only because they were two pages. */}
-      {workspaceId && (
+      {activeView === "opportunities" && workspaceId && (
         <div className="dsc-jobs-section" id={SCORING_ANCHOR}>
           <hr className="dsc-divider" />
           <OpportunityScoring
@@ -1542,7 +1702,7 @@ export default function ResearchDashboard() {
           on the page above; repeating it as a timestamped row said nothing the
           cards did not. What the log was carrying that nothing else did is kept:
           a run that failed, a run still going, and the way through to scoring. */}
-      {(unfinished.length > 0 || scorable) && (
+      {activeView === "opportunities" && (unfinished.length > 0 || scorable) && (
         <div className="dsc-jobs-section">
           <hr className="dsc-divider" />
           {unfinished.map((job) => (
@@ -1570,6 +1730,7 @@ export default function ResearchDashboard() {
                 className="dsc-link dsc-link-button"
                 onClick={() => {
                   setScorePrefill({ trend: scorable.topic, evidence: "", job: scorable.id });
+                  setActiveView("opportunities");
                   document.querySelector(".opportunity-scoring")
                     ?.scrollIntoView({ behavior: "smooth", block: "start" });
                 }}

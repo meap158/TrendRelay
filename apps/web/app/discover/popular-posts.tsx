@@ -34,6 +34,7 @@ import {
 } from "../../lib/post-board";
 import { Button } from "../ui/button";
 import { useJobs } from "../jobs-provider";
+import { useLocale } from "../i18n-provider";
 import { usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 
 /**
@@ -207,6 +208,7 @@ export function PopularPosts({
   selectedIds?: ReadonlySet<string>;
   onToggle?: (seed: DiscoverySeed) => void;
 }) {
+  const { t } = useLocale();
   const { jobs } = useJobs();
   // The page's one country is this board's region; no selector of its own.
   const region = country;
@@ -396,11 +398,11 @@ export function PopularPosts({
                         aria-pressed={selected}
                         onClick={() => onToggle(seed)}
                       >
-                        {selected ? "Added" : "Add to idea"}
+                        {selected ? t("discover.actions.addedToCampaign") : t("discover.actions.addToCampaign")}
                       </Button>
                     )}
                     <Button variant="quiet" size="sm" onClick={() => onResearch(post.topic)}>
-                      <MessageCircle size={13} aria-hidden /> Research
+                      <MessageCircle size={13} aria-hidden /> {t("discover.actions.searchThis")}
                     </Button>
                     <a className="link-action" href={post.url} target="_blank" rel="noopener noreferrer">
                       <ExternalLink size={13} aria-hidden /> Open post
@@ -527,7 +529,7 @@ export function PopularPosts({
                           aria-pressed={selected}
                           onClick={() => onToggle(seed)}
                         >
-                          {selected ? "Added" : "Add to idea"}
+                          {selected ? t("discover.actions.addedToCampaign") : t("discover.actions.addToCampaign")}
                         </Button>
                       )}
                       <Button
@@ -535,7 +537,7 @@ export function PopularPosts({
                         size="sm"
                         onClick={() => onResearch(post.title ?? post.creator)}
                       >
-                        Research
+                        {t("discover.actions.searchThis")}
                       </Button>
                       {link && (
                         <a

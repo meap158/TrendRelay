@@ -83,6 +83,20 @@ export const ar: Messages = {
   },
 
   discover: {
+    workspaceTabs: {
+      overview: "نظرة عامة",
+      trends: "الاتجاهات",
+      posts: "المنشورات",
+      signals: "الإعلانات والإشارات",
+      opportunities: "الفرص",
+    },
+    actions: {
+      addToCampaign: "أضف إلى الحملة",
+      addedToCampaign: "أُضيف",
+      searchThis: "ابحث عن هذا",
+      researchMode: "بحث آخر 30 يومًا",
+      metaAdsMode: "مكتبة إعلانات Meta",
+    },
     title: "الأكثر بحثًا على Douyin",
     subtitleEmpty: "ما هو رائج الآن على Douyin، من جلستك المتصلة.",
     read: "تحميل القائمة",
@@ -123,7 +137,7 @@ export const ar: Messages = {
       refresh: "تحديث",
       refreshing: "جارٍ القراءة…",
       refreshTitle: "أعد قراءة المصادر",
-      add: "أضف إلى الفكرة",
+      add: "أضف إلى الحملة",
       added: "أُضيف",
       newsrooms: "{count} غرفة أخبار",
       covered: "تغطية واسعة",
@@ -150,7 +164,7 @@ export const ar: Messages = {
       emerging: "في صعود",
       emergingBlurb: "أقوى مما يوحي حجمه: تفاعل أسرع أو نقاش أكثر من المعتاد في هذه اللوحة.",
       empty: "لا شيء لافت بعد. شغّل البحث بالأسفل لملء اللوحة.",
-      add: "أضف إلى الفكرة",
+      add: "أضف إلى الحملة",
       added: "أُضيف",
       views: "{count} مشاهدة",
       reactions: "{count} تفاعل",
@@ -866,7 +880,7 @@ export const ar: Messages = {
     importHelp:
       "استخدم ملف CSV البديل مع Amazon Creators أو impact.com أو Awin أو أي رابط تابع يدوي.",
     whereAmazonAccess: "كيفية الحصول على وصول Amazon API",
-    stepScore: "٢ · تقييم الحالة",
+    stepScore: "تقييم الحالة",
     buildCase: "ابنِ فرصة يمكن تبريرها",
     trendEntity: "كيان الرائج",
     lifecycle: "دورة الحياة",
@@ -876,7 +890,7 @@ export const ar: Messages = {
     noOffers:
       "لا توجد عروض بعد. استورد ملف CSV أولًا، أو قيّم أدلة الرائج دون عرض.",
     noPrimaryOffer: "لا يوجد عرض رئيسي",
-    stepDecide: "٣ · القرار",
+    stepDecide: "القرار",
     ranked: "الفرص المرتّبة",
     gatherMore: "اجمع مزيدًا من الأدلة",
     noneScored: "لم تُقيَّم أي فرصة بعد.",

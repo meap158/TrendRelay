@@ -87,6 +87,20 @@ export const en = {
   },
 
   discover: {
+    workspaceTabs: {
+      overview: "Overview",
+      trends: "Trends",
+      posts: "Posts",
+      signals: "Ads & signals",
+      opportunities: "Opportunities",
+    },
+    actions: {
+      addToCampaign: "Add to campaign",
+      addedToCampaign: "Added",
+      searchThis: "Search this",
+      researchMode: "30-day research",
+      metaAdsMode: "Meta Ad Library",
+    },
     title: "Douyin hot search",
     subtitleEmpty:
       "What is trending on Douyin right now, from your connected session.",
@@ -128,7 +142,7 @@ export const en = {
       refresh: "Refresh",
       refreshing: "Reading…",
       refreshTitle: "Read the feeds again",
-      add: "Add to idea",
+      add: "Add to campaign",
       added: "Added",
       newsrooms: "{count} newsrooms",
       covered: "Widely covered",
@@ -156,7 +170,7 @@ export const en = {
       emergingBlurb:
         "Punching above its weight: reacting faster, or drawing more discussion, than the board's usual.",
       empty: "Nothing stands out here yet. Run research below to fill the board.",
-      add: "Add to idea",
+      add: "Add to campaign",
       added: "Added",
       views: "{count} views",
       reactions: "{count} reactions",
@@ -868,7 +882,7 @@ export const en = {
     importHelp:
       "Use the CSV fallback for Amazon Creators, impact.com, Awin, or any manual affiliate link.",
     whereAmazonAccess: "Where to get Amazon API access",
-    stepScore: "2 · SCORE THE CASE",
+    stepScore: "SCORE THE CASE",
     buildCase: "Build an explainable opportunity",
     trendEntity: "Trend entity",
     lifecycle: "Lifecycle",
@@ -878,7 +892,7 @@ export const en = {
     noOffers:
       "No offers yet. Import the CSV first, or score trend evidence without an offer.",
     noPrimaryOffer: "No primary offer",
-    stepDecide: "3 · DECIDE",
+    stepDecide: "DECIDE",
     ranked: "Ranked opportunities",
     gatherMore: "Gather more evidence",
     noneScored: "No opportunities scored yet.",

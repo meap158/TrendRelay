@@ -4,7 +4,11 @@ import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import { Lightbulb, X } from "lucide-react";
 
-import { buildCampaignIdea, type DiscoverySeed } from "../../lib/discovery-ideas";
+import {
+  buildCampaignIdea,
+  campaignSignalKind,
+  type DiscoverySeed,
+} from "../../lib/discovery-ideas";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 
@@ -61,7 +65,12 @@ export function CampaignIdeaComposer({
             // moves — everything the basket knew died at this click.
             signals: seeds.map((seed) => ({
               external_id: seed.id,
-              kind: seed.kind,
+              // News is a topic signal to the Campaign model: it describes
+              // something to make content about, not a social post we own.
+              // Keep `story` in the basket UI so the operator can distinguish
+              // the evidence, but never send a kind the durable signal model
+              // rejects.
+              kind: campaignSignalKind(seed),
               label: seed.label,
               provider: seed.source,
               source_url: seed.url,
@@ -126,7 +135,7 @@ export function CampaignIdeaComposer({
             <Lightbulb size={24} aria-hidden="true" />
             <div>
               <strong>{created.name} is ready.</strong>
-              <p>The selected trend evidence has been turned into a draft Campaign.</p>
+              <p>The selected evidence is now a draft Campaign, ready for media and a publish plan.</p>
             </div>
             <Link href={`/campaigns?campaign=${encodeURIComponent(created.id)}`}>Open Campaign</Link>
           </section>

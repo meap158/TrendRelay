@@ -81,6 +81,20 @@ export const fr: Messages = {
   },
 
   discover: {
+    workspaceTabs: {
+      overview: "Vue d’ensemble",
+      trends: "Tendances",
+      posts: "Publications",
+      signals: "Publicités et signaux",
+      opportunities: "Opportunités",
+    },
+    actions: {
+      addToCampaign: "Ajouter à la campagne",
+      addedToCampaign: "Ajouté",
+      searchThis: "Rechercher ceci",
+      researchMode: "Recherche sur 30 jours",
+      metaAdsMode: "Bibliothèque publicitaire Meta",
+    },
     title: "Recherches populaires sur Douyin",
     subtitleEmpty:
       "Les tendances du moment sur Douyin, d'après votre session connectée.",
@@ -123,7 +137,7 @@ export const fr: Messages = {
       refresh: "Actualiser",
       refreshing: "Lecture…",
       refreshTitle: "Relire les flux",
-      add: "Ajouter à l'idée",
+      add: "Ajouter à la campagne",
       added: "Ajouté",
       newsrooms: "{count} rédactions",
       covered: "Largement couvert",
@@ -153,7 +167,7 @@ export const fr: Messages = {
       emergingBlurb:
         "Au-dessus de sa catégorie : réagit plus vite, ou suscite plus de discussion, que la normale du tableau.",
       empty: "Rien ne ressort encore. Lancez une recherche ci-dessous pour remplir le tableau.",
-      add: "Ajouter à l'idée",
+      add: "Ajouter à la campagne",
       added: "Ajouté",
       views: "{count} vues",
       reactions: "{count} réactions",
@@ -876,7 +890,7 @@ export const fr: Messages = {
     importHelp:
       "Utilisez le CSV de secours pour Amazon Creators, impact.com, Awin ou tout lien d'affiliation manuel.",
     whereAmazonAccess: "Comment obtenir l'accès à l'API Amazon",
-    stepScore: "2 · ÉVALUER LE DOSSIER",
+    stepScore: "ÉVALUER LE DOSSIER",
     buildCase: "Construire une opportunité justifiable",
     trendEntity: "Entité de tendance",
     lifecycle: "Cycle de vie",
@@ -887,7 +901,7 @@ export const fr: Messages = {
     noOffers:
       "Aucune offre pour l'instant. Importez d'abord le CSV, ou évaluez les preuves de tendance sans offre.",
     noPrimaryOffer: "Aucune offre principale",
-    stepDecide: "3 · DÉCIDER",
+    stepDecide: "DÉCIDER",
     ranked: "Opportunités classées",
     gatherMore: "Rassembler plus de preuves",
     noneScored: "Aucune opportunité évaluée pour le moment.",

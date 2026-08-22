@@ -81,6 +81,20 @@ export const ja: Messages = {
   },
 
   discover: {
+    workspaceTabs: {
+      overview: "概要",
+      trends: "トレンド",
+      posts: "投稿",
+      signals: "広告とシグナル",
+      opportunities: "機会",
+    },
+    actions: {
+      addToCampaign: "キャンペーンに追加",
+      addedToCampaign: "追加済み",
+      searchThis: "これを検索",
+      researchMode: "30日間リサーチ",
+      metaAdsMode: "Meta広告ライブラリ",
+    },
     title: "Douyin 急上昇ワード",
     subtitleEmpty:
       "接続中のセッションから見た、Douyin でいま話題になっているもの。",
@@ -122,7 +136,7 @@ export const ja: Messages = {
       refresh: "更新",
       refreshing: "取得中…",
       refreshTitle: "フィードを再取得",
-      add: "アイデアに追加",
+      add: "キャンペーンに追加",
       added: "追加しました",
       newsrooms: "報道機関 {count} 社",
       covered: "広く報道",
@@ -149,7 +163,7 @@ export const ja: Messages = {
       emerging: "伸びはじめ",
       emergingBlurb: "規模のわりに強い：反応の速さや議論の多さが、このボードの平均を上回っています。",
       empty: "まだ目立つものはありません。下でリサーチを実行するとボードが埋まります。",
-      add: "アイデアに追加",
+      add: "キャンペーンに追加",
       added: "追加済み",
       views: "{count} 回視聴",
       reactions: "{count} 件の反応",
@@ -864,7 +878,7 @@ export const ja: Messages = {
     importHelp:
       "Amazon Creators、impact.com、Awin、手動のアフィリエイトリンクには CSV を使います。",
     whereAmazonAccess: "Amazon API の利用申請について",
-    stepScore: "2 · 評価する",
+    stepScore: "評価する",
     buildCase: "根拠の示せる商機を組み立てる",
     trendEntity: "トレンド対象",
     lifecycle: "ライフサイクル",
@@ -874,7 +888,7 @@ export const ja: Messages = {
     noOffers:
       "案件がまだありません。先に CSV を取り込むか、案件なしでトレンドの根拠だけを評価してください。",
     noPrimaryOffer: "主案件なし",
-    stepDecide: "3 · 判断する",
+    stepDecide: "判断する",
     ranked: "順位づけした商機",
     gatherMore: "根拠をさらに集める",
     noneScored: "評価済みの商機はまだありません。",

@@ -16,6 +16,7 @@ import { apiBaseUrl } from "../../lib/api";
 import { seedFromTopic, type DiscoverySeed } from "../../lib/discovery-ideas";
 import { filterTopics, SHAPE_COPY, reasons, searchTerm, windowSummary, type Shape, type Topic } from "../../lib/trend-shapes";
 import { Button } from "../ui/button";
+import { useLocale } from "../i18n-provider";
 import { usePersistedCache, usePersistedState } from "../ui/use-persisted-state";
 
 type Consolidated = {
@@ -372,6 +373,7 @@ function TopicRow({
   selectedIds?: ReadonlySet<string>;
   onToggle?: (seed: DiscoverySeed) => void;
 }) {
+  const { t } = useLocale();
   const copy = SHAPE_COPY[topic.shape];
   const why = reasons(topic);
   const seed = seedFromTopic(topic);
@@ -406,11 +408,11 @@ function TopicRow({
             aria-pressed={selected}
             onClick={() => onToggle(seed)}
           >
-            {selected ? "Added" : "Add to idea"}
+            {selected ? t("discover.actions.addedToCampaign") : t("discover.actions.addToCampaign")}
           </Button>
         )}
         <Button variant="quiet" size="sm" onClick={() => onResearch(searchTerm(topic))}>
-          Research
+          {t("discover.actions.searchThis")}
         </Button>
         <Button variant="quiet" size="sm" onClick={() => onScore(topic)}>
           Score it

@@ -3,6 +3,26 @@
 Status: Accepted and built - consolidation core, provider readers,
 `GET /api/research/trends/consolidated`, and the Discover section.
 
+## Interface and handoff update (2026-08-22)
+
+Discover is one workspace with five focused views rather than one continuous
+stack of overlapping boards: Overview, Trends, Posts, Ads & signals, and
+Opportunities. The search, country, workspace, and provider readiness controls
+remain shared. Provider-heavy boards mount only when their view is open, which
+keeps an ordinary visit from refreshing every source at once.
+
+Every usable finding now has the same primary decision: **Add to campaign**.
+The persistent evidence tray accepts merged feed rows, news, research posts,
+ranked topics, Douyin terms, TikTok Creative Center entries, Meta public ads,
+and first-party account signals. It creates an editable draft Campaign with the
+source URL and evidence attached. Douyin keeps a separate **Save to Library**
+action because it can acquire real media; adding evidence never implies media
+rights or downloads a third party's asset.
+
+News remains labelled as a story in the evidence tray, but is persisted as a
+`topic` Campaign signal. A news event is something to make content about, not a
+social post owned by the workspace, and `story` is not a durable signal kind.
+
 ## Context
 
 Discover shows each source's own list - TikTok Creative Center's hashtags and
