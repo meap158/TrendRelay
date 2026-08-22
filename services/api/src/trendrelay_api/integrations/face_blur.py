@@ -21,7 +21,6 @@ detector needs the runtime.
 from __future__ import annotations
 
 import os
-import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,6 +41,7 @@ from trendrelay_api.jobs import (
     report_progress,
 )
 from trendrelay_api.tool_registry import PROJECT_ROOT
+from trendrelay_api.video_encoding import encode_h264
 
 Box = tuple[int, int, int, int]  # x, y, width, height
 
@@ -469,24 +469,27 @@ def _remux_audio(silent_video: Path, original: Path, destination: Path) -> bool:
     """
     if not FFMPEG.is_file():
         return False
-    completed = subprocess.run(
+    completed, _encoder = encode_h264(
+        FFMPEG,
         [
             str(FFMPEG), "-y",
             "-i", str(silent_video),
             "-i", str(original),
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+        ],
+        [
             "-pix_fmt", "yuv420p",
             "-movflags", "+faststart",
             "-c:a", "copy",
             "-map", "0:v:0", "-map", "1:a:0?",
             "-shortest",
-            str(destination),
         ],
+        destination,
+        quality=20,
+        preset="veryfast",
         capture_output=True,
         text=True,
         encoding="utf-8",
         errors="replace",
-        check=False,
         timeout=1800,
     )
     return completed.returncode == 0 and destination.is_file()

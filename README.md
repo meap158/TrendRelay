@@ -156,7 +156,7 @@ Research integrations, ad collection, opportunity scoring, and additional produc
 
 - **Web interface:** Next.js 16, React 19, TypeScript, and accessible local UI primitives.
 - **API and workers:** Python 3.12+, FastAPI, SQLAlchemy, Alembic, and durable local job workers.
-- **Media:** FFmpeg/ffprobe plus isolated Python integrations for downloading, inspection, and non-destructive effects.
+- **Media:** FFmpeg/ffprobe plus isolated Python integrations for downloading, inspection, and non-destructive effects. H.264 renders probe NVENC, Quick Sync, AMF, and VideoToolbox once per worker, use the first encoder that actually completes a frame, and retry transparently with libx264 if a hardware session fails. Set `TRENDRELAY_VIDEO_ENCODER=software` only when hardware encoding must be disabled for diagnostics.
 - **Desktop:** Electron as an optional native window over the same local services.
 - **Storage:** local SQLite and `.data/` media by default; optional public object storage only for publishing engines that fetch media by URL.
 - **Quality:** Pytest, Node's test runner, TypeScript, ESLint, Ruff, and production Next.js builds.

@@ -22,6 +22,7 @@ from pathlib import Path
 from trendrelay_api import subtitle_formats as fmt
 from trendrelay_api.integrations.openmontage_runtime import FFMPEG, FFPROBE
 from trendrelay_api.subtitles import Cue
+from trendrelay_api.video_encoding import encode_h264
 
 #: Long enough for a real clip on a slow machine, short enough that a wedged
 #: encoder does not hold a worker forever.
@@ -112,24 +113,23 @@ def burn_in(
         # Written beside the subtitles for the same reason, then moved: an
         # output path can carry the same awkward characters as an input one.
         rendered = work / f"burned{output.suffix or '.mp4'}"
-        done = subprocess.run(
+        done, _encoder = encode_h264(
+            FFMPEG,
             [
                 str(FFMPEG), "-y", "-hide_banner", "-loglevel", "error",
                 "-i", str(source),
                 "-vf", f"subtitles={subtitle_file.name}",
                 "-c:a", "copy",
-                "-c:v", "libx264", "-crf", str(crf), "-preset", preset,
+            ],
+            [
                 # Wanted by every phone and most browsers; costs nothing here.
                 "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                str(rendered),
             ],
+            rendered,
+            quality=crf,
+            preset=preset,
             cwd=work, capture_output=True, text=True,
-            timeout=RENDER_TIMEOUT_SECONDS, check=False,
-            # FFmpeg reads stdin for its interactive keys, and a worker has no
-            # console to give it. Inheriting whatever stdin the process was
-            # started with is how an encode ends up waiting on a pipe that will
-            # never deliver, holding the job until the lease expires.
-            stdin=subprocess.DEVNULL,
+            timeout=RENDER_TIMEOUT_SECONDS,
         )
         if done.returncode != 0 or not rendered.is_file():
             detail = (done.stderr or "").strip().splitlines()

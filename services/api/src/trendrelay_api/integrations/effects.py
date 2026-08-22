@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from trendrelay_api.tool_registry import PROJECT_ROOT
+from trendrelay_api.video_encoding import encode_h264
 
 FFMPEG = (
     PROJECT_ROOT
@@ -872,18 +873,19 @@ def render_stream(
         # after this many source seconds and slow motion expands the source;
         # input-side `-t` made the former empty and the latter too long.
         command += ["-t", f"{preview_seconds:.3f}"]
-    command += [
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "20",
+    command_after_encoder = [
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
         "-movflags", "+faststart",
-        str(destination),
     ]
 
-    completed = subprocess.run(
+    completed, encoder = encode_h264(
+        FFMPEG,
         command,
+        command_after_encoder,
+        destination,
+        quality=20,
+        preset="veryfast",
         capture_output=True,
         text=True,
         # Decoded explicitly, as everywhere else that runs a media tool here.
@@ -904,6 +906,7 @@ def render_stream(
     return {
         "video_filters": video,
         "audio_filters": audio,
+        "video_encoder": encoder.name,
         "output": str(destination),
         "size_bytes": destination.stat().st_size,
     }
