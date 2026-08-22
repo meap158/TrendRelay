@@ -1565,7 +1565,8 @@ export default function LibraryPage() {
 
       <section className="library-layout" aria-busy={loadingAssets}>
         <aside className="library-browser">
-          <div className="library-browser-toolbar">
+          <div className="library-browser-sticky-controls">
+            <div className="library-browser-toolbar">
           <form className="library-search" onSubmit={(event) => { event.preventDefault(); void refresh(); }}>
             <input aria-label={t("library.searchLabel")} value={query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder={t("library.searchPlaceholder")} />
             <Button type="submit"><ActionIcon name="search" />{t("common.search")}</Button>
@@ -1623,10 +1624,10 @@ export default function LibraryPage() {
               />
             </div>
           </div>
-          </div>
+            </div>
 
-          {assets.length > 0 && (
-            <div className={`library-selection-bar${selection.size ? " active" : ""}`}>
+            {assets.length > 0 && (
+              <div className={`library-selection-bar${selection.size ? " active" : ""}`}>
               <span
                 className="library-pick"
                 role="checkbox"
@@ -1706,8 +1707,9 @@ export default function LibraryPage() {
               {/* The outcome reads back where the run was started rather than as
                   a banner elsewhere; per-asset progress is in notifications. */}
               {message && <span className="library-selection-note" role="status">{message}</span>}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
           <div className={`library-collection ${groupBy === "none" ? `library-${viewMode}` : "library-grouped"}`}>
             {groupBy === "none"
               ? assets.map(renderAsset)
