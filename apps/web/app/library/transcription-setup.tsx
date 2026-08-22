@@ -4,7 +4,7 @@ import { CircleAlert, CircleCheck } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Button } from "../ui/button";
+import { Button, buttonClass } from "../ui/button";
 import { Switch } from "../ui/primitives";
 
 /**
@@ -42,6 +42,7 @@ export type MediaAiProvider = {
   prepared: boolean;
   ready: boolean;
   pairs?: { from: string; to: string; label: string }[];
+  network_during_analysis?: boolean;
 };
 
 export type MediaAiJob = {
@@ -250,8 +251,10 @@ export function TranscriptionSwitch({
             <p className="library-status-popover-problem" role="alert">{mediaAi.failure}</p>
           )}
           <p className="library-status-popover-note">
-            Runs on this machine. Nothing is uploaded, and every transcript it
-            produces is a draft to review. <Link href="/tools">More in Tools</Link>
+            {speech?.network_during_analysis
+              ? "This provider uploads only the clip you ask it to transcribe. "
+              : "The selected speech provider runs on this machine. Nothing is uploaded. "}
+            Every transcript it produces is a draft to review. <Link href="/tools">Configure providers in Tools</Link>
           </p>
         </div>
       )}
@@ -297,7 +300,11 @@ export function ProviderSwitch({
         <small>{status.provider}</small>
       </span>
 
-      {status.prepared ? (
+      {status.network_during_analysis ? (
+        <Link className={buttonClass({ variant: "secondary", size: "sm" })} href="/tools">
+          Configure
+        </Link>
+      ) : status.prepared ? (
         /* Downloaded already, so this is the quick switch and nothing more: a
            switch, not a wizard, because the expensive part is behind them. */
         <Switch

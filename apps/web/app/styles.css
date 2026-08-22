@@ -1365,6 +1365,10 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .tool-setting > span > em { color: var(--muted); font-size: 10px; font-style: normal; font-weight: 400; }
 .tool-setting > input { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; font-size: 12px; }
 .tool-setting > input:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+.tool-secret-input { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 5px; }
+.tool-secret-input > input { min-width: 0; width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; font-size: 12px; }
+.tool-secret-input > input:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+.tool-secret-input > input::placeholder { color: var(--muted); font-variant-numeric: tabular-nums; }
 /* A masked key sits in the placeholder, so it has to read as a saved value
    rather than as the usual hint about what to type. */
 .tool-setting > input::placeholder { color: var(--muted); font-variant-numeric: tabular-nums; }

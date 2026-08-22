@@ -469,7 +469,7 @@
       "id": "elevenlabs",
       "name": "ElevenLabs",
       "repository": "https://elevenlabs.io",
-      "revision": "v2 voices · v1 TTS",
+      "revision": "v2 voices · v1 TTS/STT",
       "version": "current",
       "license": "Commercial service terms",
       "license_url": "https://elevenlabs.io/terms-of-use",
@@ -480,7 +480,9 @@
         "Searchable voices by language, region, accent, and profile",
         "Live text-to-speech models and free-plan request limits",
         "Character allowance and reset reported by the service",
-        "Per-generation voice controls"
+        "Per-generation voice controls and metered previews",
+        "Optional Scribe v2 transcription with word timestamps and speakers",
+        "Reviewed transcripts feed subtitle preview, translation, and rendering"
       ],
       "integration_status": "key-and-quota",
       "commercial_use": "allowed",

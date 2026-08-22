@@ -35,6 +35,9 @@ class SettingsProvider(Protocol):
     def save(self, values: dict[str, str]) -> list[str]:
         """Validate everything, write it, and name what was written."""
 
+    def reveal(self, key: str) -> str:
+        """Return one declared secret after the API has authorized disclosure."""
+
 
 class _Tunnel:
     """The assistant tunnel, which already had the shape."""
@@ -51,6 +54,9 @@ class _Tunnel:
             return tunnel.save_settings(values)
         except tunnel.TunnelSettingsError as error:
             raise SettingsError(str(error)) from error
+
+    def reveal(self, key: str) -> str:
+        raise SettingsError("This tool does not expose saved secrets in the setup UI.")
 
 
 #: What a hosted service needs before it can be asked anything: its key.
@@ -71,6 +77,132 @@ ELEVENLABS_FIELDS: tuple[dict[str, Any], ...] = (
         ),
         "help_url": "https://elevenlabs.io/app/settings/api-keys",
     },
+    {
+        "key": "ELEVENLABS_TTS_VOICE_ID",
+        "label": "Default voice ID",
+        "kind": "text",
+        "secret": False,
+        "required": False,
+        "placeholder": "Choose per clip when left empty",
+        "help": "The voice Library selects first. A per-take choice still wins.",
+    },
+    {
+        "key": "ELEVENLABS_TTS_MODEL_ID",
+        "label": "Default speech model",
+        "kind": "choice",
+        "secret": False,
+        "required": True,
+        "options": ["eleven_multilingual_v2", "eleven_flash_v2_5", "eleven_turbo_v2_5"],
+        "default": "eleven_multilingual_v2",
+        "help": "Library starts with this model when the key can use it.",
+    },
+    {
+        "key": "ELEVENLABS_TTS_LANGUAGE_CODE",
+        "label": "Default spoken language",
+        "kind": "text",
+        "secret": False,
+        "required": False,
+        "placeholder": "Auto-detect",
+        "help": "Optional ISO 639-1 code. A transcript or per-take choice can override it.",
+    },
+    {
+        "key": "ELEVENLABS_TTS_STABILITY",
+        "label": "Default stability",
+        "kind": "number",
+        "secret": False,
+        "required": True,
+        "min": 0,
+        "max": 1,
+        "step": 0.05,
+        "default": "0.5",
+        "help": "Lower is more expressive; higher is more consistent.",
+    },
+    {
+        "key": "ELEVENLABS_TTS_SIMILARITY_BOOST",
+        "label": "Default similarity",
+        "kind": "number",
+        "secret": False,
+        "required": True,
+        "min": 0,
+        "max": 1,
+        "step": 0.05,
+        "default": "0.75",
+        "help": "How closely speech should follow the selected voice.",
+    },
+    {
+        "key": "ELEVENLABS_TTS_STYLE",
+        "label": "Default style",
+        "kind": "number",
+        "secret": False,
+        "required": True,
+        "min": 0,
+        "max": 1,
+        "step": 0.05,
+        "default": "0",
+        "help": "Style exaggeration for models that support it.",
+    },
+    {
+        "key": "ELEVENLABS_TTS_SPEED",
+        "label": "Default speed",
+        "kind": "number",
+        "secret": False,
+        "required": True,
+        "min": 0.7,
+        "max": 1.2,
+        "step": 0.05,
+        "default": "1",
+        "help": "1 is the original pace; lower is slower and higher is faster.",
+    },
+    {
+        "key": "ELEVENLABS_TTS_SPEAKER_BOOST",
+        "label": "Speaker boost",
+        "kind": "choice",
+        "secret": False,
+        "required": True,
+        "options": ["on", "off"],
+        "default": "on",
+        "help": "Keep the generated take closer to the original voice where supported.",
+    },
+    {
+        "key": "MEDIA_AI_SPEECH_PROVIDER",
+        "label": "Transcription provider",
+        "kind": "choice",
+        "secret": False,
+        "required": True,
+        "options": ["faster-whisper", "elevenlabs-scribe"],
+        "default": "faster-whisper",
+        "help": "Local keeps media on this machine. Scribe uploads it to ElevenLabs on request.",
+    },
+    {
+        "key": "ELEVENLABS_STT_MODEL_ID",
+        "label": "Scribe model",
+        "kind": "choice",
+        "secret": False,
+        "required": True,
+        "options": ["scribe_v2", "scribe_v1"],
+        "default": "scribe_v2",
+        "help": "Scribe v2 is the recommended hosted transcription model.",
+    },
+    {
+        "key": "ELEVENLABS_STT_DIARIZE",
+        "label": "Identify speakers",
+        "kind": "choice",
+        "secret": False,
+        "required": True,
+        "options": ["off", "on"],
+        "default": "off",
+        "help": "Adds speaker IDs to timed words. Enable only when the distinction is useful.",
+    },
+    {
+        "key": "ELEVENLABS_STT_TAG_AUDIO_EVENTS",
+        "label": "Tag audio events",
+        "kind": "choice",
+        "secret": False,
+        "required": True,
+        "options": ["on", "off"],
+        "default": "on",
+        "help": "Includes events such as laughter and music in the machine draft.",
+    },
 )
 
 
@@ -87,7 +219,7 @@ class _ElevenLabs:
                 # A secret is described, never returned - the same rule the
                 # tunnel's form follows, and the reason this page can be read
                 # over somebody's shoulder.
-                "value": "",
+                "value": "" if field["secret"] else stored or field.get("default", ""),
                 "preview": masked_value(field["key"]) if stored else None,
             })
         return described
@@ -99,6 +231,7 @@ class _ElevenLabs:
         unknown = sorted(set(values) - allowed)
         if unknown:
             raise SettingsError(f"Not an ElevenLabs setting: {unknown[0]}.")
+        by_key = {field["key"]: field for field in ELEVENLABS_FIELDS}
         cleaned: dict[str, str] = {}
         for key, raw in values.items():
             value = str(raw).strip()
@@ -106,13 +239,40 @@ class _ElevenLabs:
             # would be a guess about a format the service can change, and the
             # real check is the one that follows: the card probes the service
             # with it and reports what came back.
-            if value and (len(value) < 20 or any(ch.isspace() for ch in value)):
+            if key == "ELEVENLABS_API_KEY" and value and (
+                len(value) < 20 or any(ch.isspace() for ch in value)
+            ):
                 raise SettingsError(
                     "That does not look like an API key. Copy the whole value "
                     "from elevenlabs.io → Profile → API key."
                 )
+            field = by_key[key]
+            if field["kind"] == "choice" and value not in field["options"]:
+                raise SettingsError(f"Choose one of the offered values for {field['label']}.")
+            if field["kind"] == "number":
+                try:
+                    number = float(value)
+                except ValueError as error:
+                    raise SettingsError(f"{field['label']} must be a number.") from error
+                if not field["min"] <= number <= field["max"]:
+                    raise SettingsError(
+                        f"{field['label']} must be between {field['min']} and {field['max']}."
+                    )
+                value = f"{number:g}"
             cleaned[key] = value
         return write_env_values(cleaned)
+
+    def reveal(self, key: str) -> str:
+        """Reveal only a field explicitly declared as a secret by this provider."""
+        from trendrelay_api.env_store import effective_value
+
+        field = next((item for item in ELEVENLABS_FIELDS if item["key"] == key), None)
+        if field is None or not field["secret"]:
+            raise SettingsError("That setting is not an exposable secret.")
+        value = (effective_value(key) or "").strip()
+        if not value:
+            raise SettingsError("No saved value is available for that secret.")
+        return value
 
 
 #: Tool id to its settings. A tool absent here has none, which is the honest

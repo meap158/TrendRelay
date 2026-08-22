@@ -98,8 +98,16 @@ def _active_tools() -> dict[str, bool]:
     return {item["id"]: bool(item["active"]) for item in list_tools()}
 
 
-def provider_status() -> dict[str, Any]:
+def _selected_speech_provider() -> str:
+    from trendrelay_api.integrations.elevenlabs import defaults
+
+    selected = str(defaults()["transcription"]["provider"])
+    return selected if selected in {"faster-whisper", "elevenlabs-scribe"} else "faster-whisper"
+
+
+def provider_status(*, speech_provider: str | None = None) -> dict[str, Any]:
     active = _active_tools()
+    selected_speech = speech_provider or _selected_speech_provider()
     model = get_settings().media_ai_speech_model
     model_root = MODEL_ROOT / "faster-whisper"
     model_cached = model_root.is_dir() and any(model_root.rglob("model.bin"))
@@ -107,22 +115,46 @@ def provider_status() -> dict[str, Any]:
     ocr_runtime = runtime_ready("ocr")
     translate_runtime = runtime_ready("translate")
     translation_pairs = _translation_pairs() if translate_runtime else []
+    local_speech = {
+        "provider": f"faster-whisper {SPEECH_VERSION}",
+        "tool_id": PROVIDER_TOOL["speech"],
+        "source_active": active.get("faster-whisper", False),
+        "runtime_ready": speech_runtime,
+        "model": model,
+        "model_cached": model_cached,
+        # Everything the runtime needs is downloaded, whether or not the
+        # operator currently has the provider switched on. This is what
+        # separates "not set up yet", which costs a download, from "turned
+        # off", which is one click either way.
+        "prepared": bool(speech_runtime and model_cached),
+        "ready": bool(active.get("faster-whisper", False) and speech_runtime and model_cached),
+        "network_during_analysis": False,
+    }
+    if selected_speech == "elevenlabs-scribe":
+        from trendrelay_api.integrations.elevenlabs import (
+            defaults,
+        )
+        from trendrelay_api.integrations.elevenlabs import (
+            provider_status as eleven_status,
+        )
+
+        hosted = eleven_status(probe=False)
+        transcription = defaults()["transcription"]
+        speech = {
+            "provider": f"ElevenLabs {transcription['model_id']}",
+            "tool_id": "elevenlabs",
+            "source_active": bool(hosted["configured"]),
+            "runtime_ready": True,
+            "model": transcription["model_id"],
+            "model_cached": False,
+            "prepared": bool(hosted["configured"]),
+            "ready": bool(hosted["configured"]),
+            "network_during_analysis": True,
+        }
+    else:
+        speech = local_speech
     return {
-        "speech": {
-            "provider": f"faster-whisper {SPEECH_VERSION}",
-            "tool_id": PROVIDER_TOOL["speech"],
-            "source_active": active.get("faster-whisper", False),
-            "runtime_ready": speech_runtime,
-            "model": model,
-            "model_cached": model_cached,
-            # Everything the runtime needs is downloaded, whether or not the
-            # operator currently has the provider switched on. This is what
-            # separates "not set up yet", which costs a download, from "turned
-            # off", which is one click either way.
-            "prepared": bool(speech_runtime and model_cached),
-            "ready": bool(active.get("faster-whisper", False) and speech_runtime and model_cached),
-            "network_during_analysis": False,
-        },
+        "speech": speech,
         "ocr": {
             "provider": f"RapidOCR {OCR_VERSION} / ONNX Runtime {ONNX_VERSION}",
             "tool_id": PROVIDER_TOOL["ocr"],
@@ -1067,6 +1099,15 @@ def create_enrichment_job(
             raise ValueError("This asset has no audio track to transcribe.")
         if "ocr" in normalized_modes and asset.media_kind not in {"video", "image"}:
             raise ValueError("OCR requires a video or image asset.")
+        speech_provider = _selected_speech_provider()
+        from trendrelay_api.integrations.elevenlabs import defaults as eleven_defaults
+
+        stt = eleven_defaults()["transcription"]
+        speech_model = (
+            stt["model_id"]
+            if speech_provider == "elevenlabs-scribe"
+            else get_settings().media_ai_speech_model
+        )
         signature = ":".join(
             [
                 workspace_id,
@@ -1074,7 +1115,10 @@ def create_enrichment_job(
                 asset.original_sha256,
                 ",".join(normalized_modes),
                 language or "auto",
-                get_settings().media_ai_speech_model,
+                speech_provider,
+                speech_model,
+                str(stt["diarize"]),
+                str(stt["tag_audio_events"]),
                 str(get_settings().media_ai_ocr_interval_seconds),
                 SPEECH_VERSION,
                 OCR_VERSION,
@@ -1101,7 +1145,12 @@ def create_enrichment_job(
             "actor_user_id": actor_user_id,
             "modes": normalized_modes,
             "language": language or "auto",
-            "speech_provider": f"faster-whisper@{SPEECH_VERSION}",
+            "speech_provider": speech_provider,
+            "speech_model": speech_model,
+            "speech_options": {
+                "diarize": stt["diarize"],
+                "tag_audio_events": stt["tag_audio_events"],
+            },
             "ocr_provider": f"rapidocr@{OCR_VERSION}",
         },
         max_attempts=ENRICHMENT_MAX_ATTEMPTS,
@@ -1129,7 +1178,11 @@ def run_enrichment_job(
             interval_seconds=ENRICHMENT_HEARTBEAT_SECONDS,
         ):
             report_progress(job_id, 0.03, "Checking local providers", factory=factory)
-            status = provider_status()
+            status = (
+                provider_status(speech_provider="elevenlabs-scribe")
+                if payload.get("speech_provider") == "elevenlabs-scribe"
+                else provider_status()
+            )
             for mode in payload["modes"]:
                 if not status[mode]["ready"]:
                     raise RuntimeError(
@@ -1180,7 +1233,25 @@ def run_enrichment_job(
                 if mode == "speech":
                     if not audio:
                         raise RuntimeError("The audio version is unavailable.")
-                    drafts.append(("speech", SPEECH_RUNNER(audio, payload.get("language"))))
+                    if payload.get("speech_provider") == "elevenlabs-scribe":
+                        from trendrelay_api.integrations import elevenlabs
+
+                        options = payload.get("speech_options") or {}
+                        drafts.append(
+                            (
+                                "speech",
+                                elevenlabs.transcribe(
+                                    audio,
+                                    model_id=payload.get("speech_model")
+                                    or elevenlabs.DEFAULT_STT_MODEL,
+                                    language_code=payload.get("language"),
+                                    diarize=bool(options.get("diarize")),
+                                    tag_audio_events=bool(options.get("tag_audio_events", True)),
+                                ),
+                            )
+                        )
+                    else:
+                        drafts.append(("speech", SPEECH_RUNNER(audio, payload.get("language"))))
                 else:
                     if not source:
                         raise RuntimeError("The original version is unavailable.")

@@ -2560,7 +2560,9 @@ def transcribe_asset(
                 detail=(
                     f"{status[mode]['provider']} is "
                     + (
-                        "switched off. Turn it on to read this clip automatically."
+                        "not configured. Open its card in Tools before reading this clip."
+                        if status[mode].get("network_during_analysis")
+                        else "switched off. Turn it on to read this clip automatically."
                         if status[mode]["prepared"]
                         else "not downloaded yet. Set it up to read this clip "
                         "automatically."
@@ -2607,7 +2609,7 @@ class VoiceRequest(BaseModel):
     common case and the one worth making frictionless. Typed in, it wins.
     """
 
-    voice_id: str = Field(min_length=1, max_length=64)
+    voice_id: str | None = Field(default=None, min_length=1, max_length=64)
     model_id: str | None = Field(default=None, max_length=64)
     #: An override, not the source. Capped well above any sensible voiceover
     #: because it is billed per character and a runaway paste is money.
@@ -2619,6 +2621,59 @@ class VoiceRequest(BaseModel):
     #: caption request uses for the same choice. Audio alone by default: it is
     #: the half worth hearing before committing to a render.
     deliver: Literal["audio", "video", "both"] = "audio"
+
+
+class VoicePreviewRequest(BaseModel):
+    """A short, explicitly requested, metered audition of the current controls."""
+
+    voice_id: str = Field(min_length=1, max_length=64)
+    model_id: str = Field(min_length=1, max_length=64)
+    text: str = Field(min_length=1, max_length=300)
+    language_code: str | None = Field(default=None, max_length=16)
+    voice_settings: VoiceSettings
+
+
+@router.post("/voice/preview")
+def preview_voice(
+    workspace_id: str,
+    body: VoicePreviewRequest,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Generate an in-memory audition; never file it as Library media.
+
+    Returning authenticated JSON instead of a public media URL prevents browser
+    download helpers from interpreting a voice picker as a downloadable asset.
+    The 300-character cap keeps an audition an audition and bounds its charge.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "analyst"})
+    from trendrelay_api.integrations import elevenlabs
+
+    try:
+        selected_model = next(
+            (item for item in elevenlabs.models() if item["model_id"] == body.model_id), None
+        )
+        if selected_model is None:
+            raise ValueError("Choose a text-to-speech model available on this ElevenLabs key.")
+        cost = elevenlabs.check_allowance(body.text, model=selected_model)
+        audio = elevenlabs.synthesise(
+            body.text,
+            voice_id=body.voice_id,
+            model_id=body.model_id,
+            language_code=body.language_code,
+            voice_settings=body.voice_settings.model_dump(),
+        )
+    except elevenlabs.AllowanceExceeded as error:
+        raise HTTPException(status_code=402, detail=str(error)) from error
+    except elevenlabs.ElevenLabsUnavailable as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return {
+        "mime_type": "audio/mpeg",
+        "content_base64": base64.b64encode(audio).decode("ascii"),
+        "characters": cost,
+    }
 
 
 @router.post("/assets/{asset_id}/voiceover", status_code=202)
@@ -2669,7 +2724,7 @@ def generate_voiceover(
         "media_asset",
         item.id,
         {
-            "voice_id": body.voice_id,
+            "voice_id": job["payload"].get("voice_id"),
             "characters": job["payload"].get("characters"),
             "job_id": job["id"],
         },
@@ -2707,6 +2762,7 @@ def available_voices(
             "voices": [],
             "models": [],
             "status": {**status, "reachable": False, "reason": str(error)},
+            "defaults": elevenlabs.defaults(),
         }
 
 

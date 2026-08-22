@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -149,10 +150,11 @@ def queue(
             transcript_id=request.get("transcript_id"),
         )
 
-    voice_id = str(request.get("voice_id") or "").strip()
+    configured = elevenlabs.defaults()
+    voice_id = str(request.get("voice_id") or configured.get("voice_id") or "").strip()
     if not voice_id:
         raise ValueError("Choose a voice before generating.")
-    model_id = str(request.get("model_id") or elevenlabs.DEFAULT_MODEL)
+    model_id = str(request.get("model_id") or configured["model_id"])
 
     selected_model = None
     if request.get("model_id"):
@@ -166,10 +168,11 @@ def queue(
     # rather than a failed row somebody finds later.
     cost = elevenlabs.check_allowance(script, model=selected_model)
 
-    voice_settings = request.get("voice_settings") or {}
+    voice_settings = request.get("voice_settings") or configured["voice_settings"]
+    language_code = request.get("language_code") or configured.get("language_code") or language
     settings_signature = json.dumps(voice_settings, sort_keys=True, separators=(",", ":"))
     signature = ":".join(
-        [workspace_id, asset_id, voice_id, model_id, str(request.get("language_code") or language),
+        [workspace_id, asset_id, voice_id, model_id, str(language_code),
          settings_signature, script]
     )
     job_id = "voice_" + hashlib.sha256(signature.encode("utf-8")).hexdigest()[:24]
@@ -187,7 +190,7 @@ def queue(
             "actor_user_id": actor_user_id,
             "voice_id": voice_id,
             "model_id": model_id,
-            "language_code": request.get("language_code") or language,
+            "language_code": language_code,
             "voice_settings": voice_settings,
             "text": script,
             # The same word the caption job uses for the same choice, so the
@@ -332,7 +335,10 @@ def mux(source: Path, voice: Path, output: Path) -> None:
                 + (detail[-1][:300] if detail else "It gave no reason.")
             )
         output.parent.mkdir(parents=True, exist_ok=True)
-        rendered.replace(output)
+        # Temp follows the system drive while Library storage is often a large
+        # secondary drive. `Path.replace` cannot cross that boundary on Windows;
+        # `move` copies then removes when a rename is impossible.
+        shutil.move(str(rendered), str(output))
 
 
 def _record_version(

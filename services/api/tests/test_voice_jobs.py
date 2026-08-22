@@ -29,7 +29,9 @@ from trendrelay_api.models import Base
 import trendrelay_api.main  # noqa: E402,F401  isort:skip
 
 engine = create_engine(
-    "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool,
+    "sqlite://",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
 )
 TestingSession = sessionmaker(bind=engine, expire_on_commit=False)
 
@@ -46,7 +48,8 @@ def database(monkeypatch, tmp_path):
     monkeypatch.setattr(voice_jobs, "VOICE_ROOT", tmp_path / "voice")
     # Plenty of allowance unless a test says otherwise.
     monkeypatch.setattr(
-        elevenlabs, "provider_status",
+        elevenlabs,
+        "provider_status",
         lambda **kwargs: {"characters_remaining": 100_000, "tier": "creator"},
     )
     return TestingSession
@@ -68,17 +71,33 @@ def asset(*, reviewed: bool = True, machine: bool = False) -> str:
         session.add(item)
         session.flush()
         if machine:
-            session.add(MediaTranscript(
-                workspace_id=WORKSPACE, asset_id=item.id, kind="speech",
-                language="en", provider="faster-whisper", status="machine",
-                text=MACHINE, segments=[], created_by="voice-owner",
-            ))
+            session.add(
+                MediaTranscript(
+                    workspace_id=WORKSPACE,
+                    asset_id=item.id,
+                    kind="speech",
+                    language="en",
+                    provider="faster-whisper",
+                    status="machine",
+                    text=MACHINE,
+                    segments=[],
+                    created_by="voice-owner",
+                )
+            )
         if reviewed:
-            session.add(MediaTranscript(
-                workspace_id=WORKSPACE, asset_id=item.id, kind="speech",
-                language="en", provider="operator-reviewed", status="reviewed",
-                text=REVIEWED, segments=[], created_by="voice-owner",
-            ))
+            session.add(
+                MediaTranscript(
+                    workspace_id=WORKSPACE,
+                    asset_id=item.id,
+                    kind="speech",
+                    language="en",
+                    provider="operator-reviewed",
+                    status="reviewed",
+                    text=REVIEWED,
+                    segments=[],
+                    created_by="voice-owner",
+                )
+            )
         return item.id
 
 
@@ -91,7 +110,9 @@ def tmp_audio(asset_id: str) -> Path:
 
 def queue(asset_id: str, **request):
     return voice_jobs.queue(
-        WORKSPACE, asset_id, actor_user_id="voice-owner",
+        WORKSPACE,
+        asset_id,
+        actor_user_id="voice-owner",
         request={"voice_id": "voice-abc", **request},
         factory=TestingSession,
     )
@@ -132,7 +153,8 @@ def test_the_allowance_is_checked_before_anything_is_sent(monkeypatch) -> None:
     somebody has to reconstruct - and it says nothing about what to do.
     """
     monkeypatch.setattr(
-        elevenlabs, "provider_status",
+        elevenlabs,
+        "provider_status",
         lambda **kwargs: {"characters_remaining": 5, "tier": "free"},
     )
     item = asset()
@@ -151,7 +173,9 @@ def test_the_allowance_is_checked_before_anything_is_sent(monkeypatch) -> None:
 def test_an_unknown_allowance_does_not_block_the_work(monkeypatch) -> None:
     """A flaky status call must not read as an empty account."""
     monkeypatch.setattr(
-        elevenlabs, "provider_status", lambda **kwargs: {"characters_remaining": None},
+        elevenlabs,
+        "provider_status",
+        lambda **kwargs: {"characters_remaining": None},
     )
     item = asset()
 
@@ -182,11 +206,13 @@ def test_model_language_and_voice_controls_are_part_of_the_take(monkeypatch) -> 
     monkeypatch.setattr(
         elevenlabs,
         "models",
-        lambda: [{
-            "model_id": "eleven_flash_v2_5",
-            "character_cost_multiplier": 0.5,
-            "max_characters_paid": 10_000,
-        }],
+        lambda: [
+            {
+                "model_id": "eleven_flash_v2_5",
+                "character_cost_multiplier": 0.5,
+                "max_characters_paid": 10_000,
+            }
+        ],
     )
     item = asset()
 
@@ -210,6 +236,33 @@ def test_model_language_and_voice_controls_are_part_of_the_take(monkeypatch) -> 
     assert first["payload"]["characters"] == (len(REVIEWED) + 1) // 2
 
 
+def test_setup_defaults_are_snapshotted_when_a_client_uses_them(monkeypatch) -> None:
+    monkeypatch.setattr(
+        elevenlabs,
+        "defaults",
+        lambda: {
+            "voice_id": "configured-voice",
+            "model_id": elevenlabs.DEFAULT_MODEL,
+            "language_code": "vi",
+            "voice_settings": {"stability": 0.35, "speed": 1.05},
+            "transcription": {},
+        },
+    )
+    item = asset()
+
+    job = voice_jobs.queue(
+        WORKSPACE,
+        item,
+        actor_user_id="voice-owner",
+        request={},
+        factory=TestingSession,
+    )
+
+    assert job["payload"]["voice_id"] == "configured-voice"
+    assert job["payload"]["language_code"] == "vi"
+    assert job["payload"]["voice_settings"] == {"stability": 0.35, "speed": 1.05}
+
+
 def test_a_finished_job_files_a_voiceover_version() -> None:
     """Its own kind. `edited` is deleted by "Remove effects", and `audio` is the
     clip's own extracted track - writing there would destroy the original's
@@ -218,7 +271,9 @@ def test_a_finished_job_files_a_voiceover_version() -> None:
     job = queue(item)
 
     done = voice_jobs.run_voice_job(
-        job["id"], factory=TestingSession, generate=lambda *a, **k: b"ID3fake-mp3",
+        job["id"],
+        factory=TestingSession,
+        generate=lambda *a, **k: b"ID3fake-mp3",
     )
 
     with TestingSession() as session:
@@ -287,15 +342,15 @@ def test_audio_only_is_the_default_and_renders_nothing() -> None:
     assert job["payload"]["deliver"] == "audio"
 
     done = voice_jobs.run_voice_job(
-        job["id"], factory=TestingSession, generate=lambda *a, **k: b"ID3fake-mp3",
+        job["id"],
+        factory=TestingSession,
+        generate=lambda *a, **k: b"ID3fake-mp3",
     )
 
     assert done["result"]["voiced_version_id"] is None
     with TestingSession() as session:
         kinds = session.scalars(
-            select(MediaAssetVersion.version_kind).where(
-                MediaAssetVersion.asset_id == item
-            )
+            select(MediaAssetVersion.version_kind).where(MediaAssetVersion.asset_id == item)
         ).all()
     assert list(kinds) == ["voiceover"]
 
@@ -305,22 +360,24 @@ def test_asking_for_the_clip_files_both_artefacts(monkeypatch) -> None:
     item = asset()
     job = queue(item, deliver="both")
     monkeypatch.setattr(
-        voice_jobs, "mux", lambda source, voice, output: output.write_bytes(b"fake-mp4"),
+        voice_jobs,
+        "mux",
+        lambda source, voice, output: output.write_bytes(b"fake-mp4"),
     )
     # The muxer reads the asset's own file, so it has to exist.
     with TestingSession.begin() as session:
         session.get(MediaAsset, item).original_path = str(tmp_audio(item))
 
     done = voice_jobs.run_voice_job(
-        job["id"], factory=TestingSession, generate=lambda *a, **k: b"ID3fake-mp3",
+        job["id"],
+        factory=TestingSession,
+        generate=lambda *a, **k: b"ID3fake-mp3",
     )
 
     assert done["result"]["voiced_version_id"]
     with TestingSession() as session:
         kinds = session.scalars(
-            select(MediaAssetVersion.version_kind).where(
-                MediaAssetVersion.asset_id == item
-            )
+            select(MediaAssetVersion.version_kind).where(MediaAssetVersion.asset_id == item)
         ).all()
     assert sorted(kinds) == ["voiced", "voiceover"]
 
@@ -336,15 +393,15 @@ def test_a_missing_original_does_not_read_as_a_failed_generation(monkeypatch) ->
 
     with pytest.raises(RuntimeError, match="could not be found to put it on"):
         voice_jobs.run_voice_job(
-            job["id"], factory=TestingSession, generate=lambda *a, **k: b"ID3fake-mp3",
+            job["id"],
+            factory=TestingSession,
+            generate=lambda *a, **k: b"ID3fake-mp3",
         )
 
     # And the audio it did produce is filed, not lost with the failure.
     with TestingSession() as session:
         kinds = session.scalars(
-            select(MediaAssetVersion.version_kind).where(
-                MediaAssetVersion.asset_id == item
-            )
+            select(MediaAssetVersion.version_kind).where(MediaAssetVersion.asset_id == item)
         ).all()
     assert list(kinds) == ["voiceover"]
 
@@ -364,6 +421,7 @@ def test_the_mux_keeps_the_picture_and_fits_the_sound_to_it() -> None:
         return type("Done", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
     import subprocess as real
+
     original = real.run
     real.run = fake_run
     try:
@@ -379,7 +437,6 @@ def test_the_mux_keeps_the_picture_and_fits_the_sound_to_it() -> None:
     # The clip's own audio is not carried through - this replaces, not mixes.
     assert "0:v:0" in command and "1:a:0" in command
     assert "0:a:0" not in command
-
 
 
 def audio_asset() -> str:
@@ -398,11 +455,19 @@ def audio_asset() -> str:
         )
         session.add(item)
         session.flush()
-        session.add(MediaTranscript(
-            workspace_id=WORKSPACE, asset_id=item.id, kind="speech",
-            language="en", provider="operator-reviewed", status="reviewed",
-            text=REVIEWED, segments=[], created_by="voice-owner",
-        ))
+        session.add(
+            MediaTranscript(
+                workspace_id=WORKSPACE,
+                asset_id=item.id,
+                kind="speech",
+                language="en",
+                provider="operator-reviewed",
+                status="reviewed",
+                text=REVIEWED,
+                segments=[],
+                created_by="voice-owner",
+            )
+        )
         return item.id
 
 

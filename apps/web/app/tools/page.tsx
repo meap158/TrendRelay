@@ -129,7 +129,7 @@ type SetupReport = {
 type ToolSetting = {
   key: string;
   label: string;
-  kind: "text" | "choice";
+  kind: "text" | "choice" | "number";
   secret: boolean;
   required: boolean;
   help: string;
@@ -137,6 +137,9 @@ type ToolSetting = {
   placeholder?: string;
   options?: string[];
   default?: string;
+  min?: number;
+  max?: number;
+  step?: number;
   configured: boolean;
   /** Empty for a secret: the API describes those rather than returning them. */
   value: string;
@@ -209,11 +212,21 @@ export default function ToolsPage() {
    * time somebody changed the log level.
    */
   const [settingsDraft, setSettingsDraft] = useState<Record<string, string>>({});
+  /** Secrets are fetched only on an explicit click and discarded with the dialog. */
+  const [revealedSecrets, setRevealedSecrets] = useState<Record<string, string>>({});
+  const [copiedSecret, setCopiedSecret] = useState<string | null>(null);
   /** The notes shipped with a tool, once somebody asks to read them. */
   const [docs, setDocs] = useState<
     { title: string; path: string; markdown: string } | null
   >(null);
   const [reachDiagnostics, setReachDiagnostics] = useState<ReachDiagnostics | null>(null);
+
+  // A revealed credential should not remain readable in a forgotten dialog.
+  useEffect(() => {
+    if (!Object.keys(revealedSecrets).length) return;
+    const timer = window.setTimeout(() => setRevealedSecrets({}), 60_000);
+    return () => window.clearTimeout(timer);
+  }, [revealedSecrets]);
 
   const refresh = useCallback(async () => {
     const rows = await refreshTabSnapshot<Tool[]>("tools:registry", async () => {
@@ -254,6 +267,8 @@ export default function ToolsPage() {
     // typed and not saved would still be in the boxes after switching tools and
     // coming back, looking exactly like something that had been saved.
     setSettingsDraft({});
+    setRevealedSecrets({});
+    setCopiedSecret(null);
     try {
       const payload = await responseJson<{ setup: SetupReport }>(await apiFetch(`/api/tools/${toolId}/setup`));
       setSetup(payload.setup);
@@ -387,6 +402,53 @@ export default function ToolsPage() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The settings could not be saved.");
       return false;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function fetchSavedSecret(key: string): Promise<string> {
+    if (!setup) throw new Error("Open a tool setup first.");
+    const payload = await responseJson<{ key: string; value: string }>(
+      await apiFetch(`/api/tools/${setup.tool_id}/settings/reveal`, {
+        method: "POST",
+        body: JSON.stringify({ key, confirm_external_action: true }),
+      }),
+    );
+    return payload.value;
+  }
+
+  async function toggleSecret(key: string) {
+    if (revealedSecrets[key] !== undefined) {
+      setRevealedSecrets((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+    setBusy(`${key}-reveal`);
+    setError(null);
+    try {
+      const value = await fetchSavedSecret(key);
+      setRevealedSecrets((current) => ({ ...current, [key]: value }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The saved key could not be shown.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function copySecret(key: string) {
+    setBusy(`${key}-copy`);
+    setError(null);
+    try {
+      const value = settingsDraft[key] || revealedSecrets[key] || await fetchSavedSecret(key);
+      await navigator.clipboard.writeText(value);
+      setCopiedSecret(key);
+      window.setTimeout(() => setCopiedSecret((current) => current === key ? null : current), 2000);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The API key could not be copied.");
     } finally {
       setBusy(null);
     }
@@ -822,7 +884,12 @@ export default function ToolsPage() {
         open={!!setup}
         title={setup?.title ?? ""}
         description={setup?.summary}
-        onClose={() => { setSetup(null); setSettingsDraft({}); }}
+        onClose={() => {
+          setSetup(null);
+          setSettingsDraft({});
+          setRevealedSecrets({});
+          setCopiedSecret(null);
+        }}
         size="wide"
       >
         {setup && <>
@@ -906,17 +973,59 @@ export default function ToolsPage() {
                           setSettingsDraft((draft) => ({ ...draft, [field.key]: next }))}
                         label={field.label}
                       />
+                    ) : field.secret ? (
+                      <div className="tool-secret-input">
+                        <input
+                          type={revealedSecrets[field.key] !== undefined ? "text" : "password"}
+                          value={typed ?? revealedSecrets[field.key] ?? ""}
+                          placeholder={field.preview ?? field.placeholder}
+                          onChange={(event) => {
+                            setRevealedSecrets((current) => {
+                              const next = { ...current };
+                              delete next[field.key];
+                              return next;
+                            });
+                            setSettingsDraft((draft) => ({
+                              ...draft,
+                              [field.key]: event.target.value,
+                            }));
+                          }}
+                          autoComplete="off"
+                          spellCheck={false}
+                        />
+                        {field.configured && typed === undefined && (
+                          <button
+                            type="button"
+                            className={buttonClass({ variant: "quiet", size: "sm", iconOnly: true })}
+                            aria-label={revealedSecrets[field.key] !== undefined ? "Hide API key" : "Show API key"}
+                            title={revealedSecrets[field.key] !== undefined ? "Hide API key" : "Show API key"}
+                            disabled={busy === `${field.key}-reveal`}
+                            onClick={() => void toggleSecret(field.key)}
+                          >
+                            <ActionIcon name={revealedSecrets[field.key] !== undefined ? "hide" : "reveal"} />
+                          </button>
+                        )}
+                        {(field.configured || Boolean(typed)) && (
+                          <button
+                            type="button"
+                            className={buttonClass({ variant: "quiet", size: "sm", iconOnly: true })}
+                            aria-label="Copy API key"
+                            title={copiedSecret === field.key ? "Copied" : "Copy API key"}
+                            disabled={busy === `${field.key}-copy`}
+                            onClick={() => void copySecret(field.key)}
+                          >
+                            <ActionIcon name={copiedSecret === field.key ? "confirm" : "copy"} />
+                          </button>
+                        )}
+                      </div>
                     ) : (
                       <input
-                        type={field.secret ? "password" : "text"}
-                        // A secret's box starts empty and its saved value shows
-                        // as a masked placeholder. Rendering the mask *inside*
-                        // the box would give a path where a row of dots is
-                        // submitted and saved over a working key.
-                        value={typed ?? (field.secret ? "" : field.value)}
-                        placeholder={
-                          field.secret && field.preview ? field.preview : field.placeholder
-                        }
+                        type={field.kind === "number" ? "number" : "text"}
+                        min={field.min}
+                        max={field.max}
+                        step={field.step}
+                        value={typed ?? field.value}
+                        placeholder={field.placeholder}
                         onChange={(event) =>
                           setSettingsDraft((draft) => ({ ...draft, [field.key]: event.target.value }))}
                         autoComplete="off"

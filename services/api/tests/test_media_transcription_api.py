@@ -358,6 +358,146 @@ def test_what_comes_back_is_a_draft_and_says_which_machine_made_it(tmp_path, mon
     assert drafts[0]["provider"] == "faster-whisper@1.2.1"
 
 
+def test_scribe_choice_is_snapshotted_and_still_produces_a_reviewable_draft(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from trendrelay_api.integrations import elevenlabs
+
+    workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)
+    hosted_ready = {
+        **READY,
+        "speech": {
+            "ready": True,
+            "prepared": True,
+            "provider": "ElevenLabs scribe_v2",
+            "network_during_analysis": True,
+        },
+    }
+    monkeypatch.setattr(media_ai, "_selected_speech_provider", lambda: "elevenlabs-scribe")
+    monkeypatch.setattr(media_ai, "provider_status", lambda **kwargs: hosted_ready)
+    monkeypatch.setattr(
+        elevenlabs,
+        "defaults",
+        lambda: {
+            "transcription": {
+                "provider": "elevenlabs-scribe",
+                "model_id": "scribe_v2",
+                "diarize": True,
+                "tag_audio_events": False,
+            },
+        },
+    )
+    seen = {}
+
+    def transcribe(path, **options):
+        seen.update(options)
+        return {
+            "language": "vi",
+            "provider": "elevenlabs:scribe_v2",
+            "text": "xin chào",
+            "segments": [
+                {
+                    "start_ms": 0,
+                    "end_ms": 800,
+                    "text": "xin chào",
+                    "words": [
+                        {"start_ms": 0, "end_ms": 300, "text": "xin"},
+                        {"start_ms": 320, "end_ms": 800, "text": "chào"},
+                    ],
+                }
+            ],
+        }
+
+    monkeypatch.setattr(elevenlabs, "transcribe", transcribe)
+    queued = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+            json={"modes": ["speech"]},
+        )
+    ).json()["job"]
+
+    assert queued["payload"]["speech_provider"] == "elevenlabs-scribe"
+    assert queued["payload"]["speech_options"] == {
+        "diarize": True,
+        "tag_audio_events": False,
+    }
+    media_ai.run_enrichment_job(queued["id"], factory=TestingSession)
+
+    with TestingSession() as session:
+        transcript = session.scalar(
+            select(MediaTranscript).where(
+                MediaTranscript.asset_id == asset_id,
+            )
+        )
+    assert transcript.status == "machine"
+    assert transcript.provider == "elevenlabs:scribe_v2"
+    assert transcript.segments[0]["words"][1]["text"] == "chào"
+    assert seen == {
+        "model_id": "scribe_v2",
+        "language_code": "auto",
+        "diarize": True,
+        "tag_audio_events": False,
+    }
+
+
+def test_voice_preview_is_short_metered_and_returned_as_authenticated_json(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from trendrelay_api.integrations import elevenlabs
+
+    workspace_id, _ = workspace_with_asset(tmp_path, monkeypatch)
+    seen = {}
+    monkeypatch.setattr(
+        elevenlabs,
+        "models",
+        lambda: [
+            {
+                "model_id": "eleven_multilingual_v2",
+                "character_cost_multiplier": 1,
+            }
+        ],
+    )
+    monkeypatch.setattr(elevenlabs, "check_allowance", lambda text, **kwargs: len(text))
+
+    def synthesise(text, **options):
+        seen.update(text=text, **options)
+        return b"ID3-preview"
+
+    monkeypatch.setattr(elevenlabs, "synthesise", synthesise)
+    response = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/voice/preview",
+            json={
+                "voice_id": "voice-vn",
+                "model_id": "eleven_multilingual_v2",
+                "text": "Xin chào",
+                "language_code": "vi",
+                "voice_settings": {
+                    "stability": 0.4,
+                    "similarity_boost": 0.75,
+                    "style": 0,
+                    "use_speaker_boost": True,
+                    "speed": 1.05,
+                },
+            },
+        )
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "mime_type": "audio/mpeg",
+        "content_base64": "SUQzLXByZXZpZXc=",
+        "characters": 8,
+    }
+    assert seen["voice_id"] == "voice-vn"
+    assert seen["language_code"] == "vi"
+    assert seen["voice_settings"]["speed"] == 1.05
+
+
 def test_a_reviewed_transcript_is_not_replaced_by_a_machine_one(tmp_path, monkeypatch) -> None:
     """Both are kept. The reviewed one is the answer; the draft is a candidate."""
     workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)

@@ -15,6 +15,7 @@ from __future__ import annotations
 import io
 import json
 import urllib.error
+from pathlib import Path
 
 import pytest
 
@@ -225,7 +226,8 @@ def test_the_catalogue_says_it_reaches_out_and_needs_no_install() -> None:
 
 
 def test_voice_catalog_uses_the_paginated_v2_api_and_keeps_locale_metadata(
-    saved_key, monkeypatch,
+    saved_key,
+    monkeypatch,
 ) -> None:
     requests: list[urllib.request.Request] = []
 
@@ -236,17 +238,24 @@ def test_voice_catalog_uses_the_paginated_v2_api_and_keeps_locale_metadata(
             payload = PLAN
         elif "/v2/voices?" in url and "next_page_token=" not in url:
             payload = {
-                "voices": [{
-                    "voice_id": "vietnam-voice",
-                    "name": "Lan",
-                    "category": "professional",
-                    "labels": {"gender": "female", "accent": "southern"},
-                    "verified_languages": [{
-                        "language": "vi", "locale": "vi-VN", "accent": "southern",
-                        "model_id": "eleven_multilingual_v2", "preview_url": "https://audio/lan.mp3",
-                    }],
-                    "high_quality_base_model_ids": ["eleven_multilingual_v2"],
-                }],
+                "voices": [
+                    {
+                        "voice_id": "vietnam-voice",
+                        "name": "Lan",
+                        "category": "professional",
+                        "labels": {"gender": "female", "accent": "southern"},
+                        "verified_languages": [
+                            {
+                                "language": "vi",
+                                "locale": "vi-VN",
+                                "accent": "southern",
+                                "model_id": "eleven_multilingual_v2",
+                                "preview_url": "https://audio/lan.mp3",
+                            }
+                        ],
+                        "high_quality_base_model_ids": ["eleven_multilingual_v2"],
+                    }
+                ],
                 "has_more": True,
                 "next_page_token": "page-2",
             }
@@ -257,14 +266,16 @@ def test_voice_catalog_uses_the_paginated_v2_api_and_keeps_locale_metadata(
                 "next_page_token": None,
             }
         elif url.endswith("/v1/models"):
-            payload = [{
-                "model_id": "eleven_multilingual_v2",
-                "name": "Multilingual v2",
-                "can_do_text_to_speech": True,
-                "languages": [{"language_id": "vi", "name": "Vietnamese"}],
-                "model_rates": {"character_cost_multiplier": 1},
-                "max_characters_request_free_user": 2_500,
-            }]
+            payload = [
+                {
+                    "model_id": "eleven_multilingual_v2",
+                    "name": "Multilingual v2",
+                    "can_do_text_to_speech": True,
+                    "languages": [{"language_id": "vi", "name": "Vietnamese"}],
+                    "model_rates": {"character_cost_multiplier": 1},
+                    "max_characters_request_free_user": 2_500,
+                }
+            ]
         else:
             raise AssertionError(url)
         body = io.BytesIO(json.dumps(payload).encode("utf-8"))
@@ -277,7 +288,8 @@ def test_voice_catalog_uses_the_paginated_v2_api_and_keeps_locale_metadata(
     catalog = elevenlabs.voice_catalog()
 
     assert [voice["voice_id"] for voice in catalog["voices"]] == [
-        "vietnam-voice", "us-voice",
+        "vietnam-voice",
+        "us-voice",
     ]
     lan = catalog["voices"][0]
     assert lan["languages"] == ["vi"]
@@ -304,7 +316,8 @@ def test_model_cost_and_free_request_limit_are_checked_before_generation() -> No
 
 
 def test_generation_sends_the_selected_model_language_and_voice_controls(
-    saved_key, monkeypatch,
+    saved_key,
+    monkeypatch,
 ) -> None:
     seen: list[urllib.request.Request] = []
 
@@ -318,8 +331,11 @@ def test_generation_sends_the_selected_model_language_and_voice_controls(
     monkeypatch.setattr(elevenlabs.urllib.request, "urlopen", fake_urlopen)
 
     audio = elevenlabs.synthesise(
-        "Xin chào", voice_id="voice-vn", model_id="eleven_flash_v2_5",
-        language_code="vi", voice_settings={"stability": 0.4, "speed": 1.1},
+        "Xin chào",
+        voice_id="voice-vn",
+        model_id="eleven_flash_v2_5",
+        language_code="vi",
+        voice_settings={"stability": 0.4, "speed": 1.1},
     )
 
     assert audio == b"ID3"
@@ -327,3 +343,108 @@ def test_generation_sends_the_selected_model_language_and_voice_controls(
     assert payload["model_id"] == "eleven_flash_v2_5"
     assert payload["language_code"] == "vi"
     assert payload["voice_settings"] == {"stability": 0.4, "speed": 1.1}
+
+
+def test_setup_defaults_cover_voice_controls_and_opt_in_scribe(monkeypatch) -> None:
+    values = {
+        "ELEVENLABS_TTS_VOICE_ID": "voice-vn",
+        "ELEVENLABS_TTS_MODEL_ID": "eleven_flash_v2_5",
+        "ELEVENLABS_TTS_LANGUAGE_CODE": "vi",
+        "ELEVENLABS_TTS_STABILITY": "0.4",
+        "ELEVENLABS_TTS_SPEED": "1.1",
+        "MEDIA_AI_SPEECH_PROVIDER": "elevenlabs-scribe",
+        "ELEVENLABS_STT_DIARIZE": "on",
+    }
+    monkeypatch.setattr(elevenlabs, "effective_value", lambda key: values.get(key, ""))
+
+    configured = elevenlabs.defaults()
+
+    assert configured["voice_id"] == "voice-vn"
+    assert configured["model_id"] == "eleven_flash_v2_5"
+    assert configured["voice_settings"]["stability"] == 0.4
+    assert configured["voice_settings"]["speed"] == 1.1
+    assert configured["transcription"]["provider"] == "elevenlabs-scribe"
+    assert configured["transcription"]["diarize"] is True
+    assert configured["transcription"]["timestamps_granularity"] == "word"
+
+
+def test_scribe_words_are_normalized_for_the_existing_caption_pipeline(
+    saved_key,
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "clip.mp4"
+    source.write_bytes(b"video")
+
+    class Response:
+        status_code = 200
+        text = ""
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "language_code": "vi",
+                "text": "Xin chào",
+                "words": [
+                    {
+                        "text": "Xin",
+                        "start": 0.1,
+                        "end": 0.3,
+                        "type": "word",
+                        "speaker_id": "speaker_0",
+                    },
+                    {
+                        "text": "chào",
+                        "start": 0.31,
+                        "end": 0.7,
+                        "type": "word",
+                        "speaker_id": "speaker_0",
+                    },
+                ],
+            }
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, *args, **kwargs):
+            assert kwargs["data"]["timestamps_granularity"] == "word"
+            assert kwargs["data"]["diarize"] == "true"
+            return Response()
+
+    monkeypatch.setattr(elevenlabs.httpx, "Client", Client)
+
+    draft = elevenlabs.transcribe(source, language_code="vi", diarize=True)
+
+    assert draft["provider"] == "elevenlabs:scribe_v2"
+    assert draft["segments"][0]["words"][0] == {
+        "start_ms": 100,
+        "end_ms": 300,
+        "text": "Xin",
+        "type": "word",
+        "speaker_id": "speaker_0",
+    }
+
+
+def test_tools_rejects_out_of_range_voice_defaults_before_writing(monkeypatch) -> None:
+    from trendrelay_api import env_store, tool_settings
+
+    written = []
+    monkeypatch.setattr(env_store, "write_env_values", lambda values: written.append(values))
+
+    with pytest.raises(tool_settings.SettingsError, match="between 0.7 and 1.2"):
+        tool_settings.PROVIDERS["elevenlabs"].save(
+            {
+                "ELEVENLABS_TTS_SPEED": "1.8",
+            }
+        )
+
+    assert written == []

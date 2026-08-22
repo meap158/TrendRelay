@@ -190,3 +190,53 @@ def test_mutations_are_local_machine_only() -> None:
 
     response = asyncio.run(remote_request())
     assert response.status_code == 403
+
+
+def test_secret_reveal_is_explicit_and_limited_to_declared_secrets(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "trendrelay_api.env_store.effective_value",
+        lambda key: "sk_saved-secret-value-123456" if key == "ELEVENLABS_API_KEY" else None,
+    )
+
+    unconfirmed = asyncio.run(
+        request(
+            "POST",
+            "/api/tools/elevenlabs/settings/reveal",
+            json={"key": "ELEVENLABS_API_KEY", "confirm_external_action": False},
+        )
+    )
+    revealed = asyncio.run(
+        request(
+            "POST",
+            "/api/tools/elevenlabs/settings/reveal",
+            json={"key": "ELEVENLABS_API_KEY", "confirm_external_action": True},
+        )
+    )
+    non_secret = asyncio.run(
+        request(
+            "POST",
+            "/api/tools/elevenlabs/settings/reveal",
+            json={"key": "ELEVENLABS_TTS_MODEL_ID", "confirm_external_action": True},
+        )
+    )
+
+    assert unconfirmed.status_code == 400
+    assert revealed.status_code == 200
+    assert revealed.json() == {
+        "key": "ELEVENLABS_API_KEY",
+        "value": "sk_saved-secret-value-123456",
+    }
+    assert non_secret.status_code == 422
+
+
+def test_secret_reveal_is_local_machine_only() -> None:
+    async def remote_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=app, client=("192.0.2.10", 50000))
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            return await client.post(
+                "/api/tools/elevenlabs/settings/reveal",
+                json={"key": "ELEVENLABS_API_KEY", "confirm_external_action": True},
+            )
+
+    response = asyncio.run(remote_request())
+    assert response.status_code == 403

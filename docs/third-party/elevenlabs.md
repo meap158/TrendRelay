@@ -1,5 +1,23 @@
 # ElevenLabs
 
+TrendRelay uses the hosted API for two opt-in Library actions: generating a
+voiceover and, when selected in Tools, transcribing an audio or video asset with
+Scribe. The API key and reusable defaults are configured from the ElevenLabs
+card in **Tools → Setup**; no hand-edit of `.env` is required.
+
+Voice setup includes a default voice, TTS model, language and the same stability,
+similarity, style, speed and speaker-boost controls exposed per take. Library can
+generate a short, explicitly requested preview with the current values. Preview
+audio is returned as authenticated JSON and played from an in-memory blob; it is
+not filed in Library and does not expose a public media URL to download helpers.
+
+Scribe is optional. Local faster-whisper remains the default transcription
+provider. Selecting `elevenlabs-scribe` uploads only media the operator asks to
+transcribe, snapshots the Scribe model/options on the durable job, and stores the
+result as a machine draft with word timestamps and optional speaker IDs. It does
+not bypass review: reviewed speech remains the sole input to caption preview,
+subtitle translation/sidecars/burn-in, and transcript-backed voiceovers.
+
 - Service: https://elevenlabs.io
 - API: `v2` voice search plus `v1` subscription, model, and text-to-speech endpoints
 - Auth: an API key in an `xi-api-key` header — not `Authorization`, and not a bearer token

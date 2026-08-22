@@ -6,7 +6,7 @@ from typing import Any
 
 from trendrelay_api import tool_settings
 from trendrelay_api.env_store import masked_value
-from trendrelay_api.integrations.elevenlabs import API_KEY_ENV, provider_status
+from trendrelay_api.integrations.elevenlabs import API_KEY_ENV, defaults, provider_status
 
 
 def _requirement(
@@ -62,11 +62,43 @@ def setup_report() -> dict[str, Any]:
                 + " Billed per character, so this is what a generation spends.",
             )
         )
+    configured_defaults = defaults()
+    stt = configured_defaults["transcription"]
+    requirements.extend([
+        _requirement(
+            "voice-defaults",
+            "Voice defaults",
+            "ready" if configured_defaults["voice_id"] else "optional",
+            (
+                f"{configured_defaults['voice_id']} · {configured_defaults['model_id']}"
+                if configured_defaults["voice_id"]
+                else f"{configured_defaults['model_id']} · choose a voice per clip"
+            ),
+        ),
+        _requirement(
+            "transcription-route",
+            "Library transcription",
+            "ready" if stt["provider"] == "elevenlabs-scribe" and configured else "optional",
+            (
+                f"Scribe is selected ({stt['model_id']}); requested media is uploaded and "
+                "returns a timed machine draft for review."
+                if stt["provider"] == "elevenlabs-scribe"
+                else "Local faster-whisper remains selected. Choose Scribe below to opt in."
+            ),
+        ),
+        _requirement(
+            "caption-boundary",
+            "Captions and subtitles",
+            "ready",
+            "Reviewed speech feeds the existing subtitle preview, translation, sidecar, "
+            "and burn-in pipeline regardless of which transcription provider made the draft.",
+        ),
+    ])
     return {
         "summary": (
-            "Hosted text-to-speech. Unlike the models in the Library this one is "
-            "metered and the words are sent to a third party, so the allowance is "
-            "read live rather than assumed."
+            "Hosted voice generation and optional Scribe transcription. Text or media "
+            "is sent only for the action you choose; machine transcripts still require "
+            "review before they can become captions or a voiceover script."
         ),
         "requirements": requirements,
         "configured_secret_names": [API_KEY_ENV] if configured else [],
@@ -83,11 +115,10 @@ def setup_report() -> dict[str, Any]:
             }
         ],
         "settings": tool_settings.fields_for("elevenlabs"),
-        "settings_title": "ElevenLabs key",
+        "settings_title": "Voice and transcription defaults",
         "settings_blurb": (
-            "Saved to this machine's .env and never returned to the browser. "
-            "Saving re-checks it against the service, so the rows above answer "
-            "immediately."
+            "The API key stays masked. Non-secret defaults are saved here, copied into "
+            "each job for reliable resumes, and remain editable per clip in Library."
         ),
         "elevenlabs": status,
     }

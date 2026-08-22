@@ -35,7 +35,10 @@ import math
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Any
+
+import httpx
 
 from trendrelay_api.env_store import configured_keys, effective_value
 from trendrelay_api.integrations.engine_limits import Allowance
@@ -94,9 +97,7 @@ def _request(path: str) -> Any:
             raise ElevenLabsUnavailable(
                 "ElevenLabs is rate limiting this key. Wait before retrying."
             ) from error
-        raise ElevenLabsUnavailable(
-            f"ElevenLabs answered HTTP {error.code}."
-        ) from error
+        raise ElevenLabsUnavailable(f"ElevenLabs answered HTTP {error.code}.") from error
     except (urllib.error.URLError, TimeoutError, ValueError) as error:
         raise ElevenLabsUnavailable(
             "ElevenLabs could not be reached. Usually the service or this "
@@ -213,6 +214,45 @@ def provider_status(*, probe: bool = True) -> dict[str, Any]:
 DEFAULT_MODEL = "eleven_multilingual_v2"
 #: Their default too. MP3 keeps a voiceover small next to the video it joins.
 DEFAULT_OUTPUT_FORMAT = "mp3_44100_128"
+DEFAULT_STT_MODEL = "scribe_v2"
+
+
+def _saved(name: str, default: str = "") -> str:
+    return effective_value(name).strip() or default
+
+
+def _number(name: str, default: float) -> float:
+    try:
+        return float(_saved(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _on(name: str, default: bool) -> bool:
+    return _saved(name, "on" if default else "off").casefold() in {"1", "true", "yes", "on"}
+
+
+def defaults() -> dict[str, Any]:
+    """The setup choices Library starts from and durable jobs snapshot."""
+    return {
+        "voice_id": _saved("ELEVENLABS_TTS_VOICE_ID") or None,
+        "model_id": _saved("ELEVENLABS_TTS_MODEL_ID", DEFAULT_MODEL),
+        "language_code": _saved("ELEVENLABS_TTS_LANGUAGE_CODE") or None,
+        "voice_settings": {
+            "stability": _number("ELEVENLABS_TTS_STABILITY", 0.5),
+            "similarity_boost": _number("ELEVENLABS_TTS_SIMILARITY_BOOST", 0.75),
+            "style": _number("ELEVENLABS_TTS_STYLE", 0),
+            "use_speaker_boost": _on("ELEVENLABS_TTS_SPEAKER_BOOST", True),
+            "speed": _number("ELEVENLABS_TTS_SPEED", 1),
+        },
+        "transcription": {
+            "provider": _saved("MEDIA_AI_SPEECH_PROVIDER", "faster-whisper"),
+            "model_id": _saved("ELEVENLABS_STT_MODEL_ID", DEFAULT_STT_MODEL),
+            "diarize": _on("ELEVENLABS_STT_DIARIZE", False),
+            "tag_audio_events": _on("ELEVENLABS_STT_TAG_AUDIO_EVENTS", True),
+            "timestamps_granularity": "word",
+        },
+    }
 
 
 def _region_from_locale(locale: str) -> str | None:
@@ -245,9 +285,7 @@ def _voice_view(item: dict[str, Any]) -> dict[str, Any]:
         "category": item.get("category"),
         "description": item.get("description"),
         "labels": labels,
-        "languages": sorted(
-            {str(row.get("language")) for row in languages if row.get("language")}
-        ),
+        "languages": sorted({str(row.get("language")) for row in languages if row.get("language")}),
         "locales": locales,
         "regions": sorted(
             {region for locale in locales if (region := _region_from_locale(locale))}
@@ -328,9 +366,7 @@ def models() -> list[dict[str, Any]]:
                 if isinstance(rates.get("character_cost_multiplier"), (int, float))
                 else 1,
                 "max_characters_free": _int_or_none(item, "max_characters_request_free_user"),
-                "max_characters_paid": _int_or_none(
-                    item, "max_characters_request_subscribed_user"
-                ),
+                "max_characters_paid": _int_or_none(item, "max_characters_request_subscribed_user"),
                 "maximum_text_length": _int_or_none(item, "maximum_text_length_per_request"),
             }
         )
@@ -341,8 +377,100 @@ def voice_catalog() -> dict[str, Any]:
     """One live picker payload: plan, voices and models from the same key."""
     status = provider_status(probe=True)
     if not status["reachable"]:
-        return {"voices": [], "models": [], "status": status}
-    return {"voices": voices(), "models": models(), "status": status}
+        return {"voices": [], "models": [], "status": status, "defaults": defaults()}
+    return {"voices": voices(), "models": models(), "status": status, "defaults": defaults()}
+
+
+def transcribe(
+    path: Path,
+    *,
+    model_id: str = DEFAULT_STT_MODEL,
+    language_code: str | None = None,
+    diarize: bool = False,
+    tag_audio_events: bool = True,
+) -> dict[str, Any]:
+    """Upload one chosen asset to Scribe and normalize its timed draft.
+
+    The API supports both audio and video and returns word timestamps. Those
+    timestamps are kept as transcript segments so the existing reviewed-text
+    and subtitle builders can use the same record as local Whisper.
+    """
+    key = api_key()
+    if not key:
+        raise ElevenLabsUnavailable("No ElevenLabs API key is saved.")
+    if not path.is_file():
+        raise ElevenLabsUnavailable("The media file to transcribe is no longer on disk.")
+    data = {
+        "model_id": model_id,
+        "timestamps_granularity": "word",
+        "diarize": str(diarize).lower(),
+        "tag_audio_events": str(tag_audio_events).lower(),
+    }
+    if language_code and language_code != "auto":
+        data["language_code"] = language_code
+    try:
+        with path.open("rb") as source, httpx.Client(timeout=GENERATION_TIMEOUT_SECONDS) as client:
+            response = client.post(
+                f"{API_ROOT}/speech-to-text",
+                headers={AUTH_HEADER: key, "Accept": "application/json"},
+                data=data,
+                files={"file": (path.name, source, "application/octet-stream")},
+            )
+        response.raise_for_status()
+        payload = response.json()
+    except httpx.HTTPStatusError as error:
+        code = error.response.status_code
+        detail = error.response.text[:300]
+        if code in {401, 403}:
+            raise ElevenLabsUnavailable(
+                "ElevenLabs refused the key, so the media was not transcribed."
+            ) from error
+        if code == 429:
+            raise ElevenLabsUnavailable(
+                "ElevenLabs is rate limiting this key. Wait before retrying transcription."
+            ) from error
+        raise ElevenLabsUnavailable(f"ElevenLabs Scribe answered HTTP {code}. {detail}") from error
+    except (httpx.HTTPError, OSError, ValueError) as error:
+        raise ElevenLabsUnavailable(
+            "ElevenLabs Scribe could not finish this transcription."
+        ) from error
+    if not isinstance(payload, dict) or not str(payload.get("text") or "").strip():
+        raise ElevenLabsUnavailable("ElevenLabs Scribe found no spoken text.")
+    words = payload.get("words") if isinstance(payload.get("words"), list) else []
+    timed_words = [
+        {
+            "start_ms": round(float(word.get("start") or 0) * 1000),
+            "end_ms": round(float(word.get("end") or word.get("start") or 0) * 1000),
+            "text": str(word.get("text") or ""),
+            "type": word.get("type") or "word",
+            **(
+                {"probability": math.exp(float(word["logprob"]))}
+                if word.get("logprob") is not None
+                else {}
+            ),
+            **({"speaker_id": word["speaker_id"]} if word.get("speaker_id") else {}),
+        }
+        for word in words
+        if isinstance(word, dict) and word.get("text") and word.get("start") is not None
+    ]
+    segments = (
+        [
+            {
+                "start_ms": timed_words[0]["start_ms"],
+                "end_ms": timed_words[-1]["end_ms"],
+                "text": str(payload["text"]).strip(),
+                "words": timed_words,
+            }
+        ]
+        if timed_words
+        else []
+    )
+    return {
+        "language": str(payload.get("language_code") or language_code or "und"),
+        "text": str(payload["text"]).strip()[:100_000],
+        "segments": segments,
+        "provider": f"elevenlabs:{model_id}",
+    }
 
 
 class AllowanceExceeded(ElevenLabsUnavailable):
@@ -383,8 +511,10 @@ def check_allowance(
         raise ElevenLabsUnavailable("There is nothing to say: the script is empty.")
     found = status if status is not None else provider_status(probe=True)
     if model:
-        limit = model.get("max_characters_free") if found.get("plan_is_free") else model.get(
-            "max_characters_paid"
+        limit = (
+            model.get("max_characters_free")
+            if found.get("plan_is_free")
+            else model.get("max_characters_paid")
         )
         if not isinstance(limit, int):
             limit = model.get("maximum_text_length")
@@ -396,9 +526,7 @@ def check_allowance(
             )
     multiplier = model.get("character_cost_multiplier", 1) if model else 1
     cost = (
-        math.ceil(characters * multiplier)
-        if isinstance(multiplier, (int, float))
-        else characters
+        math.ceil(characters * multiplier) if isinstance(multiplier, (int, float)) else characters
     )
     remaining = found.get("characters_remaining")
     if isinstance(remaining, int) and cost > remaining:
@@ -458,8 +586,7 @@ def synthesise(
             ) from error
         if error.code == 429:
             raise ElevenLabsUnavailable(
-                "ElevenLabs is rate limiting this key. Nothing was generated; "
-                "wait before retrying."
+                "ElevenLabs is rate limiting this key. Nothing was generated; wait before retrying."
             ) from error
         # 422 is the common one and its body names the field, so it is carried
         # rather than replaced with "the request was invalid".

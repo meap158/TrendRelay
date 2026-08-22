@@ -78,6 +78,13 @@ type VoiceSettings = {
   speed: number;
 };
 
+type VoiceDefaults = {
+  voice_id?: string | null;
+  model_id?: string | null;
+  language_code?: string | null;
+  voice_settings?: VoiceSettings;
+};
+
 const DEFAULT_SETTINGS: VoiceSettings = {
   stability: 0.5,
   similarity_boost: 0.75,
@@ -172,6 +179,7 @@ export function VoiceEditor({
     voices: Voice[];
     models: VoiceModel[];
     status: VoiceStatus | null;
+    defaults: VoiceDefaults;
     preparedTargets: PreparedVoiceTarget[];
   } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -188,6 +196,8 @@ export function VoiceEditor({
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [queueing, setQueueing] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const polling = useRef<number | null>(null);
 
   useEffect(() => {
@@ -209,7 +219,8 @@ export function VoiceEditor({
     ])
       .then(async ([voiceResponse, assetResponses]) => {
         const voicePayload = (await voiceResponse.json()) as {
-          voices?: Voice[]; models?: VoiceModel[]; status?: VoiceStatus; detail?: string;
+          voices?: Voice[]; models?: VoiceModel[]; status?: VoiceStatus;
+          defaults?: VoiceDefaults; detail?: string;
         };
         if (!voiceResponse.ok) {
           throw new Error(voicePayload.detail ?? "The voices could not be read.");
@@ -229,14 +240,26 @@ export function VoiceEditor({
           voices: voicePayload.voices ?? [],
           models: voicePayload.models ?? [],
           status: voicePayload.status ?? null,
+          defaults: voicePayload.defaults ?? {},
           preparedTargets,
         });
         setLoadError(null);
-        setVoiceId((current) => current || voicePayload.voices?.[0]?.voice_id || "");
-        const firstModel = voicePayload.models?.[0];
+        const configuredVoice = voicePayload.voices?.find(
+          (voice) => voice.voice_id === voicePayload.defaults?.voice_id,
+        );
+        setVoiceId((current) => current || configuredVoice?.voice_id
+          || voicePayload.voices?.[0]?.voice_id || "");
+        const firstModel = voicePayload.models?.find(
+          (model) => model.model_id === voicePayload.defaults?.model_id,
+        ) ?? voicePayload.models?.[0];
         setModelId((current) => current || firstModel?.model_id || "");
+        setVoiceSettings((current) => voicePayload.defaults?.voice_settings ?? current);
         const transcriptLanguage = reviewed?.language?.split("-")[0]?.toLowerCase() ?? "";
-        if (transcriptLanguage && firstModel?.languages.some(
+        const configuredLanguage = voicePayload.defaults?.language_code ?? "";
+        if (configuredLanguage && firstModel?.languages.some(
+          (item) => item.language_id === configuredLanguage,
+        )) setLanguageCode((current) => current || configuredLanguage);
+        else if (transcriptLanguage && firstModel?.languages.some(
           (item) => item.language_id === transcriptLanguage,
         )) setLanguageCode((current) => current || transcriptLanguage);
       })
@@ -254,6 +277,10 @@ export function VoiceEditor({
   useEffect(() => () => {
     if (polling.current) window.clearInterval(polling.current);
   }, []);
+
+  useEffect(() => () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
 
   const refreshJob = useCallback(async () => {
     try {
@@ -408,6 +435,47 @@ export function VoiceEditor({
       setError(reason instanceof Error ? reason.message : "The voiceover could not be queued.");
     } finally {
       setQueueing(false);
+    }
+  }
+
+  async function previewVoice() {
+    setPreviewing(true);
+    setError(null);
+    try {
+      const previewText = (spoken || "This is a preview of the selected voice.").slice(0, 300);
+      const response = await apiFetch(
+        `/api/workspaces/${workspaceId}/media/library/voice/preview`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            voice_id: voiceId,
+            model_id: modelId,
+            text: previewText,
+            ...(languageCode ? { language_code: languageCode } : {}),
+            voice_settings: voiceSettings,
+          }),
+        },
+      );
+      const payload = await response.json().catch(() => ({})) as {
+        mime_type?: string; content_base64?: string; detail?: string;
+      };
+      if (!response.ok || !payload.content_base64) {
+        throw new Error(payload.detail ?? "The voice preview could not be generated.");
+      }
+      const binary = window.atob(payload.content_base64);
+      const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], {
+        type: payload.mime_type ?? "audio/mpeg",
+      }));
+      setPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return url;
+      });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The voice preview could not be generated.");
+    } finally {
+      setPreviewing(false);
     }
   }
 
@@ -611,6 +679,23 @@ export function VoiceEditor({
               )}
             </div>
           </details>
+
+          <div className="voice-preview">
+            <Button
+              variant="secondary"
+              busy={previewing}
+              disabled={!voiceId || !modelId || previewing || !canEdit}
+              onClick={() => void previewVoice()}
+            >Preview voice</Button>
+            <span>
+              Uses up to 300 characters from this script with the selected model and controls.
+            </span>
+            {previewUrl && (
+              <audio controls autoPlay preload="metadata" src={previewUrl}>
+                Your browser cannot play this voice preview.
+              </audio>
+            )}
+          </div>
 
           {/* The cost, beside what is left to spend. This is the whole reason
               the refusal lives at the queue rather than in the worker: at this

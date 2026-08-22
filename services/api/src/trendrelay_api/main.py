@@ -72,9 +72,9 @@ from trendrelay_api.production_api import router as production_router
 from trendrelay_api.publishing_api import router as publishing_router
 from trendrelay_api.signals_api import router as signals_router
 from trendrelay_api.tool_registry import (
-    documentation_for,
     PROJECT_ROOT,
     ToolRegistryError,
+    documentation_for,
     install_tool,
     list_tools,
     set_active,
@@ -242,6 +242,13 @@ class ToolSettings(BaseModel):
     confirm_external_action: bool = False
 
 
+class SecretRevealRequest(BaseModel):
+    """An explicit request to disclose one configured secret on this machine."""
+
+    key: str = Field(min_length=1, max_length=100)
+    confirm_external_action: bool = False
+
+
 @app.post("/api/tools/{tool_id}/settings", tags=["tools"])
 async def save_tool_settings(
     tool_id: str,
@@ -280,6 +287,34 @@ async def save_tool_settings(
         "written": written,
         "setup": await asyncio.to_thread(_with_settings, tool_id),
     }
+
+
+@app.post("/api/tools/{tool_id}/settings/reveal", tags=["tools"])
+async def reveal_tool_secret(
+    tool_id: str,
+    body: SecretRevealRequest,
+    request: Request,
+) -> dict[str, str]:
+    """Return one provider-declared secret after a deliberate local action.
+
+    Normal setup reports never contain reusable credentials. This separate
+    route makes disclosure auditable and opt-in, and refuses both remote
+    callers and fields the provider did not explicitly mark as secrets.
+    """
+    require_local_mutation(request)
+    if not body.confirm_external_action:
+        raise HTTPException(status_code=400, detail="Revealing a secret requires confirmation.")
+
+    from trendrelay_api.tool_settings import SettingsError, provider_for
+
+    provider = provider_for(tool_id)
+    if provider is None:
+        raise HTTPException(status_code=404, detail="This tool has no editable settings.")
+    try:
+        value = await asyncio.to_thread(provider.reveal, body.key)
+    except SettingsError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return {"key": body.key, "value": value}
 
 
 @app.get("/api/tools/agent-reach/diagnostics", tags=["tools"])
