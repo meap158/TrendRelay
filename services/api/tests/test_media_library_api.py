@@ -13,7 +13,7 @@ from trendrelay_api import campaigns_api, media_library, media_library_api
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
-from trendrelay_api.media_models import MediaAsset, MediaTranscript
+from trendrelay_api.media_models import MediaAsset, MediaAssetVersion, MediaTranscript
 from trendrelay_api.models import Base
 
 engine = create_engine(
@@ -660,3 +660,63 @@ def test_paging_past_the_end_is_empty_rather_than_an_error() -> None:
 
     assert response.status_code == 200
     assert response.json()["assets"] == []
+
+
+def test_preview_edited_cut_serves_a_captions_only_asset(tmp_path: Path) -> None:
+    """The burned-in switch must play what captions produced.
+
+    A captioned cut is filed outside RENDERED_KINDS on purpose, so "Remove
+    effects" cannot destroy it. The preview reads a wider set: with only a
+    captioned version present, cut=edited used to answer 404 and the player
+    showed "Preview not found." over a file that existed.
+    """
+    workspace_id = create_workspace()
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"burned-in caption render")
+    burned = tmp_path / "clip.captioned.mp4"
+    burned.write_bytes(b"captioned bytes")
+    with TestingSession() as session:
+        asset = MediaAsset(
+            workspace_id=workspace_id,
+            title="Clip",
+            media_kind="video",
+            source_type="upload",
+            original_path=str(clip),
+            original_sha256="a" * 64,
+            mime_type="video/mp4",
+            size_bytes=clip.stat().st_size,
+            created_by="library-owner",
+        )
+        session.add(asset)
+        session.flush()
+        session.add(MediaAssetVersion(
+            workspace_id=workspace_id,
+            asset_id=asset.id,
+            version_kind="original",
+            path=str(clip),
+            sha256="b" * 64,
+            mime_type="video/mp4",
+            size_bytes=clip.stat().st_size,
+        ))
+        session.add(MediaAssetVersion(
+            workspace_id=workspace_id,
+            asset_id=asset.id,
+            version_kind="captioned",
+            path=str(burned),
+            sha256="c" * 64,
+            mime_type="video/mp4",
+            size_bytes=burned.stat().st_size,
+        ))
+        session.commit()
+        asset_id = asset.id
+
+    response = asyncio.run(request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/preview?cut=edited",
+    ))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mime_type"] == "video/mp4"
+    import base64 as _base64
+    assert _base64.b64decode(body["content_base64"]) == b"captioned bytes"

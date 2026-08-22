@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import re
 from collections import Counter
+from collections.abc import Sequence
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
@@ -1063,18 +1064,27 @@ def _preferred_version(
     return None
 
 
-def _rendered_cut(session: Session, asset_id: str) -> MediaAssetVersion | None:
-    """The newest render of this asset, whatever effects made it.
+def _rendered_cut(
+    session: Session,
+    asset_id: str,
+    kinds: Sequence[str] = RENDERED_KINDS,
+) -> MediaAssetVersion | None:
+    """The newest render of this asset, whatever made it.
 
     Newest rather than by kind: an operator who has just re-rendered wants to
     watch what they just made, and ranking a week-old blur above this morning's
     edit would show them the wrong file with no way to say so.
+
+    Callers choose which kinds count. Recipe recovery passes the effects-only
+    default because a captioned cut records no recipe; the preview passes the
+    wider set below because a burned-in caption is exactly what "the edited
+    cut" means on that switch.
     """
     return session.scalar(
         select(MediaAssetVersion)
         .where(
             MediaAssetVersion.asset_id == asset_id,
-            MediaAssetVersion.version_kind.in_(RENDERED_KINDS),
+            MediaAssetVersion.version_kind.in_(kinds),
         )
         .order_by(MediaAssetVersion.created_at.desc())
         .limit(1)
@@ -1115,7 +1125,16 @@ def asset_preview(
     if cut == "original":
         version = _preferred_version(session, asset_id, ("proxy", "original"))
     else:
-        version = _rendered_cut(session, asset_id)
+        version = _rendered_cut(
+            session,
+            asset_id,
+            # A captioned cut is deliberately outside RENDERED_KINDS - the
+            # remove-effects endpoint reads that set and captions must survive
+            # it - but on this switch a burned-in caption is precisely what
+            # "the edited cut" means, and leaving it out answered every
+            # captions-only asset with "Preview not found."
+            kinds=(*RENDERED_KINDS, "captioned"),
+        )
     if not version:
         raise HTTPException(status_code=404, detail="Preview not found.")
     try:
