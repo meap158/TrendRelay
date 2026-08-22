@@ -199,18 +199,22 @@
 .dsc-board-view-toggle { display: flex; gap: 2px; padding: 2px; border-radius: 999px; background: var(--panel-raised); }
 .dsc-board-view-button { min-height: 24px; padding: 3px 10px; border: 0px; border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
 .dsc-board-view-button-on { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgb(28 43 51 / 18%); }
-.dsc-board-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
-.dsc-board-card { display: grid; grid-template-rows: auto 1fr; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.dsc-board-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 10px; margin-top: 12px; }
+.dsc-board-card { display: grid; grid-template-rows: auto 1fr; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 .dsc-board-thumb { position: relative; aspect-ratio: 3 / 4; overflow: hidden; background: var(--panel-raised); }
 .dsc-board-image { width: 100%; height: 100%; object-fit: cover; display: block; }
 .dsc-board-no-image { position: absolute; inset: 0px; display: grid; place-items: center; color: var(--muted); font-size: 11px; }
 .dsc-board-rank { position: absolute; top: 6px; left: 6px; display: grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: rgb(0 0 0 / 62%); color: var(--panel); font-size: 10px; font-weight: 700; }
-.dsc-board-body { display: grid; align-content: start; gap: 4px; padding: 8px 9px 10px; }
-.dsc-board-term { display: -webkit-box; overflow: hidden; webkit-box-orient: vertical; webkit-line-clamp: 2px; font-size: 12px; font-weight: 600; line-height: 1.35; color: var(--text); text-decoration: none; }
+.dsc-board-body { display: grid; min-width: 0; align-content: start; gap: 4px; padding: 8px 9px 10px; }
+.dsc-board-term { display: -webkit-box; overflow: hidden; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 12px; font-weight: 600; line-height: 1.35; color: var(--text); text-decoration: none; }
 .dsc-board-term-link { overflow: hidden; color: var(--text); font-size: 13px; font-weight: 600; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
 .dsc-board-meta { color: var(--muted); font-size: 10px; }
 .dsc-board-action { justify-self: start; margin-top: 2px; border-radius: 4px; padding: 3px 8px; background: var(--link-bg); color: var(--link); font-size: 11px; font-weight: 600; text-decoration: none; }
 .dsc-board-actions { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.dsc-board-card .dsc-board-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-self: end; width: 100%; }
+.dsc-board-card .dsc-board-actions > .ui-button:first-child { grid-column: 1 / -1; width: 100%; min-width: 0; justify-content: center; }
+.dsc-board-card .dsc-board-actions > .ui-button:nth-child(2) { min-width: 0; justify-content: center; }
+.dsc-board-card .dsc-board-action { justify-self: end; margin-top: 0; white-space: nowrap; }
 .dsc-board-download { display: inline-flex; align-items: center; gap: 4px; border: 0px; border-radius: 4px; padding: 4px 9px; background: var(--link); color: var(--panel); font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .dsc-topic-count-label { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; white-space: nowrap; }
 .dsc-topic-count-select { border-radius: 6px; border: 1px solid var(--line-strong); padding: 3px 4px; background: var(--panel); color: var(--text); font: inherit; font-size: 11px; }
