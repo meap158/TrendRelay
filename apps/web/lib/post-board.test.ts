@@ -5,6 +5,7 @@ import {
   compactCount,
   coverageNote,
   creatorSearchUrl,
+  postPlaceholderInitial,
   postMetrics,
   sourceFairPosts,
   type PopularPost,
@@ -112,6 +113,18 @@ test("source-fair ordering does not drop a quieter provider's remaining posts", 
     "TikTok one",
     "Blue two",
   ]);
+});
+
+test("a missing cover uses the post title's first readable character", () => {
+  assert.equal(
+    postPlaceholderInitial(post({ title: "  — there's no reason to wait", creator: "danluu.com" })),
+    "T",
+  );
+});
+
+test("a titleless post falls back to the creator and then the source", () => {
+  assert.equal(postPlaceholderInitial(post({ title: null, creator: "mẹ SamSim" })), "M");
+  assert.equal(postPlaceholderInitial(post({ title: null, creator: "", source: "hackernews" })), "H");
 });
 
 test("mixed providers keep their different time bases visible", () => {

@@ -29,6 +29,7 @@ import {
   compactCount,
   coverageNote,
   creatorSearchUrl,
+  postPlaceholderInitial,
   postMetrics,
   sourceFairPosts,
   type PopularPost,
@@ -144,7 +145,14 @@ const S: Record<string, React.CSSProperties> = {
     borderRadius: "6px",
     background: "var(--panel-raised)",
   },
-  coverMissing: { border: "1px dashed var(--line-strong)" },
+  coverMissing: {
+    display: "grid",
+    placeItems: "center",
+    border: "1px solid var(--line-strong)",
+    color: "var(--link)",
+    fontSize: "18px",
+    fontWeight: 700,
+  },
   body: { flex: 1, minWidth: 0 },
   creator: {
     fontSize: "15px",
@@ -491,7 +499,7 @@ export function PopularPosts({
             <p style={S.empty}>The source answered; it just had nothing for {board.region}.</p>
           ) : (
             <ol style={S.list}>
-              {visiblePosts.map((post) => {
+              {visiblePosts.map((post, index) => {
                 const link = creatorSearchUrl(post);
                 const metrics = postMetrics(post);
                 const seed = seedFromPost(post);
@@ -502,8 +510,11 @@ export function PopularPosts({
                     className="discover-post-row"
                     style={S.row}
                   >
-                    <span style={S.place} aria-label={`${post.source} rank ${post.rank}`}>
-                      {post.rank}
+                    <span
+                      style={S.place}
+                      aria-label={`Board position ${index + 1}; rank ${post.rank} in ${post.source}`}
+                    >
+                      {index + 1}
                     </span>
                     {/* The cover is the post. Without it a row is a creator's
                         name and two numbers, which is not what was asked for.
@@ -512,7 +523,9 @@ export function PopularPosts({
                       // eslint-disable-next-line @next/next/no-img-element
                       <img alt="" src={post.thumbnail} style={S.cover} loading="lazy" />
                     ) : (
-                      <span style={{ ...S.cover, ...S.coverMissing }} aria-hidden />
+                      <span style={{ ...S.cover, ...S.coverMissing }} aria-hidden>
+                        {postPlaceholderInitial(post)}
+                      </span>
                     )}
                     <div style={S.body}>
                       {post.title && <span style={S.title}>{post.title}</span>}

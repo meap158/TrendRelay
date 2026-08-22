@@ -57,6 +57,15 @@ export function sourceFairPosts(posts: PopularPost[]): PopularPost[] {
   return result;
 }
 
+/** A stable, readable cover fallback when a provider publishes no image. */
+export function postPlaceholderInitial(post: PopularPost): string {
+  for (const candidate of [post.title, post.creator, post.source]) {
+    const initial = candidate?.match(/[\p{L}\p{N}]/u)?.[0];
+    if (initial) return initial.toLocaleUpperCase();
+  }
+  return "•";
+}
+
 /** `12M`, `156.1K`. Counts on this board are read at a glance, not audited. */
 export function compactCount(value: number | null | undefined): string {
   if (value === null || value === undefined) return "";
