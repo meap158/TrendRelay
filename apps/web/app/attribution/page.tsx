@@ -29,6 +29,7 @@ import { ProductTable } from "./product-table";
 import { ShopeeImport } from "./shopee-import";
 import { buttonClass } from "../ui/button";
 import { WaitingScreen } from "../ui/waiting-screen";
+import { WaitingBlock } from "../ui/waiting-block";
 import { ActionIcon } from "../ui/action-icons";
 import { StatusToasts, useStatus } from "../ui/status";
 import { Dialog } from "../ui/dialog";
@@ -36,6 +37,11 @@ import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { useT } from "../i18n-provider";
 import { money } from "./format";
 import type { ProductRow, ProductsPayload } from "./types";
+import {
+  clearTabSnapshots,
+  readTabSnapshot,
+  refreshTabSnapshot,
+} from "../../lib/tab-snapshots";
 
 type Campaign = { id: string; name: string; affiliate_url?: string | null };
 type Plan = { id: string; campaign_id: string; title: string; platform: string; state: string };
@@ -64,6 +70,17 @@ type Summary = {
   limitations: string[];
 };
 
+type AttributionSnapshot = {
+  campaigns: Campaign[];
+  plans: Plan[];
+  summary: Summary;
+  products: ProductRow[];
+  tagChoices: {
+    campaigns: { id: string; name: string; status: string; tagged_products: number }[];
+    by_offer: Record<string, string[]>;
+  };
+};
+
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
   if (!response.ok) throw new Error(body.detail ?? "Attribution request failed.");
@@ -73,11 +90,12 @@ async function json<T>(response: Response): Promise<T> {
 export default function AttributionPage() {
   const t = useT();
   const { loading, user, apiFetch } = useAuth();
-  const { workspaces, workspaceId } = useWorkspace();
+  const { workspaces, workspaceId, loading: workspaceLoading } = useWorkspace();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [products, setProducts] = useState<ProductRow[]>([]);
+  const [loadedWorkspaceId, setLoadedWorkspaceId] = useState("");
   /** Which campaigns may promote which products, for the table's own column. */
   const [tagChoices, setTagChoices] = useState<{
     campaigns: { id: string; name: string; status: string; tagged_products: number }[];
@@ -95,6 +113,7 @@ export default function AttributionPage() {
 
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const canImport = ["owner", "editor", "approver"].includes(workspace?.role ?? "");
+  const dataReady = workspaceId ? loadedWorkspaceId === workspaceId : !workspaceLoading;
 
   const refresh = useCallback(async (nextWorkspace = workspaceId) => {
     if (!nextWorkspace) return;
@@ -103,22 +122,32 @@ export default function AttributionPage() {
     // products is one question about the workspace. And in the same parallel
     // batch as the rest - it depends on none of them, so waiting for the other
     // four to land before asking only added a fifth round-trip to every load.
-    const [
-      campaignBody, planBody, summaryBody, productBody, tagBody,
-    ] = await Promise.all([
-      json<{ campaigns: Campaign[] }>(await apiFetch(`${base}/campaigns`)),
-      json<{ plans: Plan[] }>(await apiFetch(`${base}/campaigns/calendar`)),
-      json<Summary>(await apiFetch(`${base}/attribution/summary`)),
-      json<ProductsPayload>(await apiFetch(`${base}/attribution/products`)),
-      json<typeof tagChoices>(await apiFetch(`${base}/attribution/campaign-tags`)),
-    ]);
-    setTagChoices(tagBody);
-    setCampaigns(campaignBody.campaigns);
-    setPlans(planBody.plans);
-    setSummary(summaryBody);
-    setProducts(productBody.products);
+    const snapshot = await refreshTabSnapshot<AttributionSnapshot>(
+      `attribution:${nextWorkspace}`,
+      async () => {
+        const [campaignBody, planBody, summaryBody, productBody, tagBody] = await Promise.all([
+          json<{ campaigns: Campaign[] }>(await apiFetch(`${base}/campaigns`)),
+          json<{ plans: Plan[] }>(await apiFetch(`${base}/campaigns/calendar`)),
+          json<Summary>(await apiFetch(`${base}/attribution/summary`)),
+          json<ProductsPayload>(await apiFetch(`${base}/attribution/products`)),
+          json<AttributionSnapshot["tagChoices"]>(await apiFetch(`${base}/attribution/campaign-tags`)),
+        ]);
+        return {
+          campaigns: campaignBody.campaigns,
+          plans: planBody.plans,
+          summary: summaryBody,
+          products: productBody.products,
+          tagChoices: tagBody,
+        };
+      },
+    );
+    setTagChoices(snapshot.tagChoices);
+    setCampaigns(snapshot.campaigns);
+    setPlans(snapshot.plans);
+    setSummary(snapshot.summary);
+    setProducts(snapshot.products);
     const requested = new URLSearchParams(window.location.search).get("campaign");
-    const requestedExists = Boolean(requested && campaignBody.campaigns.some(
+    const requestedExists = Boolean(requested && snapshot.campaigns.some(
       (item) => item.id === requested,
     ));
     setCampaignFocus(requestedExists ? requested! : "");
@@ -145,6 +174,7 @@ export default function AttributionPage() {
         campaigns: { id: string; name: string; status: string; tagged_products: number }[];
         by_offer: Record<string, string[]>;
       }>(await apiFetch(`/api/workspaces/${workspaceId}/attribution/campaign-tags`));
+      clearTabSnapshots(`attribution:${workspaceId}`);
       setTagChoices(refreshed);
       const name = refreshed.campaigns.find((item) => item.id === campaignId)?.name
         ?? "the campaign";
@@ -158,11 +188,27 @@ export default function AttributionPage() {
 
   useEffect(() => {
     if (!workspaceId) return;
+    let cancelled = false;
+    const cached = readTabSnapshot<AttributionSnapshot>(`attribution:${workspaceId}`);
+    if (cached) {
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setCampaigns(cached.campaigns);
+        setPlans(cached.plans);
+        setSummary(cached.summary);
+        setProducts(cached.products);
+        setTagChoices(cached.tagChoices);
+        setLoadedWorkspaceId(workspaceId);
+      });
+    }
     queueMicrotask(() => {
       void refresh(workspaceId).catch((reason) =>
         fail(reason instanceof Error ? reason.message : "Attribution unavailable."),
-      );
+      ).finally(() => {
+        if (!cancelled) setLoadedWorkspaceId(workspaceId);
+      });
     });
+    return () => { cancelled = true; };
   }, [refresh, workspaceId, fail]);
 
 
@@ -219,7 +265,7 @@ export default function AttributionPage() {
             construction rather than because the week had been quiet. Commission
             stays because it renders only when there is some. */}
         <p className="attribution-figures">
-          <span>{t("attribution.productCount", { count: products.length })}</span>
+          <span>{dataReady ? t("attribution.productCount", { count: products.length }) : "…"}</span>
           {Object.entries(summary?.by_currency ?? {}).map(([currency, item]) => (
             <span key={currency}>
               <strong>{money(item.net_commission_cents, currency)}</strong> {t("attribution.netCommission")}
@@ -252,7 +298,9 @@ export default function AttributionPage() {
         </div>
       </header>
 
-      {focusedCampaign && (
+      {!dataReady ? (
+        <WaitingBlock message={t("common.loading")} />
+      ) : <>{focusedCampaign && (
         <section className="attribution-campaign-focus" aria-label={`${focusedCampaign.name} performance`}>
           <div className="attribution-focus-heading">
             <div><p>CAMPAIGN PERFORMANCE</p><h2>{focusedCampaign.name}</h2></div>
@@ -285,6 +333,7 @@ export default function AttributionPage() {
           onTagOffers={tagOffers}
         />
       </section>
+      </>}
 
       <Dialog
         open={panel === "add"}

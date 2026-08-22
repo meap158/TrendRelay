@@ -28,6 +28,10 @@ import {
   platformLabels,
   type PublishingPlatform,
 } from "../publishing-icons";
+import {
+  readTabSnapshot,
+  refreshTabSnapshot,
+} from "../../lib/tab-snapshots";
 
 // The autopilot panel is the largest view in the app and renders only for the
 // selected campaign, below the list. Load it as its own chunk so the campaign
@@ -169,6 +173,7 @@ const POST_LANGUAGES = LOCALES.map((item) => ({ value: item.code, label: item.la
 
 /** What a post attaches when it does not pin its own product. */
 type OfferMode = "smart" | "manual" | "none";
+type CampaignsSnapshot = { campaigns: Campaign[]; plans: PublicationPlan[] };
 
 const OFFER_MODES: readonly (readonly [OfferMode, string, string])[] = [
   ["smart", "Smart match", "Fit content automatically"],
@@ -229,13 +234,13 @@ function planPlatformLabel(platform: PublicationPlan["platform"]): string {
 export default function CampaignsPage() {
   const { t, locale } = useLocale();
   const { loading, user, apiFetch } = useAuth();
-  const { workspaces, workspaceId } = useWorkspace();
+  const { workspaces, workspaceId, loading: workspaceLoading } = useWorkspace();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   // Whether the campaign list has answered at least once. `loading` above is the
   // auth probe, which only runs on first load, so on a tab switch it is already
   // false and the empty "create a campaign" hero would paint over the fetch.
   // This tells "still loading" apart from "loaded, and there are none".
-  const [campaignsLoaded, setCampaignsLoaded] = useState(false);
+  const [loadedCampaignWorkspaceId, setLoadedCampaignWorkspaceId] = useState("");
   const [campaignId, setCampaignId] = useState("");
   const requestedCampaign = useRef("");
   const [plans, setPlans] = useState<PublicationPlan[]>([]);
@@ -278,25 +283,34 @@ export default function CampaignsPage() {
   const canCreatePlan = ["owner", "editor", "approver"].includes(selectedWorkspace?.role ?? "");
   const canApprove = ["owner", "approver"].includes(selectedWorkspace?.role ?? "");
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const campaignsReady = workspaceId
+    ? loadedCampaignWorkspaceId === workspaceId
+    : !workspaceLoading;
 
   const refresh = useCallback(async (nextWorkspaceId: string) => {
     if (!nextWorkspaceId) return;
-    const [campaignBody, calendarBody] = await Promise.all([
-      json<{ campaigns: Campaign[] }>(
-        await apiFetch(`/api/workspaces/${nextWorkspaceId}/campaigns`),
-      ),
-      json<{ plans: PublicationPlan[] }>(
-        await apiFetch(`/api/workspaces/${nextWorkspaceId}/campaigns/calendar`),
-      ),
-    ]);
-    setCampaigns(campaignBody.campaigns);
-    setPlans(calendarBody.plans);
+    const snapshot = await refreshTabSnapshot<CampaignsSnapshot>(
+      `campaigns:${nextWorkspaceId}`,
+      async () => {
+        const [campaignBody, calendarBody] = await Promise.all([
+          json<{ campaigns: Campaign[] }>(
+            await apiFetch(`/api/workspaces/${nextWorkspaceId}/campaigns`),
+          ),
+          json<{ plans: PublicationPlan[] }>(
+            await apiFetch(`/api/workspaces/${nextWorkspaceId}/campaigns/calendar`),
+          ),
+        ]);
+        return { campaigns: campaignBody.campaigns, plans: calendarBody.plans };
+      },
+    );
+    setCampaigns(snapshot.campaigns);
+    setPlans(snapshot.plans);
     setCampaignId((current) =>
-      campaignBody.campaigns.some((item) => item.id === requestedCampaign.current)
+      snapshot.campaigns.some((item) => item.id === requestedCampaign.current)
         ? requestedCampaign.current
-        : campaignBody.campaigns.some((item) => item.id === current)
+        : snapshot.campaigns.some((item) => item.id === current)
         ? current
-        : (campaignBody.campaigns[0]?.id ?? ""),
+        : (snapshot.campaigns[0]?.id ?? ""),
     );
   }, [apiFetch]);
 
@@ -310,40 +324,45 @@ export default function CampaignsPage() {
   useEffect(() => {
     if (!workspaceId) return;
     let cancelled = false;
-    Promise.all([
-      apiFetch(`/api/workspaces/${workspaceId}/campaigns`).then((response) =>
-        json<{ campaigns: Campaign[] }>(response),
-      ),
-      apiFetch(`/api/workspaces/${workspaceId}/campaigns/calendar`).then((response) =>
-        json<{ plans: PublicationPlan[] }>(response),
-      ),
-    ])
-      .then(([campaignBody, calendarBody]) => {
+    const cached = readTabSnapshot<CampaignsSnapshot>(`campaigns:${workspaceId}`);
+    if (cached) {
+      queueMicrotask(() => {
         if (cancelled) return;
-        setCampaigns(campaignBody.campaigns);
-        setPlans(calendarBody.plans);
-        setCampaignId((current) =>
-          campaignBody.campaigns.some((item) => item.id === requestedCampaign.current)
-            ? requestedCampaign.current
-            : campaignBody.campaigns.some((item) => item.id === current)
-            ? current
-            : (campaignBody.campaigns[0]?.id ?? ""),
-        );
-      })
-      .catch((reason: unknown) => {
-        if (!cancelled) {
-          fail(reason instanceof Error ? reason.message : "Could not load campaigns.");
-        }
+        setCampaigns(cached.campaigns);
+        setPlans(cached.plans);
+        setCampaignId((current) => cached.campaigns.some((item) => item.id === current)
+          ? current : (cached.campaigns[0]?.id ?? ""));
+        setLoadedCampaignWorkspaceId(workspaceId);
       });
+    }
+    queueMicrotask(() => {
+      void refresh(workspaceId)
+        .then(() => {
+          if (cancelled) return;
+          setLoadedCampaignWorkspaceId(workspaceId);
+        })
+        .catch((reason: unknown) => {
+          if (!cancelled) {
+            setLoadedCampaignWorkspaceId(workspaceId);
+            fail(reason instanceof Error ? reason.message : "Could not load campaigns.");
+          }
+        });
+    });
     return () => { cancelled = true; };
-  }, [apiFetch, workspaceId, fail]);
+  }, [refresh, workspaceId, fail]);
 
   useEffect(() => {
     if (!workspaceId) return;
     let cancelled = false;
-    apiFetch(`/api/workspaces/${workspaceId}/opportunities/offers`)
-      .then((response) => json<{ offers: CampaignOffer[] }>(response))
-      .then((body) => { if (!cancelled) setOffers(body.offers ?? []); })
+    const key = `campaign-offers:${workspaceId}`;
+    const cached = readTabSnapshot<CampaignOffer[]>(key);
+    if (cached) queueMicrotask(() => { if (!cancelled) setOffers(cached); });
+    refreshTabSnapshot(key, () =>
+      apiFetch(`/api/workspaces/${workspaceId}/opportunities/offers`)
+        .then((response) => json<{ offers: CampaignOffer[] }>(response))
+        .then((body) => body.offers ?? []),
+    )
+      .then((rows) => { if (!cancelled) setOffers(rows); })
       .catch(() => { if (!cancelled) setOffers([]); });
     return () => { cancelled = true; };
   }, [apiFetch, workspaceId]);
@@ -580,10 +599,12 @@ export default function CampaignsPage() {
       <section className="campaign-layout">
         <aside className="campaign-sidebar">
           <div className="card-heading">
-            <div><p className="section-kicker">{t("campaigns.listHeading")}</p><h2>{campaigns.length} total</h2></div>
+            <div><p className="section-kicker">{t("campaigns.listHeading")}</p><h2>{campaignsReady ? campaigns.length : "—"} total</h2></div>
           </div>
           <div className="campaign-list">
-            {campaigns.map((campaign) => (
+            {!campaignsReady ? (
+              <WaitingBlock className="waiting-block-compact" message={t("common.loading")} />
+            ) : campaigns.map((campaign) => (
               <button
                 className={campaign.id === campaignId ? "selected" : ""}
                 key={campaign.id}
@@ -601,9 +622,9 @@ export default function CampaignsPage() {
                 } · {t("attribution.productCount", { count: campaign.tagged_products ?? 0 })}</span>
               </button>
             ))}
-            {!campaigns.length && <p>{t("campaigns.empty")}</p>}
+            {campaignsReady && !campaigns.length && <p>{t("campaigns.empty")}</p>}
           </div>
-          {canCreateCampaign && (
+          {campaignsReady && canCreateCampaign && (
             <Button variant="primary" onClick={() => setNewCampaignOpen(true)}>
               <ActionIcon name="add" />{t("campaigns.create")}
             </Button>
@@ -611,7 +632,9 @@ export default function CampaignsPage() {
         </aside>
 
         <div className="campaign-workspace">
-          {selectedCampaign ? (
+          {!campaignsReady ? (
+            <WaitingBlock message={t("common.loading")} />
+          ) : selectedCampaign ? (
             <>
               <section className="campaign-summary">
                 <div>

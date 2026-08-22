@@ -15,6 +15,7 @@ import { numberIn, oneOf, subsetOf, usePersistedState } from "./ui/use-persisted
 const isDownloadMode = oneOf("post", "like", "mix", "music");
 import { useJobs } from "./jobs-provider";
 import { useWorkspace } from "./workspace-provider";
+import { readTabSnapshot, refreshTabSnapshot } from "../lib/tab-snapshots";
 
 type Artifact = { path: string; name: string; size_bytes: number };
 type DownloadProgress = {
@@ -328,9 +329,14 @@ export default function Dashboard() {
   useEffect(() => {
     if (!workspaceId) return;
     let cancelled = false;
+    const snapshotKey = `download-status:${workspaceId}`;
+    const cached = readTabSnapshot<MediaStatus>(snapshotKey);
+    if (cached) queueMicrotask(() => { if (!cancelled) setStatus(cached); });
     const fetchStatus = async () => {
       try {
-        const body = await json<MediaStatus>(await apiFetch("/api/workspaces/" + workspaceId + "/media/status"));
+        const body = await refreshTabSnapshot<MediaStatus>(snapshotKey, async () =>
+          json<MediaStatus>(await apiFetch("/api/workspaces/" + workspaceId + "/media/status")),
+        );
         if (!cancelled) setStatus(body);
       } catch (reason) {
         if (!cancelled) fail(reason instanceof Error ? reason.message : "Media service unavailable.");

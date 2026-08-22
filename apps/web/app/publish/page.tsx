@@ -32,6 +32,7 @@ import { CapabilityMatrixButton } from "./capability-matrix";
 import type { ProductRow, ProductsPayload } from "../attribution/types";
 import { ActionIcon } from "../ui/action-icons";
 import { WaitingScreen } from "../ui/waiting-screen";
+import { WaitingBlock } from "../ui/waiting-block";
 import { Button, buttonClass } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Badge, Switch } from "../ui/primitives";
@@ -66,6 +67,11 @@ import {
   type SlotPreset,
 } from "./composer";
 import { useCampaignUpcoming } from "./campaign-upcoming";
+import {
+  clearTabSnapshots,
+  readTabSnapshot,
+  refreshTabSnapshot,
+} from "../../lib/tab-snapshots";
 
 type Delivery = "draft" | "schedule" | "now";
 const isDelivery = oneOf<Delivery>("draft", "schedule", "now");
@@ -218,6 +224,18 @@ type Connection = {
   /** Where a link works on each network, from the API's single policy. */
   link_placement?: Record<string, LinkPlacement>;
   providers: Provider[];
+};
+type PublishSnapshot = {
+  connection: Connection;
+  products: ProductRow[];
+  slots: Slot[];
+  presets: SlotPreset[];
+  timezone: string;
+};
+type PublishingAccountsSnapshot = {
+  accounts: Account[];
+  engines: EngineReach[];
+  pages: SocialPage[];
 };
 type Destination = {
   platform: PublishingPlatform;
@@ -1086,46 +1104,51 @@ export default function PublishPage() {
     }
   }, [caption, title, videoPath, mediaUrl, firstComment, thread, disclosure]);
 
-  useEffect(() => {
-    if (!workspaceId) return;
-    let cancelled = false;
-    apiFetch(`/api/workspaces/${workspaceId}/publishing/slots`)
-      .then((response) => json<{
-        slots: Slot[]; presets: SlotPreset[]; timezone?: string;
-      }>(response))
-      .then((body) => {
-        if (cancelled) return;
-        setSlots(body.slots);
-        setSlotPresets(body.presets);
-        // The clock a slot's hour is written on. It was in this response all
-        // along and thrown away, while the times beside it were built from the
-        // reader's zone instead - which is a different moment whenever the two
-        // disagree.
-        if (body.timezone) setWorkspaceZone(body.timezone);
-      })
-      .catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [apiFetch, workspaceId]);
-
   const loadConnection = useCallback(async () => {
     const body = await json<{ connection: Connection }>(
       await apiFetch(`/api/workspaces/${workspaceId}/publishing/connection`),
     );
+    clearTabSnapshots(`publish:${workspaceId}`);
     setConnection(body.connection);
   }, [apiFetch, workspaceId]);
 
   useEffect(() => {
     if (!workspaceId) return;
     let cancelled = false;
-    // Read once with the connection. Attaching a link should not send anyone to
-    // another page to copy a code out of it.
-    apiFetch(`/api/workspaces/${workspaceId}/attribution/products`)
-      .then((response) => json<ProductsPayload>(response))
-      .then((body) => { if (!cancelled) setLinkableProducts(body.products ?? []); })
-      .catch(() => { if (!cancelled) setLinkableProducts([]); });
-    apiFetch(`/api/workspaces/${workspaceId}/publishing/connection`)
-      .then((response) => json<{ connection: Connection }>(response))
-      .then((body) => { if (!cancelled) setConnection(body.connection); })
+    const key = `publish:${workspaceId}`;
+    const apply = (snapshot: PublishSnapshot) => {
+      setConnection(snapshot.connection);
+      setLinkableProducts(snapshot.products);
+      setSlots(snapshot.slots);
+      setSlotPresets(snapshot.presets);
+      setWorkspaceZone(snapshot.timezone);
+    };
+    const cached = readTabSnapshot<PublishSnapshot>(key);
+    if (cached) apply(cached);
+    refreshTabSnapshot<PublishSnapshot>(key, async () => {
+      // These are independent workspace reads. Keeping them in one snapshot
+      // lets Publish return with its entire working context, not one panel at a
+      // time, while the fresh reads still run together in the background.
+      const [slotBody, productBody, connectionBody] = await Promise.all([
+        json<{ slots: Slot[]; presets: SlotPreset[]; timezone?: string }>(
+          await apiFetch(`/api/workspaces/${workspaceId}/publishing/slots`),
+        ),
+        json<ProductsPayload>(
+          await apiFetch(`/api/workspaces/${workspaceId}/attribution/products`),
+        ),
+        json<{ connection: Connection }>(
+          await apiFetch(`/api/workspaces/${workspaceId}/publishing/connection`),
+        ),
+      ]);
+      return {
+        connection: connectionBody.connection,
+        products: productBody.products ?? [],
+        slots: slotBody.slots,
+        presets: slotBody.presets,
+        timezone: slotBody.timezone ?? "UTC",
+      };
+    })
+      .then((snapshot) => { if (!cancelled) apply(snapshot); })
       .catch((reason: unknown) => {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not check publishing setup.");
       });
@@ -1707,6 +1730,15 @@ export default function PublishPage() {
   useEffect(() => {
     if (!workspaceId || !connection?.configured || autoLoaded.current) return;
     autoLoaded.current = true;
+    const cached = readTabSnapshot<PublishingAccountsSnapshot>(`publish-accounts:${workspaceId}`);
+    if (cached) {
+      queueMicrotask(() => {
+        setAllAccounts(cached.accounts);
+        setPages(cached.pages);
+        setEngineReach(cached.engines);
+        setAccountsLoaded(true);
+      });
+    }
     // Deferred so the fetch does not run inside the render that scheduled it.
     queueMicrotask(() => void refreshAccounts({ quiet: true }));
     // Loaded once per page; the ref is the guard, so re-running on the
@@ -1751,14 +1783,21 @@ export default function PublishPage() {
     try {
       // Every engine at once: a post can address destinations on more than one,
       // so offering only the active engine's accounts would hide the rest.
-      const result = await json<{
+      const result = await refreshTabSnapshot<PublishingAccountsSnapshot>(
+        `publish-accounts:${workspaceId}`,
+        async () => json<{
         accounts: Account[]; engines: EngineReach[]; pages?: SocialPage[];
-      }>(await apiFetch(
-        `/api/workspaces/${workspaceId}/publishing/integrations/all`,
-        { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
-      ));
+        }>(await apiFetch(
+          `/api/workspaces/${workspaceId}/publishing/integrations/all`,
+          { method: "POST", body: JSON.stringify({ confirm_external_action: true }) },
+        )).then((body) => ({
+          accounts: body.accounts,
+          engines: body.engines,
+          pages: body.pages ?? [],
+        })),
+      );
       setAllAccounts(result.accounts);
-      setPages(result.pages ?? []);
+      setPages(result.pages);
       setEngineReach(result.engines);
       setAccountsLoaded(true);
       // Keep what is still there, drop what the refresh no longer returns: a
@@ -1849,7 +1888,9 @@ export default function PublishPage() {
           all of them at once, so a summary naming one made the others look
           switched off - and hid the fact that their destinations were already
           in the picker below. */}
-      {usableEngines.length > 0 && !setupOpen ? (
+      {checking ? (
+        <WaitingBlock className="publish-engine-wait" message={t("common.loading")} />
+      ) : usableEngines.length > 0 && !setupOpen ? (
         <div className="engine-summary">
           <span className="engine-summary-marks">
             {(switchedOnEngines.length ? switchedOnEngines : usableEngines).map((provider) => (

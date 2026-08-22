@@ -81,7 +81,12 @@ def publishing_connection(
     session: DatabaseSession,
 ) -> dict[str, Any]:
     membership(session, workspace_id, user.id)
-    return {"connection": connection_status()}
+    # Page entry needs configuration and capabilities, not a second network
+    # login. The composer follows this with integrations/all when a provider is
+    # configured; that call discovers the accounts and performs the one useful
+    # authentication probe. Probing here made Publish wait on the provider
+    # twice before it could be used (about 1.7s locally for the first pass).
+    return {"connection": connection_status(probe=False)}
 
 
 @router.get("/capabilities")

@@ -720,6 +720,52 @@ def open_browser_app(include_desktop: bool, services: list[Service]) -> bool:
     return webbrowser.open(f"http://127.0.0.1:{frontend_port}/")
 
 
+PRIMARY_WEB_ROUTES = (
+    "/discover",
+    "/library",
+    "/attribution",
+    "/publish",
+    "/campaigns",
+    "/tools",
+)
+
+
+def warm_primary_web_routes(services: list[Service]) -> None:
+    """Compile every primary dev route shortly after the browser opens.
+
+    Next's production build already contains every route. In hot-reload mode it
+    compiles a route on first request, which turned the first tab click into a
+    multi-second wait even when its API data was cached. Warming in a background
+    thread keeps startup interactive while moving that compilation off the
+    operator's click.
+    """
+    frontend = next((service for service in services if service.name == "Frontend"), None)
+    if not frontend or not frontend.port:
+        return
+    base = f"http://127.0.0.1:{frontend.port}"
+
+    def warm() -> None:
+        print("[System] Preparing the remaining tabs in the background...")
+        ready = 0
+        for route in PRIMARY_WEB_ROUTES:
+            try:
+                request = urllib.request.Request(
+                    base + route,
+                    method="GET",
+                    headers={"Purpose": "prefetch"},
+                )
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    response.read()
+                ready += 1
+            except (OSError, urllib.error.HTTPError, urllib.error.URLError):
+                # A route can still compile on its first real visit. Warming is
+                # an acceleration, never a reason to stop the application.
+                continue
+        print(f"[System] {ready} of {len(PRIMARY_WEB_ROUTES)} tabs are ready for fast switching.")
+
+    threading.Thread(target=warm, name="trendrelay-tab-warmup", daemon=True).start()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -946,6 +992,8 @@ def main() -> int:
                 time.sleep(0.25)
 
         open_browser_app(args.desktop, services)
+        if not args.production:
+            warm_primary_web_routes(services)
 
         next_health_check = time.monotonic() + 2
         next_reload_check = time.monotonic() + RELOAD_POLL_SECONDS

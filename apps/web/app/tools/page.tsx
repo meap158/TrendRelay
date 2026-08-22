@@ -7,10 +7,16 @@ import { useAuth } from "../auth-provider";
 import { useLocale } from "../i18n-provider";
 import { buttonClass } from "../ui/button";
 import { WaitingScreen } from "../ui/waiting-screen";
+import { WaitingBlock } from "../ui/waiting-block";
 import { ActionIcon } from "../ui/action-icons";
 import { Badge } from "../ui/primitives";
 import { Dialog } from "../ui/dialog";
 import { SegmentedControl } from "../ui/segmented";
+import { useWorkspace } from "../workspace-provider";
+import {
+  readTabSnapshot,
+  refreshTabSnapshot,
+} from "../../lib/tab-snapshots";
 
 type Tool = {
   id: string;
@@ -78,7 +84,6 @@ const SURFACES: { id: string; label: string; blurb: string; compact?: boolean }[
   },
 ];
 
-type Workspace = { id: string; name: string; role: string };
 type SetupRequirement = { id: string; label: string; status: "ready" | "setup-required" | "optional" | "blocked"; detail: string };
 type SetupAction = {
   id: string;
@@ -173,8 +178,9 @@ type TunnelTest = {
 export default function ToolsPage() {
   const { t, rich } = useLocale();
   const { loading, user, apiFetch } = useAuth();
+  const { workspaces } = useWorkspace();
   const [tools, setTools] = useState<Tool[]>([]);
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [toolsLoaded, setToolsLoaded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -201,8 +207,11 @@ export default function ToolsPage() {
   const [reachDiagnostics, setReachDiagnostics] = useState<ReachDiagnostics | null>(null);
 
   const refresh = useCallback(async () => {
-    const payload = await responseJson<{ tools: Tool[] }>(await apiFetch("/api/tools"));
-    setTools(payload.tools);
+    const rows = await refreshTabSnapshot<Tool[]>("tools:registry", async () => {
+      const payload = await responseJson<{ tools: Tool[] }>(await apiFetch("/api/tools"));
+      return payload.tools;
+    });
+    setTools(rows);
   }, [apiFetch]);
 
   /**
@@ -249,18 +258,30 @@ export default function ToolsPage() {
   useEffect(() => {
     if (loading || !user) return;
     let cancelled = false;
-    apiFetch("/api/tools")
-      .then((response) => responseJson<{ tools: Tool[] }>(response))
-      .then((payload) => { if (!cancelled) setTools(payload.tools); })
-      .catch((reason: unknown) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "Registry unavailable.");
+    const cached = readTabSnapshot<Tool[]>("tools:registry");
+    if (cached) {
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setTools(cached);
+        setToolsLoaded(true);
       });
-    apiFetch("/api/workspaces")
-      .then((response) => responseJson<{ workspaces: Workspace[] }>(response))
-      .then((payload) => { if (!cancelled) setWorkspaces(payload.workspaces); })
-      .catch(() => { if (!cancelled) setWorkspaces([]); });
+    }
+    queueMicrotask(() => {
+      void refresh()
+        .then(() => {
+          if (!cancelled) {
+            setToolsLoaded(true);
+          }
+        })
+        .catch((reason: unknown) => {
+          if (!cancelled) {
+            setToolsLoaded(true);
+            setError(reason instanceof Error ? reason.message : "Registry unavailable.");
+          }
+        });
+    });
     return () => { cancelled = true; };
-  }, [apiFetch, loading, user]);
+  }, [loading, refresh, user]);
 
   // A runtime download runs in the worker, so this page has to ask how it is
   // going. Only while one is actually in flight: a settled report is read once,
@@ -606,7 +627,9 @@ export default function ToolsPage() {
           between them, which is nearly one each and so grouped nothing. The
           old category survives on the card as the finer description it always
           was. */}
-      {SURFACES.filter((surface) => tools.some((tool) => tool.surface === surface.id))
+      {!toolsLoaded ? (
+        <WaitingBlock message={t("common.loading")} />
+      ) : SURFACES.filter((surface) => tools.some((tool) => tool.surface === surface.id))
         .map((surface) => {
         const inSurface = tools.filter((tool) => tool.surface === surface.id);
         return (

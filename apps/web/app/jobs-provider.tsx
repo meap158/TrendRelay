@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { useAuth } from "./auth-provider";
 import { apiBaseUrl } from "../lib/api";
 import { effectLabel } from "../lib/i18n/effects";
@@ -122,6 +122,8 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const t = useT();
   const [jobs, setJobs] = useState<BaseJob[]>([]);
   const [busy, setBusy] = useState(false);
+  const refreshInFlight = useRef<Promise<void> | null>(null);
+  const hasActiveJobs = useRef(false);
   const activeWorkspaceId = workspaceId || null;
 
   const effectJob = useCallback((job: any): BaseJob => ({
@@ -158,13 +160,14 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   }, [effectJob]);
 
   const refresh = useCallback(async () => {
-    if (!user) {
-      setJobs([]);
-      return;
-    }
-
-    setBusy(true);
-    try {
+    if (refreshInFlight.current) return refreshInFlight.current;
+    const request = (async () => {
+      if (!user) {
+        setJobs([]);
+        return;
+      }
+      setBusy(true);
+      try {
       const fetchPromises: Promise<BaseJob[]>[] = [];
 
       const researchWorkspace = activeWorkspaceId ?? "local";
@@ -288,11 +291,20 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       const results = await Promise.all(fetchPromises);
       const combined = results.flat().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-      setJobs(combined);
-    } catch (e) {
-      console.error("Failed to refresh jobs", e);
+        hasActiveJobs.current = combined.some((job) =>
+          ["queued", "running", "in_progress", "pending"].includes(job.status));
+        setJobs(combined);
+      } catch (e) {
+        console.error("Failed to refresh jobs", e);
+      } finally {
+        setBusy(false);
+      }
+    })();
+    refreshInFlight.current = request;
+    try {
+      await request;
     } finally {
-      setBusy(false);
+      if (refreshInFlight.current === request) refreshInFlight.current = null;
     }
   }, [activeWorkspaceId, apiFetch, effectJob, user]);
 
@@ -301,15 +313,20 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     // in the layout, so `queueMicrotask` fired it during hydration on every
     // page - right when first paint is already competing for the network. Let
     // the page paint, then start watching.
-    let timer: ReturnType<typeof setInterval> | undefined;
+    let timer: number | undefined;
+    let stopped = false;
+    const poll = async () => {
+      if (document.visibilityState !== "hidden") await refresh();
+      if (stopped) return;
+      // Progress deserves a responsive poll; a settled queue does not deserve
+      // seven API calls every four seconds forever. The provider lives above
+      // every route, so its idle traffic otherwise competes with whichever tab
+      // the operator is trying to open.
+      timer = window.setTimeout(poll, hasActiveJobs.current ? 2500 : 12000);
+    };
     const start = window.setTimeout(() => {
-      void refresh();
-      timer = setInterval(() => {
-        // A hidden tab is nobody watching a progress bar. Skip the fan-out while
-        // it is away and pick it back up on return, below.
-        if (document.visibilityState !== "hidden") void refresh();
-      }, 4000);
-    }, 800);
+      void poll();
+    }, 1500);
     // Returning to the tab refreshes at once rather than waiting out the
     // interval, so a job that finished while away is not stale on the way back.
     const onVisible = () => {
@@ -317,8 +334,9 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
+      stopped = true;
       window.clearTimeout(start);
-      if (timer) clearInterval(timer);
+      if (timer) window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [refresh]);

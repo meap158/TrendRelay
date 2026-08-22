@@ -32,6 +32,7 @@ import { useWorkspace } from "../workspace-provider";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { CampaignIdeaComposer } from "./campaign-idea-composer";
 import { NewsBoard } from "./news-board";
+import { readTabSnapshot, refreshTabSnapshot } from "../../lib/tab-snapshots";
 
 // The source-heavy boards load only when their workspace is selected. The
 // news board and campaign composer stay static because they are light and
@@ -626,21 +627,29 @@ export default function ResearchDashboard() {
   );
 
   const refreshProviders = useCallback(async () => {
-    const response = await fetch(`${apiBaseUrl()}/api/research/status`, {
-      cache: "no-store",
-    });
-    const payload = (await response.json()) as {
-      providers?: ResearchProviders;
-      detail?: string;
-    };
-    if (!response.ok || !payload.providers) {
-      throw new Error(payload.detail ?? "Research sources are unavailable.");
-    }
-    setProviders(payload.providers);
+    const value = await refreshTabSnapshot<ResearchProviders>(
+      "discover:providers",
+      async () => {
+        const response = await fetch(`${apiBaseUrl()}/api/research/status`, {
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as {
+          providers?: ResearchProviders;
+          detail?: string;
+        };
+        if (!response.ok || !payload.providers) {
+          throw new Error(payload.detail ?? "Research sources are unavailable.");
+        }
+        return payload.providers;
+      },
+    );
+    setProviders(value);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
+    const cached = readTabSnapshot<ResearchProviders>("discover:providers");
+    if (cached) queueMicrotask(() => { if (!cancelled) setProviders(cached); });
     queueMicrotask(() => {
       void refreshProviders().catch((reason: unknown) => {
         if (!cancelled) {
@@ -794,12 +803,18 @@ export default function ResearchDashboard() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`${apiBaseUrl()}/api/research/tiktok/status`)
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { provider?: { categories?: TikTokCategory[] } } | null) => {
-        if (!cancelled && payload?.provider?.categories) {
+    const cached = readTabSnapshot<TikTokCategory[]>("discover:tiktok-categories");
+    if (cached) queueMicrotask(() => { if (!cancelled) setTiktokCategories(cached); });
+    refreshTabSnapshot<TikTokCategory[]>("discover:tiktok-categories", async () => {
+      const response = await fetch(`${apiBaseUrl()}/api/research/tiktok/status`);
+      if (!response.ok) return [];
+      const payload = await response.json() as { provider?: { categories?: TikTokCategory[] } };
+      return (payload.provider?.categories ?? []).filter((item) => item.available);
+    })
+      .then((categories) => {
+        if (!cancelled && categories.length) {
           // Retired tabs stay in the registry for honesty, not for the operator.
-          setTiktokCategories(payload.provider.categories.filter((item) => item.available));
+          setTiktokCategories(categories);
         }
       })
       .catch(() => undefined);
