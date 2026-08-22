@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -102,6 +102,61 @@ def fake_processed(path: Path) -> dict:
             }
         ],
     }
+
+
+def test_asset_page_batches_related_record_queries(tmp_path: Path) -> None:
+    """A full Library page must not issue related-row queries per asset."""
+    workspace_id = create_workspace()
+    with TestingSession() as session:
+        for index in range(20):
+            session.add(
+                MediaAsset(
+                    id=f"asset-batch-{index}",
+                    workspace_id=workspace_id,
+                    title=f"Batch asset {index}",
+                    media_kind="video",
+                    source_type="test-fixture",
+                    source_url=None,
+                    platform="douyin",
+                    creator="Batch creator",
+                    published_at=None,
+                    caption=None,
+                    hashtags=[],
+                    audio_identifier=None,
+                    engagement={},
+                    original_path=str(tmp_path / f"asset-{index}.mp4"),
+                    original_sha256=f"{index:064x}",
+                    mime_type="video/mp4",
+                    size_bytes=100,
+                    duration_ms=1_000,
+                    width=1080,
+                    height=1920,
+                    video_codec="h264",
+                    audio_codec="aac",
+                    has_audio=True,
+                    created_by="library-owner",
+                )
+            )
+        session.commit()
+        assets = list(
+            session.scalars(select(MediaAsset).order_by(MediaAsset.id)).all()
+        )
+
+        statements: list[str] = []
+
+        def record_statement(
+            _connection, _cursor, statement, _parameters, _context, _executemany
+        ) -> None:
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", record_statement)
+        try:
+            views = media_library_api._asset_views(session, assets)
+        finally:
+            event.remove(engine, "before_cursor_execute", record_statement)
+
+    assert len(views) == 20
+    assert len(statements) == 3
 
 
 def test_ingest_deduplicates_enriches_searches_and_plans(

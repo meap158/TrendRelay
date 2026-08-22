@@ -79,3 +79,4 @@ Concise, confident, implementation-focused.
 - Every recommendation should use "should".
 - Every accessibility rule must be testable in implementation.
 - Teams should prefer system consistency over local visual exceptions.
+- Returning to a previously loaded tab must paint its last usable content immediately and revalidate in the background. List endpoints must batch related records; route mounting must not start reconciliation scans or other mutating maintenance work.

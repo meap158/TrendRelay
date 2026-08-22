@@ -510,6 +510,32 @@ type Status = {
   };
 };
 
+type LibrarySnapshot = {
+  assets: Asset[];
+  total: number;
+  facets: AssetFacets;
+  jobs: Job[];
+  status: Status;
+};
+
+// Next keeps the shell mounted while routes change, but the page itself is
+// recreated. Keep the most recent Library results at module scope so returning
+// from Campaigns or Publish paints the known list immediately, then validates
+// it against the API in the background. This is deliberately memory-only:
+// closing the app still starts from authoritative server data.
+const librarySnapshots = new Map<string, LibrarySnapshot>();
+const LIBRARY_SNAPSHOT_LIMIT = 12;
+
+function rememberLibrarySnapshot(key: string, snapshot: LibrarySnapshot) {
+  librarySnapshots.delete(key);
+  librarySnapshots.set(key, snapshot);
+  while (librarySnapshots.size > LIBRARY_SNAPSHOT_LIMIT) {
+    const oldest = librarySnapshots.keys().next().value;
+    if (!oldest) break;
+    librarySnapshots.delete(oldest);
+  }
+}
+
 async function json<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { detail?: string };
   if (!response.ok) throw new Error(body.detail ?? "Media library request failed.");
@@ -936,7 +962,6 @@ export default function LibraryPage() {
     "trendrelay.library.view", "gallery", isViewMode,
   );
   const [continueVideoPlayback, setContinueVideoPlayback] = useState(false);
-  const autoSyncedWorkspaces = useRef(new Set<string>());
   const [busy, setBusy] = useState("");
   // Errors are reported over the page: in flow they shifted everything below
   // them whenever an action finished. The bulk-action outcome below is not a
@@ -1008,8 +1033,22 @@ export default function LibraryPage() {
     params.set("sort", latestSortOrder.current);
     params.set("limit", "100");
     const suffix = `?${params}`;
+    const snapshotKey = `${nextWorkspace}${suffix}`;
+    const snapshot = librarySnapshots.get(snapshotKey);
     const sequence = ++refreshSequence.current;
-    setLoadingAssets(true);
+    if (snapshot) {
+      setAssets(snapshot.assets);
+      setTotal(snapshot.total);
+      setFacets(snapshot.facets);
+      setJobs(snapshot.jobs);
+      setStatus(snapshot.status);
+      setSelectedId((current) =>
+        snapshot.assets.some((asset) => asset.id === current)
+          ? current
+          : (snapshot.assets[0]?.id ?? ""),
+      );
+    }
+    setLoadingAssets(!snapshot);
     try {
       const [assetBody, jobBody, statusBody] = await Promise.all([
         json<{ assets: Asset[]; total?: number; facets?: AssetFacets }>(
@@ -1031,6 +1070,13 @@ export default function LibraryPage() {
       if (assetBody.facets) setFacets(assetBody.facets);
       setJobs(jobBody.jobs);
       setStatus(statusBody);
+      rememberLibrarySnapshot(snapshotKey, {
+        assets: assetBody.assets,
+        total: assetBody.total ?? assetBody.assets.length,
+        facets: assetBody.facets ?? EMPTY_FACETS,
+        jobs: jobBody.jobs,
+        status: statusBody,
+      });
       setSelectedId((current) =>
         assetBody.assets.some((asset) => asset.id === current)
           ? current
@@ -1286,37 +1332,6 @@ export default function LibraryPage() {
       );
     });
   }, [filters, refresh, sortOrder, workspaceId, fail]);
-
-  useEffect(() => {
-    if (!workspaceId || !canImport || autoSyncedWorkspaces.current.has(workspaceId)) return;
-    autoSyncedWorkspaces.current.add(workspaceId);
-    queueMicrotask(() => {
-      void (async () => {
-        try {
-          const body = await json<{ sync: { queued: Job[]; errors: string[]; removed_asset_ids: string[] } }>(
-            await apiFetch(`/api/workspaces/${workspaceId}/media/downloads/library-sync`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ confirm_external_action: true }),
-            }),
-          );
-          const pendingCount = body.sync.queued.filter((job) => ["queued", "running"].includes(job.status)).length;
-          if (pendingCount) {
-            setMessage(`${pendingCount} downloaded media items are being prepared automatically.`);
-          } else if (body.sync.removed_asset_ids.length) {
-            setMessage(`${body.sync.removed_asset_ids.length} removed media items were cleared from Library.`);
-          }
-          if (body.sync.errors.length) {
-            fail(`${body.sync.errors.length} downloaded media items could not be prepared.`);
-          }
-          await refresh(workspaceId);
-        } catch (reason) {
-          autoSyncedWorkspaces.current.delete(workspaceId);
-          fail(reason instanceof Error ? reason.message : "Downloaded media could not be synchronized.");
-        }
-      })();
-    });
-  }, [apiFetch, canImport, refresh, workspaceId, fail]);
 
   useEffect(() => {
     if (!jobs.some((job) => ["queued", "running"].includes(job.status))) return;

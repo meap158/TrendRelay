@@ -200,23 +200,35 @@ def _named_effects(effect_ids: list[str] | None) -> list[dict[str, str]]:
     ]
 
 
-def _asset_view(session: Session, item: MediaAsset) -> dict[str, Any]:
-    versions = session.scalars(
-        select(MediaAssetVersion)
-        .where(MediaAssetVersion.asset_id == item.id)
-        .order_by(MediaAssetVersion.created_at)
-    ).all()
-    transcripts = session.scalars(
-        select(MediaTranscript)
-        .where(MediaTranscript.asset_id == item.id)
-        .order_by(MediaTranscript.created_at.desc())
-    ).all()
-    analysis = session.scalar(
-        select(CreativeAnalysis)
-        .where(CreativeAnalysis.asset_id == item.id)
-        .order_by(CreativeAnalysis.version.desc())
-        .limit(1)
-    )
+def _asset_view(
+    session: Session,
+    item: MediaAsset,
+    *,
+    versions: list[MediaAssetVersion] | None = None,
+    transcripts: list[MediaTranscript] | None = None,
+    analysis: CreativeAnalysis | None = None,
+    related_loaded: bool = False,
+) -> dict[str, Any]:
+    """Serialize one asset, accepting batched related rows for list views."""
+    if not related_loaded:
+        versions = list(session.scalars(
+            select(MediaAssetVersion)
+            .where(MediaAssetVersion.asset_id == item.id)
+            .order_by(MediaAssetVersion.created_at)
+        ).all())
+        transcripts = list(session.scalars(
+            select(MediaTranscript)
+            .where(MediaTranscript.asset_id == item.id)
+            .order_by(MediaTranscript.created_at.desc())
+        ).all())
+        analysis = session.scalar(
+            select(CreativeAnalysis)
+            .where(CreativeAnalysis.asset_id == item.id)
+            .order_by(CreativeAnalysis.version.desc())
+            .limit(1)
+        )
+    versions = versions or []
+    transcripts = transcripts or []
     recorded_origin_value = (
         item.engagement.get("origin_urls", [])
         if isinstance(item.engagement, dict)
@@ -292,6 +304,45 @@ def _asset_view(session: Session, item: MediaAsset) -> dict[str, Any]:
         ],
         "analysis": _analysis_view(analysis),
     }
+
+
+def _asset_views(session: Session, items: list[MediaAsset]) -> list[dict[str, Any]]:
+    """Serialize a page of assets with three related-row queries, not three per asset."""
+    if not items:
+        return []
+    asset_ids = [item.id for item in items]
+    versions_by_asset: dict[str, list[MediaAssetVersion]] = {}
+    for version in session.scalars(
+        select(MediaAssetVersion)
+        .where(MediaAssetVersion.asset_id.in_(asset_ids))
+        .order_by(MediaAssetVersion.created_at)
+    ).all():
+        versions_by_asset.setdefault(version.asset_id, []).append(version)
+    transcripts_by_asset: dict[str, list[MediaTranscript]] = {}
+    for transcript in session.scalars(
+        select(MediaTranscript)
+        .where(MediaTranscript.asset_id.in_(asset_ids))
+        .order_by(MediaTranscript.created_at.desc())
+    ).all():
+        transcripts_by_asset.setdefault(transcript.asset_id, []).append(transcript)
+    analyses_by_asset: dict[str, CreativeAnalysis] = {}
+    for analysis in session.scalars(
+        select(CreativeAnalysis)
+        .where(CreativeAnalysis.asset_id.in_(asset_ids))
+        .order_by(CreativeAnalysis.version.desc())
+    ).all():
+        analyses_by_asset.setdefault(analysis.asset_id, analysis)
+    return [
+        _asset_view(
+            session,
+            item,
+            versions=versions_by_asset.get(item.id, []),
+            transcripts=transcripts_by_asset.get(item.id, []),
+            analysis=analyses_by_asset.get(item.id),
+            related_loaded=True,
+        )
+        for item in items
+    ]
 
 
 def _recipe(body: Enrichment, duration_ms: int | None) -> dict[str, Any]:
@@ -662,7 +713,7 @@ def list_assets(
     items = session.scalars(
         select(MediaAsset).where(*conditions()).order_by(*order_by).limit(limit)
     ).all()
-    views = [_asset_view(session, item) for item in items]
+    views = _asset_views(session, list(items))
 
     def facet(
         column: Any,
