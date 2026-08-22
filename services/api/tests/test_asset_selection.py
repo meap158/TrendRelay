@@ -69,6 +69,22 @@ def test_a_workspace_never_sees_another_one(session) -> None:
     assert matching(session, AssetFilter()) == {"a1"}
 
 
+def test_explicit_notification_assets_are_exact_and_workspace_scoped(session) -> None:
+    add(session, "a1")
+    add(session, "a2")
+    session.add(
+        MediaAsset(
+            id="other", workspace_id="w2", title="Other", media_kind="video",
+            source_type="download", original_path="C:/media/other.mp4",
+            original_sha256="o".ljust(64, "0"), mime_type="video/mp4",
+            size_bytes=1, created_by="tester",
+        )
+    )
+    session.commit()
+
+    assert matching(session, AssetFilter(asset_ids=["a2", "other", "missing"])) == {"a2"}
+
+
 def test_media_kind_narrows_the_selection(session) -> None:
     add(session, "a1", kind="video")
     add(session, "a2", kind="audio")

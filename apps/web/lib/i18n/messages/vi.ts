@@ -277,6 +277,9 @@ export const vi: Messages = {
     eyebrow: "Phân tích sáng tạo",
     intro:
       "Giữ nguyên bản gốc và biến clip tham khảo thành công thức sáng tạo có thể tìm kiếm.",
+    notificationView: "Từ thông báo · {count} mục",
+    notificationViewOne: "Từ thông báo · 1 mục",
+    showAllMedia: "Hiển thị tất cả nội dung",
     playPreview: "Phát video xem trước",
     loadingPreview: "Đang tải bản xem trước…",
     previewUnavailable: "Không xem trước được",

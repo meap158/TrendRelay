@@ -275,6 +275,9 @@ export const ar: Messages = {
     eyebrow: "تحليل المحتوى الإبداعي",
     intro:
       "احتفظ بالنسخ الأصلية كما هي، وحوّل المقاطع المرجعية إلى وصفات إبداعية قابلة للبحث.",
+    notificationView: "من الإشعارات · {count} عناصر",
+    notificationViewOne: "من الإشعارات · عنصر واحد",
+    showAllMedia: "عرض كل الوسائط",
     playPreview: "تشغيل المعاينة",
     loadingPreview: "جارٍ تحميل المعاينة…",
     previewUnavailable: "المعاينة غير متاحة",

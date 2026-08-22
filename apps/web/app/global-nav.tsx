@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock, Languages, Settings } from "lucide-react";
+import { notificationHref } from "../lib/job-links";
 
 import { useAuth } from "./auth-provider";
 import { type BaseJob, useJobs } from "./jobs-provider";
@@ -544,6 +545,7 @@ export function GlobalNav() {
                   {groups.slice(0, 15).map((group) => {
                     const job = group.latest;
                     const batch = batchProgress(group);
+                    const destination = notificationHref(group.jobs) ?? job.href;
                     const read = group.jobs.every((item) => readKeys.has(notificationKey(item)));
                     return (
                       <li className={read ? "notification-item read" : "notification-item unread"} key={group.key}>
@@ -587,10 +589,10 @@ export function GlobalNav() {
                             when the job produced something to see, and stays
                             plain text when it did not rather than becoming a
                             link to somewhere unrelated. */}
-                        {job.href ? (
+                        {destination ? (
                           <Link
                             className="notification-title linked"
-                            href={job.href}
+                            href={destination}
                             onClick={() => { markRead(group); setDrawerOpen(false); }}
                           >{job.title}</Link>
                         ) : (

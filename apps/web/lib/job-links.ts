@@ -13,7 +13,17 @@ export type JobRecord = {
   result?: { asset_id?: string; source_path?: string } | null;
   payload?: { asset_id?: string; source_path?: string } | null;
   asset_id?: string;
+  assetId?: string | null;
 };
+
+function assetId(job: JobRecord | null | undefined): string | undefined {
+  return (
+    job?.result?.asset_id
+    ?? job?.payload?.asset_id
+    ?? job?.asset_id
+    ?? job?.assetId
+  ) || undefined;
+}
 
 /**
  * The Library entry a job produced or worked on.
@@ -24,8 +34,28 @@ export type JobRecord = {
  * plain rather than linking to a Library that will select nothing.
  */
 export function assetHref(job: JobRecord | null | undefined): string | undefined {
-  const asset = job?.result?.asset_id ?? job?.payload?.asset_id ?? job?.asset_id;
-  if (asset) return `/library?asset=${encodeURIComponent(asset)}`;
+  const asset = assetId(job);
+  if (asset) {
+    const encoded = encodeURIComponent(asset);
+    return `/library?asset=${encoded}&assets=${encoded}`;
+  }
   const path = job?.result?.source_path ?? job?.payload?.source_path;
   return path ? `/library?asset=${encodeURIComponent(path)}` : undefined;
+}
+
+/**
+ * Open exactly what one notification row represents.
+ *
+ * Repeated and batched jobs are one row in the drawer, so inheriting the newest
+ * job's href loses every other result. The explicit ids form a temporary,
+ * shareable Library view; a single job still opens directly on its asset.
+ */
+export function notificationHref(jobs: JobRecord[]): string | undefined {
+  const ids = [...new Set(jobs.map(assetId).filter((id): id is string => Boolean(id)))];
+  if (ids.length === 0) return jobs.length === 1 ? assetHref(jobs[0]) : undefined;
+  if (ids.length === 1) return assetHref({ asset_id: ids[0] });
+  const params = new URLSearchParams();
+  params.set("assets", ids.join(","));
+  params.set("from", "notifications");
+  return `/library?${params}`;
 }

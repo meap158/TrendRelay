@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { assetHref } from "./job-links.ts";
+import { assetHref, notificationHref } from "./job-links.ts";
 
 test("a finished job links to the asset it produced", () => {
   assert.equal(
     assetHref({ result: { asset_id: "asset_9f2c" } }),
-    "/library?asset=asset_9f2c",
+    "/library?asset=asset_9f2c&assets=asset_9f2c",
   );
 });
 
@@ -15,7 +15,7 @@ test("the id wins over the path", () => {
   // blurred render's source is not the entry it created.
   assert.equal(
     assetHref({ result: { asset_id: "asset_9f2c", source_path: "S:\\media\\clip.mp4" } }),
-    "/library?asset=asset_9f2c",
+    "/library?asset=asset_9f2c&assets=asset_9f2c",
   );
 });
 
@@ -47,4 +47,31 @@ test("a job with nothing to show gets no link", () => {
 
 test("an empty string is not a destination", () => {
   assert.equal(assetHref({ result: { asset_id: "" }, payload: { source_path: "" } }), undefined);
+});
+
+test("a grouped notification opens every distinct affected asset", () => {
+  const href = notificationHref([
+    { payload: { asset_id: "asset_one" } },
+    { result: { asset_id: "asset_two" } },
+    { result: { asset_id: "asset_one" } },
+  ])!;
+  const params = new URLSearchParams(href.split("?")[1]);
+  assert.equal(href.split("?")[0], "/library");
+  assert.equal(params.get("assets"), "asset_one,asset_two");
+  assert.equal(params.get("from"), "notifications");
+});
+
+test("a grouped notification accepts the normalized job shape used by the drawer", () => {
+  const href = notificationHref([{ assetId: "asset_one" }, { assetId: "asset_two" }])!;
+  assert.equal(
+    new URLSearchParams(href.split("?")[1]).get("assets"),
+    "asset_one,asset_two",
+  );
+});
+
+test("a one-item notification remains a direct asset link", () => {
+  assert.equal(
+    notificationHref([{ payload: { asset_id: "asset_one" } }]),
+    "/library?asset=asset_one&assets=asset_one",
+  );
 });

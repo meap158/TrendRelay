@@ -275,6 +275,9 @@ export const ja: Messages = {
     eyebrow: "クリエイティブ分析",
     intro:
       "オリジナルはそのまま保ち、参考クリップを検索できるクリエイティブレシピに変えます。",
+    notificationView: "通知から · {count}件",
+    notificationViewOne: "通知から · 1件",
+    showAllMedia: "すべてのメディアを表示",
     playPreview: "プレビューを再生",
     loadingPreview: "プレビューを読み込み中…",
     previewUnavailable: "プレビューを表示できません",

@@ -512,6 +512,9 @@ class AssetFilter(BaseModel):
     #: captions, or generated voice. Kept separate from effects because a
     #: transcript is metadata, not a rendered visual recipe.
     processing: str | None = None
+    #: Explicit ids supplied by a notification deep link. This is an
+    #: intersection with ordinary filters, never a workspace bypass.
+    asset_ids: list[str] = Field(default_factory=list, max_length=200)
 
 
 #: Filter values that are not the id of an effect.
@@ -608,6 +611,8 @@ def asset_conditions(
 ) -> list[Any]:
     """The WHERE clause for a library query, including the free-text search."""
     values: list[Any] = [MediaAsset.workspace_id == workspace_id]
+    if filters.asset_ids:
+        values.append(MediaAsset.id.in_(filters.asset_ids))
     if omit != "platform":
         if filters.platform:
             values.append(MediaAsset.platform == filters.platform)
@@ -686,6 +691,7 @@ def list_asset_ids(
     max_duration_seconds: Annotated[int | None, Query(ge=1, le=86_400)] = None,
     has_version: Annotated[str | None, Query(max_length=64)] = None,
     processing: Annotated[str | None, Query(max_length=64)] = None,
+    asset_ids: Annotated[str | None, Query(max_length=16_000)] = None,
 ) -> dict[str, Any]:
     """Every asset id the current filter matches, for a true select-all.
 
@@ -698,6 +704,7 @@ def list_asset_ids(
         creator_missing=creator_missing, media_kind=media_kind,
         max_duration_seconds=max_duration_seconds, has_version=has_version,
         processing=processing,
+        asset_ids=_words(asset_ids, 200, 80),
     )
     where = asset_conditions(workspace_id, filters)
     matched = session.scalar(select(func.count(MediaAsset.id)).where(*where)) or 0
@@ -733,6 +740,7 @@ def list_assets(
     max_duration_seconds: Annotated[int | None, Query(ge=1, le=86_400)] = None,
     has_version: Annotated[str | None, Query(max_length=64)] = None,
     processing: Annotated[str | None, Query(max_length=64)] = None,
+    asset_ids: Annotated[str | None, Query(max_length=16_000)] = None,
     sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> dict[str, Any]:
@@ -742,6 +750,7 @@ def list_assets(
         creator_missing=creator_missing, media_kind=media_kind,
         max_duration_seconds=max_duration_seconds, has_version=has_version,
         processing=processing,
+        asset_ids=_words(asset_ids, 200, 80),
     )
 
     def conditions(*, omit: str | None = None) -> list[Any]:

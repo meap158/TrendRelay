@@ -283,6 +283,9 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .library-browser > * { min-width: 0; }
 .library-browser-sticky-controls { position: sticky; top: -10px; z-index: 80; display: grid; gap: 8px; margin: -10px -2px 0; padding: 10px 2px 0; background: var(--panel); }
 .library-browser-toolbar { display: grid; gap: 7px; padding-bottom: 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.library-notification-view { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-inline-size: 0; border: 1px solid var(--line); border-inline-start: 3px solid var(--link); border-radius: var(--radius-sm); padding: 6px 8px; color: var(--text); background: var(--link-bg); font-size: 11px; font-weight: 600; }
+.library-notification-view > span { min-inline-size: 0; overflow-wrap: anywhere; }
+.library-notification-view .ui-button { flex: 0 0 auto; }
 .library-browser-toolbar > [role="group"] { margin: 0; }
 .library-category-bar, .library-collection-toolbar { width: 100%; min-width: 0; box-sizing: border-box; }
 /* Not full-width. The actions are pushed right by `margin-inline-start: auto`,

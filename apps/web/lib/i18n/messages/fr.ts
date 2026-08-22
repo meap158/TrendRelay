@@ -282,6 +282,9 @@ export const fr: Messages = {
     eyebrow: "Analyse créative",
     intro:
       "Gardez les originaux intacts et transformez les clips de référence en recettes créatives consultables.",
+    notificationView: "Depuis les notifications · {count} éléments",
+    notificationViewOne: "Depuis les notifications · 1 élément",
+    showAllMedia: "Afficher tous les médias",
     playPreview: "Lire l'aperçu",
     loadingPreview: "Chargement de l'aperçu…",
     previewUnavailable: "Aperçu indisponible",

@@ -280,6 +280,9 @@ export const ru: Messages = {
     eyebrow: "Аналитика креативов",
     intro:
       "Оригиналы остаются неизменными, а референсные ролики превращаются в креативные рецепты с поиском.",
+    notificationView: "Из уведомлений · {count} элементов",
+    notificationViewOne: "Из уведомлений · 1 элемент",
+    showAllMedia: "Показать все медиа",
     playPreview: "Воспроизвести превью",
     loadingPreview: "Загрузка превью…",
     previewUnavailable: "Превью недоступно",

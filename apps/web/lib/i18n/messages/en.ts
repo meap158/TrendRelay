@@ -281,6 +281,9 @@ export const en = {
     eyebrow: "Creative intelligence",
     intro:
       "Keep originals immutable and turn reference clips into searchable creative recipes.",
+    notificationView: "From notifications · {count} items",
+    notificationViewOne: "From notifications · 1 item",
+    showAllMedia: "Show all media",
     playPreview: "Play video preview",
     loadingPreview: "Loading preview…",
     previewUnavailable: "Preview unavailable",

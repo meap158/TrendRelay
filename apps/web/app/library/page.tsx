@@ -3,7 +3,8 @@
 import { Check, CircleAlert, CircleCheck, CirclePause, CircleX, Layers3, LoaderCircle, Undo2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { effectLabel, effectTag } from "../../lib/i18n/effects";
@@ -967,8 +968,14 @@ type BulkAction = {
 const isSortOrder = oneOf("newest", "oldest", "title", "duration");
 const isGroupBy = oneOf("none", "channel", "source");
 const isViewMode = oneOf("gallery", "list");
-export default function LibraryPage() {
+function notificationAssetsFromQuery(value: string): string[] {
+  return [...new Set(value.split(",").map((id) => id.trim()).filter(Boolean))].slice(0, 200);
+}
+
+function LibraryContent() {
   const t = useT();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { loading, user, apiFetch } = useAuth();
   const { workspaces, workspaceId } = useWorkspace();
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -978,6 +985,11 @@ export default function LibraryPage() {
   // One object rather than four separate states, so the list, the select-all
   // and the Publish picker all describe a filter the same way.
   const [filters, setFilters] = useState<AssetFilterValues>({});
+  const notificationAssetQuery = searchParams.get("assets") ?? "";
+  const notificationAssetIds = useMemo(
+    () => notificationAssetsFromQuery(notificationAssetQuery),
+    [notificationAssetQuery],
+  );
   const query = filters.query ?? "";
   const mediaKind = filters.mediaKind ?? "";
   const patchFilters = (next: Partial<AssetFilterValues>) =>
@@ -1063,7 +1075,11 @@ export default function LibraryPage() {
     }, new Map<string, Asset[]>())).sort((left, right) => right[1].length - left[1].length || left[0].localeCompare(right[0]));
 
   /** The filter the list is showing, so a select-all can ask for the same set. */
-  const filterParams = useCallback(() => assetFilterParams(filters), [filters]);
+  const filterParams = useCallback(() => {
+    const params = assetFilterParams(filters);
+    if (notificationAssetIds.length) params.set("asset_ids", notificationAssetIds.join(","));
+    return params;
+  }, [filters, notificationAssetIds]);
 
   useEffect(() => { latestFilters.current = filters; }, [filters]);
   useEffect(() => { latestSortOrder.current = sortOrder; }, [sortOrder]);
@@ -1075,6 +1091,7 @@ export default function LibraryPage() {
     // Images or an effect. Reading refs here makes even that delayed refresh
     // use what the controls show now, rather than silently restoring "All".
     const params = assetFilterParams(latestFilters.current);
+    if (notificationAssetIds.length) params.set("asset_ids", notificationAssetIds.join(","));
     params.set("sort", latestSortOrder.current);
     params.set("limit", "100");
     const suffix = `?${params}`;
@@ -1130,7 +1147,7 @@ export default function LibraryPage() {
     } finally {
       if (sequence === refreshSequence.current) setLoadingAssets(false);
     }
-  }, [apiFetch, workspaceId]);
+  }, [apiFetch, notificationAssetIds, workspaceId]);
 
   useEffect(() => {
     const effectJobs = notificationJobs.filter((job) => job.category === "edit");
@@ -1150,6 +1167,14 @@ export default function LibraryPage() {
 
   function clearFilters() {
     setFilters({});
+  }
+
+  function clearNotificationView() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("asset");
+    url.searchParams.delete("assets");
+    url.searchParams.delete("from");
+    router.replace(`${url.pathname}${url.search}${url.hash}`, { scroll: false });
   }
 
   function groupTotal(label: string, loadedCount: number) {
@@ -1385,7 +1410,9 @@ export default function LibraryPage() {
       );
       if (!match) return;
       setSelectedId(match.id);
-      window.history.replaceState({}, "", window.location.pathname);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("asset");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     });
   }, [assets]);
 
@@ -1644,6 +1671,19 @@ export default function LibraryPage() {
         <aside className="library-browser">
           <div className="library-browser-sticky-controls">
             <div className="library-browser-toolbar">
+          {notificationAssetIds.length > 0 && (
+            <div className="library-notification-view" role="status">
+              <span>{t(
+                notificationAssetIds.length === 1
+                  ? "library.notificationViewOne"
+                  : "library.notificationView",
+                { count: notificationAssetIds.length },
+              )}</span>
+              <Button variant="quiet" size="sm" onClick={clearNotificationView}>
+                {t("library.showAllMedia")}
+              </Button>
+            </div>
+          )}
           <form className="library-search" onSubmit={(event) => { event.preventDefault(); void refresh(); }}>
             <input aria-label={t("library.searchLabel")} value={query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder={t("library.searchPlaceholder")} />
             <Button type="submit"><ActionIcon name="search" />{t("common.search")}</Button>
@@ -2201,5 +2241,14 @@ export default function LibraryPage() {
       )}
       <StatusToasts messages={statusMessages} onDismiss={dismiss} />
     </main>
+  );
+}
+
+export default function LibraryPage() {
+  const t = useT();
+  return (
+    <Suspense fallback={<WaitingScreen className="library-page" message={t("library.opening")} />}>
+      <LibraryContent />
+    </Suspense>
   );
 }
