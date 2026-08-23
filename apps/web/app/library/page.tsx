@@ -624,6 +624,28 @@ function reviewedLanguage(asset: Asset): string {
   return asset.transcripts.find((item) => item.status === "reviewed")?.language ?? "und";
 }
 
+/**
+ * When a clip arrived, short enough to sit in a line of metadata.
+ *
+ * The date and the hour, not a relative "3d ago": this reads beside the
+ * dimensions and the file size, which are facts about the asset rather than
+ * news about it, and the download window in the filter strip above is already
+ * the relative way to ask the question. The full moment goes in the `title`,
+ * because the minute matters when two clips came from one batch.
+ *
+ * Rendered only in the browser - these assets arrive from a fetch - so the
+ * viewer's own locale and timezone are the right ones to use.
+ */
+function downloadedOn(when: string | null | undefined): { short: string; exact: string } {
+  if (!when) return { short: "", exact: "" };
+  const at = new Date(when);
+  if (!Number.isFinite(at.getTime())) return { short: "", exact: "" };
+  return {
+    short: at.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }),
+    exact: at.toLocaleString(),
+  };
+}
+
 function displaySize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -1840,7 +1862,7 @@ function LibraryContent() {
           <AssetFilters
             values={filters}
             facets={facets}
-            fields={["channel", "platform", "effect", "processing"]}
+            fields={["channel", "platform", "effect", "processing", "downloaded"]}
             onChange={setFilters}
           >
             <label>{t("library.group")}
@@ -2071,7 +2093,17 @@ function LibraryContent() {
                       row of its own; the clip and its details are what deserve
                       the vertical space. */}
                   <div className="library-meta-line">
-                    <small>{selected.width && selected.height ? `${selected.width}×${selected.height} · ` : ""}{displaySize(selected.size_bytes)}</small>
+                    <small>{selected.width && selected.height ? `${selected.width}×${selected.height} · ` : ""}{displaySize(selected.size_bytes)}
+                      {/* When it arrived. Kept beside the size rather than
+                          given a row: it is one more fact about the file, and
+                          the reason to want it - telling this morning's batch
+                          from last week's - is answered by reading it, not by
+                          hunting for it. */}
+                      {downloadedOn(selected.collected_at).short && (
+                        <> · <span title={`Downloaded ${downloadedOn(selected.collected_at).exact}`}>
+                          Downloaded {downloadedOn(selected.collected_at).short}
+                        </span></>
+                      )}</small>
                     <nav className="library-item-navigation" aria-label={t("library.browseMedia")}>
                       <Button
                         variant="quiet"

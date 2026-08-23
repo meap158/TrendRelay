@@ -58,3 +58,33 @@ test("an unpinned base counts as no active filter", () => {
   assert.equal(activeFilterCount({}, {}), 0);
   assert.equal(activeFilterCount({ mediaKind: "image" }, {}), 1);
 });
+
+
+// --- when it arrived ----------------------------------------------------------
+
+test("a download window is sent as the API's collected_within_days", () => {
+  const params = assetFilterParams({ downloadedWithinDays: 7 });
+
+  assert.equal(params.get("collected_within_days"), "7");
+});
+
+test("the download window narrows alongside the others, not instead of them", () => {
+  // The select-all endpoint builds its predicate from the same parameters, so
+  // a window that quietly dropped one of them would select a different set
+  // than the list is showing.
+  const params = assetFilterParams({
+    downloadedWithinDays: 1, channel: "LuLu", effect: "any",
+  });
+
+  assert.equal(params.get("collected_within_days"), "1");
+  assert.equal(params.get("creator"), "LuLu");
+  assert.equal(params.get("has_version"), "any");
+  assert.equal(activeFilterCount({ downloadedWithinDays: 1, channel: "LuLu" }), 2);
+});
+
+test("any time is no window rather than a window of everything", () => {
+  const params = assetFilterParams({ downloadedWithinDays: undefined });
+
+  assert.equal(params.get("collected_within_days"), null);
+  assert.equal(activeFilterCount({ downloadedWithinDays: undefined }), 0);
+});

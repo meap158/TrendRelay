@@ -1233,6 +1233,9 @@ export const zh: Messages = {
     captions: "字幕",
     voiceover: "配音",
     byLength: "按时长筛选",
+    downloaded: "下载时间",
+    anyTime: "任何时间",
+    byDownloaded: "按下载时间筛选",
   },
 
   clipEditor: {

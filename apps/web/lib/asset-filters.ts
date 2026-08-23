@@ -16,6 +16,14 @@ export type AssetFilterValues = {
   /** A transcript, caption, or voice artifact carried by the asset. */
   processing?: string;
   maxSeconds?: number;
+  /**
+   * How recently the asset was downloaded, in days back from now.
+   *
+   * A window rather than a pair of dates: the question a download library
+   * gets asked is "what came in today" or "what arrived this week", and a
+   * relative answer needs nobody to work out what today is first.
+   */
+  downloadedWithinDays?: number;
 };
 
 export type Facet = { value: string; label: string; count: number };
@@ -47,6 +55,9 @@ export function assetFilterParams(values: AssetFilterValues): URLSearchParams {
   if (values.effect) params.set("has_version", values.effect);
   if (values.processing) params.set("processing", values.processing);
   if (values.maxSeconds) params.set("max_duration_seconds", String(values.maxSeconds));
+  if (values.downloadedWithinDays) {
+    params.set("collected_within_days", String(values.downloadedWithinDays));
+  }
   return params;
 }
 
@@ -56,6 +67,7 @@ export function activeFilterCount(
 ): number {
   const keys: (keyof AssetFilterValues)[] = [
     "query", "channel", "platform", "mediaKind", "effect", "processing", "maxSeconds",
+    "downloadedWithinDays",
   ];
   return keys.filter((key) => {
     const value = key === "query" ? values.query?.trim() : values[key];

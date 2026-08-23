@@ -1251,6 +1251,9 @@ export const ja: Messages = {
     captions: "字幕",
     voiceover: "ボイスオーバー",
     byLength: "長さで絞り込む",
+    downloaded: "ダウンロード",
+    anyTime: "すべての期間",
+    byDownloaded: "ダウンロードした時期で絞り込む",
   },
 
   clipEditor: {

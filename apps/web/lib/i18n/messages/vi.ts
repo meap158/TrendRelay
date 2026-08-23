@@ -1258,6 +1258,9 @@ export const vi: Messages = {
     captions: "Phụ đề",
     voiceover: "Lồng tiếng",
     byLength: "Lọc theo thời lượng",
+    downloaded: "Đã tải",
+    anyTime: "Bất kỳ lúc nào",
+    byDownloaded: "Lọc theo thời điểm tải về",
   },
 
   clipEditor: {

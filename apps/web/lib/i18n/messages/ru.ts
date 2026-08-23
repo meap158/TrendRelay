@@ -1277,6 +1277,9 @@ export const ru: Messages = {
     captions: "Субтитры",
     voiceover: "Закадровый голос",
     byLength: "Фильтровать по длительности",
+    downloaded: "Загружено",
+    anyTime: "Любое время",
+    byDownloaded: "Фильтровать по времени загрузки",
   },
 
   clipEditor: {

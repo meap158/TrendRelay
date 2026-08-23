@@ -1261,6 +1261,9 @@ export const en = {
     captions: "Captions",
     voiceover: "Voiceover",
     byLength: "Filter by length",
+    downloaded: "Downloaded",
+    anyTime: "Any time",
+    byDownloaded: "Filter by when it was downloaded",
   },
 
   clipEditor: {

@@ -1,6 +1,6 @@
 import asyncio
 import base64
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -14,7 +14,7 @@ from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
 from trendrelay_api.main import app
 from trendrelay_api.media_models import MediaAsset, MediaAssetVersion, MediaTranscript
-from trendrelay_api.models import Base
+from trendrelay_api.models import Base, utc_now
 
 engine = create_engine(
     "sqlite://",
@@ -645,6 +645,56 @@ def test_paging_reaches_every_match_without_repeating_one() -> None:
 
     assert len(seen) == 25
     assert len(set(seen)) == 25, "a row was served on two pages"
+
+
+def test_a_download_window_narrows_the_list_and_the_selection_together() -> None:
+    """"What came in this week" - and a select-all that means the same set.
+
+    The window is checked on both endpoints in one test on purpose. They build
+    the predicate from one shared `AssetFilter` precisely so a selection cannot
+    cover rows the list is not showing, and a filter added to only one of them
+    is the way that promise quietly stops holding.
+    """
+    workspace_id = create_workspace()
+    ages = {"today": 0, "this week": 3, "last month": 40}
+    with TestingSession.begin() as session:
+        for name, days in ages.items():
+            session.add(
+                MediaAsset(
+                    workspace_id=workspace_id,
+                    title=f"Arrived {name}",
+                    media_kind="video",
+                    source_type="test",
+                    original_path=f"/clips/{days}.mp4",
+                    original_sha256=f"sha-{days}",
+                    mime_type="video/mp4",
+                    size_bytes=10,
+                    created_by="library-owner",
+                    collected_at=utc_now() - timedelta(days=days, hours=1),
+                )
+            )
+
+    base = f"/api/workspaces/{workspace_id}/media/library"
+    listed = asyncio.run(request("GET", f"{base}/assets?collected_within_days=7"))
+    assert listed.status_code == 200
+    assert [asset["title"] for asset in listed.json()["assets"]] == [
+        "Arrived today",
+        "Arrived this week",
+    ]
+    assert listed.json()["total"] == 2
+
+    selectable = asyncio.run(request("GET", f"{base}/assets/ids?collected_within_days=7"))
+    assert selectable.status_code == 200
+    assert selectable.json()["matched"] == 2
+    assert set(selectable.json()["asset_ids"]) == {
+        asset["id"] for asset in listed.json()["assets"]
+    }
+
+    # A day back keeps only the one that arrived an hour ago, and no window at
+    # all still keeps everything - the filter has to be able to let go.
+    today = asyncio.run(request("GET", f"{base}/assets?collected_within_days=1"))
+    assert [asset["title"] for asset in today.json()["assets"]] == ["Arrived today"]
+    assert asyncio.run(request("GET", f"{base}/assets")).json()["total"] == 3
 
 
 def test_paging_past_the_end_is_empty_rather_than_an_error() -> None:

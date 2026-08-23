@@ -1278,6 +1278,9 @@ export const fr: Messages = {
     captions: "Sous-titres",
     voiceover: "Voix off",
     byLength: "Filtrer par durée",
+    downloaded: "Téléchargé",
+    anyTime: "À tout moment",
+    byDownloaded: "Filtrer par date de téléchargement",
   },
 
   clipEditor: {

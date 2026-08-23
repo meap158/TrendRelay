@@ -33,7 +33,7 @@ export {
  * disagreeing again.
  */
 /** Which controls a surface shows. The picker has no use for a media kind. */
-export type FilterField = "query" | "channel" | "platform" | "mediaKind" | "effect" | "processing" | "length";
+export type FilterField = "query" | "channel" | "platform" | "mediaKind" | "effect" | "processing" | "length" | "downloaded";
 
 const PROCESSING_LABEL_KEYS = {
   transcript_reviewed: "filters.transcriptReviewed",
@@ -43,6 +43,22 @@ const PROCESSING_LABEL_KEYS = {
   captions: "filters.captions",
   voiceover: "filters.voiceover",
 } as const;
+
+/**
+ * The windows worth offering, in days back from now.
+ *
+ * Round human periods rather than a scale: nobody asks for the last nine days.
+ * Written as days rather than as calendar boundaries because "today" here
+ * means the last twenty-four hours - a clip downloaded at eleven last night is
+ * still what somebody means when they say they just got it, and midnight is a
+ * strange place for a library to forget things.
+ */
+const DOWNLOADED: [number, string][] = [
+  [1, "Last 24 hours"],
+  [7, "Last 7 days"],
+  [30, "Last 30 days"],
+  [90, "Last 90 days"],
+];
 
 const LENGTHS: [number, string][] = [
   [15, "Up to 15s"],
@@ -211,6 +227,23 @@ export function AssetFilters({
             <option value="">{t("filters.anyLength")}</option>
             {LENGTHS.map(([seconds, text]) => (
               <option key={seconds} value={seconds}>{text}</option>
+            ))}
+          </Select>
+        </label>
+      )}
+
+      {shown.has("downloaded") && (
+        <label>{t("filters.downloaded")}
+          <Select
+            aria-label={t("filters.byDownloaded")}
+            value={values.downloadedWithinDays ?? ""}
+            onChange={(event) => set({
+              downloadedWithinDays: event.target.value ? Number(event.target.value) : undefined,
+            })}
+          >
+            <option value="">{t("filters.anyTime")}</option>
+            {DOWNLOADED.map(([days, text]) => (
+              <option key={days} value={days}>{text}</option>
             ))}
           </Select>
         </label>

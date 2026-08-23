@@ -1261,6 +1261,9 @@ export const ar: Messages = {
     captions: "التسميات التوضيحية",
     voiceover: "التعليق الصوتي",
     byLength: "تصفية حسب المدة",
+    downloaded: "تم التنزيل",
+    anyTime: "أي وقت",
+    byDownloaded: "تصفية حسب وقت التنزيل",
   },
 
   clipEditor: {

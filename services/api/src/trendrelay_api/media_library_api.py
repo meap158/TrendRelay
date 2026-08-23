@@ -7,7 +7,7 @@ import re
 from collections import Counter
 from collections.abc import Sequence
 from contextlib import suppress
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from secrets import token_hex
 from typing import Annotated, Any, Literal
@@ -542,6 +542,14 @@ class AssetFilter(BaseModel):
     #: captions, or generated voice. Kept separate from effects because a
     #: transcript is metadata, not a rendered visual recipe.
     processing: str | None = None
+    #: How recently the asset was collected, in days back from now.
+    #:
+    #: Relative rather than a pair of dates because the question people
+    #: actually ask of a download library is "what came in today" or "what
+    #: arrived this week", and a relative window answers that without the
+    #: caller having to know what today is in the workspace's timezone. An
+    #: absolute range can be added beside it later; it would not replace this.
+    collected_within_days: int | None = None
     #: Explicit ids supplied by a notification deep link. This is an
     #: intersection with ordinary filters, never a workspace bypass.
     asset_ids: list[str] = Field(default_factory=list, max_length=200)
@@ -661,6 +669,11 @@ def asset_conditions(
         values.append(MediaAsset.media_kind == filters.media_kind)
     if filters.max_duration_seconds:
         values.append(MediaAsset.duration_ms <= filters.max_duration_seconds * 1000)
+    if omit != "collected_within_days" and filters.collected_within_days:
+        values.append(
+            MediaAsset.collected_at
+            >= utc_now() - timedelta(days=filters.collected_within_days)
+        )
     if omit != "has_version" and filters.has_version:
         values.append(_effect_condition(filters.has_version))
     if omit != "processing" and filters.processing:
@@ -721,6 +734,7 @@ def list_asset_ids(
     max_duration_seconds: Annotated[int | None, Query(ge=1, le=86_400)] = None,
     has_version: Annotated[str | None, Query(max_length=64)] = None,
     processing: Annotated[str | None, Query(max_length=64)] = None,
+    collected_within_days: Annotated[int | None, Query(ge=1, le=3650)] = None,
     asset_ids: Annotated[str | None, Query(max_length=16_000)] = None,
 ) -> dict[str, Any]:
     """Every asset id the current filter matches, for a true select-all.
@@ -733,7 +747,7 @@ def list_asset_ids(
         q=q, platform=platform, platform_missing=platform_missing, creator=creator,
         creator_missing=creator_missing, media_kind=media_kind,
         max_duration_seconds=max_duration_seconds, has_version=has_version,
-        processing=processing,
+        processing=processing, collected_within_days=collected_within_days,
         asset_ids=_words(asset_ids, 200, 80),
     )
     where = asset_conditions(workspace_id, filters)
@@ -770,6 +784,7 @@ def list_assets(
     max_duration_seconds: Annotated[int | None, Query(ge=1, le=86_400)] = None,
     has_version: Annotated[str | None, Query(max_length=64)] = None,
     processing: Annotated[str | None, Query(max_length=64)] = None,
+    collected_within_days: Annotated[int | None, Query(ge=1, le=3650)] = None,
     asset_ids: Annotated[str | None, Query(max_length=16_000)] = None,
     sort: Annotated[Literal["newest", "oldest", "title", "duration"], Query()] = "newest",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
@@ -785,7 +800,7 @@ def list_assets(
         q=q, platform=platform, platform_missing=platform_missing, creator=creator,
         creator_missing=creator_missing, media_kind=media_kind,
         max_duration_seconds=max_duration_seconds, has_version=has_version,
-        processing=processing,
+        processing=processing, collected_within_days=collected_within_days,
         asset_ids=_words(asset_ids, 200, 80),
     )
 
