@@ -346,3 +346,66 @@ def test_removing_a_product_that_is_not_tagged_is_not_an_error(workspace) -> Non
     ).json()
 
     assert body["untagged"] == 1
+
+
+def test_a_post_written_around_a_product_brings_it_with_it(workspace) -> None:
+    """The case the pin rule reads wrong.
+
+    Somebody who writes a post in Publish around a particular product and then
+    files it into a campaign has already chosen. Refusing it and asking them to
+    go and tag the product first is bookkeeping, not a decision - so the caller
+    that means it says so, and the campaign learns the product from the post.
+    """
+    campaign_id = campaign(workspace)
+
+    added = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={
+            "video_path": "S:\\media\\crafted.mp4",
+            "body": "Written around this one.",
+            "offer_ids": ["offer-1"],
+            "carry_offers": True,
+        },
+    )
+
+    assert added.status_code == 201, added.text
+    assert added.json()["item"]["offer_ids"] == ["offer-1"]
+    # And the campaign may now promote it, which is what makes the post
+    # schedulable rather than a pin pointing outside its own catalogue.
+    tagged = request("GET", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/products")
+    assert "offer-1" in [row["offer_id"] for row in tagged.json()["products"]]
+
+
+def test_carrying_a_product_over_is_asked_for_rather_than_assumed(workspace) -> None:
+    """Without the flag the ordinary rule still holds, for every other caller."""
+    campaign_id = campaign(workspace)
+
+    refused = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={
+            "video_path": "S:\\media\\crafted.mp4",
+            "body": "Written around this one.",
+            "offer_ids": ["offer-1"],
+        },
+    )
+
+    assert refused.status_code == 422
+    assert "not on this campaign" in refused.json()["detail"]
+
+
+def test_a_product_carried_over_still_has_to_be_a_usable_offer(workspace) -> None:
+    """Carrying answers "the campaign has not met this product", nothing else."""
+    campaign_id = campaign(workspace)
+
+    refused = request(
+        "POST", f"/api/workspaces/{workspace}/campaigns/{campaign_id}/queue",
+        json={
+            "video_path": "S:\\media\\crafted.mp4",
+            "body": "Written around a product that does not exist.",
+            "offer_ids": ["offer-nowhere"],
+            "carry_offers": True,
+        },
+    )
+
+    assert refused.status_code == 422
+    assert "usable offer" in refused.json()["detail"]

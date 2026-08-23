@@ -229,6 +229,18 @@ class QueueItemCreate(BaseModel):
     first_comment: str | None = Field(default=None, max_length=2000)
     thread: list[str] = Field(default_factory=list, max_length=24)
     offer_ids: list[str] = Field(default_factory=list, max_length=5)
+    #: Bring the post's products onto the campaign if they are not there yet.
+    #:
+    #: Off by default, which keeps the ordinary rule: a pin is a way of choosing
+    #: among a campaign's products, not a way around the choice of which
+    #: products it has, and a post pinned to a stray offer is refused.
+    #:
+    #: A post arriving whole is the case that rule reads wrong. Somebody who has
+    #: written a post in Publish around a particular product and then files it
+    #: into a campaign has already chosen; refusing it and asking them to go and
+    #: tag the product first is bookkeeping, not a decision. So the caller that
+    #: means it says so, and the campaign learns the product from the post.
+    carry_offers: bool = False
 
 
 class QueueItemUpdate(BaseModel):
@@ -869,6 +881,22 @@ def create_queue_item(
             CampaignQueueItem.campaign_id == campaign_id
         )
     ) or 0
+    if body.carry_offers and body.offer_ids:
+        # Before the check, not instead of it. Everything else it enforces -
+        # that the offer exists, is usable, and fits the per-post cap - still
+        # has to hold; the only thing being answered here is "this campaign has
+        # not met this product yet", and the post is the introduction.
+        from trendrelay_api import campaign_offer_tags
+
+        known = set(campaign_offer_tags.tagged_offer_ids(session, campaign_id))
+        arriving = [
+            offer_id for offer_id in dict.fromkeys(body.offer_ids)
+            if offer_id not in known
+        ]
+        if arriving:
+            campaign_offer_tags.tag(
+                session, workspace_id, campaign_id, arriving, user_id=created_by,
+            )
     _require_offer_ids(
         session, workspace_id, body.offer_ids,
         campaign_id=campaign_id,

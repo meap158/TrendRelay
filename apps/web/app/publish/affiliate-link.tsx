@@ -52,6 +52,8 @@ export function AffiliateLink({
   campaignsByOffer,
   placementByPlatform,
   platforms,
+  offer,
+  onOffer,
   caption,
   firstComment,
   disclosure,
@@ -71,6 +73,16 @@ export function AffiliateLink({
   placementByPlatform: Record<string, LinkPlacement>;
   /** The networks this post is actually going to. */
   platforms: string[];
+  /**
+   * The product this post is written around, owned by the page.
+   *
+   * Lifted out of here because two other things need it: filing the post into
+   * a campaign carries the product with it, and the offer mode above picks it
+   * automatically. A choice that three surfaces read is not this component's
+   * private state.
+   */
+  offer: OfferChoice | null;
+  onOffer: (next: OfferChoice | null) => void;
   caption: string;
   firstComment: string;
   /** The sentence that leads the caption. Editable: see below. */
@@ -96,7 +108,6 @@ export function AffiliateLink({
 }) {
   const t = useT();
   const [picking, setPicking] = useState(false);
-  const [offer, setOffer] = useState<OfferChoice | null>(null);
 
   /** What each chosen network will do with this link, grouped by outcome. */
   const outcomes = useMemo(() => {
@@ -195,7 +206,7 @@ export function AffiliateLink({
         campaigns={campaigns}
         campaignsByOffer={campaignsByOffer}
         chosen={offer?.offer_id ?? ""}
-        onChoose={(next) => { setOffer(next); setPicking(false); }}
+        onChoose={(next) => { onOffer(next); setPicking(false); }}
         onClose={() => setPicking(false)}
       />
 

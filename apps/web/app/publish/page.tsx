@@ -21,7 +21,9 @@ import {
 import { accountIdentity } from "../publishing-account";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
+import { AddToCampaign } from "./add-to-campaign";
 import { AffiliateLink, DEFAULT_DISCLOSURE, type LinkPlacement } from "./affiliate-link";
+import type { OfferChoice } from "./offer-picker";
 import { CapabilityMatrixButton } from "./capability-matrix";
 import type { ProductRow, ProductsPayload } from "../attribution/types";
 import { ActionIcon } from "../ui/action-icons";
@@ -477,6 +479,16 @@ export default function PublishPage() {
   const [workspaceZone, setWorkspaceZone] = useState("UTC");
   const [disclosure, setDisclosure] = useState(DEFAULT_DISCLOSURE);
   const [disclose, setDisclose] = useState(false);
+  /**
+   * The product this post is written around, and how it got chosen.
+   *
+   * Owned here rather than inside the affiliate panel because three things
+   * read it: the panel that inserts its link, the offer mode that can pick it
+   * automatically, and filing the post into a campaign, which takes the
+   * product with it.
+   */
+  const [offer, setOffer] = useState<OfferChoice | null>(null);
+  const [filingToCampaign, setFilingToCampaign] = useState(false);
   /**
    * The Pinterest boards of the account this post is going to.
    *
@@ -3354,6 +3366,8 @@ export default function PublishPage() {
             campaignsByOffer={campaignTags.by_offer}
             placementByPlatform={connection?.link_placement ?? {}}
             platforms={chosen}
+            offer={offer}
+            onOffer={setOffer}
             caption={caption}
             firstComment={firstComment}
             disclosure={disclosure}
@@ -3624,6 +3638,20 @@ export default function PublishPage() {
             <Button type="submit" variant="secondary" busy={busy === "preview"} disabled={busy !== null}>
               <ActionIcon name="confirm" />{busy === "preview" ? "Checking" : "Dry-run"}
             </Button>
+            {/* The other thing a finished post can be: not sent now, but filed
+                into a queue something else sends on a schedule. Beside the
+                send rather than hidden in a menu, because writing one post by
+                hand and wanting it in a campaign is an ordinary thing to want
+                and the alternative was writing it twice. */}
+            <Button
+              variant="secondary"
+              type="button"
+              disabled={busy !== null || !(videoPath || imagePaths.length)}
+              title={videoPath || imagePaths.length
+                ? "File this post into a campaign's queue instead of sending it"
+                : "Choose the media for this post first"}
+              onClick={() => setFilingToCampaign(true)}
+            ><ActionIcon name="campaign" />Add to campaign</Button>
             <Button
               variant={delivery === "now" ? "danger" : "primary"}
               busy={busy === "publish"}
@@ -3808,6 +3836,27 @@ export default function PublishPage() {
           onClose={() => setPickerOpen(false)}
         />
       )}
+
+      <AddToCampaign
+        open={filingToCampaign}
+        workspaceId={workspaceId}
+        post={{
+          videoPath,
+          imagePaths,
+          title,
+          caption,
+          firstComment,
+          thread,
+          // The product it was written around, so the campaign gets the post
+          // somebody actually wrote rather than a caption with a link in it
+          // that the campaign cannot account for.
+          offerIds: offer ? [offer.offer_id] : [],
+          assetId: null,
+        }}
+        apiFetch={apiFetch}
+        onClose={() => setFilingToCampaign(false)}
+        onAdded={setNotice}
+      />
     </main>
   );
 }
