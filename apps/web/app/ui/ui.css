@@ -184,7 +184,11 @@ a.ui-button { text-decoration: none; }
 .ui-card-head { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 12px; }
 .ui-card-head h2 { margin: 0; font-size: 15px; font-weight: 500; }
 .ui-card-eyebrow { margin: 0 0 2px; color: var(--green); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-.ui-card-aside { display: flex; align-items: center; gap: 6px; }
+/* Wrapping, because an aside holding more than one control has no other way
+   to fit a narrow card - it would otherwise push its own contents out of the
+   heading. Ends aligned so a wrapped line still reads as part of the heading's
+   right-hand side rather than starting a new column. */
+.ui-card-aside { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
 
 /* --- field ----------------------------------------------------------------- */
 .ui-field { display: grid; gap: 6px; }

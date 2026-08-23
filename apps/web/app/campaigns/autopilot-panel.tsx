@@ -3647,8 +3647,29 @@ export function AutopilotPanel({
           ready: autopilot.queue_ready, total: autopilot.queue_total,
         })}
         aside={canEdit ? (
-          <Button variant="secondary" size="sm" busy={busy === "library"}
-            onClick={() => void loadLibrary()}><ActionIcon name="clip" />{t("autopilot.addFromLibrary")}</Button>
+          <>
+            {/* In the heading, not in the selection bar below it.
+                The bar grows a row of actions the moment anything is ticked,
+                and the strip sat between the count and those actions - so
+                selecting a post shoved the chips sideways under the cursor
+                that had just clicked one. This heading does not change with
+                the selection, so the chips stay where they were put.
+
+                Only when there is more than one pile to choose between: a
+                queue that is entirely "in rotation" has nothing to filter. */}
+            {queueChips.length > 2 && (
+              <FilterChipStrip
+                chips={queueChips}
+                selected={activeQueueTag}
+                onSelect={setQueueTag}
+                ariaLabel={t("autopilot.queueFilterLabel")}
+                className="queue-filter-strip"
+                dense
+              />
+            )}
+            <Button variant="secondary" size="sm" busy={busy === "library"}
+              onClick={() => void loadLibrary()}><ActionIcon name="clip" />{t("autopilot.addFromLibrary")}</Button>
+          </>
         ) : undefined}
         toolbar={canEdit && queue.length > 0 ? (
           <div className={`campaign-queue-bar${pickedQueue.length ? " active" : ""}`}>
@@ -3672,24 +3693,6 @@ export function AutopilotPanel({
                 ? `${pickedQueue.length} selected`
                 : `Select from ${shownQueue.length} post${shownQueue.length === 1 ? "" : "s"}`}
             </strong>
-            {/* In the bar rather than above it. A strip of its own cost a whole
-                row - its padding, its border and the gap under it - to carry
-                one control, while this row sat half empty until something was
-                ticked. It takes the slack and scrolls inside it; on a narrow
-                screen it wraps, which is still one line rather than one row.
-
-                Only when there is more than one pile to choose between: a
-                queue that is entirely "in rotation" has nothing to filter. */}
-            {queueChips.length > 2 && (
-              <FilterChipStrip
-                chips={queueChips}
-                selected={activeQueueTag}
-                onSelect={setQueueTag}
-                ariaLabel={t("autopilot.queueFilterLabel")}
-                className="queue-filter-strip"
-                dense
-              />
-            )}
             {pickedQueue.length > 0 && (
               <>
                 {pickedQueue.some((item) => item.state !== "approved") && (
