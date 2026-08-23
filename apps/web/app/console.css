@@ -1320,6 +1320,9 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
    approving. Its own line rather than more of the sentence above: it is the
    only actionable part of that row. */
 .campaign-graduation { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+/* The Autonomous unlock progress beside the Authority label: a small chip, the
+   full count and what still has to resolve on its hover. */
+.autopilot-authority-hint { margin-inline-start: 6px; color: var(--muted); font-size: 10px; font-style: normal; font-weight: 500; white-space: nowrap; cursor: help; border-block-end: 1px dotted var(--line-strong); }
 .autopilot-queue-thumb { display: grid; place-items: center; }
 .autopilot-queue-thumb .picker-thumb, .autopilot-queue-thumb .campaign-pipeline-thumb-empty { display: grid; place-items: center; inline-size: 84px; block-size: 64px; overflow: hidden; border-radius: var(--radius-sm); background: var(--line); color: var(--muted); }
 .autopilot-queue-thumb .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }
@@ -1503,6 +1506,16 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-approval-where > small { color: var(--muted); font-size: 10px; }
 .campaign-approval-where > .ui-badge { margin-inline-start: auto; }
 .campaign-approval-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+/* The bulk actions above the list and aligned with the row checkboxes, so
+   picking posts and acting on them are one column of controls, not a checkbox
+   on the left and its buttons in the card's corner. Keeps its height whether or
+   not anything is picked, so the list below does not jump. */
+.campaign-approval-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-block-size: 34px; margin-block-end: 10px; padding-inline-start: 12px; }
+.campaign-approval-selectall { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.campaign-approval-selectall input { inline-size: 15px; block-size: 15px; margin: 0; accent-color: var(--link); cursor: pointer; }
+.campaign-approval-toolbar > strong { font-size: 12px; }
+.campaign-approval-clear { appearance: none; padding: 4px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.campaign-approval-clear:hover { color: var(--text); text-decoration: underline; }
 /* Shorter here than in the composer. A 9:16 clip at the full width of this
    column is over 500px tall, and the facts beside it end in about 200 - so
    every held post was a screen of its own with a void down one side, and ten

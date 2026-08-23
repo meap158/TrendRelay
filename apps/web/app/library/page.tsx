@@ -1119,7 +1119,7 @@ function LibraryContent() {
   // Errors are reported over the page: in flow they shifted everything below
   // them whenever an action finished. The bulk-action outcome below is not a
   // banner — it reads back inline where the run was started — so it stays put.
-  const { messages: statusMessages, fail, dismiss } = useStatus();
+  const { messages: statusMessages, succeed, fail, dismiss } = useStatus();
   const {
     jobs: notificationJobs,
     refresh: refreshJobs,
@@ -2415,7 +2415,7 @@ function LibraryContent() {
           assets={campaignPickerFor}
           apiFetch={apiFetch}
           onClose={() => setCampaignPickerFor([])}
-          onAdded={(text) => { setMessage(text); setSelection(new Set()); }}
+          onAdded={(text) => { succeed(text); setSelection(new Set()); }}
         />
       )}
       {workspaceId && selected && (

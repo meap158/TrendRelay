@@ -1938,6 +1938,20 @@ export function AutopilotPanel({
     });
   }, [loadExceptions]);
 
+  // A running campaign keeps producing posts to approve, and switching it on
+  // produces the first of them - neither of which should need a page reload to
+  // appear. So while it is enabled the held list is reloaded at once and then
+  // on a gentle interval, paused whenever the tab is not being looked at.
+  useEffect(() => {
+    if (!autopilot?.enabled) return;
+    void loadExceptions();
+    const tick = () => {
+      if (document.visibilityState !== "hidden") void loadExceptions();
+    };
+    const timer = window.setInterval(tick, 20000);
+    return () => window.clearInterval(timer);
+  }, [autopilot?.enabled, loadExceptions]);
+
   /**
    * One decision about one held post.
    *
@@ -3178,7 +3192,28 @@ export function AutopilotPanel({
                 explain each other; read apart, none of them explains
                 anything. */}
             <label className="autopilot-delivery">
-              <span>Authority</span>
+              <span>
+                Authority
+                {/* The unlock progress, where the choice is made rather than
+                    only where a refused switch would have explained it: the
+                    chip says how close Autonomous is, and its hover carries the
+                    full count and what still has to resolve. */}
+                {autopilot.graduation && autopilot.authority !== "autonomous" && (
+                  <em
+                    className="autopilot-authority-hint"
+                    title={autopilot.graduation.ready
+                      ? "This campaign has earned Autonomous - switch to it here and only weakly matched products will wait."
+                      : `Autonomous unlocks at ${autopilot.graduation.required} provider-confirmed posts - ${autopilot.graduation.published} so far`
+                        + (autopilot.graduation.unresolved
+                          ? `, with ${autopilot.graduation.unresolved} uncertain deliver${autopilot.graduation.unresolved === 1 ? "y" : "ies"} to resolve first.`
+                          : ".")}
+                  >
+                    {autopilot.graduation.ready
+                      ? "Autonomous ready"
+                      : `${autopilot.graduation.published}/${autopilot.graduation.required} to Autonomous`}
+                  </em>
+                )}
+              </span>
               <Select
                 value={autopilot.authority}
                 disabled={!canEdit}
@@ -3366,52 +3401,7 @@ export function AutopilotPanel({
         <Card
           eyebrow="Approval"
           title="Needs your approval"
-          aside={
-            <div className="campaign-approval-bar">
-              <Badge tone="warn">{exceptions.length} held</Badge>
-              {/* Offered only where it saves something. Two accounts and five
-                  posting times is ten confirmations a day, each its own
-                  dialog; one held post is one click either way. */}
-              {canEdit && exceptions.length > 1 && (
-                <>
-                  <Button variant="quiet" size="sm"
-                    onClick={() => setPicked(picked.size === exceptions.length
-                      ? new Set()
-                      : new Set(exceptions.map((item) => item.id)))}>
-                    {picked.size === exceptions.length ? "Clear" : "Select all"}
-                  </Button>
-                  {/* Every answer a single post offers, over the selection.
-                      Approving in one action while the other three stayed
-                      one-at-a-time made clearing an inbox cost more than
-                      filling it. */}
-                  <Button variant="primary" size="sm"
-                    disabled={!picked.size}
-                    busy={busy === "approve-batch"}
-                    onClick={() => void approvePicked()}>
-                    Approve {picked.size || ""}
-                  </Button>
-                  <Button variant="secondary" size="sm"
-                    disabled={!picked.size}
-                    busy={busy === "approve-batch"}
-                    onClick={() => void approvePicked({ publishNow: true })}>
-                    Publish now
-                  </Button>
-                  <Button variant="quiet" size="sm"
-                    disabled={!picked.size}
-                    busy={busy === "dismiss-batch"}
-                    onClick={() => void dismissPicked()}>
-                    Skip
-                  </Button>
-                  <Button variant="quiet" size="sm"
-                    disabled={!picked.size}
-                    busy={busy === "dismiss-batch"}
-                    onClick={() => void dismissPicked({ stopProposing: true })}>
-                    Decline
-                  </Button>
-                </>
-              )}
-            </div>
-          }
+          aside={<Badge tone="warn">{exceptions.length} held</Badge>}
         >
           {/* "Nothing is published until you approve it" is rule 6 of the
               posting strategy, on the same screen. What is left is the part
@@ -3451,6 +3441,40 @@ export function AutopilotPanel({
               <strong>Decline</strong> also pauses the post, so it stops being
               proposed until you put it back.
             </small>
+          )}
+          {/* Aligned with the checkboxes down the list, so ticking posts and
+              acting on them read as one thing - rather than a checkbox on the
+              left of each row and its buttons off in the card's top corner. */}
+          {canEdit && exceptions.length > 1 && (
+            <div className="campaign-approval-toolbar" data-active={picked.size > 0 || undefined}>
+              <label className="campaign-approval-selectall">
+                <input
+                  type="checkbox"
+                  ref={(el) => { if (el) el.indeterminate = picked.size > 0 && picked.size < exceptions.length; }}
+                  checked={picked.size === exceptions.length}
+                  aria-label="Select all held posts"
+                  onChange={() => setPicked(picked.size === exceptions.length
+                    ? new Set()
+                    : new Set(exceptions.map((item) => item.id)))}
+                />
+                Select all
+              </label>
+              {picked.size > 0 && (
+                <>
+                  <strong>{picked.size} selected</strong>
+                  <Button variant="primary" size="sm" busy={busy === "approve-batch"}
+                    onClick={() => void approvePicked()}>Approve {picked.size}</Button>
+                  <Button variant="secondary" size="sm" busy={busy === "approve-batch"}
+                    onClick={() => void approvePicked({ publishNow: true })}>Publish now</Button>
+                  <Button variant="quiet" size="sm" busy={busy === "dismiss-batch"}
+                    onClick={() => void dismissPicked()}>Skip</Button>
+                  <Button variant="quiet" size="sm" busy={busy === "dismiss-batch"}
+                    onClick={() => void dismissPicked({ stopProposing: true })}>Decline</Button>
+                  <button type="button" className="campaign-approval-clear"
+                    onClick={() => setPicked(new Set())}>Clear</button>
+                </>
+              )}
+            </div>
           )}
           <ul className="campaign-approval-list">
             {exceptions.map((item) => (
@@ -5563,6 +5587,23 @@ export function AutopilotPanel({
                                 Planned
                               </Badge>
                             )}
+                            {/* Beside the badge, which is where the grid puts
+                                the same action. It used to live in the muted
+                                source line below as ten-pixel undecorated
+                                text, deliberately styled not to read as a link
+                                so it would not pair with the one next to it -
+                                and the result was an action nobody could find.
+                                A row that can be edited says so with a
+                                button. */}
+                            {canEdit && entry.kind === "planned"
+                              && entry.queue_item_id
+                              && queueById.has(entry.queue_item_id) && (
+                              <Button variant="quiet" size="sm"
+                                onClick={() => openPostEditor(
+                                  queueById.get(entry.queue_item_id!)!, "posts")}>
+                                Edit
+                              </Button>
+                            )}
                           </div>
                           <h4>{entry.post_url ? (
                             <a href={entry.post_url} target="_blank" rel="noreferrer">
@@ -5575,17 +5616,6 @@ export function AutopilotPanel({
                               without this the reader cannot tell that. */}
                           {entry.queue_item_id && queueById.get(entry.queue_item_id) && (
                             <p className="campaign-entry-source">
-                              {/* Editable from here, not only findable. This
-                                  is where somebody reads the post and decides
-                                  it needs changing, and sending them to
-                                  another tab to find the row again loses the
-                                  thought that started it. */}
-                              {canEdit && entry.kind === "planned" && (
-                                <button type="button" className="campaign-entry-edit"
-                                  onClick={() => openPostEditor(
-                                    queueById.get(entry.queue_item_id!)!, "posts")}
-                                  >Edit this post</button>
-                              )}
                               From{" "}
                               <button type="button" onClick={() => {
                                 setView("content");
