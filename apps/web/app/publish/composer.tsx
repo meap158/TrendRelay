@@ -12,6 +12,7 @@ import {
   type AssetFilterValues,
 } from "../ui/asset-filters";
 import { Button } from "../ui/button";
+import { useLibraryAssets } from "../../lib/use-library-assets";
 import { Select } from "../ui/select";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
@@ -166,13 +167,8 @@ export function AssetThumbnail({
  */
 export function MediaPicker({
   open,
-  assets,
   workspaceId,
   apiFetch,
-  loading,
-  failure,
-  facets,
-  onSearch,
   onPick,
   onClose,
   mediaKind = "video",
@@ -181,13 +177,8 @@ export function MediaPicker({
   capacity = 0,
 }: {
   open: boolean;
-  assets: LibraryAsset[];
   workspaceId: string;
   apiFetch: Fetcher;
-  loading: boolean;
-  failure: string | null;
-  facets: AssetFacets;
-  onSearch: (filters: AssetFilterValues) => void;
   onPick: (asset: LibraryAsset) => void;
   onClose: () => void;
   /** What this dialog is being opened to find. */
@@ -213,23 +204,28 @@ export function MediaPicker({
   const order = new Map(chosen.map((path, index) => [path, index + 1]));
   const full = capacity > 0 && chosen.length >= capacity;
   const base = images ? IMAGE_PICKER_BASE : PICKER_BASE;
-  // Initialised from what this dialog was opened for. The caller keys it on
-  // `mediaKind`, so opening it for carousel frames after opening it for a clip
-  // starts a fresh dialog rather than one still narrowed to the last kind.
-  const [filters, setFilters] = useState<AssetFilterValues>(base);
+  // The shared library loop - the same hook the campaign media browser reads
+  // with, so the two pickers cannot drift. It owns the debounce, the paging,
+  // the stale-response guard and the counts; the baseline is what this dialog
+  // was opened for, and the caller keys the component on `mediaKind` so
+  // opening it for carousel frames after opening it for a clip starts fresh.
+  // Audio is dropped on arrival: Publish sends a clip or a gallery of
+  // pictures, so a sound file has nothing to become here.
+  const picker = useLibraryAssets<LibraryAsset>({
+    workspaceId, apiFetch,
+    baseline: base,
+    enabled: open,
+    keep: (asset) => asset.media_kind !== "audio",
+  });
+  const { assets, filters } = picker;
+  const loading = picker.loading !== "";
+  const failure = picker.failure;
 
-  /** Applied on change, because narrowing the list is a new search either way. */
-  function apply(next: AssetFilterValues) {
-    setFilters(next);
-    onSearch(next);
-  }
-
-  // Audio is not offered. Publish sends a clip or a gallery of pictures, so a
-  // sound file has nothing to become here, and a kind in the chooser that
-  // returns a list nobody can pick from is worse than one that is absent.
+  // A kind in the chooser that returns a list nobody can pick from is worse
+  // than one that is absent, so the facet row drops audio too.
   const postable: AssetFacets = {
-    ...facets,
-    media_kinds: facets.media_kinds.filter(
+    ...picker.facets,
+    media_kinds: picker.facets.media_kinds.filter(
       (facet) => (POSTABLE_KINDS as readonly string[]).includes(facet.value),
     ),
   };
@@ -257,7 +253,7 @@ export function MediaPicker({
         facets={postable}
         fields={["query", "mediaKind", "effect", "channel", "platform", "length"]}
         cleared={base}
-        onChange={apply}
+        onChange={(next) => picker.setFilters(next)}
       />
       {/* What the picking has added up to, where the picking happens. It was
           only ever shown on the page behind this dialog, so the answer to "how
@@ -334,6 +330,20 @@ export function MediaPicker({
           );
         })}
       </ul>
+      {/* The count and the way to the rest. This dialog used to stop at its
+          first page and never say so - a five-hundred-clip library showed
+          forty rows and looked like forty was everything. */}
+      {picker.canLoadMore && (
+        <p className="picker-more">
+          Showing {assets.length} of {picker.total.toLocaleString()} matching.
+          <Button
+            variant="quiet"
+            size="sm"
+            busy={picker.loading === "more"}
+            onClick={() => void picker.loadMore()}
+          >Load more</Button>
+        </p>
+      )}
     </Dialog>
   );
 }

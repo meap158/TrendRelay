@@ -72,11 +72,12 @@ import { money } from "../attribution/format";
 type AttachedProduct = CommissionBearing & { offer_id: string; name: string };
 import {
   AssetFilters,
-  EMPTY_FACETS,
-  assetFilterParams,
-  type AssetFacets,
   type AssetFilterValues,
 } from "../ui/asset-filters";
+import {
+  SELECT_ALL_ASSET_CEILING,
+  useLibraryAssets,
+} from "../../lib/use-library-assets";
 import {
   AssetThumbnail,
   PostPreview,
@@ -760,19 +761,18 @@ const TAGGED_PER_PAGE = 20;
 const QUEUE_BATCH = 8;
 
 /** One request's worth of clips, which is the assets endpoint's own ceiling. */
-const PICKER_PAGE = 100;
 /** Rows of the ready-to-post queue shown per page. */
 const QUEUE_PAGE_SIZE = 50;
 
 /**
  * How many clips the picker will hold at once.
  *
- * A select-all pages until it has them, so this is a request count as much as
- * a row count: ten pages, held as whole assets because the composer renders
- * each one. Beyond it the filter is the better tool, and the bar says so
- * rather than stopping short and letting the number look like the whole match.
+ * The shared library hook's own select-all bound: a select-all pages until it
+ * has them, held as whole assets because the composer renders each one.
+ * Beyond it the filter is the better tool, and the bar says so rather than
+ * stopping short and letting the number look like the whole match.
  */
-const PICKER_CEILING = 1_000;
+const PICKER_CEILING = SELECT_ALL_ASSET_CEILING;
 
 /** What one queued package is written with, before it is sent. */
 type PostCopy = { body: string; hashtags: string };
@@ -1713,20 +1713,22 @@ export function AutopilotPanel({
   const [exceptions, setExceptions] = useState<HeldExecution[]>([]);
   const [busy, setBusy] = useState("");
   const [adding, setAdding] = useState(false);
-  const [library, setLibrary] = useState<LibraryAsset[]>([]);
-  const [libraryFacets, setLibraryFacets] = useState<AssetFacets>(EMPTY_FACETS);
-  // No media-kind filter to begin with: a campaign can post a clip or a
-  // carousel, so the picker opens on everything and the filter row above it is
-  // there for narrowing down. Starting on "video" was what made pictures
-  // invisible even after the queue learned to hold them.
-  const [libraryFilters, setLibraryFilters] = useState<AssetFilterValues>({});
-  const [libraryTotal, setLibraryTotal] = useState(0);
-  /**
-   * How many rows have been asked of the API, which is not `library.length`.
-   * Audio is dropped on arrival, so the count on screen runs behind the count
-   * fetched - and paging from the wrong one would skip a clip per sound file.
-   */
-  const [libraryOffset, setLibraryOffset] = useState(0);
+  const [picking, setPicking] = useState(false);
+  // The shared library loop - the same hook the Publish picker reads with,
+  // so a capability added there arrives here without this file changing.
+  // No media-kind baseline: a campaign can post a clip or a carousel, so the
+  // picker opens on everything and the filter row above it narrows. Starting
+  // on "video" was what made pictures invisible even after the queue learned
+  // to hold them. Audio is dropped on arrival - a campaign posts a clip or a
+  // carousel, so a sound file has nothing to become here.
+  const picker = useLibraryAssets<LibraryAsset>({
+    workspaceId, apiFetch,
+    enabled: picking,
+    keep: (asset) => asset.media_kind !== "audio",
+  });
+  const library = picker.assets;
+  const libraryFacets = picker.facets;
+  const libraryFilters = picker.filters;
   /** The clips sharing this campaign copy. Empty when the composer is closed. */
   const [drafting, setDrafting] = useState<LibraryAsset[]>([]);
   // The product decision is part of the package, made when it is added:
@@ -1826,7 +1828,6 @@ export function AutopilotPanel({
   const [editingDisclosure, setEditingDisclosure] = useState("");
   const [editingBioHint, setEditingBioHint] = useState("");
   const [composed, setComposed] = useState<ComposedPost | null>(null);
-  const [picking, setPicking] = useState(false);
   // Two panes: Posts is what goes out, Queue & setup is everything behind it.
   //
   // It was three, split from one endless scroll so each section could say what
@@ -1845,18 +1846,6 @@ export function AutopilotPanel({
   const [view, setView] = useState<"posts" | "content">(
     campaignStatus === "active" ? "posts" : "content",
   );
-  const searchTimer = useRef<number | null>(null);
-  /**
-   * Which library query the picker's rows belong to.
-   *
-   * Filtering replaces the rows and paging appends to them, and the two race:
-   * typing in the search box while "Load more" or a select-all was in flight
-   * appended the old query's page onto the new query's first page. That put
-   * rows the filter excludes back on screen, and where the two pages overlap
-   * it listed one asset twice under one React key. Every load takes a number;
-   * a page that comes back under an old one is dropped rather than merged.
-   */
-  const libraryRequest = useRef(0);
   const automaticPreview = useRef(false);
   // The references this mirrors (Buffer, Zernio) offer the same posts as a
   // list and as a calendar; the list answers "what went out", the calendar
@@ -2021,10 +2010,6 @@ export function AutopilotPanel({
     });
   }, [refresh, apiFetch, workspaceId, fail]);
 
-  useEffect(() => () => {
-    if (searchTimer.current) window.clearTimeout(searchTimer.current);
-  }, []);
-
   // The inbox is the panel's front door now - approving held posts is the
   // operator's recurring job - so it loads with the page rather than behind
   // a pane. Deferred out of the effect body, like the initial refresh.
@@ -2152,62 +2137,12 @@ export function AutopilotPanel({
     }
   }
 
-  /**
-   * One page of the library, as the API hands it over.
-   *
-   * Videos and pictures both: a campaign can post a carousel now, and a picker
-   * that only offers clips cannot express one. Still only what the library
-   * considers ready - the queue posts unattended, so an asset mid processing
-   * has no business in it.
-   */
-  async function fetchLibraryPage(filters: AssetFilterValues, offset: number) {
-    const params = assetFilterParams(filters);
-    params.set("limit", String(PICKER_PAGE));
-    if (offset) params.set("offset", String(offset));
-    return json<{
-      assets: LibraryAsset[]; facets?: AssetFacets; total?: number;
-    }>(await apiFetch(
-      `/api/workspaces/${workspaceId}/media/library/assets?${params.toString()}`,
-    ));
-  }
-
-  /**
-   * A campaign posts a clip or a carousel, so a sound file has nothing to
-   * become here. Dropped on arrival rather than offered and then refused.
-   */
-  const postableOnly = (assets: LibraryAsset[] = []) =>
-    assets.filter((asset) => asset.media_kind !== "audio");
-
-  /**
-   * Rows on screen plus rows just arrived, as a set rather than a list.
-   *
-   * The picker holds each asset once - it is a selection, and an asset chosen
-   * twice means nothing. Appending blind made that reachable, and React saw it
-   * first: two `<li>` under one asset id is the duplicate-key warning, and the
-   * row it drops is a row the operator cannot tick.
-   */
-  const mergeAssets = (current: LibraryAsset[], arrived: LibraryAsset[]) => {
-    const seen = new Set(current.map((asset) => asset.id));
-    return [...current, ...arrived.filter((asset) => !seen.has(asset.id))];
-  };
-
-  async function loadLibrary(filters: AssetFilterValues = libraryFilters) {
-    const generation = ++libraryRequest.current;
-    setBusy("library");
-    try {
-      const body = await fetchLibraryPage(filters, 0);
-      if (libraryRequest.current !== generation) return;
-      setLibrary(postableOnly(body.assets));
-      setLibraryOffset(body.assets?.length ?? 0);
-      if (body.facets) setLibraryFacets(body.facets);
-      setLibraryTotal(body.total ?? body.assets?.length ?? 0);
-      setDrafting([]);
-      setPicking(true);
-    } catch (reason) {
-      fail(explainFailure(reason, "The library could not be read."));
-    } finally {
-      setBusy("");
-    }
+  /** Open the picker. The shared hook fetches on open and on every filter
+      change; what stays here is only what this surface adds - the composer
+      reset, and the selection. */
+  function loadLibrary() {
+    setDrafting([]);
+    setPicking(true);
   }
 
   // Arriving from Library's "Add to campaign": open the picker on exactly the
@@ -2222,88 +2157,38 @@ export function AutopilotPanel({
     const ids = [...new Set(wanted.split(",").filter(Boolean))];
     window.history.replaceState(null, "", "/campaigns");
     setView("content");
-    void (async () => {
-      try {
-        const body = await fetchLibraryPage({ asset_ids: ids } as AssetFilterValues, 0);
-        const assets = postableOnly(body.assets);
-        setLibrary(assets);
+    void picker.fetchByIds(ids)
+      .then((assets) => {
         setSelectedAssets(Object.fromEntries(assets.map((asset) => [asset.id, asset])));
         setPicking(true);
-      } catch {
-        fail("The handed-off clips could not be loaded.");
-      }
-    })();
+      })
+      .catch(() => fail("The handed-off clips could not be loaded."));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per workspace on arrival
   }, [workspaceId]);
-
-  /** The next page, appended. What "showing 100 of 131" was missing. */
-  async function loadMoreLibrary() {
-    const generation = libraryRequest.current;
-    setBusy("library-more");
-    try {
-      const body = await fetchLibraryPage(libraryFilters, libraryOffset);
-      // Dropped rather than appended if the filter moved on while this was in
-      // flight: this page was cut against a query nobody is looking at now.
-      if (libraryRequest.current !== generation) return;
-      const arrived = body.assets ?? [];
-      setLibrary((current) => mergeAssets(current, postableOnly(arrived)));
-      setLibraryOffset((current) => current + arrived.length);
-      if (body.total !== undefined) setLibraryTotal(body.total);
-    } catch (reason) {
-      fail(explainFailure(reason, "The rest of the library could not be read."));
-    } finally {
-      setBusy("");
-    }
-  }
 
   /**
    * Tick everything the filter matches, not merely everything on screen.
    *
-   * Pages until the matches run out, because the composer is handed whole
-   * assets rather than ids - the Library's own select-all can stop at ids and
-   * so needs only one request. Bounded, and the bound is stated rather than
-   * implied: a selection that quietly stopped short is the bug this replaces.
+   * The hook pages whole assets to its stated ceiling, because the composer
+   * is handed rows rather than ids; what stays here is turning the walk's
+   * result into this surface's selection. Null means the filter changed
+   * under the walk, and a selection of a query nobody is looking at is not
+   * made.
    */
   async function selectAllMatching() {
-    const generation = libraryRequest.current;
-    setBusy("library-all");
-    try {
-      let collected = [...library];
-      let offset = libraryOffset;
-      let total = libraryTotal;
-      while (offset < Math.min(total, PICKER_CEILING)) {
-        const body = await fetchLibraryPage(libraryFilters, offset);
-        // Abandoned mid-page if the filter changed under it, rather than
-        // finishing a walk of a query that is no longer on screen.
-        if (libraryRequest.current !== generation) return;
-        const arrived = body.assets ?? [];
-        // No progress means the end, whatever the count said. Without this a
-        // total that disagrees with the rows on hand spins forever.
-        if (!arrived.length) break;
-        collected = mergeAssets(collected, postableOnly(arrived));
-        offset += arrived.length;
-        if (body.total !== undefined) total = body.total;
-      }
-      setLibrary(collected);
-      setLibraryOffset(offset);
-      setLibraryTotal(total);
+    const collected = await picker.fetchAllMatching();
+    if (collected) {
       setSelectedAssets(Object.fromEntries(collected.map((asset) => [asset.id, asset])));
-    } catch (reason) {
-      fail(explainFailure(reason, "The whole selection could not be read."));
-    } finally {
-      setBusy("");
     }
   }
 
-  function filterLibrary(next: AssetFilterValues) {
-    // Passed through as given. This used to pin `mediaKind` to "video" on the
-    // way past, so the picker opened on everything and then hid every picture
-    // the moment anybody typed a search or chose a channel - which made the
-    // carousel support look absent when it was only one line out of reach.
-    setLibraryFilters(next);
-    if (searchTimer.current) window.clearTimeout(searchTimer.current);
-    searchTimer.current = window.setTimeout(() => void loadLibrary(next), 220);
-  }
+  // The hook's own failure line, surfaced the way every other failure in
+  // this panel is. Keyed on the message so one failure is one toast.
+  const pickerFailure = picker.failure;
+  useEffect(() => {
+    if (pickerFailure) fail(pickerFailure);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fail is stable in practice; keying on the message
+  }, [pickerFailure]);
 
   const loadPreview = useCallback(async (announce = true) => {
     setBusy("preview");
@@ -3163,7 +3048,7 @@ export function AutopilotPanel({
    * Read from the facets rather than the page of results, because the API
    * computes them with the media kind left out of its own filter - so each
    * count is what choosing that kind would actually show, under whatever else
-   * is already narrowed. `libraryTotal` is not used for this: it counts audio
+   * is already narrowed. The hook's `total` is not used for this: it counts audio
    * too, and audio is not offered here.
    */
   const kindCount = (kind: string) =>
@@ -3802,8 +3687,8 @@ export function AutopilotPanel({
                 dense
               />
             )}
-            <Button variant="secondary" size="sm" busy={busy === "library"}
-              onClick={() => void loadLibrary()}><ActionIcon name="clip" />{t("autopilot.addFromLibrary")}</Button>
+            <Button variant="secondary" size="sm"
+              onClick={() => loadLibrary()}><ActionIcon name="clip" />{t("autopilot.addFromLibrary")}</Button>
           </>
         ) : undefined}
         toolbar={canEdit && queue.length > 0 ? (
@@ -3900,7 +3785,7 @@ export function AutopilotPanel({
                     type="button"
                     className={active ? "selected" : ""}
                     aria-pressed={active}
-                    onClick={() => filterLibrary({ ...libraryFilters, mediaKind: value })}
+                    onClick={() => picker.setFilters({ ...libraryFilters, mediaKind: value }, true)}
                   >{label} <span>{(count ?? 0).toLocaleString()}</span></button>
                 );
               })}
@@ -3910,7 +3795,7 @@ export function AutopilotPanel({
               facets={libraryFacets}
               fields={["query", "effect", "channel", "platform", "length"]}
               cleared={{}}
-              onChange={filterLibrary}
+              onChange={(next) => picker.setFilters(next)}
             />
             <div className="campaign-media-actions">
               {/* The same control the Library page carries, in the same shape,
@@ -3958,14 +3843,14 @@ export function AutopilotPanel({
                   this reaches the rest. Named with the real number so it is
                   never mistaken for the count already on screen. */}
               {matchingCount > library.length && library.length < PICKER_CEILING && (
-                <Button variant="secondary" size="sm" busy={busy === "library-all"}
+                <Button variant="secondary" size="sm" busy={picker.loading === "all"}
                   onClick={() => void selectAllMatching()}>
                   Select all {Math.min(matchingCount, PICKER_CEILING).toLocaleString()} matching
                 </Button>
               )}
               {matchingCount > library.length && library.length < PICKER_CEILING && (
-                <Button variant="quiet" size="sm" busy={busy === "library-more"}
-                  onClick={() => void loadMoreLibrary()}>Load more</Button>
+                <Button variant="quiet" size="sm" busy={picker.loading === "more"}
+                  onClick={() => void picker.loadMore()}>Load more</Button>
               )}
               {/* Every editing action the Library offers, not only effects. */}
               <ActionMenu
@@ -4013,7 +3898,11 @@ export function AutopilotPanel({
                   </label>
                 </li>
               ))}
-              {!library.length && <li className="campaign-media-empty">{t("autopilot.noClips")}</li>}
+              {!library.length && (
+                <li className="campaign-media-empty">
+                  {picker.loading === "list" ? "Reading the library…" : t("autopilot.noClips")}
+                </li>
+              )}
             </ul>
           </div>
         </Dialog>

@@ -21,12 +21,6 @@ import {
 import { accountIdentity } from "../publishing-account";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
-import {
-  EMPTY_FACETS,
-  assetFilterParams,
-  type AssetFacets,
-  type AssetFilterValues,
-} from "../ui/asset-filters";
 import { AffiliateLink, DEFAULT_DISCLOSURE, type LinkPlacement } from "./affiliate-link";
 import { CapabilityMatrixButton } from "./capability-matrix";
 import type { ProductRow, ProductsPayload } from "../attribution/types";
@@ -50,8 +44,6 @@ import {
 import {
   MEDIA_DRAG_TYPE,
   MediaPicker,
-  IMAGE_PICKER_BASE,
-  PICKER_BASE,
   PostPreview,
   SlotEditor,
   UpcomingPosts,
@@ -475,12 +467,8 @@ export default function PublishPage() {
   const [boardsByAccount, setBoardsByAccount] = useState<
     Record<string, Array<{ id: string; name: string }>>
   >({});
-  const [library, setLibrary] = useState<LibraryAsset[]>([]);
-  const [libraryFacets, setLibraryFacets] = useState<AssetFacets>(EMPTY_FACETS);
-  const [libraryState, setLibraryState] = useState<{ loading: boolean; failure: string | null }>({
-    loading: false,
-    failure: null,
-  });
+  // The picker reads the library itself now, through the shared hook - the
+  // same loop the campaign browser uses - so nothing here holds its rows.
 
   function chooseDelivery(mode: Delivery) {
     if (mode === "schedule") setNow(new Date());
@@ -1403,33 +1391,6 @@ export default function PublishPage() {
     }
   }
 
-  const loadLibrary = useCallback(
-    async (filters: AssetFilterValues = PICKER_BASE) => {
-      setLibraryState({ loading: true, failure: null });
-      try {
-        // Built by the shared serialiser, so the picker and the Library page
-        // cannot express the same filter as two different requests.
-        const params = assetFilterParams(filters);
-        params.set("limit", "40");
-        const body = await json<{ assets: LibraryAsset[]; facets?: AssetFacets }>(
-          await apiFetch(`/api/workspaces/${workspaceId}/media/library/assets?${params}`),
-        );
-        // Audio dropped on arrival, the way the campaign picker does it: a
-        // post here is a clip or a carousel, so a sound file has nothing to
-        // become and offering one only to refuse it is the worse half.
-        setLibrary((body.assets ?? []).filter((asset) => asset.media_kind !== "audio"));
-        if (body.facets) setLibraryFacets(body.facets);
-        setLibraryState({ loading: false, failure: null });
-      } catch (reason) {
-        setLibraryState({
-          loading: false,
-          failure: reason instanceof Error ? reason.message : "The library could not be read.",
-        });
-      }
-    },
-    [apiFetch, workspaceId],
-  );
-
   /** Accepts a drag from the library picker, and says so when a file is
       dropped instead - a browser gives no filesystem path for one, so it has
       to be imported before it can be published. */
@@ -1455,10 +1416,10 @@ export default function PublishPage() {
 
   function openPicker(mode: "video" | "images" = "video") {
     setPickerMode(mode);
+    // The dialog reads the library itself on open, baselined to what it was
+    // opened for - the mode key remounts it, so images and clips never share
+    // a stale list.
     setPickerOpen(true);
-    // Loaded for what is being looked for: the dialog searching for images
-    // while the list holds videos would come back empty and look broken.
-    void loadLibrary(mode === "images" ? IMAGE_PICKER_BASE : PICKER_BASE);
   }
 
   /**
@@ -3789,13 +3750,8 @@ export default function PublishPage() {
           // resets its filters without setting state inside an effect.
           key={pickerMode}
           open={pickerOpen}
-          assets={library}
           workspaceId={workspaceId}
           apiFetch={apiFetch}
-          loading={libraryState.loading}
-          failure={libraryState.failure}
-          facets={libraryFacets}
-          onSearch={(filters) => void loadLibrary(filters)}
           mediaKind={pickerMode === "images" ? "image" : "video"}
           // Routed by what was picked rather than by which button opened the
           // dialog. "Choose from Library" now shows pictures too, and a
