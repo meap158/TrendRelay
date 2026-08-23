@@ -9,8 +9,9 @@ commission alone can never make an unrelated product a recommendation.
 
 from __future__ import annotations
 
+import math
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -297,55 +298,73 @@ def _restriction_penalty(restrictions: Iterable[str], platforms: set[str]) -> tu
     return penalty, reasons
 
 
-def match_offers(
-    session: Session,
-    campaign: Campaign,
-    autopilot: CampaignAutopilot,
-    *,
-    item: CampaignQueueItem | None = None,
-    destinations: Iterable[CampaignDestination] = (),
-    limit: int = 12,
-) -> tuple[list[OfferMatch], dict[str, Any]]:
-    """Rank one usable offer per product against campaign and content evidence."""
-    evidence, media = campaign_evidence(session, campaign, item)
-    context: dict[str, tuple[float, set[str]]] = {
-        source.label: (source.weight, tokens(source.text)) for source in evidence
+def _informativeness(rows: Sequence[tuple[Any, Any]]) -> dict[str, float]:
+    """How much each word narrows the field, from 1 down to 0.
+
+    Matching used to count words: a product sharing four terms with the caption
+    outscored one sharing two, whatever the terms were. Measured on a real
+    catalogue of four hundred offers, "shopee" is in every single one - it is
+    the marketplace field - and twenty-three words appear in more than a tenth
+    of them. So a post about a fan ranked eyeglass wipes above the fan, on the
+    strength of "tiện lợi": convenient, which everything claims to be.
+
+    A word one product carries is worth its full weight; a word every product
+    carries is worth a fraction of it. Damped rather than erased, and the
+    difference matters: how far a word narrows the catalogue and whether it
+    says this product suits this post are two questions, and zeroing the common
+    ones answers the first by destroying the second. On a two-product
+    catalogue every shared word would drop to nothing and both products would
+    read as matching no content at all.
+
+    Inverse document frequency, scaled so a unique word lands on 1 and a
+    universal one on a small floor rather than on zero.
+
+    Measured against the candidates rather than a fixed stop-word list, because
+    which words are uninformative is a fact about this workspace's catalogue -
+    "áo" carries real meaning in a shop that sells three shirts and almost none
+    in one that sells three hundred.
+    """
+    total = len(rows)
+    if total < 2:
+        return {}
+    seen: dict[str, int] = {}
+    for offer, product in rows:
+        words: set[str] = set()
+        for value in (
+            product.name, product.category, product.brand,
+            offer.merchant, product.marketplace,
+        ):
+            words |= tokens(value)
+        for word in words:
+            seen[word] = seen.get(word, 0) + 1
+    scale = math.log1p(total)
+    return {
+        word: math.log1p(total / count) / scale
+        for word, count in seen.items()
     }
-    # What this campaign may promote at all: the products tagged to it.
-    #
-    # This used to be a narrowing that most campaigns left empty, and empty
-    # meant the whole workspace - so a campaign about one thing ranked every
-    # product anybody had ever imported and attached whichever scored least
-    # badly. A tag is a permission now: nothing untagged is ranked.
-    candidate_ids = set(
-        session.scalars(
-            select(CampaignOffer.offer_id).where(
-                CampaignOffer.campaign_id == campaign.id
-            )
-        ).all()
-    )
-    # A pin on the post names a product outright, and the campaign's single
-    # chosen offer is the same act at campaign level. Both are tagged when they
-    # are set, so reading them here is belt and braces rather than a way in.
-    if item:
-        candidate_ids.update(item.offer_ids or [])
-    if autopilot.offer_id:
-        candidate_ids.add(autopilot.offer_id)
-    rows = (
-        session.execute(
-            select(ProductOffer, Product)
-            .join(Product, Product.id == ProductOffer.product_id)
-            .where(
-                ProductOffer.workspace_id == campaign.workspace_id,
-                ProductOffer.availability != "unavailable",
-                ProductOffer.id.in_(candidate_ids),
-            )
-        ).all()
-        if candidate_ids
-        else []
-    )
-    platforms = {item.platform for item in destinations if item.enabled}
-    performance = _offer_performance(session, campaign.id)
+
+
+def score_offers(
+    rows: Sequence[tuple[Any, Any]],
+    context: dict[str, tuple[float, set[str]]],
+    *,
+    platforms: set[str],
+    performance: dict[str, dict[str, float]] | None = None,
+    limit: int = 12,
+) -> list[OfferMatch]:
+    """Rank offers against whatever evidence was gathered about the content.
+
+    Lifted out of `match_offers` so a post written by hand in Publish can be
+    matched by the same arithmetic a campaign uses. Nothing here knows about
+    campaigns: it takes the candidate offers, the weighted text to match them
+    against, and the networks the post is going to.
+
+    One implementation matters more than the small cost of the extraction.
+    Two rankings would answer "which product fits this content" differently,
+    and the one that drifts is the one nobody compares.
+    """
+    performance = performance or {}
+    rarity = _informativeness(rows)
     matches: list[OfferMatch] = []
 
     for offer, product in rows:
@@ -368,7 +387,10 @@ def match_offers(
                 overlap = product_tokens & source_tokens
                 if not overlap:
                     continue
-                contribution = min(20.0, len(overlap) * field_weight * source_weight)
+                # Weighted by how much each word narrows the field, not by how
+                # many words happened to coincide. See `_informativeness`.
+                informative = sum(rarity.get(word, 1.0) for word in overlap)
+                contribution = min(20.0, informative * field_weight * source_weight)
                 relevance += contribution
                 matched.update(overlap)
                 sources.add(source)
@@ -435,11 +457,68 @@ def match_offers(
         existing = best_by_product.get(match.product_id)
         if existing is None or (match.score, match.offer_id) > (existing.score, existing.offer_id):
             best_by_product[match.product_id] = match
-    ranked = sorted(
+    return sorted(
         best_by_product.values(),
         key=lambda match: (match.score, match.confidence == "high", match.product_name.casefold()),
         reverse=True,
     )[:limit]
+
+
+def match_offers(
+    session: Session,
+    campaign: Campaign,
+    autopilot: CampaignAutopilot,
+    *,
+    item: CampaignQueueItem | None = None,
+    destinations: Iterable[CampaignDestination] = (),
+    limit: int = 12,
+) -> tuple[list[OfferMatch], dict[str, Any]]:
+    """Rank one usable offer per product against campaign and content evidence."""
+    evidence, media = campaign_evidence(session, campaign, item)
+    context: dict[str, tuple[float, set[str]]] = {
+        source.label: (source.weight, tokens(source.text)) for source in evidence
+    }
+    # What this campaign may promote at all: the products tagged to it.
+    #
+    # This used to be a narrowing that most campaigns left empty, and empty
+    # meant the whole workspace - so a campaign about one thing ranked every
+    # product anybody had ever imported and attached whichever scored least
+    # badly. A tag is a permission now: nothing untagged is ranked.
+    candidate_ids = set(
+        session.scalars(
+            select(CampaignOffer.offer_id).where(
+                CampaignOffer.campaign_id == campaign.id
+            )
+        ).all()
+    )
+    # A pin on the post names a product outright, and the campaign's single
+    # chosen offer is the same act at campaign level. Both are tagged when they
+    # are set, so reading them here is belt and braces rather than a way in.
+    if item:
+        candidate_ids.update(item.offer_ids or [])
+    if autopilot.offer_id:
+        candidate_ids.add(autopilot.offer_id)
+    rows = (
+        session.execute(
+            select(ProductOffer, Product)
+            .join(Product, Product.id == ProductOffer.product_id)
+            .where(
+                ProductOffer.workspace_id == campaign.workspace_id,
+                ProductOffer.availability != "unavailable",
+                ProductOffer.id.in_(candidate_ids),
+            )
+        ).all()
+        if candidate_ids
+        else []
+    )
+    platforms = {item.platform for item in destinations if item.enabled}
+    ranked = score_offers(
+        rows,
+        context,
+        platforms=platforms,
+        performance=_offer_performance(session, campaign.id),
+        limit=limit,
+    )
     auto_eligible = [match for match in ranked if match.confidence != "low"]
 
     slot_count = (
