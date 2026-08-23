@@ -1246,6 +1246,19 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .campaign-row-rehearsal > summary > span { color: var(--link); font-size: 10px; font-weight: 700; }
 .campaign-row-rehearsal > summary > small { min-width: 0; overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-rehearsal-list { display: grid; gap: 8px; margin-block-start: 8px; }
+/* The chevron that says this opens. `display: flex` on a summary suppresses
+   the native marker, so without one the row was blue text and nothing else. */
+.campaign-row-rehearsal > summary > svg { flex: none; color: var(--link); transition: transform 150ms ease; }
+.campaign-row-rehearsal[open] > summary > svg { transform: rotate(90deg); }
+.campaign-row-rehearsal > summary:hover > span { text-decoration: underline; }
+/* Each posting previewed, several across rather than one under another.
+   A repeat that goes out three times was three full-width previews stacked,
+   which is most of a screen to say the same post three times. */
+.campaign-outings { grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); align-items: start; }
+/* The same cap the approval inbox puts on its previews. These are vertical
+   clips: at full width a single one is taller than the row that opened it. */
+.campaign-outings .post-preview-frame { max-block-size: min(28vh, 220px); }
+.campaign-outings .post-preview { margin: 0; padding: 9px; }
 .campaign-rehearsal-list > article { display: grid; gap: 7px; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
 .campaign-rehearsal-list > article > header { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .campaign-rehearsal-list > article > header strong { min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }

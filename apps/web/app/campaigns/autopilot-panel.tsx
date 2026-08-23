@@ -1356,7 +1356,11 @@ function QueueRehearsal({
   });
   return (
     <details className="campaign-row-rehearsal">
-      <summary>
+      <summary title="Show each posting, previewed as it will go out">
+        {/* A disclosure with `display: flex` loses the native marker, so this
+            row read as text that happened to be blue. The chevron says it
+            opens; the title says what is behind it. */}
+        <ActionIcon name="expand" size={12} />
         <span>Goes out {outings.length}×</span>
         {/* The first two spelled out, the rest counted. Enough to recognise the
             plan without the summary line wrapping to three rows. */}
@@ -1366,7 +1370,7 @@ function QueueRehearsal({
             + ` · ${formatName(post, item)}`).join("  ·  ")}
           {outings.length > 2 && `  ·  +${outings.length - 2} more`}</small>
       </summary>
-      <div className="campaign-rehearsal-list">
+      <div className="campaign-rehearsal-list campaign-outings">
         {outings.map((post) => {
           const platform = post.destination?.platform;
           const followUps = [
