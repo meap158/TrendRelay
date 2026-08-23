@@ -1163,15 +1163,16 @@ export default function ResearchDashboard() {
                 >{mode === "gallery" ? "Gallery" : "List"}</button>
               ))}
             </div>
-            <button
-              type="button"
-              className="dsc-quick-link-btn"
+            <Button
+              variant="secondary"
+              size="sm"
+              busy={busy === "douyin"}
               disabled={busy === "douyin" || !workspaceId}
               onClick={() => void loadDouyinBoard()}
             >
               {douyinBoard && <RefreshCw size={13} aria-hidden="true" />}
-              {busy === "douyin" ? "Reading…" : douyinBoard ? "Refresh" : "Read the board"}
-            </button>
+              {douyinBoard ? t("common.refresh") : "Read the board"}
+            </Button>
           </div>
         </div>
 
@@ -1414,9 +1415,14 @@ export default function ResearchDashboard() {
                   <option key={value} value={value}>{label}</option>
                 ))}
               </Select>
-              <button
-                type="button"
-                className="dsc-quick-link-btn"
+              {/* The shared button, like the two controls beside it. This was
+                  a hand-rolled `dsc-quick-link-btn` that predated them, so the
+                  one control people press repeatedly was the one that did not
+                  match anything else on the page. */}
+              <Button
+                variant="secondary"
+                size="sm"
+                busy={busy === "tiktok"}
                 disabled={busy === "tiktok" || !tiktokResult}
                 onClick={() => {
                   if (tiktokResult) {
@@ -1425,8 +1431,8 @@ export default function ResearchDashboard() {
                 }}
               >
                 <RefreshCw size={13} aria-hidden="true" />
-                {busy === "tiktok" ? "Reading…" : "Refresh"}
-              </button>
+                {t("common.refresh")}
+              </Button>
             </div>
           </div>
 
