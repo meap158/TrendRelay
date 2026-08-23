@@ -114,10 +114,19 @@
 .console-page > .console-heading h1,
 .publish-page > header:first-child h1,
 .tools-sticky-header h1,
-.workspace-heading h1 {
+.workspace-heading h1,
+/* The three that were setting their own weight in their own stylesheets, and
+   so disagreed: Campaigns inherited 500, Library asked for 550, Attribution for
+   600. Three weights for one thing, and the lightest of them read as a
+   different rank of heading rather than as the same heading on another tab. */
+.library-heading h1,
+.campaign-page > .campaign-heading h1,
+.attribution-heading h1 {
   margin: 0;
   font-size: 20px;
-  font-weight: 550;
+  /* 600 rather than 550: it is what Attribution already used, and a title that
+     has to hold its own against a row of buttons beside it wants the weight. */
+  font-weight: 600;
   letter-spacing: normal;
 }
 
@@ -240,6 +249,36 @@
   .library-sticky-header .library-heading {
     padding: 10px 12px;
   }
+
+  /* Title over note rather than beside it, the way the Library heading already
+     does it. Side by side, a phone gives the note whatever is left of about
+     340px after the title - which on Campaigns and Downloads was a few words
+     and an ellipsis, aligned against a baseline it no longer shared. */
+  .console-page > .console-heading > div,
+  .campaign-page > .campaign-heading > div,
+  .publish-page > header:first-child > div {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 2px;
+  }
+  /* Nothing left to sit beside, so the title can use the width it has. A
+     nowrap title in a one-column grid overflows the card rather than wrapping
+     inside it. */
+  .console-page > .console-heading h1,
+  .campaign-page > .campaign-heading h1,
+  .publish-page > header:first-child h1 {
+    white-space: normal;
+  }
+  /* Two lines of explanation, then stop. The heading is chrome above the thing
+     somebody came to use, and four lines of it on a phone is the page. */
+  .console-page > .console-heading > div > p:last-child,
+  .campaign-page > .campaign-heading .lede {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
 
   .tools-sticky-header .lede,
   .publish-page > header:first-child .lede {
