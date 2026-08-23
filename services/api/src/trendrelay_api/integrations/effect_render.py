@@ -768,6 +768,23 @@ def preview_recipe_frame(
         else:
             invisible.append(step.effect.label)
 
+    # A still has no clock, so a step timed with `enable` would be evaluated at
+    # t=0 and render as nothing. Each step that cares says how it reads at this
+    # instant; one that does nothing here leaves the frame's recipe entirely,
+    # rather than costing an encode to change nothing.
+    at_ms = position * float(duration or 0.0) * 1000.0
+    momentary: list[RecipeStep] = []
+    for step in visual:
+        if step.effect.still_values is None:
+            momentary.append(step)
+            continue
+        moment = step.effect.still_values(step.values, at_ms)
+        if moment is None:
+            notes.append(f"{step.effect.label} does nothing at this point in the clip.")
+            continue
+        momentary.append(RecipeStep(step.effect, moment))
+    visual = momentary
+
     scratch = Path(tempfile.mkdtemp(prefix="frame-preview-"))
     try:
         source_frame = scratch / "source.jpg"

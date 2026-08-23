@@ -205,3 +205,91 @@ def test_a_clip_of_unknown_length_still_previews(monkeypatch, tmp_path) -> None:
     )
 
     assert result["image"] == b"frame"
+
+
+# --- the preview the editor actually uses -------------------------------------
+#
+# The stack preview sends a whole recipe rather than one effect, and that path
+# never calls a stream effect's own `preview`. Without the still rewrite the
+# cover would evaluate its `enable` at t=0 on a decoded frame and draw nothing.
+
+
+def _recipe_frame(monkeypatch, tmp_path, *, position: float, duration: float):
+    """The recipe preview with its decode and its encode stubbed out."""
+    from trendrelay_api.integrations import effect_render, face_blur
+
+    source = tmp_path / "clip.mp4"
+    source.write_bytes(b"source")
+    drawn: list[list] = []
+
+    monkeypatch.setattr(
+        effect_render, "_source_preview_frame",
+        lambda _source, _at: {
+            "image": b"frame", "position": position, "duration_seconds": duration,
+        },
+    )
+
+    def fake_still_recipe(_frame, destination, steps):
+        drawn.append(list(steps))
+        destination.write_bytes(b"rendered")
+
+    class FakeImage:
+        shape = (1920, 1080, 3)
+
+    monkeypatch.setattr(effect_render, "render_still_recipe", fake_still_recipe)
+    monkeypatch.setattr(face_blur, "_load_opencv", lambda: object())
+    monkeypatch.setattr(face_blur, "read_image", lambda _cv2, _path: FakeImage())
+    monkeypatch.setattr(face_blur, "encode_preview", lambda _cv2, _image, _size: b"covered")
+    return source, drawn
+
+
+def test_the_stack_preview_shows_a_cover_timed_to_that_moment(monkeypatch, tmp_path) -> None:
+    from trendrelay_api.integrations import effect_render
+    from trendrelay_api.integrations.effects import RecipeStep
+
+    source, drawn = _recipe_frame(monkeypatch, tmp_path, position=0.5, duration=20.0)
+    step = RecipeStep(
+        effects.REGISTRY[COVER],
+        coerce(mode="solid", regions=[region(start_ms=9000, end_ms=11000)]),
+    )
+
+    result = effect_render.preview_recipe_frame(source, [step], 0.5)
+
+    [rendered] = drawn[0]
+    [shown] = rendered.values["regions"]
+    # Held open from zero, which is where the still sits.
+    assert shown["start_ms"] == 0.0 and shown["end_ms"] == 1.0
+    assert result["image"] == b"covered"
+
+
+def test_a_step_with_nothing_to_do_here_leaves_the_frames_recipe(monkeypatch, tmp_path) -> None:
+    """Cheaper and more honest than an encode that changes nothing."""
+    from trendrelay_api.integrations import effect_render
+    from trendrelay_api.integrations.effects import RecipeStep
+
+    source, drawn = _recipe_frame(monkeypatch, tmp_path, position=0.5, duration=20.0)
+    step = RecipeStep(
+        effects.REGISTRY[COVER],
+        coerce(mode="solid", regions=[region(start_ms=0, end_ms=2000)]),
+    )
+
+    result = effect_render.preview_recipe_frame(source, [step], 0.5)
+
+    assert drawn == []
+    assert result["image"] == b"frame"
+    assert "does nothing at this point in the clip" in result["note"]
+
+
+def test_an_untimed_effect_is_left_alone(monkeypatch, tmp_path) -> None:
+    # Only steps that declare a still reading are rewritten; a flip means the
+    # same thing wherever you look.
+    from trendrelay_api.integrations import effect_render
+    from trendrelay_api.integrations.effects import RecipeStep
+
+    source, drawn = _recipe_frame(monkeypatch, tmp_path, position=0.5, duration=20.0)
+    flip = RecipeStep(effects.REGISTRY["flip"], {"axis": "horizontal"})
+
+    effect_render.preview_recipe_frame(source, [flip], 0.5)
+
+    [rendered] = drawn[0]
+    assert rendered.values == {"axis": "horizontal"}

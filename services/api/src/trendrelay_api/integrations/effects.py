@@ -152,6 +152,17 @@ class Effect:
     #: separate feature — what a blur or a swap does to frame 400 of a clip is
     #: exactly what it should do to a photograph of the same person.
     render_still: Callable[[Path, Path, dict[str, Any]], dict[str, Any]] | None = None
+    #: How this step's values should read on one frame, at this many
+    #: milliseconds into the clip. Returns `None` when the step does nothing at
+    #: that moment, and is left undeclared by every effect whose answer does not
+    #: depend on when you look.
+    #:
+    #: A still has no clock. A step timed with `enable` is evaluated at t=0 on a
+    #: decoded frame, so anything scheduled later in the clip renders as nothing
+    #: and reads as a broken effect rather than as a preview of a moment it does
+    #: not apply to. This is how such a step says what it looks like *here*,
+    #: without the preview having to know which effects are timed.
+    still_values: Callable[[dict[str, Any], float], dict[str, Any] | None] | None = None
     #: Why a still cannot answer this effect's question, when it cannot. Said
     #: rather than left as a missing feature: for an effect that decides
     #: something over the whole clip, one frame is not a cheap preview, it is a
@@ -737,6 +748,33 @@ def _cover_text_filters(values: dict[str, Any]) -> list[str]:
         raise EffectError(str(error)) from error
 
 
+def _cover_text_still_values(
+    values: dict[str, Any], at_ms: float
+) -> dict[str, Any] | None:
+    """The cover as it stands at one instant, with its clock taken away.
+
+    The regions alive at that moment, held open from zero, because zero is
+    where a still sits. `None` when none of them are: a step with nothing to do
+    on this frame is not in the frame's recipe, which is cheaper and more honest
+    than an empty filter that costs an encode to change nothing.
+
+    The stored step keeps its real windows throughout. This rewrite lives for
+    the length of one preview.
+    """
+    live = [
+        region for region in values.get("regions") or ()
+        if float(region.get("start_ms", 0)) <= at_ms < float(region.get("end_ms", 0))
+    ]
+    if not live:
+        return None
+    return {
+        **values,
+        "regions": tuple(
+            {**region, "start_ms": 0.0, "end_ms": 1.0} for region in live
+        ),
+    }
+
+
 def _cover_text_preview(
     source: Path, values: dict[str, Any], at: float | None
 ) -> dict[str, Any]:
@@ -763,11 +801,8 @@ def _cover_text_preview(
     at_ms = position * float(duration or 0.0) * 1000.0
 
     regions = tuple(values.get("regions") or ())
-    live = [
-        region for region in regions
-        if float(region.get("start_ms", 0)) <= at_ms < float(region.get("end_ms", 0))
-    ]
-    if not live:
+    shown = _cover_text_still_values(values, at_ms)
+    if shown is None:
         # The source frame, untouched, and told why. Rendering an empty
         # filtergraph to arrive at the same picture would cost an encode to
         # show nothing, and showing nothing without saying so reads as an
@@ -786,14 +821,9 @@ def _cover_text_preview(
             ),
         }
 
-    # Held open from zero, because that is where a still sits. The stored step
-    # keeps its real windows; this rewrite exists for the length of one frame.
-    shown = tuple({**region, "start_ms": 0.0, "end_ms": 1.0} for region in live)
-    result = preview_recipe_frame(
-        source, [RecipeStep(COVER_TEXT, {**values, "regions": shown})], at
-    )
+    result = preview_recipe_frame(source, [RecipeStep(COVER_TEXT, shown)], at)
     return {**result, "note": (
-        f"{len(shown)} of {len(regions)} region"
+        f"{len(shown['regions'])} of {len(regions)} region"
         f"{'s' if len(regions) != 1 else ''} on screen at "
         f"{position * float(duration or 0.0):.1f}s."
     )}
@@ -840,6 +870,7 @@ COVER_TEXT = Effect(
     ),
     video_filters=_cover_text_filters,
     preview=_cover_text_preview,
+    still_values=_cover_text_still_values,
     media_kinds=STILL_AND_MOVING,
 )
 
