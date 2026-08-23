@@ -13,8 +13,8 @@
  *   the *network* decides what exists  - Instagram has carousels, and no link
  *                                        in one of its posts is clickable;
  *   the *engine*  decides what is reachable - Buffer posts no carousel at all,
- *                                        and is the only engine that can put
- *                                        text after a post.
+ *                                        and text after a post is reachable
+ *                                        through only two of the four engines.
  *
  * So a cell is the pair. "Instagram, carousel" reads as a capability the
  * network has and no engine here can reach, which is exactly the trap this is
