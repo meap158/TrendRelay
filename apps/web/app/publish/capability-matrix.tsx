@@ -70,6 +70,27 @@ type EngineRow = {
   ingests_media_url: boolean;
   media_note: string;
   supports_approval: boolean;
+  /**
+   * The engine's published tiers, dated and sourced.
+   *
+   * Served with the matrix all along and never drawn. "Which engine can post a
+   * carousel to Instagram" and "which engine lets me do it without paying" are
+   * the same decision, and answering only the first sent somebody to a pricing
+   * page to finish it.
+   */
+  plans?: {
+    checked_on: string;
+    source: string | null;
+    caveat: string;
+    tiers: {
+      name: string;
+      price: string;
+      accounts: string;
+      posts: string;
+      note?: string;
+      free: boolean;
+    }[];
+  };
 };
 
 export type CapabilityMatrix = {
@@ -140,6 +161,10 @@ export function CapabilityMatrixButton({ workspaceId }: { workspaceId: string })
 }
 
 function MatrixTables({ matrix }: { matrix: CapabilityMatrix }) {
+  // All four engines are checked on the same date, so the note is stated once
+  // rather than per row. Read off whichever engine carries it: a build where
+  // none do simply does not draw the note.
+  const planNote = matrix.engines.find((engine) => engine.plans)?.plans ?? null;
   const engines = matrix.engines;
   return (
     <div className="capability-matrix">
@@ -274,6 +299,11 @@ function MatrixTables({ matrix }: { matrix: CapabilityMatrix }) {
             <tr>
               <th scope="col">Engine</th>
               <th scope="col" className="numeric">Networks</th>
+              {/* The free tier rather than the whole ladder: it is the row
+                  somebody is on while deciding, and the only one whose numbers
+                  change what they can do today. The rest is a click away on
+                  the engine's own page, linked below. */}
+              <th scope="col">Free plan</th>
               <th scope="col">Media</th>
               <th scope="col">Approval</th>
               <th scope="col">Notes</th>
@@ -295,6 +325,20 @@ function MatrixTables({ matrix }: { matrix: CapabilityMatrix }) {
                     <small>Cannot fetch a URL, so it always needs the file</small>
                   )}
                 </td>
+                <td className="capability-plan-cell">{(() => {
+                  const free = engine.plans?.tiers.find((tier) => tier.free);
+                  if (!free) return "—";
+                  return (
+                    <>
+                      <b>{free.accounts} {free.accounts === "1" ? "account" : "accounts"}</b>
+                      {/* The cap that actually bites, in the engine's own
+                          words - "20 / month", "10 queued per channel",
+                          "Unlimited" are three different promises and
+                          flattening them to a number would lose which. */}
+                      <small>{free.posts}</small>
+                    </>
+                  );
+                })()}</td>
                 <td>{engine.supports_approval ? "Yes" : "—"}</td>
                 <td className="capability-note-cell">{engine.media_note}</td>
               </tr>
@@ -307,6 +351,17 @@ function MatrixTables({ matrix }: { matrix: CapabilityMatrix }) {
         A thread runs to {matrix.limits.max_thread_parts} parts.
         {" "}Buffer&rsquo;s first comment also depends on the plan its account is on.
       </p>
+
+      {/* Dated, and said to be a reading of a marketing page rather than
+          anything the engine told us. A published figure that looks live is
+          worse than none, because it gets reconciled against a bill. */}
+      {planNote && (
+        <p className="capability-footnote">
+          Plan figures are read from each engine&rsquo;s own pricing page, last
+          checked {planNote.checked_on}. They are not read from the API and can
+          change without notice.
+        </p>
+      )}
     </div>
   );
 }

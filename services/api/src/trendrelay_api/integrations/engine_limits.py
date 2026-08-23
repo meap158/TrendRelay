@@ -31,7 +31,7 @@ Confidence = Literal["measured", "counted", "published"]
 
 #: When the published figures below were last checked against each engine's own
 #: pricing page. Shown with them, so their age is visible rather than implied.
-PUBLISHED_ON = "2026-08-09"
+PUBLISHED_ON = "2026-08-24"
 
 
 @dataclass(frozen=True)
@@ -248,7 +248,9 @@ PLAN_CAVEATS: dict[str, str] = {
     ),
     "zernio": (
         "Charged per connected account, never per post. Two accounts cost "
-        "nothing and the third is what starts a bill."
+        "nothing and the third is what starts a bill. Graduated, not banded: "
+        "each rate applies only to the accounts inside its range, so twelve "
+        "accounts are eight at $6 and two at $3 rather than twelve at $3."
     ),
     "woopsocial": (
         "Credits meter AI content generation, not publishing. TrendRelay writes "

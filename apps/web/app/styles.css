@@ -1146,6 +1146,13 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .capability-legend b { color: var(--link); }
 .capability-heading { margin: 4px 0 0; font-size: 12px; }
 .capability-note-cell { max-width: 300px; color: var(--muted); font-size: 11px; }
+/* The free tier's two numbers, stacked so the column stays narrow: how many
+   accounts, and the cap that actually bites. Kept in the engine's own words
+   below - "20 / month" and "10 queued per channel" are different promises
+   and a single figure would lose which. */
+.capability-plan-cell { white-space: nowrap; }
+.capability-plan-cell b { display: block; font-size: 11px; font-weight: 600; }
+.capability-plan-cell small { display: block; color: var(--muted); font-size: 10px; }
 .capability-footnote { margin: 0; color: var(--muted); font-size: 11px; }
 
 /* Three questions asked at three different moments, so one at a time. */
