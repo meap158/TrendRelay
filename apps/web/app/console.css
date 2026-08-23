@@ -1281,6 +1281,7 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
      The aside wraps by itself; this only says the chips take the whole line
      and take it second. */
   .queue-filter-strip { flex-basis: 100%; order: 1; }
+}
 .campaign-queue-card > .ui-card-head-region {
   position: sticky;
   top: var(--app-toolbar-offset, 52px);
