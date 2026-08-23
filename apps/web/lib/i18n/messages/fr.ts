@@ -450,6 +450,8 @@ export const fr: Messages = {
     carouselImages: "{count, plural, =0 {Images du carrousel} one {Carrousel · # image} other {Carrousel · # images}}",
     addImages: "Ajouter des images",
     carouselEmpty: "Un carrousel nécessite au moins une image. Elles défilent dans cet ordre.",
+    galleryImages: "{count, plural, =0 {Images} one {# image} other {# images}}",
+    galleryEmpty: "Joignez au moins une image. Elles apparaissent dans cet ordre.",
     moveEarlier: "Déplacer avant",
     moveLater: "Déplacer après",
     carouselIsItsOwnPost: "Un carrousel photo ne peut pas partir dans la même publication qu'une destination vidéo. Envoyez-les séparément.",

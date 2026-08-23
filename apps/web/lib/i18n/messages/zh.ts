@@ -434,6 +434,8 @@ export const zh: Messages = {
     carouselImages: "{count, plural, =0 {轮播图片} other {轮播 · # 张图片}}",
     addImages: "添加图片",
     carouselEmpty: "轮播至少需要一张图片，将按此顺序滑动浏览。",
+    galleryImages: "{count, plural, other {# 张图片}}",
+    galleryEmpty: "至少附上一张图片。它们按此顺序显示。",
     moveEarlier: "前移",
     moveLater: "后移",
     carouselIsItsOwnPost: "图片轮播不能与视频目标放在同一条帖子中发布，请分开发送。",

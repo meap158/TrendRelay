@@ -713,8 +713,6 @@ export default function PublishPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [chosenAccounts, postTypes],
   );
-  /** Derived rather than counted twice: one predicate, one place to be wrong. */
-  const wantsCarousel = carouselTargetCount > 0;
   /**
    * How many images every chosen destination will accept.
    *
@@ -734,6 +732,29 @@ export default function PublishPage() {
     }
     return carouselCapacity(chosenAccounts, caps);
   }, [chosenAccounts, providerById]);
+  /**
+   * Whether this post can carry more than one picture.
+   *
+   * Two ways in, and only the first was here. A destination set to "Photo
+   * carousel" is asking for a gallery outright - that is Instagram and TikTok,
+   * the two networks with a post type for it.
+   *
+   * The second is every other network, where several pictures are simply what
+   * a post holds: four on X, ten on Facebook and Threads, twenty on LinkedIn.
+   * None of them has a "photo" post type to choose, so the gallery field never
+   * appeared and a post to any of them could carry exactly one picture through
+   * an engine that takes several.
+   */
+  const wantsCarousel = carouselTargetCount > 0 || imageCapacity > 1;
+  /**
+   * Whether "carousel" is the right word for what is being attached.
+   *
+   * It is Instagram's and TikTok's word for a swipeable gallery, and those are
+   * the two networks with a post type for it. Four pictures on X are a post -
+   * calling that a carousel, and telling somebody they are "swiped through",
+   * describes something the reader will never do.
+   */
+  const isCarousel = carouselTargetCount > 0;
   const tooManyImages = imageCapacity > 0 && imagePaths.length > imageCapacity;
   /**
    * Whether any chosen destination can carry a topic.
@@ -3257,7 +3278,10 @@ export default function PublishPage() {
               {wantsCarousel && (
                 <div className="carousel-field">
                   <span className="carousel-head">
-                    <strong>{t("publish.carouselImages", { count: imagePaths.length })}</strong>
+                    <strong>{t(
+                      isCarousel ? "publish.carouselImages" : "publish.galleryImages",
+                      { count: imagePaths.length },
+                    )}</strong>
                     {imageCapacity > 0 && (
                       <em className={tooManyImages ? "carousel-over" : "carousel-room"}>
                         {imagePaths.length} / {imageCapacity}
@@ -3308,7 +3332,9 @@ export default function PublishPage() {
                       ))}
                     </ol>
                   ) : (
-                    <small className="ui-field-note">{t("publish.carouselEmpty")}</small>
+                    <small className="ui-field-note">{t(
+                      isCarousel ? "publish.carouselEmpty" : "publish.galleryEmpty",
+                    )}</small>
                   )}
                 </div>
               )}

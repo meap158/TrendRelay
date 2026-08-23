@@ -440,6 +440,8 @@ export const ar: Messages = {
     carouselImages: "{count, plural, zero {صور العرض الدوّار} one {عرض دوّار · صورة واحدة} two {عرض دوّار · صورتان} few {عرض دوّار · # صور} other {عرض دوّار · # صورة}}",
     addImages: "إضافة صور",
     carouselEmpty: "يحتاج العرض الدوّار إلى صورة واحدة على الأقل، وتُعرض بهذا الترتيب.",
+    galleryImages: "{count, plural, zero {صور} one {صورة واحدة} two {صورتان} few {# صور} other {# صورة}}",
+    galleryEmpty: "أرفق صورة واحدة على الأقل. تظهر بهذا الترتيب.",
     moveEarlier: "تحريك للأمام",
     moveLater: "تحريك للخلف",
     carouselIsItsOwnPost: "لا يمكن إرسال العرض الدوّار في المنشور نفسه مع وجهة فيديو. أرسلهما بشكل منفصل.",

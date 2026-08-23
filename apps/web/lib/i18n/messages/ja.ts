@@ -442,6 +442,8 @@ export const ja: Messages = {
     carouselImages: "{count, plural, =0 {カルーセル画像} other {カルーセル · # 枚}}",
     addImages: "画像を追加",
     carouselEmpty: "カルーセルには画像が最低1枚必要です。この順番でスワイプされます。",
+    galleryImages: "{count, plural, other {画像 # 枚}}",
+    galleryEmpty: "画像を1枚以上添付してください。この順番で表示されます。",
     moveEarlier: "前へ",
     moveLater: "後ろへ",
     carouselIsItsOwnPost: "写真カルーセルは動画の配信先と同じ投稿では送れません。別々に投稿してください。",

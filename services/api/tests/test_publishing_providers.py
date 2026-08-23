@@ -2212,11 +2212,25 @@ def test_the_request_itself_is_bounded_by_the_largest_ceiling() -> None:
     assert publishing.MAX_CAROUSEL_IMAGES == 35
 
 
-def test_tiktok_still_takes_thirty_five() -> None:
-    # The ceilings are per network and nowhere near each other.
+def test_the_ceilings_are_per_network_and_nowhere_near_each_other() -> None:
+    """Read from each network's documented figure, not from one another."""
     assert publishing.carousel_limit("tiktok") == 35
+    assert publishing.carousel_limit("linkedin") == 20
     assert publishing.carousel_limit("instagram") == 10
-    assert publishing.carousel_limit("threads") == 0
+    assert publishing.carousel_limit("threads") == 10
+    # Four is an ordinary X post rather than a gallery, and it is still a
+    # ceiling: the network refuses the fifth.
+    assert publishing.carousel_limit("twitter") == 4
+
+
+def test_a_network_that_takes_one_picture_offers_no_gallery() -> None:
+    """Absent rather than recorded as 1.
+
+    A gallery of one is a post, so offering the choice would be offering
+    nothing - and a 1 here would read as a limit somebody could raise.
+    """
+    assert publishing.carousel_limit("pinterest") == 0
+    assert publishing.carousel_limit("youtube") == 0
 
 
 # --- saying something after the post ------------------------------------------
@@ -2374,3 +2388,28 @@ def test_the_plan_says_so_only_when_it_disagrees_with_the_choice(
         "short", width=1072, height=1920, duration_ms=4_400
     )
     assert not any("YouTube will publish" in note for note in asked_short_got_short)
+
+
+def test_several_pictures_are_an_ordinary_post_on_most_networks() -> None:
+    """Not everything with more than one picture is a carousel.
+
+    Four on X and ten on Facebook are what an ordinary post holds, and only
+    TikTok was declared - so a post to any of the others could carry exactly one
+    picture through an engine that documents a figure for all of them.
+    """
+    for platform in ("facebook", "twitter", "linkedin", "threads", "bluesky"):
+        fits, reason = publishing.carousel_fits_destination("zernio", platform, 2)
+        assert fits, f"{platform}: {reason}"
+
+
+def test_the_network_that_said_no_is_still_refused() -> None:
+    """Instagram's carousel is a post type, and an engine has been told so.
+
+    "does not support the 'carousel' post type. Valid types are post, story, or
+    reel." A figure in an engine's documentation is weaker evidence than a
+    network refusing a built post, so this stays out until something measures it.
+    """
+    fits, reason = publishing.carousel_fits_destination("zernio", "instagram", 2)
+
+    assert not fits
+    assert reason

@@ -288,7 +288,14 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         ),
         requires_public_media=False,
         ingests_media_url=True,
-        photo_carousel_platforms=("tiktok",),
+        # Instagram is deliberately absent. Its carousel is a distinct post
+        # type rather than "several pictures", and an engine has already been
+        # recorded being refused one at publish time: "does not support the
+        # 'carousel' post type. Valid types are post, story, or reel." A
+        # documented figure is weaker evidence than a network saying no.
+        photo_carousel_platforms=(
+            "tiktok", "facebook", "twitter", "linkedin", "threads", "bluesky",
+        ),
         media_note="The approved local MP4 is uploaded through a Zernio presigned URL.",
     ),
     "buffer": ProviderDefinition(
@@ -565,12 +572,32 @@ DEFAULT_YOUTUBE_CATEGORY = "22"
 #: extension is better refused here than three minutes into a publish.
 IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".webp"})
 
-#: Each network's own ceiling on a photo carousel, which are not the same.
+#: Each network's ceiling on pictures in one post, which are not the same.
+#:
+#: "Carousel" is the Instagram and TikTok word for it, and it is the wrong word
+#: for most of this list: four pictures on X and ten on Facebook are an ordinary
+#: post, not a gallery format somebody opts into. The name is kept because it is
+#: what the code around it has always called the field; the numbers are what
+#: matter, and only two of them were here.
 #:
 #: Instagram's app lets somebody swipe twenty in by hand; its API takes ten, and
 #: the API is what publishes here. Sending an eleventh would be refused by Meta
 #: after the post was already half-built, so the lower number is the real one.
-CAROUSEL_LIMITS: dict[str, int] = {"tiktok": 35, "instagram": 10}
+#:
+#: Read from Zernio's platform guides on 2026-08-24, which state a figure per
+#: network. Networks that take exactly one picture are absent rather than
+#: recorded as 1: a gallery of one is a post, and offering the choice would be
+#: offering nothing.
+CAROUSEL_LIMITS: dict[str, int] = {
+    "tiktok": 35,
+    "linkedin": 20,
+    "instagram": 10,
+    "facebook": 10,
+    "threads": 10,
+    "twitter": 4,
+    "bluesky": 4,
+}
+
 
 #: The most any network here takes, which is what bounds the request itself.
 #: The per-network limit is checked against the destinations actually chosen.
@@ -1318,11 +1345,13 @@ def carousel_fits_destination(
     campaign can decline a pairing before it makes a post out of it rather than
     finding out from the engine afterwards.
 
-    Carousel support is narrow and it is a property of the engine as much as the
-    network: only Zernio and WoopSocial declare one, and only for TikTok. Buffer
-    and Bundle.social post no carousel at all, so a workspace whose Instagram
-    and Threads run through Buffer has nowhere to send pictures even though both
-    networks support galleries perfectly well themselves.
+    It is a property of the engine as much as the network. Zernio documents a
+    picture count for every network it reaches, so it declares all of them;
+    WoopSocial's API takes an array but publishes no per-network figures, so it
+    declares the one that was verified rather than the seven that were not.
+    Buffer and Bundle.social send no gallery at all, so a workspace whose
+    Instagram and Threads run through Buffer has nowhere to send pictures even
+    though both networks support galleries perfectly well themselves.
 
     (True, None) for an unknown engine: not recognising a login is not evidence
     the post is wrong, and the delivery guard refuses what this cannot judge.

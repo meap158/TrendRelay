@@ -447,6 +447,8 @@ export const en = {
     carouselImages: "{count, plural, =0 {Carousel images} one {Carousel · # image} other {Carousel · # images}}",
     addImages: "Add images",
     carouselEmpty: "A carousel needs at least one image. They are swiped through in this order.",
+    galleryImages: "{count, plural, =0 {Images} one {# image} other {# images}}",
+    galleryEmpty: "Attach at least one image. They appear in this order.",
     moveEarlier: "Move earlier",
     moveLater: "Move later",
     carouselIsItsOwnPost: "A photo carousel cannot go out in the same post as a video destination. Send those separately.",

@@ -443,6 +443,8 @@ export const vi: Messages = {
     carouselImages: "{count, plural, =0 {Ảnh carousel} other {Carousel · # ảnh}}",
     addImages: "Thêm ảnh",
     carouselEmpty: "Carousel cần ít nhất một ảnh. Người xem sẽ vuốt theo thứ tự này.",
+    galleryImages: "{count, plural, other {# ảnh}}",
+    galleryEmpty: "Đính kèm ít nhất một ảnh. Chúng hiển thị theo thứ tự này.",
     moveEarlier: "Đưa lên trước",
     moveLater: "Đưa xuống sau",
     carouselIsItsOwnPost: "Carousel ảnh không thể đăng chung bài với đích video. Hãy gửi riêng.",
