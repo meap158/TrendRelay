@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import test from "node:test";
 
 import { hardcodedColours } from "./palette-guard.ts";
@@ -9,8 +9,14 @@ const APP = join(import.meta.dirname, "..", "app");
 
 function stylesheets(): Record<string, string> {
   const found: Record<string, string> = {};
-  for (const name of readdirSync(APP)) {
-    if (name.endsWith(".css")) found[name] = readFileSync(join(APP, name), "utf8");
+  // Recursive: `app/ui/ui.css` is a real stylesheet, loaded on every page and
+  // holding the shared primitives, and a flat read never once looked at it.
+  // The one file whose colours everything else inherits was the one file the
+  // check could not see.
+  for (const entry of readdirSync(APP, { withFileTypes: true, recursive: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".css")) continue;
+    const from = join(entry.parentPath ?? APP, entry.name);
+    found[relative(APP, from).replaceAll("\\", "/")] = readFileSync(from, "utf8");
   }
   return found;
 }

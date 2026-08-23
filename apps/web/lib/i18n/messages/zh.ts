@@ -623,6 +623,7 @@ export const zh: Messages = {
     destinationAdded: "已添加 {label}。",
     removeDestination: "删除 {label}",
     destinationRemoved: "已移除 {label}。",
+    queueFilterLabel: "按标签筛选帖子",
     queueEyebrow: "发布什么",
     queue: "{total} 条中 {ready} 条可以发布",
     noQueue: "队列是空的。添加一个视频和配套文案。",

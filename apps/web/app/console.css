@@ -186,20 +186,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 /* Status filter chips. The strip scrolls horizontally but draws no scrollbar:
  * it is dragged with the mouse (see useDragToScroll) and pans natively on a
  * touch screen, so a visible track would only spend height the list needs. */
-/* The notification chips' palettes. Geometry, the gesture and the fades live
- * with `.filter-chip` in ui.css now, shared with the campaign queue's strip -
- * this is only what these particular chips are coloured, which is what the
- * rows they stand for already wear. */
 .notification-filters { position: relative; flex: 0 0 auto; border-bottom: 1px solid var(--line-strong); background: var(--panel); }
-/* Waiting holds amber - the default a row badge wears while nothing has
- * happened to it yet. Running is blue on purpose: it is the live colour of the
- * progress bars, and sharing amber with Waiting would read as more of the same
- * stillness rather than work in motion. */
-.filter-chip.chip-running { color: var(--link); background: var(--link-bg); }
-.filter-chip.chip-waiting { color: #876300; background: #fff4cc; }
-.filter-chip.chip-succeeded { color: var(--green); background: var(--green-dark); }
-.filter-chip.chip-failed { color: var(--bad); background: var(--bad-bg); }
-.filter-chip.chip-paused { color: #6b5a2e; background: #f2ece0; }
 .notification-list { display: block; flex: 1 1 auto; overflow-x: hidden; overflow-y: auto; width: 100%; min-width: 0; min-height: 0; margin: 0; padding: 0; list-style: none; background: transparent; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .notification-item { position: relative; display: grid; width: 100%; min-width: 0; box-sizing: border-box; gap: 7px; border-bottom: 1px solid var(--line-strong); padding: 12px 16px 11px 19px; }
 .notification-item:last-child { border-bottom: 0; }
@@ -1149,7 +1136,28 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
  * so `min-height` is the outer height rather than the content's. */
 .campaign-queue-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: calc(var(--control-sm) + 16px); margin-bottom: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .campaign-queue-bar.active { border-color: var(--link); background: var(--link-bg); }
-.campaign-queue-bar > strong { margin-inline-end: auto; font-size: 11px; font-weight: 600; }
+.campaign-queue-bar > strong { flex: 0 0 auto; font-size: 11px; font-weight: 600; }
+/* The strip takes the row's slack instead of a row of its own.
+ *
+ * `min-width: 0` because a flex item will not shrink below its content, and
+ * the content here is every chip laid end to end - without it the bar grows to
+ * fit them all and the actions are pushed off the end. The `auto` margin moves
+ * from the label to the strip so the actions still sit at the far end.
+ *
+ * Named `queue-filter-strip` rather than restyling `.filter-chip-frame` from
+ * here: reaching into another stylesheet's class makes it a name two files
+ * define, and the next person to change the frame would have two places to
+ * look. The component takes this name and its own dense mode instead. */
+.queue-filter-strip { flex: 1 1 auto; min-width: 0; margin-inline-end: auto; }
+/* The fades read against the bar, not the panel behind it. */
+.queue-filter-strip::before { background: linear-gradient(to right, var(--panel), transparent); }
+.queue-filter-strip::after { background: linear-gradient(to left, var(--panel), transparent); }
+.campaign-queue-bar.active .queue-filter-strip::before { background: linear-gradient(to right, var(--link-bg), transparent); }
+.campaign-queue-bar.active .queue-filter-strip::after { background: linear-gradient(to left, var(--link-bg), transparent); }
+@media (max-width: 640px) {
+  /* Its own line on a narrow screen, which is still a line rather than a row:
+     no border, no card padding, just the chips under the count. */
+  .queue-filter-strip { flex-basis: 100%; margin-inline-end: 0; }
 .campaign-queue-card > .ui-card-head-region {
   position: sticky;
   top: var(--app-toolbar-offset, 52px);

@@ -641,6 +641,7 @@ export const ru: Messages = {
     destinationAdded: "{label} добавлен.",
     removeDestination: "Удалить {label}",
     destinationRemoved: "{label} удалён.",
+    queueFilterLabel: "Фильтровать посты по метке",
     queueEyebrow: "Что публикует",
     queue: "{ready} из {total} готовы к публикации",
     noQueue: "Очередь пуста. Добавьте ролик и текст к нему.",

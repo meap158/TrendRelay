@@ -634,6 +634,7 @@ export const vi: Messages = {
     destinationAdded: "Đã thêm {label}.",
     removeDestination: "Xoá {label}",
     destinationRemoved: "Đã xoá {label}.",
+    queueFilterLabel: "Lọc bài đăng theo thẻ",
     queueEyebrow: "Đăng gì",
     queue: "{ready}/{total} bài sẵn sàng đăng",
     noQueue: "Chưa có gì trong hàng đợi. Thêm một video và nội dung đi kèm.",

@@ -373,6 +373,8 @@ a.ui-button { text-decoration: none; }
 .filter-chip-frame[data-can-start]::before, .filter-chip-frame[data-can-end]::after { opacity: 1; }
 .filter-chip-strip { display: flex; gap: 6px; overflow-x: auto; width: 100%; box-sizing: border-box; padding: 9px 16px; scrollbar-width: none; touch-action: pan-x; user-select: none; -webkit-user-select: none; overscroll-behavior-x: contain; }
 .filter-chip-strip::-webkit-scrollbar { display: none; }
+/* Inside a row that already has padding of its own. */
+.filter-chip-frame[data-dense] .filter-chip-strip { padding: 0; }
 .filter-chip-strip.dragging { cursor: grabbing; scroll-behavior: auto; }
 .filter-chip { flex: 0 0 auto; display: inline-flex; gap: 5px; align-items: center; min-height: 24px; border: 1px solid transparent; border-radius: 999px; padding: 2px 10px; cursor: pointer; font: inherit; font-size: 10px; font-weight: 700; white-space: nowrap; }
 .filter-chip:not(.chip-all) { border-color: color-mix(in srgb, currentColor 26%, transparent); }
@@ -388,6 +390,15 @@ a.ui-button { text-decoration: none; }
 .filter-chip.chip-good { color: var(--green); background: var(--green-dark); }
 .filter-chip.chip-warn { color: #7a5c00; background: #fdf5db; }
 .filter-chip.chip-neutral { color: var(--muted); background: var(--panel-raised); }
+/* Waiting holds amber - the default a row badge wears while nothing has
+ * happened to it yet. Running is blue on purpose: it is the live colour of the
+ * progress bars, and sharing amber with Waiting would read as more of the same
+ * stillness rather than work in motion. */
+.filter-chip.chip-running { color: var(--link); background: var(--link-bg); }
+.filter-chip.chip-waiting { color: #876300; background: #fff4cc; }
+.filter-chip.chip-succeeded { color: var(--green); background: var(--green-dark); }
+.filter-chip.chip-failed { color: var(--bad); background: var(--bad-bg); }
+.filter-chip.chip-paused { color: #6b5a2e; background: #f2ece0; }
 @media (max-width: 640px) {
   /* Finger-sized: the strip is panned by touch here, so the targets it carries
      have to clear the comfortable minimum rather than the mouse one. Moved

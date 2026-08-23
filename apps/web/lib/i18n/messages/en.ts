@@ -638,6 +638,7 @@ export const en = {
     destinationAdded: "{label} added.",
     removeDestination: "Remove {label}",
     destinationRemoved: "{label} removed.",
+    queueFilterLabel: "Filter posts by tag",
     queueEyebrow: "What it posts",
     queue: "{ready} of {total} ready to post",
     noQueue: "Nothing queued yet. Add a clip and the copy to go with it.",

@@ -633,6 +633,7 @@ export const ja: Messages = {
     destinationAdded: "{label} を追加しました。",
     removeDestination: "{label} を削除",
     destinationRemoved: "{label} を削除しました。",
+    queueFilterLabel: "タグで投稿を絞り込む",
     queueEyebrow: "投稿内容",
     queue: "{total} 件中 {ready} 件が投稿できます",
     noQueue: "キューは空です。クリップと本文を追加してください。",

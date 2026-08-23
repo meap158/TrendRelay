@@ -33,11 +33,24 @@ export function FilterChipStrip({
   selected,
   onSelect,
   ariaLabel,
+  className,
+  dense,
 }: {
   chips: FilterChip[];
   selected: string;
   onSelect: (key: string) => void;
   ariaLabel: string;
+  /**
+   * A name for this strip's own placement, put on the frame.
+   *
+   * Offered because the alternative is a caller reaching in and restyling
+   * `.filter-chip-frame` from its own stylesheet, which makes that class a
+   * thing two files define - and the next person to change the frame has two
+   * places to find.
+   */
+  className?: string;
+  /** Drops the strip's own padding, for a strip sitting inside a padded row. */
+  dense?: boolean;
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
@@ -130,7 +143,11 @@ export function FilterChipStrip({
   };
 
   return (
-    <div className="filter-chip-frame" ref={frameRef}>
+    <div
+      className={`filter-chip-frame${className ? ` ${className}` : ""}`}
+      data-dense={dense ? "" : undefined}
+      ref={frameRef}
+    >
       <div
         ref={stripRef}
         role="group"

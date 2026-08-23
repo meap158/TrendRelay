@@ -631,6 +631,7 @@ export const ar: Messages = {
     destinationAdded: "أُضيف {label}.",
     removeDestination: "إزالة {label}",
     destinationRemoved: "أُزيل {label}.",
+    queueFilterLabel: "تصفية المنشورات حسب الوسم",
     queueEyebrow: "ماذا ينشر",
     queue: "{ready} من {total} جاهزة للنشر",
     noQueue: "القائمة فارغة. أضف مقطعًا والنص المرافق له.",

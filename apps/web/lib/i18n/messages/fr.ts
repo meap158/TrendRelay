@@ -644,6 +644,7 @@ export const fr: Messages = {
     destinationAdded: "{label} ajouté.",
     removeDestination: "Supprimer {label}",
     destinationRemoved: "{label} retiré.",
+    queueFilterLabel: "Filtrer les publications par étiquette",
     queueEyebrow: "Ce qu’il publie",
     queue: "{ready} sur {total} prêtes à publier",
     noQueue: "La file est vide. Ajoutez un clip et le texte qui l'accompagne.",
