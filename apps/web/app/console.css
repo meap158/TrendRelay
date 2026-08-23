@@ -1151,7 +1151,14 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
  * Not `justify-content: flex-end` inside the strip: that is the classic way
  * to make an overflowing scroll container unreachable at its start, and this
  * one overflows by design. */
-.queue-filter-strip { flex: 0 1 auto; min-width: 0; }
+/* `margin-inline-end` keeps the last chip's outline clear of the button beside
+   it: the aside's gap separates two controls, and this is the little extra the
+   strip needs because a selected chip's ring reaches past its edge.
+
+   Unscoped, because this class is the strip's own. Writing it as
+   `.ui-card-aside > .queue-filter-strip` would name a class this stylesheet
+   does not own, which is what the scope check exists to catch - and did. */
+.queue-filter-strip { flex: 0 1 auto; min-width: 0; margin-inline-end: 2px; }
 /* The fades read against the card, which is what sits behind the heading. */
 .queue-filter-strip::before { background: linear-gradient(to right, var(--panel), transparent); }
 .queue-filter-strip::after { background: linear-gradient(to left, var(--panel), transparent); }
