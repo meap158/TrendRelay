@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from trendrelay_api.integrations.mcp import context, policy, sops, writes
+from trendrelay_api.integrations.mcp import context, policy, schedules, sops, writes
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -28,8 +28,18 @@ INSTRUCTIONS = (
     "thread reply lands there, and the campaign's brief. Write with "
     "`write_caption`, `write_first_comment` and `write_thread` (or `write_post_copy` "
     "for several at once).\n\n"
-    "You write drafts only. You cannot approve, publish, deploy, connect an account "
-    "or sign in - those stay a person's decision in the app."
+    "For when things post, `list_posting_times` gives the workspace's times, the "
+    "presets available and which pages are assigned one; "
+    "`get_campaign_posting_times` says what each of a campaign's accounts posts at "
+    "and which level decided it. To change a rhythm, `create_posting_preset` names "
+    "a set of times without putting it in front of anything, then "
+    "`set_campaign_posting_times`, `set_page_posting_times` or "
+    "`set_workspace_posting_times` puts it into effect. Times are HH:MM on the "
+    "workspace's own clock, not UTC.\n\n"
+    "You write drafts and schedules only. You cannot approve, publish, deploy, "
+    "connect an account or sign in - those stay a person's decision in the app. "
+    "Changing a schedule moves when already-approved posts go out; it never sends "
+    "one, so say what you are about to reschedule before you do it."
 )
 
 
@@ -301,6 +311,115 @@ def build_server(workspace_id: str) -> FastMCP:
             "write_bio_hint",
             lambda s: writes.write_post_copy(
                 s, workspace_id, item_id, bio_hint=bio_hint
+            ),
+        )
+
+    # --- when the workspace posts ------------------------------------------
+    # Reading and setting the schedule, not the sending. See the note in
+    # `policy` for why setting it sits on the allowed side of the boundary.
+
+    @server.tool(
+        name="list_posting_times",
+        description=(
+            "Every posting schedule in the workspace: its own recurring times, "
+            "the named presets available, which pages are assigned one, and the "
+            "timezone all of them are wall-clock in."
+        ),
+    )
+    def list_posting_times() -> dict[str, Any]:
+        return _call(
+            "list_posting_times",
+            lambda s: schedules.list_posting_times(s, workspace_id),
+        )
+
+    @server.tool(
+        name="get_campaign_posting_times",
+        description=(
+            "What each of a campaign's accounts actually posts at, and which "
+            "level decided it - the account itself, the campaign, the page, or "
+            "the workspace."
+        ),
+    )
+    def get_campaign_posting_times(campaign_id: str) -> dict[str, Any]:
+        return _call(
+            "get_campaign_posting_times",
+            lambda s: schedules.get_campaign_posting_times(s, workspace_id, campaign_id),
+        )
+
+    @server.tool(
+        name="create_posting_preset",
+        description=(
+            "Save a named set of posting times, as HH:MM in the workspace's "
+            "timezone. This only defines the preset - it changes nothing about "
+            "when anything posts until you assign it. Pass weekday 0-6 (Monday "
+            "first) to pin it to one day; leave it out for every day."
+        ),
+    )
+    def create_posting_preset(
+        label: str,
+        times: list[str],
+        summary: str = "",
+        weekday: int | None = None,
+    ) -> dict[str, Any]:
+        return _call(
+            "create_posting_preset",
+            lambda s: schedules.create_posting_preset(
+                s, workspace_id, label, times, summary, weekday
+            ),
+        )
+
+    @server.tool(
+        name="set_campaign_posting_times",
+        description=(
+            "Give one campaign its own posting times, by preset id. Applies to "
+            "every account it feeds that has not been given its own. Pass null "
+            "to clear it and let each account inherit again."
+        ),
+    )
+    def set_campaign_posting_times(
+        campaign_id: str, preset_id: str | None = None
+    ) -> dict[str, Any]:
+        return _call(
+            "set_campaign_posting_times",
+            lambda s: schedules.set_campaign_posting_times(
+                s, workspace_id, campaign_id, preset_id
+            ),
+        )
+
+    @server.tool(
+        name="set_page_posting_times",
+        description=(
+            "Assign a preset to one page, so every campaign posting to that "
+            "account uses it unless the campaign or the account says otherwise. "
+            "Pass null to clear the assignment."
+        ),
+    )
+    def set_page_posting_times(
+        page_key: str, preset_id: str | None = None
+    ) -> dict[str, Any]:
+        return _call(
+            "set_page_posting_times",
+            lambda s: schedules.set_page_posting_times(
+                s, workspace_id, page_key, preset_id
+            ),
+        )
+
+    @server.tool(
+        name="set_workspace_posting_times",
+        description=(
+            "Replace the workspace's own posting times with exactly these, as "
+            "HH:MM in its timezone. This is the fallback every campaign and page "
+            "lands on, so a time left out is a time removed. Pass weekday 0-6 "
+            "to pin them to one day; leave it out for every day."
+        ),
+    )
+    def set_workspace_posting_times(
+        times: list[str], weekday: int | None = None
+    ) -> dict[str, Any]:
+        return _call(
+            "set_workspace_posting_times",
+            lambda s: schedules.set_workspace_posting_times(
+                s, workspace_id, times, weekday
             ),
         )
 

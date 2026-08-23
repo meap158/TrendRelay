@@ -23,8 +23,25 @@ from trendrelay_api.autopilot_models import (
     CampaignQueueItem,
 )
 from trendrelay_api.campaign_autopilot import PLACEHOLDER_BODY
-from trendrelay_api.integrations.mcp import context, policy, server, service, sops, tunnel, writes
-from trendrelay_api.models import Base, Campaign, UserProfile, Workspace, WorkspaceMember
+from trendrelay_api.integrations import posting_slots
+from trendrelay_api.integrations.mcp import (
+    context,
+    policy,
+    schedules,
+    server,
+    service,
+    sops,
+    tunnel,
+    writes,
+)
+from trendrelay_api.models import (
+    Base,
+    Campaign,
+    PagePostingSchedule,
+    UserProfile,
+    Workspace,
+    WorkspaceMember,
+)
 from trendrelay_api.opportunity_models import Product, ProductOffer
 
 # Registers every table on Base.metadata - the queue item's neighbours carry
@@ -93,11 +110,14 @@ def test_every_operation_is_classified_on_purpose() -> None:
         assert isinstance(access, policy.Access), name
 
 
-def test_the_allowed_surface_is_the_reads_and_the_copy_writes() -> None:
+def test_the_allowed_surface_is_the_reads_the_copy_and_the_schedule() -> None:
     assert policy.allowed_operations() == [
-        "get_campaign_config", "get_post_context", "get_sop", "list_campaigns",
-        "list_posts_needing_copy", "list_sops", "write_bio_hint", "write_caption",
-        "write_disclosure", "write_first_comment", "write_post_copy", "write_thread",
+        "create_posting_preset", "get_campaign_config", "get_campaign_posting_times",
+        "get_post_context", "get_sop", "list_campaigns", "list_posting_times",
+        "list_posts_needing_copy", "list_sops", "set_campaign_posting_times",
+        "set_page_posting_times", "set_workspace_posting_times",
+        "write_bio_hint", "write_caption", "write_disclosure", "write_first_comment",
+        "write_post_copy", "write_thread",
     ]
 
 
@@ -511,3 +531,118 @@ def test_an_unmeasured_clip_says_nothing_rather_than_zero(session) -> None:
     assert context.get_post_context(session, "ws", unmeasured)["duration_seconds"] is None
     # The fixture's own post is made from a path with no Library row behind it.
     assert context.get_post_context(session, "ws", "q1")["duration_seconds"] is None
+
+
+# --- when the workspace posts -------------------------------------------------
+
+
+def test_the_schedule_reads_back_the_workspaces_own_clock(session) -> None:
+    """A bare "18:30" is not a time until you know whose clock it is on."""
+    posting_slots.replace_slots("ws", [{"time": "18:30"}], session=session)
+
+    seen = schedules.list_posting_times(session, "ws")
+
+    assert [entry["time"] for entry in seen["workspace_times"]] == ["18:30"]
+    assert seen["timezone"] == session.get(Workspace, "ws").timezone
+    assert {preset["id"] for preset in seen["presets"]} >= {"commute", "evening"}
+
+
+def test_a_preset_is_defined_without_being_put_in_front_of_anything(session) -> None:
+    """Naming a rhythm and imposing one are two decisions, so they are two calls."""
+    before = schedules.get_campaign_posting_times(session, "ws", "camp")
+
+    made = schedules.create_posting_preset(
+        session, "ws", "Late shift", ["22:00", "23:30"], "After the evening peak."
+    )
+
+    after = schedules.get_campaign_posting_times(session, "ws", "camp")
+    assert made["label"] == "Late shift"
+    assert [entry["time"] for entry in made["slots"]] == ["22:00", "23:30"]
+    # Nothing about when this campaign posts has moved.
+    assert after["campaign_preset_id"] == before["campaign_preset_id"] is None
+    assert after["accounts"][0]["source"] == before["accounts"][0]["source"]
+
+
+def test_a_campaign_can_be_given_its_own_hours_over_mcp(session) -> None:
+    made = schedules.create_posting_preset(session, "ws", "Late shift", ["22:00"])
+
+    resolved = schedules.set_campaign_posting_times(session, "ws", "camp", made["id"])
+
+    account = resolved["accounts"][0]
+    assert resolved["campaign_preset_id"] == made["id"]
+    assert account["source"] == "campaign"
+    assert account["times"] == ["22:00"]
+    # And handing it back is the same call with nothing.
+    cleared = schedules.set_campaign_posting_times(session, "ws", "camp", None)
+    assert cleared["campaign_preset_id"] is None
+    assert cleared["accounts"][0]["source"] == "workspace"
+
+
+def test_the_resolved_schedule_says_which_level_answered(session) -> None:
+    """The stored id does not say which of four levels won; `source` does."""
+    session.add(PagePostingSchedule(
+        workspace_id="ws", page_key="threads:@brand", preset_id="evening"
+    ))
+    destination = session.get(CampaignDestination, "d1")
+    destination.page_key = "threads:@brand"
+    session.commit()
+
+    by_page = schedules.get_campaign_posting_times(session, "ws", "camp")["accounts"][0]
+    schedules.set_campaign_posting_times(session, "ws", "camp", "commute")
+    by_campaign = schedules.get_campaign_posting_times(session, "ws", "camp")["accounts"][0]
+    destination.posting_preset_id = "spread"
+    session.commit()
+    by_account = schedules.get_campaign_posting_times(session, "ws", "camp")["accounts"][0]
+
+    assert (by_page["source"], by_campaign["source"], by_account["source"]) == (
+        "page", "campaign", "destination"
+    )
+
+
+def test_a_workspace_schedule_is_replaced_rather_than_added_to(session) -> None:
+    """A time left out is a time removed - the same as saving it in the app."""
+    schedules.set_workspace_posting_times(session, "ws", ["09:00", "18:00"])
+
+    seen = schedules.set_workspace_posting_times(session, "ws", ["12:00"])
+
+    assert [entry["time"] for entry in seen["workspace_times"]] == ["12:00"]
+
+
+def test_a_time_no_clock_would_show_is_refused_over_mcp_too(session) -> None:
+    """The same validation the app's own route runs, because it is the same helper."""
+    with pytest.raises(ValueError):
+        schedules.create_posting_preset(session, "ws", "Broken", ["25:00"])
+    with pytest.raises(ValueError):
+        schedules.create_posting_preset(session, "ws", "Empty", [])
+    with pytest.raises(ValueError):
+        schedules.set_campaign_posting_times(session, "ws", "camp", "no-such-preset")
+
+
+def test_the_schedule_tools_cannot_reach_another_workspace(session) -> None:
+    session.add(Workspace(id="other", name="O", slug="o", created_by="local-admin"))
+    session.add(Campaign(
+        id="theirs", workspace_id="other", name="Theirs", objective="o",
+        audience="a", markets=[], languages=[], status="active", created_by="local-admin",
+    ))
+    session.commit()
+
+    with pytest.raises(ValueError):
+        schedules.get_campaign_posting_times(session, "ws", "theirs")
+    with pytest.raises(ValueError):
+        schedules.set_campaign_posting_times(session, "ws", "theirs", "commute")
+
+
+def test_setting_a_schedule_approves_and_publishes_nothing(session) -> None:
+    """The whole reason these writes are on the allowed side of the boundary."""
+    item = session.get(CampaignQueueItem, "q1")
+    autopilot = session.get(CampaignAutopilot, "auto")
+    autopilot.enabled = False
+    session.commit()
+    was = (item.state, item.body, autopilot.enabled, autopilot.delivery)
+
+    schedules.set_campaign_posting_times(session, "ws", "camp", "evening")
+    schedules.set_workspace_posting_times(session, "ws", ["07:00"])
+
+    session.refresh(item)
+    session.refresh(autopilot)
+    assert (item.state, item.body, autopilot.enabled, autopilot.delivery) == was

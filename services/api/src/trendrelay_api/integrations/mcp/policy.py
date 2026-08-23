@@ -14,6 +14,16 @@ Two rules hold however many operations are added:
   person gives it. A caller that can propose a change and also approve it has
   not been governed - it has been given a longer arm.
 
+Schedules are configuration, and sit on the allowed side. Nothing in the
+posting-time tools approves a post, arms a campaign, or sends anything: a
+campaign that is switched off stays off, a post waiting for a person keeps
+waiting, and every post those times move was already written and already
+approved. What changes is *when* work somebody has already authorised happens,
+which is the same kind of setting as a campaign's brief or its daily cap. It is
+worth being plain that this is not nothing - a caller can move tonight's posts
+to a different hour of tonight - but it cannot make a post exist, make one go
+out that would not have, or reach an account nobody connected.
+
 Anything not named here is refused by `DEFAULT_REFUSAL`, so a new operation is
 argued for rather than inherited. The classification is checked at call time in
 the server, not trusted from the tool listing, because a caller may name any
@@ -71,6 +81,9 @@ EXPOSURE: dict[str, Access] = {
     "get_campaign_config": Access.READ,
     "list_sops": Access.READ,
     "get_sop": Access.READ,
+    # --- Reads: when the workspace posts -----------------------------------
+    "list_posting_times": Access.READ,
+    "get_campaign_posting_times": Access.READ,
     # --- Workspace writes: the copy itself, never its approval -------------
     "write_caption": Access.WORKSPACE_WRITE,
     "write_first_comment": Access.WORKSPACE_WRITE,
@@ -78,6 +91,14 @@ EXPOSURE: dict[str, Access] = {
     "write_post_copy": Access.WORKSPACE_WRITE,
     "write_disclosure": Access.WORKSPACE_WRITE,
     "write_bio_hint": Access.WORKSPACE_WRITE,
+    # --- Workspace writes: the schedule, never the sending -----------------
+    # See the note above on why these are allowed. Creating a preset assigns
+    # it to nothing; the three that assign one decide when already-approved
+    # work happens, and nothing else.
+    "create_posting_preset": Access.WORKSPACE_WRITE,
+    "set_campaign_posting_times": Access.WORKSPACE_WRITE,
+    "set_page_posting_times": Access.WORKSPACE_WRITE,
+    "set_workspace_posting_times": Access.WORKSPACE_WRITE,
     # --- Named, and refused ------------------------------------------------
     # Credentials and sessions.
     "sign_in": Access.REFUSED_CREDENTIALS,

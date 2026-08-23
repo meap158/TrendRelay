@@ -12,6 +12,7 @@ write operation looks convenient.
 | Intended action | Canonical action | First live operation |
 | --- | --- | --- |
 | Fill missing Campaigns copy | `campaigns.fill-needs-copy` | `list_posts_needing_copy` |
+| Read or change when things post | (no SOP yet) | `list_posting_times` |
 
 For an action not listed here, call `list_sops`. Match its canonical action or
 an alias. If no reviewed SOP exists, follow current explicit user direction and
@@ -36,10 +37,17 @@ and use a final fresh queue read as completion evidence.
 ## Authority and safety
 
 An SOP explains how to use authority already granted by the MCP policy; it does
-not grant new authority. TrendRelay MCP may read workspace context and write
-draft copy that remains inside the workspace. It may not sign in, connect an
-account, approve content, publish, deploy, delete, or trigger another external
-side effect reserved for the operator.
+not grant new authority. TrendRelay MCP may read workspace context, write draft
+copy that remains inside the workspace, and read or change the posting schedule.
+It may not sign in, connect an account, approve content, publish, deploy,
+delete, or trigger another external side effect reserved for the operator.
+
+A schedule is configuration, which is why it sits inside that authority:
+changing one moves when work a person has already written and already approved
+happens, and it cannot make a post exist, send one that would not have gone, or
+reach an account nobody connected. It is still a live effect - a campaign's
+posts can be moved to a different hour of tonight - so say what is about to be
+rescheduled before doing it, and read the schedule back afterwards.
 
 Current explicit user instructions outrank an SOP. Campaign-specific rules and
 live post configuration outrank general defaults. When instructions conflict,
