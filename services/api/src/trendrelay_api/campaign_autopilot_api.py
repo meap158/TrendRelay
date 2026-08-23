@@ -1553,6 +1553,21 @@ def preview_autopilot(
     # Deferred: campaign_runner imports this module lazily for its links, and
     # a top-level import back at it would close that circle.
     from trendrelay_api.campaign_runner import _outcome_of
+    from trendrelay_api.campaign_measurement import latest_metrics
+    from trendrelay_api.publication_models import PublicationExecution
+
+    # Each measured post's latest engagement, keyed by the job it rode in, so a
+    # delivered row can carry its own numbers. Only posts read back have any.
+    metrics_by_job: dict[str, dict[str, float]] = {}
+    for execution in session.scalars(
+        select(PublicationExecution).where(
+            PublicationExecution.campaign_id == campaign_id,
+            PublicationExecution.state == "measured",
+        )
+    ).all():
+        figures = latest_metrics(execution)
+        if execution.job_id and figures:
+            metrics_by_job[execution.job_id] = figures
 
     seen_posts: set[tuple[Any, ...]] = set()
     for job in jobs:
@@ -1613,6 +1628,9 @@ def preview_autopilot(
             "updated_at": job.updated_at,
             "post_url": next(iter(permalinks), None),
             "page_url": profile_url(platform, label),
+            # The post's own engagement once it has been read back - likes,
+            # comments, shares, views, saves - or None until then.
+            "metrics": metrics_by_job.get(job.id) or None,
             # For the same media preview the Publish composer plays, so the
             # timeline can show the post rather than name a file path.
             "video_path": request_payload.get("video_path"),

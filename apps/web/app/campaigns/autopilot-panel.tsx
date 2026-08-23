@@ -584,6 +584,8 @@ type TimelineEntry = {
   /** Delivered rows only: what the engine did with it. */
   status: DeployedPost["status"] | null;
   delivery: DeployedPost["delivery"] | null;
+  /** Delivered rows only: its measured engagement, once read back. */
+  metrics: PostMetrics | null;
   post_url: string | null;
   page_url: string | null;
   video_path: string | null;
@@ -597,6 +599,18 @@ type TimelineEntry = {
   placement: string | null;
   reason: string | null;
   route: { label: string; detail: string } | null;
+};
+
+/** A post's own engagement, once the engine has been read back. Every field is
+    optional: a platform reports what it reports, and a metric it does not know
+    is absent rather than zero. */
+type PostMetrics = {
+  views?: number;
+  likes?: number;
+  comments?: number;
+  shares?: number;
+  saves?: number;
+  watch_seconds?: number;
 };
 
 type DeployedPost = {
@@ -622,6 +636,8 @@ type DeployedPost = {
   page_url: string | null;
   video_path: string | null;
   image_paths: string[];
+  /** The post's measured engagement, or null until it has been read back. */
+  metrics: PostMetrics | null;
 };
 
 type OfferMatch = {
@@ -916,6 +932,39 @@ function deliveredStatus(entry: TimelineEntry): { label: string; tone: "good" | 
   }
   const raw = entry.status ?? "delivered";
   return { label: raw.charAt(0).toUpperCase() + raw.slice(1), tone: "neutral" };
+}
+
+/** A big count in a small space: 1500 -> 1.5k, so a row of them stays a row. */
+function compactCount(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 ? 1 : 0)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(value % 1_000 ? 1 : 0)}k`;
+  return String(Math.round(value));
+}
+
+/**
+ * A delivered post's engagement, as a compact row of counts.
+ *
+ * Only what the platform reported: a metric it does not know is left out rather
+ * than shown as a zero, which would read as "nobody" when the truth is "unknown".
+ * Renders nothing until a post has been read back at all.
+ */
+function PostMetricsRow({ metrics }: { metrics: PostMetrics }) {
+  const items: Array<[string, string, number | undefined]> = [
+    ["views", "views", metrics.views],
+    ["likes", "likes", metrics.likes],
+    ["comments", "comments", metrics.comments],
+    ["shares", "shares", metrics.shares],
+    ["saves", "saves", metrics.saves],
+  ];
+  const shown = items.filter((item) => typeof item[2] === "number");
+  if (!shown.length) return null;
+  return (
+    <div className="campaign-metrics" aria-label="Post engagement">
+      {shown.map(([key, label, value]) => (
+        <span key={key}><b>{compactCount(value as number)}</b> {label}</span>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -3109,6 +3158,7 @@ export function AutopilotPanel({
       destination_id: item.destination_id,
       status: item.status,
       delivery: item.delivery,
+      metrics: item.metrics,
       post_url: item.post_url,
       page_url: item.page_url,
       video_path: item.video_path,
@@ -3135,6 +3185,7 @@ export function AutopilotPanel({
       destination_id: post.destination_id,
       status: null,
       delivery: null,
+      metrics: null,
       post_url: null,
       page_url: null,
       video_path: null,
@@ -5610,6 +5661,9 @@ export function AutopilotPanel({
                               {displayTitle(entry.title) || "Untitled campaign post"}
                             </a>
                           ) : (displayTitle(entry.title) || "Untitled campaign video")}</h4>
+                          {entry.kind === "delivered" && entry.metrics && (
+                            <PostMetricsRow metrics={entry.metrics} />
+                          )}
                           {/* Which queued post this outing is of, and a way
                               back to it. A post repeats, so the same one
                               appears on the schedule several times, and
@@ -5777,6 +5831,9 @@ export function AutopilotPanel({
                       })}
                       {destination?.label ? ` · ${destination.label}` : ""}
                     </small>
+                    {entry.kind === "delivered" && entry.metrics && (
+                      <PostMetricsRow metrics={entry.metrics} />
+                    )}
                   </div>
                   <div className="campaign-grid-foot">
                     {entry.kind === "delivered" ? (

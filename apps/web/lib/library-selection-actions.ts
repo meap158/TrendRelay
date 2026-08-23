@@ -99,8 +99,8 @@ export const SELECTION_ACTION_KEY: Record<LibrarySelectionActionId, string> = {
 };
 
 export const SELECTION_ACTION_ICON: Record<LibrarySelectionActionId, ActionName> = {
-  effects: "edit",
+  effects: "effects",
   transcribe: "transcribe",
-  captions: "edit",
-  voiceover: "play",
+  captions: "captions",
+  voiceover: "voiceover",
 };

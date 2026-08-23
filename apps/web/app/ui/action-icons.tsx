@@ -4,6 +4,7 @@ import {
   AudioLines,
   CalendarPlus,
   Archive,
+  Captions,
   Check,
   ChevronRight,
   Copy,
@@ -14,6 +15,7 @@ import {
   Grid2X2,
   Link2,
   List,
+  MicVocal,
   Pencil,
   Play,
   Plus,
@@ -25,6 +27,7 @@ import {
   SlidersHorizontal,
   Trash2,
   Upload,
+  Wand2,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -52,6 +55,14 @@ export const ACTION_ICONS = {
   // transcribing and captioning sit next to each other in the same menu,
   // and one pencil for both would make them the same action twice.
   transcribe: AudioLines,
+  // The three below are the rest of that same menu, and they had the same
+  // problem the comment above describes: effects and captions both wore the
+  // pencil, and voiceover wore the play triangle - which reads as listening
+  // to the asset rather than speaking a new track over it. Four editing
+  // actions in one row, two of them identical and one of them wrong.
+  effects: Wand2,
+  captions: Captions,
+  voiceover: MicVocal,
   clip: Scissors,
   openFolder: FolderOpen,
   publish: Send,

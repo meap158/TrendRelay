@@ -1918,7 +1918,7 @@ function LibraryContent() {
                       onClick={() => setCampaignPickerFor(
                         assets.filter((asset) => selection.has(asset.id)),
                       )}
-                    ><ActionIcon name="clip" />Add to campaign</Button>
+                    ><ActionIcon name="campaign" />Add to campaign</Button>
                     <ActionMenu
                       label={t("library.selectionActions")}
                       ariaLabel={t("library.selectionActionsLabel")}
@@ -2103,7 +2103,7 @@ function LibraryContent() {
                           variant="secondary"
                           title="Stack, preview, and apply any available effect, including face blur"
                           onClick={() => setEffectsOpen(true)}
-                        ><ActionIcon name="edit" />Effects</Button>
+                        ><ActionIcon name="effects" />Effects</Button>
                         {renderedCut(selected.versions) && (
                           <Button
                             variant="secondary"
@@ -2134,7 +2134,7 @@ function LibraryContent() {
                           ? "Build subtitles from this asset's transcript, styled and timed to the speech"
                           : "Captions need an asset with audio"}
                         onClick={() => setCaptionsOpen(true)}
-                      ><ActionIcon name="edit" />Captions</Button>
+                      ><ActionIcon name="captions" />Captions</Button>
                       {/* Its own button for the same reason captions have one:
                           it comes from the words rather than the picture, and
                           does not stack with anything. Video or audio, because
@@ -2147,7 +2147,7 @@ function LibraryContent() {
                           ? "Speak this asset's reviewed transcript in a chosen voice"
                           : "A voiceover needs a clip to put it on"}
                         onClick={() => setVoiceOpen(true)}
-                      ><ActionIcon name="play" />Voiceover</Button>
+                      ><ActionIcon name="voiceover" />Voiceover</Button>
                     </div>
                     <EffectActivity
                       assetId={selected.id}
