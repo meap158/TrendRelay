@@ -2342,18 +2342,27 @@ export function AutopilotPanel({
       }
       succeed(await work());
       await refresh();
+      // And the page that owns the campaign list, because its rows count
+      // things this panel changes. The badge beside a campaign's name counts
+      // posts held for approval; approving one left it reading the old number
+      // until the tab was reloaded, which is the one moment somebody is
+      // certain the number moved.
+      //
+      // Every action goes through here, so this is the one place it belongs -
+      // an action that forgot to say so is the bug this replaces, and a list
+      // of which actions count is a list that goes stale.
+      if (label !== "preview") await onCampaignChanged();
       if (replanning) await loadPreview(false);
     } catch (reason) {
       fail(explainFailure(reason, "That did not work."));
     } finally {
       setBusy("");
     }
-  }, [refresh, succeed, fail, loadPreview]);
+  }, [refresh, succeed, fail, loadPreview, onCampaignChanged]);
 
   async function save(changes: Partial<Autopilot>, { confirm = false } = {}) {
     if (!autopilot) return;
     const next = { ...autopilot, ...changes };
-    const turningOn = Boolean(next.enabled && !autopilot.enabled);
     await run("settings", async () => {
       const saved = await json<{ held?: { recomposed: number; kept: number } }>(
         await apiFetch(`${base}/autopilot`, {
@@ -2404,9 +2413,6 @@ export function AutopilotPanel({
       }
       return `${settled} ${parts.join("; ")}.`;
     });
-    // Switching on activates the campaign server-side; the parent's status
-    // chip and list need to hear about it.
-    if (turningOn) await onCampaignChanged();
   }
 
   /**
