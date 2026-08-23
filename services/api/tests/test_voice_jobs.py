@@ -494,3 +494,32 @@ def test_the_audio_alone_is_still_offered_on_a_recording() -> None:
     job = queue(audio_asset(), deliver="audio")
 
     assert job["payload"]["deliver"] == "audio"
+
+
+def test_a_queued_take_carries_the_clips_length(database) -> None:
+    """What the notification drawer estimates from.
+
+    A voiceover delivered as video re-encodes the clip, so its cost tracks the
+    clip's length the way a render's does - and the row is already open here to
+    check the asset has a picture at all.
+    """
+    item = asset()
+    with TestingSession.begin() as session:
+        session.get(MediaAsset, item).duration_ms = 18_250
+
+    assert queue(item)["payload"]["media_ms"] == 18_250
+
+
+def test_the_length_is_not_part_of_what_makes_a_take_the_same(database) -> None:
+    """Measuring a clip afterwards must not bill a second identical take.
+
+    The id is derived from what the audio depends on - the words, the voice,
+    the model. How long the source runs is none of those, so a clip measured
+    between two identical requests still returns the take already generated.
+    """
+    item = asset()
+    first = queue(item)
+    with TestingSession.begin() as session:
+        session.get(MediaAsset, item).duration_ms = 61_000
+
+    assert queue(item)["id"] == first["id"]

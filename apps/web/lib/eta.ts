@@ -82,6 +82,17 @@ export type Model = {
   flatSeconds: number;
   /** How many finished jobs this was fitted from. */
   samples: number;
+  /**
+   * How many of those had a measured length behind them.
+   *
+   * Separate from `samples` because the two can be wildly different, and the
+   * choice between the rate and the median turns on it. Measured live: 195
+   * finished face blurs, exactly one of which had been queued since lengths
+   * started being recorded. That one point set a rate, and a rate beats a
+   * median if you let it - so a 60-second clip was estimated at 43 seconds
+   * against an observed median of 157.
+   */
+  measuredSamples: number;
 };
 
 /**
@@ -133,6 +144,7 @@ export function fit(finished: Finished[], shape: string): Model {
       perMediaSecond: ratios.length ? median(ratios) : 0,
       flatSeconds,
       samples: mine.length,
+      measuredSamples: measured.length,
     };
   }
 
@@ -157,24 +169,51 @@ export function fit(finished: Finished[], shape: string): Model {
       perMediaSecond: median(ratios),
       flatSeconds,
       samples: mine.length,
+      measuredSamples: measured.length,
     };
   }
 
   // Startup is whatever the line says a zero-length clip would still cost.
   // Never below zero: a negative fixed cost would make short clips free.
   const fixedSeconds = Math.max(0, lowWork - slope * lowMedia);
-  return { shape, fixedSeconds, perMediaSecond: slope, flatSeconds, samples: mine.length };
+  return {
+    shape,
+    fixedSeconds,
+    perMediaSecond: slope,
+    flatSeconds,
+    samples: mine.length,
+    measuredSamples: measured.length,
+  };
 }
 
-/** What the model alone expects a job of this length to cost, start to finish. */
+/**
+ * What the model alone expects a job of this length to cost, start to finish.
+ *
+ * Two summaries of the same shape compete here, and the tie-break is which of
+ * them describes the jobs the median is drawn from.
+ *
+ * The rate wins when most of the population was measured, because then both
+ * are talking about the same work and the rate is the one that scales. It
+ * loses when the measured jobs are a small minority - a rate fitted from one
+ * clip is one clip's opinion, and letting it outrank a median of two hundred
+ * is how a face blur that reliably takes two and a half minutes came to be
+ * advertised as forty-three seconds. That is a real reading from this
+ * workspace: 195 finished renders, one of them queued since lengths started
+ * being recorded.
+ *
+ * A majority rather than a count, because a count cannot tell those apart -
+ * three measured of three is confident, three of two hundred is an anecdote.
+ * It also self-corrects: as the unmeasured history ages out of the window, the
+ * measured share climbs and length takes over on its own.
+ */
 export function expectedSeconds(model: Model, mediaSeconds: number | null): number | null {
-  if (mediaSeconds !== null && mediaSeconds > 0 && model.perMediaSecond > 0) {
-    return model.fixedSeconds + model.perMediaSecond * mediaSeconds;
-  }
-  // No length to go on, or nothing learned about length yet. The median job of
-  // this shape is the best available answer, and no answer is better than an
-  // invented one.
-  return model.flatSeconds > 0 ? model.flatSeconds : null;
+  const byLength = mediaSeconds !== null && mediaSeconds > 0 && model.perMediaSecond > 0
+    ? model.fixedSeconds + model.perMediaSecond * mediaSeconds
+    : null;
+  const representative = model.measuredSamples * 2 >= model.samples;
+  if (byLength !== null && representative) return byLength;
+  if (model.flatSeconds > 0) return model.flatSeconds;
+  return byLength;
 }
 
 function confidenceOf(model: Model, progress: number | null): Confidence {

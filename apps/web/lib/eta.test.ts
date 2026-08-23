@@ -245,3 +245,52 @@ test("the wording says whether it is a measurement or a guess", () => {
     etaLabel({ remainingSeconds: 90, confidence: "rough", basis: "" }), "about 1m 30s left",
   );
 });
+
+
+test("one measured clip does not outvote a median of two hundred", () => {
+  // The live bug this exists for. 195 finished face blurs, exactly one queued
+  // since lengths started being recorded. That single point set a rate, and a
+  // rate beat the median if you let it: a 60-second clip was advertised at 43
+  // seconds against an observed median of 157.
+  const mostlyUnmeasured: Finished[] = [
+    ...Array.from({ length: 194 }, () => (
+      { shape: "burn", mediaSeconds: null, workSeconds: 157 }
+    )),
+    { shape: "burn", mediaSeconds: 60, workSeconds: 43 },
+  ];
+
+  const model = fit(mostlyUnmeasured, "burn");
+
+  assert.equal(model.samples, 195);
+  assert.equal(model.measuredSamples, 1);
+  assert.equal(expectedSeconds(model, 60), 157, "one clip outvoted the median");
+});
+
+test("length takes over once most of the history has been measured", () => {
+  // The self-correcting half: as unmeasured jobs age out of the window, the
+  // measured share climbs past half and the rate stops being an anecdote.
+  const mostlyMeasured: Finished[] = [
+    { shape: "burn", mediaSeconds: null, workSeconds: 157 },
+    { shape: "burn", mediaSeconds: null, workSeconds: 157 },
+    { shape: "burn", mediaSeconds: 30, workSeconds: 30 },
+    { shape: "burn", mediaSeconds: 60, workSeconds: 60 },
+    { shape: "burn", mediaSeconds: 120, workSeconds: 120 },
+  ];
+
+  const model = fit(mostlyMeasured, "burn");
+
+  assert.equal(model.measuredSamples, 3);
+  assert.equal(model.samples, 5);
+  assert.ok(Math.abs(expectedSeconds(model, 90)! - 90) < 2, `${expectedSeconds(model, 90)}`);
+});
+
+test("a history that is entirely measured scales, however short it is", () => {
+  const only: Finished[] = [{ shape: "burn", mediaSeconds: 60, workSeconds: 30 }];
+
+  const model = fit(only, "burn");
+
+  // The median and the rate agree here - there is one job either way - but the
+  // rate is the one that scales, and it must not be discarded for being alone.
+  assert.equal(expectedSeconds(model, 60), 30);
+  assert.ok(expectedSeconds(model, 600)! > 30, "a ten-minute clip read as a one-minute one");
+});

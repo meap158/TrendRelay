@@ -242,3 +242,43 @@ def test_the_track_is_named_for_its_language(tmp_path) -> None:
     done = caption_jobs.run_caption_job(job["id"], factory=Factory)
 
     assert Path(done["result"]["files"]["srt"]).name == "asset1.en.srt"
+
+
+def test_a_queued_burn_carries_the_clips_length() -> None:
+    """The notification drawer estimates from it; the row is already open here.
+
+    A burn re-encodes the whole clip, so how long it takes tracks how long the
+    clip is. Carrying the length on the job is what lets a batch of them say
+    how much longer it has without a database read per notification row.
+    """
+    add_asset()
+    with Factory.begin() as session:
+        session.get(MediaAsset, "asset1").duration_ms = 31_500
+
+    queued = caption_jobs.queue(
+        "ws1", "asset1", actor_user_id="owner", request=request(), factory=Factory
+    )
+
+    assert queued["payload"]["media_ms"] == 31_500
+
+
+def test_the_length_is_not_part_of_what_makes_a_job_the_same() -> None:
+    """Measuring a clip afterwards must not split one request into two jobs.
+
+    The id is content-addressed on what the render depends on. A duration is
+    metadata about the source, not an input to the encode, so a clip that gets
+    measured between two identical requests still returns the job already
+    doing it rather than starting a second one.
+    """
+    add_asset()
+    before = caption_jobs.queue(
+        "ws1", "asset1", actor_user_id="owner", request=request(), factory=Factory
+    )
+    with Factory.begin() as session:
+        session.get(MediaAsset, "asset1").duration_ms = 44_000
+
+    after = caption_jobs.queue(
+        "ws1", "asset1", actor_user_id="owner", request=request(), factory=Factory
+    )
+
+    assert before["id"] == after["id"]

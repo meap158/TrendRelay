@@ -132,6 +132,10 @@ def queue(
         )
         if not asset:
             raise ValueError("Media asset was not found.")
+        # Read while the row is open, for the estimate downstream. A voiceover
+        # delivered as video re-encodes the clip, so its cost tracks the clip's
+        # length the way a render's does.
+        media_ms = asset.duration_ms
         # Refused here for the same reason the allowance is: there is no
         # picture to put sound on, and finding that out in the worker means
         # finding it out after the speech has been generated and billed. The
@@ -187,6 +191,7 @@ def queue(
             "id": job_id,
             "workspace_id": workspace_id,
             "asset_id": asset_id,
+            "media_ms": media_ms,
             "actor_user_id": actor_user_id,
             "voice_id": voice_id,
             "model_id": model_id,

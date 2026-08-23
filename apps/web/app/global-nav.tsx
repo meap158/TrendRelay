@@ -22,6 +22,7 @@ import { NotificationContext } from "./notification-context";
 import { useT } from "./i18n-provider";
 import { Button } from "./ui/button";
 import { FilterChipStrip } from "./ui/filter-strip";
+import { RelativeTime } from "./ui/relative-time";
 import { ActionIcon } from "./ui/action-icons";
 import { LanguagePicker } from "./ui/language-picker";
 import { TimezonePicker } from "./ui/timezone-picker";
@@ -97,7 +98,19 @@ function jobShape(job: BaseJob): string {
   const payload = job.raw?.payload ?? {};
   const modes: string[] = Array.isArray(payload.modes) ? payload.modes : [];
   const effects: string[] = Array.isArray(payload.effects) ? payload.effects : [];
-  const detail = [...modes, ...effects].sort().join("+");
+  // What is delivered separates the two halves of one job kind: a caption
+  // sidecar writes a text file and a caption burn re-encodes the whole clip,
+  // and a voiceover is either a sound file or that sound muxed onto the
+  // picture. One `caption_render` median across both is a number true of
+  // neither - which is the mistake this whole key exists to avoid.
+  const deliver = typeof payload.deliver === "string" ? payload.deliver : "";
+  // A preview renders a few seconds to check a recipe; the real thing renders
+  // the clip. Measured across this workspace's own face-blur history the two
+  // together run from 0.7s to 1751s - a single median across that is not an
+  // estimate of anything.
+  const preview = payload.request?.preview_seconds ? "preview" : "";
+  const detail = [...modes, ...effects].sort()
+    .concat(deliver || [], preview || []).join("+");
   const kind = String(job.raw?.kind ?? job.category ?? "job");
   return detail ? `${kind}:${detail}` : kind;
 }
@@ -128,6 +141,13 @@ function finishedWork(jobs: BaseJob[]): Finished[] {
   const samples: Finished[] = [];
   for (const job of jobs) {
     if (job.status !== "succeeded") continue;
+    // A retried job is not a measurement of work. Its span runs from the first
+    // attempt to the last, so it also contains whatever failed and however
+    // long the row waited to be reclaimed. Measured on this workspace's own
+    // renders: first attempts run 0.7s to 455s with a median of 157s, second
+    // attempts a median of 689s and third 918s. Training on those would have
+    // taught the estimator that a face blur takes eleven minutes.
+    if ((job.raw?.attempt_count ?? 1) > 1) continue;
     const workSeconds = secondsBetween(job.startedAt, job.raw?.completed_at);
     if (workSeconds === null || workSeconds <= 0) continue;
     samples.push({
@@ -889,7 +909,12 @@ export function GlobalNav() {
                         )}
                         {job.error && <p className="notification-error">{job.error}</p>}
                         <footer>
-                          <time dateTime={job.created_at}>{new Date(job.created_at).toLocaleString()}</time>
+                          {/* How long ago, because the first question a
+                              notification answers is whether it is still
+                              relevant - and a formatted date makes you do the
+                              arithmetic to find out. The exact time is still
+                              there on hover. */}
+                          <RelativeTime at={job.created_at} />
                           {/* Offered while the batch has something to stop,
                               not while its newest job happens to be unfinished.
                               A batch row said "running" with no way to stop it

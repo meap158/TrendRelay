@@ -74,6 +74,12 @@ def queue(
         )
         if asset is None:
             raise LookupError("That asset is not in this workspace.")
+        # Read while the row is open. A burn's cost tracks the length of what
+        # it burns onto, and this is what lets the notification drawer say how
+        # much longer a batch of them has - see `lib/eta.ts`. Not part of the
+        # signature below: the same request is the same job whether or not
+        # anybody has measured the clip.
+        media_ms = asset.duration_ms
         signature = ":".join(
             [
                 workspace_id,
@@ -106,6 +112,7 @@ def queue(
             "id": job_id,
             "workspace_id": workspace_id,
             "asset_id": asset_id,
+            "media_ms": media_ms,
             "actor_user_id": actor_user_id,
             **request,
         },
