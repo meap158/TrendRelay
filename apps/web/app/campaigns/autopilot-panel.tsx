@@ -5626,35 +5626,42 @@ export function AutopilotPanel({
                               <small>{platform ? platformLabels[platform] : "Social account"}
                                 {destination?.provider ? ` · ${destination.provider}` : ""}</small>
                             </span>
-                            {/* Whether it has gone out, in one badge. This was
-                                the difference between the two lists. */}
-                            {entry.kind === "delivered" ? (
-                              <Badge tone={deliveredStatus(entry).tone}>
-                                {deliveredStatus(entry).label}
-                              </Badge>
-                            ) : (
-                              <Badge tone={entry.problem ? "warn" : "neutral"}
-                                title={plannedMeaning(autopilot.delivery)}>
-                                Planned
-                              </Badge>
-                            )}
-                            {/* Beside the badge, which is where the grid puts
-                                the same action. It used to live in the muted
-                                source line below as ten-pixel undecorated
-                                text, deliberately styled not to read as a link
-                                so it would not pair with the one next to it -
-                                and the result was an action nobody could find.
-                                A row that can be edited says so with a
-                                button. */}
-                            {canEdit && entry.kind === "planned"
-                              && entry.queue_item_id
-                              && queueById.has(entry.queue_item_id) && (
-                              <Button variant="quiet" size="sm"
-                                onClick={() => openPostEditor(
-                                  queueById.get(entry.queue_item_id!)!, "posts")}>
-                                Edit
-                              </Button>
-                            )}
+                            {/* State above, what can be done about it below -
+                                the order the grid card already uses, and the
+                                reason this is a column rather than the rest of
+                                the row. Inline, the button pushed the badge
+                                left, so a badge sat at a different place
+                                depending on whether its row happened to be
+                                editable and the column of them read ragged. */}
+                            <div className="campaign-entry-state">
+                              {/* Whether it has gone out, in one badge. This was
+                                  the difference between the two lists. */}
+                              {entry.kind === "delivered" ? (
+                                <Badge tone={deliveredStatus(entry).tone}>
+                                  {deliveredStatus(entry).label}
+                                </Badge>
+                              ) : (
+                                <Badge tone={entry.problem ? "warn" : "neutral"}
+                                  title={plannedMeaning(autopilot.delivery)}>
+                                  Planned
+                                </Badge>
+                              )}
+                              {/* It used to live in the muted source line below
+                                  as ten-pixel undecorated text, deliberately
+                                  styled not to read as a link so it would not
+                                  pair with the one next to it - and the result
+                                  was an action nobody could find. A row that
+                                  can be edited says so with a button. */}
+                              {canEdit && entry.kind === "planned"
+                                && entry.queue_item_id
+                                && queueById.has(entry.queue_item_id) && (
+                                <Button variant="quiet" size="sm"
+                                  onClick={() => openPostEditor(
+                                    queueById.get(entry.queue_item_id!)!, "posts")}>
+                                  Edit
+                                </Button>
+                              )}
+                            </div>
                           </div>
                           <h4>{entry.post_url ? (
                             <a href={entry.post_url} target="_blank" rel="noreferrer">
