@@ -331,6 +331,29 @@ def test_the_server_resolves_the_local_operators_workspace(session) -> None:
 # --- the tunnel ---------------------------------------------------------------
 
 
+class _OverriddenSettings:
+    """Real settings with a few fields pinned.
+
+    Not a bare namespace, deliberately. A module that does
+    ``from trendrelay_api.config import get_settings`` at import time binds
+    whatever function is there at that moment - and the first import of such a
+    module can happen *inside* a stubbed test, freezing the stub into it for
+    the rest of the process. A bare namespace then breaks every later test
+    that touches an unrelated field (`media_ai_speech_model` was the one that
+    caught this). Delegating to the real settings keeps a leaked binding
+    harmless: every field answers, and only the pinned ones differ.
+    """
+
+    def __init__(self, real, overrides: dict) -> None:
+        self._real = real
+        self._overrides = overrides
+
+    def __getattr__(self, name: str):
+        if name in self._overrides:
+            return self._overrides[name]
+        return getattr(self._real, name)
+
+
 def _tunnel_env(monkeypatch, **overrides) -> None:
     """Point the tunnel at a controlled configuration, through Settings.
 
@@ -339,8 +362,6 @@ def _tunnel_env(monkeypatch, **overrides) -> None:
     `get_settings` with a fixed object, keyed by the same CONTROL_PLANE_* /
     TUNNEL_* names the operator uses, mapped to their Settings fields.
     """
-    from types import SimpleNamespace
-
     import trendrelay_api.config as config
 
     values = {
@@ -360,7 +381,10 @@ def _tunnel_env(monkeypatch, **overrides) -> None:
     }
     for key, value in overrides.items():
         values[env_to_field.get(key, key)] = "" if value is None else value
-    monkeypatch.setattr(config, "get_settings", lambda: SimpleNamespace(**values))
+    real = config.get_settings()
+    monkeypatch.setattr(
+        config, "get_settings", lambda: _OverriddenSettings(real, values)
+    )
 
 
 def test_tunnel_config_resolves_from_the_environment(monkeypatch) -> None:
