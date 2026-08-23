@@ -90,6 +90,15 @@ type Version = {
 const RENDERED_KINDS = new Set(["blurred", "edited", "captioned"]);
 
 /**
+ * What can be read at all: speech off a soundtrack, or text off a frame.
+ *
+ * The union of the two modes rather than either one, because the dialog is
+ * where the choice between them is made and it disables whichever the asset
+ * cannot do. Disabling the button for an image would hide OCR entirely.
+ */
+const TRANSCRIBABLE = ["video", "audio", "image"];
+
+/**
  * The newest render of an asset, whatever effects made it.
  *
  * Newest rather than ranked by kind: somebody who has just re-rendered wants
@@ -1137,6 +1146,7 @@ function LibraryContent() {
   const [lastPicked, setLastPicked] = useState<string | null>(null);
   const [bulkActions, setBulkActions] = useState<BulkAction[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [transcribeOpen, setTranscribeOpen] = useState(false);
   const [captionsOpen, setCaptionsOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   /** What the campaign picker is about to add. Empty closes it. */
@@ -2124,6 +2134,22 @@ function LibraryContent() {
                           : t("library.videoOnlyClip")}
                         onClick={() => setEditorOpen(true)}
                         ><ActionIcon name="clip" />{t("library.clipPlan")}</Button>
+                      {/* Ahead of Captions because that is the order the work
+                          goes in: both captions and a voiceover read from a
+                          transcript, and until now the only way to make one
+                          from this panel was a widget buried in the reviewed-
+                          text form far below - so the step they depend on was
+                          the one step the row did not offer. Same dialog the
+                          batch menu opens, with this asset as its single
+                          target, so the two paths cannot drift apart. */}
+                      <Button
+                        variant="secondary"
+                        disabled={!TRANSCRIBABLE.includes(selected.media_kind)}
+                        title={TRANSCRIBABLE.includes(selected.media_kind)
+                          ? "Read this asset's speech, or the text on screen, into a draft transcript"
+                          : "Transcribing needs a clip with sound or something to read on screen"}
+                        onClick={() => setTranscribeOpen(true)}
+                      ><ActionIcon name="transcribe" />Transcribe</Button>
                       {/* Captions are not an effect: they come from the audio,
                           need not touch the picture, and do not stack. So they
                           get their own button rather than a row in the stack. */}
@@ -2393,6 +2419,29 @@ function LibraryContent() {
           apiFetch={apiFetch}
           onClose={() => setSelectionAction(null)}
           onQueued={finishSelectionAction}
+        />
+      )}
+      {workspaceId && selected && (
+        // One target, but the batch dialog: it already knows which modes this
+        // media supports, which providers are ready, and what to do about one
+        // that is not. A second single-asset dialog beside it would be the
+        // same decisions written twice, and drifting from the first.
+        <BatchTranscribe
+          key={`transcribe-${selected.id}`}
+          open={transcribeOpen}
+          workspaceId={workspaceId}
+          targets={[{
+            id: selected.id,
+            title: selected.title,
+            mediaKind: selected.media_kind,
+          }]}
+          canEdit={canImport}
+          apiFetch={apiFetch}
+          onClose={() => setTranscribeOpen(false)}
+          onQueued={(text) => {
+            setMessage(text);
+            setTranscribeOpen(false);
+          }}
         />
       )}
       {workspaceId && selected && (
