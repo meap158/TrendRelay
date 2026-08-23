@@ -19,7 +19,7 @@ import dynamic from "next/dynamic";
 import { clipLength, handoffPath } from "../../lib/media-rules";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Info } from "lucide-react";
+import { Bookmark, ChevronDown, Eye, Heart, Info, MessageCircle, Share2 } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { AUTHORITIES } from "./authority-options";
@@ -942,27 +942,39 @@ function compactCount(value: number): string {
 }
 
 /**
- * A delivered post's engagement, as a compact row of counts.
+ * A delivered post's engagement, as the icons a platform shows it with.
  *
- * Only what the platform reported: a metric it does not know is left out rather
- * than shown as a zero, which would read as "nobody" when the truth is "unknown".
- * Renders nothing until a post has been read back at all.
+ * The eye, heart, speech bubble, share and bookmark read the way they do under
+ * a real post, so a glance lands without reading labels - the count is the
+ * content, the icon is what it counts. Only what the platform reported: a
+ * metric it does not know is left out rather than shown as a zero, which would
+ * read as "nobody" when the truth is "unknown". Renders nothing until a post
+ * has been read back at all.
  */
+const METRIC_ICON = {
+  views: Eye,
+  likes: Heart,
+  comments: MessageCircle,
+  shares: Share2,
+  saves: Bookmark,
+} as const;
+const METRIC_ORDER = ["views", "likes", "comments", "shares", "saves"] as const;
+
 function PostMetricsRow({ metrics }: { metrics: PostMetrics }) {
-  const items: Array<[string, string, number | undefined]> = [
-    ["views", "views", metrics.views],
-    ["likes", "likes", metrics.likes],
-    ["comments", "comments", metrics.comments],
-    ["shares", "shares", metrics.shares],
-    ["saves", "saves", metrics.saves],
-  ];
-  const shown = items.filter((item) => typeof item[2] === "number");
+  const shown = METRIC_ORDER.filter((key) => typeof metrics[key] === "number");
   if (!shown.length) return null;
   return (
     <div className="campaign-metrics" aria-label="Post engagement">
-      {shown.map(([key, label, value]) => (
-        <span key={key}><b>{compactCount(value as number)}</b> {label}</span>
-      ))}
+      {shown.map((key) => {
+        const Icon = METRIC_ICON[key];
+        const value = metrics[key] as number;
+        return (
+          <span key={key} title={`${value.toLocaleString()} ${key}`}>
+            <Icon size={13} strokeWidth={2} aria-hidden="true" />
+            {compactCount(value)}
+          </span>
+        );
+      })}
     </div>
   );
 }

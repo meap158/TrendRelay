@@ -1459,8 +1459,12 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-grid-open { color: var(--link); font-size: 12px; font-weight: 500; }
 /* A delivered post's engagement, a compact row of counts under it - in the
    list and the grid card alike. The number is emphasised, the label quiet. */
-.campaign-metrics { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-block-start: 4px; color: var(--muted); font-size: 11px; }
-.campaign-metrics b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Read as a social post's own engagement bar: the platform's icons, a count
+   beside each, spaced tight so the row is chrome under the post rather than a
+   block of its own. The icon carries the meaning; the number carries the news. */
+.campaign-metrics { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-block-start: 5px; color: var(--muted); font-size: 11px; }
+.campaign-metrics span { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
+.campaign-metrics svg { opacity: .7; }
 
 /* Day drawer ("see more"): the whole day, one row per post. */
 /* The selection bar holds its own row height whether or not anything is
