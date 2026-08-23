@@ -4,7 +4,10 @@ import { useMemo, useState } from "react";
 
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
+import { Select } from "../ui/select";
+import { useLocale } from "../i18n-provider";
 import { useJobs } from "../jobs-provider";
+import { transcriptionLanguageOptions } from "../../lib/transcription-languages";
 import { ProviderSwitch, providerOf, useMediaAi } from "./transcription-setup";
 import type { ProviderKey } from "./transcription-setup";
 
@@ -75,9 +78,13 @@ export function BatchTranscribe({
   // make this commit uncompilable without that one. A refresh reaches the
   // same drawer a moment later and owes nothing to work in flight.
   const { refresh: refreshJobs } = useJobs();
+  const { locale } = useLocale();
   const mediaAi = useMediaAi(apiFetch, open);
   const [chosen, setChosen] = useState<Record<Mode, boolean>>({ speech: true, ocr: false });
   const [language, setLanguage] = useState("");
+  // Named in the reader's own language, and only built when the model's list is
+  // actually on screen.
+  const languageOptions = useMemo(() => transcriptionLanguageOptions(locale), [locale]);
   const [queueing, setQueueing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [queued, setQueued] = useState<string | null>(null);
@@ -218,12 +225,18 @@ export function BatchTranscribe({
 
       <label className="batch-transcribe-language">
         <span>Language <em>optional</em></span>
-        <input
+        <Select
           value={language}
-          maxLength={40}
-          placeholder="Detected per clip when left empty"
+          aria-label="Language"
           onChange={(event) => setLanguage(event.target.value)}
-        />
+        >
+          {/* Empty is detection - the same value `start` reads as "send no
+              language and let the model decide". */}
+          <option value="">Detected per clip</option>
+          {languageOptions.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </Select>
         <small>
           Naming a language the model then disagrees with is worse than letting
           it detect one - but music over speech detects badly, and you usually
