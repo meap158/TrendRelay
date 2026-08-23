@@ -192,6 +192,12 @@ def installed_pairs(*, argos: Any = None) -> list[dict[str, str]]:
                         "from": language.code,
                         "to": other.code,
                         "label": f"{language.name} to {other.name}",
+                        # Each end named on its own as well as together.
+                        # A reading that does not know its own language
+                        # needs to be told which it is, and "English to
+                        # Vietnamese" is not the name of a language.
+                        "from_label": language.name,
+                        "to_label": other.name,
                     }
                 )
     return found

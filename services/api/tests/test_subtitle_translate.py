@@ -127,7 +127,13 @@ def test_pairs_are_listed_from_what_is_installed() -> None:
             return [english, vietnamese]
 
     assert installed_pairs(argos=Argos()) == [
-        {"from": "en", "to": "vi", "label": "English to Vietnamese"}
+        {
+            "from": "en", "to": "vi", "label": "English to Vietnamese",
+            # Each end named alone as well, because a reading of glyphs
+            # has to be told which language it is in and "English to
+            # Vietnamese" is not the name of one.
+            "from_label": "English", "to_label": "Vietnamese",
+        }
     ]
 
 

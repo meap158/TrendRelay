@@ -91,11 +91,37 @@ export function TranscriptReader({
   /** Put a reading into the reviewed field. The original, or the translation. */
   onUse: (text: string) => void;
 }) {
-  const [pairs, setPairs] = useState<{ from: string; to: string; label: string }[]>([]);
+  const [pairs, setPairs] = useState<
+    { from: string; to: string; label: string; from_label?: string; to_label?: string }[]
+  >([]);
   const [target, setTarget] = useState("");
-  const [translated, setTranslated] = useState<{ text: string; lines: TranslatedLine[] } | null>(null);
+  /**
+   * What language the reader says this is, when the reading does not know.
+   *
+   * OCR reports `und` - it reads glyphs, and no amount of looking at them says
+   * whether they are Vietnamese or Malay. This used to end the matter: the
+   * control said there was nothing to translate from, which made on-screen
+   * text the one reading that could never be translated. A person can see
+   * which language it is, so they are asked.
+   *
+   * Held here and sent with the request rather than saved onto the transcript.
+   * A language chosen in order to read a translation is not a finding about
+   * the clip.
+   */
+  const [assumedSource, setAssumedSource] = useState("");
+  /**
+   * The translation, and which reading it is of.
+   *
+   * Carrying the id is what makes it impossible to show one clip's words under
+   * another's times. That used to be an effect that cleared this whenever the
+   * draft changed, which is the same guarantee arrived at by running something
+   * after the wrong thing has already been rendered once.
+   */
+  const [translated, setTranslated] = useState<
+    { forId: string; text: string; lines: TranslatedLine[] } | null
+  >(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ forId: string; message: string } | null>(null);
   const [view, setView] = useState<"timed" | "whole">("timed");
 
   useEffect(() => {
@@ -111,21 +137,28 @@ export function TranscriptReader({
     return () => controller.abort();
   }, [open, apiFetch, workspaceId]);
 
-  // A different draft is a different reading; carrying the last translation
-  // across would show one clip's words under another's times.
-  useEffect(() => {
-    setTranslated(null);
-    setError(null);
-  }, [transcript?.id]);
-
-  const source = (transcript?.language ?? "").toLowerCase();
-  // OCR reads glyphs and reports `und`, so there is no direction to translate
-  // from and the control says so rather than offering a choice that fails.
-  const translatable = Boolean(source) && source !== "und";
+  const stated = (transcript?.language ?? "").toLowerCase();
+  /** Whether the reading itself knows. Speech does; glyphs never do. */
+  const knowsItsOwn = Boolean(stated) && stated !== "und";
+  const source = knowsItsOwn ? stated : assumedSource;
+  /** Every language something is installed to translate out of. */
+  const sources = [...new Map(
+    pairs.map((pair) => [pair.from, pair.from_label ?? pair.from]),
+  )].sort((a, b) => a[1].localeCompare(b[1]));
   const targets = pairs.filter((pair) => pair.from === source);
+  /**
+   * The target as it currently stands, which is not always the one stored.
+   *
+   * A target belongs to a direction rather than to a language on its own, so
+   * changing what this is read as can leave the stored one translating out of
+   * something else. Derived rather than corrected in an effect: there is no
+   * moment where the interface shows a direction that does not exist, and
+   * nothing has to run to put it right.
+   */
+  const chosenTarget = targets.some((pair) => pair.to === target) ? target : "";
 
   const translate = useCallback(async () => {
-    if (!transcript || !target) return;
+    if (!transcript || !chosenTarget) return;
     setBusy(true);
     setError(null);
     try {
@@ -137,7 +170,10 @@ export function TranscriptReader({
           body: JSON.stringify({
             kind: transcript.kind,
             status: transcript.status ?? "machine",
-            target,
+            target: chosenTarget,
+            // Only meaningful when the reading does not know its own; the API
+            // ignores it when it does, so the reading always wins.
+            ...(knowsItsOwn ? {} : { source }),
           }),
         },
       );
@@ -145,19 +181,30 @@ export function TranscriptReader({
         text?: string; lines?: TranslatedLine[]; detail?: string;
       };
       if (!response.ok) throw new Error(payload.detail ?? "That could not be translated.");
-      setTranslated({ text: payload.text ?? "", lines: payload.lines ?? [] });
+      setTranslated({
+        forId: transcript.id, text: payload.text ?? "", lines: payload.lines ?? [],
+      });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "That could not be translated.");
+      setError({
+        forId: transcript.id,
+        message: reason instanceof Error
+          ? reason.message : "That could not be translated.",
+      });
     } finally {
       setBusy(false);
     }
-  }, [transcript, target, apiFetch, workspaceId, assetId]);
+  }, [transcript, chosenTarget, source, knowsItsOwn, apiFetch, workspaceId, assetId]);
 
   if (!transcript) return null;
 
+  // A different draft is a different reading, so anything belonging to another
+  // one simply is not shown - no clearing, and no frame where it was.
+  const shown = translated?.forId === transcript.id ? translated : null;
+  const problem = error?.forId === transcript.id ? error.message : null;
+
   const lines = timedLines(transcript.segments);
-  const byTime = translated?.lines.length
-    ? translated.lines.map((line) => ({ at: line.start_ms, text: line.text, source: line.source }))
+  const byTime = shown?.lines.length
+    ? shown.lines.map((line) => ({ at: line.start_ms, text: line.text, source: line.source }))
     : lines.map((line) => ({ ...line, source: "" }));
 
   return (
@@ -170,8 +217,8 @@ export function TranscriptReader({
       footer={
         <>
           <Button variant="quiet" onClick={onClose}>Close</Button>
-          {translated && (
-            <Button variant="secondary" onClick={() => onUse(translated.text)}>
+          {shown && (
+            <Button variant="secondary" onClick={() => onUse(shown.text)}>
               Use the translation
             </Button>
           )}
@@ -193,49 +240,67 @@ export function TranscriptReader({
             label="How to read it"
           />
         )}
-        {translatable ? (
-          <span className="transcript-reader-translate">
+        <span className="transcript-reader-translate">
+          {/* Asked first, because nothing downstream means anything until it
+              is answered - the targets on offer are the ones this language can
+              actually be turned into. */}
+          {!knowsItsOwn && (
             <select
-              value={target}
+              value={assumedSource}
+              onChange={(event) => setAssumedSource(event.target.value)}
+              aria-label="What language is this in"
+            >
+              <option value="">Read as…</option>
+              {sources.map(([code, label]) => (
+                <option key={code} value={code}>{label}</option>
+              ))}
+            </select>
+          )}
+            <select
+              value={chosenTarget}
               onChange={(event) => setTarget(event.target.value)}
               aria-label="Translate into"
             >
               <option value="">Translate into…</option>
               {targets.map((pair) => (
-                <option key={pair.to} value={pair.to}>{pair.label}</option>
+                // Named by the language alone once the direction is already
+                // settled by the control beside it.
+                <option key={pair.to} value={pair.to}>{pair.to_label ?? pair.label}</option>
               ))}
             </select>
             <Button
               variant="secondary"
               size="sm"
               busy={busy}
-              disabled={!target || busy}
+              disabled={!chosenTarget || !source || busy}
+              title={source ? undefined : "Say what language this is in first"}
               onClick={() => void translate()}
             >Translate</Button>
-            {translated && (
+            {shown && (
               <Button variant="quiet" size="sm" onClick={() => setTranslated(null)}>
                 Show the original
               </Button>
             )}
-          </span>
-        ) : (
-          <small className="transcript-reader-note">
-            Read as glyphs rather than as a language, so there is nothing to
-            translate from.
-          </small>
-        )}
+        </span>
       </div>
 
-      {targets.length === 0 && translatable && (
+      {!knowsItsOwn && !assumedSource && (
         <p className="transcript-reader-note">
-          No language packages are installed for {transcript.language}. Add them from
-          Tools → Argos Translate.
+          Read as glyphs rather than as a language, so it cannot say which one
+          it is. Choose what to read it as and it can be translated.
         </p>
       )}
 
-      {error && <p className="transcript-reader-problem" role="alert">{error}</p>}
+      {source && targets.length === 0 && (
+        <p className="transcript-reader-note">
+          No language packages are installed to translate out of {source}. Add
+          them from Tools → Argos Translate.
+        </p>
+      )}
 
-      {translated && (
+      {problem && <p className="transcript-reader-problem" role="alert">{problem}</p>}
+
+      {shown && (
         <p className="transcript-reader-note">
           <Badge tone="accent">Translated</Badge> Shown to help you check the reading.
           What gets saved is still whichever you choose below.
@@ -258,7 +323,7 @@ export function TranscriptReader({
           ))}
         </ol>
       ) : (
-        <p className="transcript-reader-whole">{translated?.text ?? transcript.text}</p>
+        <p className="transcript-reader-whole">{shown?.text ?? transcript.text}</p>
       )}
     </Dialog>
   );
