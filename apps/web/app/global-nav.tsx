@@ -5,6 +5,14 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useCollapsingChrome } from "../lib/collapsing-chrome";
+import {
+  estimateBatch,
+  estimateOne,
+  etaLabel,
+  fit,
+  type Finished,
+  type Pending,
+} from "../lib/eta";
 import { Clock, Languages, Settings } from "lucide-react";
 import { notificationHref } from "../lib/job-links";
 
@@ -76,37 +84,105 @@ function groupFilter(group: NotificationGroup): Exclude<NotificationFilter, "all
  * swallowed - releasing a drag over a chip must not also press it.
  */
 
-/** Progress needs a few percent behind it before an estimate means anything. */
-const ESTIMATE_AFTER = 0.04;
+/**
+ * What kind of work a job is, for the purpose of guessing how long it takes.
+ *
+ * Two jobs share a shape only if their durations are comparable, so the kind
+ * alone is not enough: reading speech off a clip and reading the text on its
+ * frames are one `media_enrichment` kind and run at different rates, and a
+ * face blur and a caption burn are one `edit` kind and do not. The discriminator
+ * is whatever the payload says the work actually is.
+ */
+function jobShape(job: BaseJob): string {
+  const payload = job.raw?.payload ?? {};
+  const modes: string[] = Array.isArray(payload.modes) ? payload.modes : [];
+  const effects: string[] = Array.isArray(payload.effects) ? payload.effects : [];
+  const detail = [...modes, ...effects].sort().join("+");
+  const kind = String(job.raw?.kind ?? job.category ?? "job");
+  return detail ? `${kind}:${detail}` : kind;
+}
+
+/** Seconds of media a job is working on, when the queuer recorded it. */
+function mediaSecondsOf(job: BaseJob): number | null {
+  const ms = job.raw?.payload?.media_ms;
+  return typeof ms === "number" && ms > 0 ? ms / 1000 : null;
+}
+
+function secondsBetween(from?: string | null, to?: string | null): number | null {
+  if (!from || !to) return null;
+  const span = (new Date(to).getTime() - new Date(from).getTime()) / 1000;
+  return Number.isFinite(span) && span >= 0 ? span : null;
+}
 
 /**
- * Roughly how much longer, from how long it has taken to get this far.
+ * What the finished jobs on this page have to teach about how long work takes.
  *
- * Measured rather than predicted: nothing here knows how long a clip is or how
- * fast this machine encodes, and the one thing that does know is the work
- * already done. Withheld until a few percent are in, because dividing by a
- * fraction near zero produces a confident-looking number that is nonsense — and
- * "4 hours left" on a job that finishes in thirty seconds is worse than saying
- * nothing.
- *
- * The passes are weighted so the fraction tracks time rather than frames, which
- * is what keeps this from lurching when a render moves from reading a clip to
- * writing it.
+ * The drawer holds a window of recent jobs, and every succeeded one in it is a
+ * measurement: this shape of work, this much media, this long. That is the
+ * whole training set - it is this machine, doing this workspace's work, in the
+ * last little while, which is exactly the population the running jobs belong
+ * to. Nothing is remembered across sessions on purpose: a rate learned on a
+ * laptop plugged in last week is not a rate.
  */
-function timeRemaining(job: BaseJob, now: number): string {
+function finishedWork(jobs: BaseJob[]): Finished[] {
+  const samples: Finished[] = [];
+  for (const job of jobs) {
+    if (job.status !== "succeeded") continue;
+    const workSeconds = secondsBetween(job.startedAt, job.raw?.completed_at);
+    if (workSeconds === null || workSeconds <= 0) continue;
+    samples.push({
+      shape: jobShape(job),
+      mediaSeconds: mediaSecondsOf(job),
+      workSeconds,
+    });
+  }
+  return samples;
+}
+
+/** One unfinished job, as the estimator wants it. */
+function pendingWork(job: BaseJob, now: number): Pending {
+  return {
+    shape: jobShape(job),
+    mediaSeconds: mediaSecondsOf(job),
+    progress: job.progress,
+    elapsedSeconds: job.startedAt
+      ? Math.max(0, (now - new Date(job.startedAt).getTime()) / 1000)
+      : null,
+  };
+}
+
+/**
+ * Roughly how much longer one job has, learned from the ones already done.
+ *
+ * This used to divide elapsed time by the progress fraction and nothing else -
+ * honest, but blind: it could not say anything at all until a job reported
+ * progress, and it knew nothing about how long this machine takes over a clip
+ * of this length. Now the jobs that have finished in this same window supply a
+ * rate, so a job that has just started already has an estimate, and its own
+ * pace takes over as it gets far enough along to be the better evidence.
+ */
+function timeRemaining(job: BaseJob, siblings: BaseJob[], now: number): string {
   // Nothing is working on it, so elapsed keeps growing while progress does not:
   // the estimate would climb for as long as the drawer stayed open.
-  if (job.stalled) return "";
-  if (typeof job.progress !== "number" || job.progress < ESTIMATE_AFTER) return "";
-  if (!job.startedAt || !now) return "";
-  const elapsed = now - new Date(job.startedAt).getTime();
-  if (!Number.isFinite(elapsed) || elapsed <= 0) return "";
-  const left = Math.round((elapsed * (1 - job.progress)) / job.progress / 1000);
-  if (left <= 0) return "almost done";
-  if (left < 60) return `about ${left}s left`;
-  const minutes = Math.round(left / 60);
-  if (minutes < 60) return `about ${minutes} min left`;
-  return `about ${Math.round(minutes / 60)} h left`;
+  if (job.stalled || !now) return "";
+  const model = fit(finishedWork(siblings), jobShape(job));
+  return etaLabel(estimateOne(pendingWork(job, now), model));
+}
+
+/**
+ * How much longer a whole batch has - the question somebody who queued
+ * seventy-seven clips is actually asking. One clip's percentage does not
+ * answer it, and neither does counting the ones left.
+ */
+function batchRemaining(jobs: BaseJob[], siblings: BaseJob[], now: number): string {
+  const left = jobs.filter(
+    (job) => ["queued", "running", "in_progress", "pending"].includes(job.status),
+  );
+  if (!left.length || left.every((job) => job.stalled)) return "";
+  // One worker per media kind is what this app actually runs; estimating as if
+  // there were more would report a batch finishing before it can.
+  return etaLabel(estimateBatch(left.map((job) => pendingWork(job, now)),
+    finishedWork(siblings), 1));
 }
 
 type NotificationGroup = {
@@ -753,7 +829,15 @@ export function GlobalNav() {
                             >
                               <span style={{ width: `${Math.round((batch.settled / batch.total) * 100)}%` }} />
                             </div>
-                            <small>{batch.label}</small>
+                            {/* How far through, and how much longer. The
+                                count answers "is it moving"; only the time
+                                answers "can I go and do something else",
+                                which is the question a batch of seventy-seven
+                                actually raises. */}
+                            <small>{[
+                              batch.label,
+                              batchRemaining(group.jobs, jobs, now),
+                            ].filter(Boolean).join(" · ")}</small>
                             {batch.stalled > 0 && (
                               <small className="notification-stalled">
                                 {[
@@ -790,7 +874,7 @@ export function GlobalNav() {
                               {[
                                 job.progressStage,
                                 `${Math.round(job.progress * 100)}%`,
-                                timeRemaining(job, now),
+                                timeRemaining(job, jobs, now),
                               ].filter(Boolean).join(" · ")}
                             </small>
                             {/* The percentage above is where it stopped, not

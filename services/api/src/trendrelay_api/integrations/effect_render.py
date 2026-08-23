@@ -1019,15 +1019,23 @@ def create_render_job(
 
     from trendrelay_api.media_models import MediaAsset
 
-    lookup = select(MediaAsset.id).where(
+    # The length rides along with the identity. It costs nothing here - the row
+    # is already being read - and it is what lets the interface estimate how
+    # much longer a batch has: a render's cost tracks the length of what it is
+    # rendering, and nothing downstream can find that out per job without a
+    # lookup per notification.
+    media_ms: int | None = None
+    lookup = select(MediaAsset.id, MediaAsset.duration_ms).where(
         MediaAsset.workspace_id == request.workspace_id,
         MediaAsset.original_path == str(source),
     )
     if session is not None:
-        asset_id = session.scalar(lookup)
+        found = session.execute(lookup).first()
     else:
         with JOB_SESSION_FACTORY() as owned:
-            asset_id = owned.scalar(lookup)
+            found = owned.execute(lookup).first()
+    if found:
+        asset_id, media_ms = found
     create_job_record(
         job_id,
         request.workspace_id,
@@ -1039,6 +1047,7 @@ def create_render_job(
             "output": str(output),
             "effects": [step.effect.id for step in steps],
             "asset_id": asset_id,
+            "media_ms": media_ms,
             # A batch still creates independent, cancellable jobs. Keeping the
             # shared identity and position on each one lets the Library explain
             # that relationship without relying on transient client state.

@@ -979,3 +979,68 @@ def test_clearing_never_removes_a_render_in_flight(tmp_path, monkeypatch) -> Non
 
     assert response.json()["removed"] == 0
     assert [job["id"] for job in effect_render.list_render_jobs(workspace)] == ["edit_running"]
+
+
+def test_a_queued_render_carries_the_clips_length(tmp_path, monkeypatch) -> None:
+    """The estimate downstream needs it, and the row is already open here.
+
+    How long a render takes tracks the length of what it renders, so the
+    notification drawer's "how much longer" is only as good as its access to
+    that length. Reading it per notification would be a database round trip per
+    row; carrying it on the job costs nothing, because queueing already looks
+    the asset up to record its identity.
+    """
+    from trendrelay_api.integrations import effect_render
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    monkeypatch.setattr(effect_render, "approved_source", lambda path: Path(path))
+    monkeypatch.setattr(effect_render, "run_render_job", lambda _job_id: None)
+    workspace = create_workspace()
+    clip = make_asset(workspace, tmp_path, name="measured-clip")
+    with TestingSession() as session:
+        session.get(MediaAsset, clip).duration_ms = 47_500
+        session.commit()
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/render-batch",
+        json={
+            "asset_ids": [clip],
+            "steps": [{"effect": "speed", "values": {"rate": 1.25}}],
+            "confirm_external_action": True,
+        },
+    )
+
+    assert response.status_code == 202, response.text
+    with TestingSession() as session:
+        job = session.query(DurableJob).filter_by(kind="media_effect_render").one()
+        assert job.payload["media_ms"] == 47_500
+        assert job.payload["asset_id"] == clip
+
+
+def test_an_unmeasured_clip_queues_with_no_length_rather_than_zero(
+    tmp_path, monkeypatch
+) -> None:
+    """None and zero are different answers, and zero would estimate instantly."""
+    from trendrelay_api.integrations import effect_render
+
+    monkeypatch.setattr(effect_render, "JOB_SESSION_FACTORY", TestingSession)
+    monkeypatch.setattr(effect_render, "approved_source", lambda path: Path(path))
+    monkeypatch.setattr(effect_render, "run_render_job", lambda _job_id: None)
+    workspace = create_workspace()
+    clip = make_asset(workspace, tmp_path, name="unmeasured-clip")
+
+    response = request(
+        "POST",
+        f"/api/workspaces/{workspace}/media/library/effects/render-batch",
+        json={
+            "asset_ids": [clip],
+            "steps": [{"effect": "speed", "values": {"rate": 1.25}}],
+            "confirm_external_action": True,
+        },
+    )
+
+    assert response.status_code == 202, response.text
+    with TestingSession() as session:
+        job = session.query(DurableJob).filter_by(kind="media_effect_render").one()
+        assert job.payload["media_ms"] is None

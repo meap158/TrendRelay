@@ -1389,6 +1389,10 @@ def create_enrichment_job(
             "id": job_id,
             "workspace_id": workspace_id,
             "asset_id": asset_id,
+            # What it is about to read the length of, so the interface can say
+            # how much longer a batch of these has. Free here: the asset row is
+            # already open above.
+            "media_ms": asset.duration_ms,
             "actor_user_id": actor_user_id,
             "modes": normalized_modes,
             "language": language or "auto",
