@@ -1137,18 +1137,23 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-queue-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: calc(var(--control-sm) + 16px); margin-bottom: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .campaign-queue-bar.active { border-color: var(--link); background: var(--link-bg); }
 .campaign-queue-bar > strong { flex: 0 0 auto; font-size: 11px; font-weight: 600; }
-/* The strip takes the row's slack instead of a row of its own.
+/* The strip sits at the far end of the row rather than filling it.
+ *
+ * Sized to its chips and pushed over by an `auto` margin on its start side.
+ * Not `justify-content: flex-end` on the strip itself: that is the classic way
+ * to make an overflowing scroll container unreachable at its start, and this
+ * one overflows by design.
  *
  * `min-width: 0` because a flex item will not shrink below its content, and
  * the content here is every chip laid end to end - without it the bar grows to
- * fit them all and the actions are pushed off the end. The `auto` margin moves
- * from the label to the strip so the actions still sit at the far end.
+ * fit them all and the actions are pushed off the end. It shrinks and scrolls
+ * instead, which is what the strip is for.
  *
  * Named `queue-filter-strip` rather than restyling `.filter-chip-frame` from
  * here: reaching into another stylesheet's class makes it a name two files
  * define, and the next person to change the frame would have two places to
  * look. The component takes this name and its own dense mode instead. */
-.queue-filter-strip { flex: 1 1 auto; min-width: 0; margin-inline-end: auto; }
+.queue-filter-strip { flex: 0 1 auto; min-width: 0; margin-inline-start: auto; }
 /* The fades read against the bar, not the panel behind it. */
 .queue-filter-strip::before { background: linear-gradient(to right, var(--panel), transparent); }
 .queue-filter-strip::after { background: linear-gradient(to left, var(--panel), transparent); }
@@ -1157,7 +1162,9 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 @media (max-width: 640px) {
   /* Its own line on a narrow screen, which is still a line rather than a row:
      no border, no card padding, just the chips under the count. */
-  .queue-filter-strip { flex-basis: 100%; margin-inline-end: 0; }
+  /* Full width on its own line, so it starts where the eye already is rather
+     than hugging the far edge of a line it has to itself. */
+  .queue-filter-strip { flex-basis: 100%; margin-inline-start: 0; }
 .campaign-queue-card > .ui-card-head-region {
   position: sticky;
   top: var(--app-toolbar-offset, 52px);
