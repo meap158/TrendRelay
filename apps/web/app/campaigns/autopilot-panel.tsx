@@ -2916,7 +2916,17 @@ export function AutopilotPanel({
       (candidate) => candidate.id === item.integration_id
         && candidate.provider === item.provider,
     );
-    return profileUrl(item.platform, account?.handle);
+    // The engine's own handle where it reported one, and the destination's
+    // label where it did not. The label is what the posting timeline already
+    // links a delivered post by, so the same account was clickable there and
+    // plain text here - and the engines that report no handle at all are
+    // exactly the ones where the label is the only thing anybody has.
+    //
+    // `profileUrl` still refuses anything that is not handle-shaped, so a page
+    // named in words - "Tủ Xinh Của Nàng" - stays plain rather than becoming a
+    // link to a profile that does not exist.
+    return profileUrl(item.platform, account?.handle)
+      ?? profileUrl(item.platform, item.label);
   }
 
   /**
