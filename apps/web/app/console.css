@@ -858,7 +858,11 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .queue-filters button.selected { border-color: var(--line); color: var(--text); background: var(--panel-raised); }
 .queue-filters b { display: grid; min-width: 18px; height: 18px; place-items: center; border-radius: 999px; color: var(--muted); background: var(--panel); font-size: 9px; }
 
-.download-empty { display: grid; justify-items: center; gap: 7px; padding: 46px 14px; text-align: center; }
+/* Anchored to the top, where the first row of the list would have been.
+   Equal padding above and below floated the message in the middle of the
+   card, so choosing a filter with nothing in it read as the whole panel
+   re-centring itself rather than as a list that had emptied. */
+.download-empty { display: grid; align-content: start; justify-items: center; gap: 7px; padding: 20px 14px 46px; text-align: center; }
 .empty-download-icon { display: grid; width: 38px; height: 38px; margin-bottom: 4px; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--link); background: var(--panel-raised); font-size: 20px; }
 .download-empty strong { font-size: 13px; font-weight: 600; }
 .download-empty p { max-width: 420px; margin: 0; color: var(--muted); line-height: 1.45; }
