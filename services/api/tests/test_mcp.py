@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine
@@ -685,7 +686,10 @@ def _image_asset(session, asset_id: str = "img1", path: str = r"S:\media\shot.pn
     asset = MediaAsset(
         id=asset_id, workspace_id="ws", title="Shot", media_kind="image",
         source_type="mcp-upload", original_path=path,
-        original_sha256="a" * 64, mime_type="image/png", size_bytes=1234,
+        # Its own digest per asset: the Library holds one row per set of bytes,
+        # so two fixtures sharing one hash cannot both exist - which is exactly
+        # what a carousel needs.
+        original_sha256=(asset_id * 64)[:64], mime_type="image/png", size_bytes=1234,
         created_by="local-admin",
     )
     session.add(asset)
@@ -907,3 +911,71 @@ def test_a_tool_left_out_of_the_categories_is_refused(monkeypatch) -> None:
             server.tool_catalog()
     finally:
         server.tool_catalog.cache_clear()
+
+
+# --- a carousel an assistant made, all the way to a publishable request -------
+
+
+def test_a_carousel_an_assistant_created_can_actually_be_published(session) -> None:
+    """The end of the road the upload tools start.
+
+    Every step of this existed and the last one refused: `PublishRequest` only
+    allowed images when a destination's post type was "photo", a campaign
+    destination cannot be set to "photo" - that setting would break every video
+    in the same queue - so a campaign could hold a carousel and never publish
+    one. Nothing said so until an engine did.
+    """
+    from datetime import UTC, datetime
+
+    from trendrelay_api.campaign_runner import _post_type_for
+    from trendrelay_api.integrations.mcp import intake
+    from trendrelay_api.integrations.publishing import PublishRequest
+
+    _image_asset(session, "img1", r"S:\media\one.png")
+    _image_asset(session, "img2", r"S:\media\two.png")
+    view = intake.create_campaign_post(
+        session, "ws", "camp", ["img1", "img2"], caption="Three ways to wear it",
+    )
+    assert view["image_paths"] == [r"S:\media\one.png", r"S:\media\two.png"]
+
+    # What the runner sends for that package, on the destination a campaign can
+    # actually have: TikTok through Zernio, whose post type is "video".
+    execution = SimpleNamespace(
+        image_paths=view["image_paths"], platform="tiktok", post_type="video",
+    )
+    assert _post_type_for(execution) == "photo", "the media did not decide the type"
+
+    request = PublishRequest(
+        workspace_id="ws",
+        image_paths=view["image_paths"],
+        caption="Three ways to wear it",
+        date=datetime.now(UTC),
+        targets=[{
+            "platform": "tiktok", "integration_id": "acct-1",
+            "post_type": _post_type_for(execution), "provider": "zernio",
+        }],
+        confirm_external_action=True,
+    )
+    assert request.image_paths == view["image_paths"]
+
+
+def test_a_video_package_keeps_the_type_its_destination_chose(session) -> None:
+    """Reel, story or video is a real choice, and only pictures override it."""
+    from trendrelay_api.campaign_runner import _post_type_for
+
+    for post_type in ("reel", "story"):
+        execution = SimpleNamespace(
+            image_paths=[], platform="instagram", post_type=post_type,
+        )
+        assert _post_type_for(execution) == post_type
+
+
+def test_pictures_ride_an_ordinary_post_where_there_is_no_photo_type(session) -> None:
+    """Facebook has no photo type; several pictures are just what a post holds."""
+    from trendrelay_api.campaign_runner import _post_type_for
+
+    execution = SimpleNamespace(
+        image_paths=[r"S:\media\one.png"], platform="facebook", post_type="post",
+    )
+
+    assert _post_type_for(execution) == "post"

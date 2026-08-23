@@ -111,6 +111,29 @@ def _as_utc(value: datetime | None) -> datetime | None:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
+def _post_type_for(execution: Any) -> str | None:
+    """The post type this particular post is, not the one the account defaults to.
+
+    A destination records how its account usually posts - a reel, a story, a
+    video. What kind of post *this* is depends on what it is made of, and a
+    campaign carrying pictures had no way to say so: a destination cannot be
+    set to "photo" (that setting would break every video in the same queue), so
+    an image package went out asking to be a video and the request refused it
+    before any engine saw it. A campaign could hold a carousel and never
+    publish one.
+
+    Only Instagram and TikTok have the type at all. Everywhere else pictures
+    ride an ordinary post and the destination's own type is already right.
+    """
+    if not execution.image_paths:
+        return execution.post_type
+    from trendrelay_api.integrations.publishing import post_types_for
+
+    if any(kind.id == "photo" for kind in post_types_for(execution.platform)):
+        return "photo"
+    return execution.post_type
+
+
 def _publish_execution(
     session: Session,
     autopilot: CampaignAutopilot,
@@ -153,7 +176,7 @@ def _publish_execution(
         targets=[{
             "platform": execution.platform,
             "integration_id": execution.integration_id,
-            "post_type": execution.post_type,
+            "post_type": _post_type_for(execution),
             "provider": execution.provider,
         }],
         # The operator confirmed when they switched autopilot on. Re-confirming
@@ -248,7 +271,7 @@ def finalization_problems(
                 targets=[{
                     "platform": execution.platform,
                     "integration_id": execution.integration_id,
-                    "post_type": execution.post_type,
+                    "post_type": _post_type_for(execution),
                     "provider": execution.provider,
                 }],
             ))

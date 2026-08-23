@@ -1818,15 +1818,20 @@ def test_a_video_post_still_needs_its_media() -> None:
     assert publishing.PublishRequest(**payload, media_url="https://cdn.example.com/c.mp4")
 
 
-def test_images_without_a_carousel_destination_are_refused(
+def test_images_without_a_destination_that_can_carry_them_are_refused(
     media_file: Path, carousel_images: list[str]
 ) -> None:
     """Attached, then the destination switched back to a video.
 
     Silently ignoring them would publish a video while the composer still shows
     a list of images that were supposedly going out.
+
+    The refusal names the destination now rather than saying no carousel was
+    chosen. Choosing one is only possible on the two networks that have a photo
+    post type; everywhere else pictures ride an ordinary post, so "nothing is
+    posting a carousel" described a setting most networks do not have.
     """
-    with pytest.raises(ValueError, match="no destination is posting a carousel"):
+    with pytest.raises(ValueError, match="no destination can carry them"):
         request(media_file, image_paths=carousel_images)
 
 

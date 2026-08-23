@@ -631,6 +631,45 @@ def resolve_post_type(platform: str, requested: str | None) -> PostType:
     )
 
 
+def _takes_pictures(target: "PublishTarget") -> bool:
+    """Whether this destination can carry a post made of pictures.
+
+    Two ways to be one, and only the first used to count. A "photo" post type
+    is the network asking for a gallery outright - Instagram's and TikTok's
+    word for it, and the only two that have the type. Everywhere else several
+    pictures are simply what a post holds, so the question is whether the
+    engine delivering it publishes them there.
+
+    An engine nobody recognises answers yes: not knowing a login is not
+    evidence the post is wrong, and the delivery guard refuses what this cannot
+    judge. The same reasoning `carousel_fits_destination` already uses, so the
+    two cannot disagree about which pairings are possible.
+    """
+    try:
+        chosen = target.kind.id
+    except ValueError:
+        return False
+    if any(kind.id == "photo" for kind in post_types_for(target.platform)):
+        # The network has a photo type, so which kind of post this is was a
+        # choice - and choosing "video" or "reel" means a video. Only Instagram
+        # and TikTok work this way.
+        return chosen == "photo"
+    # Everywhere else there is no such choice to make: several pictures are
+    # simply what a post holds. Whether they arrive is the engine's business.
+    if not target.provider:
+        # The request's own engine, resolved later against state a validator
+        # should not be reading. Permissive here for the same reason
+        # `carousel_fits_destination` is: not knowing which login delivers this
+        # is not evidence the post is wrong, and the delivery guard refuses
+        # what this cannot judge.
+        return True
+    try:
+        provider = resolve_provider(target.provider)
+    except ValueError:
+        return True
+    return target.platform in provider.photo_carousel_platforms
+
+
 class PublishTarget(BaseModel):
     platform: Platform
     integration_id: str = Field(min_length=1, max_length=200)
@@ -788,35 +827,60 @@ class PublishRequest(BaseModel):
             # and `_validate_request` words it far better than a wrapped
             # validation error would. Leave it to say so.
             return self
-        carousel = bool(photo)
-        if carousel:
-            # One post carries one set of media. A carousel alongside a video
-            # destination would hand that destination the images as a video, or
-            # nothing at all - so the two are separate posts, not one.
-            if len(photo) != len(self.targets):
-                others = ", ".join(sorted({
-                    PLATFORM_LABELS.get(target.platform, target.platform)
-                    for target in self.targets if target.kind.id != "photo"
-                }))
+        # A picture post either says so in its post type, or is one because the
+        # engine publishes several pictures to that network as an ordinary post.
+        #
+        # Only Instagram and TikTok have a "photo" type to choose, so requiring
+        # one made every other network unable to carry pictures at all - even
+        # after the engines were recorded as posting galleries to six of them,
+        # and even after the composer started offering the field. This is the
+        # gate that was still asking the old question, and it is the reason a
+        # campaign could hold a carousel and never publish one: a campaign
+        # destination cannot be set to "photo", so its post type was always
+        # something this refused images for.
+        picture_post = bool(photo) or (
+            bool(self.image_paths) and all(_takes_pictures(target) for target in self.targets)
+        )
+        if picture_post:
+            # One post carries one set of media. Pictures alongside a target
+            # that can only take a video would hand that target the images as a
+            # video, or nothing at all - so the two are separate posts.
+            unable = sorted({
+                PLATFORM_LABELS.get(target.platform, target.platform)
+                for target in self.targets
+                if target.kind.id != "photo" and not _takes_pictures(target)
+            })
+            if unable:
                 raise ValueError(
-                    "A photo carousel is its own post, so it cannot go out with a "
-                    f"video destination in the same one ({others}). Send those "
-                    "separately."
+                    "A picture post is its own post, so it cannot go out with a "
+                    f"video destination in the same one ({', '.join(unable)}). "
+                    "Send those separately."
                 )
             if not self.image_paths:
                 raise ValueError("A photo carousel needs at least one image.")
             if self.video_path.strip():
                 raise ValueError(
-                    "A photo carousel posts its images, so it cannot also carry a "
+                    "A picture post carries its images, so it cannot also carry a "
                     "video. Clear the clip, or switch the destination back to a video."
                 )
         else:
+            # Named before the missing-video complaint, because it is the more
+            # useful of the two: somebody who attached pictures did not forget
+            # a clip, they chose a destination that cannot take them - and
+            # "this post needs an MP4" sends them looking for the wrong thing.
+            if self.image_paths:
+                unreachable = sorted({
+                    PLATFORM_LABELS.get(target.platform, target.platform)
+                    for target in self.targets if not _takes_pictures(target)
+                })
+                raise ValueError(
+                    "Images were attached but no destination can carry them"
+                    + (f" ({', '.join(unreachable)})." if unreachable else ".")
+                    + " Deliver those through an engine that posts pictures"
+                    " there, or post a video."
+                )
             if not self.video_path.strip() and not self.media_url:
                 raise ValueError("A post needs an approved MP4 or a public media URL.")
-            if self.image_paths:
-                raise ValueError(
-                    "Images were attached but no destination is posting a carousel."
-                )
         return self
 
     @field_validator("targets")
