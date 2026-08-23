@@ -592,6 +592,8 @@ export const ja: Messages = {
     commentReach: "Instagram はコメントのリンクへ誘導する投稿のリーチを下げ、そのコメントを隠すことがあります。",
     chooseDestinationsFirst: "配信先を選ぶと、リンクの行き先が表示されます。",
     disclosureLeads: "この一文がすべてのネットワークでキャプションの先頭に入ります。リンクがプロフィールにある場合も同じです。",
+    discloseAffiliate: "アフィリエイト表示を追加",
+    disclosureOff: "表示は追加されません。報酬を得る投稿には表示が求められます — 動画内で述べていない限りオンにしてください。",
     disclosureEmpty: "表示なし。キャプションには何も追加されません。",
     chooseProductHint: "カタログから選ぶ",
     bioOnlyHere: "{platforms} では投稿内のリンクをタップできないため、このリンクはプロフィールに置き、キャプションからそこを指します。",

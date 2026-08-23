@@ -593,6 +593,8 @@ export const vi: Messages = {
     commentReach: "Instagram giảm tiếp cận với bài dẫn tới liên kết ở bình luận, và thường ẩn bình luận đó.",
     chooseDestinationsFirst: "Hãy chọn đích đến để xem liên kết sẽ nằm ở đâu.",
     disclosureLeads: "Câu này mở đầu chú thích trên mọi nền tảng, kể cả khi liên kết nằm ở tiểu sử.",
+    discloseAffiliate: "Thêm công bố tiếp thị liên kết",
+    disclosureOff: "Không thêm công bố nào. Quy định về quảng cáo yêu cầu có công bố ở mọi bài đăng có hoa hồng — hãy bật trừ khi nội dung đã nói rõ.",
     disclosureEmpty: "Không có công bố. Sẽ không thêm gì vào chú thích.",
     chooseProductHint: "Chọn từ danh mục",
     bioOnlyHere: "Trên {platforms}, không liên kết nào trong bài bấm được, nên hãy đặt liên kết này ở tiểu sử và để chú thích trỏ tới đó.",

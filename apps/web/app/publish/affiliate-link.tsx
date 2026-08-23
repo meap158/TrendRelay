@@ -55,9 +55,11 @@ export function AffiliateLink({
   caption,
   firstComment,
   disclosure,
+  disclose,
   onCaption,
   onFirstComment,
   onDisclosure,
+  onDisclose,
   commentPlatforms,
   commentUnavailableReason,
   disabled,
@@ -73,9 +75,19 @@ export function AffiliateLink({
   firstComment: string;
   /** The sentence that leads the caption. Editable: see below. */
   disclosure: string;
+  /**
+   * Whether that sentence is added at all.
+   *
+   * Off by default, and what it turns off is a legal safeguard - so it is a
+   * decision somebody makes rather than one this makes for them. The wording
+   * stays editable while it is off, because the two are separate choices and
+   * losing what was typed on switching it off would be its own small cruelty.
+   */
+  disclose: boolean;
   onCaption: (next: string) => void;
   onFirstComment: (next: string) => void;
   onDisclosure: (next: string) => void;
+  onDisclose: (next: boolean) => void;
   /** Networks among the chosen that accept a first comment at all. */
   commentPlatforms: string[];
   /** Why none will carry one - the plan or the engine, already worded. */
@@ -101,7 +113,7 @@ export function AffiliateLink({
 
   function addToCaption() {
     if (!offer) return;
-    const body = withDisclosure(caption, disclosure);
+    const body = disclose ? withDisclosure(caption, disclosure) : caption;
     onCaption(
       body.includes(offer.affiliate_url)
         ? body
@@ -113,7 +125,7 @@ export function AffiliateLink({
     if (!offer) return;
     // The disclosure still goes in the caption, not the comment. In a comment it
     // discloses nothing to a reader who never opens the comments.
-    onCaption(withDisclosure(caption, disclosure));
+    if (disclose) onCaption(withDisclosure(caption, disclosure));
     onFirstComment(
       firstComment.includes(offer.affiliate_url)
         ? firstComment
@@ -234,21 +246,40 @@ export function AffiliateLink({
            * wording differs by market and by each network's own rules, and
            * somebody posting in Vietnamese should not have to disclose in
            * English. Emptying it is allowed, and says what that means. */}
-          <label className="affiliate-disclosure">
-            <span>{t("publish.disclosure")}</span>
-            <input
-              type="text"
-              value={disclosure}
-              maxLength={500}
-              disabled={disabled}
-              placeholder={DEFAULT_DISCLOSURE}
-              onChange={(event) => onDisclosure(event.target.value)}
-            />
-          </label>
-          <small className={`affiliate-note${disclosure.trim() ? "" : " warn"}`}>
-            {disclosure.trim()
-              ? t("publish.disclosureLeads")
-              : t("publish.disclosureEmpty")}
+          <div className="affiliate-disclosure-block">
+            <label className="affiliate-disclosure-switch">
+              <input
+                type="checkbox"
+                checked={disclose}
+                disabled={disabled}
+                onChange={(event) => onDisclose(event.target.checked)}
+              />
+              <span>{t("publish.discloseAffiliate")}</span>
+            </label>
+            <label className="affiliate-disclosure">
+              <span>{t("publish.disclosure")}</span>
+              <input
+                type="text"
+                value={disclosure}
+                maxLength={500}
+                // Editable while it is off: the wording and whether to use it
+                // are separate choices, and clearing what somebody typed for
+                // their market on the way past would be its own small loss.
+                disabled={disabled}
+                placeholder={DEFAULT_DISCLOSURE}
+                onChange={(event) => onDisclosure(event.target.value)}
+              />
+            </label>
+          </div>
+          {/* Three states, not two. Off is the default and says what it costs;
+              on with nothing written cannot disclose anything; on with wording
+              says where it lands. */}
+          <small className={`affiliate-note${disclose && !disclosure.trim() ? " warn" : ""}`}>
+            {!disclose
+              ? t("publish.disclosureOff")
+              : disclosure.trim()
+                ? t("publish.disclosureLeads")
+                : t("publish.disclosureEmpty")}
           </small>
           {bioOnly && (
             <small className="affiliate-note warn">

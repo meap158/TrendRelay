@@ -292,6 +292,15 @@ const DRAFT_KEY = "trendrelay.publish.draft";
  * should not find it reset to English the first time they clear a draft.
  */
 const DISCLOSURE_KEY = "trendrelay.publish.disclosure";
+/**
+ * Whether a disclosure is added at all, remembered the same way the wording is.
+ *
+ * Off unless somebody has said otherwise, which is the same default a campaign
+ * takes. What it switches off is a legal safeguard, so it is a decision made on
+ * purpose rather than one the interface makes quietly - and a post that carries
+ * no affiliate link has nothing to disclose in the first place.
+ */
+const DISCLOSE_KEY = "trendrelay.publish.disclose";
 
 export default function PublishPage() {
   const t = useT();
@@ -457,6 +466,7 @@ export default function PublishPage() {
   // wall time and mean nothing without it.
   const [workspaceZone, setWorkspaceZone] = useState("UTC");
   const [disclosure, setDisclosure] = useState(DEFAULT_DISCLOSURE);
+  const [disclose, setDisclose] = useState(false);
   /**
    * The Pinterest boards of the account this post is going to.
    *
@@ -1030,6 +1040,7 @@ export default function PublishPage() {
       try {
         const saved = window.localStorage.getItem(DISCLOSURE_KEY);
         if (saved !== null) setDisclosure(saved);
+        setDisclose(window.localStorage.getItem(DISCLOSE_KEY) === "on");
       } catch {
         // Blocked storage costs the remembered wording, not the page.
       }
@@ -1165,6 +1176,7 @@ export default function PublishPage() {
     if (!draftRestored.current) return;
     try {
       window.localStorage.setItem(DISCLOSURE_KEY, disclosure);
+      window.localStorage.setItem(DISCLOSE_KEY, disclose ? "on" : "off");
     } catch {
       // As above: not worth failing a page over.
     }
@@ -1176,7 +1188,7 @@ export default function PublishPage() {
     } catch {
       // Storage can be full or blocked; losing a draft is not worth an error.
     }
-  }, [caption, title, videoPath, mediaUrl, firstComment, thread, disclosure]);
+  }, [caption, title, videoPath, mediaUrl, firstComment, thread, disclosure, disclose]);
 
   const loadConnection = useCallback(async () => {
     const body = await json<{ connection: Connection }>(
@@ -3335,9 +3347,11 @@ export default function PublishPage() {
             caption={caption}
             firstComment={firstComment}
             disclosure={disclosure}
+            disclose={disclose}
             onCaption={setCaption}
             onFirstComment={setFirstComment}
             onDisclosure={setDisclosure}
+            onDisclose={setDisclose}
             commentPlatforms={chosen.filter((platform) =>
               providersFor(platform).some(
                 (provider) => (provider.first_comment_platforms ?? []).includes(platform)))}

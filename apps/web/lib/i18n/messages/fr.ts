@@ -603,6 +603,8 @@ export const fr: Messages = {
     commentReach: "Instagram réduit la portée des publications qui renvoient à un lien en commentaire, et masque souvent ce commentaire.",
     chooseDestinationsFirst: "Choisissez des destinations pour voir où ce lien atterrira.",
     disclosureLeads: "Cette phrase ouvre la légende sur chaque réseau, y compris lorsque le lien est dans la bio.",
+    discloseAffiliate: "Ajouter une mention d’affiliation",
+    disclosureOff: "Aucune mention n’est ajoutée. Les règles publicitaires en exigent une dès qu’une publication rapporte une commission — activez-la sauf si le média le dit déjà.",
     disclosureEmpty: "Aucune mention. Rien ne sera ajouté à la légende.",
     chooseProductHint: "Choisir dans le catalogue",
     bioOnlyHere: "Sur {platforms}, aucun lien dans une publication n’est cliquable : placez ce lien sur le profil et laissez la légende y renvoyer.",

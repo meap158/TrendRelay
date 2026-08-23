@@ -597,6 +597,8 @@ export const en = {
     commentReach: "Instagram reduces reach for posts that funnel to a comment link, and often hides the comment.",
     chooseDestinationsFirst: "Choose destinations to see where this link will land.",
     disclosureLeads: "This leads the caption on every network, including where the link is in the bio.",
+    discloseAffiliate: "Add an affiliate disclosure",
+    disclosureOff: "No disclosure is added. Endorsement rules ask for one wherever a post earns a commission — switch it on unless the media already says so.",
     disclosureEmpty: "No disclosure. Nothing will be added to the caption.",
     chooseProductHint: "Pick one from the catalogue",
     bioOnlyHere: "On {platforms} no link in a post is clickable, so put this link on the profile and let the caption point at it.",
