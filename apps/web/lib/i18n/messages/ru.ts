@@ -141,6 +141,9 @@ export const ru: Messages = {
     news: {
       heading: "В новостях",
       deskLabel: "Отдел новостей",
+      searchPlaceholder: "Поиск по заголовкам",
+      searchLabel: "Искать среди этих заголовков",
+      noMatches: "Ничего не найдено по запросу «{query}».",
       deskAll: "Все",
       deskAllTitle: "Все отделы",
       deskWorld: "В мире",

@@ -141,6 +141,9 @@ export const ar: Messages = {
     news: {
       heading: "في الأخبار",
       deskLabel: "قسم الأخبار",
+      searchPlaceholder: "البحث في العناوين",
+      searchLabel: "ابحث ضمن هذه العناوين",
+      noMatches: "لا شيء يطابق «{query}».",
       deskAll: "الكل",
       deskAllTitle: "كل الأقسام",
       deskWorld: "العالم",

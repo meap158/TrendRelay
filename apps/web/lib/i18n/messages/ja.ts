@@ -140,6 +140,9 @@ export const ja: Messages = {
     news: {
       heading: "話題のニュース",
       deskLabel: "ニュースデスク",
+      searchPlaceholder: "見出しを検索",
+      searchLabel: "この見出しから検索",
+      noMatches: "「{query}」に一致するものはありません。",
       deskAll: "すべて",
       deskAllTitle: "すべてのデスク",
       deskWorld: "国際",

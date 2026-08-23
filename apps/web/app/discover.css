@@ -217,6 +217,10 @@
 .dsc-search-input { flex: 1 1 auto; min-inline-size: 0; border: none; outline: none; padding: 7px 9px; background: transparent; color: var(--text); font-family: inherit; font-size: 14px; }
 .dsc-tiktok-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .dsc-tiktok-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+/* The period picker rides the same line as the modes and refresh. The shared
+   `.ui-select` is `width: 100%` for form fields, which here claimed a row of
+   its own and pushed refresh onto another - three rows for three controls. */
+.dsc-tiktok-controls .dsc-tiktok-select { width: auto; flex: 0 1 auto; }
 .dsc-tiktok-select { border: 1px solid var(--line-strong); border-radius: 16px; padding: 6px 12px; font-size: 12px; background: var(--panel); color: var(--text); font-family: inherit; cursor: pointer; }
 /* A caveat about the source, not a warning about the run. As a bordered,
    filled callout it carried the weight of something gone wrong and cost a
@@ -327,6 +331,14 @@
 .news-board-head h2 { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
 .news-board-head h2 svg { color: var(--link); }
 .news-board-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+/* Narrow on purpose. It sits in a row with two segmented controls and a
+   refresh, and a search box given its head takes the row - on a phone it
+   would push the desks onto a line of their own. Grows only where there is
+   room to grow into. */
+.news-search { display: flex; flex: 0 1 190px; min-inline-size: 118px; align-items: center; gap: 5px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 0 7px; background: var(--panel); color: var(--muted); }
+.news-search input { inline-size: 100%; min-inline-size: 0; border: 0; padding: 5px 0; background: none; color: var(--text); font: inherit; font-size: 11px; }
+.news-search input:focus-visible { outline: none; }
+.news-search:focus-within { border-color: var(--link); box-shadow: 0 0 0 2px color-mix(in srgb, var(--link) 22%, transparent); }
 
 .news-shelf { display: grid; align-content: start; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow-sm); }
 .news-shelf.covered { border-inline-start: 3px solid var(--link); }

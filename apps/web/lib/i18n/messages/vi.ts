@@ -140,6 +140,9 @@ export const vi: Messages = {
     news: {
       heading: "Trên báo chí",
       deskLabel: "Ban tin",
+      searchPlaceholder: "Tìm tiêu đề",
+      searchLabel: "Tìm trong các tiêu đề này",
+      noMatches: "Không có gì khớp với “{query}”.",
       deskAll: "Tất cả",
       deskAllTitle: "Mọi ban tin",
       deskWorld: "Thế giới",

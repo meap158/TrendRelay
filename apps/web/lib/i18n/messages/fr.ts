@@ -141,6 +141,9 @@ export const fr: Messages = {
     news: {
       heading: "Dans l'actualité",
       deskLabel: "Rubrique",
+      searchPlaceholder: "Rechercher un titre",
+      searchLabel: "Rechercher dans ces titres",
+      noMatches: "Rien ne correspond à « {query} ».",
       deskAll: "Toutes",
       deskAllTitle: "Toutes les rubriques",
       deskWorld: "Monde",

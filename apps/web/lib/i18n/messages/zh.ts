@@ -138,6 +138,9 @@ export const zh: Messages = {
     news: {
       heading: "新闻速览",
       deskLabel: "新闻分区",
+      searchPlaceholder: "搜索标题",
+      searchLabel: "在这些标题中搜索",
+      noMatches: "没有与“{query}”匹配的内容。",
       deskAll: "全部",
       deskAllTitle: "所有分区",
       deskWorld: "国际",

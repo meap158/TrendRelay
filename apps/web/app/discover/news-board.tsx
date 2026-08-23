@@ -26,7 +26,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Check, Cpu, Globe, Newspaper, Plus, RefreshCw, Zap } from "lucide-react";
+import { Building2, Check, Cpu, Globe, Newspaper, Plus, RefreshCw, Search, Zap } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import {
@@ -176,6 +176,19 @@ export function NewsBoard({
     "all",
     oneOf("all", "general", "business", "technology"),
   );
+  /**
+   * Narrowing the board by word, which is what a desk cannot do.
+   *
+   * The desks answer "what kind of news"; this answers "the thing I am posting
+   * about". A board of forty headlines across four desks has no other way to
+   * find the two about a product somebody sells, and the reference this is
+   * modelled on puts the box first for that reason.
+   *
+   * Not persisted, unlike the desk and the density. Those are how somebody
+   * reads the board; a query is about one thing they were looking for, and
+   * finding the board still filtered tomorrow reads as a board with no news.
+   */
+  const [query, setQuery] = useState("");
   const [density, setDensity] = usePersistedState<Density>(
     "discover.news.density",
     "rows",
@@ -261,6 +274,32 @@ export function NewsBoard({
     only: t("discover.news.seedOnly"),
   };
 
+  /**
+   * The board as narrowed, or the board itself when nothing was typed.
+   *
+   * Derived rather than fetched: the desk is what the reader asks the server
+   * for, and a word is a question about the headlines already on the screen.
+   * Matching the source as well as the headline, because "Reuters" is a way
+   * people narrow a news board.
+   */
+  const matching = useMemo(() => {
+    if (!board) return null;
+    const needle = query.trim().toLowerCase();
+    if (!needle) return board;
+    // The headline, the summary, and every newsroom carrying it. "Reuters"
+    // is a way people narrow a news board, and a story that four outlets
+    // ran should be findable by any of them rather than only the first.
+    const hit = (story: NewsStory) =>
+      [story.title, story.summary, story.outlet, ...story.outlets]
+        .filter(Boolean)
+        .some((field) => field.toLowerCase().includes(needle));
+    return {
+      ...board,
+      covered: board.covered.filter(hit),
+      breaking: board.breaking.filter(hit),
+    };
+  }, [board, query]);
+
   return (
     <div className="news-board">
       <div className="news-board-head">
@@ -269,6 +308,19 @@ export function NewsBoard({
           {t("discover.news.heading")}
         </h2>
         <div className="news-board-controls">
+          {/* First, and narrow. It is the control somebody reaches for when
+              they know what they are looking for, and the desks are what they
+              use when they do not. */}
+          <label className="news-search">
+            <Search size={13} aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              placeholder={t("discover.news.searchPlaceholder")}
+              aria-label={t("discover.news.searchLabel")}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
           <SegmentedControl
             value={desk}
             options={deskOptions}
@@ -327,14 +379,18 @@ export function NewsBoard({
         <p className="news-empty">{t("discover.news.empty")}</p>
       ) : null}
 
-      {board ? (
+      {board && matching && !matching.covered.length && !matching.breaking.length ? (
+        <p className="news-empty">{t("discover.news.noMatches", { query: query.trim() })}</p>
+      ) : null}
+
+      {matching ? (
         <>
           <Shelf
             title={t("discover.news.covered")}
             blurb={t("discover.news.coveredBlurb")}
             icon={Newspaper}
             tone="covered"
-            stories={board.covered}
+            stories={matching.covered}
             density={density}
             chosen={chosen}
             onAdd={(story) => onSeed(seedFromNewsStory(story, seedLabels))}
@@ -344,7 +400,7 @@ export function NewsBoard({
             blurb={t("discover.news.breakingBlurb")}
             icon={Zap}
             tone="breaking"
-            stories={board.breaking}
+            stories={matching.breaking}
             density={density}
             chosen={chosen}
             onAdd={(story) => onSeed(seedFromNewsStory(story, seedLabels))}

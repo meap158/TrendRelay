@@ -146,6 +146,9 @@ export const en = {
     news: {
       heading: "In the news",
       deskLabel: "News desk",
+      searchPlaceholder: "Search headlines",
+      searchLabel: "Search these headlines",
+      noMatches: "Nothing here matches “{query}”.",
       deskAll: "All",
       deskAllTitle: "Every desk",
       deskWorld: "World",
