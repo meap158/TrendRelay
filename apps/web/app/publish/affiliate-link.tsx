@@ -33,6 +33,7 @@ import { useT } from "../i18n-provider";
 import { withDisclosure } from "../../lib/publish-rules";
 import { commissionLabel } from "../commission";
 import { OfferPicker, type OfferChoice } from "./offer-picker";
+import { offerChoices } from "./offer-rows";
 import type { ProductRow } from "../attribution/types";
 
 export type LinkPlacement = { placement: string; reason: string };
@@ -46,6 +47,35 @@ export type LinkPlacement = { placement: string; reason: string };
  */
 export const DEFAULT_DISCLOSURE = "Affiliate link; we may earn a commission.";
 
+/** How a post decides which product it carries. */
+export type OfferMode = "smart" | "manual" | "none";
+
+/**
+ * One ranked candidate, as the matcher returns it.
+ *
+ * Deliberately not an `OfferChoice`. The matcher answers "how well does this
+ * offer fit this content" and knows nothing about the picture, the price or
+ * the brand; the catalogue the panel already holds knows all three. Accepting
+ * a match looks the real offer up rather than carrying a thinner copy of it
+ * around, which is how a chosen product ends up missing its own name.
+ */
+export type OfferMatch = {
+  offer_id: string;
+  product_name: string;
+  score: number;
+  confidence: "high" | "medium" | "low";
+  matched_terms: string[];
+  reasons: string[];
+};
+
+export type OfferSuggestion = {
+  matches: OfferMatch[];
+  /** What it read, what it ranked against, and what it makes of the result. */
+  advice: string;
+  read_from: string[];
+  candidate_scope: string;
+};
+
 export function AffiliateLink({
   products,
   campaigns,
@@ -54,6 +84,11 @@ export function AffiliateLink({
   platforms,
   offer,
   onOffer,
+  mode,
+  onMode,
+  suggestion,
+  suggesting,
+  onSuggest,
   caption,
   firstComment,
   disclosure,
@@ -83,6 +118,20 @@ export function AffiliateLink({
    */
   offer: OfferChoice | null;
   onOffer: (next: OfferChoice | null) => void;
+  /**
+   * How this post gets its product, in the campaign's own three words.
+   *
+   * The same choice a campaign makes, made for one post: fit the content
+   * automatically, use the one you pick, or attach nothing. Publish had only
+   * the middle one, which meant the operator did the matching in their head
+   * against a catalogue of hundreds.
+   */
+  mode: OfferMode;
+  onMode: (next: OfferMode) => void;
+  /** What smart match came back with, best first. */
+  suggestion: OfferSuggestion | null;
+  suggesting: boolean;
+  onSuggest: () => void;
   caption: string;
   firstComment: string;
   /** The sentence that leads the caption. Editable: see below. */
@@ -108,6 +157,12 @@ export function AffiliateLink({
 }) {
   const t = useT();
   const [picking, setPicking] = useState(false);
+  /** The catalogue by offer, so a ranked match can become a real choice. */
+  const choices = useMemo(() => {
+    const byId = new Map<string, OfferChoice>();
+    for (const choice of offerChoices(products)) byId.set(choice.offer_id, choice);
+    return byId;
+  }, [products]);
 
   /** What each chosen network will do with this link, grouped by outcome. */
   const outcomes = useMemo(() => {
@@ -156,19 +211,95 @@ export function AffiliateLink({
     <div className="affiliate-link">
       <div className="affiliate-head">
         <span className="affiliate-head-label">{t("publish.affiliateLink")}</span>
-        <Button
-          variant={offer ? "quiet" : "secondary"}
-          size="sm"
-          disabled={disabled}
-          onClick={() => setPicking(true)}
-        >{offer ? t("publish.changeProduct") : t("publish.chooseProductAction")}</Button>
+        {mode === "manual" && (
+          <Button
+            variant={offer ? "quiet" : "secondary"}
+            size="sm"
+            disabled={disabled}
+            onClick={() => setPicking(true)}
+          >{offer ? t("publish.changeProduct") : t("publish.chooseProductAction")}</Button>
+        )}
       </div>
+
+      {/* How this post gets its product, in the same three words a campaign
+          uses for the same decision. Publish only ever had the middle one,
+          which left the operator matching a catalogue of hundreds by eye. */}
+      <div className="campaign-mode-options" role="radiogroup"
+        aria-label="Products for this post">
+        <button type="button" role="radio" disabled={disabled}
+          aria-checked={mode === "smart"}
+          className={mode === "smart" ? "active" : ""}
+          onClick={() => { onMode("smart"); onSuggest(); }}>
+          <strong>Smart match</strong>
+          <small>Fit content automatically</small>
+        </button>
+        <button type="button" role="radio" disabled={disabled}
+          aria-checked={mode === "manual"}
+          className={mode === "manual" ? "active" : ""}
+          onClick={() => onMode("manual")}>
+          <strong>One product</strong>
+          <small>Use one offer everywhere</small>
+        </button>
+        <button type="button" role="radio" disabled={disabled}
+          aria-checked={mode === "none"}
+          className={mode === "none" ? "active" : ""}
+          onClick={() => { onMode("none"); onOffer(null); }}>
+          <strong>No products</strong>
+          <small>Organic posts only</small>
+        </button>
+      </div>
+
+      {mode === "smart" && (
+        <div className="affiliate-smart">
+          <div className="affiliate-smart-head">
+            <small>
+              {suggesting
+                ? "Reading the post and ranking your products…"
+                : suggestion?.advice ?? "Match this post against your products."}
+            </small>
+            <Button variant="quiet" size="sm" busy={suggesting} disabled={disabled}
+              onClick={onSuggest}>Match again</Button>
+          </div>
+          {/* What it read, said out loud. A ranking is only as good as what it
+              had to go on, and a caption nobody has written yet ranks on
+              commission alone - which looks confident and means nothing. */}
+          {suggestion && suggestion.read_from.length > 0 && (
+            <small className="affiliate-note">
+              Read from {suggestion.read_from.join(", ")} against{" "}
+              {suggestion.candidate_scope}.
+            </small>
+          )}
+          {suggestion && suggestion.matches.length > 0 && (
+            <ul className="affiliate-suggestions">
+              {suggestion.matches.slice(0, 4).map((match) => (
+                <li key={match.offer_id} data-on={match.offer_id === offer?.offer_id || undefined}>
+                  <button type="button"
+                    // An offer ranked but no longer in the catalogue the panel
+                    // was given cannot be chosen: the link and the price come
+                    // from there, and attaching a name alone attaches nothing.
+                    disabled={disabled || !choices.has(match.offer_id)}
+                    onClick={() => onOffer(choices.get(match.offer_id) ?? null)}>
+                    <span>
+                      <strong>{choices.get(match.offer_id)?.name ?? match.product_name}</strong>
+                      <small>{match.matched_terms.slice(0, 5).join(", ")
+                        || "Nothing in the content matched this one."}</small>
+                    </span>
+                    <span className={`affiliate-score ${match.confidence}`}>
+                      {match.score}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* The product as a card rather than a line of text: the name is what
           somebody checks they picked the right thing by, and the rate is why
           they picked it over another offer. Empty, it is a place for a product
           rather than a sentence saying there is none. */}
-      {offer ? (
+      {mode !== "none" && offer ? (
         <div className="affiliate-product">
           {/* Only when there is one. A Shopee export carries no image URL, so a
               placeholder here would be a grey square standing in for data the
@@ -186,7 +317,7 @@ export function AffiliateLink({
             <span className="affiliate-rate">{commissionLabel(offer)}</span>
           )}
         </div>
-      ) : (
+      ) : mode === "manual" ? (
         <button
           type="button"
           className="affiliate-product empty"
@@ -198,7 +329,7 @@ export function AffiliateLink({
             <small>{t("publish.chooseProductHint")}</small>
           </span>
         </button>
-      )}
+      ) : null}
 
       <OfferPicker
         open={picking}

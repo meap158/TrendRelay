@@ -92,6 +92,69 @@ def publishing_connection(
     return {"connection": connection_status(probe=False)}
 
 
+class DraftMatchRequest(BaseModel):
+    """What has been written so far, for ranking products against."""
+
+    caption: str = Field(default="", max_length=4000)
+    title: str = Field(default="", max_length=300)
+    #: The clip or picture chosen, so its own readings can be matched on. A
+    #: draft usually has a video before it has a caption, and the words in the
+    #: video are the strongest signal available at that point.
+    media_path: str = Field(default="", max_length=1200)
+    platforms: list[str] = Field(default_factory=list, max_length=20)
+
+
+@router.post("/offer-match")
+def match_offers_for_draft(
+    workspace_id: str,
+    body: DraftMatchRequest,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Which of the workspace's products fit the post being written.
+
+    The campaign matcher's arithmetic, against the whole catalogue rather than
+    one campaign's tags: a post written by hand belongs to no campaign, so
+    every usable offer is a candidate.
+
+    A read, and only a read. Nothing is attached here - the interface decides
+    what to do with the ranking, because how much of that decision to delegate
+    is the thing the operator chose.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.publish_offer_match import match_for_draft
+
+    ranked, strategy = match_for_draft(
+        session,
+        workspace_id,
+        caption=body.caption,
+        title=body.title,
+        media_path=body.media_path,
+        platforms={item for item in body.platforms if item},
+    )
+    return {
+        "matches": [
+            {
+                "offer_id": match.offer_id,
+                "product_id": match.product_id,
+                "product_name": match.product_name,
+                "score": match.score,
+                "confidence": match.confidence,
+                "matched_terms": list(match.matched_terms),
+                "reasons": list(match.reasons),
+                "affiliate_url": match.affiliate_url,
+                "network": match.network,
+                "availability": match.availability,
+                "commission_bps": match.commission_bps,
+                "commission_flat_cents": match.commission_flat_cents,
+                "currency": match.currency,
+            }
+            for match in ranked
+        ],
+        "strategy": strategy,
+    }
+
+
 @router.get("/capabilities")
 def publishing_capabilities(
     workspace_id: str,

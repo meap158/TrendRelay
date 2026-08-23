@@ -22,7 +22,13 @@ import { accountIdentity } from "../publishing-account";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 import { AddToCampaign } from "./add-to-campaign";
-import { AffiliateLink, DEFAULT_DISCLOSURE, type LinkPlacement } from "./affiliate-link";
+import {
+  AffiliateLink,
+  DEFAULT_DISCLOSURE,
+  type LinkPlacement,
+  type OfferMode,
+  type OfferSuggestion,
+} from "./affiliate-link";
 import type { OfferChoice } from "./offer-picker";
 import { CapabilityMatrixButton } from "./capability-matrix";
 import type { ProductRow, ProductsPayload } from "../attribution/types";
@@ -488,6 +494,14 @@ export default function PublishPage() {
    * product with it.
    */
   const [offer, setOffer] = useState<OfferChoice | null>(null);
+  /**
+   * How this post gets its product - the campaign's own three-way choice,
+   * made for one post. Smart match by default, because the alternative is
+   * matching a catalogue of hundreds by eye.
+   */
+  const [offerMode, setOfferMode] = useState<OfferMode>("smart");
+  const [suggestion, setSuggestion] = useState<OfferSuggestion | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
   const [filingToCampaign, setFilingToCampaign] = useState(false);
   /**
    * The Pinterest boards of the account this post is going to.
@@ -1211,6 +1225,50 @@ export default function PublishPage() {
       // Storage can be full or blocked; losing a draft is not worth an error.
     }
   }, [caption, title, videoPath, mediaUrl, firstComment, thread, disclosure, disclose]);
+
+  /**
+   * Rank the workspace's products against what has been written so far.
+   *
+   * Asked for rather than run on every keystroke. It reads the draft, the
+   * clip's transcripts and its creative analysis, and ranks four hundred
+   * offers - which is cheap on a server and pointless to repeat while
+   * somebody is still typing the first sentence.
+   */
+  const suggestOffers = useCallback(async () => {
+    if (!workspaceId) return;
+    setSuggesting(true);
+    try {
+      const body = await json<{
+        matches: OfferSuggestion["matches"];
+        strategy: { advice: string; read_from: string[]; candidate_scope: string };
+      }>(await apiFetch(`/api/workspaces/${workspaceId}/publishing/offer-match`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          caption,
+          title,
+          // The clip itself, which usually says more than a draft caption does.
+          media_path: wantsCarousel ? imagePaths[0] ?? "" : videoPath,
+          platforms: chosen,
+        }),
+      }));
+      setSuggestion({
+        matches: body.matches,
+        advice: body.strategy.advice,
+        read_from: body.strategy.read_from,
+        candidate_scope: body.strategy.candidate_scope,
+      });
+    } catch (reason) {
+      setSuggestion({
+        matches: [],
+        advice: reason instanceof Error ? reason.message : "The products could not be ranked.",
+        read_from: [],
+        candidate_scope: "",
+      });
+    } finally {
+      setSuggesting(false);
+    }
+  }, [workspaceId, apiFetch, caption, title, wantsCarousel, imagePaths, videoPath, chosen]);
 
   const loadConnection = useCallback(async () => {
     const body = await json<{ connection: Connection }>(
@@ -3368,6 +3426,11 @@ export default function PublishPage() {
             platforms={chosen}
             offer={offer}
             onOffer={setOffer}
+            mode={offerMode}
+            onMode={setOfferMode}
+            suggestion={suggestion}
+            suggesting={suggesting}
+            onSuggest={() => void suggestOffers()}
             caption={caption}
             firstComment={firstComment}
             disclosure={disclosure}

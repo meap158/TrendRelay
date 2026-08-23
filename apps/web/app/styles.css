@@ -1059,6 +1059,25 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 /* The rate reads as a figure, not prose: it is the number being compared. */
 .affiliate-rate { flex: none; border-radius: 999px; padding: 3px 9px; background: var(--green-dark); color: var(--green); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* What smart match came back with: a short ranked list rather than one
+   answer, because a score of 22 against a score of 21 is a judgement somebody
+   should make with the product names in front of them. */
+.affiliate-smart { display: grid; gap: 7px; }
+.affiliate-smart-head { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.affiliate-smart-head > small { flex: 1 1 auto; min-width: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.affiliate-suggestions { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.affiliate-suggestions button { display: flex; gap: 10px; align-items: center; justify-content: space-between; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.affiliate-suggestions button:hover:not(:disabled) { border-color: var(--green); background: var(--panel-raised); }
+.affiliate-suggestions li[data-on] button { border-color: var(--green); background: var(--green-dark); }
+.affiliate-suggestions span { display: grid; gap: 2px; min-width: 0; }
+.affiliate-suggestions strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.affiliate-suggestions small { color: var(--muted); font-size: 10px; }
+/* The number, coloured by how much evidence is behind it rather than by how
+   big it is - a confident 30 is worth more than a hopeful 45. */
+.affiliate-score { flex: none; padding: 2px 7px; border-radius: 999px; background: var(--panel-raised); color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; font-weight: 700; }
+.affiliate-score.high { background: var(--green-dark); color: var(--green); }
+.affiliate-score.medium { background: var(--warn-bg); color: var(--warn); }
+
 /* The switch above the wording it governs, and the wording still reachable
    while it is off - the two are separate choices, and greying out what
    somebody typed for their market would lose it on the way past. */
