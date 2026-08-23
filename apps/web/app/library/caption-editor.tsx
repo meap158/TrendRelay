@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { Button } from "../ui/button";
@@ -419,6 +419,28 @@ export function CaptionEditor({
 
   const watcher = useRef<ResizeObserver | null>(null);
   /**
+   * Read the frame's size, and only disturb React when it has actually moved.
+   *
+   * Called from a layout effect on every render as well as from the observer.
+   * Belt and braces on purpose: the frame grows when the video's own
+   * proportions arrive, and that resize was not reliably reaching the observer
+   * - the overlay stayed sized against a 360px-tall frame after it had become
+   * 477. Measuring after every render cannot miss it, and the equality check
+   * is what stops that turning into a loop.
+   */
+  const measureFrame = useCallback(() => {
+    const node = frameRef.current;
+    if (!node) return;
+    const width = node.clientWidth;
+    const height = node.clientHeight;
+    setFrameSize((current) => (
+      current.width === width && current.height === height
+        ? current
+        : { width, height }
+    ));
+  }, []);
+  useLayoutEffect(measureFrame);
+  /**
    * Attach the observer when the frame appears, not when the dialog opens.
    *
    * The frame is rendered conditionally - there is nothing to preview until
@@ -436,13 +458,12 @@ export function CaptionEditor({
     // observer did not cause, which had the overlay sized against a frame
     // eight pixels wider than the one on screen. These two are what the
     // absolutely-positioned overlay is actually laid out against.
-    const measure = () => setFrameSize({
-      width: node.clientWidth,
-      height: node.clientHeight,
-    });
-    measure();
-    watcher.current = new ResizeObserver(measure);
+    watcher.current = new ResizeObserver(() => measureFrame());
     watcher.current.observe(node);
+    measureFrame();
+    // `measureFrame` is declared below and never changes; naming it in the
+    // deps would only re-run this on a ref React already calls once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**

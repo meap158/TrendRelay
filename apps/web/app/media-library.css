@@ -745,7 +745,12 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 /* No max-* here on purpose: the size is computed from the frame and the
    source, and a percentage ceiling on top of that can only disagree with it -
    silently, and only on the clips whose shape differs most from their box. */
-.caption-media-picture { box-sizing: border-box; display: flex; flex-direction: column; }
+/* The container the caption's font size is measured against, now that the
+   caption lives in here rather than across the whole frame. The size is a
+   `cqw` share of the video's width - that is what makes the preview match a
+   burn - and left on the frame it measured a box wider than the picture, so
+   the text came out oversized and wrapped a character to a line. */
+.caption-media-picture { box-sizing: border-box; container-type: inline-size; display: flex; flex-direction: column; }
 /* The caption is its own handle - there is nothing else on the frame a drag
    could mean. Pointer events come back on for it alone, so the video's own
    controls underneath stay usable. */
