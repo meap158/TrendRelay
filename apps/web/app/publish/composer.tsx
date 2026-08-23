@@ -1005,11 +1005,21 @@ export function WeekCalendar({
           const daySlots = slots.filter(
             (slot) => slot.weekday === EVERY_DAY || slot.weekday === index,
           );
-          const loose = dayEntries.filter(
-            (entry) => !daySlots.some(
+          /* Posts scheduled off the rhythm, one chip per *time* rather than
+             per post: four posts at six o'clock drew four identical "6:00 PM"
+             chips, which read as the calendar stuttering rather than as a
+             busy hour. Grouped with a count, and sorted on the clock - they
+             arrived in queue order, which put 9:00 AM after 6:00 PM. */
+          const loose = new Map<number, CalendarEntry[]>();
+          for (const entry of dayEntries) {
+            const onSlot = daySlots.some(
               (slot) => slot.hour === entry.at.getHours() && slot.minute === entry.at.getMinutes(),
-            ),
-          );
+            );
+            if (onSlot) continue;
+            const minute = entry.at.getHours() * 60 + entry.at.getMinutes();
+            loose.set(minute, [...(loose.get(minute) ?? []), entry]);
+          }
+          const looseTimes = [...loose.entries()].sort(([left], [right]) => left - right);
           return (
             <div key={day.toISOString()} className={`week-day${today ? " today" : ""}`}>
               <span className="week-day-head">
@@ -1040,9 +1050,14 @@ export function WeekCalendar({
                   </button>
                 );
               })}
-              {loose.map((entry, entryIndex) => (
-                <span key={`${entry.label}-${entryIndex}`} className="week-extra" title={entry.label}>
-                  {entry.at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+              {looseTimes.map(([minute, atTime]) => (
+                <span
+                  key={minute}
+                  className="week-extra"
+                  title={atTime.map((entry) => entry.label).join(", ")}
+                >
+                  {atTime[0].at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                  {atTime.length > 1 && <em>×{atTime.length}</em>}
                 </span>
               ))}
             </div>
@@ -1051,7 +1066,8 @@ export function WeekCalendar({
       </div>
       <p className="week-legend">
         {slots.length
-          ? "Click a slot to schedule at that time. A number marks posts already queued then."
+          ? "Click a slot to schedule at that time. A number marks posts already "
+            + "queued then; a grey time is a post scheduled off the rhythm."
           : "No posting times set yet. Add some below, or apply a preset, and they will appear here."}
       </p>
     </section>

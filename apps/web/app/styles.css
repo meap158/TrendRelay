@@ -703,6 +703,8 @@ nav strong { color: var(--text); }
 .week-slot:disabled { border-style: dotted; opacity: .45; cursor: default; }
 .week-slot em { margin-inline-start: 4px; border-radius: 999px; padding: 0 4px; background: var(--green); color: var(--on-ink); font-size: 9px; font-style: normal; font-weight: 700; }
 .week-extra { border-radius: var(--radius-sm); padding: 2px 4px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; text-align: center; }
+/* How many posts share that off-rhythm time - the same mark the slots carry. */
+.week-extra em { margin-inline-start: 3px; color: var(--muted-soft); font-size: 10px; font-style: normal; font-weight: 600; }
 .week-legend { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 
 /* --- posting time editor -------------------------------------------------- */
