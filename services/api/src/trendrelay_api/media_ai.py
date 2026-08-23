@@ -1200,11 +1200,23 @@ def _extract_ocr_frames(asset: MediaAsset, source: Path, work: Path) -> list[Pat
     return frames
 
 
-def _rapidocr_text(result: Any) -> tuple[list[str], list[float]]:
+def _rapidocr_text(result: Any) -> tuple[list[str], list[float], list[list[list[float]]]]:
+    """The words, how sure the model is, and where on the frame each one sits.
+
+    The boxes were read and thrown away until now. They are what makes a
+    translation something that can be *placed*: a line of on-screen text can
+    only be covered and rewritten if its corners are known, and re-running OCR
+    at render time to find them again would be a second pass over every frame.
+
+    Four points per line - top-left, top-right, bottom-right, bottom-left - in
+    the frame's own pixels. Converted out of NumPy here, because these are
+    stored as JSON and an ndarray is not serialisable.
+    """
     texts = list(getattr(result, "txts", []) or [])
     scores = [float(value) for value in (getattr(result, "scores", []) or [])]
+    boxes = _plain_boxes(getattr(result, "boxes", None))
     if texts:
-        return [str(value) for value in texts], scores
+        return [str(value) for value in texts], scores, boxes
     payload = result.to_json() if hasattr(result, "to_json") else result
     if isinstance(payload, str):
         try:
@@ -1214,7 +1226,29 @@ def _rapidocr_text(result: Any) -> tuple[list[str], list[float]]:
     if isinstance(payload, dict):
         texts = list(payload.get("txts") or payload.get("texts") or [])
         scores = [float(value) for value in (payload.get("scores") or [])]
-    return [str(value) for value in texts], scores
+        boxes = _plain_boxes(payload.get("boxes"))
+    return [str(value) for value in texts], scores, boxes
+
+
+def _plain_boxes(boxes: Any) -> list[list[list[float]]]:
+    """RapidOCR's `(N, 4, 2)` corners as nested lists, or nothing.
+
+    Defensive rather than trusting: a box that is not four points is not a
+    quadrilateral, and storing it would hand a renderer something it cannot
+    draw. Rounded to whole pixels - these are frame coordinates, and a
+    sub-pixel corner is precision the detector never had.
+    """
+    if boxes is None:
+        return []
+    plain: list[list[list[float]]] = []
+    for box in boxes:
+        try:
+            points = [[round(float(point[0])), round(float(point[1]))] for point in box]
+        except (TypeError, ValueError, IndexError):
+            continue
+        if len(points) == 4:
+            plain.append(points)
+    return plain
 
 
 _OCR_ENGINE: Any | None = None
@@ -1246,14 +1280,21 @@ def _ocr_draft(asset: MediaAsset, source: Path, work: Path) -> dict[str, Any]:
         engine = _ocr_engine()
         for index, frame in enumerate(frames):
             result = engine(str(frame))
-            texts, scores = _rapidocr_text(result)
+            texts, scores, boxes = _rapidocr_text(result)
             kept = []
-            for text, score in zip(texts, scores or [1.0] * len(texts), strict=False):
+            for position, (text, score) in enumerate(
+                zip(texts, scores or [1.0] * len(texts), strict=False)
+            ):
                 normalized = " ".join(text.strip().split())
                 if not normalized or score < 0.45:
                     continue
                 key = normalized.casefold()
-                kept.append({"text": normalized, "confidence": round(score, 4)})
+                line: dict[str, Any] = {"text": normalized, "confidence": round(score, 4)}
+                # Where it sits, when the detector said. Kept per line rather
+                # than per frame: covering one line means covering that line.
+                if position < len(boxes):
+                    line["box"] = boxes[position]
+                kept.append(line)
                 if key not in seen:
                     seen.add(key)
                     unique.append(normalized)
