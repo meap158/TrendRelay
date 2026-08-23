@@ -247,8 +247,8 @@ def build_server(workspace_id: str) -> FastMCP:
         name="write_post_copy",
         description=(
             "Write several copy fields for a post at once - any of caption, "
-            "first_comment, thread, hashtags, title, disclosure. A field left unset "
-            "is not changed."
+            "first_comment, thread, hashtags, title, disclosure, bio_hint. A field "
+            "left unset is not changed."
         ),
     )
     def write_post_copy(
@@ -259,6 +259,7 @@ def build_server(workspace_id: str) -> FastMCP:
         hashtags: list[str] | None = None,
         title: str | None = None,
         disclosure: str | None = None,
+        bio_hint: str | None = None,
     ) -> dict[str, Any]:
         return _call(
             "write_post_copy",
@@ -266,6 +267,7 @@ def build_server(workspace_id: str) -> FastMCP:
                 s, workspace_id, item_id,
                 caption=caption, first_comment=first_comment,
                 thread=thread, hashtags=hashtags, title=title, disclosure=disclosure,
+                bio_hint=bio_hint,
             ),
         )
 
@@ -282,6 +284,23 @@ def build_server(workspace_id: str) -> FastMCP:
             "write_disclosure",
             lambda s: writes.write_post_copy(
                 s, workspace_id, item_id, disclosure=disclosure
+            ),
+        )
+
+    @server.tool(
+        name="write_bio_hint",
+        description=(
+            "Set this post's own profile-bio hint - the words the campaign turns "
+            "into a bio line for networks that carry the link there, overriding the "
+            "campaign's default. Write the words only; the campaign adds the link. "
+            "An empty string clears the override back to the campaign's."
+        ),
+    )
+    def write_bio_hint(item_id: str, bio_hint: str) -> dict[str, Any]:
+        return _call(
+            "write_bio_hint",
+            lambda s: writes.write_post_copy(
+                s, workspace_id, item_id, bio_hint=bio_hint
             ),
         )
 

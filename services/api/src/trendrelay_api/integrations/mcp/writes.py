@@ -60,6 +60,7 @@ def write_post_copy(
     hashtags: list[str] | None = None,
     title: str | None = None,
     disclosure: str | None = None,
+    bio_hint: str | None = None,
 ) -> dict[str, Any]:
     """Set any of a post's copy fields, leaving the rest and its state alone.
 
@@ -105,10 +106,16 @@ def write_post_copy(
         # Its own disclosure line for this post; an empty string clears the
         # override and falls the post back to the campaign's.
         fields["disclosure"] = disclosure
+    if bio_hint is not None:
+        # The words the campaign turns into a profile-bio line. The campaign
+        # adds the link there too, so this carries the words only; an empty
+        # string clears the override back to the campaign's.
+        _refuse_links("bio hint", bio_hint)
+        fields["bio_hint"] = bio_hint
     if not fields:
         raise ValueError(
-            "Provide at least one of caption, first_comment, thread, hashtags, title "
-            "or disclosure."
+            "Provide at least one of caption, first_comment, thread, hashtags, title, "
+            "disclosure or bio_hint."
         )
 
     update = QueueItemUpdate(**fields)

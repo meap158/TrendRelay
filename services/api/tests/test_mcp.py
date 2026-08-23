@@ -96,8 +96,8 @@ def test_every_operation_is_classified_on_purpose() -> None:
 def test_the_allowed_surface_is_the_reads_and_the_copy_writes() -> None:
     assert policy.allowed_operations() == [
         "get_campaign_config", "get_post_context", "get_sop", "list_campaigns",
-        "list_posts_needing_copy", "list_sops", "write_caption", "write_disclosure",
-        "write_first_comment", "write_post_copy", "write_thread",
+        "list_posts_needing_copy", "list_sops", "write_bio_hint", "write_caption",
+        "write_disclosure", "write_first_comment", "write_post_copy", "write_thread",
     ]
 
 
@@ -252,6 +252,15 @@ def test_writing_a_disclosure_overrides_the_campaigns(session) -> None:
     writes.write_post_copy(session, "ws", "q1", disclosure="Paid partnership.")
     ctx = context.get_post_context(session, "ws", "q1")
     assert ctx["effective_disclosure"] == "Paid partnership."
+
+
+def test_writing_a_bio_hint_sets_it_and_refuses_a_link(session) -> None:
+    # Parity with the edit form, which can set a post's bio hint too.
+    result = writes.write_post_copy(session, "ws", "q1", bio_hint="Best deals in bio")
+    assert result["bio_hint"] == "Best deals in bio"
+    # The campaign adds the profile link itself, so the hint carries words only.
+    with pytest.raises(ValueError, match="bio hint may not contain a link"):
+        writes.write_post_copy(session, "ws", "q1", bio_hint="Shop https://s.shopee.vn/x")
 
 
 def test_writing_a_caption_flips_the_post_to_having_copy(session) -> None:

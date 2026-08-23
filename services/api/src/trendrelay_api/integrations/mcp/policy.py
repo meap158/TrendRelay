@@ -77,6 +77,7 @@ EXPOSURE: dict[str, Access] = {
     "write_thread": Access.WORKSPACE_WRITE,
     "write_post_copy": Access.WORKSPACE_WRITE,
     "write_disclosure": Access.WORKSPACE_WRITE,
+    "write_bio_hint": Access.WORKSPACE_WRITE,
     # --- Named, and refused ------------------------------------------------
     # Credentials and sessions.
     "sign_in": Access.REFUSED_CREDENTIALS,
