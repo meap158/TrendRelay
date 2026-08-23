@@ -1107,6 +1107,9 @@ export function SlotEditor({
   const [spreadCount, setSpreadCount] = useState(4);
   const [spreadFrom, setSpreadFrom] = useState("08:00");
   const [spreadTo, setSpreadTo] = useState("21:00");
+  /** Which day's column is taking a new time right now, and what it says. */
+  const [addingDay, setAddingDay] = useState<number | null>(null);
+  const [dayDraft, setDayDraft] = useState("");
 
   const entries = slots.map((slot) => ({ weekday: slot.weekday, time: slot.time }));
   const everyDay = slots.filter((slot) => slot.weekday === EVERY_DAY);
@@ -1131,6 +1134,18 @@ export function SlotEditor({
     if (!wanted.length) return;
     onSave([...entries, ...wanted]);
     setDraft("");
+  }
+
+  /** One time onto one day, from that day's own + - the reference's gesture:
+      the column is where the question is asked, so it is where the answer is
+      typed. */
+  function addToDay(day: number) {
+    const time = dayDraft;
+    setAddingDay(null);
+    setDayDraft("");
+    if (!time) return;
+    if (entries.some((entry) => entry.weekday === day && entry.time === time)) return;
+    onSave([...entries, { weekday: day, time }]);
   }
 
   /**
@@ -1248,6 +1263,41 @@ export function SlotEditor({
                 {posts.length === 0 && (
                   <li className="slot-week-none" aria-label={`Nothing posts on ${name}`}>—</li>
                 )}
+                {/* The day's own +, the way the reference adds a slot: the
+                    column is the day, so a time for it is typed right there
+                    rather than by pairing a time with a day picker below. */}
+                {canEdit && (addingDay === day ? (
+                  <li className="slot-week-add-row">
+                    <input
+                      type="time"
+                      autoFocus
+                      value={dayDraft}
+                      aria-label={`Time to add on ${name}`}
+                      onChange={(event) => setDayDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") addToDay(day);
+                        if (event.key === "Escape") { setAddingDay(null); setDayDraft(""); }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="slot-week-add-confirm"
+                      aria-label={`Add this time on ${name}`}
+                      disabled={busy || !dayDraft}
+                      onClick={() => addToDay(day)}
+                    ><ActionIcon name="add" /></button>
+                  </li>
+                ) : (
+                  <li className="slot-week-add">
+                    <button
+                      type="button"
+                      aria-label={`Add a time on ${name}`}
+                      title={`Add a time on ${name}`}
+                      disabled={busy}
+                      onClick={() => { setAddingDay(day); setDayDraft(""); }}
+                    ><ActionIcon name="add" /></button>
+                  </li>
+                ))}
               </ul>
             </div>
           );

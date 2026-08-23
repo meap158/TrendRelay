@@ -733,6 +733,21 @@ nav strong { color: var(--text); }
    the Every day row above. */
 .slot-week-inherited { justify-content: center; padding-inline-end: 6px; background: none; border: 1px dashed var(--line); }
 .slot-week-inherited b { color: var(--muted); font-weight: 500; }
+/* Real field chrome on the editor's bare inputs. A native time input with no
+   border is "--:-- --" floating in space; with the same border, radius and
+   height as every other field it reads as the control it is. */
+.slot-editor input[type="time"], .slot-editor input[type="number"] { min-height: 32px; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; }
+/* Each day's own +: a quiet dashed invitation at the foot of the column,
+   which is how the reference adds a slot - on the day itself. */
+.slot-week-add { padding: 0; background: none; }
+.slot-week-add button { display: grid; place-items: center; width: 100%; min-height: 22px; border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 0; background: none; color: var(--muted-soft); cursor: pointer; }
+.slot-week-add button:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
+.slot-week-add button:disabled { cursor: not-allowed; opacity: .5; }
+/* The + swapped for a small inline form: the time, and the confirm. */
+.slot-week-add-row { display: flex; gap: 2px; padding: 0; background: none; }
+.slot-week-add-row input[type="time"] { flex: 1; min-width: 0; min-height: 26px; padding: 2px 4px; font-size: 11px; }
+.slot-week-add-confirm { display: grid; place-items: center; flex: none; width: 26px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 0; background: var(--panel); color: var(--green); cursor: pointer; }
+.slot-week-add-confirm:disabled { cursor: not-allowed; opacity: .5; }
 /* Applies to all seven, so it is stated once above them rather than
    repeated in every column as seven rows nobody can edit apart. */
 .slot-week-everyday { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
