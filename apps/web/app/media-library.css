@@ -846,6 +846,12 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 /* Choosing a campaign: a list, and a click. The whole row is the control
    because picking one is the only thing to do here - a button inside the row
    would be a smaller target for the same act. */
+/* Asked before the campaign, because it changes what is being filed rather
+   than where it goes. The consequence sits under it in words, since "5
+   posts" and "one carousel" are the two outcomes and the labels are the
+   shortest way to say them. */
+.campaign-shape-choice { display: grid; gap: 4px; justify-items: start; }
+.campaign-shape-choice small { color: var(--muted); font-size: 11px; }
 .campaign-choice-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .campaign-choice-list > li > button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: inherit; font: inherit; text-align: start; cursor: pointer; }
 .campaign-choice-list > li > button:hover:not(:disabled) { border-color: var(--link); background: var(--panel-raised); }
