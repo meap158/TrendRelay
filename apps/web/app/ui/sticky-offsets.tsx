@@ -62,13 +62,22 @@ export function StickyOffsets() {
     const root = document.documentElement;
 
     const measure = () => {
+      // On a narrow viewport the toolbar collapses off the top of the screen as
+      // somebody reads down - `useCollapsingChrome` sets data-chrome="away" and
+      // a transform slides it up. While it is away it takes no room, so it must
+      // add nothing here: a heading sticking beneath it then rides to the very
+      // top rather than hanging at a toolbar-shaped gap. This offset is written
+      // inline and so beats the stylesheet rule that zeroes it for data-chrome,
+      // which is exactly why the two have to be reconciled in one place.
+      const away = root.dataset.chrome === "away";
       let stacked = 0;
       for (const layer of LAYERS) {
         const element = document.querySelector(layer.selector);
+        const collapsed = away && layer.property === "--app-toolbar-offset";
         // A page with no heading leaves the offset where the toolbar left it,
         // so anything sticking to that layer sits directly under the toolbar
         // rather than under a gap where a heading is not.
-        if (element instanceof HTMLElement) {
+        if (element instanceof HTMLElement && !collapsed) {
           // The border box, which is what `top` positions against - so the
           // seam between two layers is exact rather than nearly right.
           stacked += element.getBoundingClientRect().height;
@@ -87,8 +96,14 @@ export function StickyOffsets() {
       if (element instanceof HTMLElement) observer.observe(element);
     }
     window.addEventListener("resize", measure);
+    // The toolbar collapsing is an attribute change, not a size change, so the
+    // ResizeObserver never sees it. Watch the attribute so the offsets follow
+    // the toolbar leaving and returning rather than freezing at its height.
+    const chromeWatch = new MutationObserver(measure);
+    chromeWatch.observe(root, { attributes: true, attributeFilter: ["data-chrome"] });
     return () => {
       observer.disconnect();
+      chromeWatch.disconnect();
       window.removeEventListener("resize", measure);
     };
   }, [pathname]);
