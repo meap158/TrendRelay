@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth-provider";
 import { useT } from "../i18n-provider";
 import { Button, buttonClass } from "../ui/button";
+import { WaitingBlock } from "../ui/waiting-block";
 import { Select } from "../ui/select";
 
 type Workspace = { id: string; name: string; slug: string; role: string; created_at: string };
@@ -34,6 +35,10 @@ export default function WorkspacesPage() {
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Whether the workspace list has answered once. `authLoading` above is the
+  // session probe, already false on a tab switch, so without this the "create
+  // your first workspace" panel paints over the fetch that is still in flight.
+  const [workspacesLoaded, setWorkspacesLoaded] = useState(false);
 
   const selected = workspaces.find((workspace) => workspace.id === selectedId) ?? null;
 
@@ -80,7 +85,8 @@ export default function WorkspacesPage() {
         })
         .catch((reason: unknown) => {
           if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not load workspaces.");
-        });
+        })
+        .finally(() => { if (!cancelled) setWorkspacesLoaded(true); });
     }
     return () => { cancelled = true; };
   }, [apiFetch, user]);
@@ -252,7 +258,7 @@ export default function WorkspacesPage() {
           </form>
         </aside>
         <div className="workspace-content">
-          {!selected ? <div className="empty-panel"><h2>{t("workspaces.createFirst")}</h2><p>{t("workspaces.boundaryNote")}</p></div> : <>
+          {!selected ? (!workspacesLoaded ? <WaitingBlock message={t("common.loading")} /> : <div className="empty-panel"><h2>{t("workspaces.createFirst")}</h2><p>{t("workspaces.boundaryNote")}</p></div>) : <>
             <header className="workspace-title"><div><span>{selected.role}</span><h2>{selected.name}</h2><p>{selected.slug} · {selected.id}</p></div></header>
             <section className="management-grid">
               <article className="management-card"><h3>{t("workspaces.members")}</h3><div className="record-list">{members.map((member) => <div key={member.id}><strong>{member.email ?? member.user_id}</strong><span>{member.role}</span></div>)}</div>{selected.role === "owner" && <form className="stack-form" onSubmit={addMember}><label>{t("workspaces.verifiedUserId")}<input name="user_id" required /></label><label>{t("workspaces.emailOptional")}<input name="email" type="email" /></label><label>{t("workspaces.role")}<Select name="role" defaultValue="editor"><option>editor</option><option>approver</option><option>analyst</option><option>owner</option></Select></label><Button type="submit" variant="primary" busy={busy}>{t("workspaces.addMember")}</Button></form>}</article>

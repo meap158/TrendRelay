@@ -583,9 +583,9 @@ export default function Dashboard() {
               <h2>{t("downloads.addLinks")}</h2>
               <p>{t("downloads.addLinksHelp")}</p>
             </div>
-            <span className={"connection-badge " + (canFetch ? "ready" : connectionActive ? "working" : "setup")}>
+            <span className={"connection-badge " + (!status ? "working" : canFetch ? "ready" : connectionActive ? "working" : "setup")}>
               <i aria-hidden="true" />
-              {canFetch ? "Douyin connected" : connectionActive ? "Waiting for sign-in" : "Connection needed"}
+              {!status ? "Checking connection…" : canFetch ? "Douyin connected" : connectionActive ? "Waiting for sign-in" : "Connection needed"}
             </span>
           </div>
 
@@ -619,7 +619,10 @@ export default function Dashboard() {
             </ul>
           </section>}
 
-          {!providerReady && <div className="connection-callout warning">
+          {/* Only once the status is known: while it is still null on first
+              load, providerReady is false for want of an answer, not because a
+              provider is missing, and this warning would flash then vanish. */}
+          {status && !providerReady && <div className="connection-callout warning">
             <div><strong>{t("downloads.installProvider")}</strong><span>{t("downloads.installProviderHelp")}</span></div>
             <Link className={buttonClass({ variant: "secondary" })} href="/tools">{t("downloads.openTools")}</Link>
           </div>}
