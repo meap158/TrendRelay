@@ -268,16 +268,29 @@ export function GalleryPanel({
     let active = true;
     // Only the pictures. A clip cannot be a portrait, and offering one would
     // be a choice that can only fail.
-    apiFetch(`${base}/assets?media_kind=image&limit=200`)
-      .then((response) => (response.ok ? response.json() : null))
-      .then((body) => {
-        if (!active || !body?.assets) return;
-        setPictures(body.assets.map((asset: { id: string; title: string }) => ({
-          id: asset.id,
-          title: asset.title,
-        })));
+    //
+    // `limit=100` is the endpoint's own ceiling. This asked for 200, the API
+    // answered 422, `response.ok` was quietly false and the catch swallowed
+    // it - so the dropdown rendered with no options and no explanation, which
+    // is the failure mode this now refuses to reproduce: a refused read is a
+    // message, not an empty list.
+    apiFetch(`${base}/assets?media_kind=image&limit=100`)
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!active) return;
+        if (!response.ok) {
+          throw new Error(body.detail ?? "The library's pictures could not be read.");
+        }
+        setPictures(((body.assets ?? []) as { id: string; title: string }[]).map(
+          (asset) => ({ id: asset.id, title: asset.title }),
+        ));
       })
-      .catch(() => undefined);
+      .catch((reason: unknown) => {
+        if (!active) return;
+        setAddFailure(
+          reason instanceof Error ? reason.message : "The library's pictures could not be read.",
+        );
+      });
     return () => {
       active = false;
     };
