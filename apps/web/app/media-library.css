@@ -218,7 +218,28 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .transcript-draft-head strong { font-size: 11px; }
 .transcript-draft-head small { color: var(--muted); font-size: 10px; font-weight: 400; }
 .transcript-draft-actions { display: flex; flex: none; gap: 6px; align-items: center; }
-.transcript-draft-text { margin: 0; max-block-size: 160px; overflow: auto; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.5; white-space: pre-wrap; }
+/* Two lines of the reading, and how much more there is. Never the whole of it:
+   on-screen text runs to hundreds of deduplicated lines, and pouring that in
+   here pushed the campaign fields and the save button off the screen. */
+.transcript-draft-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.transcript-draft-text > em { color: var(--link); font-style: normal; font-weight: 600; }
+
+/* The reader itself: times down one edge, words beside them. */
+.transcript-reader-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-block-end: 12px; }
+.transcript-reader-translate { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.transcript-reader-translate select { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 5px 9px; color: var(--text); background: var(--panel); font: inherit; font-size: 11px; }
+.transcript-reader-note { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.transcript-reader-problem { margin: 0 0 10px; padding: 8px 11px; border-inline-start: 3px solid var(--bad); border-radius: var(--radius-sm); background: var(--bad-bg); color: var(--bad); font-size: 11px; }
+.transcript-reader-lines { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; }
+/* A row per line, its time in a fixed column so the times form a readable
+   edge rather than shifting with the length of what was said. */
+.transcript-reader-lines > li { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 10px; padding: 5px 7px; border-radius: var(--radius-sm); }
+.transcript-reader-lines > li:hover { background: var(--panel-raised); }
+.transcript-reader-lines time { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; line-height: 1.6; }
+.transcript-reader-lines span { display: grid; gap: 2px; min-width: 0; font-size: 12px; line-height: 1.5; }
+/* The machine's own words under the translation, quieter than it. */
+.transcript-reader-lines em { color: var(--muted); font-size: 11px; font-style: normal; }
+.transcript-reader-whole { margin: 0; white-space: pre-wrap; font-size: 12px; line-height: 1.6; }
 @media (max-width: 1050px) {
   .library-layout { grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr); }
   .library-detail-grid { grid-template-columns: 1fr; }

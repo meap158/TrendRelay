@@ -15,6 +15,7 @@ import { type BaseJob, useJobs } from "../jobs-provider";
 import { useWorkspace } from "../workspace-provider";
 import { useT } from "../i18n-provider";
 import { blurredVersion, handoffPath, openingCut } from "../../lib/media-rules";
+import type { ReadableTranscript } from "./transcript-reader";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
 import { Button, buttonClass } from "../ui/button";
 import { WaitingScreen } from "../ui/waiting-screen";
@@ -57,6 +58,7 @@ const ClipEditor = dynamic(() => import("./clip-editor").then((m) => m.ClipEdito
 const EffectEditor = dynamic(() => import("./effect-editor").then((m) => m.EffectEditor), { ssr: false });
 const AutoTranscribe = dynamic(() => import("./auto-transcribe").then((m) => m.AutoTranscribe), { ssr: false });
 const TranscriptDraft = dynamic(() => import("./auto-transcribe").then((m) => m.TranscriptDraft), { ssr: false });
+const TranscriptReader = dynamic(() => import("./transcript-reader").then((m) => m.TranscriptReader), { ssr: false });
 const TranscriptionSwitch = dynamic(() => import("./transcription-setup").then((m) => m.TranscriptionSwitch), { ssr: false });
 
 type ViewMode = "gallery" | "list";
@@ -1137,6 +1139,8 @@ function LibraryContent() {
   const [voiceOpen, setVoiceOpen] = useState(false);
   /** What the campaign picker is about to add. Empty closes it. */
   const [campaignPickerFor, setCampaignPickerFor] = useState<Asset[]>([]);
+  /** The machine reading open in the reader, or null. */
+  const [readingDraft, setReadingDraft] = useState<ReadableTranscript | null>(null);
   const [effectsOpen, setEffectsOpen] = useState(false);
   const [selectionAction, setSelectionAction] = useState<LibrarySelectionActionId | null>(null);
   const [cancellingEffectJobId, setCancellingEffectJobId] = useState("");
@@ -2272,12 +2276,14 @@ function LibraryContent() {
                           transcripts={selected.transcripts}
                           kind="speech"
                           onUse={(text) => { if (speechField.current) speechField.current.value = text; }}
+                          onRead={setReadingDraft}
                         />
                         <label>{t("recipe.reviewedText")}<textarea ref={ocrField} name="ocr_text" rows={4} defaultValue={reviewedText(selected, "ocr")} /></label>
                         <TranscriptDraft
                           transcripts={selected.transcripts}
                           kind="ocr"
                           onUse={(text) => { if (ocrField.current) ocrField.current.value = text; }}
+                          onRead={setReadingDraft}
                         />
                       </section>
                       <section>
@@ -2410,6 +2416,23 @@ function LibraryContent() {
           apiFetch={apiFetch}
           onClose={() => setCampaignPickerFor([])}
           onAdded={(text) => { setMessage(text); setSelection(new Set()); }}
+        />
+      )}
+      {workspaceId && selected && (
+        <TranscriptReader
+          open={readingDraft !== null}
+          transcript={readingDraft}
+          workspaceId={workspaceId}
+          assetId={selected.id}
+          apiFetch={apiFetch}
+          onClose={() => setReadingDraft(null)}
+          onUse={(text) => {
+            // Whichever field this reading is a candidate for. The reader does
+            // not know about the form; it hands back words and closes.
+            const field = readingDraft?.kind === "ocr" ? ocrField : speechField;
+            if (field.current) field.current.value = text;
+            setReadingDraft(null);
+          }}
         />
       )}
       {workspaceId && selected && (

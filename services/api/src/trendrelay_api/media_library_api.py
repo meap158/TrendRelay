@@ -2697,6 +2697,123 @@ class TranscriptionRequest(BaseModel):
     batch: BatchMarker | None = None
 
 
+class TranscriptTranslation(BaseModel):
+    """Which reading to translate, and into what."""
+
+    kind: Literal["speech", "ocr"]
+    #: The stored reading to translate. `machine` is the usual one - a reviewed
+    #: text is already in the words somebody chose.
+    status: Literal["machine", "reviewed"] = "machine"
+    target: str = Field(min_length=2, max_length=16)
+
+
+@router.get("/translation/pairs")
+def translation_pairs(
+    workspace_id: str, user: AuthenticatedUser, session: DatabaseSession
+) -> dict[str, Any]:
+    """Which directions can be translated right now.
+
+    Asked before a target language is offered, so nobody is given a choice
+    that fails when they take it.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.subtitle_translate import installed_pairs
+
+    return {"pairs": installed_pairs()}
+
+
+@router.post("/assets/{asset_id}/transcripts/translate")
+def translate_transcript(
+    workspace_id: str,
+    asset_id: str,
+    body: TranscriptTranslation,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """A reading in another language, returned rather than stored.
+
+    Not written back to the asset. A translation is a way to read what the
+    machine heard, not a second reading of the clip - storing it would leave
+    two transcripts of one kind and no way to say which the captions should
+    use. What a person keeps, they keep by putting it in the reviewed field
+    themselves.
+
+    Segments are translated line by line where the reading has them, so the
+    timings survive and the result can be read against the clip. The whole
+    text is translated in one call as well, because joining translated
+    segments and translating a joined text are not the same sentence.
+    """
+    membership(session, workspace_id, user.id)
+    item = _asset_record(session, workspace_id, asset_id)
+    found = session.scalar(
+        select(MediaTranscript).where(
+            MediaTranscript.asset_id == item.id,
+            MediaTranscript.workspace_id == workspace_id,
+            MediaTranscript.kind == body.kind,
+            MediaTranscript.status == body.status,
+        )
+    )
+    if not found or not (found.text or "").strip():
+        raise HTTPException(status_code=404, detail="There is no such reading to translate.")
+
+    source = (found.language or "").strip().lower()
+    # OCR reports `und` - it reads glyphs, not a language. The caller names the
+    # source in that case; without one there is nothing to translate from.
+    if not source or source == "und":
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "This reading does not say which language it is in, so it cannot "
+                "be translated. On-screen text is read as glyphs rather than as a "
+                "language."
+            ),
+        )
+    if source == body.target:
+        raise HTTPException(status_code=422, detail="That is already the language it is in.")
+
+    from trendrelay_api.subtitle_translate import live_translator
+
+    try:
+        translate = live_translator(source, body.target)
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+    try:
+        text = translate(found.text)
+        lines = [
+            {
+                "start_ms": part.get("start_ms") or part.get("timestamp_ms") or 0,
+                "text": translate(part["text"]),
+                "source": part["text"],
+            }
+            for part in _translatable_parts(found.segments or [])
+        ]
+    except Exception as error:  # noqa: BLE001 - a provider state, not a bug
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+    return {"source": source, "target": body.target, "text": text, "lines": lines}
+
+
+def _translatable_parts(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One `{start_ms, text}` per timed line, whichever reading produced it.
+
+    Speech gives a segment per utterance; OCR gives a frame holding several
+    lines. Flattened here so the caller has one shape to render rather than
+    two, and so a frame's lines keep the time they were read at.
+    """
+    parts: list[dict[str, Any]] = []
+    for segment in segments:
+        if not isinstance(segment, dict):
+            continue
+        if segment.get("text"):
+            parts.append(segment)
+            continue
+        for line in segment.get("lines") or []:
+            if isinstance(line, dict) and line.get("text"):
+                parts.append({**line, "timestamp_ms": segment.get("timestamp_ms", 0)})
+    return parts
+
+
 @router.post("/assets/{asset_id}/transcription", status_code=202)
 def transcribe_asset(
     workspace_id: str,

@@ -35,6 +35,14 @@ type Transcript = {
   text: string;
   provider?: string;
   status?: string;
+  /** Timed lines, which the API has always sent and nothing ever showed. */
+  segments?: {
+    start_ms?: number;
+    end_ms?: number;
+    timestamp_ms?: number;
+    text?: string;
+    lines?: { text: string; confidence?: number }[];
+  }[];
 };
 
 type EnrichmentJob = {
@@ -272,14 +280,22 @@ export function TranscriptDraft({
   transcripts,
   kind,
   onUse,
+  onRead,
 }: {
   transcripts: Transcript[];
   kind: "speech" | "ocr";
   onUse: (text: string) => void;
+  /** Open the full reading, with its times and a translation. */
+  onRead: (draft: Transcript) => void;
 }) {
   const draft = transcripts.find((item) => item.kind === kind && item.status === "machine");
-  const [open, setOpen] = useState(false);
   if (!draft || !draft.text.trim()) return null;
+
+  // Enough to recognise the reading without becoming the reading. On-screen
+  // text runs to hundreds of deduplicated lines, and expanding that in place
+  // pushed the rest of the form off the screen.
+  const lines = draft.text.split("\n").filter((line) => line.trim());
+  const preview = lines.slice(0, 2).join(" · ");
 
   return (
     <div className="transcript-draft">
@@ -289,15 +305,22 @@ export function TranscriptDraft({
           <small>{draft.provider} · {draft.language}</small>
         </span>
         <span className="transcript-draft-actions">
-          <Button variant="quiet" size="sm" onClick={() => setOpen((current) => !current)}>
-            {open ? "Hide" : "Show"}
+          <Button variant="quiet" size="sm" onClick={() => onRead(draft)}>
+            Read it
           </Button>
           <Button variant="secondary" size="sm" onClick={() => onUse(draft.text)}>
             Use draft
           </Button>
         </span>
       </div>
-      {open && <p className="transcript-draft-text">{draft.text}</p>}
+      {/* The first of it, and how much more there is - so "Read it" is a
+          decision rather than a guess. */}
+      <p className="transcript-draft-text">
+        {preview}
+        {lines.length > 2 && (
+          <em>{` +${lines.length - 2} more ${lines.length - 2 === 1 ? "line" : "lines"}`}</em>
+        )}
+      </p>
     </div>
   );
 }
