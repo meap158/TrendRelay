@@ -45,7 +45,10 @@
 .library-layout { display: grid; grid-template-columns: minmax(600px, 1.65fr) minmax(400px, 1fr); gap: 16px; align-items: start; }
 .library-browser { position: sticky; top: 121px; display: grid; gap: 8px; max-height: calc(100vh - 140px); overflow: auto; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .library-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
-.library-search button, .library-import button, .library-compact-form button, .library-enrichment button, .library-actions a { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; text-decoration: none; cursor: pointer; }
+/* `:not(.search-select *)` keeps this page-level button chrome out of the
+   shared dropdown: its popover rows are buttons too, and boxing each one drew
+   a border between every option that no other dropdown in the app has. */
+.library-search button:not(.search-select *), .library-import button:not(.search-select *), .library-compact-form button:not(.search-select *), .library-enrichment button:not(.search-select *), .library-actions a { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; text-decoration: none; cursor: pointer; }
 /* One row per asset. Three columns of horizontal cards is a second gallery,
    which is why the toggle looked like it did nothing: both views were grids of
    cards, and only the card's proportions changed. A list earns its name by
