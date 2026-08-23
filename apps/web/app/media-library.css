@@ -782,6 +782,10 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .caption-editor-setup { display: grid; gap: 8px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-raised); color: var(--muted); font-size: 12px; }
 .caption-editor-setup > p { margin: 0; }
 .caption-editor-setup code, .caption-editor-note code { font-size: 11px; }
+/* The no-transcript prompt is the first and only useful action on a clip that
+   has none, so it carries the accent rule the rest of the app gives its live
+   choices rather than sitting as another quiet grey box. */
+.caption-editor-transcribe-cta { border-color: var(--link); box-shadow: inset 3px 0 var(--link); color: var(--text); }
 
 /* Auto-fit rather than a fixed count: the number of styles is whatever the
    registry declares, and this file should not need editing when it grows. */

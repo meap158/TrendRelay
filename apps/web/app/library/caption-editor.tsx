@@ -589,6 +589,32 @@ export function CaptionEditor({
       }
     >
       <div className="caption-editor caption-editor-with-media">
+        {/* Without a transcript nothing below can build a caption, so the way to
+            make one is the first thing in the modal rather than the last - the
+            same control, moved out from under the timing list where it was
+            missed. */}
+        {needsSpeechTranscript && primary && (
+          <div className="caption-editor-setup caption-editor-transcribe-cta">
+            <p>
+              <strong>This clip has no speech transcript yet.</strong>{" "}
+              Transcribe it here and the machine draft unlocks caption timing
+              automatically when it finishes — review the wording before publishing.
+            </p>
+            <AutoTranscribe
+              workspaceId={workspaceId}
+              assetId={primary.id}
+              hasAudio={hasAudio}
+              mediaKind={primary.mediaKind}
+              modesAvailable={["speech"]}
+              apiFetch={apiFetch}
+              canEdit={canEdit}
+              onFinished={() => {
+                void load();
+                onTranscribed?.();
+              }}
+            />
+          </div>
+        )}
         {batch && skippedTargets > 0 && (
           <p className="caption-editor-note">
             {t("library.actionSkippedIncompatible", { count: skippedTargets })}
@@ -765,28 +791,6 @@ export function CaptionEditor({
             )}
           </h4>
           {problem && <p className="caption-editor-problem">{problem}</p>}
-          {needsSpeechTranscript && primary && (
-            <div className="caption-editor-setup">
-              <p>
-                <strong>Transcribe speech here.</strong>{" "}
-                The machine draft will unlock caption timing automatically when it finishes.
-                Review the wording before publishing.
-              </p>
-              <AutoTranscribe
-                workspaceId={workspaceId}
-                assetId={primary.id}
-                hasAudio={hasAudio}
-                mediaKind={primary.mediaKind}
-                modesAvailable={["speech"]}
-                apiFetch={apiFetch}
-                canEdit={canEdit}
-                onFinished={() => {
-                  void load();
-                  onTranscribed?.();
-                }}
-              />
-            </div>
-          )}
           {queued && <p className="caption-editor-queued">{queued}</p>}
           {busy && !preview && <p className="caption-editor-note">Building the first cues…</p>}
           {preview && (
