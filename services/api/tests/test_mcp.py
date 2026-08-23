@@ -1130,3 +1130,25 @@ def test_listing_campaigns_says_which_can_carry_a_gallery(session) -> None:
     listed = {row["campaign_id"]: row for row in context.list_campaigns(session, "ws")}
 
     assert listed["camp"]["accepts_carousel"] is True
+
+
+def test_the_order_pictures_are_named_in_is_the_order_they_swipe(session) -> None:
+    """The SOP promises this, so it is pinned rather than left to `dict.fromkeys`.
+
+    A carousel is a sequence - a before and an after, a set-up and a punchline
+    - and an assistant handed three pictures in an order has no other way to
+    express it.
+    """
+    from trendrelay_api.integrations.mcp import intake
+
+    _destination(session, "d2", "tiktok", "zernio")
+    for index in (3, 1, 2):
+        _image_asset(session, f"img{index}", rf"S:\media\{index}.png")
+
+    view = intake.create_campaign_post(session, "ws", "camp", ["img3", "img1", "img2"])
+
+    assert view["image_paths"] == [
+        r"S:\media\3.png", r"S:\media\1.png", r"S:\media\2.png",
+    ]
+    stored = session.get(CampaignQueueItem, view["id"])
+    assert stored.image_paths == view["image_paths"], "the queue reordered them"
