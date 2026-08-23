@@ -328,11 +328,18 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .waiting-block-compact { min-height: 120px; padding: 18px; border: 0; background: none; }
 .waiting-block-compact strong { font-size: 11px; font-weight: 500; }
 
-/* The animated brand mark. The trend line traces itself in, the four points
-   light along it in turn, then it eases back and loops - a small sign that
-   something is still working, drawn from the app's own logo rather than a
-   generic spinner. pathLength=1 on the <path> normalises the line to a unit,
-   so the dash math holds whatever the exact coordinates are. */
+/* The animated brand mark. One repeating gesture on a shared 2.2s clock:
+   the green trend line traces itself from beginning to end while a glowing
+   pen rides just ahead of the ink, each point lights as the pen passes it,
+   the peak pings once during the short hold, and the scene dissolves before
+   tracing again - so every loop reads as "drawn, start to finish", never as
+   a static figure with decoration around it.
+     0-52%   the line draws and the pen rides it
+     52-86%  finished chart holds; the peak pings once
+     86-96%  everything fades out fully, so the redraw starts from nothing
+             rather than snapping from drawn to empty
+   pathLength=1 on the stroke normalises it to a unit length, so the dash
+   math holds whatever the exact coordinates are. */
 .loading-mark { display: inline-flex; margin-block-end: 4px; }
 .loading-mark svg { width: 44px; height: 44px; overflow: visible; }
 .loading-mark-line {
@@ -343,36 +350,139 @@ button, a { -webkit-tap-highlight-color: transparent; }
   stroke-linejoin: round;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
-  animation: loading-mark-draw 2.4s ease-in-out infinite;
+  opacity: 1;
+  animation: loading-mark-draw 2.2s ease-in-out infinite;
 }
-.loading-mark circle {
+/* A shine running the finished line, first point to last, while the chart
+   holds - the same gesture as the draw, in light rather than ink, so the pause
+   before the redraw is part of the animation instead of a gap in it.
+
+   One short lit dash on a copy of the path: `stroke-dashoffset` going 1 to 0
+   walks it forward along the geometry, which is the same trick the draw uses
+   and costs the compositor nothing. Light green rather than white, because
+   white over this green on a white page is a hole in the line, not a highlight. */
+.loading-mark-glint {
+  fill: none;
+  stroke: var(--green-line);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 0.14 0.86;
+  stroke-dashoffset: 1;
+  opacity: 0;
+  animation: loading-mark-glint 2.2s ease-in-out infinite;
+}
+@keyframes loading-mark-glint {
+  /* Nothing while the pen is still drawing: a highlight on a line that does
+     not exist yet reads as a second pen. */
+  0%, 52%   { stroke-dashoffset: 1;    opacity: 0; }
+  58%       {                          opacity: 0.9; }
+  80%       { stroke-dashoffset: 0.14; opacity: 0.9; }
+  86%, 100% { stroke-dashoffset: 0.14; opacity: 0; }
+}
+/* The pen that draws the line. `offset-path` carries it along exactly the
+   geometry the path uses; browsers without motion path hide it behind the
+   @supports rule below and the mark degrades to the plain self-drawing line. */
+.loading-mark-pen {
+  opacity: 0;
+  offset-path: path("M7.5 21.5 L13 16 L18 19 L24.5 10.5");
+  offset-rotate: 0deg;
+  animation: loading-mark-ride 2.2s ease-in-out infinite;
+}
+.loading-mark-pen circle { fill: var(--green); }
+.loading-mark-pen-glow { opacity: 0.3; }
+@supports not (offset-path: path("M0 0")) {
+  .loading-mark-pen { display: none; }
+}
+.loading-mark-point {
   fill: var(--green);
   transform-box: fill-box;
   transform-origin: center;
   opacity: 0.2;
-  animation: loading-mark-point 2.4s ease-in-out infinite;
+  animation: loading-mark-point 2.2s ease-in-out infinite;
 }
-/* Staggered so the points arrive in the order the line reaches them. */
-.loading-mark circle:nth-of-type(1) { animation-delay: 0.15s; }
-.loading-mark circle:nth-of-type(2) { animation-delay: 0.45s; }
-.loading-mark circle:nth-of-type(3) { animation-delay: 0.75s; }
-.loading-mark circle:nth-of-type(4) { animation-delay: 1.05s; }
+/* Staggered so each point lights as the pen reaches it. The delays are
+   negative on purpose: they shift each point's private copy of the shared
+   clock so its peak (the 40% keyframe) lands on the moment the pen passes
+   its vertex, and a negative delay also means every point is mid-animation
+   from the first paint, so nothing flashes in late from its resting style.
+
+   The arrival times are the path's own: the vertices sit 0, 0.320, 0.560 and
+   1 of the way along it by length, and the ride is `ease-in-out` over the
+   first 52% of the cycle, so the pen reaches them at 0, 0.449s, 0.612s and
+   1.144s. Two of these were eyeballed and about 80ms out, which is invisible
+   at 44px and plainly wrong when the mark is blown up - a point lighting
+   before the ink arrives, which is the one thing the effect must not do. */
+.loading-mark-point:nth-of-type(1) { animation-delay: -0.88s; }
+.loading-mark-point:nth-of-type(2) { animation-delay: -0.431s; }
+.loading-mark-point:nth-of-type(3) { animation-delay: -0.268s; }
+.loading-mark-point:nth-of-type(4) { animation-delay: 0.264s; }
+/* One expanding ring on the peak right after the pen arrives, the single
+   flourish of the hold before the scene dissolves and redraws. */
+.loading-mark-ring {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 1;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: loading-mark-ping 2.2s ease-out infinite;
+}
 @keyframes loading-mark-draw {
-  0%        { stroke-dashoffset: 1; opacity: 0.35; }
-  45%       { stroke-dashoffset: 0; opacity: 1; }
-  70%       { stroke-dashoffset: 0; opacity: 1; }
-  100%      { stroke-dashoffset: 0; opacity: 0.35; }
+  0%        { stroke-dashoffset: 1; opacity: 0; }
+  4%        { opacity: 1; }
+  52%       { stroke-dashoffset: 0; }
+  86%       { stroke-dashoffset: 0; opacity: 1; }
+  96%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes loading-mark-ride {
+  0%        { offset-distance: 0%;   opacity: 0; }
+  6%        {                        opacity: 1; }
+  52%       { offset-distance: 100%; opacity: 1; }
+  58%       { offset-distance: 100%; opacity: 0; }
+  100%      { offset-distance: 100%; opacity: 0; }
 }
 @keyframes loading-mark-point {
-  0%, 100%  { opacity: 0.2; transform: scale(0.7); }
+  0%        { opacity: 0.2; transform: scale(0.7); }
   40%       { opacity: 1;   transform: scale(1.15); }
-  70%       { opacity: 0.85; transform: scale(1); }
+  70%       { opacity: 0.9; transform: scale(1); }
+  88%       { opacity: 0.9; }
+  98%, 100% { opacity: 0;   transform: scale(0.8); }
 }
-/* Honour a reduced-motion preference: hold the finished mark, no looping. */
+@keyframes loading-mark-ping {
+  0%, 54%   { opacity: 0.8; transform: scale(1); }
+  82%       { opacity: 0;   transform: scale(2.6); }
+  100%      { opacity: 0;   transform: scale(2.6); }
+}
+/* Reduced motion, not no motion.
+   This is a loading indicator: the movement is the message, and a frozen one
+   reads as a hung request - which is the reasoning `.ui-button-spinner`
+   already follows by slowing rather than stopping. Held frozen here, the mark
+   was a static green tick on any machine with the preference set, and the app
+   looked stalled every time it was waiting.
+
+   What the preference asks to avoid is motion that can unsettle: travel across
+   the screen, spinning, scaling, parallax. So the pen, the ping and the drawing
+   stroke go - all of them movement - and what stays is light: the finished mark
+   breathing, and the shine walking the line slowly. Nothing changes position or
+   size, so there is nothing to track with the eye. */
 @media (prefers-reduced-motion: reduce) {
-  .loading-mark-line, .loading-mark circle { animation: none; }
-  .loading-mark-line { stroke-dashoffset: 0; }
-  .loading-mark circle { opacity: 1; }
+  .loading-mark-line {
+    stroke-dashoffset: 0;
+    opacity: 1;
+    animation: loading-mark-breathe 3.4s ease-in-out infinite;
+  }
+  .loading-mark-point {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+  .loading-mark-pen, .loading-mark-ring { display: none; }
+  .loading-mark-glint { animation-duration: 3.4s; }
+}
+@keyframes loading-mark-breathe {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
 }
 .empty-console h1 { margin: 16px 0 8px; font-weight: 500; font-size: 20px; }
 .empty-console h2 { margin: 12px 0; font-size: 16px; font-weight: 500; }
