@@ -5871,6 +5871,10 @@ export function AutopilotPanel({
           })}
           description={`${openDayEntries.length} ${openDayEntries.length === 1 ? "post" : "posts"} this day`}
         >
+          {/* The bar and the list are one thing - it selects what is directly
+              below it - so they are wrapped and spaced together rather than
+              sitting as two dialog sections a full gap apart. */}
+          <div className="campaign-day-picker">
           {/* The selection bar keeps its own row whether anything is ticked or
               not, so ticking the first post never shoves the list down. */}
           <div className="campaign-day-tools" data-active={selectedDayPosts.size > 0 || undefined}>
@@ -5981,6 +5985,7 @@ export function AutopilotPanel({
               );
             })}
           </ul>
+          </div>
         </Dialog>
       )}
       </>}

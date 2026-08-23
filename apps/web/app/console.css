@@ -1483,11 +1483,18 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-day-tools, .campaign-day-row { --day-gutter: 2px; --day-check: 22px; }
 /* The selection bar holds its own row height whether or not anything is
    ticked, so selecting never reflows the list underneath it. */
+/* One unit with the list under it, rather than two sections a dialog gap
+   apart. The bar selects what is directly below it, and twelve points of
+   air between them read as the list starting somewhere else. */
+.campaign-day-picker { display: grid; gap: 2px; min-block-size: 0; }
 .campaign-day-tools {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-block-size: 40px;
+  /* What the tallest state actually needs: a small control plus the
+     padding below it. It reserved forty, which put eight points of nothing
+     around a label two thirds that height. */
+  min-block-size: calc(var(--control-sm) + 4px);
   padding-block-end: 4px;
   padding-inline: var(--day-gutter);
 }
