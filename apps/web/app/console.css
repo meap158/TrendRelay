@@ -1995,22 +1995,14 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-match-pay { margin-inline-start: 6px; color: var(--green); font-size: 11px; font-variant-numeric: tabular-nums; }
 
 /* --- the two ends of one pipeline ----------------------------------------- */
-/* What state the row is in, and what can be done about it - stacked, the way
-   the grid card stacks its badge over its actions. A column rather than more
-   of the row because the button is conditional: inline, it pushed the badge
-   off the edge on the rows that had one, and a reader scanning down the
-   badges found them at two different places. Right-aligned so the badge keeps
-   the edge either way, and `align-items` rather than `text-align` so it is the
-   boxes that line up and not the text inside them. */
-.campaign-entry-state { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 /* A scheduled post is one outing of a queued post that repeats, so the row
    says which one and offers a way back to it. */
 .campaign-entry-source { margin: 2px 0 0; color: var(--muted); font-size: 10px; }
 .campaign-entry-source button { border: 0; padding: 0; background: none; color: var(--link); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
-/* The edit action moved up under the badge, as a button, the way the grid
-   stacks its own. Here it was ten-pixel text styled not to read as a link - so
-   as not to pair with the one beside it - which is a reliable way to make an
-   action nobody finds. */
+/* The edit action moved up beside the badge, as a button, where the grid keeps
+   its own. Here it was ten-pixel text styled not to read as a link - so as not
+   to pair with the one beside it - which is a reliable way to make an action
+   nobody finds. */
 /* Held for a moment after arriving from the schedule, so the eye lands on the
    row that was asked for rather than hunting the list for it. */
 .autopilot-queue > li.just-linked { outline: 2px solid var(--link); outline-offset: 2px; border-radius: var(--radius-sm); }
