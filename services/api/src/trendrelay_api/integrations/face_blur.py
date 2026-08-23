@@ -389,6 +389,16 @@ def detector_name() -> str:
 def _detector(cv2: Any, frame_size: tuple[int, int], settings: BlurSettings) -> Any:
     if not YUNET_MODEL.is_file():
         return _CascadeDetector(cv2, settings)
+    # Prefer the onnxruntime YuNet: the same weights, several times faster on the
+    # CPU and off it entirely on a GPU. It returns None - and this falls through
+    # to OpenCV's own detector - when onnxruntime is absent or will not build on
+    # this machine, so the effect never depends on it. See face_detect_onnx.
+    from trendrelay_api.integrations import face_detect_onnx
+
+    accelerated = face_detect_onnx.detector(YUNET_MODEL, settings.confidence)
+    if accelerated is not None:
+        accelerated.setInputSize(frame_size)
+        return accelerated
     detector = cv2.FaceDetectorYN.create(
         model=str(YUNET_MODEL), config="", input_size=frame_size,
         score_threshold=settings.confidence, nms_threshold=0.3, top_k=5000,
