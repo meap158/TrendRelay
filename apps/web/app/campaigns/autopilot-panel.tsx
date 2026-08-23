@@ -26,6 +26,7 @@ import { AUTHORITIES } from "./authority-options";
 
 import { Button } from "../ui/button";
 import { SegmentedControl } from "../ui/segmented";
+import { FilterChipStrip } from "../ui/filter-strip";
 import { ActionIcon } from "../ui/action-icons";
 import { Dialog } from "../ui/dialog";
 import { WaitingBlock } from "../ui/waiting-block";
@@ -1493,8 +1494,71 @@ export function AutopilotPanel({
    */
   const [queuePicked, setQueuePicked] = useState<Set<string>>(new Set());
   /** Rendered one page at a time: a 372-post queue mounted at once is the lag. */
+  /**
+   * The tag a row wears, by the same rule its badge follows.
+   *
+   * `needs_copy` wins over the stored state there, so it wins here too - a
+   * chip and the badge it stands for must never disagree about which pile a
+   * post is in.
+   */
+  const tagOf = (item: QueueItem) => (item.needs_copy ? "needsCopy" : item.state);
+
+  const [queueTag, setQueueTag] = usePersistedState<string>(
+    "campaigns.queueTag", "all", (value): value is string => typeof value === "string",
+  );
+
+  const queueTagCounts = queue.reduce<Record<string, number>>((counts, item) => {
+    counts[tagOf(item)] = (counts[tagOf(item)] ?? 0) + 1;
+    return counts;
+  }, {});
+
+  /**
+   * Chips for the tags this queue actually has, in the order a post travels.
+   *
+   * Empty tags are left out rather than shown at zero: a queue where nothing
+   * is paused should not spend a chip saying so, and four dead chips make the
+   * two live ones harder to find. "All" is always there because clearing the
+   * filter has to be one click.
+   */
+  const QUEUE_TAGS: { key: string; tone: string }[] = [
+    { key: "needsCopy", tone: "chip-warn" },
+    { key: "approved", tone: "chip-good" },
+    { key: "draft", tone: "chip-neutral" },
+    { key: "paused", tone: "chip-neutral" },
+    { key: "retired", tone: "chip-neutral" },
+  ];
+  const queueChips = [
+    { key: "all", label: t("common.all"), count: queue.length, tone: "chip-all" },
+    ...QUEUE_TAGS
+      .filter(({ key }) => queueTagCounts[key])
+      .map(({ key, tone }) => ({
+        key,
+        label: t(`autopilot.state.${key}`),
+        count: queueTagCounts[key],
+        tone,
+      })),
+  ];
+
+  // A tag that emptied - the last unwritten post got its copy - would
+  // otherwise leave the list filtered to nothing by a chip no longer on
+  // screen. Falling back to everything is the only honest reading of a
+  // filter whose subject has gone.
+  const activeQueueTag = queueChips.some((chip) => chip.key === queueTag) ? queueTag : "all";
+  const shownQueue = activeQueueTag === "all"
+    ? queue
+    : queue.filter((item) => tagOf(item) === activeQueueTag);
+
+  // Selection follows what is on screen: ticking "all" while a filter is up
+  // means all of these, not all of a list the filter is hiding.
+  const pickedQueue = shownQueue.filter((item) => queuePicked.has(item.id));
+  const allQueueSelected = shownQueue.length > 0 && pickedQueue.length === shownQueue.length;
   const [queuePage, setQueuePage] = useState(0);
-  const queuePages = Math.max(1, Math.ceil(queue.length / QUEUE_PAGE_SIZE));
+  // Pages of what the filter leaves, not of the whole queue: narrowing to
+  // eight unwritten posts should be one page, not page one of three with two
+  // of them empty. `safeQueuePage` already clamps, so a filter that shortens
+  // the list past the current page lands on the last one rather than on
+  // nothing - which is why changing a filter needs no page reset of its own.
+  const queuePages = Math.max(1, Math.ceil(shownQueue.length / QUEUE_PAGE_SIZE));
   const safeQueuePage = Math.min(queuePage, queuePages - 1);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
@@ -2857,8 +2921,6 @@ export function AutopilotPanel({
    * selection stops counting on the next render, with no state to keep in step
    * and no chance of sending an id the API will only report back as missing.
    */
-  const pickedQueue = queue.filter((item) => queuePicked.has(item.id));
-  const allQueueSelected = queue.length > 0 && pickedQueue.length === queue.length;
 
   function toggleQueuePick(id: string) {
     setQueuePicked((current) => {
@@ -2870,7 +2932,7 @@ export function AutopilotPanel({
 
   /** Everything, or nothing - the same two-state box the Library and the picker use. */
   function toggleAllQueue() {
-    setQueuePicked(allQueueSelected ? new Set() : new Set(queue.map((item) => item.id)));
+    setQueuePicked(allQueueSelected ? new Set() : new Set(shownQueue.map((item) => item.id)));
   }
 
   async function batchQueue(action: "approve" | "hold" | "remove") {
@@ -3589,6 +3651,19 @@ export function AutopilotPanel({
             onClick={() => void loadLibrary()}><ActionIcon name="clip" />{t("autopilot.addFromLibrary")}</Button>
         ) : undefined}
         toolbar={canEdit && queue.length > 0 ? (
+          <>
+          {/* Narrowing by the tag the rows already wear. Above the selection
+              bar because it decides what that bar acts on, and only when there
+              is more than one pile to choose between - a queue that is
+              entirely "in rotation" has nothing to filter. */}
+          {queueChips.length > 2 && (
+            <FilterChipStrip
+              chips={queueChips}
+              selected={activeQueueTag}
+              onSelect={setQueueTag}
+              ariaLabel="Filter posts by tag"
+            />
+          )}
           <div className={`campaign-queue-bar${pickedQueue.length ? " active" : ""}`}>
             <span
               className="library-pick"
@@ -3637,6 +3712,7 @@ export function AutopilotPanel({
               </>
             )}
           </div>
+          </>
         ) : undefined}
       >
         {/* The rules moved to "How this campaign posts", beside this card.
@@ -4108,7 +4184,7 @@ export function AutopilotPanel({
         ) : (
           <>
           <ul className={canEdit ? "autopilot-queue selectable" : "autopilot-queue"}>
-            {queue.slice(safeQueuePage * QUEUE_PAGE_SIZE, (safeQueuePage + 1) * QUEUE_PAGE_SIZE).map((item) => (
+            {shownQueue.slice(safeQueuePage * QUEUE_PAGE_SIZE, (safeQueuePage + 1) * QUEUE_PAGE_SIZE).map((item) => (
               <li key={item.id} id={`queued-${item.id}`} className={item.state}>
                 {/* A span, not a div: `.autopilot-queue > li > div` is a grid
                     rule that catches any div wrapper added inside these rows. */}
