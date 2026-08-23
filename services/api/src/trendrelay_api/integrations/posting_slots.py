@@ -215,10 +215,27 @@ def resolved_slots(
     session: Session,
     page_key: str | None = None,
     override_preset_id: str | None = None,
+    campaign_preset_id: str | None = None,
 ) -> tuple[list[ResolvedSlot | PublishingSlot], dict[str, Any]]:
-    """Resolve destination override, then page assignment, then workspace slots."""
+    """Resolve destination, then campaign, then page, then workspace slots.
+
+    Narrowest statement first. The destination override is one campaign on one
+    account and beats everything. The campaign's own hours come next, ahead of
+    the page assignment, because a page assignment is a standing property of
+    the account while choosing hours for a campaign is a decision somebody is
+    making now - ignoring it on whichever accounts happen to carry an
+    assignment would make the setting work on some destinations and not
+    others, which is worse than not having it.
+
+    The winner is named in the returned summary either way, so the interface
+    can say which of the four is in force rather than leaving it to be
+    inferred from the times.
+    """
     preset_id = override_preset_id
-    source = "campaign" if preset_id else "workspace"
+    source = "destination" if preset_id else "workspace"
+    if not preset_id and campaign_preset_id:
+        preset_id = campaign_preset_id
+        source = "campaign"
     if not preset_id and page_key:
         assigned = session.scalar(select(PagePostingSchedule).where(
             PagePostingSchedule.workspace_id == workspace_id,

@@ -243,6 +243,96 @@ def test_each_destination_is_only_considered_at_its_resolved_schedule(session) -
     assert posts[0].at.hour == 12
 
 
+def _two_pages_with_their_own_hours(session) -> None:
+    """Two accounts, each already assigned a different page schedule."""
+    destination(session, "d1", "youtube", page_key="youtube:@evening")
+    destination(session, "d2", "tiktok", page_key="tiktok:@commute")
+    session.add(PagePostingSchedule(
+        workspace_id="ws", page_key="youtube:@evening", preset_id="evening"
+    ))
+    session.add(PagePostingSchedule(
+        workspace_id="ws", page_key="tiktok:@commute", preset_id="commute"
+    ))
+    session.commit()
+    queue_item(session, "q1")
+    queue_item(session, "q2")
+
+
+def test_a_campaign_can_run_on_its_own_hours_across_every_account(session) -> None:
+    """Set once on the campaign, honoured on every account it feeds.
+
+    The point of the setting: before it, running two campaigns on different
+    rhythms meant repeating the same preset on every destination and
+    remembering to repeat it again on each one added later.
+
+    Both accounts here already have a page schedule, and neither of those two
+    puts anything inside this window - so every post below exists because the
+    campaign's own hours displaced them.
+    """
+    _two_pages_with_their_own_hours(session)
+
+    window = {"now": NOW + timedelta(minutes=30), "horizon": timedelta(hours=7)}
+    inherited, note = plan_campaign(
+        session, autopilot(session, posting_preset_id=None), link_for=None, **window
+    )
+    assert inherited == [], note
+
+    session.delete(session.get(CampaignAutopilot, "auto"))
+    session.commit()
+    on_its_own, _ = plan_campaign(
+        session, autopilot(session, posting_preset_id="spread"), link_for=None, **window
+    )
+
+    # "Spread" is 9, 12, 15, 18, 21; nine has gone by half past nine, so noon
+    # and three o'clock are what this window holds.
+    assert [post.at.hour for post in on_its_own] == [12, 15]
+
+
+def test_one_account_can_still_disagree_with_its_campaign(session) -> None:
+    """The narrower statement wins: a destination override outranks the campaign."""
+    destination(session, "on-campaign-hours", "youtube")
+    destination(
+        session, "its-own-hours", "tiktok", posting_preset_id="commute",
+    )
+    session.commit()
+    queue_item(session, "q1")
+    queue_item(session, "q2")
+
+    posts, _ = plan_campaign(
+        session,
+        autopilot(session, posting_preset_id="spread"),
+        now=NOW + timedelta(hours=2), link_for=None, horizon=timedelta(hours=8),
+    )
+
+    when: dict[str, set[tuple[int, int]]] = {}
+    for post in posts:
+        when.setdefault(post.destination_id, set()).add((post.at.hour, post.at.minute))
+
+    # Spread's noon, three and six; commute's half past five and half past
+    # six. Neither account is ever considered at the other's times.
+    assert when["on-campaign-hours"] <= {(12, 0), (15, 0), (18, 0)}
+    assert when["its-own-hours"] <= {(17, 30), (18, 30)}
+    assert when["its-own-hours"], "the override never got a turn"
+    assert not (when["on-campaign-hours"] & when["its-own-hours"])
+
+
+def test_a_campaign_with_no_hours_of_its_own_keeps_the_page_assignment(session) -> None:
+    """Inheriting is the ordinary case, and the setting must be able to be absent."""
+    destination(session, "d1", "youtube", page_key="youtube:@evening")
+    session.add(PagePostingSchedule(
+        workspace_id="ws", page_key="youtube:@evening", preset_id="evening"
+    ))
+    session.commit()
+    queue_item(session, "q1")
+
+    posts, _ = plan_campaign(
+        session, autopilot(session, posting_preset_id=None),
+        now=NOW, link_for=None, horizon=timedelta(hours=12),
+    )
+
+    assert [post.at.hour for post in posts] == [18]
+
+
 def test_no_destinations_is_explained_rather_than_silent(session) -> None:
     posts, note = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
     assert posts == []

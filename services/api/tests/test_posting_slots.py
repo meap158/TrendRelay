@@ -129,11 +129,21 @@ def test_custom_presets_are_saved_and_join_the_built_ins(slots) -> None:
     assert {item["id"] for item in available} >= {"commute", saved["id"]}
 
 
-def test_schedule_resolution_prefers_campaign_then_page_then_workspace(slots) -> None:
+def test_schedule_resolution_reads_narrowest_statement_first(slots) -> None:
+    """Destination, then campaign, then page, then the workspace.
+
+    The campaign sits ahead of the page deliberately: a page assignment is a
+    standing property of the account, and hours chosen for a campaign are a
+    decision being made now. Behind the page, the setting would work on the
+    accounts with no assignment and quietly do nothing on the others.
+    """
     posting_slots.replace_slots("w1", [{"time": "11:00"}], factory=slots)
     with slots() as session, session.begin():
         custom = posting_slots.create_preset(
             "w1", "Page prime time", "", [{"time": "19:30"}], session=session
+        )
+        campaign = posting_slots.create_preset(
+            "w1", "Campaign hours", "", [{"time": "06:45"}], session=session
         )
         posting_slots.assign_page(
             "w1", "instagram:@brand", custom["id"], session=session
@@ -143,15 +153,29 @@ def test_schedule_resolution_prefers_campaign_then_page_then_workspace(slots) ->
         )
         campaign_slots, campaign_rule = posting_slots.resolved_slots(
             "w1", session=session, page_key="instagram:@brand",
-            override_preset_id="commute",
+            campaign_preset_id=campaign["id"],
+        )
+        destination_slots, destination_rule = posting_slots.resolved_slots(
+            "w1", session=session, page_key="instagram:@brand",
+            campaign_preset_id=campaign["id"], override_preset_id="commute",
         )
         fallback_slots, fallback_rule = posting_slots.resolved_slots(
             "w1", session=session, page_key="youtube:@other"
         )
+        # A campaign with no hours of its own still lands on the page's.
+        inherited_slots, inherited_rule = posting_slots.resolved_slots(
+            "w1", session=session, page_key="instagram:@brand",
+            campaign_preset_id=None,
+        )
 
     assert [(item.hour, item.minute) for item in page_slots] == [(19, 30)]
     assert page_rule["source"] == "page"
+    assert [(item.hour, item.minute) for item in campaign_slots] == [(6, 45)]
     assert campaign_rule["source"] == "campaign"
-    assert [(item.hour, item.minute) for item in campaign_slots][0] == (7, 30)
+    assert campaign_rule["label"] == "Campaign hours"
+    assert [(item.hour, item.minute) for item in destination_slots][0] == (7, 30)
+    assert destination_rule["source"] == "destination"
     assert fallback_rule["source"] == "workspace"
     assert [(item.hour, item.minute) for item in fallback_slots] == [(11, 0)]
+    assert [(item.hour, item.minute) for item in inherited_slots] == [(19, 30)]
+    assert inherited_rule["source"] == "page"

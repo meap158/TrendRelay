@@ -148,6 +148,8 @@ function PostingPresetSelect({
   timezone,
   workspaceSlots,
   pagePresetId,
+  campaignPresetId,
+  inheritLabel,
   onChange,
 }: {
   value: string;
@@ -155,6 +157,20 @@ function PostingPresetSelect({
   timezone: string;
   workspaceSlots: Slot[];
   pagePresetId?: string;
+  /**
+   * The campaign's own hours, when this control is choosing for one account
+   * inside it. Passed so "inherit" can show what inheriting would actually
+   * land on - which is the campaign's times when it has any, not the page's.
+   */
+  campaignPresetId?: string;
+  /**
+   * What inheriting means at this level, when it is not what resolving says.
+   *
+   * A campaign inherits per account, so there is no single schedule to name
+   * and the caller supplies the wording. Everywhere else the label is left to
+   * be worked out below, from whichever level actually answers.
+   */
+  inheritLabel?: string;
   onChange: (value: string) => void;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -164,14 +180,31 @@ function PostingPresetSelect({
   const [shownInfo, setShownInfo] = useState<string | null>(null);
   const [pinnedInfo, setPinnedInfo] = useState<string | null>(null);
   const pagePreset = presets.find((preset) => preset.id === pagePresetId);
-  const inheritedSlots = pagePreset?.slots ?? workspaceSlots;
+  const campaignPreset = presets.find((preset) => preset.id === campaignPresetId);
+  // Same order the server resolves in: the campaign's own hours outrank the
+  // page assignment, so "inherit" has to show the campaign's when it has any -
+  // otherwise this row promises times the scheduler will not use.
+  const inheritedFrom = campaignPreset ?? pagePreset;
+  const inheritedSlots = inheritedFrom?.slots ?? workspaceSlots;
   const choices = [
     {
       id: "",
-      label: "Inherit page / workspace schedule",
-      summary: pagePreset
-        ? `Uses “${pagePreset.label}”, assigned to this page.`
-        : "Uses the workspace posting times.",
+      // Named after whatever inheriting would land on, rather than a fixed
+      // "page / workspace" - which stopped being true the moment a campaign
+      // could hold hours of its own, and would have had this row promising
+      // times the scheduler was not going to use.
+      label: inheritLabel ?? (
+        campaignPreset
+          ? "Inherit this campaign's schedule"
+          : pagePreset
+            ? "Inherit this page's schedule"
+            : "Inherit the workspace schedule"
+      ),
+      summary: campaignPreset
+        ? `Uses “${campaignPreset.label}”, this campaign's own times.`
+        : pagePreset
+          ? `Uses “${pagePreset.label}”, assigned to this page.`
+          : "Uses the workspace posting times.",
       slots: inheritedSlots,
     },
     ...presets,
@@ -349,7 +382,7 @@ type Destination = {
   /** Null inherits the page assignment and then the workspace schedule. */
   posting_preset_id?: string | null;
   posting_schedule?: {
-    source: "campaign" | "page" | "workspace";
+    source: "destination" | "campaign" | "page" | "workspace";
     preset_id: string | null;
     label: string;
     slot_count: number;
@@ -422,6 +455,8 @@ type Autopilot = {
   rotate_products: boolean;
   daily_cap_per_account: number;
   weekly_post_cap: number | null;
+  /** The campaign's own posting times. Null lets each account inherit. */
+  posting_preset_id: string | null;
   /** The language the composed scaffolding speaks. */
   post_language: string;
   posts_scheduled: number;
@@ -2342,6 +2377,7 @@ export function AutopilotPanel({
           rotate_products: next.rotate_products,
           daily_cap_per_account: next.daily_cap_per_account,
           weekly_post_cap: next.weekly_post_cap,
+          posting_preset_id: next.posting_preset_id,
           delivery: next.delivery,
           authority: next.authority,
           priority: next.priority,
@@ -4833,6 +4869,32 @@ export function AutopilotPanel({
             onClick={() => void loadAccounts()}>{t("autopilot.addAccount")}</Button>
         ) : undefined}
       >
+        {/* The campaign's own rhythm, above the accounts it applies to.
+            Without it, running two campaigns on different hours meant setting
+            the same preset on every destination and remembering to set it
+            again on each one added later - so the campaign, which is the
+            thing that has a rhythm, was the one place that could not say so.
+            Any single account below can still disagree; that row says which
+            of the two it is following. */}
+        {canEdit && (
+          <label className="campaign-schedule-default">
+            <span>
+              <strong>Posting times for this campaign</strong>
+              <small>Applies to every account below that has not been given
+                its own.</small>
+            </span>
+            <PostingPresetSelect
+              value={autopilot.posting_preset_id ?? ""}
+              presets={postingPresets}
+              timezone={scheduleTimezone}
+              workspaceSlots={slots}
+              inheritLabel="Each account's own schedule"
+              onChange={(postingPresetId) => void save({
+                posting_preset_id: postingPresetId || null,
+              })}
+            />
+          </label>
+        )}
         {destinations.length === 0 ? (
           <p className="autopilot-empty">{t("autopilot.noDestinations")}</p>
         ) : (
@@ -4880,8 +4942,13 @@ export function AutopilotPanel({
                 <p className="autopilot-schedule-reason">
                   Posting schedule: <strong>{item.posting_schedule?.label
                     ?? "Workspace posting times"}</strong>
+                  {/* Which of the four is in force. Worth saying rather than
+                      leaving to be inferred from the times: four levels
+                      resolve here, and "these are the hours" is a different
+                      statement from "these are the hours, and here is why". */}
                   {item.posting_schedule?.source === "page" ? " · assigned to this page" : ""}
-                  {item.posting_schedule?.source === "campaign" ? " · campaign override" : ""}
+                  {item.posting_schedule?.source === "campaign" ? " · this campaign's own times" : ""}
+                  {item.posting_schedule?.source === "destination" ? " · set for this account" : ""}
                 </p>
                 {canEdit && (
                   <div className="autopilot-destination-controls">
@@ -4893,6 +4960,7 @@ export function AutopilotPanel({
                       timezone={scheduleTimezone}
                       workspaceSlots={slots}
                       pagePresetId={pageAssignments[item.page_key ?? ""]}
+                      campaignPresetId={autopilot.posting_preset_id ?? undefined}
                       onChange={(postingPresetId) => void run("schedule", async () => {
                         await json(await apiFetch(
                           `${base}/destinations/${item.id}/schedule`,

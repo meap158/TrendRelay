@@ -171,6 +171,15 @@ class CampaignAutopilot(Base):
     #: the promise. Drafting stays available for anybody who wants a review
     #: step, chosen rather than assumed.
     delivery: Mapped[str] = mapped_column(String(16), default="schedule")
+    #: The times this campaign posts at, when it does not want the workspace's.
+    #:
+    #: Null inherits, which is the ordinary case. A campaign that sets this
+    #: overrides the page assignment too: a page assignment is a standing
+    #: property of the account, and choosing hours here is a decision made
+    #: about this campaign now, so it should not be quietly ignored on the
+    #: accounts that happen to carry one. A single destination can still
+    #: overrule it - that is the narrower statement of the two.
+    posting_preset_id: Mapped[str | None] = mapped_column(String(64))
     #: Counted, not derived, because it drives the exploration cadence and has to
     #: survive a restart.
     posts_scheduled: Mapped[int] = mapped_column(Integer, default=0)

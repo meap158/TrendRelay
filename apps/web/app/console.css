@@ -1919,6 +1919,24 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .autopilot-schedule-reason { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .autopilot-schedule-reason strong { color: var(--ink); font-weight: 600; }
 .campaign-account-schedule { color: var(--muted); }
+/* The campaign's own hours, above the accounts they apply to. Separated by a
+   rule rather than by space: it governs the list below it, and a gap alone
+   would read as another row of it. */
+.campaign-schedule-default {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 210px);
+  gap: 10px;
+  align-items: center;
+  margin-block-end: 12px;
+  padding-block-end: 12px;
+  border-block-end: 1px solid var(--line);
+}
+.campaign-schedule-default > span { display: grid; gap: 2px; min-width: 0; }
+.campaign-schedule-default strong { font-size: 12px; }
+.campaign-schedule-default small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+@media (max-width: 600px) {
+  .campaign-schedule-default { grid-template-columns: minmax(0, 1fr); }
+}
 .ui-button[data-destination-remove] {
   min-height: 30px;
   padding-inline: 8px;

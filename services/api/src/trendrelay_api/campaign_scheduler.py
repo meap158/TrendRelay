@@ -568,6 +568,7 @@ def plan_campaign(
             session=session,
             page_key=destination.page_key,
             override_preset_id=destination.posting_preset_id,
+            campaign_preset_id=autopilot.posting_preset_id,
         )
         moments_by_destination[destination.id] = set(due_slots(
             list(resolved), now=now, until=now + horizon, timezone=timezone
@@ -1298,6 +1299,7 @@ def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str,
         "rotate_products": autopilot.rotate_products,
         "daily_cap_per_account": autopilot.daily_cap_per_account,
         "weekly_post_cap": autopilot.weekly_post_cap,
+        "posting_preset_id": autopilot.posting_preset_id,
         "posts_scheduled": autopilot.posts_scheduled,
         "last_run_at": autopilot.last_run_at,
         "last_note": autopilot.last_note,

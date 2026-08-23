@@ -152,6 +152,9 @@ class AutopilotSettings(BaseModel):
     #: The whole campaign's rolling-week ceiling, across every destination.
     #: None leaves the per-account caps as the only limit.
     weekly_post_cap: int | None = Field(default=None, ge=1, le=200)
+    #: The hours this campaign posts at. None inherits, which is the ordinary
+    #: case; a single destination can still overrule whatever is chosen here.
+    posting_preset_id: str | None = Field(default=None, max_length=64)
     #: The language the composed scaffolding speaks. Defaults follow the
     #: campaign's own languages at creation, not English.
     post_language: str = Field(default="en", pattern=r"^[a-z]{2}$")
@@ -279,7 +282,26 @@ def _autopilot(session: Session, workspace_id: str, campaign_id: str,
     return found
 
 
-def _destination_view(session: Session, item: CampaignDestination) -> dict[str, Any]:
+def _campaign_preset_id(session: Session, campaign_id: str) -> str | None:
+    """The campaign's own posting preset, if it has chosen one.
+
+    Read as a scalar rather than through `_autopilot`, which creates a row
+    when there is none: asking what a campaign's hours are must not be the
+    thing that switches autopilot on for it.
+    """
+    return session.scalar(
+        select(CampaignAutopilot.posting_preset_id).where(
+            CampaignAutopilot.campaign_id == campaign_id
+        )
+    )
+
+
+def _destination_view(
+    session: Session,
+    item: CampaignDestination,
+    *,
+    campaign_preset_id: str | None = None,
+) -> dict[str, Any]:
     from trendrelay_api.integrations.publishing import (
         first_comment_deliverable,
         limits_for,
@@ -302,6 +324,7 @@ def _destination_view(session: Session, item: CampaignDestination) -> dict[str, 
         session=session,
         page_key=item.page_key,
         override_preset_id=item.posting_preset_id,
+        campaign_preset_id=campaign_preset_id,
     )
     return {
         "id": item.id,
@@ -427,7 +450,10 @@ def read_autopilot(
             # afterwards.
             "held": held_posts(session, campaign_id),
         },
-        "destinations": [_destination_view(session, item) for item in destinations],
+        "destinations": [
+            _destination_view(session, item, campaign_preset_id=autopilot.posting_preset_id)
+            for item in destinations
+        ],
         "queue": [_queue_view(item) for item in queue],
     }
 
@@ -484,6 +510,16 @@ def save_autopilot(
         )
         if not offer:
             raise HTTPException(status_code=404, detail="Affiliate offer not found.")
+    if body.posting_preset_id:
+        from trendrelay_api.integrations import posting_slots
+
+        if not posting_slots.preset_by_id(
+            workspace_id, body.posting_preset_id, session=session
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="That posting preset is not available in this workspace.",
+            )
     candidate_ids = list(dict.fromkeys(body.candidate_offer_ids))
     if candidate_ids:
         found = set(session.scalars(select(ProductOffer.id).where(
@@ -546,6 +582,7 @@ def save_autopilot(
     autopilot.authority = body.authority
     autopilot.priority = body.priority
     autopilot.weekly_post_cap = body.weekly_post_cap
+    autopilot.posting_preset_id = body.posting_preset_id
     autopilot.updated_at = datetime.now(UTC)
     if body.enabled and not was_enabled:
         # Switching on IS deploying: the campaign activates and the first run
@@ -645,7 +682,9 @@ def add_destination(
     )
     session.add(item)
     session.flush()
-    return {"destination": _destination_view(session, item)}
+    return {"destination": _destination_view(
+        session, item, campaign_preset_id=_campaign_preset_id(session, campaign_id)
+    )}
 
 
 @router.post("/{campaign_id}/destinations/{destination_id}/placement")
@@ -694,7 +733,12 @@ def set_destination_placement(
         "campaign.destination_placement", "campaign_destination", item.id,
         {"link_placement": body.link_placement, "recomposed_held": reached["recomposed"]},
     )
-    return {"destination": _destination_view(session, item), "held": reached}
+    return {
+        "destination": _destination_view(
+            session, item, campaign_preset_id=_campaign_preset_id(session, campaign_id)
+        ),
+        "held": reached,
+    }
 
 
 @router.post("/{campaign_id}/destinations/{destination_id}/schedule")
@@ -734,7 +778,9 @@ def set_destination_schedule(
         {"posting_preset_id": body.posting_preset_id},
     )
     session.flush()
-    return {"destination": _destination_view(session, item)}
+    return {"destination": _destination_view(
+        session, item, campaign_preset_id=_campaign_preset_id(session, campaign_id)
+    )}
 
 
 @router.delete("/{campaign_id}/destinations/{destination_id}")
