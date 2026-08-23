@@ -112,6 +112,45 @@ export const NO_OFFER_FILTERS: OfferFilters = {
  *
  * Every filter narrows - none widens - so an offer has to pass all of them.
  */
+/**
+ * Whether a whole product survives the same search and filters.
+ *
+ * The Attribution table asks per product what the picker asks per offer, and
+ * it had its own inline copy of these rules - the untested copy, which is the
+ * one that drifts. The two stay separate functions because their units differ
+ * - a product is in a campaign if any of its offers is - but they live here
+ * together so the semantics are one thing with one home.
+ */
+export function productMatches(
+  product: ProductRow,
+  filters: OfferFilters,
+  campaignsByOffer: Record<string, string[]> = {},
+): boolean {
+  const needle = filters.query.trim().toLowerCase();
+  if (needle) {
+    const fields = [
+      product.name, product.brand, product.marketplace,
+      ...product.creators,
+      ...product.offers.map((offer) => offer.merchant),
+      ...product.offers.map((offer) => offer.network),
+    ];
+    if (!fields.filter(Boolean)
+      .some((field) => String(field).toLowerCase().includes(needle))) return false;
+  }
+  // Any offer in the campaign keeps the product: a product with two offers
+  // can be promoted on one of them, and that is the one being asked about.
+  if (filters.campaign && !product.offers.some(
+    (offer) => (campaignsByOffer[offer.id] ?? []).includes(filters.campaign),
+  )) return false;
+  if (filters.file && product.import_filename !== filters.file) return false;
+  // Compared as dates rather than instants, exactly as `offerMatches` does,
+  // so the two surfaces agree about what "imported that day" means.
+  const day = (product.imported_at ?? "").slice(0, 10);
+  if (filters.from && (!day || day < filters.from)) return false;
+  if (filters.to && (!day || day > filters.to)) return false;
+  return true;
+}
+
 export function offerMatches(
   row: OfferChoice,
   filters: OfferFilters,

@@ -235,6 +235,25 @@ function offerDescription(offer: CampaignOffer): string {
   return [offer.product.marketplace, offer.network, commission].filter(Boolean).join(" · ");
 }
 
+/**
+ * One option shape for every offer chooser on this page.
+ *
+ * The create dialog and the settings dialog each built their own, and they
+ * had drifted: the settings one described an offer by its network alone and
+ * searched on nothing but the visible text, so the same search found
+ * different offers depending on which dialog it was typed into. One builder
+ * is what keeps the two being the same control.
+ */
+function offerOption(offer: CampaignOffer) {
+  return {
+    value: offer.id,
+    label: offer.product.name,
+    description: offerDescription(offer),
+    keywords: `${offer.product.brand ?? ""} ${offer.product.marketplace ?? ""} `
+      + `${offer.network} ${offer.affiliate_url}`,
+  };
+}
+
 function planPlatformLabel(platform: PublicationPlan["platform"]): string {
   if (platform === "douyin") return "Douyin";
   if (platform === "other") return "Other";
@@ -919,12 +938,7 @@ export default function CampaignsPage() {
             <label>Offer
               <SearchSelect
                 value={newCampaignOfferId}
-                options={offers.map((offer) => ({
-                  value: offer.id,
-                  label: offer.product.name,
-                  description: offerDescription(offer),
-                  keywords: `${offer.product.brand ?? ""} ${offer.product.marketplace ?? ""} ${offer.network} ${offer.affiliate_url}`,
-                }))}
+                options={offers.map(offerOption)}
                 onChange={setNewCampaignOfferId}
                 placeholder="Choose an imported offer"
                 searchPlaceholder="Search imported offers…"
@@ -1113,11 +1127,7 @@ export default function CampaignsPage() {
                     onChange={setOfferChoice}
                     placeholder="Choose an imported offer"
                     searchPlaceholder="Search imported offers…"
-                    options={offers.map((offer) => ({
-                      value: offer.id,
-                      label: offer.product.name,
-                      description: offer.network,
-                    }))}
+                    options={offers.map(offerOption)}
                   />
                   <small>Source: imported offers in Attribution.</small>
                 </label>

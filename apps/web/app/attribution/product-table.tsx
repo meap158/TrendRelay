@@ -21,6 +21,7 @@ import { Select } from "../ui/select";
 import { useT } from "../i18n-provider";
 import { commissionRate } from "../commission";
 import { money } from "./format";
+import { productMatches } from "../publish/offer-rows";
 import {
   sortProducts,
   type ProductSort,
@@ -174,31 +175,12 @@ export function ProductTable({
   );
 
   const shown = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const from = filterFrom ? Date.parse(filterFrom) : null;
-    // The "to" bound is inclusive of its whole day, so treat it as up to the
-    // next midnight rather than the instant midnight begins.
-    const until = filterTo ? Date.parse(filterTo) + 86_400_000 : null;
-    const filtered = products.filter((product) => {
-      if (needle && ![
-        product.name,
-        product.brand,
-        product.marketplace,
-        ...product.creators,
-        ...product.offers.map((offer) => offer.merchant),
-      ].some((field) => (field || "").toLowerCase().includes(needle))) return false;
-      if (filterCampaign && !product.offers.some(
-        (offer) => (campaignsByOffer[offer.id] || []).includes(filterCampaign),
-      )) return false;
-      if (filterFile && product.import_filename !== filterFile) return false;
-      if (from !== null || until !== null) {
-        if (!product.imported_at) return false;
-        const at = Date.parse(product.imported_at);
-        if (from !== null && at < from) return false;
-        if (until !== null && at >= until) return false;
-      }
-      return true;
-    });
+    // The same tested rules the offer picker filters with, at product grain -
+    // this table carried its own inline copy, and the inline copy is the one
+    // that drifts.
+    const filtered = products.filter((product) => productMatches(product, {
+      query, campaign: filterCampaign, file: filterFile, from: filterFrom, to: filterTo,
+    }, campaignsByOffer));
     return sortProducts(filtered, sort);
   }, [
     products, query, sort, filterCampaign, filterFile, filterFrom, filterTo, campaignsByOffer,

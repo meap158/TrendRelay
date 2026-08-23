@@ -6,6 +6,7 @@ import {
   offerChoices,
   offerMatches,
   offerValue,
+  productMatches,
   type OfferFilters,
 } from "../app/publish/offer-rows.ts";
 import { sortRows } from "../app/attribution/sort.ts";
@@ -201,6 +202,37 @@ test("every filter narrows, so all of them have to pass", () => {
   assert.equal(offerMatches(mug, filters({
     query: "mug", campaign: "camp-1", file: "shopee-may.xlsx", from: "2026-06-01",
   }), byOffer), false);
+});
+
+// --- the same rules at product grain, for the Attribution table ---------------
+
+test("a product stays when any of its offers is in the chosen campaign", () => {
+  const two = product("p1", [offer("o1"), offer("o2")], "Mug");
+  const byOffer = { o2: ["camp-1"] };
+
+  assert.equal(productMatches(two, { ...NO_OFFER_FILTERS, campaign: "camp-1" }, byOffer), true);
+  assert.equal(productMatches(two, { ...NO_OFFER_FILTERS, campaign: "camp-9" }, byOffer), false);
+});
+
+test("a product is searched by its offers' merchants and networks too", () => {
+  const item = product("p1", [offer("o1", { merchant: "JT stationery" })], "Mug");
+
+  assert.equal(productMatches(item, { ...NO_OFFER_FILTERS, query: "JT stat" }), true);
+  assert.equal(productMatches(item, { ...NO_OFFER_FILTERS, query: "shopee" }), true);
+  assert.equal(productMatches(item, { ...NO_OFFER_FILTERS, query: "nowhere" }), false);
+});
+
+test("a product's import date range is inclusive at both ends, like the picker's", () => {
+  const item = product("p1", [offer("o1")], "Mug");
+  item.imported_at = "2026-06-15T09:30:00Z";
+
+  assert.equal(productMatches(item, {
+    ...NO_OFFER_FILTERS, from: "2026-06-15", to: "2026-06-15",
+  }), true);
+  assert.equal(productMatches(item, { ...NO_OFFER_FILTERS, to: "2026-06-14" }), false);
+  // No import date is not evidence of any range.
+  const undated = product("p2", [offer("o2")], "Bottle");
+  assert.equal(productMatches(undated, { ...NO_OFFER_FILTERS, from: "2026-01-01" }), false);
 });
 
 test("creators order the column and a product without one is not dropped", () => {

@@ -35,7 +35,6 @@ import { SortableHeader, nextSort } from "../ui/sortable-header";
 import { oneOf, usePersistedState } from "../ui/use-persisted-state";
 import type { SortState } from "../ui/sortable-header";
 import { Badge, Card, Switch } from "../ui/primitives";
-import { SearchSelect } from "../ui/search-select";
 import { Select } from "../ui/select";
 import { useT } from "../i18n-provider";
 import { LOCALES } from "../../lib/i18n/locales";
