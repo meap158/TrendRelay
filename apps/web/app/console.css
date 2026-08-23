@@ -1468,21 +1468,46 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .campaign-metrics svg { opacity: .7; }
 
 /* Day drawer ("see more"): the whole day, one row per post. */
+/* The checkbox column, named once for the bar and the rows both.
+   Select-all governs the ticks below it, so it has to sit in the same column
+   as them or it reads as belonging to something else. It did not: the rows
+   carry inline padding and centre their box inside a wider cell, and the bar
+   above had neither, which put every row's tick 5.5px to the right of the one
+   that controls them - close enough to look accidental, because it was. Two
+   numbers rather than two hard-coded sets, so they cannot drift apart again. */
+.campaign-day-tools, .campaign-day-row { --day-gutter: 2px; --day-check: 22px; }
 /* The selection bar holds its own row height whether or not anything is
    ticked, so selecting never reflows the list underneath it. */
-.campaign-day-tools { display: flex; align-items: center; gap: 10px; min-block-size: 40px; padding-block-end: 4px; }
+.campaign-day-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-block-size: 40px;
+  padding-block-end: 4px;
+  padding-inline: var(--day-gutter);
+}
 .campaign-day-tools > strong { font-size: 13px; font-weight: 600; }
 .campaign-day-tools-gap { flex: 1 1 auto; }
-.campaign-day-selectall { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; cursor: pointer; }
-.campaign-day-selectall input { inline-size: 15px; block-size: 15px; margin: 0; accent-color: var(--green); cursor: pointer; }
+/* Two columns, the first the same width the rows give their tick, so the box
+   lands on the same axis and the label starts where a row's own text does. */
+.campaign-day-selectall {
+  display: grid;
+  grid-template-columns: var(--day-check) auto;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.campaign-day-selectall input { justify-self: center; inline-size: 15px; block-size: 15px; margin: 0; accent-color: var(--green); cursor: pointer; }
 .campaign-day-clear { appearance: none; padding: 4px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
 .campaign-day-clear:hover { color: var(--text); text-decoration: underline; }
 .campaign-day-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
-.campaign-day-row { display: flex; gap: 8px; align-items: center; padding: 4px 2px; border-block-end: 1px solid var(--line); }
+.campaign-day-row { display: flex; gap: 8px; align-items: center; padding: 4px var(--day-gutter); border-block-end: 1px solid var(--line); }
 .campaign-day-row:last-child { border-block-end: 0; }
 .campaign-day-row[data-selected] { background: color-mix(in srgb, var(--green) 12%, transparent); }
 /* Always here, empty on a delivered post, so a tick never shifts the row. */
-.campaign-day-check { flex: 0 0 auto; display: grid; place-items: center; inline-size: 22px; block-size: 22px; }
+.campaign-day-check { flex: 0 0 auto; display: grid; place-items: center; inline-size: var(--day-check); block-size: 22px; }
 .campaign-day-check input { inline-size: 15px; block-size: 15px; margin: 0; accent-color: var(--green); cursor: pointer; }
 .campaign-day-main { flex: 1 1 auto; min-inline-size: 0; display: flex; gap: 10px; align-items: center; appearance: none; padding: 5px 6px; border: 0; border-radius: var(--radius-sm); background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
 .campaign-day-main:hover { background: var(--panel-raised); }
