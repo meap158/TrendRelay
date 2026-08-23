@@ -53,6 +53,43 @@ They write through the same helper the interface's own edit route uses
 (`apply_queue_item_edits`), so a caption an assistant writes is validated and
 stored exactly as one a person types, and the two surfaces cannot drift.
 
+## The second surface: media in, and a proposed post
+
+An assistant can bring an image into the workspace and propose a post made
+from Library media into a campaign - the action `campaigns.add-post-with-media`.
+
+- `upload_image` fetches one image and puts it through the operator's own
+  ingest pipeline - deduplicated by content, kept immutable, audited - so it
+  appears in the media library like any import, under the `mcp-upload` source.
+  The image arrives either as a chat attachment (see the file-parameter
+  convention below) or as a direct public `https://` URL. The fetch is
+  guarded: no redirects, no private or loopback destination, 25 MB at most,
+  and only the image types the Library accepts (JPEG, PNG, WebP).
+- `get_import_status` reports the import job until it carries the `asset_id`.
+- `create_campaign_post` proposes a post from Library asset ids - one video,
+  or up to twenty images as a carousel - with optional copy that passes the
+  same no-links rule as every copy write. It creates through the same
+  `create_queue_item` helper as the interface's own route.
+
+**A post an assistant creates is a draft, never rotation-ready.** The
+operator's own additions arrive approved because adding them is the operator's
+decision; an assistant's arrive in `draft` - the queue's parking brake - and
+enter the rotation only when a person promotes them in the app. Without this,
+a model could compose a post into a campaign whose authority is autonomous and
+thereby publish it, which would cross the execution boundary below.
+
+### Chat attachments: the `openai/fileParams` convention
+
+`upload_image` declares `_meta["openai/fileParams"] = ["image"]` on its tool
+definition. A client that understands this convention - ChatGPT's MCP
+connectors do - routes a file the user attaches in chat into the `image`
+argument as an object carrying a `file_id` and a signed, temporary
+`download_url`. The server fetches that URL once and never stores it: it
+expires, and its query string carries an access token. Clients that do not
+know the convention simply pass `image_url` instead; the tool takes either.
+The convention is documented in
+[`docs/third-party/openai-file-params.md`](openai-file-params.md).
+
 ## The boundary
 
 Decided in `integrations/mcp/policy.py`, and re-checked at the moment of every
@@ -70,8 +107,8 @@ caller names one directly.
 
 | | Count |
 | --- | --- |
-| Reads | 6 |
-| Workspace writes (copy) | 5 |
+| Reads | 9 |
+| Workspace writes (copy, schedule, media, drafts) | 12 |
 | Refused - credentials and sessions | 4 |
 | Refused - approval, execution, deployment | 6 |
 
@@ -131,6 +168,7 @@ than a 404 that reads as broken.
 | Read context | `services/api/src/trendrelay_api/integrations/mcp/context.py` |
 | SOP catalog and guidance | `services/api/src/trendrelay_api/integrations/mcp/sops.py`, `SOP/` |
 | Copy writes | `services/api/src/trendrelay_api/integrations/mcp/writes.py` |
+| Media intake and draft posts | `services/api/src/trendrelay_api/integrations/mcp/intake.py` |
 | Server | `services/api/src/trendrelay_api/integrations/mcp/server.py` |
 | Supervisor + status | `services/api/src/trendrelay_api/integrations/mcp/service.py` |
 | Entry point | `scripts/mcp_server.py` |

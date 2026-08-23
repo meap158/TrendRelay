@@ -12,6 +12,7 @@ write operation looks convenient.
 | Intended action | Canonical action | First live operation |
 | --- | --- | --- |
 | Fill missing Campaigns copy | `campaigns.fill-needs-copy` | `list_posts_needing_copy` |
+| Add a post with media (upload an image, propose a post) | `campaigns.add-post-with-media` | `upload_image` |
 | Read or change when things post | (no SOP yet) | `list_posting_times` |
 
 For an action not listed here, call `list_sops`. Match its canonical action or
@@ -38,9 +39,12 @@ and use a final fresh queue read as completion evidence.
 
 An SOP explains how to use authority already granted by the MCP policy; it does
 not grant new authority. TrendRelay MCP may read workspace context, write draft
-copy that remains inside the workspace, and read or change the posting schedule.
+copy that remains inside the workspace, bring an image into the media library,
+propose a draft post into a campaign, and read or change the posting schedule.
 It may not sign in, connect an account, approve content, publish, deploy,
-delete, or trigger another external side effect reserved for the operator.
+delete, or trigger another external side effect reserved for the operator. A
+post it creates arrives as a draft outside the rotation; only the operator
+promotes it, in the app.
 
 A schedule is configuration, which is why it sits inside that authority:
 changing one moves when work a person has already written and already approved

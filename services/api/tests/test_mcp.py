@@ -110,12 +110,13 @@ def test_every_operation_is_classified_on_purpose() -> None:
         assert isinstance(access, policy.Access), name
 
 
-def test_the_allowed_surface_is_the_reads_the_copy_and_the_schedule() -> None:
+def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> None:
     assert policy.allowed_operations() == [
-        "create_posting_preset", "get_campaign_config", "get_campaign_posting_times",
+        "create_campaign_post", "create_posting_preset", "get_campaign_config",
+        "get_campaign_posting_times", "get_import_status",
         "get_post_context", "get_sop", "list_campaigns", "list_posting_times",
         "list_posts_needing_copy", "list_sops", "set_campaign_posting_times",
-        "set_page_posting_times", "set_workspace_posting_times",
+        "set_page_posting_times", "set_workspace_posting_times", "upload_image",
         "write_bio_hint", "write_caption", "write_disclosure", "write_first_comment",
         "write_post_copy", "write_thread",
     ]
@@ -144,10 +145,13 @@ def test_the_server_offers_only_the_allowed_tools() -> None:
     assert not [n for n in refused if n in names], "a refused operation was offered"
 
 
-def test_the_campaign_copy_sop_is_discovered_by_action() -> None:
+def test_the_campaign_sops_are_discovered_by_action() -> None:
     catalogue = sops.list_sops()
-    assert [entry["action"] for entry in catalogue] == ["campaigns.fill-needs-copy"]
-    assert "markdown" not in catalogue[0]
+    assert [entry["action"] for entry in catalogue] == [
+        "campaigns.add-post-with-media",
+        "campaigns.fill-needs-copy",
+    ]
+    assert all("markdown" not in entry for entry in catalogue)
 
     procedure = sops.get_sop("write_campaign_copy")
     assert procedure["id"] == "campaigns.fill-needs-copy"
@@ -646,3 +650,204 @@ def test_setting_a_schedule_approves_and_publishes_nothing(session) -> None:
     session.refresh(item)
     session.refresh(autopilot)
     assert (item.state, item.body, autopilot.enabled, autopilot.delivery) == was
+
+
+# --- media in, and a post proposed -------------------------------------------
+
+
+def _image_asset(session, asset_id: str = "img1", path: str = r"S:\media\shot.png"):
+    from trendrelay_api.media_models import MediaAsset
+
+    asset = MediaAsset(
+        id=asset_id, workspace_id="ws", title="Shot", media_kind="image",
+        source_type="mcp-upload", original_path=path,
+        original_sha256="a" * 64, mime_type="image/png", size_bytes=1234,
+        created_by="local-admin",
+    )
+    session.add(asset)
+    session.commit()
+    return asset
+
+
+def test_upload_image_writes_the_file_and_queues_the_operators_own_ingest(
+    tmp_path, monkeypatch
+) -> None:
+    from trendrelay_api import media_library
+    from trendrelay_api.integrations.mcp import intake
+
+    monkeypatch.setattr(intake, "_upload_root", lambda: tmp_path / "mcp-uploads")
+    asked: dict[str, object] = {}
+
+    def fake_ingest(**kwargs):
+        asked.update(kwargs)
+        return {"id": "media_abc", "status": "queued", "duplicate": False}
+
+    monkeypatch.setattr(media_library, "create_ingest_job", fake_ingest)
+    result = intake.upload_image(
+        "ws",
+        image_url="https://cdn.example.test/shot.png",
+        title="Launch hero",
+        fetch=lambda url: (b"png-bytes", "image/png"),
+    )
+
+    saved = list((tmp_path / "mcp-uploads").iterdir())
+    assert len(saved) == 1 and saved[0].suffix == ".png"
+    assert saved[0].read_bytes() == b"png-bytes"
+    assert asked["path"] == str(saved[0])
+    assert asked["workspace_id"] == "ws"
+    assert asked["actor_user_id"] == "local-admin"
+    assert asked["source_type"] == "mcp-upload"
+    assert result["job_id"] == "media_abc"
+    assert "get_import_status" in result["note"]
+
+
+def test_the_chatgpt_file_object_supplies_the_fetch(tmp_path, monkeypatch) -> None:
+    """The `openai/fileParams` shape: a chat attachment arrives as an object
+    carrying a signed download_url, which is fetched once and never stored."""
+    from trendrelay_api import media_library
+    from trendrelay_api.integrations.mcp import intake
+
+    monkeypatch.setattr(intake, "_upload_root", lambda: tmp_path)
+    asked: dict[str, object] = {}
+    monkeypatch.setattr(
+        media_library, "create_ingest_job",
+        lambda **kwargs: asked.update(kwargs) or {"id": "j", "status": "queued"},
+    )
+    fetched: list[str] = []
+
+    def fetch(url: str):
+        fetched.append(url)
+        return b"jpeg-bytes", "image/jpeg"
+
+    intake.upload_image(
+        "ws",
+        image={"file_id": "sediment://f_1", "download_url": "https://signed.example/f?tok=s"},
+        fetch=fetch,
+    )
+
+    assert fetched == ["https://signed.example/f?tok=s"]
+    # The signed URL is not recorded anywhere the workspace keeps.
+    assert asked.get("source_url") is None
+
+
+def test_an_upload_needs_exactly_a_source(monkeypatch) -> None:
+    from trendrelay_api.integrations.mcp import intake
+
+    with pytest.raises(ValueError, match="attach one|image_url"):
+        intake.upload_image("ws", fetch=lambda url: (b"", "image/png"))
+
+
+def test_a_wrong_content_type_is_refused_by_what_the_server_said(
+    tmp_path, monkeypatch
+) -> None:
+    from trendrelay_api.integrations.mcp import intake
+
+    monkeypatch.setattr(intake, "_upload_root", lambda: tmp_path)
+    with pytest.raises(ValueError, match="text/html"):
+        intake.upload_image(
+            "ws", image_url="https://cdn.example.test/page",
+            fetch=lambda url: (b"<html>", "text/html"),
+        )
+
+
+def test_the_fetch_guard_refuses_plain_http_and_local_addresses() -> None:
+    from trendrelay_api.integrations.mcp import intake
+
+    with pytest.raises(ValueError, match="https"):
+        intake._require_public_https("http://cdn.example.test/a.png")
+    for local in (
+        "https://127.0.0.1/a.png",
+        "https://localhost/a.png",
+        "https://192.168.1.10/a.png",
+        "https://169.254.169.254/latest/meta-data",
+    ):
+        with pytest.raises(ValueError, match="private or local"):
+            intake._require_public_https(local)
+
+
+def test_a_created_post_arrives_as_a_draft_outside_the_rotation(session) -> None:
+    from trendrelay_api.integrations.mcp import intake
+
+    _image_asset(session)
+    view = intake.create_campaign_post(
+        session, "ws", "camp", ["img1"], caption="A clean desk, finally.",
+    )
+
+    item = session.scalar(
+        select_queue_item := __import__("sqlalchemy").select(CampaignQueueItem).where(
+            CampaignQueueItem.campaign_id == "camp",
+            CampaignQueueItem.id != "q1",
+        )
+    )
+    assert item.state == "draft"
+    assert item.image_paths == [r"S:\media\shot.png"]
+    assert item.body == "A clean desk, finally."
+    assert item.created_by == "local-admin"
+    assert "operator" in view["note"]
+
+
+def test_a_created_post_without_copy_carries_the_placeholder(session) -> None:
+    from trendrelay_api.integrations.mcp import intake
+
+    _image_asset(session)
+    intake.create_campaign_post(session, "ws", "camp", ["img1"])
+
+    item = session.scalar(
+        __import__("sqlalchemy").select(CampaignQueueItem).where(
+            CampaignQueueItem.campaign_id == "camp", CampaignQueueItem.id != "q1",
+        )
+    )
+    assert item.body == PLACEHOLDER_BODY
+
+
+def test_a_created_posts_copy_passes_the_same_no_link_rule(session) -> None:
+    from trendrelay_api.integrations.mcp import intake
+
+    _image_asset(session)
+    with pytest.raises(ValueError, match="may not contain a link"):
+        intake.create_campaign_post(
+            session, "ws", "camp", ["img1"], caption="Buy at https://x.example/p",
+        )
+
+
+def test_media_kinds_do_not_mix_and_audio_is_named(session) -> None:
+    from trendrelay_api.integrations.mcp import intake
+    from trendrelay_api.media_models import MediaAsset
+
+    _image_asset(session)
+    session.add(MediaAsset(
+        id="vid1", workspace_id="ws", title="Clip", media_kind="video",
+        source_type="download", original_path=r"S:\media\clip.mp4",
+        original_sha256="b" * 64, mime_type="video/mp4", size_bytes=99,
+        created_by="local-admin",
+    ))
+    session.add(MediaAsset(
+        id="aud1", workspace_id="ws", title="Song", media_kind="audio",
+        source_type="download", original_path=r"S:\media\song.mp3",
+        original_sha256="c" * 64, mime_type="audio/mpeg", size_bytes=99,
+        created_by="local-admin",
+    ))
+    session.commit()
+
+    with pytest.raises(ValueError, match="never both"):
+        intake.create_campaign_post(session, "ws", "camp", ["img1", "vid1"])
+    with pytest.raises(ValueError, match="audio"):
+        intake.create_campaign_post(session, "ws", "camp", ["aud1"])
+
+    view = intake.create_campaign_post(session, "ws", "camp", ["vid1"])
+    assert view["video_path"] == r"S:\media\clip.mp4"
+
+
+def test_an_asset_from_another_workspace_is_not_reachable(session) -> None:
+    from trendrelay_api.integrations.mcp import intake
+
+    with pytest.raises(LookupError, match="ghost"):
+        intake.create_campaign_post(session, "ws", "camp", ["ghost"])
+
+
+def test_the_upload_tool_declares_the_chatgpt_file_param() -> None:
+    """The `openai/fileParams` meta is what makes a ChatGPT chat attachment
+    arrive in the `image` argument; losing it silently breaks that client."""
+    built = server.build_server("ws")
+    tools = {tool.name: tool for tool in asyncio.run(built.list_tools())}
+    assert tools["upload_image"].meta == {"openai/fileParams": ["image"]}

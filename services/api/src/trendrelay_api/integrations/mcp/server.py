@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from trendrelay_api.integrations.mcp import context, policy, schedules, sops, writes
+from trendrelay_api.integrations.mcp import context, intake, policy, schedules, sops, writes
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -28,6 +28,12 @@ INSTRUCTIONS = (
     "thread reply lands there, and the campaign's brief. Write with "
     "`write_caption`, `write_first_comment` and `write_thread` (or `write_post_copy` "
     "for several at once).\n\n"
+    "To add a new post: `upload_image` brings an image into the Library (attach "
+    "one in chat, or pass image_url), `get_import_status` reports when its "
+    "asset_id exists, and `create_campaign_post` proposes a post from Library "
+    "assets into a campaign. A post you create arrives as a draft outside the "
+    "rotation - the operator promotes it in the app - so say it is waiting for "
+    "them.\n\n"
     "For when things post, `list_posting_times` gives the workspace's times, the "
     "presets available and which pages are assigned one; "
     "`get_campaign_posting_times` says what each of a campaign's accounts posts at "
@@ -311,6 +317,90 @@ def build_server(workspace_id: str) -> FastMCP:
             "write_bio_hint",
             lambda s: writes.write_post_copy(
                 s, workspace_id, item_id, bio_hint=bio_hint
+            ),
+        )
+
+    # --- media in, and a post proposed -------------------------------------
+    # See the note in `policy`: the upload is the operator's own ingest
+    # pipeline, and a created post is a draft only a person promotes.
+
+    @server.tool(
+        name="upload_image",
+        description=(
+            "Bring one image into the media library, to post later. Attach the "
+            "image in chat (it arrives as the `image` file parameter) or pass "
+            "a direct public https `image_url`. Give it a `title` a person "
+            "will recognise; `source_url`, `creator`, `caption` and `platform` "
+            "(the network it genuinely came from, if any) record where it came "
+            "from. It lands in the media library like any import, under the "
+            "'mcp-upload' source. Returns an asset_id at once for an image the "
+            "library already holds, otherwise a job_id to poll with "
+            "get_import_status."
+        ),
+        # The ChatGPT connector convention: declaring the parameter here makes
+        # a chat attachment arrive as {"file_id", "download_url"} in `image`.
+        # Other MCP clients ignore this meta and pass image_url instead.
+        meta={"openai/fileParams": ["image"]},
+    )
+    def upload_image(
+        image: dict[str, Any] | None = None,
+        image_url: str | None = None,
+        title: str = "",
+        caption: str | None = None,
+        creator: str | None = None,
+        source_url: str | None = None,
+        platform: str | None = None,
+    ) -> dict[str, Any]:
+        _guard("upload_image")
+        return intake.upload_image(
+            workspace_id,
+            image=image,
+            image_url=image_url,
+            title=title,
+            caption=caption,
+            creator=creator,
+            source_url=source_url,
+            platform=platform,
+        )
+
+    @server.tool(
+        name="get_import_status",
+        description=(
+            "How an upload_image import is going. Poll until status is "
+            "'succeeded' and take the asset_id; a 'failed' status carries the "
+            "error to read."
+        ),
+    )
+    def get_import_status(job_id: str) -> dict[str, Any]:
+        _guard("get_import_status")
+        return intake.get_import_status(job_id)
+
+    @server.tool(
+        name="create_campaign_post",
+        description=(
+            "Propose a post into a campaign from Library assets: one video "
+            "asset, or up to twenty image assets as a carousel. Copy fields "
+            "are optional and follow the same rules as the write_* tools - no "
+            "links; the campaign adds its own. The post is created as a DRAFT "
+            "outside the rotation, and only the operator can promote it in "
+            "the app - tell them it is waiting."
+        ),
+    )
+    def create_campaign_post(
+        campaign_id: str,
+        asset_ids: list[str],
+        caption: str | None = None,
+        title: str | None = None,
+        hashtags: list[str] | None = None,
+        first_comment: str | None = None,
+        thread: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return _call(
+            "create_campaign_post",
+            lambda s: intake.create_campaign_post(
+                s, workspace_id, campaign_id, asset_ids,
+                caption=caption, title=title, hashtags=hashtags,
+                first_comment=first_comment, thread=thread,
             ),
         )
 

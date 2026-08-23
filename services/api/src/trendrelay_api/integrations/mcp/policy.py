@@ -99,6 +99,17 @@ EXPOSURE: dict[str, Access] = {
     "set_campaign_posting_times": Access.WORKSPACE_WRITE,
     "set_page_posting_times": Access.WORKSPACE_WRITE,
     "set_workspace_posting_times": Access.WORKSPACE_WRITE,
+    # --- Workspace writes: media in, and a post proposed -------------------
+    # An upload adds a file to the Library through the same ingest as an
+    # operator's import - immutable, deduplicated, audited - and publishes
+    # nothing. Creating a post is the argued one: unlike a schedule, it makes
+    # a post exist. It stays on the allowed side because the post arrives as a
+    # *draft* - the queue's parking brake, outside the rotation - and only a
+    # person promotes it in the app. `intake.create_campaign_post` hard-codes
+    # that state; a caller cannot ask for another.
+    "upload_image": Access.WORKSPACE_WRITE,
+    "get_import_status": Access.READ,
+    "create_campaign_post": Access.WORKSPACE_WRITE,
     # --- Named, and refused ------------------------------------------------
     # Credentials and sessions.
     "sign_in": Access.REFUSED_CREDENTIALS,

@@ -846,17 +846,24 @@ def remove_destination(
     return {"removed": destination_id}
 
 
-@router.post("/{campaign_id}/queue", status_code=201)
-def add_queue_item(
+def create_queue_item(
+    session: Session,
     workspace_id: str,
     campaign_id: str,
     body: QueueItemCreate,
-    user: AuthenticatedUser,
-    session: DatabaseSession,
-) -> dict[str, Any]:
-    require_role(membership(session, workspace_id, user.id), EDITORS)
+    *,
+    created_by: str,
+    state: str = "approved",
+) -> CampaignQueueItem:
+    """Make one queued package, however the request arrived.
+
+    Extracted from the route so the interface and the MCP assistant create a
+    post through the same code - the same validation, the same offer check,
+    the same rotation bookkeeping. `state` is the one thing that differs:
+    the operator's own additions arrive approved (see the note inline), while
+    an assistant's arrive as drafts the operator promotes in the app.
+    """
     _campaign(session, workspace_id, campaign_id)
-    ensure_profile(session, user)
     last = session.scalar(
         select(func.max(CampaignQueueItem.position)).where(
             CampaignQueueItem.campaign_id == campaign_id
@@ -879,16 +886,33 @@ def add_queue_item(
         first_comment=(body.first_comment or "").strip() or None,
         thread=[part.strip() for part in body.thread if part.strip()],
         offer_ids=list(dict.fromkeys(body.offer_ids)), offer_match={},
-        # Ready on arrival. Approval lives where it belongs - the authority
-        # dial and its exception inbox, where a frozen execution is what gets
-        # approved rather than a form. 'draft' remains as the operator's
-        # parking brake for content deliberately kept out of the rotation.
-        state="approved", position=last + 1, last_posted_by_destination={},
-        created_by=user.id,
+        # Ready on arrival, for the operator's own additions. Approval lives
+        # where it belongs - the authority dial and its exception inbox, where
+        # a frozen execution is what gets approved rather than a form. 'draft'
+        # remains as the operator's parking brake for content deliberately kept
+        # out of the rotation - and is where an assistant's additions start.
+        state=state, position=last + 1, last_posted_by_destination={},
+        created_by=created_by,
     )
     session.add(item)
     session.flush()
     _refresh_item_match(session, campaign_id, item)
+    return item
+
+
+@router.post("/{campaign_id}/queue", status_code=201)
+def add_queue_item(
+    workspace_id: str,
+    campaign_id: str,
+    body: QueueItemCreate,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    require_role(membership(session, workspace_id, user.id), EDITORS)
+    ensure_profile(session, user)
+    item = create_queue_item(
+        session, workspace_id, campaign_id, body, created_by=user.id
+    )
     return {"item": _queue_view(item)}
 
 
