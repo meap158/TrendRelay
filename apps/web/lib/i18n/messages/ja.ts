@@ -506,6 +506,8 @@ export const ja: Messages = {
       "no-accounts": "チャンネルなし",
     },
     engineReadyDetail: "{count}件の配信先が投稿可能です。",
+    dismissNote: "この注意を隠す",
+    showNote: "問題の内容を表示",
     engineNoKey: "このエンジンのAPIキーが保存されていません。",
     engineNoKeyFix: "下でキーを追加し、アカウントを読み込んでください。",
     engineRejected: "このエンジンは保存済みのキーを拒否しました。",

@@ -190,7 +190,13 @@ def test_collection_says_which_providers_cannot_be_read(session) -> None:
     result = collect_snapshots(session, now=NOW + timedelta(days=8))
 
     assert result == {"captured": 0, "unreadable_providers": ["buffer"]}
-    assert "No publishing engine currently exposes" in reader_status()["note"]
+    # Zernio exposes a post-metrics read, so the interface no longer says that
+    # nothing can be measured: it names the engine that cannot be read - Buffer -
+    # while listing the one that can.
+    status = reader_status()
+    assert status["note"] is None
+    assert "zernio" in status["readable_providers"]
+    assert "buffer" not in status["readable_providers"]
 
 
 def test_a_registered_reader_fills_each_window_once(session) -> None:

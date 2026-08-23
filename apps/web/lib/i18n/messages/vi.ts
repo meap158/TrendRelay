@@ -507,6 +507,8 @@ export const vi: Messages = {
       "no-accounts": "chưa có kênh",
     },
     engineReadyDetail: "{count} đích đến sẵn sàng đăng.",
+    dismissNote: "Ẩn ghi chú này",
+    showNote: "Xem vấn đề là gì",
     engineNoKey: "Chưa lưu khóa API cho công cụ này.",
     engineNoKeyFix: "Hãy thêm khóa bên dưới, rồi tải danh sách tài khoản.",
     engineRejected: "Công cụ này đã từ chối khóa đã lưu.",

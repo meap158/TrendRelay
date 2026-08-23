@@ -510,6 +510,8 @@ export const en = {
       "no-accounts": "no channels",
     },
     engineReadyDetail: "{count, plural, one {# destination} other {# destinations}} ready to publish.",
+    dismissNote: "Hide this note",
+    showNote: "Show what is wrong",
     engineNoKey: "No API key saved for this engine.",
     engineNoKeyFix: "Add a key below, then load accounts.",
     engineRejected: "This engine refused the saved key.",

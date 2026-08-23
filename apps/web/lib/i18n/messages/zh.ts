@@ -496,6 +496,8 @@ export const zh: Messages = {
       "no-accounts": "无渠道",
     },
     engineReadyDetail: "{count} 个发布目标已就绪。",
+    dismissNote: "隐藏此提示",
+    showNote: "查看问题所在",
     engineNoKey: "尚未为该引擎保存 API 密钥。",
     engineNoKeyFix: "请在下方添加密钥，然后加载账号。",
     engineRejected: "该引擎拒绝了已保存的密钥。",

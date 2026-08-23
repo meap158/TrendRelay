@@ -513,6 +513,8 @@ export const ru: Messages = {
     },
     engineReadyDetail:
       "{count, plural, one {# направление готово} few {# направления готовы} many {# направлений готово} other {# направления готово}} к публикации.",
+    dismissNote: "Скрыть это примечание",
+    showNote: "Показать, что не так",
     engineNoKey: "Для этого движка не сохранён API-ключ.",
     engineNoKeyFix: "Добавьте ключ ниже, затем загрузите аккаунты.",
     engineRejected: "Движок отклонил сохранённый ключ.",

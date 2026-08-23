@@ -372,6 +372,18 @@ nav strong { color: var(--text); }
 .engine-status-line { display: grid; gap: 3px; margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
 .engine-status-line.bad { border-inline-start: 3px solid var(--bad); }
 .engine-status-line small { color: var(--muted); }
+/* The close control sits over the note rather than under it: a note worth
+   closing is already three lines tall, and giving its button a row of its
+   own would spend more height than closing it saves. The inline padding
+   below is what keeps the first line from running under it. */
+.engine-status-line.closable { position: relative; padding-inline-end: 28px; }
+.engine-status-dismiss { position: absolute; inset-block-start: 4px; inset-inline-end: 4px; display: grid; place-items: center; width: 20px; height: 20px; border: 0; border-radius: var(--radius-sm); padding: 0; background: none; color: var(--muted); cursor: pointer; }
+.engine-status-dismiss:hover { background: var(--surface); color: var(--text); }
+/* The badge keeps its own look; this only makes it answer a click.
+   Not `display: contents`, which drops the button out of the
+   accessibility tree in several browsers - the one thing a control whose
+   whole job is to bring hidden text back must not do. */
+.engine-status-reveal { display: inline-flex; align-items: center; border: 0; border-radius: var(--radius-sm); padding: 0; background: none; font: inherit; cursor: pointer; }
 /* Its own row, so the switch never competes for width with the key actions.
    Two columns rather than a wrapping flex line: the switch keeps the space it
    needs and the default control sits opposite it at every card width. */

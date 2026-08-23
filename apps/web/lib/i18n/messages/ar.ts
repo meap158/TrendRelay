@@ -503,6 +503,8 @@ export const ar: Messages = {
     },
     engineReadyDetail:
       "{count, plural, zero {لا وجهات} one {وجهة واحدة} two {وجهتان} few {# وجهات} many {# وجهة} other {# وجهة}} جاهزة للنشر.",
+    dismissNote: "إخفاء هذه الملاحظة",
+    showNote: "عرض الخطأ",
     engineNoKey: "لم يُحفظ مفتاح API لهذا المحرّك.",
     engineNoKeyFix: "أضف مفتاحًا أدناه، ثم حمّل الحسابات.",
     engineRejected: "رفض هذا المحرّك المفتاح المحفوظ.",

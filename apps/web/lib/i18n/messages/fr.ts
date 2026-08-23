@@ -516,6 +516,8 @@ export const fr: Messages = {
     },
     engineReadyDetail:
       "{count, plural, one {# destination prête} other {# destinations prêtes}} à publier.",
+    dismissNote: "Masquer cette note",
+    showNote: "Afficher le problème",
     engineNoKey: "Aucune clé d’API enregistrée pour ce moteur.",
     engineNoKeyFix: "Ajoutez une clé ci-dessous, puis chargez les comptes.",
     engineRejected: "Ce moteur a refusé la clé enregistrée.",

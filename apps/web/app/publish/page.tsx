@@ -358,6 +358,34 @@ export default function PublishPage() {
     (value): value is string[] =>
       Array.isArray(value) && value.every((item) => typeof item === "string"),
   );
+  /**
+   * Engine notes somebody has read and put away.
+   *
+   * A refused key is a paragraph, a fix, and a link to the dashboard - useful
+   * once, and after that it is a wall on top of a card you are trying to read
+   * past. So it can be closed.
+   *
+   * Keyed by the problem rather than by the engine, so a *different* refusal
+   * still arrives: putting away "HTTP 403, key rejected" should not also
+   * silence "the engine cannot be reached" next week. What stays either way is
+   * the state badge - closing an explanation must not hide that there is one,
+   * and the badge is how the note is asked for again.
+   */
+  const [dismissedNotes, setDismissedNotes] = usePersistedState<string[]>(
+    "trendrelay.publish.dismissedEngineNotes",
+    [],
+    (value): value is string[] =>
+      Array.isArray(value) && value.every((item) => typeof item === "string"),
+  );
+  /** What counts as the same note twice. */
+  const noteKey = (providerId: string, state: string, detail: string) =>
+    `${providerId}|${state}|${detail}`;
+  const putNoteAway = (key: string) =>
+    // Bounded, because every distinct message an engine has ever returned
+    // would otherwise sit in local storage for good.
+    setDismissedNotes([...dismissedNotes.filter((item) => item !== key), key].slice(-20));
+  const bringNoteBack = (key: string) =>
+    setDismissedNotes(dismissedNotes.filter((item) => item !== key));
   const [hostingDraft, setHostingDraft] = useState<Record<string, string>>({});
   const [hostingOpen, setHostingOpen] = useState(false);
   /** The last storage check, kept on screen so its stages can be read. */
@@ -2051,6 +2079,11 @@ export default function PublishPage() {
             // Whether this engine could deliver if asked. Whether it should is
             // the switch below, and the two are deliberately not the same test.
             const usable = ["ready", "no-accounts"].includes(status.state);
+            // Only a note with something to do about it can be closed. A ready
+            // engine's line is one short sentence and closing it would save
+            // nothing while giving the badge a control that does nothing.
+            const noteId = noteKey(provider.id, status.state, status.detail);
+            const noteClosed = status.fix !== null && dismissedNotes.includes(noteId);
             const open = openProvider === provider.id;
             const reach = engineReach.find((item) => item.id === provider.id);
             const channels = reach?.channels ?? [];
@@ -2103,7 +2136,24 @@ export default function PublishPage() {
                       "can this engine publish?" and "should it?" are answered
                       in the same glance rather than inferred from a key field
                       three lines down. */}
-                  <Badge tone={status.tone}>{t(`publish.engineState.${status.state}`)}</Badge>
+                  {noteClosed ? (
+                    /* The badge itself, still saying exactly what it said
+                       before - only now it is the way back to the note behind
+                       it. A closed explanation with no way to reopen it is
+                       information thrown away rather than put away. */
+                    <button
+                      type="button"
+                      className="engine-status-reveal"
+                      title={t("publish.showNote")}
+                      onClick={() => bringNoteBack(noteId)}
+                    >
+                      <Badge tone={status.tone}>
+                        {t(`publish.engineState.${status.state}`)}
+                      </Badge>
+                    </button>
+                  ) : (
+                    <Badge tone={status.tone}>{t(`publish.engineState.${status.state}`)}</Badge>
+                  )}
                 </div>
                 <p className="engine-blurb">{provider.summary}</p>
                 {/* What is connected, and which plan is carrying it.
@@ -2178,27 +2228,43 @@ export default function PublishPage() {
                 {/* The engine's own message where there is one, and the thing
                     to do about it either way. A state without a next step is a
                     dead end dressed as information. */}
-                <p className={`engine-status-line${status.tone === "bad" ? " bad" : ""}`} role="status">
-                  <span>{status.detail}</span>
-                  {status.fix && <small>{status.fix}</small>}
-                  {/* The link the sentence above just sent you to. "Reconnect
-                      the account in the engine's dashboard" without a way to
-                      get there is an instruction, not a fix - and the page it
-                      means differs by state: a refused key wants the keys page,
-                      no channels wants the channels page. */}
-                  {(status.state === "rejected" || status.state === "no-accounts") && (
-                    <a
-                      className="engine-status-link"
-                      href={status.state === "no-accounts"
-                        ? provider.channels_url : provider.dashboard_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >{t(status.state === "no-accounts"
-                      ? "publish.openChannels" : "publish.openKeys", {
-                        label: provider.label,
-                      })}</a>
-                  )}
-                </p>
+                {!noteClosed && (
+                  <p
+                    className={`engine-status-line${status.tone === "bad" ? " bad" : ""}`
+                      + `${status.fix ? " closable" : ""}`}
+                    role="status"
+                  >
+                    {status.fix && (
+                      <button
+                        type="button"
+                        className="engine-status-dismiss"
+                        title={t("publish.dismissNote")}
+                        onClick={() => putNoteAway(noteId)}
+                      >
+                        <ActionIcon name="dismiss" />
+                      </button>
+                    )}
+                    <span>{status.detail}</span>
+                    {status.fix && <small>{status.fix}</small>}
+                    {/* The link the sentence above just sent you to. "Reconnect
+                        the account in the engine's dashboard" without a way to
+                        get there is an instruction, not a fix - and the page it
+                        means differs by state: a refused key wants the keys page,
+                        no channels wants the channels page. */}
+                    {(status.state === "rejected" || status.state === "no-accounts") && (
+                      <a
+                        className="engine-status-link"
+                        href={status.state === "no-accounts"
+                          ? provider.channels_url : provider.dashboard_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >{t(status.state === "no-accounts"
+                        ? "publish.openChannels" : "publish.openKeys", {
+                          label: provider.label,
+                        })}</a>
+                    )}
+                  </p>
+                )}
                 {/* Its own row. The switch answers "will this engine carry the
                     post", which is a different question from the three key
                     actions below it - and as a peer of those buttons it needed
