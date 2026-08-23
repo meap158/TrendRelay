@@ -11,6 +11,7 @@ import { type BaseJob, useJobs } from "./jobs-provider";
 import { NotificationContext } from "./notification-context";
 import { useT } from "./i18n-provider";
 import { Button } from "./ui/button";
+import { FilterChipStrip } from "./ui/filter-strip";
 import { ActionIcon } from "./ui/action-icons";
 import { LanguagePicker } from "./ui/language-picker";
 import { TimezonePicker } from "./ui/timezone-picker";
@@ -72,137 +73,6 @@ function groupFilter(group: NotificationGroup): Exclude<NotificationFilter, "all
  * than the threshold stays a click, and the click that follows a real drag is
  * swallowed - releasing a drag over a chip must not also press it.
  */
-function NotificationFilterStrip({
-  chips,
-  selected,
-  onChange,
-}: {
-  chips: { key: NotificationFilter; count: number }[];
-  selected: NotificationFilter;
-  onChange: (next: NotificationFilter) => void;
-}) {
-  const t = useT();
-  const frameRef = useRef<HTMLDivElement>(null);
-  const stripRef = useRef<HTMLDivElement>(null);
-  const drag = useRef({ pointerId: -1, startX: 0, startScrollLeft: 0, active: false });
-  const suppressClick = useRef(false);
-
-  /**
-   * Which ends still hold chips, written as attributes on the frame for its
-   * fade pseudo-elements. Read straight off the DOM rather than through state:
-   * this runs on every scroll tick, and a render per pixel of travel is a
-   * price the list behind the strip should not pay.
-   */
-  const applyEdges = useCallback(() => {
-    const strip = stripRef.current;
-    const frame = frameRef.current;
-    if (!strip || !frame) return;
-    const overflow = strip.scrollWidth - strip.clientWidth > 1;
-    // scrollLeft runs negative in RTL, so distance from the start is |value|.
-    const fromStart = Math.abs(strip.scrollLeft);
-    frame.toggleAttribute("data-can-start", overflow && fromStart > 1);
-    frame.toggleAttribute(
-      "data-can-end",
-      overflow && fromStart < strip.scrollWidth - strip.clientWidth - 1,
-    );
-  }, []);
-
-  // Measured when the chips change, since that is what changes their width,
-  // and again on resize. Only DOM attributes move here, not React state.
-  useEffect(() => {
-    applyEdges();
-    window.addEventListener("resize", applyEdges);
-    return () => window.removeEventListener("resize", applyEdges);
-  }, [applyEdges, chips]);
-
-  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType !== "mouse" || event.button !== 0) return;
-    drag.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startScrollLeft: stripRef.current?.scrollLeft ?? 0,
-      active: false,
-    };
-  };
-
-  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const state = drag.current;
-    if (state.pointerId !== event.pointerId) return;
-    const delta = event.clientX - state.startX;
-    if (!state.active) {
-      if (Math.abs(delta) < DRAG_THRESHOLD_PX) return;
-      state.active = true;
-      stripRef.current?.classList.add("dragging");
-      // Capturing keeps the drag alive when the cursor leaves the strip.
-      try {
-        stripRef.current?.setPointerCapture(event.pointerId);
-      } catch {
-        // The pointer was already gone; the native pan takes over instead.
-      }
-    }
-    // Assigned, not nudged by deltas: RTL scrollLeft runs negative, and
-    // `start - travelled` holds in both directions without special cases.
-    if (stripRef.current) {
-      stripRef.current.scrollLeft = state.startScrollLeft - delta;
-      applyEdges();
-    }
-  };
-
-  const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    const state = drag.current;
-    if (state.pointerId !== event.pointerId) return;
-    if (state.active) {
-      suppressClick.current = true;
-      // Cleared one macrotask out: the click following pointerup fires before
-      // any timer, so it is eaten, while a genuine later click never is.
-      window.setTimeout(() => { suppressClick.current = false; }, 0);
-      stripRef.current?.classList.remove("dragging");
-      try {
-        stripRef.current?.releasePointerCapture(event.pointerId);
-      } catch {
-        // Already released with the pointer itself; nothing to clean up.
-      }
-    }
-    drag.current = { pointerId: -1, startX: 0, startScrollLeft: 0, active: false };
-  };
-
-  const onClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!suppressClick.current) return;
-    event.preventDefault();
-    event.stopPropagation();
-  };
-
-  return (
-    <div className="notification-filters" ref={frameRef}>
-      <div
-        ref={stripRef}
-        role="group"
-        aria-label={t("notifications.filterLabel")}
-        className="notification-filter-strip"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onClickCapture={onClickCapture}
-        onScroll={applyEdges}
-      >
-        {chips.map(({ key, count }) => (
-          <button
-            key={key}
-            type="button"
-            data-filter={key}
-            aria-pressed={selected === key}
-            className={`notification-filter${selected === key ? " selected" : ""}`}
-            onClick={() => onChange(key)}
-          >
-            {key === "all" ? t("notifications.filterAll") : t(`notifications.filter_${key}`)}
-            <span className="notification-filter-count">{count}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 /** Progress needs a few percent behind it before an estimate means anything. */
 const ESTIMATE_AFTER = 0.04;
@@ -759,11 +629,23 @@ export function GlobalNav() {
               {/* Status chips. The strip hides its scrollbar and drags with the
                   mouse instead; on a touch screen it pans natively. */}
               {filterChips.length > 1 && (
-                <NotificationFilterStrip
-                  chips={filterChips}
+                <div className="notification-filters">
+                <FilterChipStrip
+                  chips={filterChips.map(({ key, count }) => ({
+                    key,
+                    count,
+                    label: key === "all"
+                      ? t("notifications.filterAll")
+                      : t(`notifications.filter_${key}`),
+                    // The palette the rows already wear, named per state so a
+                    // chip and its badges are unmistakably the same word.
+                    tone: `chip-notification chip-${key}`,
+                  }))}
                   selected={statusFilter}
-                  onChange={setStatusFilter}
+                  onSelect={(key) => setStatusFilter(key as NotificationFilter)}
+                  ariaLabel={t("notifications.filterLabel")}
                 />
+                </div>
               )}
 
               {groups.length === 0 ? (

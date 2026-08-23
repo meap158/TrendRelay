@@ -388,6 +388,14 @@ a.ui-button { text-decoration: none; }
 .filter-chip.chip-good { color: var(--green); background: var(--green-dark); }
 .filter-chip.chip-warn { color: #7a5c00; background: #fdf5db; }
 .filter-chip.chip-neutral { color: var(--muted); background: var(--panel-raised); }
+@media (max-width: 640px) {
+  /* Finger-sized: the strip is panned by touch here, so the targets it carries
+     have to clear the comfortable minimum rather than the mouse one. Moved
+     here with the geometry it adjusts - left behind in the notifications
+     stylesheet it would have stopped applying the moment the chips became
+     `.filter-chip`, and the campaign queue's strip would never have had it. */
+  .filter-chip { min-height: 30px; padding: 4px 12px; font-size: 11px; }
+}
 .filter-chip-count { opacity: .72; font-variant-numeric: tabular-nums; }
 @media (max-width: 430px) {
   /* Finger-sized chips where the strip is panned by touch. */
