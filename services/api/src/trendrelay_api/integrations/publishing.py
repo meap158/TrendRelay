@@ -1998,6 +1998,73 @@ def _zernio_accounts() -> list[dict[str, str]]:
     return accounts
 
 
+def _zernio_metrics(execution: Any) -> dict[str, float] | None:
+    """A published Zernio post's engagement, in the measurement pipeline's terms.
+
+    Reads Zernio's analytics report for the external post id stored at delivery
+    and returns the newest figures as ``{views, likes, comments, shares, saves,
+    watch_seconds}`` - whichever the platform reported. Returns None, which the
+    collector reads as "still due" rather than a zero, when there is no id, the
+    call fails, or the post has not reached the report yet.
+    """
+    post_ids = [str(pid) for pid in (execution.remote_post_ids or []) if pid]
+    if not post_ids:
+        return None
+    try:
+        payload = _zernio_request("GET", f"/analytics?postId={quote(post_ids[0])}", timeout=30)
+    except Exception:
+        return None
+    if not payload:
+        return None
+    # The report is paginated; a postId filter narrows it to this post, but the
+    # exact envelope key is read defensively so a shape change does not silently
+    # zero a campaign's numbers.
+    rows: Any = payload if isinstance(payload, list) else (
+        payload.get("data") or payload.get("posts") or payload.get("results")
+        or payload.get("items") or payload.get("analytics") or []
+    )
+    if isinstance(rows, dict):
+        rows = [rows]
+    wanted = set(post_ids)
+    row = next(
+        (item for item in rows if str(item.get("postId") or item.get("_id") or "") in wanted),
+        rows[0] if rows else None,
+    )
+    if not isinstance(row, dict):
+        return None
+    stats = row.get("analytics") if isinstance(row.get("analytics"), dict) else row
+
+    def number(*keys: str) -> float | None:
+        for key in keys:
+            value = stats.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return float(value)
+        return None
+
+    measured = {
+        "views": number("views", "impressions"),
+        "likes": number("likes"),
+        "comments": number("comments"),
+        "shares": number("shares", "reposts"),
+        "saves": number("saves"),
+        "watch_seconds": number("igReelsVideoViewTotalTime"),
+    }
+    cleaned = {key: value for key, value in measured.items() if value is not None}
+    return cleaned or None
+
+
+# The engine knows how to read its own posts back; the measurement pipeline only
+# knows it has a reader for a provider. Registering here keeps that module free
+# of any engine import - it discovers the reader rather than depending on it.
+def _register_metric_readers() -> None:
+    from trendrelay_api import campaign_measurement
+
+    campaign_measurement.PROVIDER_METRIC_READERS["zernio"] = _zernio_metrics
+
+
+_register_metric_readers()
+
+
 # --------------------------------------------------------------------------- #
 # Buffer
 # --------------------------------------------------------------------------- #
