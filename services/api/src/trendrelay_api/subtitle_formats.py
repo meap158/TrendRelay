@@ -337,6 +337,49 @@ def placement(cue: Cue, width: int, height: int) -> str:
     return rf"{{\an5\pos({centre_x},{centre_y})\fs{size}}}"
 
 
+#: How far the backdrop reaches past the measured box, as a share of the box's
+#: own height on every side. The OCR box hugs the glyphs, and antialiased edges
+#: and drop shadows sit just outside it - the same six per cent the cover
+#: effect learned to pad by, for the same reason.
+BACKDROP_PAD = 0.06
+
+
+def backdrop(cue: Cue, look: Style, width: int, height: int) -> str | None:
+    r"""A filled rectangle over the whole box a placed cue replaces.
+
+    The blocking half of the replacement. The text is fitted to the box and a
+    translation is rarely the same width as its original, so the text alone
+    leaves the original showing at whichever end it underfills - a translated
+    line floating over still-legible source text, which is worse than either
+    alone. The backdrop spans the measured box (plus the pad), so what the
+    original occupied is covered whatever the replacement's width came to.
+
+    Drawn from the style's `back_colour` and `back_alpha`, which is what those
+    fields mean on a placed cue: not a shadow, the patch the line sits on. It
+    is a vector drawing rather than `BorderStyle=3`, because the format's own
+    box hugs the *text*, and the job here is to hide the *original*.
+    """
+    if cue.place is None:
+        return None
+    x, y, box_width, box_height = cue.place
+    pad = box_height * BACKDROP_PAD
+    left = max(0.0, x - pad)
+    top = max(0.0, y - pad)
+    right = min(1.0, x + box_width + pad)
+    bottom = min(1.0, y + box_height + pad)
+    span_x = max(1, round((right - left) * width))
+    span_y = max(1, round((bottom - top) * height))
+    # `\1c` carries the colour and `\1a` the transparency, separately - the
+    # combined 8-digit form is a Styles-section shape, not an override one.
+    colour = ass_colour(look.back_colour)
+    return (
+        rf"{{\an7\pos({round(left * width)},{round(top * height)})"
+        rf"\1c{colour}\1a&H{max(0, min(255, look.back_alpha)):02X}&"
+        rf"\bord0\shad0\p1}}"
+        rf"m 0 0 l {span_x} 0 {span_x} {span_y} 0 {span_y}{{\p0}}"
+    )
+
+
 def to_ass(
     cues: Sequence[Cue],
     style: Style | None = None,
@@ -355,8 +398,16 @@ def to_ass(
     header = _ass_header(look, play_width, play_height)
     events = []
     for cue in cues:
+        # A placed cue blocks before it speaks: the backdrop on the layer
+        # below, the replacement text above it. Without the backdrop a
+        # translation narrower than its original floats over source text the
+        # reader can still see at both ends.
+        cover = backdrop(cue, look, play_width, play_height)
+        if cover is not None:
+            events.append(_dialogue(cue.start_ms, cue.end_ms, look.name, cover))
+        layer = 1 if cover is not None else 0
         if look.highlight_active_word and cue.words:
-            events.extend(_highlight_events(cue, look))
+            events.extend(_highlight_events(cue, look, layer=layer))
         else:
             # The override goes on after escaping, not before: `escape_ass`
             # escapes braces, and these braces are the ones that have to
@@ -365,6 +416,7 @@ def to_ass(
                 cue.start_ms, cue.end_ms, look.name,
                 placement(cue, play_width, play_height)
                 + escape_ass(_cased(cue.text, look)),
+                layer=layer,
             ))
     return header + "\n".join(events) + "\n"
 
@@ -398,13 +450,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
 
-def _dialogue(start_ms: int, end_ms: int, style_name: str, text: str) -> str:
+def _dialogue(
+    start_ms: int, end_ms: int, style_name: str, text: str, *, layer: int = 0
+) -> str:
     return (
-        f"Dialogue: 0,{ass_time(start_ms)},{ass_time(end_ms)},{style_name},,0,0,0,,{text}"
+        f"Dialogue: {layer},{ass_time(start_ms)},{ass_time(end_ms)},"
+        f"{style_name},,0,0,0,,{text}"
     )
 
 
-def _highlight_events(cue: Cue, look: Style) -> list[str]:
+def _highlight_events(cue: Cue, look: Style, *, layer: int = 0) -> list[str]:
     """One event per word, with that word lit up.
 
     The alternative is ASS karaoke (`\\k`), which is one event and less work -
@@ -433,7 +488,7 @@ def _highlight_events(cue: Cue, look: Style) -> list[str]:
             else escape_ass(_cased(other.text, look))
             for index, other in enumerate(cue.words)
         )
-        events.append(_dialogue(start, end, look.name, rendered))
+        events.append(_dialogue(start, end, look.name, rendered, layer=layer))
     return events
 
 

@@ -159,6 +159,44 @@ def test_the_override_survives_into_the_file() -> None:
     assert r"\{" not in written
 
 
+def test_a_placed_cue_blocks_its_whole_box_before_it_speaks() -> None:
+    """The backdrop is what makes a replacement a replacement.
+
+    The text is fitted to the box, and a translation is rarely the same width
+    as its original - without the backdrop the original shows at whichever end
+    the replacement underfills, and a reader sees both languages at once.
+    """
+    from trendrelay_api.subtitle_formats import Style
+
+    cue = Cue(index=1, start_ms=0, end_ms=1500, lines=["Sale"], place=(0.1, 0.8, 0.6, 0.08))
+
+    written = to_ass([cue], Style(), play_width=WIDTH, play_height=HEIGHT)
+    lines = [line for line in written.splitlines() if line.startswith("Dialogue:")]
+
+    # Two events: the backdrop on the layer below, the text above it.
+    assert len(lines) == 2
+    assert lines[0].startswith("Dialogue: 0,")
+    assert lines[1].startswith("Dialogue: 1,")
+    # The backdrop is a filled vector rectangle, padded past the measured box
+    # so antialiased glyph edges do not peek out around the patch.
+    assert r"\p1" in lines[0]
+    assert "m 0 0 l" in lines[0]
+    # Solid by default - back_alpha 0 - because a see-through block blocks
+    # nothing. The operator can still choose translucency by override.
+    assert r"\1a&H00&" in lines[0]
+
+
+def test_a_spoken_caption_gets_no_backdrop() -> None:
+    """Blocking is a placed-cue behaviour; a bottom-of-frame caption covers
+    nothing and must not acquire a rectangle behind it."""
+    cue = Cue(index=1, start_ms=0, end_ms=1500, lines=["Hello there"])
+
+    written = to_ass([cue], play_width=WIDTH, play_height=HEIGHT)
+
+    assert r"\p1" not in written
+    assert written.count("Dialogue:") == 1
+
+
 def test_braces_in_the_translation_are_still_escaped() -> None:
     # The override's braces survive; the text's do not get to open one.
     cue = Cue(index=1, start_ms=0, end_ms=1500, lines=["{sale}"], place=(0.1, 0.8, 0.6, 0.08))

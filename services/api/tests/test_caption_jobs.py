@@ -102,6 +102,39 @@ def request(**changes) -> dict:
     }
 
 
+def test_a_burn_lands_on_the_newest_rendered_cut(tmp_path) -> None:
+    """The same rule as the interface's handoffPath, for the same reason.
+
+    Burning onto the original would discard every rendered decision: captions
+    over the unblurred faces somebody blurred on purpose, and a translated
+    line over on-screen text whose cover was rendered as an effect.
+    """
+    add_asset()
+    covered = tmp_path / "covered.mp4"
+    covered.write_bytes(b"the covered cut")
+    with Factory.begin() as session:
+        session.add(MediaAssetVersion(
+            workspace_id="ws1", asset_id="asset1", version_kind="edited",
+            path=str(covered), sha256="b" * 64, mime_type="video/mp4",
+            size_bytes=15,
+        ))
+        asset = session.get(MediaAsset, "asset1")
+        assert caption_jobs._burn_source(session, asset) == covered
+
+
+def test_a_rendered_cut_gone_from_disk_falls_back_to_the_original() -> None:
+    """A stale version row must not fail the render."""
+    add_asset()
+    with Factory.begin() as session:
+        session.add(MediaAssetVersion(
+            workspace_id="ws1", asset_id="asset1", version_kind="blurred",
+            path="clips/vanished.mp4", sha256="c" * 64, mime_type="video/mp4",
+            size_bytes=15,
+        ))
+        asset = session.get(MediaAsset, "asset1")
+        assert caption_jobs._burn_source(session, asset) == Path("clips/a.mp4")
+
+
 # --- queueing -----------------------------------------------------------------
 
 

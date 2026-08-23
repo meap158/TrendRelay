@@ -197,7 +197,7 @@ def _render(
             source_language = transcript.language or "en"
             transcript_id = transcript.id
             regions = []
-        source_path = Path(asset.original_path)
+        source_path = _burn_source(session, asset)
 
     progress(0.16, "Building caption cues")
     translator = None
@@ -263,6 +263,34 @@ def _render(
         # span is the kind of thing somebody needs to see after the render too.
         "notes": built["notes"],
     }
+
+
+def _burn_source(session: Any, asset: Any) -> Path:
+    """The cut a burn goes onto: the newest rendered version, else the original.
+
+    The same rule the interface's `handoffPath` applies when media leaves the
+    Library, and for the same reason. Burning onto the original discarded
+    every rendered decision - captions over the unblurred faces somebody
+    blurred on purpose, and a translated line over on-screen text whose cover
+    was rendered as an effect. The backdrop still blocks the measured box on
+    its own, but a cover the operator shaped against the footage is the better
+    patch, and it is under the captions now rather than thrown away.
+
+    Falls back to the original when the rendered file has gone missing on
+    disk: a stale version row must not fail the render, and the original is
+    the honest remainder.
+    """
+    rendered = session.scalars(
+        select(MediaAssetVersion).where(
+            MediaAssetVersion.asset_id == asset.id,
+            MediaAssetVersion.version_kind.in_(("blurred", "edited")),
+        ).order_by(MediaAssetVersion.created_at.desc())
+    ).first()
+    if rendered and rendered.path:
+        candidate = Path(rendered.path)
+        if candidate.is_file():
+            return candidate
+    return Path(asset.original_path)
 
 
 def _on_screen_reading(session: Any, workspace_id: str, asset_id: str) -> Any:
