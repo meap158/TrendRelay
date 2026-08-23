@@ -726,9 +726,11 @@ nav strong { color: var(--text); }
 .slot-week-day b { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
 /* A day nothing posts on, said rather than left as an empty column. */
 .slot-week-none { justify-content: center; color: var(--muted); background: none; }
-/* A column with no times of its own but every-day times above it. Muted and
-   italic so it reads as a note about the day rather than a time set on it. */
-.slot-week-inherits { justify-content: center; color: var(--muted); background: none; font-size: 10px; font-style: italic; }
+/* An every-day time shown inside a day's column: the same clock reading as
+   the day's own rows, quieter, and with no remove of its own - it belongs to
+   the Every day row above. */
+.slot-week-inherited { justify-content: center; padding-inline-end: 6px; background: none; border: 1px dashed var(--line); }
+.slot-week-inherited b { color: var(--muted); font-weight: 500; }
 /* Applies to all seven, so it is stated once above them rather than
    repeated in every column as seven rows nobody can edit apart. */
 .slot-week-everyday { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

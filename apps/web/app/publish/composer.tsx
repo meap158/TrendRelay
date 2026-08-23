@@ -1182,15 +1182,38 @@ export function SlotEditor({
           columns for the same reason. */}
       <div className="slot-week" role="group" aria-label={t("composer.postingTimes")}>
         {WEEKDAY_NAMES.map((name, day) => {
-          const times = slots
-            .filter((slot) => slot.weekday === day)
-            .sort((left, right) => slotLabel(left).localeCompare(slotLabel(right)));
+          /* The day's whole truth, in clock order: its own times and the
+             every-day ones together, because both post on this day. A column
+             that said the literal words "every day" - or, worse, showed only
+             a day's own 7am under an every-day 8am - answered a different
+             question than "when does a Wednesday post". Sorted on the clock,
+             not the label: alphabetically, 10am comes before 9am. */
+          const posts = [
+            ...slots
+              .filter((slot) => slot.weekday === day)
+              .map((slot) => ({ slot, inherited: false })),
+            ...everyDay.map((slot) => ({ slot, inherited: true })),
+          ].sort((left, right) =>
+            left.slot.hour - right.slot.hour || left.slot.minute - right.slot.minute);
           return (
             <div className="slot-week-day" key={name}>
               {/* Short on the header, full in the label a reader hears. */}
               <h5 title={name}>{name.slice(0, 3)}</h5>
               <ul>
-                {times.map((slot) => (
+                {posts.map(({ slot, inherited }) => inherited ? (
+                  /* Quiet, and without a remove: this row belongs to "Every
+                     day" above, and taking it off one day is done there -
+                     a per-day remove here would silently delete six other
+                     days' time. */
+                  <li
+                    key={`everyday-${slot.id}`}
+                    className="slot-week-inherited"
+                    title={`Posts every day - change it in the Every day row above`}
+                    aria-label={`${slotLabel(slot)} posts on ${name} from the every-day row`}
+                  >
+                    <b>{slotLabel(slot)}</b>
+                  </li>
+                ) : (
                   <li key={slot.id}>
                     <b>{slotLabel(slot)}</b>
                     {canEdit && (
@@ -1204,20 +1227,9 @@ export function SlotEditor({
                     )}
                   </li>
                 ))}
-                {/* An empty column is not an empty day when there are
-                    every-day times: those post here too, and seven blank
-                    columns under a row of them said the opposite. Named
-                    rather than repeated in full - the times are already
-                    listed once, above. */}
-                {times.length === 0 && everyDay.length > 0 && (
-                  <li
-                    className="slot-week-inherits"
-                    aria-label={`${everyDay.length} every-day times post on ${name}`}
-                  >every day</li>
-                )}
                 {/* A day nothing posts on at all, which is worth seeing rather
                     than inferring from an absence. */}
-                {times.length === 0 && everyDay.length === 0 && (
+                {posts.length === 0 && (
                   <li className="slot-week-none" aria-label={`Nothing posts on ${name}`}>—</li>
                 )}
               </ul>
