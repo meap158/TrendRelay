@@ -248,3 +248,111 @@ def test_a_busy_clip_says_how_many_lines_it_left_out(workspace) -> None:
     assert f"line {MAX_COVERED_LINES + over - 1}" not in {
         region["text"] for region in body["regions"]
     }
+
+
+# --- the translated overlay ---------------------------------------------------
+#
+# The other half of covering: what goes in the cleared box, and where. A
+# translation of on-screen text that lands at the bottom of the frame is a
+# second thing to read beside the thing it translates.
+
+
+def overlay(workspace_id: str, asset_id: str, **body) -> httpx.Response:
+    return request(
+        "POST",
+        f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/text-overlay/preview",
+        json={"target": "en", **body},
+    )
+
+
+def with_translator(monkeypatch, rendering=lambda text: f"[{text}]") -> None:
+    from trendrelay_api import subtitle_translate
+
+    monkeypatch.setattr(
+        subtitle_translate, "live_translator", lambda _from, _to: rendering,
+    )
+
+
+def read_sale(workspace_id: str, **kwargs) -> str:
+    return add_asset(workspace_id, segments=[
+        {"timestamp_ms": 0, "lines": [
+            {"text": "GIẢM GIÁ", "confidence": 0.95, "box": box(100, 1600, 700, 1720)},
+        ]},
+    ], **kwargs)
+
+
+def test_the_translation_is_placed_where_the_original_was(workspace, monkeypatch) -> None:
+    with_translator(monkeypatch)
+    asset_id = read_sale(workspace)
+
+    response = overlay(workspace, asset_id, source="vi")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["cue_count"] == 1
+    assert body["source_language"] == "vi"
+    [cue] = body["cues"]
+    assert "[GIẢM GIÁ]" in " ".join(cue["lines"])
+
+
+def test_a_reading_of_glyphs_has_to_be_told_its_language(workspace, monkeypatch) -> None:
+    """OCR reports `und`: it reads glyphs, and no amount of looking says which.
+
+    Refusing on that basis made on-screen text the one reading that could never
+    be translated, which is most of the reason somebody has it read.
+    """
+    with_translator(monkeypatch)
+    asset_id = read_sale(workspace)
+
+    response = overlay(workspace, asset_id)
+
+    assert response.status_code == 422
+    assert "which language" in response.json()["detail"]
+
+
+def test_translating_into_the_language_it_is_already_in_is_refused(workspace, monkeypatch) -> None:
+    with_translator(monkeypatch)
+    asset_id = read_sale(workspace)
+
+    response = overlay(workspace, asset_id, source="en", target="en")
+
+    assert response.status_code == 422
+    assert "already" in response.json()["detail"]
+
+
+def test_a_missing_language_package_is_a_conflict_not_a_failure(workspace, monkeypatch) -> None:
+    # Something to install, not something broken - and the message says which.
+    from trendrelay_api import subtitle_translate
+
+    def refuse(_from, _to):
+        raise RuntimeError("No package installed for vi to en.")
+
+    monkeypatch.setattr(subtitle_translate, "live_translator", refuse)
+    asset_id = read_sale(workspace)
+
+    response = overlay(workspace, asset_id, source="vi")
+
+    assert response.status_code == 409
+    assert "No package installed" in response.json()["detail"]
+
+
+def test_lines_too_small_to_read_are_reported_rather_than_lettered(workspace, monkeypatch) -> None:
+    """Their originals are still covered; only the replacement is left out."""
+    with_translator(monkeypatch)
+    asset_id = add_asset(workspace, segments=[
+        {"timestamp_ms": 0, "lines": [
+            {"text": "tiny", "confidence": 0.9, "box": box(0, 0, 400, 20)},
+        ]},
+    ])
+
+    body = overlay(workspace, asset_id, source="vi").json()
+
+    assert body["cue_count"] == 0
+    assert any("could not be lettered" in note for note in body["notes"])
+
+
+def test_a_clip_nobody_has_read_cannot_be_lettered(workspace, monkeypatch) -> None:
+    with_translator(monkeypatch)
+    asset_id = add_asset(workspace, segments=None)
+
+    assert overlay(workspace, asset_id, source="vi").status_code == 404

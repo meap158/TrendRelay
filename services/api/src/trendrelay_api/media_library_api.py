@@ -2720,6 +2720,14 @@ class TranscriptTranslation(BaseModel):
     #: text is already in the words somebody chose.
     status: Literal["machine", "reviewed"] = "machine"
     target: str = Field(min_length=2, max_length=16)
+    #: What language the reading is in, when the reading does not know.
+    #:
+    #: OCR reports `und`: it reads glyphs, not a language, and no amount of
+    #: looking at them tells it whether they are Vietnamese or Malay. Refusing
+    #: on that basis made on-screen text the one reading that could never be
+    #: translated - which is most of the reason somebody wants it read at all.
+    #: A person can see which language it is, so they are allowed to say.
+    source: str | None = Field(default=None, min_length=2, max_length=16)
 
 
 @router.get("/translation/pairs")
@@ -2735,6 +2743,132 @@ def translation_pairs(
     from trendrelay_api.subtitle_translate import installed_pairs
 
     return {"pairs": installed_pairs()}
+
+
+def _ocr_reading(session: Any, workspace_id: str, asset_pk: str) -> Any:
+    """This clip's on-screen text reading, the reviewed one for preference.
+
+    Somebody corrected it on purpose, and the corrections are what is actually
+    on the screen.
+    """
+    found = session.scalar(
+        select(MediaTranscript).where(
+            MediaTranscript.asset_id == asset_pk,
+            MediaTranscript.workspace_id == workspace_id,
+            MediaTranscript.kind == "ocr",
+        ).order_by(MediaTranscript.status.desc())
+    )
+    if not found:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "This clip's on-screen text has not been read yet. Read it "
+                "first, then there will be something to cover."
+            ),
+        )
+    return found
+
+
+def _measured(item: Any) -> None:
+    """Refuse an asset whose frame nobody ever sized."""
+    if not item.width or not item.height:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "This clip's dimensions were never measured, so a region cannot "
+                "be placed as a share of the frame."
+            ),
+        )
+
+
+class TextOverlayRequest(BaseModel):
+    """Translate what a clip shows, and put it where the clip shows it."""
+
+    target: str = Field(min_length=2, max_length=16)
+    #: The language the on-screen text is in. Required in practice, because a
+    #: reading of glyphs never knows - see `TranscriptTranslation.source`.
+    source: str | None = Field(default=None, min_length=2, max_length=16)
+
+
+@router.post("/assets/{asset_id}/text-overlay/preview")
+def preview_text_overlay(
+    workspace_id: str,
+    asset_id: str,
+    body: TextOverlayRequest,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """The translated on-screen text, placed where the original sits.
+
+    The sibling of the caption preview, and cheap for the same reason: choosing
+    a language means looking at what the lines say and whether they fit their
+    boxes, and neither needs an encoder.
+
+    Placed cues rather than a caption track. A translation of on-screen text
+    that lands at the bottom of the frame is a second thing to read beside the
+    thing it translates - and over a covered original it is a blank rectangle
+    and an unexplained caption.
+    """
+    membership(session, workspace_id, user.id)
+    item = _asset_record(session, workspace_id, asset_id)
+    from trendrelay_api import captions
+    from trendrelay_api.config import get_settings
+    from trendrelay_api.text_cover import readable_lines
+    from trendrelay_api.text_lettering import lettered_cues, merge_overlapping
+
+    found = _ocr_reading(session, workspace_id, item.id)
+    _measured(item)
+
+    source = (found.language or "").strip().lower()
+    if not source or source == "und":
+        source = (body.source or "").strip().lower()
+    if not source:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Say which language the on-screen text is in. It was read as "
+                "glyphs, so the reading itself does not know."
+            ),
+        )
+    if source == body.target.strip().lower():
+        raise HTTPException(
+            status_code=422, detail="That is already the language it is in."
+        )
+
+    from trendrelay_api.subtitle_translate import live_translator
+
+    try:
+        translate = live_translator(source, body.target)
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+    regions, dropped = readable_lines(
+        found.segments or [],
+        interval_ms=round(get_settings().media_ai_ocr_interval_seconds * 1000),
+        width=item.width,
+        height=item.height,
+    )
+    cues, skipped = lettered_cues(regions, translate)
+    cues = merge_overlapping(cues)
+    notes: list[str] = []
+    if skipped:
+        notes.append(
+            f"{len(skipped)} line{'s' if len(skipped) != 1 else ''} could not be "
+            "lettered: too small to read at that size, or nothing came back for "
+            "them. Their originals are still covered."
+        )
+    if dropped:
+        notes.append(
+            f"{dropped} less certain line{'s were' if dropped != 1 else ' was'} "
+            "left out of the reading."
+        )
+    return {
+        "source_language": source,
+        "cue_count": len(cues),
+        "duration_ms": cues[-1].end_ms if cues else 0,
+        "cues": captions.preview(cues),
+        "notes": notes,
+    }
 
 
 @router.get("/assets/{asset_id}/text-regions")
@@ -2766,29 +2900,8 @@ def asset_text_regions(
     from trendrelay_api.config import get_settings
     from trendrelay_api.text_cover import readable_lines
 
-    found = session.scalar(
-        select(MediaTranscript).where(
-            MediaTranscript.asset_id == item.id,
-            MediaTranscript.workspace_id == workspace_id,
-            MediaTranscript.kind == "ocr",
-        ).order_by(MediaTranscript.status.desc())
-    )
-    if not found:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "This clip's on-screen text has not been read yet. Read it "
-                "first, then there will be something to cover."
-            ),
-        )
-    if not item.width or not item.height:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "This clip's dimensions were never measured, so a region cannot "
-                "be placed as a share of the frame."
-            ),
-        )
+    found = _ocr_reading(session, workspace_id, item.id)
+    _measured(item)
 
     interval_ms = round(get_settings().media_ai_ocr_interval_seconds * 1000)
     regions, dropped = readable_lines(
@@ -2845,15 +2958,19 @@ def translate_transcript(
         raise HTTPException(status_code=404, detail="There is no such reading to translate.")
 
     source = (found.language or "").strip().lower()
-    # OCR reports `und` - it reads glyphs, not a language. The caller names the
-    # source in that case; without one there is nothing to translate from.
+    # OCR reports `und` - it reads glyphs, not a language. The reader says which
+    # it is; the stored reading is never overwritten with that answer, because
+    # what somebody chose in order to read a translation is not a finding about
+    # the clip.
+    if not source or source == "und":
+        source = (body.source or "").strip().lower()
     if not source or source == "und":
         raise HTTPException(
             status_code=422,
             detail=(
-                "This reading does not say which language it is in, so it cannot "
-                "be translated. On-screen text is read as glyphs rather than as a "
-                "language."
+                "This reading does not say which language it is in, so say which "
+                "to translate from. On-screen text is read as glyphs rather than "
+                "as a language."
             ),
         )
     if source == body.target:
