@@ -15,6 +15,10 @@ import { handoffPath, type VersionedAsset } from "../../lib/media-rules";
  * structurally, and neither is this component's to depend on.
  */
 type ChosenAsset = VersionedAsset & {
+  /** The Library id, so the queue item links back to the asset it came from -
+      which is what lets the campaign show its thumbnail and preview. Without
+      it the post arrives as a bare path the panel has no still for. */
+  id: string;
   title: string;
   media_kind: "video" | "audio" | "image";
 };
@@ -96,8 +100,8 @@ export function CampaignPicker({
             headers: { "content-type": "application/json" },
             body: JSON.stringify(
               asset.media_kind === "image"
-                ? { image_paths: [handoffPath(asset)] }
-                : { video_path: handoffPath(asset) },
+                ? { asset_id: asset.id, image_paths: [handoffPath(asset)] }
+                : { asset_id: asset.id, video_path: handoffPath(asset) },
             ),
           },
         );
