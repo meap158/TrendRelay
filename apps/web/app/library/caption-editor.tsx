@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { Button } from "../ui/button";
@@ -49,6 +49,8 @@ type CaptionStyle = {
   id: string;
   label: string;
   summary: string;
+  /** The gallery shelf this sits on; the API sends styles already grouped. */
+  category: string;
   style: CaptionStyleSettings;
   layout: Record<string, unknown>;
   needs_word_timings: boolean;
@@ -1204,32 +1206,42 @@ export function CaptionEditor({
             <p className="caption-editor-note">
               Each line is placed over the words it replaces, from this
               clip&rsquo;s on-screen text reading — so the style decides how it looks and the
-              reading decides where it goes. Cover the originals with the
-              Effects step first, or the translation sits on top of them.
+              reading decides where it goes. Each line draws its own solid
+              backdrop over the original text; a cover rendered in the Effects
+              step makes a nicer patch, and the burn lands on that cut when
+              one exists.
             </p>
           )}
         </section>
 
         <section className="caption-editor-styles" aria-label="Caption style">
           <h4>Style</h4>
+          {/* Shelved the way the caption tools people know arrange theirs -
+              the styles that move with the voice, the flat social shapes, the
+              broadcast-safe set, the throwbacks. The API sends the styles
+              already grouped; a heading appears where its group starts. */}
           <div className="caption-style-grid">
-            {(catalogue?.styles ?? []).map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="caption-style-choice"
-                data-on={item.id === styleId ? "" : undefined}
-                aria-pressed={item.id === styleId}
-                onClick={() => chooseStyle(item.id)}
-              >
-                <span className="caption-style-swatch" style={captionPosition(item.style.alignment)} aria-hidden="true">
-                  <CaptionLook preset={item} sample={catalogue?.sample} compact />
-                </span>
-                <span className="caption-style-copy">
-                  <strong>{item.label}</strong>
-                  <small>{item.summary}</small>
-                </span>
-              </button>
+            {(catalogue?.styles ?? []).map((item, at, all) => (
+              <Fragment key={item.id}>
+                {(at === 0 || all[at - 1].category !== item.category) && (
+                  <h5 className="caption-style-shelf">{item.category}</h5>
+                )}
+                <button
+                  type="button"
+                  className="caption-style-choice"
+                  data-on={item.id === styleId ? "" : undefined}
+                  aria-pressed={item.id === styleId}
+                  onClick={() => chooseStyle(item.id)}
+                >
+                  <span className="caption-style-swatch" style={captionPosition(item.style.alignment)} aria-hidden="true">
+                    <CaptionLook preset={item} sample={catalogue?.sample} compact />
+                  </span>
+                  <span className="caption-style-copy">
+                    <strong>{item.label}</strong>
+                    <small>{item.summary}</small>
+                  </span>
+                </button>
+              </Fragment>
             ))}
           </div>
         </section>

@@ -56,6 +56,9 @@ def styles() -> list[dict[str, Any]]:
                 "id": identifier,
                 "label": _label(identifier),
                 "summary": _summary(identifier),
+                # The gallery shelf this sits on, so the interface can group
+                # the styles the way the caption tools people know do.
+                "category": _CATEGORIES.get(identifier, "More"),
                 # Everything the interface may edit, sent as-is so a new field
                 # on `Style` needs no frontend change to become editable.
                 "style": asdict(style),
@@ -66,6 +69,9 @@ def styles() -> list[dict[str, Any]]:
                 "needs_word_timings": style.highlight_active_word,
             }
         )
+    described.sort(
+        key=lambda item: (CATEGORY_ORDER.index(item["category"]),)
+    )
     return described
 
 
@@ -77,6 +83,8 @@ _LABELS = {
     "boxed": "Boxed",
     "bold-outline": "Bold outline",
     "minimal": "Minimal",
+    "social-box": "Social box",
+    "retro-pop": "Retro pop",
 }
 
 _SUMMARIES = {
@@ -87,7 +95,27 @@ _SUMMARIES = {
     "boxed": "White text on a solid panel, for footage it would otherwise vanish into.",
     "bold-outline": "Heavy uppercase with a thick outline, for sound-off feeds.",
     "minimal": "Small and unobtrusive, with a soft shadow instead of an outline.",
+    "social-box": "Dark type on a solid light panel, the caption-app staple.",
+    "retro-pop": "Warm italic serif with a hard edge, for a throwback feel.",
 }
+
+#: The gallery's shelves, the way the caption tools people already know
+#: arrange theirs: the styles that move with the voice together, then the flat
+#: social shapes, the broadcast-safe set, and the throwbacks. Order here is
+#: display order, and a style added without a shelf goes to "More" rather than
+#: silently vanishing from the gallery.
+_CATEGORIES: dict[str, str] = {
+    "word-pop": "Dynamic",
+    "one-word": "Dynamic",
+    "karaoke": "Dynamic",
+    "social-box": "Social",
+    "bold-outline": "Social",
+    "broadcast": "Business",
+    "boxed": "Business",
+    "minimal": "Business",
+    "retro-pop": "Retro",
+}
+CATEGORY_ORDER = ("Dynamic", "Social", "Business", "Retro", "More")
 
 
 def _label(identifier: str) -> str:

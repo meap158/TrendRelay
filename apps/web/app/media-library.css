@@ -869,6 +869,10 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 /* Auto-fit rather than a fixed count: the number of styles is whatever the
    registry declares, and this file should not need editing when it grows. */
 .caption-style-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+/* A shelf heading spans the grid and reads as the gallery's own furniture -
+   quiet uppercase, the same voice the tool inspector's group headings use. */
+.caption-style-shelf { grid-column: 1 / -1; margin: 6px 0 0; color: var(--muted-soft); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.caption-style-shelf:first-child { margin-top: 0; }
 .caption-style-choice { display: grid; grid-template-rows: 78px auto; gap: 8px; min-width: 0; padding: 5px 5px 9px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); text-align: start; cursor: pointer; }
 .caption-style-choice:hover { border-color: var(--line-strong); }
 .caption-style-choice[data-on] { border-color: var(--link); box-shadow: inset 0 0 0 1px var(--link); }

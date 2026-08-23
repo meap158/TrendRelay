@@ -150,6 +150,25 @@ PRESETS: dict[str, tuple[Style, Layout]] = {
               shadow=2.0, margin_v=60),
         Layout(),
     ),
+    # The two shapes the VEED reference sheet shows most: dark type on a solid
+    # light panel (its Social swatches), and the warm italic serif with a hard
+    # edge (its Retro row). Both are reachable with the fields the format
+    # already has - the box is the outline, exactly as `boxed` documents.
+    "social-box": (
+        Style(
+            name="SocialBox", font="Arial Black", size=46, colour="#111111",
+            border=BORDER_BOX, outline_colour="#FFFFFF", outline_alpha=0,
+            outline=12.0, shadow=0.0,
+        ),
+        Layout(max_chars_per_line=26, max_lines=2),
+    ),
+    "retro-pop": (
+        Style(
+            name="RetroPop", font="Georgia", size=52, italic=True,
+            colour="#FFE83D", outline_colour="#000000", outline=4.0, shadow=3.0,
+        ),
+        Layout(max_chars_per_line=30, max_lines=2),
+    ),
 }
 
 
