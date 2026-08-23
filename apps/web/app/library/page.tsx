@@ -2155,7 +2155,7 @@ function LibraryContent() {
                             aria-label="Remove effects"
                             title="Remove rendered effects and the saved recipe; keep the original media"
                             onClick={() => void removeEffects(selected)}
-                          ><ActionIcon name="dismiss" /></Button>
+                          ><ActionIcon name="dismiss" size={13} /></Button>
                         )}
                       </ButtonPair>
                       <Button

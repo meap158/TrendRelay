@@ -113,12 +113,32 @@ a.ui-button { text-decoration: none; }
  * to touch. `align-self: stretch` keeps the icon the exact height of whatever
  * it is attached to, so it stays square without being told a size. */
 .ui-button-pair { display: inline-flex; }
-.ui-button-pair > .ui-button:first-child { border-start-end-radius: 0; border-end-end-radius: 0; }
-.ui-button-pair > .ui-button:last-child {
+/* Only square the seam when there is a seam. The trailing half is
+   conditional - Remove effects exists only while there are effects - and
+   `:first-child` matches a lone button as readily as a leading one, which
+   flattened all four corners of a button standing on its own. */
+.ui-button-pair > .ui-button:first-child:not(:last-child) {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+.ui-button-pair > .ui-button + .ui-button {
   align-self: stretch;
   margin-inline-start: -1px;
   border-start-start-radius: 0;
   border-end-start-radius: 0;
+  /* Subordinate, because that is what it is: the undoing of the button it
+     hangs off, not a second action of equal weight. Muted rather than
+     shrunk - the two halves share a height and a border, so making this one
+     smaller would break the seam that joins them, and the target would be
+     harder to hit for no gain. The danger colour waits for the pointer: a
+     permanently red cross reads as a warning about the state of the asset
+     rather than as what one reversible click would do. */
+  color: var(--muted);
+}
+.ui-button-pair > .ui-button + .ui-button:hover:not(:disabled) {
+  border-color: #e13333;
+  background: #f8d7da;
+  color: #a3162a;
 }
 /* Whichever half the eye or the keyboard is on comes forward, so its own
  * border and its focus ring are not cut in half by the neighbour. */
