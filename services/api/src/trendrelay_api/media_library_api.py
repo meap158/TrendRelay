@@ -2737,6 +2737,79 @@ def translation_pairs(
     return {"pairs": installed_pairs()}
 
 
+@router.get("/assets/{asset_id}/text-regions")
+def asset_text_regions(
+    workspace_id: str,
+    asset_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Where this clip's on-screen text sits, ready to be covered.
+
+    The cover effect carries its rectangles in the step itself, rather than
+    reading the asset when it renders. That is deliberate: a step is a
+    self-contained set of values everywhere else in the recipe, and a preview is
+    only trustworthy because it is handed the same shape the render will get.
+    An effect that quietly re-read the asset could show one thing in the editor
+    and do another a week later, after the clip had been read again.
+
+    So the regions are resolved once, here, at the moment somebody adds the
+    step. This is that resolution and nothing more - it stores nothing, and
+    asking twice is free.
+
+    As shares of the frame, because a recipe outlives the file it was written
+    against and a re-encode at another size would otherwise put every cover
+    somewhere other than the words.
+    """
+    membership(session, workspace_id, user.id)
+    item = _asset_record(session, workspace_id, asset_id)
+    from trendrelay_api.config import get_settings
+    from trendrelay_api.text_cover import readable_lines
+
+    found = session.scalar(
+        select(MediaTranscript).where(
+            MediaTranscript.asset_id == item.id,
+            MediaTranscript.workspace_id == workspace_id,
+            MediaTranscript.kind == "ocr",
+        ).order_by(MediaTranscript.status.desc())
+    )
+    if not found:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "This clip's on-screen text has not been read yet. Read it "
+                "first, then there will be something to cover."
+            ),
+        )
+    if not item.width or not item.height:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "This clip's dimensions were never measured, so a region cannot "
+                "be placed as a share of the frame."
+            ),
+        )
+
+    interval_ms = round(get_settings().media_ai_ocr_interval_seconds * 1000)
+    regions, dropped = readable_lines(
+        found.segments or [],
+        interval_ms=interval_ms,
+        width=item.width,
+        height=item.height,
+    )
+    return {
+        "regions": regions,
+        # Said rather than left to be noticed. A clip that OCRs into hundreds of
+        # fragments keeps its most confident lines, and a caller comparing the
+        # count against the reading would otherwise find them silently missing.
+        "dropped": dropped,
+        "read_every_ms": interval_ms,
+        # Which reading these came from, because a machine draft and a reviewed
+        # one are different texts and only one of them is on screen.
+        "status": found.status,
+    }
+
+
 @router.post("/assets/{asset_id}/transcripts/translate")
 def translate_transcript(
     workspace_id: str,
