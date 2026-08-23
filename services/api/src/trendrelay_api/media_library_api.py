@@ -1795,7 +1795,10 @@ def preview_captions(
             raise HTTPException(status_code=409, detail=str(error)) from error
     try:
         built = captions.build(
-            transcript.segments or [],
+            # Not `transcript.segments`: a reviewed one has none, and this is
+            # where its words are put back on the machine's clock. Shared with
+            # the render so the preview keeps its promise.
+            caption_segments(session, workspace_id, asset_id, transcript),
             style_id=body.style_id,
             style_overrides=body.style_overrides,
             layout_overrides=body.layout_overrides,
@@ -1956,6 +1959,19 @@ def render_captions(
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     return {"job": _stamp_batch(session, job, body.batch)}
+
+
+def caption_segments(
+    session: Session, workspace_id: str, asset_id: str, transcript: Any
+) -> list[Any]:
+    """The timed words to caption from - see `caption_jobs.caption_segments`.
+
+    Re-exported here so the preview and the render reach the same function
+    rather than each deciding what a reviewed transcript means.
+    """
+    from trendrelay_api.caption_jobs import caption_segments as shared
+
+    return shared(session, workspace_id, asset_id, transcript)
 
 
 def _caption_transcript(

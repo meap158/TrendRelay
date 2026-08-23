@@ -223,6 +223,107 @@ def _estimate_words(segment: dict[str, Any]) -> list[Word]:
     return words
 
 
+# --- putting a corrected transcript back on the clock -------------------------
+
+
+def _comparable(word: str) -> str:
+    """A word stripped to what a correction is unlikely to have changed."""
+    return "".join(ch for ch in word.casefold() if ch.isalnum())
+
+
+def retimed_segments(text: str, draft: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Put a hand-corrected transcript back on the machine's timings.
+
+    A reviewed transcript is stored as text and nothing else - it is what
+    somebody typed, and typing does not produce timings. But it is also the
+    transcript captions prefer, so reviewing one used to leave the asset with
+    no cues at all: `build_cues` reads words, the reviewed record had none, and
+    the caption came out empty for every style without saying why.
+
+    The words are the operator's and the clock is the machine's, so this
+    carries one onto the other. Corrections are nearly always spelling,
+    punctuation or a misheard word, which is exactly the shape a sequence match
+    handles well: the runs that agree keep their measured timings, and only the
+    stretches that differ are estimated - across the span the draft used for
+    the words being replaced, shared by length the same way an untimed segment
+    already is.
+
+    A word inserted where the draft has nothing gets the seam between its
+    neighbours. That can be zero, and zero is fine here: a cue shorter than the
+    layout allows is extended by `_fit_timings` to reach the next one, which is
+    the same repair a genuinely fast word gets.
+
+    Returns segments rather than words, because that is what `build_cues` takes
+    and what a transcript stores - one segment, since the correction has no
+    sentence structure of its own to preserve.
+    """
+    spoken = words_from_segments(draft)
+    reviewed = [piece for piece in (text or "").split() if piece]
+    if not spoken or not reviewed:
+        return []
+
+    from difflib import SequenceMatcher
+
+    matcher = SequenceMatcher(
+        a=[_comparable(word.text) for word in spoken],
+        b=[_comparable(word) for word in reviewed],
+        # A transcript repeats common words constantly, and the heuristic that
+        # calls a frequent element junk would drop exactly those from the
+        # match - which is most of a sentence.
+        autojunk=False,
+    )
+
+    timed: list[Word] = []
+    for tag, draft_from, draft_to, mine_from, mine_to in matcher.get_opcodes():
+        if tag == "equal":
+            for offset in range(mine_to - mine_from):
+                measured = spoken[draft_from + offset]
+                timed.append(Word(
+                    text=reviewed[mine_from + offset],
+                    start_ms=measured.start_ms,
+                    end_ms=measured.end_ms,
+                    probability=measured.probability,
+                ))
+            continue
+        mine = reviewed[mine_from:mine_to]
+        if not mine:
+            # Words the operator removed. Their time goes to whatever follows.
+            continue
+        covered = spoken[draft_from:draft_to]
+        if covered:
+            start, end = covered[0].start_ms, covered[-1].end_ms
+        else:
+            # An insertion: the seam between the word before and the word after.
+            start = spoken[draft_from - 1].end_ms if draft_from else spoken[0].start_ms
+            end = spoken[draft_from].start_ms if draft_from < len(spoken) else start
+        timed.extend(_shared_span(mine, start, max(start, end)))
+
+    return [{
+        "start_ms": timed[0].start_ms,
+        "end_ms": timed[-1].end_ms,
+        "text": " ".join(word.text for word in timed),
+        "words": [
+            {"text": word.text, "start_ms": word.start_ms, "end_ms": word.end_ms}
+            for word in timed
+        ],
+    }] if timed else []
+
+
+def _shared_span(words: Sequence[str], start: int, end: int) -> list[Word]:
+    """Lay words across a span, weighted by length. Longer words take longer."""
+    total = sum(max(1, len(word)) for word in words)
+    span = max(0, end - start)
+    placed: list[Word] = []
+    at = start
+    for word in words:
+        share = round(span * max(1, len(word)) / total)
+        placed.append(Word(text=word, start_ms=at, end_ms=at + share))
+        at += share
+    if placed:
+        placed[-1] = replace(placed[-1], end_ms=max(end, placed[-1].start_ms))
+    return placed
+
+
 # --- grouping words into cues -------------------------------------------------
 
 

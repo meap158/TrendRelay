@@ -10,6 +10,7 @@ from trendrelay_api.subtitles import (
     MIN_DURATION_MS,
     Layout,
     build_cues,
+    retimed_segments,
     words_from_segments,
     wrap_lines,
 )
@@ -260,3 +261,108 @@ def test_the_one_word_preset_does_not_ask_for_word_timings_it_cannot_use() -> No
     from trendrelay_api.subtitle_formats import PRESETS
 
     assert PRESETS["one-word"][0].highlight_active_word is False
+
+
+# --- a corrected transcript, put back on the clock ----------------------------
+
+
+def spoken() -> list[dict]:
+    """A machine draft with real per-word timings, which is what Whisper gives."""
+    return [
+        {
+            "start_ms": 0,
+            "end_ms": 2400,
+            "text": "their going to the shop",
+            "words": [
+                {"text": "their", "start_ms": 0, "end_ms": 400},
+                {"text": "going", "start_ms": 400, "end_ms": 900},
+                {"text": "to", "start_ms": 900, "end_ms": 1100},
+                {"text": "the", "start_ms": 1100, "end_ms": 1400},
+                {"text": "shop", "start_ms": 1400, "end_ms": 2400},
+            ],
+        }
+    ]
+
+
+def test_reviewing_a_transcript_no_longer_silences_the_captions() -> None:
+    """The bug: reviewing one left every style with nothing to show.
+
+    A reviewed transcript is stored as text and no segments, because typing
+    produces no timings - and it is the transcript captions prefer. So the cue
+    builder, which reads words, got none and returned an empty caption for
+    every preset without saying why.
+    """
+    assert build_cues([]) == []
+
+    put_back = retimed_segments("They're going to the shop", spoken())
+
+    assert build_cues(put_back, layout=Layout(max_words=1))
+
+
+def test_a_correction_keeps_the_timings_of_the_words_it_did_not_change() -> None:
+    """The words are the operator's; the clock stays the machine's."""
+    put_back = retimed_segments("They're going to the shop", spoken())
+    words = {word["text"]: (word["start_ms"], word["end_ms"])
+             for word in put_back[0]["words"]}
+
+    # Only the first word was corrected. The other four are untouched, so they
+    # keep the timings that were actually measured.
+    assert words["going"] == (400, 900)
+    assert words["to"] == (900, 1100)
+    assert words["the"] == (1100, 1400)
+    assert words["shop"] == (1400, 2400)
+    # And the corrected one still occupies the span the word it replaced did.
+    assert words["They're"] == (0, 400)
+
+
+def test_a_word_added_by_hand_lands_between_its_neighbours() -> None:
+    put_back = retimed_segments("their going to the corner shop", spoken())
+    words = [(word["text"], word["start_ms"]) for word in put_back[0]["words"]]
+
+    assert [text for text, _ in words] == [
+        "their", "going", "to", "the", "corner", "shop",
+    ]
+    # Inserted at the seam, so it does not steal time from a measured word.
+    # A zero-length cue is extended to the next one by the layout.
+    corner = dict(words)["corner"]
+    assert 1400 <= corner <= 1400
+
+
+def test_a_word_removed_by_hand_gives_its_time_back() -> None:
+    put_back = retimed_segments("their going to shop", spoken())
+    words = {word["text"]: (word["start_ms"], word["end_ms"])
+             for word in put_back[0]["words"]}
+
+    assert "the" not in words
+    assert words["shop"] == (1400, 2400)
+
+
+def test_one_word_captions_follow_the_speech_rather_than_a_metronome() -> None:
+    """What the One-word preset is for: a word appears when it is said."""
+    put_back = retimed_segments("They're going to the shop", spoken())
+
+    cues = build_cues(put_back, layout=Layout(
+        max_words=1, min_gap_ms=0, min_duration_ms=200, max_cps=99.0,
+        break_on_sentence=False,
+    ))
+
+    assert [cue.lines[0] for cue in cues] == [
+        "They're", "going", "to", "the", "shop",
+    ]
+    # Each starts when the speaker started it, not on an even division.
+    assert [cue.start_ms for cue in cues] == [0, 400, 900, 1100, 1400]
+
+
+def test_a_rewrite_with_nothing_in_common_still_covers_the_span() -> None:
+    """Not an alignment any more - but it must not produce a caption at 0ms."""
+    put_back = retimed_segments("completely different words entirely", spoken())
+
+    assert put_back
+    assert put_back[0]["start_ms"] == 0
+    assert put_back[0]["end_ms"] == 2400
+
+
+def test_nothing_to_align_against_is_nothing_rather_than_a_guess() -> None:
+    assert retimed_segments("some words", []) == []
+    assert retimed_segments("", spoken()) == []
+    assert retimed_segments("   ", spoken()) == []

@@ -282,3 +282,52 @@ def test_the_length_is_not_part_of_what_makes_a_job_the_same() -> None:
     )
 
     assert before["id"] == after["id"]
+
+
+def test_a_reviewed_transcript_still_captions_on_the_machines_timings() -> None:
+    """Reviewing one used to silence the captions completely.
+
+    A reviewed transcript is stored as text and no segments - typing produces
+    no timings - and it is the transcript captions prefer over the machine
+    draft. So correcting a word left the asset with no cues at all, for every
+    style, and nothing said so.
+    """
+    add_asset()
+    with Factory.begin() as session:
+        session.add(
+            MediaTranscript(
+                workspace_id="ws1",
+                asset_id="asset1",
+                kind="speech",
+                language="en",
+                provider="operator-reviewed",
+                status="reviewed",
+                text="hello there old friend",
+                segments=[],
+                created_by="owner",
+            )
+        )
+
+    with Factory() as session:
+        chosen = caption_jobs._transcript(session, "ws1", "asset1", None)
+        segments = caption_jobs.caption_segments(session, "ws1", "asset1", chosen)
+
+    assert chosen.status == "reviewed", "the reviewed one is still preferred"
+    assert chosen.segments == [], "and it still stores no timings of its own"
+    # But the words are now on the draft's clock rather than on nothing.
+    assert segments, "a reviewed transcript produced no timed words"
+    words = [word["text"] for word in segments[0]["words"]]
+    assert words == ["hello", "there", "old", "friend"]
+    # The two words the draft also had keep the timings it measured.
+    assert segments[0]["words"][0]["start_ms"] == 0
+
+
+def test_a_machine_transcript_is_used_as_it_stands() -> None:
+    """Nothing is re-timed when the chosen transcript already has timings."""
+    add_asset()
+
+    with Factory() as session:
+        chosen = caption_jobs._transcript(session, "ws1", "asset1", None)
+        segments = caption_jobs.caption_segments(session, "ws1", "asset1", chosen)
+
+    assert segments == list(chosen.segments)

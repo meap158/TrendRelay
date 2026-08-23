@@ -172,7 +172,7 @@ def _render(
         transcript = _transcript(session, workspace_id, asset_id, payload.get("transcript_id"))
         if transcript is None:
             raise RuntimeError("This asset has no speech transcript to caption.")
-        segments = list(transcript.segments or [])
+        segments = caption_segments(session, workspace_id, asset_id, transcript)
         source_language = transcript.language or "en"
         source_path = Path(asset.original_path)
         transcript_id = transcript.id
@@ -226,6 +226,39 @@ def _render(
         # span is the kind of thing somebody needs to see after the render too.
         "notes": built["notes"],
     }
+
+
+def caption_segments(session: Any, workspace_id: str, asset_id: str, transcript: Any) -> list:
+    """The timed words to caption from, whichever transcript was chosen.
+
+    A reviewed transcript is stored as text and nothing else, because typing
+    does not produce timings - and it is also the transcript captions prefer.
+    So reviewing one used to leave the asset with no cues at all: the builder
+    reads words, the reviewed record had none, and every style came out empty
+    without saying why.
+
+    Its words are put back on the machine draft's clock here. Shared by the
+    preview and the render on purpose: the preview promises what will be
+    rendered, and two paths deciding this separately is how that promise
+    quietly stops being true.
+    """
+    stored = list(transcript.segments or [])
+    if stored:
+        return stored
+    draft = session.scalar(
+        select(MediaTranscript).where(
+            MediaTranscript.workspace_id == workspace_id,
+            MediaTranscript.asset_id == asset_id,
+            MediaTranscript.kind == transcript.kind,
+            MediaTranscript.id != transcript.id,
+            MediaTranscript.segments != [],
+        ).order_by(MediaTranscript.created_at.desc()).limit(1)
+    )
+    if draft is None or not draft.segments:
+        return []
+    from trendrelay_api.subtitles import retimed_segments
+
+    return retimed_segments(transcript.text or "", draft.segments)
 
 
 def _transcript(session: Any, workspace_id: str, asset_id: str, transcript_id: str | None):
