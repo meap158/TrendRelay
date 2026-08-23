@@ -17,10 +17,12 @@ import {
   contentRect,
   checkedSize,
   movable,
+  nudge,
   overridesFrom,
   placementFromPoint,
   placementStyle,
   sizeFromDrag,
+  usableWidth,
   type Alignment,
   type Placement,
 } from "../../lib/caption-placement";
@@ -457,16 +459,42 @@ export function CaptionEditor({
     setSizeOverride(null);
   }, []);
 
-  const pointerPlacement = useCallback((event: { clientX: number; clientY: number }) => {
-    const frame = frameRef.current?.getBoundingClientRect();
-    if (!frame) return;
-    setPlacement((current) => placementFromPoint(
-      { x: event.clientX - frame.left, y: event.clientY - frame.top },
-      { width: frame.width, height: frame.height },
-      source,
-      current ?? presetPlacement,
-    ));
-  }, [source, presetPlacement]);
+  const pointerPlacement = useCallback(
+    (event: { clientX: number; clientY: number; altKey?: boolean }) => {
+      const frame = frameRef.current?.getBoundingClientRect();
+      if (!frame) return;
+      setPlacement((current) => placementFromPoint(
+        { x: event.clientX - frame.left, y: event.clientY - frame.top },
+        { width: frame.width, height: frame.height },
+        source,
+        current ?? presetPlacement,
+        // Alt turns the snap off, the way it does in a drawing tool. Snapping
+        // is right almost always and wrong exactly when somebody is placing a
+        // caption deliberately near the middle.
+        !event.altKey,
+      ));
+    }, [source, presetPlacement],
+  );
+
+  /**
+   * Arrow keys, once the caption has focus.
+   *
+   * The exact instrument beside the rough one: a drag gets it near and the
+   * arrows put it right. It is also the only way to place a caption without a
+   * pointer at all, which a drag handle on its own quietly rules out.
+   */
+  const nudgeBy = useCallback((event: React.KeyboardEvent) => {
+    const direction = {
+      ArrowLeft: { x: -1 }, ArrowRight: { x: 1 },
+      ArrowUp: { y: -1 }, ArrowDown: { y: 1 },
+    }[event.key];
+    if (!direction) return;
+    event.preventDefault();
+    // Ten at a time with Shift, which is the step everything else uses for
+    // "the same thing, faster".
+    const step = event.shiftKey ? 10 : 1;
+    setPlacement((current) => nudge(current ?? presetPlacement, direction, step));
+  }, [presetPlacement]);
 
   // Pointer capture rather than window listeners: the gesture belongs to the
   // element it started on, so a pointer that leaves the frame - or a dialog
@@ -911,11 +939,20 @@ export function CaptionEditor({
                   <span
                     className="caption-media-handle"
                     role="application"
-                    aria-label={`Caption position: ${activePlacement.alignment}. Drag to move, or use the fields below.`}
+                    tabIndex={canEdit ? 0 : -1}
+                    aria-label={
+                      `Caption position: ${activePlacement.alignment}, `
+                      + `${activePlacement.margin_h} from the side, `
+                      + `${activePlacement.margin_v} from the edge. `
+                      + "Drag to move, arrow keys to nudge, hold Shift for ten at a time, "
+                      + "hold Alt while dragging to place it without snapping."
+                    }
                     data-dragging={dragging === "move" || undefined}
+                    onKeyDown={canEdit ? nudgeBy : undefined}
                     onPointerDown={(event) => {
                       if (!canEdit) return;
                       event.preventDefault();
+                      event.currentTarget.focus();
                       setDragging("move");
                       pointerPlacement(event);
                     }}
@@ -1011,6 +1048,19 @@ export function CaptionEditor({
                   </Button>
                 )}
               </div>
+            )}
+            {/* What moving sideways costs. The format writes one horizontal
+                margin into both sides, so pushing a caption towards the middle
+                squeezes it from both at once - and the render will do it
+                whether or not anybody was told. */}
+            {canEdit && previewPreset && canMove.horizontal
+              && usableWidth(activePlacement, source) < source.width * 0.35 && (
+              <p className="caption-editor-note">
+                Only {Math.round(usableWidth(activePlacement, source))} of{" "}
+                {source.width} pixels are left for the text to run in, because a
+                side margin applies to both sides at once. It will wrap into a
+                narrow column. Move it back towards its edge, or centre it.
+              </p>
             )}
             {/* Said rather than left to be discovered by pulling at something
                 that will not move. The format writes one horizontal margin to

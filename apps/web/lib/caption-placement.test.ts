@@ -4,6 +4,8 @@ import { test } from "node:test";
 import {
   bandsOf,
   checkedMargin,
+  nudge,
+  usableWidth,
   checkedSize,
   contentRect,
   fractionOf,
@@ -46,7 +48,7 @@ test("a box with no size yet answers the middle rather than dividing by zero", (
 
 // --- reading a drop -----------------------------------------------------------
 
-test("the nine cells are thirds of the picture", () => {
+test("each half picks the edge its margin is measured from", () => {
   const box = { width: 720, height: 1280 };
   const at = (x: number, y: number) =>
     placementFromPoint({ x: x * 720, y: y * 1280 }, box, PORTRAIT, BOTTOM).alignment;
@@ -220,4 +222,104 @@ test("a middle anchor sends no vertical margin, whatever is in the field", () =>
   );
 
   assert.deepEqual(changes, { alignment: "middle" });
+});
+
+
+// --- free movement, and where it snaps ----------------------------------------
+
+test("a caption moves freely between the edges rather than jumping to thirds", () => {
+  // The first model chose the anchor by which third the pointer was in, which
+  // made the whole middle third a dead zone: dragged to 40% across, a caption
+  // snapped to centre and then refused to move at all.
+  const box = { width: 720, height: 1280 };
+  const at = (x: number) =>
+    placementFromPoint({ x: x * 720, y: 1200 }, box, PORTRAIT, BOTTOM);
+
+  const near = at(0.40);
+  const nearer = at(0.44);
+
+  assert.equal(near.alignment, "bottom-left");
+  assert.equal(nearer.alignment, "bottom-left");
+  assert.ok(nearer.margin_h > near.margin_h, "it did not keep moving");
+});
+
+test("the centre is a target you land on, not a region you are trapped in", () => {
+  const box = { width: 720, height: 1280 };
+  const at = (x: number) =>
+    placementFromPoint({ x: x * 720, y: 1200 }, box, PORTRAIT, BOTTOM).alignment;
+
+  assert.equal(at(0.5), "bottom", "dead centre did not snap");
+  assert.equal(at(0.48), "bottom", "just off centre did not snap");
+  assert.equal(at(0.44), "bottom-left", "the band swallowed a deliberate placement");
+});
+
+test("snapping can be turned off for an exact placement", () => {
+  const box = { width: 720, height: 1280 };
+
+  const snapped = placementFromPoint({ x: 360, y: 1200 }, box, PORTRAIT, BOTTOM, true);
+  const exact = placementFromPoint({ x: 360, y: 1200 }, box, PORTRAIT, BOTTOM, false);
+
+  assert.equal(snapped.alignment, "bottom");
+  assert.equal(exact.alignment, "bottom-right", "the exact placement still snapped");
+  assert.equal(exact.margin_h, 360);
+});
+
+test("vertical placement is free all the way, because MarginV stands alone", () => {
+  // Unlike the horizontal pair, the vertical margin measures one edge only, so
+  // nothing is squeezed by moving up or down.
+  const box = { width: 720, height: 1280 };
+  const at = (y: number) =>
+    placementFromPoint({ x: 360, y: y * 1280 }, box, PORTRAIT, BOTTOM);
+
+  assert.equal(at(0.3).alignment, "top");
+  assert.equal(at(0.3).margin_v, 384);
+  assert.equal(at(0.7).alignment, "bottom");
+  assert.equal(at(0.7).margin_v, 384);
+});
+
+// --- the keyboard -------------------------------------------------------------
+
+test("an arrow moves the caption, not the number", () => {
+  // A margin is a distance from an edge, so the same key changes the sign
+  // depending on which edge it is anchored to. What the eye sees is the
+  // caption going right either way.
+  const left: Placement = { alignment: "bottom-left", margin_h: 100, margin_v: 80 };
+  const right: Placement = { alignment: "bottom-right", margin_h: 100, margin_v: 80 };
+
+  assert.equal(nudge(left, { x: 1 }).margin_h, 101);
+  assert.equal(nudge(right, { x: 1 }).margin_h, 99);
+  // Up is towards the top edge, so a bottom anchor grows and a top one shrinks.
+  assert.equal(nudge(left, { y: -1 }).margin_v, 81);
+  assert.equal(nudge({ ...left, alignment: "top-left" }, { y: -1 }).margin_v, 79);
+});
+
+test("an arrow takes a bigger step when asked", () => {
+  const left: Placement = { alignment: "bottom-left", margin_h: 100, margin_v: 80 };
+
+  assert.equal(nudge(left, { x: 1 }, 10).margin_h, 110);
+});
+
+test("an axis with no anchored edge does not move", () => {
+  const centred: Placement = { alignment: "bottom", margin_h: 60, margin_v: 80 };
+
+  assert.deepEqual(nudge(centred, { x: 1 }), centred);
+  assert.equal(nudge(centred, { y: -1 }).margin_v, 81, "the vertical still moves");
+});
+
+test("nudging cannot walk a margin past what the render accepts", () => {
+  const edge: Placement = { alignment: "bottom-left", margin_h: 0, margin_v: 2000 };
+
+  assert.equal(nudge(edge, { x: -1 }).margin_h, 0);
+  assert.equal(nudge(edge, { y: -1 }).margin_v, 2000);
+});
+
+// --- what horizontal movement costs -------------------------------------------
+
+test("moving a caption sideways is measured in the width it costs", () => {
+  // The format writes one margin into both sides, so pushing towards the
+  // middle squeezes from both at once. At 45% across, a 720-wide clip has 72
+  // pixels left to write in.
+  assert.equal(usableWidth({ alignment: "bottom", margin_h: 60, margin_v: 80 }, PORTRAIT), 600);
+  assert.equal(usableWidth({ alignment: "bottom-left", margin_h: 324, margin_v: 80 }, PORTRAIT), 72);
+  assert.equal(usableWidth({ alignment: "bottom-left", margin_h: 700, margin_v: 80 }, PORTRAIT), 0);
 });

@@ -49,8 +49,17 @@ export type Rect = { x: number; y: number; width: number; height: number };
 export const MARGIN_LIMIT = 2000;
 export const SIZE_LIMITS = { min: 8, max: 400 };
 
-/** Where each band begins. Thirds, which is what nine cells means. */
-const BAND = 1 / 3;
+/**
+ * How close to the middle counts as centred, as a fraction of the picture.
+ *
+ * A snap band rather than a third. The first version chose the anchor by which
+ * third the pointer was in, which made the whole middle third a dead zone -
+ * drag a caption to 40% across and it snapped to centre and refused to move.
+ * Anchors are not a positional grid: they are which edge the margin is
+ * measured from, so a left-anchored caption can sit anywhere. Free movement is
+ * the default now and the centre is a target you can land on.
+ */
+const SNAP = 0.045;
 
 function clamp(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(high, value));
@@ -91,10 +100,9 @@ export function fractionOf(point: { x: number; y: number }, rect: Rect): { x: nu
   };
 }
 
-function bandOf(fraction: number): -1 | 0 | 1 {
-  if (fraction < BAND) return -1;
-  if (fraction > 1 - BAND) return 1;
-  return 0;
+function bandOf(fraction: number, snap: boolean): -1 | 0 | 1 {
+  if (snap && Math.abs(fraction - 0.5) < SNAP) return 0;
+  return fraction < 0.5 ? -1 : 1;
 }
 
 function alignmentOf(horizontal: -1 | 0 | 1, vertical: -1 | 0 | 1): Alignment {
@@ -126,11 +134,12 @@ export function placementFromPoint(
   container: Size,
   source: Size,
   current: Placement,
+  snap = true,
 ): Placement {
   const rect = contentRect(container, source);
   const at = fractionOf(point, rect);
-  const horizontal = bandOf(at.x);
-  const vertical = bandOf(at.y);
+  const horizontal = bandOf(at.x, snap);
+  const vertical = bandOf(at.y, snap);
   const alignment = alignmentOf(horizontal, vertical);
 
   const margin_h = horizontal === 0
@@ -181,6 +190,49 @@ export function placementStyle(
     justifyContent,
     padding: `${top}% ${across}% ${bottom}% ${across}%`,
   };
+}
+
+/**
+ * Move a placement by whole pixels, for the arrow keys.
+ *
+ * The keyboard is the exact instrument here - a drag gets you there and
+ * arrows put it right - and it is also the only way to place a caption
+ * without a pointer, which a drag handle on its own quietly rules out.
+ *
+ * The sign is the interesting part: a margin is a distance from an edge, so
+ * pressing right increases the margin on a left-anchored caption and
+ * decreases it on a right-anchored one. Arrows move the caption, not the
+ * number, which is what somebody watching the frame expects.
+ *
+ * An axis with no anchored edge does not move, and says so by returning the
+ * placement unchanged rather than pretending.
+ */
+export function nudge(
+  placement: Placement,
+  direction: { x?: number; y?: number },
+  step = 1,
+): Placement {
+  const { horizontal, vertical } = bandsOf(placement.alignment);
+  const across = (direction.x ?? 0) * step * (horizontal < 0 ? 1 : -1);
+  const down = (direction.y ?? 0) * step * (vertical < 0 ? 1 : -1);
+  return {
+    alignment: placement.alignment,
+    margin_h: horizontal === 0 ? placement.margin_h : checkedMargin(placement.margin_h + across),
+    margin_v: vertical === 0 ? placement.margin_v : checkedMargin(placement.margin_v + down),
+  };
+}
+
+/**
+ * How much width the text is left with, in source pixels.
+ *
+ * Worth knowing because the format takes one horizontal margin and writes it
+ * into both sides, so pushing a caption towards the middle squeezes it from
+ * both directions at once. At 45% across there is a tenth of the frame left to
+ * write in, and the caption wraps into a column. The renderer will do it
+ * either way; this is what lets the interface say so first.
+ */
+export function usableWidth(placement: Placement, source: Size): number {
+  return Math.max(0, source.width - placement.margin_h * 2);
 }
 
 /**
