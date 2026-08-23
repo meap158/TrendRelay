@@ -931,6 +931,10 @@ def test_a_carousel_an_assistant_created_can_actually_be_published(session) -> N
     from trendrelay_api.integrations.mcp import intake
     from trendrelay_api.integrations.publishing import PublishRequest
 
+    # The campaign posts TikTok through Zernio, which is what a carousel needs
+    # a campaign to have - the fixture's Buffer account is refused the gallery
+    # before any of this, which is `..._refused_at_the_door` below.
+    _destination(session, "d2", "tiktok", "zernio")
     _image_asset(session, "img1", r"S:\media\one.png")
     _image_asset(session, "img2", r"S:\media\two.png")
     view = intake.create_campaign_post(
@@ -979,3 +983,150 @@ def test_pictures_ride_an_ordinary_post_where_there_is_no_photo_type(session) ->
     )
 
     assert _post_type_for(execution) == "post"
+
+
+# --- can this campaign take pictures at all -----------------------------------
+
+
+def _destination(session, dest_id: str, platform: str, provider: str, *, enabled=True):
+    session.add(CampaignDestination(
+        id=dest_id, workspace_id="ws", campaign_id="camp", integration_id=dest_id,
+        platform=platform, provider=provider, label=platform, enabled=enabled,
+    ))
+    session.commit()
+
+
+def test_a_carousel_no_account_could_post_says_so_without_refusing(session) -> None:
+    """The fixture campaign posts Threads through Buffer, which sends no gallery.
+
+    Every step before this one succeeded silently, so an assistant told to put
+    two pictures in that campaign reported that it had. The post then sat as a
+    draft until somebody approved it and the runner declined the pairing - the
+    engine's answer arriving days after the question, to a person who did not
+    ask it.
+
+    Not refused, though: the app's own queue route takes the same package
+    without asking, and a rule only assistants meet would be a worse
+    inconsistency than the silence. Said, in the answer, while the assistant is
+    still there to pass it on.
+    """
+    from trendrelay_api.integrations.mcp import intake
+
+    _image_asset(session, "img1", r"S:\media\one.png")
+    _image_asset(session, "img2", r"S:\media\two.png")
+
+    view = intake.create_campaign_post(session, "ws", "camp", ["img1", "img2"])
+
+    assert any("Buffer" in note for note in view["carousel_warnings"])
+    assert "nowhere to go" in view["note"]
+
+
+def test_a_video_into_the_same_campaign_is_untouched(session) -> None:
+    """The check is about pictures. A campaign that takes no gallery still
+    takes the clips it was made for, and the guard must not read on them."""
+    from trendrelay_api.integrations.mcp import intake
+    from trendrelay_api.media_models import MediaAsset
+
+    session.add(MediaAsset(
+        id="vid1", workspace_id="ws", title="Clip", media_kind="video",
+        source_type="download", original_path=r"S:\media\clip.mp4",
+        original_sha256="b" * 64, mime_type="video/mp4", size_bytes=99,
+        created_by="local-admin",
+    ))
+    session.commit()
+
+    view = intake.create_campaign_post(session, "ws", "camp", ["vid1"])
+
+    assert view["video_path"] == r"S:\media\clip.mp4"
+
+
+def test_a_carousel_one_account_can_post_is_created_and_names_the_rest(
+    session,
+) -> None:
+    """Partial support is the ordinary case, not an error.
+
+    A campaign feeding TikTok and Threads through different engines can carry
+    the gallery to one and not the other. Refusing the post would lose a
+    destination that works; saying nothing would let the assistant report a
+    reach it does not have. So it is created, and the declining account is
+    named in the same answer.
+    """
+    from trendrelay_api.integrations.mcp import intake
+
+    _destination(session, "d2", "tiktok", "zernio")
+    _image_asset(session, "img1", r"S:\media\one.png")
+    _image_asset(session, "img2", r"S:\media\two.png")
+
+    view = intake.create_campaign_post(session, "ws", "camp", ["img1", "img2"])
+
+    assert view["image_paths"] == [r"S:\media\one.png", r"S:\media\two.png"]
+    assert any("Buffer" in note for note in view["carousel_warnings"])
+    assert "TikTok" in view["note"], "the account that carries it was not named"
+
+
+def test_too_many_pictures_for_the_network_is_named_by_count(session) -> None:
+    """X swipes through four, and this post has six.
+
+    An engine that carries galleries to a network is not an engine that carries
+    any number of them, so the count is part of the same question. Read where
+    the pictures are chosen rather than where the fifth one is dropped.
+    """
+    from trendrelay_api.integrations.mcp import intake
+
+    session.query(CampaignDestination).filter_by(id="d1").delete()
+    _destination(session, "d2", "twitter", "zernio")
+    ids = []
+    for index in range(6):
+        asset = _image_asset(session, f"shot{index}", rf"S:\media\{index}.png")
+        ids.append(asset.id)
+
+    view = intake.create_campaign_post(session, "ws", "camp", ids)
+
+    assert any("at most 4" in note for note in view["carousel_warnings"])
+
+
+def test_a_switched_off_account_does_not_decide_it(session) -> None:
+    """It posts nothing, so it neither blocks the carousel nor excuses it."""
+    from trendrelay_api.integrations.mcp import intake
+
+    session.query(CampaignDestination).filter_by(id="d1").update({"enabled": False})
+    session.commit()
+    _destination(session, "d2", "tiktok", "zernio")
+    _image_asset(session, "img1", r"S:\media\one.png")
+
+    view = intake.create_campaign_post(session, "ws", "camp", ["img1"])
+
+    assert view["carousel_warnings"] == []
+
+
+def test_a_campaign_with_no_accounts_yet_still_takes_the_post(session) -> None:
+    """Nothing is known to refuse it. A campaign is often filled before it is
+    pointed anywhere, and refusing that would make the tools useless first."""
+    from trendrelay_api.integrations.mcp import intake
+
+    session.query(CampaignDestination).filter_by(id="d1").delete()
+    session.commit()
+    _image_asset(session, "img1", r"S:\media\one.png")
+
+    view = intake.create_campaign_post(session, "ws", "camp", ["img1"])
+
+    assert view["image_paths"] == [r"S:\media\one.png"]
+
+
+def test_listing_campaigns_says_which_can_carry_a_gallery(session) -> None:
+    """So the campaign is chosen before the pictures are uploaded.
+
+    An assistant asked to put images in "the summer campaign" cannot tell from
+    a name whether that campaign has anywhere to put them, and finding out by
+    being refused costs an upload per attempt.
+    """
+    from trendrelay_api.integrations.mcp import context
+
+    listed = {row["campaign_id"]: row for row in context.list_campaigns(session, "ws")}
+
+    assert listed["camp"]["accepts_carousel"] is False
+
+    _destination(session, "d2", "tiktok", "zernio")
+    listed = {row["campaign_id"]: row for row in context.list_campaigns(session, "ws")}
+
+    assert listed["camp"]["accepts_carousel"] is True

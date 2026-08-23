@@ -289,10 +289,38 @@ def _destination_summary(view: dict[str, Any]) -> str:
 
 
 def list_campaigns(session: Session, workspace_id: str) -> list[dict[str, Any]]:
-    """Every campaign in the workspace, with how many posts still need copy."""
+    """Every campaign in the workspace, with how many posts still need copy.
+
+    And whether it has anywhere to put pictures. A campaign is chosen by name,
+    and a name does not say whether its accounts can carry a gallery - so an
+    assistant asked to file images somewhere would otherwise learn the answer
+    by uploading them first and being refused.
+    """
+    from trendrelay_api.autopilot_models import CampaignDestination
+    from trendrelay_api.integrations.publishing import (  # noqa: PLC0415
+        carousel_fits_destination,
+    )
+
     campaigns = session.scalars(
         select(Campaign).where(Campaign.workspace_id == workspace_id)
     ).all()
+    destinations = session.scalars(
+        select(CampaignDestination).where(
+            CampaignDestination.workspace_id == workspace_id,
+            CampaignDestination.enabled.is_(True),
+        )
+    ).all()
+    # One picture, because this answers "anywhere at all" rather than "all
+    # twenty of these" - the count is a property of the post, and the post does
+    # not exist yet.
+    carries: dict[str, bool] = {}
+    for destination in destinations:
+        fits, _why = carousel_fits_destination(
+            destination.provider, destination.platform, 1
+        )
+        carries[destination.campaign_id] = carries.get(
+            destination.campaign_id, False
+        ) or fits
     placeholder = _placeholder_body()
     result: list[dict[str, Any]] = []
     for campaign in campaigns:
@@ -309,6 +337,10 @@ def list_campaigns(session: Session, workspace_id: str) -> list[dict[str, Any]]:
             "status": campaign.status,
             "objective": campaign.objective,
             "posts_needing_copy": len(needs),
+            # False for a campaign with no accounts yet too: it has nowhere to
+            # post anything, and saying "yes" of a campaign pointed at nothing
+            # would be a promise about accounts nobody has connected.
+            "accepts_carousel": carries.get(campaign.id, False),
         })
     return result
 

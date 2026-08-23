@@ -229,6 +229,61 @@ def get_import_status(job_id: str) -> dict[str, Any]:
     }
 
 
+def _and_list(names: list[str]) -> str:
+    """"a", "a and b", "a, b and c" - a sentence rather than a list dump."""
+    if len(names) <= 1:
+        return "".join(names)
+    return f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def _carousel_reach(
+    session: Session, workspace_id: str, campaign_id: str, image_count: int
+) -> tuple[list[str], list[str]]:
+    """Which of a campaign's accounts would carry this gallery, and why not.
+
+    Whether a login can post several pictures somewhere is a property of the
+    engine as much as the network - Buffer sends no gallery at all, Zernio
+    sends one everywhere except Instagram - so the campaign's own destinations
+    are what decides it, not the platform names.
+
+    Asked here because this is where the pictures are chosen. `campaign_runner`
+    asks the same question of the same helper before it posts, which is the
+    right last line but the wrong first one: by then the assistant is gone and
+    the operator is looking at a post they were told was ready.
+
+    An empty warning list means nothing is known to refuse it - including a
+    campaign with no accounts yet, which is how most campaigns start.
+    """
+    from trendrelay_api.autopilot_models import CampaignDestination
+    from trendrelay_api.integrations.publishing import (  # noqa: PLC0415
+        PLATFORM_LABELS,
+        carousel_fits_destination,
+    )
+
+    destinations = session.scalars(
+        select(CampaignDestination).where(
+            CampaignDestination.workspace_id == workspace_id,
+            CampaignDestination.campaign_id == campaign_id,
+            # A switched-off account posts nothing, so it neither blocks the
+            # carousel nor excuses one the live accounts cannot take.
+            CampaignDestination.enabled.is_(True),
+        )
+    ).all()
+    reaches: list[str] = []
+    warnings: list[str] = []
+    for destination in destinations:
+        fits, why = carousel_fits_destination(
+            destination.provider, destination.platform, image_count
+        )
+        if fits:
+            reaches.append(
+                PLATFORM_LABELS.get(destination.platform, destination.platform)
+            )
+        elif why:
+            warnings.append(why)
+    return reaches, warnings
+
+
 def create_campaign_post(
     session: Session,
     workspace_id: str,
@@ -291,6 +346,17 @@ def create_campaign_post(
     for index, reply in enumerate(thread or [], start=1):
         _refuse_links(f"reply {index}", reply)
 
+    # Said, not enforced. The app's own queue route accepts the same package
+    # without asking, and a rule that exists only for assistants would mean the
+    # operator adding this post by hand sails through where their assistant is
+    # refused. It is also a legitimate thing to do: campaigns are filled before
+    # the account that will carry them is connected.
+    reaches, carousel_warnings = (
+        _carousel_reach(session, workspace_id, campaign_id, len(assets))
+        if "image_paths" in media
+        else ([], [])
+    )
+
     from trendrelay_api.auth import LOCAL_ADMIN_ID
 
     body = QueueItemCreate(
@@ -311,8 +377,21 @@ def create_campaign_post(
     )
     session.commit()
     view = _queue_view(item)
+    view["carousel_warnings"] = carousel_warnings
     view["note"] = (
-        "Created as a draft. It enters the campaign's rotation only when the "
+        # Where the pictures land leads, when it is not everywhere. A post the
+        # operator is told is waiting, and which then reaches one of their three
+        # accounts, is worse news arriving later than it needed to.
+        (
+            f"The pictures reach {_and_list(reaches)}; the rest of this "
+            "campaign's accounts cannot post a gallery. "
+            if carousel_warnings and reaches
+            else "No account in this campaign can post a picture carousel, so "
+            "this post has nowhere to go until one is added. "
+            if carousel_warnings
+            else ""
+        )
+        + "Created as a draft. It enters the campaign's rotation only when the "
         "operator approves it in the app - tell them it is waiting."
     )
     return view

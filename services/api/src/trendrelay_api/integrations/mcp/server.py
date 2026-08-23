@@ -167,7 +167,11 @@ def build_server(workspace_id: str) -> FastMCP:
 
     @server.tool(
         name="list_campaigns",
-        description="Every campaign in the workspace, with how many posts still need a caption.",
+        description=(
+            "Every campaign in the workspace, with how many posts still need "
+            "a caption and whether its accounts can post a picture carousel "
+            "(`accepts_carousel`). Check that before uploading images for one."
+        ),
     )
     def list_campaigns() -> list[dict[str, Any]]:
         return _call("list_campaigns", lambda s: context.list_campaigns(s, workspace_id))
@@ -384,7 +388,9 @@ def build_server(workspace_id: str) -> FastMCP:
             "are optional and follow the same rules as the write_* tools - no "
             "links; the campaign adds its own. The post is created as a DRAFT "
             "outside the rotation, and only the operator can promote it in "
-            "the app - tell them it is waiting."
+            "the app - tell them it is waiting. If the campaign's accounts "
+            "cannot all carry a gallery, it is still created and "
+            "`carousel_warnings` says which ones will not - pass that on."
         ),
     )
     def create_campaign_post(
