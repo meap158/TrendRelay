@@ -72,6 +72,7 @@ def styles() -> list[dict[str, Any]]:
 _LABELS = {
     "broadcast": "Broadcast",
     "word-pop": "Word pop",
+    "one-word": "One word",
     "karaoke": "Karaoke",
     "boxed": "Boxed",
     "bold-outline": "Bold outline",
@@ -81,6 +82,7 @@ _LABELS = {
 _SUMMARIES = {
     "broadcast": "Two readable lines at the bottom, to published subtitle limits.",
     "word-pop": "Three words at a time, centred, lighting the word being spoken.",
+    "one-word": "One word at a time, filling the frame, swapped as each is said.",
     "karaoke": "A full line with the current word picked out as it is said.",
     "boxed": "White text on a solid panel, for footage it would otherwise vanish into.",
     "bold-outline": "Heavy uppercase with a thick outline, for sound-off feeds.",

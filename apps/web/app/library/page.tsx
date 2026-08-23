@@ -16,7 +16,7 @@ import { useT } from "../i18n-provider";
 import { blurredVersion, handoffPath, openingCut } from "../../lib/media-rules";
 import type { ReadableTranscript } from "./transcript-reader";
 import { WorkspaceSectionNav } from "../workspace-section-nav";
-import { Button, buttonClass } from "../ui/button";
+import { Button, ButtonPair, buttonClass } from "../ui/button";
 import { WaitingScreen } from "../ui/waiting-screen";
 import { WaitingBlock } from "../ui/waiting-block";
 import { Dialog } from "../ui/dialog";
@@ -2092,20 +2092,30 @@ function LibraryContent() {
                   <section className="library-action-group library-editing-actions" aria-label={t("library.editingActions")}>
                     <h4>{t("library.editingActions")}</h4>
                     <div className="library-action-row">
-                      <Button
-                        variant="secondary"
-                        title="Stack, preview, and apply any available effect, including face blur"
-                        onClick={() => setEffectsOpen(true)}
-                      ><ActionIcon name="edit" />Effects</Button>
-                      {renderedCut(selected.versions) && (
+                      {/* Taking the effects off is not a separate action from
+                          putting them on, and it only exists while there are
+                          any - so it hangs off the Effects button as an icon
+                          rather than standing beside it as an equal, and the
+                          row no longer changes width as the selection moves
+                          between an edited asset and an untouched one. */}
+                      <ButtonPair label="Effects">
                         <Button
                           variant="secondary"
-                          busy={busy === "discard-effects"}
-                          disabled={!canImport}
-                          title="Remove rendered effects and the saved recipe; keep the original media"
-                          onClick={() => void removeEffects(selected)}
-                        ><ActionIcon name="dismiss" />Remove effects</Button>
-                      )}
+                          title="Stack, preview, and apply any available effect, including face blur"
+                          onClick={() => setEffectsOpen(true)}
+                        ><ActionIcon name="edit" />Effects</Button>
+                        {renderedCut(selected.versions) && (
+                          <Button
+                            variant="secondary"
+                            iconOnly
+                            busy={busy === "discard-effects"}
+                            disabled={!canImport}
+                            aria-label="Remove effects"
+                            title="Remove rendered effects and the saved recipe; keep the original media"
+                            onClick={() => void removeEffects(selected)}
+                          ><ActionIcon name="dismiss" /></Button>
+                        )}
+                      </ButtonPair>
                       <Button
                         variant="secondary"
                         disabled={selected.media_kind !== "video"}

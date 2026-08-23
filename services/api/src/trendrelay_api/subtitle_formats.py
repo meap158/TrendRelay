@@ -95,6 +95,34 @@ PRESETS: dict[str, tuple[Style, Layout]] = {
         ),
         Layout(max_words=3, break_on_sentence=False, min_duration_ms=200, max_cps=99.0),
     ),
+    "one-word": (
+        Style(
+            name="OneWord", font="Arial Black", size=78, outline=6.0,
+            alignment="middle", uppercase=True,
+            # Nothing to pick out: the cue *is* the word being spoken, so a
+            # highlight colour would be the only colour on screen.
+            highlight_active_word=False,
+        ),
+        # The timing is the whole trick, and every field here is load-bearing.
+        #
+        # `min_gap_ms=0` so one word replaces the next with no blank frame
+        # between them. At the default 84ms that is two or three black frames
+        # per word at 30fps - a strobe rather than a caption.
+        #
+        # `min_duration_ms` equal to `max_duration_ms` makes each word reach
+        # for the next one and stop where it starts: `_fit_timings` extends a
+        # short cue up to the following cue's start, then caps whatever is
+        # left. So a word holds until the next is spoken, and in a silence it
+        # holds for a beat and leaves rather than hanging there.
+        #
+        # `max_cps` is off because reading speed is a two-line-of-prose idea.
+        # One word is read at a glance, and enforcing 17 characters a second
+        # would stretch "extraordinarily" over the three words after it.
+        Layout(
+            max_words=1, min_gap_ms=0, min_duration_ms=1200, max_duration_ms=1200,
+            max_cps=99.0, break_on_sentence=False,
+        ),
+    ),
     "karaoke": (
         Style(
             name="Karaoke", font="Arial Black", size=54, outline=4.0,

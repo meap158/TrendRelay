@@ -91,3 +91,20 @@ export function Button({
     </button>
   );
 }
+
+/**
+ * Two buttons joined into one control.
+ *
+ * For an action and the undoing of it: Effects, and beside it the small icon
+ * that takes the applied effects off again. Standing on its own, the second
+ * one is a full button competing for the eye with the thing it depends on -
+ * and it appears and disappears with the asset, so the row it sits in changes
+ * width as somebody moves between assets. Attached, it reads as what it is,
+ * and only the control it belongs to grows.
+ *
+ * Still two real buttons, in a group with a name: joining them is a visual
+ * matter, and a keyboard or a screen reader should still find two actions.
+ */
+export function ButtonPair({ label, children }: { label: string; children: ReactNode }) {
+  return <span className="ui-button-pair" role="group" aria-label={label}>{children}</span>;
+}

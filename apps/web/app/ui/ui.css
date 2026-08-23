@@ -107,6 +107,24 @@ a.ui-button { text-decoration: none; }
 .ui-button:disabled { cursor: not-allowed; opacity: .5; }
 .ui-button:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
 
+/* A split button: the action, and attached to it the icon that undoes it.
+ * The seam is a single shared line rather than two borders meeting, which is
+ * what makes the pair read as one control instead of two buttons that happen
+ * to touch. `align-self: stretch` keeps the icon the exact height of whatever
+ * it is attached to, so it stays square without being told a size. */
+.ui-button-pair { display: inline-flex; }
+.ui-button-pair > .ui-button:first-child { border-start-end-radius: 0; border-end-end-radius: 0; }
+.ui-button-pair > .ui-button:last-child {
+  align-self: stretch;
+  margin-inline-start: -1px;
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+/* Whichever half the eye or the keyboard is on comes forward, so its own
+ * border and its focus ring are not cut in half by the neighbour. */
+.ui-button-pair > .ui-button:hover:not(:disabled),
+.ui-button-pair > .ui-button:focus-visible { position: relative; z-index: 1; }
+
 /* --- action menu ---------------------------------------------------------- */
 /* Commands, not a selected value. The panel overlays the page so revealing
  * more actions never moves the selected rows underneath it. */

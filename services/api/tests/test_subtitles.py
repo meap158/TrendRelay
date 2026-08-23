@@ -172,3 +172,91 @@ def test_reading_speed_is_respected_where_there_is_room() -> None:
     cues = build_cues([segment(text, 0, 500, words=words)])
 
     assert cues[0].cps <= Layout().max_cps + 0.5
+
+
+# --- one word at a time -------------------------------------------------------
+
+
+def one_word_layout() -> Layout:
+    from trendrelay_api.subtitle_formats import PRESETS
+
+    return PRESETS["one-word"][1]
+
+
+def test_one_word_a_cue() -> None:
+    cues = build_cues([segment("ra duong khong can", 0, 1000)], layout=one_word_layout())
+
+    assert [cue.text for cue in cues] == ["ra", "duong", "khong", "can"]
+
+
+def test_each_word_holds_until_the_next_one_starts() -> None:
+    """The difference between a caption and a strobe.
+
+    At the default 84ms minimum gap, one word per cue leaves two or three
+    black frames between every word at 30fps. These have to meet.
+    """
+    cues = build_cues(
+        [segment(
+            "ra duong khong", 0, 800,
+            words=[
+                {"text": "ra", "start_ms": 0, "end_ms": 180},
+                {"text": "duong", "start_ms": 200, "end_ms": 520},
+                {"text": "khong", "start_ms": 540, "end_ms": 800},
+            ],
+        )],
+        layout=one_word_layout(),
+    )
+
+    assert [(cue.start_ms, cue.end_ms) for cue in cues[:2]] == [(0, 200), (200, 540)]
+    # Said as a rule rather than as three numbers: no cue may end before the
+    # next begins, and none may end after it either.
+    assert all(
+        cues[index].end_ms == cues[index + 1].start_ms
+        for index in range(len(cues) - 1)
+    )
+
+
+def test_a_word_before_a_silence_leaves_rather_than_hanging() -> None:
+    # Reaching for the next word is right until there is no next word for two
+    # seconds. Then the frame should be clear, not holding the last thing said.
+    cues = build_cues(
+        [segment(
+            "can cau", 0, 3200,
+            words=[
+                {"text": "can", "start_ms": 820, "end_ms": 980},
+                {"text": "cau", "start_ms": 3000, "end_ms": 3200},
+            ],
+        )],
+        layout=one_word_layout(),
+    )
+
+    assert cues[0].end_ms == 2020
+    assert cues[1].start_ms == 3000
+
+
+def test_a_long_word_is_not_stretched_by_reading_speed() -> None:
+    """Reading speed is a two-lines-of-prose idea.
+
+    One word is read at a glance, and 17 characters a second would hold
+    "extraordinarily" over the three words spoken after it.
+    """
+    cues = build_cues(
+        [segment(
+            "extraordinarily so", 0, 700,
+            words=[
+                {"text": "extraordinarily", "start_ms": 0, "end_ms": 400},
+                {"text": "so", "start_ms": 420, "end_ms": 700},
+            ],
+        )],
+        layout=one_word_layout(),
+    )
+
+    assert cues[0].end_ms == 420
+
+
+def test_the_one_word_preset_does_not_ask_for_word_timings_it_cannot_use() -> None:
+    # With one word to a cue there is nothing to pick out: the cue is the word
+    # being spoken, so a highlight colour would be the only colour on screen.
+    from trendrelay_api.subtitle_formats import PRESETS
+
+    assert PRESETS["one-word"][0].highlight_active_word is False
