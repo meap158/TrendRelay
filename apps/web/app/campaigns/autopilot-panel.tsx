@@ -4983,6 +4983,7 @@ export function AutopilotPanel({
                       onChange={(event) => void run("placement", async () => {
                         const saved = await json<{
                           held?: { recomposed: number; kept: number };
+                          planned?: number;
                         }>(await apiFetch(
                           `${base}/destinations/${item.id}/placement`,
                           {
@@ -4998,10 +4999,23 @@ export function AutopilotPanel({
                         // so this reaches the posts already waiting for this
                         // account - and says how many.
                         const reached = saved?.held;
+                        // And the planned ones, which are rebuilt from the
+                        // campaign every time the outlook is drawn and so
+                        // follow this without anything being rewritten. Said
+                        // out loud because nothing on screen shows it: a
+                        // campaign with nothing frozen used to report reaching
+                        // no posts at all, which read as a setting that did
+                        // nothing.
+                        const planned = saved?.planned ?? 0;
                         return `Link placement updated for ${item.label}.`
                           + (reached?.recomposed
                             ? ` ${reached.recomposed} waiting post${
                               reached.recomposed === 1 ? "" : "s"} rewritten.`
+                            : "")
+                          + (planned
+                            ? ` ${planned} planned post${
+                              planned === 1 ? "" : "s"} follow${
+                              planned === 1 ? "s" : ""} the new setting.`
                             : "")
                           + (reached?.kept
                             ? ` ${reached.kept} left as edited by hand.`

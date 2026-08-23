@@ -749,3 +749,91 @@ def test_approving_stale_media_fails_rather_than_delivering_it(
     assert execution.state == "failed"
     assert execution.failure_class == "media"
     assert engine_stub == []
+
+
+def test_a_placement_change_counts_the_posts_that_are_still_editable(
+    session, tmp_path, monkeypatch, engine_stub
+) -> None:
+    """The ones nothing has to rewrite, which is why they were never counted.
+
+    A planned post is composed fresh every time the outlook is drawn, so it
+    follows a new setting on its own. That made a campaign with nothing frozen
+    report reaching no posts at all - and a setting that reports changing
+    nothing reads as a setting that did nothing.
+    """
+    from trendrelay_api.campaign_autopilot_api import _planned_for_destination
+
+    campaign_setup(session, tmp_path)
+    attached_product(session, monkeypatch)
+    pilot = autopilot(session, authority="assist")
+
+    assert _planned_for_destination(session, pilot, "d1", now=NOW) > 0
+
+
+def test_only_the_account_the_setting_belongs_to_is_counted(
+    session, tmp_path, monkeypatch, engine_stub
+) -> None:
+    # Where a link goes is a property of one destination. Counting the whole
+    # campaign would promise to change posts the change cannot reach.
+    from trendrelay_api.campaign_autopilot_api import _planned_for_destination
+
+    campaign_setup(session, tmp_path)
+    session.add(CampaignDestination(
+        id="d2", workspace_id="ws", campaign_id="camp", provider="buffer",
+        integration_id="acct-2", platform="threads", label="threads account",
+        enabled=True,
+    ))
+    session.add(CampaignQueueItem(
+        id="q2", workspace_id="ws", campaign_id="camp", state="approved",
+        video_path=str(tmp_path / "clip.mp4"), body="A second post to fill it.",
+        hashtags=["coffee"], position=1, last_posted_by_destination={},
+        created_by="user-1",
+    ))
+    session.add(PublishingSlot(
+        id="slot-15", workspace_id="ws", weekday=-1, hour=15, minute=0
+    ))
+    session.commit()
+    attached_product(session, monkeypatch)
+    # One each: the cadence offers the second slot to the other account once
+    # the first is at its cap.
+    pilot = autopilot(session, authority="assist", daily_cap_per_account=1)
+
+    for destination_id in ("d1", "d2"):
+        assert _planned_for_destination(
+            session, pilot, destination_id, now=NOW,
+        ) == 1
+
+
+def test_an_account_with_nothing_planned_counts_none(
+    session, tmp_path, monkeypatch, engine_stub
+) -> None:
+    from trendrelay_api.campaign_autopilot_api import _planned_for_destination
+
+    campaign_setup(session, tmp_path)
+    attached_product(session, monkeypatch)
+    pilot = autopilot(session, authority="assist")
+
+    assert _planned_for_destination(session, pilot, "not-a-destination", now=NOW) == 0
+
+
+def test_a_count_that_cannot_be_taken_does_not_fail_the_change(
+    session, tmp_path, monkeypatch, engine_stub
+) -> None:
+    """The setting is saved by the time this runs.
+
+    Failing the request over the sentence describing it would undo nothing and
+    report a failure that did not happen.
+    """
+    from trendrelay_api import campaign_autopilot_api
+
+    campaign_setup(session, tmp_path)
+    pilot = autopilot(session, authority="assist")
+
+    def refuse(*_args, **_kwargs):
+        raise RuntimeError("the planner fell over")
+
+    monkeypatch.setattr(campaign_autopilot_api, "plan_campaign", refuse)
+
+    assert campaign_autopilot_api._planned_for_destination(
+        session, pilot, "d1", now=NOW,
+    ) == 0

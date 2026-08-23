@@ -687,6 +687,32 @@ def add_destination(
     )}
 
 
+def _planned_for_destination(
+    session: DatabaseSession, autopilot: Any, destination_id: str,
+    *, now: datetime | None = None,
+) -> int:
+    """How many posts the next window plans for one account.
+
+    The planner is the only thing that knows: a queue of four hundred is not
+    four hundred upcoming posts, it is however many fit the window at this
+    account's posting times and daily cap.
+
+    Read-only, and the same call the outlook makes - so the number quoted is
+    the number of rows somebody is looking at, not an estimate of them.
+    """
+    try:
+        posts, _note = plan_campaign(
+            session, autopilot, now=now or datetime.now(UTC),
+            link_for=lambda _destination_id, offer_id: offer_link_url(session, offer_id),
+        )
+    except Exception:  # noqa: BLE001
+        # A count is a courtesy. The setting is already saved by this point, and
+        # failing the request over the sentence describing it would undo nothing
+        # and report a failure that did not happen.
+        return 0
+    return sum(1 for post in posts if post.destination_id == destination_id)
+
+
 @router.post("/{campaign_id}/destinations/{destination_id}/placement")
 def set_destination_placement(
     workspace_id: str,
@@ -723,21 +749,36 @@ def set_destination_placement(
     # the setting belongs to the destination, and recomposing the rest would
     # report changing posts it cannot reach.
     reached = {"recomposed": 0, "kept": 0}
+    planned = 0
     if changed:
         autopilot = _autopilot(session, workspace_id, campaign_id, user_id=user.id)
         from trendrelay_api.campaign_runner import recompose_held
 
         reached = recompose_held(session, autopilot, destination_id=item.id)
+        # And the ones that are not waiting anywhere yet.
+        #
+        # A planned post is composed fresh every time the outlook is drawn, so
+        # it follows this setting on its own without anything being rewritten.
+        # That is exactly why it is worth counting: nothing on the screen shows
+        # that thirty posts just changed, so a campaign with nothing frozen
+        # reported reaching no posts at all and the change read as a no-op.
+        planned = _planned_for_destination(session, autopilot, item.id)
     audit(
         session, request, workspace_id, user.id,
         "campaign.destination_placement", "campaign_destination", item.id,
-        {"link_placement": body.link_placement, "recomposed_held": reached["recomposed"]},
+        {
+            "link_placement": body.link_placement,
+            "recomposed_held": reached["recomposed"],
+            "planned": planned,
+        },
     )
     return {
         "destination": _destination_view(
             session, item, campaign_preset_id=_campaign_preset_id(session, campaign_id)
         ),
         "held": reached,
+        # Still editable, and already following the new setting.
+        "planned": planned,
     }
 
 
