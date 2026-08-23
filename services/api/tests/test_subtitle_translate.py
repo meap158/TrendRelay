@@ -74,16 +74,40 @@ def test_word_timings_are_dropped_rather_than_invented() -> None:
     assert translated[0].words == []
 
 
-def test_a_highlight_style_falls_back_by_itself_on_a_translated_track() -> None:
-    """The absence of word timings is what makes this safe automatically."""
-    style, layout = PRESETS["word-pop"]
+def test_a_word_paced_style_stays_word_paced_when_translated() -> None:
+    """The pacing is the style, in every language.
+
+    Falling back to one whole-cue block turned the one-word style into a wall
+    of translated prose. The translated words are spread across the cue's
+    measured span instead - estimated timing, said to be estimated, but one
+    word at a time stays one word at a time.
+    """
+    _, layout = PRESETS["one-word"]
     translated, _ = translate_cues([cue("one two three", 0, 3000)], shout, layout=layout)
 
-    text = to_ass(translated, style)
-    events = [line for line in text.splitlines() if line.startswith("Dialogue:")]
+    assert [item.text for item in translated] == ["ONE", "TWO", "THREE"]
+    # The span is preserved exactly: the chunks tile the cue with no gap.
+    assert translated[0].start_ms == 0
+    assert translated[-1].end_ms == 3000
+    for before, after in zip(translated, translated[1:]):
+        assert before.end_ms == after.start_ms
+    # Each chunk carries its own estimated words, so highlight styles keep
+    # lighting word by word on a translated track.
+    assert all(item.words for item in translated)
 
-    assert len(events) == len(translated)
-    assert "\\c&H" not in text, "nothing should be highlighted without word timings"
+
+def test_a_paced_chunk_shares_time_by_width_not_by_count() -> None:
+    """A long word holds longer than a short one, the way a re-timer would."""
+    _, layout = PRESETS["one-word"]
+    translated, _ = translate_cues(
+        [cue("a extraordinarily b", 0, 3000)],
+        lambda text: text,
+        layout=layout,
+    )
+
+    spans = {item.text: item.duration_ms for item in translated}
+    assert spans["extraordinarily"] > spans["a"]
+    assert spans["extraordinarily"] > spans["b"]
 
 
 def test_a_translation_too_long_to_read_is_reported() -> None:

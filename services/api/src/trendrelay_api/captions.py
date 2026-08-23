@@ -297,7 +297,14 @@ def build(
             raise ValueError("A translation was asked for without a translator.")
         cues, crowded = translate_cues(cues, translator, layout=layout)
         notes.extend(crowded)
-        if style.highlight_active_word:
+        if layout.max_words is not None:
+            notes.append(
+                "Word timing on the translated track is estimated: the "
+                "translated words are spread across each cue's measured span, "
+                "so the pacing keeps the style's rhythm without claiming the "
+                "transcriber measured it."
+            )
+        elif style.highlight_active_word:
             notes.append(
                 "Word highlighting is off on a translated track: word order "
                 "changes, so the measured timings no longer match the words."

@@ -96,11 +96,29 @@ def test_building_returns_cues_and_what_was_used() -> None:
     assert isinstance(built["layout"], Layout)
 
 
-def test_translation_notes_that_highlighting_has_gone() -> None:
-    """It falls back silently otherwise, which looks like the style not working."""
+def test_translation_says_word_timing_is_estimated_on_a_paced_style() -> None:
+    """The paced styles keep their rhythm when translated, and say the timing
+    is estimated rather than measured - silence would claim a precision the
+    transcriber never provided."""
     built = captions.build(
         [segment("hello there", 0, 3000)],
         style_id="word-pop",
+        translate_to="vi",
+        translator=str.upper,
+    )
+
+    assert any("estimated" in note for note in built["notes"])
+    # The pacing survives: cues still carry words to light and to swap.
+    assert all(cue.words for cue in built["cues"])
+
+
+def test_translation_notes_that_highlighting_has_gone_on_a_reading_style() -> None:
+    """A reading layout has no pacing to preserve, so a highlight style on it
+    still falls back to whole cues - and says so."""
+    built = captions.build(
+        [segment("hello there my old friend", 0, 3000)],
+        style_id="broadcast",
+        style_overrides={"highlight_active_word": True},
         translate_to="vi",
         translator=str.upper,
     )

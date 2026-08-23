@@ -9,12 +9,14 @@ different language.
 
 What translation costs
 ----------------------
-Word-level timing does not survive. Word order changes, so the spans the
-transcriber measured no longer point at anything in the translated text. Cues
-therefore come back with no words attached, which is not a loss of information
-so much as a refusal to invent it - and it makes the highlight styles fall back
-to showing the whole cue by themselves, since they only highlight when a cue
-has words.
+Measured word-level timing does not survive. Word order changes, so the spans
+the transcriber measured no longer point at anything in the translated text.
+For a reading layout the cues come back with no words attached - a refusal to
+invent what was not measured. A *word-paced* layout is the exception, because
+there the pacing is the style itself: its translated words are spread back
+across each cue's measured span in proportion to their width on screen (see
+`_word_paced`), estimated and said to be, so one word at a time stays one word
+at a time in every language.
 
 Reading speed is the other cost, and it cannot always be paid. A translation
 that is longer than its source has the same span to be read in, and the span
@@ -31,7 +33,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from trendrelay_api.subtitles import Cue, Layout, wrap_lines
+from trendrelay_api.subtitles import Cue, Layout, Word, wrap_lines
 
 #: What TrendRelay's own interface speaks, and so the translations most likely
 #: to be asked for. Not a limit: any pair Argos has a package for will work.
@@ -69,6 +71,13 @@ def translate_cues(
             # A translator that returns nothing has failed for this cue. Keep
             # the original rather than dropping a line of the video's speech.
             rendered = source
+        if rules.max_words is not None:
+            # A word-paced layout is word-paced in every language. Falling
+            # back to whole cues here turned the one-word style into a wall of
+            # translated prose - the pacing is the style, so the translated
+            # words are spread back across the cue's measured span instead.
+            translated.extend(_word_paced(rendered, cue, rules, len(translated) + 1))
+            continue
         moved = Cue(
             index=len(translated) + 1,
             start_ms=cue.start_ms,
@@ -88,6 +97,67 @@ def translate_cues(
         translated.append(moved)
 
     return translated, crowded
+
+
+def _word_paced(
+    rendered: str, cue: Cue, rules: Layout, index_from: int
+) -> list[Cue]:
+    """The translated words, re-paced across the cue's measured span.
+
+    Measured word timing does not survive translation - word order changes -
+    but the *cue's* span was measured against the voice and survives intact.
+    So the translated words are chunked the way the layout chunks (`max_words`
+    at a time) and each chunk takes a share of the span proportional to its
+    width on screen: a long word holds longer than a short one, which is how
+    professional re-timing distributes a line when only the line's ends are
+    known. Estimated, and honest about it - the note `captions.build` attaches
+    says so - but one word at a time stays one word at a time in every
+    language, which is the whole point of the style.
+
+    Each chunk also carries per-word timings allocated the same way, so the
+    highlight styles keep lighting word by word instead of going dark on a
+    translated track.
+    """
+    from trendrelay_api.subtitle_formats import em_width
+
+    tokens = rendered.split()
+    if not tokens:
+        return []
+    step = max(1, rules.max_words or 1)
+    chunks = [tokens[at:at + step] for at in range(0, len(tokens), step)]
+    weights = [sum(em_width(token) for token in chunk) for chunk in chunks]
+    total_weight = sum(weights) or 1.0
+    span = cue.duration_ms
+
+    paced: list[Cue] = []
+    at = cue.start_ms
+    for position, (chunk, weight) in enumerate(zip(chunks, weights)):
+        if position == len(chunks) - 1:
+            end = cue.end_ms
+        else:
+            end = min(cue.end_ms, at + max(1, round(span * weight / total_weight)))
+        word_weights = [em_width(token) for token in chunk]
+        word_total = sum(word_weights) or 1.0
+        words: list[Word] = []
+        word_at = at
+        for word_position, (token, word_weight) in enumerate(zip(chunk, word_weights)):
+            if word_position == len(chunk) - 1:
+                word_end = end
+            else:
+                word_end = min(
+                    end, word_at + max(1, round((end - at) * word_weight / word_total))
+                )
+            words.append(Word(text=token, start_ms=word_at, end_ms=word_end))
+            word_at = word_end
+        paced.append(Cue(
+            index=index_from + len(paced),
+            start_ms=at,
+            end_ms=end,
+            lines=[" ".join(chunk)],
+            words=words,
+        ))
+        at = end
+    return paced
 
 
 #: Which sentence splitter Argos should use before translating a passage.

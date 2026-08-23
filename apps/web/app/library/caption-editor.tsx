@@ -1051,7 +1051,11 @@ export function CaptionEditor({
                       preset={previewPreset}
                       cue={activeCue}
                       activeMs={playbackMs}
-                      highlightWords={!translateTo}
+                      // Trust the cues: a word-paced style keeps (estimated)
+                      // words on a translated track now, and a reading style's
+                      // translated cues come back with none - so the cue
+                      // itself says whether there is anything to light.
+                      highlightWords
                       sourceWidth={mediaSourceWidth}
                       sizeOverride={activeSize}
                     />
@@ -1272,9 +1276,14 @@ export function CaptionEditor({
           )}
           {translateTo && chosen?.needs_word_timings && (
             <p className="caption-editor-note">
-              This style highlights the word being spoken, which a translation
-              cannot carry — word order changes, so the measured timings no
-              longer match the words. It will show whole cues instead.
+              {typeof chosen.layout.max_words === "number"
+                ? "Word timing on a translated track is estimated: the "
+                  + "translated words are spread across each cue's measured "
+                  + "span, so the style keeps its rhythm."
+                : "This style highlights the word being spoken, which a "
+                  + "translation cannot carry — word order changes, so the "
+                  + "measured timings no longer match the words. It will show "
+                  + "whole cues instead."}
             </p>
           )}
           {!canBurn && compatibleTargets.length > 0 && (
