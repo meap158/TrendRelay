@@ -20,6 +20,7 @@ could switch off.
 
 from __future__ import annotations
 
+import os
 import statistics
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,6 +51,17 @@ SPRITE_STEP = 4
 #: it. 960 still cuts a 4K frame's pixels by sixteen and keeps a face down to
 #: about 3% of the frame width findable.
 DETECT_WIDTH = 960
+
+#: Run the detector on one frame in this many, and let the tracker interpolate
+#: the faces between - detection is ~60% of the render (see DETECT_SHARE), so
+#: skipping every other frame roughly halves the CPU the effect asks for. The
+#: gap this leaves is filled by the same machinery that already bridges a
+#: detector's blinks (track_faces / _fill), and is kept well inside the twelve
+#: frames that machinery will bridge, so a sampled frame is filled exactly as a
+#: dropped one is. Two is deliberately conservative: at 30fps a face moves
+#: little in one frame, so the interpolated frame is where the detector would
+#: have found it anyway. Overridable per machine.
+DETECT_EVERY = max(1, int(os.environ.get("TRENDRELAY_OVERLAY_DETECT_EVERY", "2")))
 
 #: Solidity at or above which an object still counts as covering a face.
 #:
@@ -686,12 +698,19 @@ def render_overlaid(
             finding = (progress or ProgressReporter(None)).stage(
                 "Finding faces", 0.0, DETECT_SHARE
             )
+            # Never sample wider than the gap the tracker will bridge, so every
+            # skipped frame is one it can fill.
+            detect_every = min(DETECT_EVERY, MAX_GAP_FRAMES)
             while limit is None or len(per_frame) < limit:
                 ok, frame = capture.read()
                 if not ok:
                     break
-                per_frame.append(reader.read(frame))
-                finding.at(len(per_frame) - 1, max(expected, len(per_frame)))
+                index = len(per_frame)
+                # Detect on the sampled frames; leave the rest empty for the
+                # tracker to interpolate. The first frame is always index 0, so
+                # a track always opens on a real detection.
+                per_frame.append(reader.read(frame) if index % detect_every == 0 else [])
+                finding.at(index, max(expected, len(per_frame)))
             # Read after the pass, not before it: the tier is settled by what
             # the detections turned out to carry.
             tier = reader.tier
@@ -795,7 +814,13 @@ def render_overlaid(
 
     total = len(per_frame)
     coverage = covered_frames / total if total else 0.0
-    found = detected / total if total else 0.0
+    # Read the detection rate against the frames the detector was actually run
+    # on, not the whole clip. Sampling every Nth frame is a deliberate saving,
+    # and the frames skipped for it are interpolated by the tracker exactly as a
+    # dropped detection is - so they must not read as frames where the detector
+    # failed, which would raise a drift warning on a render that has no gap.
+    attempted = (total + detect_every - 1) // detect_every if total else 0
+    found = min(1.0, detected / attempted) if attempted else 0.0
     return {
         "source": str(source),
         "output": str(destination),
