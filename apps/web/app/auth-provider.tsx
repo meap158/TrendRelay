@@ -3,7 +3,7 @@
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
-import { apiBaseUrl } from "../lib/api";
+import { apiBaseUrl, apiPath } from "../lib/api";
 // Type only - erased at build, so importing it pulls no Supabase code. The SDK
 // itself is loaded dynamically below, and only when a hosted session needs it.
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -326,7 +326,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const apiFetch = useCallback(
-    async (path: string, init: RequestInit = {}) => {
+    async (target: string, init: RequestInit = {}) => {
+      // A caller holding an absolute API URL means the same request as one
+      // holding the path; see `apiPath`. Taken off once here so all three
+      // branches below - loopback, desktop bridge, Supabase - get the path
+      // each of them expects.
+      const path = apiPath(target);
       if (localUser) {
         const headers = new Headers(init.headers);
         if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");

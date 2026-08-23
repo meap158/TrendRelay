@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { apiBaseUrl } from "../../lib/api";
 import { effectLabel, effectTag } from "../../lib/i18n/effects";
 import { LOCALES } from "../../lib/i18n/locales";
 import { mediaTypeFor, opaquePreviewUrl } from "../../lib/media-preview";
@@ -840,8 +839,11 @@ function MediaPreview({
           return;
         }
         apiFetch(
+          // A path, not a URL: `apiFetch` puts the base in front. Passing the
+          // absolute form here is what produced the origin twice over, and the
+          // burned-in caption preview could not be opened at all.
           opaquePreviewUrl(
-            `${apiBaseUrl()}/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/preview/stream?cut=${wanted}`,
+            `/api/workspaces/${workspaceId}/media/library/assets/${asset.id}/preview/stream?cut=${wanted}`,
           ),
           { signal: controller.signal },
         )
