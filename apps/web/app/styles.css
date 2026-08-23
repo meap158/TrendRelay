@@ -3,8 +3,19 @@
 body { margin: 0; min-height: 100vh; background: var(--panel-raised); color: var(--text); }
 main { width: min(1080px, calc(100% - 40px)); margin: 0 auto; padding: 12vh 0 8vh; }
 .eyebrow, .status { color: var(--green); letter-spacing: 0.16em; font-weight: 700; }
-h1 { max-width: 850px; margin: 18px 0; font-size: clamp(3rem, 8vw, 7rem); line-height: 0.92; letter-spacing: -0.06em; }
-.lede { max-width: 720px; color: var(--muted); font-size: 1.2rem; line-height: 1.6; }
+/* No global `h1` or `.lede` live here either, and for the same reason as the
+ * lists below.
+ *
+ * They were marketing type - a heading that grew to seven rem, a lede at 1.2rem
+ * - for the landing page that /about used to be. It redirects to /tools now,
+ * `/` renders the console, and console.css restates both a line later, so
+ * neither rule had reached a screen in a long time. What they did do was
+ * describe a heading this app does not have, one import earlier than the rules
+ * that decide the real one.
+ *
+ * The tab heads are sized in console.css and sticky-headers.css. If a page
+ * needs display type again, give it a class.
+ */
 /* No global `ol`, `li` or `li span` rules live here, and none should.
  *
  * They used to: a multi-column grid, 14px of white padding on every list item,
