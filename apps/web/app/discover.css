@@ -202,11 +202,14 @@
 .dsc-view-tab small { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; border-radius: 999px; padding: 0 5px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .dsc-view-tab[aria-current="page"] small { background: var(--link-bg); color: var(--link); }
 .dsc-hero { display: grid; gap: 9px; max-width: var(--dsc-measure); margin: 0 auto; padding: 10px var(--dsc-inset); text-align: start; }
-.dsc-hero-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* The heading as the bordered bar every other tab now carries: title and its
+   one-line tagline share a row, with the readiness status kept to the right. */
+.dsc-hero-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.dsc-hero-head > div:first-child { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 12px; min-width: 0; }
 .dsc-hero-status { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 .dsc-readiness { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
-.dsc-logo { margin: 0 0 1px; color: var(--text); font-size: 20px; font-weight: 600; letter-spacing: -0.5px; }
-.dsc-tagline { margin: 0; color: var(--muted); font-size: 12px; font-weight: 400; }
+.dsc-logo { margin: 0; color: var(--text); font-size: 20px; font-weight: 600; letter-spacing: -0.5px; white-space: nowrap; }
+.dsc-tagline { overflow: hidden; margin: 0; color: var(--muted); font-size: 12px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .dsc-discovery-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; }
 .dsc-search-form { display: flex; align-items: stretch; min-width: 0; width: 100%; background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 3px; box-shadow: var(--shadow-sm); transition: border-color 150ms, box-shadow 150ms; }
 .dsc-search-form:focus-within { border-color: var(--link); box-shadow: 0 0 0 3px var(--link-bg); }

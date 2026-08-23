@@ -659,9 +659,11 @@ export default function CampaignsPage() {
         <div>
           <p className="section-kicker">{t("campaigns.eyebrow")}</p>
           <h1>{t("campaigns.heading")}</h1>
-          {/* No intro paragraph. The heading is the promise; the panel's own
-              summary sentence restates it with this campaign's numbers, and
-              a third telling on every visit was fuss. */}
+          {/* One line, like every other tab's heading: enough to say what this
+              is for. The panel's own summary still restates it with this
+              campaign's numbers - this only keeps the heading from reading as a
+              bare word where the others carry a sentence. */}
+          <p className="lede">Run a campaign end to end — what it posts, where it goes, and how hard it runs.</p>
         </div>
       </header>
 

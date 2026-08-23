@@ -92,6 +92,7 @@
 .console-page > .console-heading > div > p:last-child,
 .research-radar > .research-radar-header .lede,
 .opportunity-page > .opportunity-header .lede,
+.campaign-page > .campaign-heading .lede,
 .publish-page > header:first-child .lede,
 .tools-sticky-header .lede {
   max-width: none;
@@ -123,6 +124,7 @@
 /* 4. Title and its one-line note share a row, the way the Library heading
       does, instead of stacking - so the whole heading is a single line high. */
 .console-page > .console-heading > div,
+.campaign-page > .campaign-heading > div,
 .publish-page > header:first-child > div {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -132,6 +134,7 @@
   max-width: none;
 }
 .console-page > .console-heading h1,
+.campaign-page > .campaign-heading h1,
 .publish-page > header:first-child h1 {
   white-space: nowrap;
 }
