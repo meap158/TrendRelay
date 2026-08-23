@@ -106,8 +106,11 @@ export function BulkVoiceEditor({
 
   const readyTargets = data?.prepared.filter((target) => target.transcript) ?? [];
   const missing = (data?.prepared.length ?? 0) - readyTargets.length;
+  // Composed before counting, the way the API counts and the service bills:
+  // decomposed Vietnamese is the same sentence at about a fifth more
+  // characters, and a figure that disagrees with the charge is worse than none.
   const characters = readyTargets.reduce(
-    (sum, target) => sum + (target.transcript?.text?.trim().length ?? 0), 0,
+    (sum, target) => sum + (target.transcript?.text?.trim().normalize("NFC").length ?? 0), 0,
   );
   const allVideo = compatible.every((target) => target.mediaKind === "video");
   const deliveryOptions = [

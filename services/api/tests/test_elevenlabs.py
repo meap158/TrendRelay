@@ -448,3 +448,62 @@ def test_tools_rejects_out_of_range_voice_defaults_before_writing(monkeypatch) -
         )
 
     assert written == []
+
+
+# --- what a character is ------------------------------------------------------
+
+
+def test_the_same_vietnamese_sentence_costs_the_same_either_way_it_is_written() -> None:
+    """Speech is billed per character, and Vietnamese has two spellings of one.
+
+    Composed, "ặ" is a single character; decomposed it is "a" and two combining
+    marks. Both arrive in real text - transcripts, pastes, macOS filenames
+    differ on which - and they look identical on screen. Counted with `len`,
+    the decomposed form of the same sentence is about a fifth longer, so the
+    allowance check reserved a fifth more than the service would charge and the
+    figure shown to the operator was wrong for the app's main language.
+    """
+    import unicodedata
+
+    from trendrelay_api.integrations.elevenlabs import characters_in
+
+    sentence = "Mặc all-black xong tự nhiên đi lấy nước cũng thấy như đang catwalk"
+    composed = unicodedata.normalize("NFC", sentence)
+    decomposed = unicodedata.normalize("NFD", sentence)
+
+    assert composed != decomposed, "the two spellings must actually differ"
+    assert characters_in(decomposed) == characters_in(composed)
+    assert characters_in(composed) == len(composed)
+
+
+def test_what_is_sent_is_what_was_counted(saved_key, monkeypatch) -> None:
+    """Otherwise the check reserves one number and the bill is another."""
+    import unicodedata
+
+    from trendrelay_api.integrations import elevenlabs
+
+    sent: dict[str, object] = {}
+
+    class _Response:
+        status = 200
+
+        def read(self) -> bytes:
+            return b"audio"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc) -> None:
+            return None
+
+    def _capture(request, timeout=None):  # noqa: ANN001 - urllib's shape
+        sent["body"] = json.loads(request.data.decode("utf-8"))
+        return _Response()
+
+    monkeypatch.setattr(elevenlabs.urllib.request, "urlopen", _capture)
+    decomposed = unicodedata.normalize("NFD", "Đi lấy nước")
+
+    elevenlabs.synthesise(decomposed, voice_id="v1")
+
+    assert sent["body"]["text"] == unicodedata.normalize("NFC", decomposed)
+    assert len(sent["body"]["text"]) == elevenlabs.characters_in(decomposed)

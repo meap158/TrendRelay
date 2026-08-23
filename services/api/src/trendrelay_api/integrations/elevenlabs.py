@@ -31,6 +31,7 @@ before anything can spend it - for the pre-flight check stage two owes.
 from __future__ import annotations
 
 import json
+import unicodedata
 import math
 import urllib.error
 import urllib.parse
@@ -352,14 +353,21 @@ def models() -> list[dict[str, Any]]:
                 "model_id": item["model_id"],
                 "name": item.get("name") or item["model_id"],
                 "description": item.get("description"),
-                "languages": [
-                    {
-                        "language_id": row.get("language_id"),
-                        "name": row.get("name") or row.get("language_id"),
-                    }
-                    for row in (item.get("languages") or [])
-                    if isinstance(row, dict) and row.get("language_id")
-                ],
+                # Sorted by name. The service returns them roughly by
+                # popularity - English, Japanese, Chinese, German - which is no
+                # order at all once a list runs to 74 entries and somebody is
+                # hunting for one of them.
+                "languages": sorted(
+                    (
+                        {
+                            "language_id": row.get("language_id"),
+                            "name": row.get("name") or row.get("language_id"),
+                        }
+                        for row in (item.get("languages") or [])
+                        if isinstance(row, dict) and row.get("language_id")
+                    ),
+                    key=lambda row: str(row["name"]).casefold(),
+                ),
                 "can_use_style": bool(item.get("can_use_style")),
                 "can_use_speaker_boost": bool(item.get("can_use_speaker_boost")),
                 "character_cost_multiplier": rates.get("character_cost_multiplier")
@@ -477,6 +485,26 @@ class AllowanceExceeded(ElevenLabsUnavailable):
     """This generation would cost more characters than the plan has left."""
 
 
+def billable(text: str) -> str:
+    """The script as it will be sent, in one composition.
+
+    Vietnamese - and Korean, and anything else that accents heavily - can be
+    written two ways that look identical: composed, where "ặ" is one character,
+    and decomposed, where it is "a" plus two combining marks. Both arrive in
+    real text; transcripts, pastes and macOS filenames differ on which.
+
+    ElevenLabs bills per character of what it receives, so the decomposed form
+    of the same sentence costs about a fifth more for nothing. Normalising is
+    also what makes the count honest: composing here, once, means the number
+    somebody is shown, the number the allowance is checked against, and the
+    number the service charges are all the same number.
+
+    NFC because it is what text interchange settles on, and what the same
+    sentence typed into any Vietnamese keyboard already is.
+    """
+    return unicodedata.normalize("NFC", text)
+
+
 def characters_in(text: str) -> int:
     """What this will be billed as.
 
@@ -485,7 +513,7 @@ def characters_in(text: str) -> int:
     differently from the other is how a check passes and the bill does not
     match it.
     """
-    return len(text)
+    return len(billable(text))
 
 
 def check_allowance(
@@ -556,7 +584,10 @@ def synthesise(
     key = api_key()
     if not key:
         raise ElevenLabsUnavailable("No ElevenLabs API key is saved.")
-    body: dict[str, Any] = {"text": text, "model_id": model_id}
+    # Composed, because that is what `characters_in` counted and what the
+    # allowance was checked against. Sending the decomposed form would bill
+    # more characters than the check reserved.
+    body: dict[str, Any] = {"text": billable(text), "model_id": model_id}
     if language_code:
         body["language_code"] = language_code
     if voice_settings:

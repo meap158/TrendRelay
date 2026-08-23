@@ -114,7 +114,11 @@ type VoiceTarget = {
   mediaKind: string;
 };
 
-type PreparedVoiceTarget = VoiceTarget & { transcript: Transcript | null };
+type PreparedVoiceTarget = VoiceTarget & {
+  transcript: Transcript | null;
+  /** The machine reading, kept only when there is no reviewed one to use. */
+  draft: Transcript | null;
+};
 
 type Job = {
   id: string;
@@ -233,13 +237,19 @@ export function VoiceEditor({
         }
         const preparedTargets = assetResponses.map(({ target, response, payload }) => {
           if (!response.ok) throw new Error(payload.detail ?? `${target.title} could not be read.`);
-          // Reviewed only. A machine draft is deliberately not offered here -
-          // see the note at the top of this file.
-          const transcript = (payload.transcripts ?? []).find(
-            (item) => item.kind === "speech" && item.status === "reviewed"
-              && (item.text ?? "").trim(),
-          ) ?? null;
-          return { ...target, transcript };
+          const speech = (payload.transcripts ?? []).filter(
+            (item) => item.kind === "speech" && (item.text ?? "").trim(),
+          );
+          // Reviewed is still the only thing voiced without being asked. The
+          // machine reading is carried alongside so the editor can offer it
+          // deliberately, rather than reporting "no transcript" at an asset
+          // that has just been transcribed - which is what it looked like
+          // while every draft on the shelf was machine.
+          const transcript = speech.find((item) => item.status === "reviewed") ?? null;
+          const draft = transcript
+            ? null
+            : speech.find((item) => item.status === "machine") ?? null;
+          return { ...target, transcript, draft };
         });
         const reviewed = preparedTargets[0]?.transcript ?? null;
         setData({
@@ -255,19 +265,36 @@ export function VoiceEditor({
         );
         setVoiceId((current) => current || configuredVoice?.voice_id
           || voicePayload.voices?.[0]?.voice_id || "");
-        const firstModel = voicePayload.models?.find(
-          (model) => model.model_id === voicePayload.defaults?.model_id,
-        ) ?? voicePayload.models?.[0];
-        setModelId((current) => current || firstModel?.model_id || "");
-        setVoiceSettings((current) => voicePayload.defaults?.voice_settings ?? current);
         const transcriptLanguage = reviewed?.language?.split("-")[0]?.toLowerCase() ?? "";
         const configuredLanguage = voicePayload.defaults?.language_code ?? "";
-        if (configuredLanguage && firstModel?.languages.some(
-          (item) => item.language_id === configuredLanguage,
-        )) setLanguageCode((current) => current || configuredLanguage);
-        else if (transcriptLanguage && firstModel?.languages.some(
-          (item) => item.language_id === transcriptLanguage,
-        )) setLanguageCode((current) => current || transcriptLanguage);
+        const wanted = configuredLanguage || transcriptLanguage;
+        const configuredModel = voicePayload.models?.find(
+          (model) => model.model_id === voicePayload.defaults?.model_id,
+        ) ?? voicePayload.models?.[0];
+        const speaks = (model: VoiceModel | undefined, language: string) =>
+          Boolean(language) && Boolean(model?.languages.some(
+            (item) => item.language_id === language,
+          ));
+        /*
+         * The configured model unless it cannot say the words.
+         *
+         * The service's default reads 29 languages and Vietnamese is not one
+         * of them, while three other models on the same key do speak it. The
+         * editor opened on the default, offered a list without the language
+         * the transcript was written in, and said nothing about the models
+         * that had it - so a language the account could speak read as one the
+         * product did not support.
+         */
+        const firstModel = speaks(configuredModel, wanted)
+          ? configuredModel
+          : voicePayload.models?.find((model) => speaks(model, wanted)) ?? configuredModel;
+        setModelId((current) => current || firstModel?.model_id || "");
+        setVoiceSettings((current) => voicePayload.defaults?.voice_settings ?? current);
+        if (speaks(firstModel, configuredLanguage)) {
+          setLanguageCode((current) => current || configuredLanguage);
+        } else if (speaks(firstModel, transcriptLanguage)) {
+          setLanguageCode((current) => current || transcriptLanguage);
+        }
       })
       .catch((reason: unknown) => {
         if (reason instanceof DOMException && reason.name === "AbortError") return;
@@ -319,6 +346,7 @@ export function VoiceEditor({
   const status = data?.status ?? null;
   const preparedTargets = data?.preparedTargets ?? [];
   const transcript = preparedTargets[0]?.transcript ?? null;
+  const draft = preparedTargets[0]?.draft ?? null;
   const voicableTargets = preparedTargets.filter((target) => target.transcript);
   const missingTranscripts = preparedTargets.length - voicableTargets.length;
   const loading = open && !data && !loadError;
@@ -328,10 +356,37 @@ export function VoiceEditor({
   const scripts = batch
     ? voicableTargets.map((target) => (target.transcript?.text ?? "").trim())
     : [spoken];
-  const characters = scripts.reduce((sum, text) => sum + text.length, 0);
-  const largestScript = scripts.reduce((largest, text) => Math.max(largest, text.length), 0);
+  /**
+   * Counted the way it will be billed, which is not the way it is typed.
+   *
+   * Vietnamese can be written two ways that look identical: composed, where
+   * "ặ" is one character, and decomposed, where it is "a" and two combining
+   * marks. Both arrive in real transcripts. `.length` counts the second at
+   * about a fifth more, so the figure on screen disagreed with what the API
+   * checked the allowance against - and with what the service charges. The
+   * API composes before counting and before sending; this composes to match.
+   */
+  const billable = (text: string) => text.normalize("NFC").length;
+  const characters = scripts.reduce((sum, text) => sum + billable(text), 0);
+  const largestScript = scripts.reduce((largest, text) => Math.max(largest, billable(text)), 0);
   const selectedVoice = voices.find((voice) => voice.voice_id === voiceId) ?? null;
   const selectedModel = models.find((model) => model.model_id === modelId) ?? null;
+  /**
+   * The transcript's language, and whether the chosen model can say it.
+   *
+   * Worth naming rather than leaving the reader to compare a language against
+   * a list of 74: the models on one key do not speak the same set, so "not in
+   * this list" and "not available at all" look identical without it.
+   */
+  const scriptLanguage = transcript?.language?.split("-")[0]?.toLowerCase() ?? "";
+  const modelSpeaksScript = !scriptLanguage || Boolean(selectedModel?.languages.some(
+    (item) => item.language_id === scriptLanguage,
+  ));
+  const modelsThatSpeakScript = scriptLanguage
+    ? models.filter((model) => model.languages.some(
+        (item) => item.language_id === scriptLanguage,
+      ))
+    : [];
   const languages = useMemo(
     () => [...new Set(voices.flatMap((voice) => voice.languages))].sort(),
     [voices],
@@ -609,6 +664,20 @@ export function VoiceEditor({
                 ))}
               </Select>
               <small>Restricts normalization where the selected model supports it.</small>
+              {/* Said here because the select cannot: a language the model
+                  does not speak is simply absent from it, which reads as the
+                  product not supporting the language at all. */}
+              {!modelSpeaksScript && (
+                <small className="voice-language-gap">
+                  {modelsThatSpeakScript.length
+                    ? `${selectedModel?.name ?? "This model"} does not speak `
+                      + `${transcript?.language}. These do: `
+                      + `${modelsThatSpeakScript.map((model) => model.name).join(", ")}.`
+                    : `No model on this key speaks ${transcript?.language}. `
+                      + "Leave the language on “Detect from text”, or type a script "
+                      + "in a language one of them speaks."}
+                </small>
+              )}
             </label>
           </div>
 
@@ -622,7 +691,9 @@ export function VoiceEditor({
                 ? "your own words"
                 : transcript
                   ? `the reviewed transcript${transcript.language ? ` · ${transcript.language}` : ""}`
-                  : "no reviewed transcript on this asset"}</em>
+                  : draft
+                    ? `not reviewed yet · a ${draft.provider ?? "machine"} draft is available`
+                    : "no reviewed transcript on this asset"}</em>
             </span>
             <textarea
               rows={5}
@@ -638,6 +709,24 @@ export function VoiceEditor({
                 ? "Typed words override the transcript."
                 : "Leave empty to speak the reviewed transcript. A machine draft is never voiced."}
             </small>
+            {/* The way out of the dead end. A machine draft is still never
+                voiced on its own, but "no reviewed transcript" at a clip that
+                was just transcribed left nothing to do here and no reason
+                given - so the draft is offered as a script to read and edit,
+                which is a person choosing these words. */}
+            {!typed && !transcript && draft && (
+              <div className="voice-draft-offer">
+                <Button variant="secondary" size="sm"
+                  onClick={() => setScript((draft.text ?? "").trim())}>
+                  Use the {draft.provider ?? "machine"} draft as the script
+                </Button>
+                <small>
+                  It is a machine reading{draft.language ? ` · ${draft.language}` : ""}, so
+                  check it before spending characters on it. Reviewing it in the Library
+                  makes it the default here.
+                </small>
+              </div>
+            )}
           </label>}
 
           <div className="voice-field">
