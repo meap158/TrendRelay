@@ -1839,11 +1839,23 @@ export function AutopilotPanel({
   // Approvals stay above the panes: the one thing that must never hide. The old
   // `accounts`/`settings` names survive in the readiness rows, which is why
   // `jumpTo` translates them.
-  // Not remembered, and deliberately: which pane opens depends on the campaign
-  // rather than on a preference - a campaign that is not running opens on the
-  // half that gets it running, and remembering "posts" would hide that.
-  const [view, setView] = useState<"posts" | "content">(
-    campaignStatus === "active" ? "posts" : "content",
+  /**
+   * Which pane is open, and it is remembered.
+   *
+   * It used to be chosen per campaign - an active one opened on Schedule, a
+   * draft on Queue & setup - on the reasoning that the campaign knows better
+   * than a preference does. That reads well with one campaign and badly with
+   * three: every switch between running campaigns threw you back to Schedule,
+   * including the switch you made to compare two queues.
+   *
+   * So it holds where it was put, and opens on Queue & setup, which is the
+   * half that answers "what is in this campaign" for a campaign you have not
+   * looked at yet.
+   */
+  const [view, setView] = usePersistedState<"posts" | "content">(
+    "trendrelay.campaigns.workTab",
+    "content",
+    oneOf("posts", "content"),
   );
   const automaticPreview = useRef(false);
   // The references this mirrors (Buffer, Zernio) offer the same posts as a
