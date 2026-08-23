@@ -409,9 +409,30 @@ def list_campaigns(
     # can be tagged to several campaigns, so these counts overlap and do not sum
     # to a distinct-product total - each is only what that campaign may promote.
     counts = offer_counts(session, workspace_id)
+    # How many posts each campaign is holding for approval - the "proposed"
+    # executions - in one grouped query, so the sidebar can show what needs a
+    # person without a count per row.
+    from sqlalchemy import func
+
+    from trendrelay_api.publication_models import PublicationExecution
+
+    held_counts = dict(
+        session.execute(
+            select(PublicationExecution.campaign_id, func.count())
+            .where(
+                PublicationExecution.campaign_id.in_([item.id for item in items]),
+                PublicationExecution.state == "proposed",
+            )
+            .group_by(PublicationExecution.campaign_id)
+        ).all()
+    )
     return {
         "campaigns": [
-            {**_campaign(item), "tagged_products": counts.get(item.id, 0)}
+            {
+                **_campaign(item),
+                "tagged_products": counts.get(item.id, 0),
+                "held_count": held_counts.get(item.id, 0),
+            }
             for item in items
         ]
     }

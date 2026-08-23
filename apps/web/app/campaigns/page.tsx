@@ -68,6 +68,9 @@ type Campaign = {
   // several campaigns, so this counts what is tagged here, not a share of some
   // total. Optional because only the list endpoint fills it in.
   tagged_products?: number;
+  /** Posts this campaign is holding for approval right now. Only the list
+      endpoint fills it in; shown on the sidebar row when there are any. */
+  held_count?: number;
 };
 /** How hard a campaign is run. Stored on its autopilot, set from its settings. */
 type CampaignPolicy = {
@@ -706,6 +709,13 @@ export default function CampaignsPage() {
                     <ActionIcon name={CAMPAIGN_STATUS_ICON[campaign.status]} size={14} />
                   </span>
                   <span className="campaign-list-name">{campaign.name}</span>
+                  {/* What needs a person, where the campaign is chosen: a count
+                      of posts held for approval, shown only when there are any. */}
+                  {(campaign.held_count ?? 0) > 0 && (
+                    <em className="campaign-list-held"
+                      title={`${campaign.held_count} post${campaign.held_count === 1 ? "" : "s"} waiting for your approval`}
+                    >{campaign.held_count}</em>
+                  )}
                 </strong>
                 {/* The language it posts in, not the market it was never asked
                     for. Every campaign reported "global" once markets stopped
