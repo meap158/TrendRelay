@@ -1066,7 +1066,6 @@ export function WeekCalendar({
 export function SlotEditor({
   slots,
   presets,
-  timezone,
   canEdit,
   busy,
   onSave,
@@ -1074,7 +1073,6 @@ export function SlotEditor({
 }: {
   slots: Slot[];
   presets: SlotPreset[];
-  timezone: string;
   canEdit: boolean;
   busy: boolean;
   onSave: (entries: { weekday: number; time: string }[]) => void;
@@ -1113,11 +1111,11 @@ export function SlotEditor({
 
   return (
     <div className="slot-editor">
+      {/* No heading of its own. The dialog this opens in says what it is and
+          which clock the times are in; repeating both here spent four lines of
+          a phone screen saying it twice. The timezone is the caller's to
+          state, and it still states it - once. */}
       <div className="slot-editor-head">
-        <div>
-          <h4>{t("composer.postingTimes")}</h4>
-          <p>Times are {timezone}, the clock you are reading.</p>
-        </div>
         {slots.length > 0 && canEdit && (
           <Button variant="quiet" size="sm" busy={busy} onClick={() => onSave([])}>
             Clear all
@@ -1177,8 +1175,19 @@ export function SlotEditor({
                     )}
                   </li>
                 ))}
-                {/* A day with no times is a day nothing posts on, which is
-                    worth seeing rather than inferring from an absence. */}
+                {/* An empty column is not an empty day when there are
+                    every-day times: those post here too, and seven blank
+                    columns under a row of them said the opposite. Named
+                    rather than repeated in full - the times are already
+                    listed once, above. */}
+                {times.length === 0 && everyDay.length > 0 && (
+                  <li
+                    className="slot-week-inherits"
+                    aria-label={`${everyDay.length} every-day times post on ${name}`}
+                  >every day</li>
+                )}
+                {/* A day nothing posts on at all, which is worth seeing rather
+                    than inferring from an absence. */}
                 {times.length === 0 && everyDay.length === 0 && (
                   <li className="slot-week-none" aria-label={`Nothing posts on ${name}`}>—</li>
                 )}

@@ -427,6 +427,16 @@ export default function PublishPage() {
    * One picker rather than two: it is the same library, the same filters and
    * the same search, and a second copy would drift from this one.
    */
+  /**
+   * Whether the posting-times editor is open.
+   *
+   * A dialog rather than a disclosure. The editor is a week of times, a page
+   * assignment list and a preset row - the tallest thing on this tab - and
+   * expanded in place it pushed the composer, the destinations and the plan
+   * below the fold to answer a question somebody asks about twice a month. On
+   * a phone it was most of the page.
+   */
+  const [schedulingOpen, setSchedulingOpen] = useState(false);
   const [pickerMode, setPickerMode] = useState<"video" | "images">("video");
   /**
    * What each carousel image is called, keyed by the path that will be sent.
@@ -3521,15 +3531,32 @@ export default function PublishPage() {
                   </div>
                 </div>
               )}
-              <details className="planner-editor">
-                <summary>
-                  Posting times
-                  <b>{slots.length ? `${slots.length} per day` : "none set"}</b>
-                </summary>
+              {/* One line, and the editor behind it. What the summary said is
+                  what somebody needs at a glance; the rest is a decision they
+                  came here to make on purpose. */}
+              <div className="planner-schedule-row">
+                <span>
+                  <strong>Posting times</strong>
+                  <small>{slots.length
+                    ? `${slots.length} a day · ${timezone}`
+                    : "None set - nothing can be scheduled"}</small>
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setSchedulingOpen(true)}
+                >{slots.length ? "Edit times" : "Set times"}</Button>
+              </div>
+              <Dialog
+                open={schedulingOpen}
+                size="wide"
+                title="Posting times"
+                description={`The week this workspace posts on. Times are ${timezone}, the clock you are reading.`}
+                onClose={() => setSchedulingOpen(false)}
+              >
                 <SlotEditor
                   slots={slots}
                   presets={slotPresets}
-                  timezone={timezone}
                   canEdit={Boolean(canExecute)}
                   busy={busy === "slots"}
                   onSave={(entries) => void saveSlots(entries)}
@@ -3565,7 +3592,7 @@ export default function PublishPage() {
                     </ul>
                   </section>
                 )}
-              </details>
+              </Dialog>
             </div>
           )}
 

@@ -663,10 +663,16 @@ nav strong { color: var(--text); }
 
 /* --- posting calendar ----------------------------------------------------- */
 /* The calendar is what choosing Schedule asked for, so it is not behind a
- * disclosure. Editing the times is the rare job and folds away instead. */
+ * disclosure. Editing the times is the rare job and opens in a dialog. */
 .schedule-planner { display: grid; gap: 8px; padding-top: 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel); }
-.planner-editor > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 11px; font-weight: 600; cursor: pointer; }
-.planner-editor > summary b { border-radius: 999px; padding: 2px 8px; background: var(--panel-raised); color: var(--muted); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+/* One line where a disclosure used to be. The editor behind it is a week of
+   times, a page assignment list and a preset row - expanded in place it put
+   the composer and the plan below the fold, and on a phone it was most of
+   the page. The state stays visible; only the editing moved. */
+.planner-schedule-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 12px; border-top: 1px solid var(--line); }
+.planner-schedule-row > span { display: grid; gap: 1px; min-inline-size: 0; }
+.planner-schedule-row strong { font-size: 11px; font-weight: 600; }
+.planner-schedule-row small { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .planner-empty { display: grid; gap: 8px; padding: 4px 12px 8px; }
 .planner-empty strong { display: block; font-size: 12px; font-weight: 600; }
 .planner-empty span { color: var(--muted); font-size: 11px; }
@@ -720,6 +726,9 @@ nav strong { color: var(--text); }
 .slot-week-day b { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
 /* A day nothing posts on, said rather than left as an empty column. */
 .slot-week-none { justify-content: center; color: var(--muted); background: none; }
+/* A column with no times of its own but every-day times above it. Muted and
+   italic so it reads as a note about the day rather than a time set on it. */
+.slot-week-inherits { justify-content: center; color: var(--muted); background: none; font-size: 10px; font-style: italic; }
 /* Applies to all seven, so it is stated once above them rather than
    repeated in every column as seven rows nobody can edit apart. */
 .slot-week-everyday { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -730,6 +739,13 @@ nav strong { color: var(--text); }
 .slot-remove { display: grid; place-items: center; width: 18px; min-height: 18px; padding: 0; border: none; border-radius: 999px; background: transparent; color: var(--muted); font-size: 13px; line-height: 1; cursor: pointer; }
 .slot-remove:hover { background: var(--line); color: var(--text); }
 .slot-add { display: flex; flex-wrap: wrap; gap: 6px; }
+/* One line. Left alone the time input, the day chooser and the button
+   stacked into three rows: the chooser is a `.ui-select`, which is
+   `width: 100%` by design because it fills the field it is given - and here
+   the field is a row, so it is told how much of the row to take. */
+.slot-add { align-items: center; }
+.slot-add > input { inline-size: auto; min-inline-size: 0; }
+.slot-add .ui-select { flex: 0 1 190px; inline-size: auto; }
 .publish-form .slot-add input, .publish-form .slot-add select { width: auto; min-height: 32px; padding: 4px 8px; }
 .slot-presets { display: grid; gap: 6px; }
 .slot-presets > span { color: var(--muted); font-size: 11px; font-weight: 600; }
