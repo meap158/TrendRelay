@@ -9,6 +9,7 @@ registered here, so they are absent from the listing and refused by name.
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from trendrelay_api.integrations.mcp import context, intake, policy, schedules, sops, writes
@@ -519,3 +520,42 @@ def build_server(workspace_id: str) -> FastMCP:
 def exposed_tool_names() -> list[str]:
     """The tool names a caller will be offered - the allowed operations."""
     return policy.allowed_operations()
+
+
+@lru_cache(maxsize=1)
+def tool_catalog() -> tuple[dict[str, Any], ...]:
+    """Every exposed tool with what it does, read off the server itself.
+
+    For the Tools tab to show a tool list the way an MCP client would - name,
+    what it does, what it takes - rather than a comma-joined line of names.
+    Read from a built server so the descriptions shown are the ones served and
+    the two cannot drift; cached because the answer only changes with the code.
+    Requires the mcp extra, like everything that builds a server - callers
+    guard on availability.
+    """
+    import asyncio
+
+    listed = asyncio.run(build_server("catalog").list_tools())
+    catalog = []
+    for tool in sorted(listed, key=lambda entry: entry.name):
+        schema = tool.inputSchema or {}
+        required = set(schema.get("required") or [])
+        access = policy.classify(tool.name)
+        catalog.append({
+            "name": tool.name,
+            "description": " ".join((tool.description or "").split()),
+            # Read or write, so the list can say which tools only look.
+            "access": access.value if access else None,
+            "params": [
+                {
+                    "name": param,
+                    "required": param in required,
+                    "type": (detail or {}).get("type"),
+                }
+                for param, detail in (schema.get("properties") or {}).items()
+            ],
+            # The ChatGPT file-parameter declaration, and anything like it:
+            # part of what the tool is, so the inspector shows it.
+            "meta": tool.meta or None,
+        })
+    return tuple(catalog)

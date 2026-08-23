@@ -292,7 +292,11 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                     "tools",
                     "Tools exposed",
                     "optional",
-                    ", ".join(status["tools"]),
+                    # The list itself is its own section in the dialog, with
+                    # each tool's description - a comma-joined line of names
+                    # answered "how many" while looking like it answered more.
+                    f"{len(status['tools'])} operations, listed below with "
+                    "what each one does.",
                 ),
             ],
             actions=[
@@ -314,6 +318,10 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                 ),
             ],
             connection={"state": status["state"], "message": status["message"]},
+            # The inspector's data: every exposed tool with its description,
+            # access and parameters, the way an MCP client's tool list shows
+            # them. Empty when the extra is not installed.
+            tool_details=status.get("tool_details") or [],
             # The tunnel's own credentials, shown the way every other key on
             # this page is: which are set, and masked.
             configured_secret_names=configured_tunnel,

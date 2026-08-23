@@ -287,6 +287,22 @@ nav strong { color: var(--text); }
 .secret-checklist code.configured { border-color: #8ac7b2; color: var(--green); }
 .secret-checklist code.missing { color: var(--muted-soft); }
 .connection-note { padding: 11px 13px; border-inline-start: 3px solid var(--green); background: #f1f8f5; color: var(--muted); }
+/* The MCP tool inspector: each exposed tool as a row - name, whether it only
+   reads, and what it does - the way an MCP client's own connector view lists
+   them. Scrolls inside itself: twenty-one rows must not make the dialog's
+   Start button unreachable. */
+.mcp-tool-list { margin: 18px 0; padding: 16px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel-raised); }
+.mcp-tool-list > strong { font-size: 13px; }
+.mcp-tool-list > p { margin: 4px 0 10px; color: var(--muted); line-height: 1.45; }
+.mcp-tool-list > ul { display: grid; gap: 1px; max-height: 320px; margin: 0; padding: 0; border: 1px solid var(--line); background: var(--line); overflow-y: auto; list-style: none; }
+.mcp-tool-list li { display: grid; gap: 3px; padding: 9px 11px; background: var(--panel); }
+.mcp-tool-list li > div { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+.mcp-tool-list li code { font-size: 12px; font-weight: 600; }
+.mcp-tool-list li em { border: 1px solid var(--line-strong); border-radius: 999px; padding: 1px 7px; color: var(--muted); font-size: 10px; font-style: normal; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; }
+.mcp-tool-list li em.read { border-color: #8ac7b2; color: var(--green); }
+.mcp-tool-list li em.write { border-color: #d9b98a; color: var(--amber, #9a6b1f); }
+.mcp-tool-list li em.file { border-color: var(--link); color: var(--link); text-transform: none; }
+.mcp-tool-list li > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .setup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 /* The tunnel test's answer: a verdict, then the checks behind it. Tinted by
    outcome so the state is legible before a word is read, and dismissible,

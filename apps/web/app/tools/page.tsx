@@ -125,6 +125,15 @@ type SetupReport = {
   settings?: ToolSetting[];
   settings_title?: string;
   settings_blurb?: string;
+  /** MCP only: every exposed tool with what it does, for the inspector list. */
+  tool_details?: McpToolDetail[];
+};
+type McpToolDetail = {
+  name: string;
+  description: string;
+  access: "read" | "workspace_write" | null;
+  params: { name: string; required: boolean; type: string | null }[];
+  meta?: Record<string, unknown> | null;
 };
 type ToolSetting = {
   key: string;
@@ -932,6 +941,36 @@ export default function ToolsPage() {
           )}
           {setup.tool_id === "douyin-downloader" && setup.connection && <p className="connection-note">{t("tools.douyinConnection")} <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
           {setup.tool_id === "mcp-server" && setup.connection && <p className="connection-note">Assistant access: <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
+          {/* The tool inspector: what a connected assistant is offered, shown
+              the way its own client shows a connector's tools - each with what
+              it does - rather than a comma-joined line of names. */}
+          {setup.tool_id === "mcp-server" && (setup.tool_details?.length ?? 0) > 0 && (
+            <section className="mcp-tool-list" aria-label="Tools exposed over MCP">
+              <strong>Tools exposed · {setup.tool_details!.length}</strong>
+              <p>
+                What a connected assistant may call. Reads only look;
+                writes stay drafts a person still approves in the app.
+              </p>
+              <ul>
+                {setup.tool_details!.map((tool) => (
+                  <li key={tool.name}>
+                    <div>
+                      <code>{tool.name}</code>
+                      <em className={tool.access === "read" ? "read" : "write"}>
+                        {tool.access === "read" ? "read" : "write"}
+                      </em>
+                      {Boolean((tool.meta as Record<string, unknown> | null)?.["openai/fileParams"]) && (
+                        <em className="file" title="Accepts a file attached in chat (openai/fileParams)">
+                          chat file
+                        </em>
+                      )}
+                    </div>
+                    <p>{tool.description}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {setup.media_ai?.job && (
             /* The download's own words. A job that failed after twenty minutes
                of pip output has a reason, and this is the only place the

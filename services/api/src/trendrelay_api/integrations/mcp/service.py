@@ -224,15 +224,35 @@ def server_status() -> dict[str, Any]:
         # The file says it is up but the process is gone: a crash, not a state.
         state = "stopped" if state == "starting" else "failed"
     running = state == "running" and alive
+    available = mcp_available()
     return {
         "state": state,
         "running": running,
-        "available": mcp_available(),
+        "available": available,
         "message": status.get("message", "The MCP server is stopped."),
         "url": server_url(),
         "port": port(),
         "workspace_id": status.get("workspace_id"),
         "tools": exposed_tool_names(),
+        # What each tool is, read off a built server - so the Tools tab can
+        # show the list an MCP client would see, not just the names. Only
+        # where the extra is installed; the names above need no import.
+        "tool_details": _tool_details() if available else [],
         "boundary": BOUNDARY_NOTE,
         "updated_at": status.get("updated_at"),
     }
+
+
+def _tool_details() -> list[dict[str, Any]]:
+    """The catalog, or an empty list where building a server fails.
+
+    A status page must not go down with the inspector: whatever stops a
+    server being built (a broken install, a half-upgraded extra) will be
+    named when the operator presses Start, which is the actionable moment.
+    """
+    from trendrelay_api.integrations.mcp.server import tool_catalog
+
+    try:
+        return list(tool_catalog())
+    except Exception:  # noqa: BLE001 - the status must render regardless
+        return []
