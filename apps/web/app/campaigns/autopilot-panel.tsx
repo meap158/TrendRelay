@@ -5459,7 +5459,7 @@ export function AutopilotPanel({
                 { value: "calendar", label: "Calendar" },
               ]}
             />
-            <Button variant="secondary" size="sm" busy={busy === "preview"}
+            <Button variant="secondary" size="sm" busy={busy === "preview"} spinsIcon
               disabled={!ready.configured}
               onClick={() => void loadPreview()}><ActionIcon name="refresh" />Refresh outlook</Button>
           </span>

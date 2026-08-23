@@ -1167,6 +1167,7 @@ export default function ResearchDashboard() {
               variant="secondary"
               size="sm"
               busy={busy === "douyin"}
+              spinsIcon
               disabled={busy === "douyin" || !workspaceId}
               onClick={() => void loadDouyinBoard()}
             >
@@ -1423,6 +1424,7 @@ export default function ResearchDashboard() {
                 variant="secondary"
                 size="sm"
                 busy={busy === "tiktok"}
+                spinsIcon
                 disabled={busy === "tiktok" || !tiktokResult}
                 onClick={() => {
                   if (tiktokResult) {

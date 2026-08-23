@@ -284,7 +284,8 @@ export function NewsBoard({
           <Button
             variant="quiet"
             size="sm"
-            disabled={loading}
+            busy={loading}
+            spinsIcon
             onClick={() => {
               setRefreshing(true);
               setReload((count) => count + 1);
@@ -292,7 +293,7 @@ export function NewsBoard({
             title={t("discover.news.refreshTitle")}
           >
             <RefreshCw size={13} aria-hidden="true" />
-            {loading ? t("discover.news.refreshing") : t("discover.news.refresh")}
+            {t("discover.news.refresh")}
           </Button>
         </div>
       </div>

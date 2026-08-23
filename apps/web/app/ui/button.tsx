@@ -18,6 +18,15 @@ type Shape = {
 type Props = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> & Shape & {
   /** Shows a spinner and blocks input without changing the button's width. */
   busy?: boolean;
+  /**
+   * Spin the icon this button already carries, instead of adding a spinner.
+   *
+   * For a control whose icon is a circular arrow - Refresh, mostly - the
+   * default puts a spinning ring next to a refresh symbol, which reads as two
+   * loading indicators for one action. Here the symbol turns and nothing is
+   * added. Only for that shape of icon: a spinning trash can is not progress.
+   */
+  spinsIcon?: boolean;
   children: ReactNode;
 };
 
@@ -58,6 +67,7 @@ export function Button({
   variant = "secondary",
   size = "md",
   busy = false,
+  spinsIcon = false,
   block = false,
   iconOnly = false,
   selected = false,
@@ -70,11 +80,13 @@ export function Button({
     <button
       {...rest}
       type={type}
-      className={buttonClass({ variant, size, block, iconOnly, selected })}
+      className={`${buttonClass({ variant, size, block, iconOnly, selected })}${
+        busy && spinsIcon ? " ui-button-spins" : ""
+      }`}
       disabled={disabled || busy}
       aria-busy={busy || undefined}
     >
-      {busy && <span className="ui-button-spinner" aria-hidden="true" />}
+      {busy && !spinsIcon && <span className="ui-button-spinner" aria-hidden="true" />}
       {children}
     </button>
   );

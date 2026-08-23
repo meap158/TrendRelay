@@ -132,7 +132,12 @@ a.ui-button { text-decoration: none; }
   animation: ui-spin .7s linear infinite;
 }
 @keyframes ui-spin { to { transform: rotate(360deg); } }
+/* The button's own icon turning, for a control whose icon is already a
+   circular arrow. Same clock as the spinner it replaces, so a page with both
+   kinds of button running does not tick at two speeds. */
+.ui-button-spins > svg:first-of-type { animation: ui-spin .7s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .ui-button-spinner { animation-duration: 2.4s; } }
+@media (prefers-reduced-motion: reduce) { .ui-button-spins > svg:first-of-type { animation-duration: 2.4s; } }
 
 /* --- segmented control ------------------------------------------------------ */
 /* An inset track with the chosen option raised out of it. The campaign timeline
