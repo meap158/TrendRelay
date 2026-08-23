@@ -86,10 +86,20 @@ def test_the_two_fields_stay_apart_even_though_the_capability_is_one() -> None:
     )
 
 
-def test_only_buffer_can_post_a_follow_up_at_all() -> None:
-    assert first_comment_deliverable("zernio", "facebook") is False
-    assert first_comment_deliverable("bundle_social", "instagram") is False
+def test_zernio_joins_buffer_on_comment_networks_but_not_on_threads() -> None:
+    # Buffer reaches every follow-up network by its two fields. Zernio carries a
+    # first comment on the three comment networks through a field of its own, and
+    # has no thread endpoint - so a reply network routed through it cannot take
+    # one. The other two engines have no follow-up field at all.
+    assert first_comment_deliverable("buffer", "facebook") is True
+    assert first_comment_deliverable("buffer", "threads") is True
+    assert first_comment_deliverable("zernio", "instagram") is True
+    assert first_comment_deliverable("zernio", "facebook") is True
+    assert first_comment_deliverable("zernio", "linkedin") is True
     assert first_comment_deliverable("zernio", "threads") is False
+    assert first_comment_deliverable("zernio", "bluesky") is False
+    assert first_comment_deliverable("bundle_social", "instagram") is False
+    assert first_comment_deliverable("woopsocial", "facebook") is False
 
 
 def test_other_engines_say_they_drop_comments_instead_of_dropping_silently() -> None:

@@ -16,7 +16,7 @@ Two axes, deliberately not merged:
 * the **network** decides what exists - Instagram has carousels and no
   clickable link in a post; Threads has replies and a working caption link;
 * the **engine** decides what is reachable - Buffer posts no carousel anywhere,
-  and it is the only engine that can put text after a post at all.
+  and text after a post is reachable through only two of the four engines.
 
 A capability needs both, which is why a workspace whose Instagram runs through
 Buffer cannot post a gallery even though Instagram plainly has them.
@@ -47,7 +47,7 @@ from trendrelay_api.integrations.publishing import (
 )
 
 
-#: The engine that can post text after a post, on the networks that have one.
+#: The engines that can post text after a post, on the networks that have one.
 #: Not hard-coded: asked of the same predicate delivery asks, so an engine that
 #: gains the ability appears here without this module being touched.
 def _follow_up_engines(platform: str) -> list[str]:
@@ -186,9 +186,11 @@ def capability_matrix() -> dict[str, Any]:
                 "carousels; no engine here can post one to it."
             ),
             (
-                "Only Buffer can put text after a post - a first comment, or a "
-                "reply in a thread. On Buffer, first comments additionally "
-                "depend on the plan the account is on."
+                "Text after a post needs an engine that reaches it. Buffer and "
+                "Zernio both post a first comment on Instagram, Facebook and "
+                "LinkedIn; only Buffer also posts a reply in a thread. On Buffer "
+                "a first comment additionally depends on the plan the account is "
+                "on; Zernio gates nothing."
             ),
             (
                 "Where a link is clickable is the network's decision. On "

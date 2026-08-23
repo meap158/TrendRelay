@@ -769,6 +769,42 @@ def test_zernio_forwards_the_type_as_its_content_type(
     assert sent["body"]["platforms"][0]["platformSpecificData"]["contentType"] == "post"
 
 
+def test_zernio_carries_a_first_comment_on_the_comment_networks(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    # Zernio's follow-up field. A comment network gets the text as `firstComment`
+    # inside its own platform data; a network Zernio cannot comment on - here
+    # TikTok - never carries it, so a link is never sent where it will not post.
+    use_provider(monkeypatch, tmp_path, "zernio")
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        sent["body"] = kwargs.get("body")
+        return {"post": {"_id": "p1", "status": "DRAFT"}}
+
+    monkeypatch.setattr(publishing, "_zernio_request", fake_request)
+    monkeypatch.setattr(publishing, "_zernio_upload", lambda video: "https://cdn/x.mp4")
+    body = request(
+        media_file,
+        first_comment="Shop the look: https://go.example.test/abc",
+        targets=[
+            publishing.PublishTarget(
+                platform="facebook", integration_id="a1", post_type="post"
+            ),
+            publishing.PublishTarget(platform="tiktok", integration_id="a2"),
+        ],
+    )
+
+    publishing._zernio_publish(body, media_file)
+
+    by_platform = {
+        entry["platform"]: entry.get("platformSpecificData", {})
+        for entry in sent["body"]["platforms"]
+    }
+    assert by_platform["facebook"]["firstComment"] == body.first_comment
+    assert "firstComment" not in by_platform["tiktok"]
+
+
 def test_the_dry_run_names_the_post_type_for_every_destination(media_file: Path) -> None:
     body = request(
         media_file,

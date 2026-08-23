@@ -99,15 +99,21 @@ def test_a_thread_network_calls_it_a_reply_and_a_comment_network_a_comment() -> 
     assert found["youtube"]["follow_up_label"] is None
 
 
-def test_only_one_engine_carries_anything_after_a_post() -> None:
+def test_two_engines_carry_text_after_a_post_and_only_one_reaches_threads() -> None:
     """Worth stating plainly: it is the constraint that shapes affiliate posts."""
+    found = rows()
     carriers = {
         engine
-        for row in rows().values()
+        for row in found.values()
         for engine in row["follow_up_engines"]
     }
 
-    assert carriers == {"buffer"}
+    # Buffer and Zernio both carry a first comment; nothing else carries anything.
+    assert carriers == {"buffer", "zernio"}
+    # A comment network is reached by both engines...
+    assert set(found["instagram"]["follow_up_engines"]) == {"buffer", "zernio"}
+    # ...while a thread network is Buffer's alone: Zernio has no thread endpoint.
+    assert found["threads"]["follow_up_engines"] == ["buffer"]
 
 
 def test_an_engine_that_cannot_fetch_a_url_says_so() -> None:

@@ -489,6 +489,11 @@ POST_TYPES: dict[str, tuple[PostType, ...]] = {
 # through the thread array all along. They are different fields, not different
 # capabilities, and the operator is choosing where the link goes rather than
 # which of Buffer's fields carries it.
+#
+# Zernio carries the same first comment on the three comment networks, through a
+# per-platform `firstComment` field of its own, but has no thread array - so its
+# reach is those three and not the four reply networks. `first_comment_deliverable`
+# is where that split lives; everything downstream reads it rather than an engine id.
 
 #: Buffer's schema declares a thread array on exactly these four networks. A
 #: thread is one post per reply, so each part is measured against the network's
@@ -522,10 +527,27 @@ def first_comment_deliverable(provider: str | None, platform: str | None) -> boo
 
     Asked before promising a first-comment placement: a link in a comment no
     engine will post is not a placement, it is a lost link. It answers for both
-    fields, because the question is whether the link can go after the post and
-    not which of Buffer's inputs carries it there.
+    fields at once - a first comment and a thread reply are the same question of
+    whether the link can go after the post, not which input carries it there.
+
+    Two engines reach it, and not the same networks. Buffer carries both fields,
+    so it delivers on every follow-up network. Zernio has a `firstComment` per
+    platform on the three comment networks but no thread endpoint, so its reach
+    stops at those three - a reply network routed through Zernio has nowhere to
+    put the follow-up.
+
+    The other two carry no follow-up on the publish request, checked against
+    their docs on 2026-08-23. WoopSocial's create endpoint has no such field.
+    bundle.social can post a comment, but only as a separate call against a post
+    it has already published - a different mechanism from the atomic field this
+    asks about, one that spends the account's monthly comment quota and is not
+    wired here - so a first comment through bundle.social is not promised.
     """
-    return provider == "buffer" and platform in FOLLOW_UP_PLATFORMS
+    if provider == "buffer":
+        return platform in FOLLOW_UP_PLATFORMS
+    if provider == "zernio":
+        return platform in FIRST_COMMENT_PLATFORMS
+    return False
 
 # YouTube requires a category on create. 22 is People & Blogs, the general
 # bucket short-form creator video falls into; the rest are offered for choice.
@@ -1670,6 +1692,13 @@ def _zernio_publish(
         if target.platform == "pinterest":
             specific["boardId"] = request.board
             specific["title"] = _post_title(request)[:100]
+        # Zernio carries the follow-up on the comment networks as a per-platform
+        # `firstComment`, the same field its own composer writes into. It is the
+        # only follow-up Zernio has - there is no thread endpoint - so it is set
+        # only for the three networks that take a comment, and Zernio skips it on
+        # a draft, delivering it when the post itself goes out.
+        if target.platform in FIRST_COMMENT_PLATFORMS and request.first_comment:
+            specific["firstComment"] = request.first_comment
         if specific:
             entry["platformSpecificData"] = specific
         post["platforms"].append(entry)
@@ -2804,22 +2833,27 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
     # but your plan does not include it" is a different sentence from "this
     # network has no comment to post into", and showing the second for the
     # first blamed the network for the plan.
-    comment_capable = (
-        set(provider.platforms) & FIRST_COMMENT_PLATFORMS
-        if provider.id == "buffer" else set()
-    )
-    comment_included = comment_capable and engine_limits.feature_available(
+    # Asked of the same predicate delivery asks, so every engine that reaches a
+    # comment network - Buffer, and now Zernio - is offered it here without this
+    # being a hard-coded list of engine ids.
+    comment_capable = {
+        platform for platform in provider.platforms
+        if platform in FIRST_COMMENT_PLATFORMS
+        and first_comment_deliverable(provider.id, platform)
+    }
+    comment_included = bool(comment_capable) and engine_limits.feature_available(
         provider.id,
         "first_comment",
-        # Read from the rate-limit policy Buffer returns on every call, the
-        # same way the plan shown beside the engine is. Asking without it
-        # would name no plan, and an unnamed plan keeps the feature.
+        # The paid gate is Buffer's alone, and only its plan is read off a
+        # rate-limit header. Every other engine leaves the feature on regardless
+        # of plan, so inferring one - and fetching Buffer's header to do it -
+        # would be a call made to change nothing.
         engine_limits.infer_plan(
             provider.id,
             policy=engine_limits.parse_rate_limit_policy(
                 buffer_rate_limit_policy_header()
             ),
-        ),
+        ) if provider.id == "buffer" else engine_limits.infer_plan(provider.id),
     )
     return {
         # The connection's id, which for an engine's first login is the engine
@@ -2854,23 +2888,31 @@ def provider_status(provider_id: str, *, probe: bool = True) -> dict[str, Any]:
         "authenticated": authenticated,
         "authorization_error": authorization_error,
         "thread_platforms": sorted(
-            set(provider.platforms) & THREAD_PLATFORMS
-        ) if provider.id == "buffer" else [],
+            platform for platform in provider.platforms
+            if platform in THREAD_PLATFORMS
+            and first_comment_deliverable(provider.id, platform)
+        ),
         "max_thread_parts": MAX_THREAD_PARTS,
         "supports_approval": provider.id == "buffer",
-        # Where a follow-up can be delivered at all - by either of Buffer's two
-        # fields, which the table above sets out. The thread networks are here
-        # because a reply in the thread is the same thing to the operator, who
-        # is choosing where the link goes and not which input carries it.
+        # Where a follow-up can be delivered at all. On Buffer that is both its
+        # fields - a first comment on the three comment networks and a reply on
+        # the four thread networks - because a reply in the thread is the same
+        # thing to the operator, who is choosing where the link goes and not
+        # which input carries it. On Zernio it is the three comment networks
+        # only; it has no thread endpoint.
         #
-        # The paid gate covers only the `firstComment` networks. That is the
-        # feature Buffer sells, and the one whose free tier answers "First
-        # comment requires a paid plan" after the post has been built and sent;
-        # the thread array is not sold separately and is not withheld here.
+        # The paid gate covers only the `firstComment` networks, and only on the
+        # engine that sells them: Buffer's free tier answers "First comment
+        # requires a paid plan" after the post has been built and sent. The
+        # thread array is not sold separately, and Zernio gates nothing.
         "first_comment_platforms": sorted(
-            (set(provider.platforms) & THREAD_PLATFORMS)
+            {
+                platform for platform in provider.platforms
+                if platform in THREAD_PLATFORMS
+                and first_comment_deliverable(provider.id, platform)
+            }
             | (comment_capable if comment_included else set())
-        ) if provider.id == "buffer" else [],
+        ),
         # Networks that take a first comment which this login's plan withholds
         # - so the interface can blame the plan, not the network.
         "first_comment_locked_platforms": sorted(
