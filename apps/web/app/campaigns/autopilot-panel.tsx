@@ -19,7 +19,7 @@ import dynamic from "next/dynamic";
 import { clipLength, handoffPath } from "../../lib/media-rules";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, ChevronDown, Eye, Heart, Info, MessageCircle, Share2 } from "lucide-react";
+import { Bookmark, Check, ChevronDown, Circle, Eye, Heart, Info, MessageCircle, Share2 } from "lucide-react";
 
 import { apiBaseUrl } from "../../lib/api";
 import { AUTHORITIES } from "./authority-options";
@@ -3433,7 +3433,9 @@ export function AutopilotPanel({
               <li key={row.id} className={row.met ? "met" : "unmet"}>
                 {/* The outstanding rows carry the weight, not the finished ones: what
                     is left to do is the reason this list is on screen. */}
-                <span aria-hidden="true">{row.met ? "✓" : "•"}</span>
+                <span aria-hidden="true">{row.met
+                  ? <Check size={14} strokeWidth={3} />
+                  : <Circle size={9} strokeWidth={3} fill="currentColor" />}</span>
                 <span>{row.label}</span>
                 {!row.met && row.section && (
                   <button type="button" className="autopilot-fix" onClick={() => {
@@ -3965,7 +3967,7 @@ export function AutopilotPanel({
                       <em>{asset.versions.some((version) => ["blurred", "edited"].includes(version.kind))
                         ? "Effects applied" : "Original"}</em>
                     </span>
-                    <b className="campaign-media-check" aria-hidden="true">✓</b>
+                    <b className="campaign-media-check" aria-hidden="true"><Check size={14} strokeWidth={3} /></b>
                   </label>
                 </li>
               ))}

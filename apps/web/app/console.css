@@ -1048,6 +1048,7 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 .autopilot-checklist { display: grid; gap: 4px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); list-style: none; }
 .autopilot-checklist li { display: flex; gap: 8px; align-items: center; padding: 2px 0; font-size: 12px; line-height: 1.5; }
 .autopilot-checklist li > span:first-child { flex: none; width: 14px; font-size: 15px; line-height: 1.2; text-align: center; font-weight: 700; }
+.autopilot-checklist li > span:first-child svg { display: block; margin: 0 auto; }
 .autopilot-checklist li.met { color: var(--muted); }
 .autopilot-checklist li.met > span:first-child { color: var(--green); }
 .autopilot-checklist li.unmet > span:first-child { color: var(--amber); }
