@@ -748,6 +748,18 @@ nav strong { color: var(--text); }
 .slot-week-add-row input[type="time"] { flex: 1; min-width: 0; min-height: 26px; padding: 2px 4px; font-size: 11px; }
 .slot-week-add-confirm { display: grid; place-items: center; flex: none; width: 26px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 0; background: var(--panel); color: var(--green); cursor: pointer; }
 .slot-week-add-confirm:disabled { cursor: not-allowed; opacity: .5; }
+/* The same button standing down. Green says "this does the thing"; the way
+   out of a row nobody has typed in yet is not the thing, so it reads as
+   chrome until there is something to confirm. */
+.slot-week-add-confirm[data-cancel] { border-color: var(--line); color: var(--muted); }
+.slot-week-add-confirm[data-cancel]:hover:not(:disabled) { border-color: var(--line-strong); color: var(--text); }
+/* One line. Left alone the time input, the day chooser and the button
+   stacked into three rows: the chooser is a `.ui-select`, which is
+   `width: 100%` by design because it fills the field it is given - and here
+   the field is a row, so it is told how much of the row to take. */
+.slot-add { align-items: center; }
+.slot-add > input { inline-size: auto; min-inline-size: 0; }
+.slot-add .ui-select { flex: 0 1 190px; inline-size: auto; }
 /* Applies to all seven, so it is stated once above them rather than
    repeated in every column as seven rows nobody can edit apart. */
 .slot-week-everyday { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

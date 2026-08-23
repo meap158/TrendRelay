@@ -1279,13 +1279,28 @@ export function SlotEditor({
                         if (event.key === "Escape") { setAddingDay(null); setDayDraft(""); }
                       }}
                     />
+                    {/* One slot, two jobs, decided by whether there is
+                        anything to add. It was a plus that sat disabled until
+                        a time was typed - dead space exactly while somebody
+                        was deciding whether they wanted the row at all, and
+                        the only way out was an Escape key nothing mentioned.
+                        Empty, it is the way back to the plain +. A column this
+                        narrow has no room for a third control, and a button
+                        that does nothing is the one worth spending. */}
                     <button
                       type="button"
                       className="slot-week-add-confirm"
-                      aria-label={`Add this time on ${name}`}
-                      disabled={busy || !dayDraft}
-                      onClick={() => addToDay(day)}
-                    ><ActionIcon name="add" /></button>
+                      data-cancel={dayDraft ? undefined : ""}
+                      aria-label={dayDraft
+                        ? `Add this time on ${name}`
+                        : `Stop adding a time on ${name}`}
+                      title={dayDraft ? "Add" : "Close"}
+                      disabled={busy}
+                      onClick={() => {
+                        if (dayDraft) { addToDay(day); return; }
+                        setAddingDay(null);
+                      }}
+                    ><ActionIcon name={dayDraft ? "add" : "dismiss"} /></button>
                   </li>
                 ) : (
                   <li className="slot-week-add">
