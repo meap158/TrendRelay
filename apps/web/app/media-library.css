@@ -805,3 +805,26 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .caption-file-download { padding: 0; border: 0; background: none; color: var(--link); font-size: 13px; text-align: start; overflow-wrap: anywhere; cursor: pointer; }
 .caption-file-download:hover { text-decoration: underline; }
 .caption-file-list span { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+/* The way out of "no reviewed transcript" at a clip that has just been read by
+   a machine: the draft, offered as a script to check rather than voiced. */
+.voice-draft-offer { display: grid; justify-items: start; gap: 4px; margin-block-start: 6px; }
+.voice-draft-offer small { color: var(--muted); font-size: 10px; line-height: 1.4; }
+/* A model that cannot say the transcript's language, named. */
+.voice-language-gap { color: var(--amber-text, var(--muted)); }
+
+/* One sticky layer on a phone, not three.
+
+   The search, the category tabs and the collection actions are useful standing
+   context on a wide screen, where they cost a corner of it. Stacked under a
+   two-row toolbar and a page heading on a 390px screen they came to about 44%
+   of the viewport, and a media browser showing almost no media is not a
+   browser. They scroll away with the panel they belong to; what stays is the
+   toolbar, and that now retracts on the way down. */
+@media (max-width: 700px) {
+  .library-browser-sticky-controls {
+    position: static;
+    top: auto;
+  }
+}
+

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { useCollapsingChrome } from "../lib/collapsing-chrome";
 import { Clock, Languages, Settings } from "lucide-react";
 import { notificationHref } from "../lib/job-links";
 
@@ -238,6 +240,11 @@ function groupNotifications(jobs: BaseJob[]): NotificationGroup[] {
 }
 
 export function GlobalNav() {
+  // On a phone this toolbar is two rows and about 123px, and every page sticks
+  // its own heading beneath it. It leaves on the way down and returns on the
+  // way up, which gives a reader the screen back without putting anything
+  // out of reach.
+  useCollapsingChrome();
   const { user, signOut, localMode, apiFetch } = useAuth();
   const { jobs, refresh: refreshJobs } = useJobs();
   const { workspaces, workspaceId, setWorkspaceId, loading: workspaceLoading, error: workspaceError } = useWorkspace();

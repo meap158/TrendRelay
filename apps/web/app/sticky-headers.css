@@ -90,6 +90,37 @@
   }
 }
 
+/* The toolbar leaves while somebody reads down, and returns on the way up.
+   Two rows and about 123px of a phone screen is too much to hold permanently,
+   and every page sticks its own heading underneath it - on Library the stack
+   reached roughly 44% of the viewport.
+
+   The offset goes to zero with it, so the page heading rides up rather than
+   leaving a toolbar-shaped hole above itself: the whole stack moves as one,
+   which is what makes it read as the chrome retracting rather than as a
+   layout breaking. `useCollapsingChrome` sets the attribute. */
+@media (max-width: 1100px) {
+  .app-toolbar {
+    transition: transform 160ms ease;
+    will-change: transform;
+  }
+
+  html[data-chrome="away"] .app-toolbar {
+    transform: translateY(-100%);
+  }
+
+  html[data-chrome="away"] {
+    --app-toolbar-offset: 0px;
+  }
+}
+
+/* Movement is the affordance for some people and a symptom for others. */
+@media (prefers-reduced-motion: reduce) {
+  .app-toolbar {
+    transition: none;
+  }
+}
+
 @media (max-width: 1100px) {
   :root {
     --app-toolbar-offset: 131px;
