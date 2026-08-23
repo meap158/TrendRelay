@@ -377,8 +377,15 @@ a.ui-button { text-decoration: none; }
 .filter-chip-frame[data-can-start]::before, .filter-chip-frame[data-can-end]::after { opacity: 1; }
 .filter-chip-strip { display: flex; gap: 6px; overflow-x: auto; width: 100%; box-sizing: border-box; padding: 9px 16px; scrollbar-width: none; touch-action: pan-x; user-select: none; -webkit-user-select: none; overscroll-behavior-x: contain; }
 .filter-chip-strip::-webkit-scrollbar { display: none; }
-/* Inside a row that already has padding of its own. */
-.filter-chip-frame[data-dense] .filter-chip-strip { padding: 0; }
+/* Inside a row that already has padding of its own.
+ *
+ * Horizontal padding goes; vertical padding stays and is pulled back out with
+ * a negative margin, so the row is no taller but the strip still has room
+ * inside it. `overflow-x: auto` makes `overflow-y` compute to `auto` too - a
+ * box cannot clip one axis and overflow the other - so a strip with no
+ * vertical padding clips the selected chip's ring top and bottom, and the
+ * selection reads as two vertical bars rather than an outline. */
+.filter-chip-frame[data-dense] .filter-chip-strip { padding: 2px 0; margin-block: -2px; }
 .filter-chip-strip.dragging { cursor: grabbing; scroll-behavior: auto; }
 .filter-chip { flex: 0 0 auto; display: inline-flex; gap: 5px; align-items: center; min-height: 24px; border: 1px solid transparent; border-radius: 999px; padding: 2px 10px; cursor: pointer; font: inherit; font-size: 10px; font-weight: 700; white-space: nowrap; }
 .filter-chip:not(.chip-all) { border-color: color-mix(in srgb, currentColor 26%, transparent); }
