@@ -51,12 +51,14 @@ import {
 } from "../../lib/library-selection-actions";
 
 const CaptionEditor = dynamic(() => import("../library/caption-editor").then((m) => m.CaptionEditor), { ssr: false });
+const OfferPicker = dynamic(() => import("../publish/offer-picker").then((m) => m.OfferPicker), { ssr: false });
 const BulkVoiceEditor = dynamic(() => import("../library/bulk-voice-editor").then((m) => m.BulkVoiceEditor), { ssr: false });
 const BatchTranscribe = dynamic(() => import("../library/batch-transcribe").then((m) => m.BatchTranscribe), { ssr: false });
 import { TimelineImage, TimelinePlayer } from "./timeline-player";
 import { accountIdentity, type EngineAccount } from "../publishing-account";
 import { profileUrl } from "../../lib/social-profile";
 import { commissionLabel, type CommissionBearing } from "../commission";
+import type { ProductRow } from "../attribution/types";
 // The same money the Attribution table prints, so a price reads the same
 // in the campaign that promotes the product as in the list it came from.
 import { money } from "../attribution/format";
@@ -1668,6 +1670,16 @@ export function AutopilotPanel({
   const [tagged, setTagged] = useState<TaggedProduct[]>([]);
   const [addingProducts, setAddingProducts] = useState(false);
   /**
+   * The Attribution catalogue, read once the add-products dialog first opens.
+   *
+   * The dialog is the same `OfferPicker` Publish and Discover choose from, on
+   * the same terms - price, rate, network, import batch - rather than the
+   * name-only list that used to sit inline here. That picker reads whole
+   * `ProductRow`s, which is a different, richer read than the flat offers the
+   * panel already holds, so it is fetched for the dialog and only then.
+   */
+  const [attributionProducts, setAttributionProducts] = useState<ProductRow[] | null>(null);
+  /**
    * The whole tagged list, when somebody asks for it.
    *
    * The panel shows the first few. A campaign curated from an import can hold
@@ -1684,7 +1696,6 @@ export function AutopilotPanel({
   const [productFilter, setProductFilter] = useState<"all" | "available" | "unavailable">("all");
   const [productPage, setProductPage] = useState(0);
   const [pickedProducts, setPickedProducts] = useState<Set<string>>(new Set());
-  const [productSearch, setProductSearch] = useState("");
   const [pinnedOffers, setPinnedOffers] = useState<Set<string>>(new Set());
   const [slots, setSlots] = useState<Slot[]>([]);
   const [postingPresets, setPostingPresets] = useState<PostingPreset[]>([]);
@@ -2413,6 +2424,22 @@ export function AutopilotPanel({
       setTagged([]);
     }
   }, [apiFetch, base]);
+
+  /** Offers already on this campaign - the rows the add dialog ticks. */
+  const taggedOfferIds = useMemo(
+    () => new Set(tagged.map((product) => product.offer_id)),
+    [tagged],
+  );
+  const productsLoaded = attributionProducts !== null;
+  useEffect(() => {
+    if (!addingProducts || productsLoaded || !workspaceId) return;
+    let live = true;
+    void apiFetch(`/api/workspaces/${workspaceId}/attribution/products`)
+      .then((response) => json<{ products: ProductRow[] }>(response))
+      .then((body) => { if (live) setAttributionProducts(body.products ?? []); })
+      .catch(() => { if (live) setAttributionProducts([]); });
+    return () => { live = false; };
+  }, [addingProducts, productsLoaded, apiFetch, workspaceId]);
 
   async function tagProducts(offerIds: string[]) {
     if (!offerIds.length) return;
@@ -5302,82 +5329,32 @@ export function AutopilotPanel({
                 </div>
               </Dialog>
 
-              {addingProducts && (
-                <div className="campaign-product-picker">
-                  <div className="autopilot-picker-head">
-                    <span>
-                      <strong>Add products</strong>
-                      <small>Imported offers from Attribution. Adding one here
-                        is the same as tagging it to this campaign there.</small>
-                    </span>
-                    <Button variant="quiet" size="sm"
-                      onClick={() => { setAddingProducts(false); setProductSearch(""); }}>
-                      {t("common.close")}
-                    </Button>
-                  </div>
-                  <input
-                    className="campaign-product-search"
-                    value={productSearch}
-                    placeholder="Search imported products…"
-                    aria-label="Search imported products"
-                    onChange={(event) => setProductSearch(event.target.value)}
-                  />
-                  {(() => {
-                    const held = new Set(tagged.map((product) => product.offer_id));
-                    const term = productSearch.trim().toLowerCase();
-                    const available = offers
-                      .filter((offer) => !held.has(offer.id))
-                      .filter((offer) => !term
-                        || offer.product.name.toLowerCase().includes(term)
-                        || (offer.product.brand ?? "").toLowerCase().includes(term));
-                    if (!offers.length) {
-                      return <p className="autopilot-empty">
-                        No products imported yet. Import them in Attribution.
-                      </p>;
-                    }
-                    if (!available.length) {
-                      return <p className="autopilot-empty">{term
-                        ? "No imported product matches that."
-                        : "Every imported product is already on this campaign."}</p>;
-                    }
-                    return (
-                      <>
-                        {/* Everything matching, in one action. Tagging forty
-                            products one at a time is the reason people give up
-                            and leave the campaign empty. */}
-                        {term && available.length > 1 && (
-                          <Button variant="secondary" size="sm" busy={busy === "tag-products"}
-                            onClick={() => void tagProducts(available.map((offer) => offer.id))}>
-                            Add all {available.length} matching
-                          </Button>
-                        )}
-                        <ul className="campaign-product-choices">
-                          {available.slice(0, 60).map((offer) => (
-                            <li key={offer.id}>
-                              <span>
-                                <strong>{offer.product.name}</strong>
-                                <small>{[
-                                  offer.product.brand,
-                                  offer.product.marketplace ?? offer.network,
-                                  commissionLabel(offer),
-                                ].filter(Boolean).join(" · ")}</small>
-                              </span>
-                              <Button variant="secondary" size="sm"
-                                busy={busy === "tag-products"}
-                                onClick={() => void tagProducts([offer.id])}>Add</Button>
-                            </li>
-                          ))}
-                        </ul>
-                        {available.length > 60 && (
-                          <p className="autopilot-empty">
-                            {available.length - 60} more. Search to narrow them.
-                          </p>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
+              {/* The same dialog Publish and Discover choose from, on the
+                  same terms - price, rate, network, import batch, sortable -
+                  rather than a name-only list walled at sixty rows. It stays
+                  open across adds: tagging is cumulative, and each added row
+                  wears its tick as the campaign takes it. */}
+              <OfferPicker
+                open={addingProducts}
+                products={attributionProducts ?? []}
+                loading={!productsLoaded}
+                chosen=""
+                chosenIds={taggedOfferIds}
+                title="Add products"
+                description={"Imported offers from Attribution. Adding one here "
+                  + "is the same as tagging it to this campaign there."}
+                chooseAllLabel="Add all"
+                onChoose={(offer) => {
+                  if (!taggedOfferIds.has(offer.offer_id)) {
+                    void tagProducts([offer.offer_id]);
+                  }
+                }}
+                onChooseAll={(rows) => void tagProducts(
+                  rows.filter((row) => !taggedOfferIds.has(row.offer_id))
+                    .map((row) => row.offer_id),
+                )}
+                onClose={() => setAddingProducts(false)}
+              />
 
               {/* The ranking, on demand. It explains which of the tagged
                   products would be chosen and why, which is a different

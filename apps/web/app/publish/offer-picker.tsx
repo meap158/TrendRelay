@@ -64,14 +64,27 @@ export function OfferPicker({
   open,
   products,
   chosen,
+  chosenIds,
   campaigns = [],
   campaignsByOffer = {},
+  loading = false,
+  title = "Choose a product",
+  description = "Its own affiliate link goes in the post. Sorted by what each offer pays.",
+  chooseAllLabel,
   onChoose,
+  onChooseAll,
   onClose,
 }: {
   open: boolean;
   products: ProductRow[];
   chosen: string;
+  /**
+   * Everything already chosen, for a caller that accumulates - a campaign
+   * tagging products one after another. Rows in here wear the tick alongside
+   * whatever `chosen` marks, and the dialog stays open across choices because
+   * closing is the caller's decision, not this component's.
+   */
+  chosenIds?: ReadonlySet<string>;
   /**
    * Campaigns a product can be promoted by, and which ones already promote
    * each offer.
@@ -82,7 +95,14 @@ export function OfferPicker({
    */
   campaigns?: { id: string; name: string; status: string; tagged_products: number }[];
   campaignsByOffer?: Record<string, string[]>;
+  /** The catalogue is still being read - say so instead of "no products". */
+  loading?: boolean;
+  title?: string;
+  description?: string;
+  /** Offered when a caller can take every shown row at once - "Add all N". */
+  chooseAllLabel?: string;
   onChoose: (offer: OfferChoice) => void;
+  onChooseAll?: (offers: OfferChoice[]) => void;
   onClose: () => void;
 }) {
   const t = useT();
@@ -149,8 +169,8 @@ export function OfferPicker({
     <Dialog
       open={open}
       size="wide"
-      title="Choose a product"
-      description="Its own affiliate link goes in the post. Sorted by what each offer pays."
+      title={title}
+      description={description}
       onClose={onClose}
     >
       <div className="product-picker">
@@ -170,6 +190,17 @@ export function OfferPicker({
               ? `${rows.length} of ${all.length}`
               : t("attribution.productCount", { count: rows.length })}
           </span>
+          {/* Everything shown, in one action - for the caller that tags a
+              campaign rather than picking one link. Offered once the list is
+              narrowed to something somebody meant, because "add every product
+              in the catalogue" is nearly always a slip. */}
+          {onChooseAll && rows.length > 1 && (query.trim() || filtered) && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => onChooseAll(rows)}
+            >{chooseAllLabel ?? "Choose all"} {rows.length}</Button>
+          )}
         </div>
 
         {/* Reusing Attribution's own filter classes rather than restyling them
@@ -241,9 +272,11 @@ export function OfferPicker({
 
         {rows.length === 0 ? (
           <p className="product-picker-empty">
-            {all.length
-              ? t("attribution.noProductMatches")
-              : t("publish.noProductsToLink")}
+            {loading
+              ? "Reading the catalogue…"
+              : all.length
+                ? t("attribution.noProductMatches")
+                : t("publish.noProductsToLink")}
           </p>
         ) : (
           <div className="product-picker-scroll">
@@ -285,7 +318,8 @@ export function OfferPicker({
               </thead>
               <tbody>
                 {rows.map((row) => {
-                  const picked = row.offer_id === chosen;
+                  const picked = row.offer_id === chosen
+                    || Boolean(chosenIds?.has(row.offer_id));
                   return (
                     <tr
                       key={row.offer_id}
