@@ -11,6 +11,19 @@ import { AutoTranscribe } from "./auto-transcribe";
 import { ProviderSwitch, providerOf, useMediaAi } from "./transcription-setup";
 import { useT } from "../i18n-provider";
 import { useJobs } from "../jobs-provider";
+import {
+  ALIGNMENTS,
+  checkedMargin,
+  contentRect,
+  checkedSize,
+  movable,
+  overridesFrom,
+  placementFromPoint,
+  placementStyle,
+  sizeFromDrag,
+  type Alignment,
+  type Placement,
+} from "../../lib/caption-placement";
 
 /**
  * Captions: their own class of work, not an effect.
@@ -148,6 +161,7 @@ function CaptionLook({
   compact = false,
   highlightWords = true,
   sourceWidth = 1920,
+  sizeOverride,
 }: {
   preset: CaptionStyle;
   cue?: Cue | null;
@@ -156,6 +170,8 @@ function CaptionLook({
   compact?: boolean;
   highlightWords?: boolean;
   sourceWidth?: number;
+  /** A size being dragged, which the preset does not know about yet. */
+  sizeOverride?: number;
 }) {
   const sampleWords = (sample || "Caption preview").split(/\s+/).filter(Boolean);
   const compactSample = sampleWords.slice(
@@ -176,7 +192,11 @@ function CaptionLook({
   return (
     <span
       className={`caption-look${compact ? " caption-look-compact" : ""}`}
-      style={captionTextStyle(preset.style, compact, sourceWidth)}
+      style={captionTextStyle(
+        sizeOverride === undefined ? preset.style : { ...preset.style, size: sizeOverride },
+        compact,
+        sourceWidth,
+      )}
     >
       {wordsByLine.map((line, lineIndex) => {
         const wordOffset = wordsByLine
@@ -281,6 +301,28 @@ export function CaptionEditor({
   const [mediaProblem, setMediaProblem] = useState("");
   const [playbackMs, setPlaybackMs] = useState(0);
   const [mediaSourceWidth, setMediaSourceWidth] = useState(1920);
+  const [mediaSourceHeight, setMediaSourceHeight] = useState(1080);
+  /**
+   * Where the caption sits and how big it is, once somebody has said.
+   *
+   * Null until then, and null means "whatever the preset says" rather than a
+   * copy of it: the presets are the API's to change, and a placement captured
+   * at open time would quietly pin this style to the values it had that day.
+   */
+  const [placement, setPlacement] = useState<Placement | null>(null);
+  const [sizeOverride, setSizeOverride] = useState<number | null>(null);
+  const [dragging, setDragging] = useState<null | "move" | "resize">(null);
+  /**
+   * How big the preview box currently is.
+   *
+   * Measured rather than assumed, because the picture inside it is letterboxed
+   * and the overlay has to land on the picture. `aspect-ratio` looked like it
+   * could do this in CSS alone, and cannot: a grid item needs one real
+   * dimension, and giving it one makes the ratio lose to it - the overlay came
+   * out 640px wide inside a 470px frame.
+   */
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  const frameRef = useRef<HTMLDivElement | null>(null);
   const mediaRef = useRef<HTMLMediaElement | null>(null);
   // A preview asked for after a newer one must not overwrite it: the requests
   // are independent and the slower one can land last.
@@ -338,6 +380,121 @@ export function CaptionEditor({
     };
   }, [apiFetch, open, primaryAssetId, workspaceId]);
 
+  const chosen = catalogue?.styles.find((item) => item.id === styleId);
+  const previewPreset = chosen ?? catalogue?.styles[0] ?? null;
+
+  // --- where the caption sits ------------------------------------------------
+  const source = useMemo(
+    () => ({ width: mediaSourceWidth, height: mediaSourceHeight }),
+    [mediaSourceWidth, mediaSourceHeight],
+  );
+  /** The preset's own placement, which is what an untouched caption uses. */
+  const presetPlacement: Placement = useMemo(() => ({
+    alignment: (previewPreset?.style.alignment ?? "bottom") as Alignment,
+    margin_h: previewPreset?.style.margin_h ?? 0,
+    margin_v: previewPreset?.style.margin_v ?? 0,
+  }), [previewPreset]);
+  const activePlacement = placement ?? presetPlacement;
+  const activeSize = sizeOverride ?? previewPreset?.style.size ?? 48;
+  const canMove = movable(activePlacement.alignment);
+  /** Nothing to send while it matches the preset, which is the common case. */
+  const styleOverrides = useMemo(
+    () => overridesFrom(activePlacement, activeSize, previewPreset?.style ?? {}),
+    [activePlacement, activeSize, previewPreset],
+  );
+  const moved = Object.keys(styleOverrides).length > 0;
+
+  /** The preview drawn where the render will put it, not at a fixed inset. */
+  const overlayStyle = useMemo(
+    () => placementStyle(activePlacement, source),
+    [activePlacement, source],
+  );
+  /** The picture's own box, which is what those percentages are of. */
+  const picture = useMemo(
+    () => contentRect(frameSize, source),
+    [frameSize, source],
+  );
+
+  const watcher = useRef<ResizeObserver | null>(null);
+  /**
+   * Attach the observer when the frame appears, not when the dialog opens.
+   *
+   * The frame is rendered conditionally - there is nothing to preview until
+   * the styles and the media have arrived - so an effect keyed on `open` runs
+   * while the ref is still null and observes nothing. A callback ref fires on
+   * the mount itself, which is the moment there is something to measure.
+   */
+  const attachFrame = useCallback((node: HTMLDivElement | null) => {
+    frameRef.current = node;
+    watcher.current?.disconnect();
+    watcher.current = null;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    // `clientWidth`/`clientHeight` rather than the observer's own rectangle:
+    // that one is the content box in fractional pixels and lags a layout the
+    // observer did not cause, which had the overlay sized against a frame
+    // eight pixels wider than the one on screen. These two are what the
+    // absolutely-positioned overlay is actually laid out against.
+    const measure = () => setFrameSize({
+      width: node.clientWidth,
+      height: node.clientHeight,
+    });
+    measure();
+    watcher.current = new ResizeObserver(measure);
+    watcher.current.observe(node);
+  }, []);
+
+  /**
+   * Pick a preset, and take its placement with it.
+   *
+   * Carrying the last one's numbers across would make choosing a style do
+   * nothing visible - its placement is most of what distinguishes it. Done
+   * here rather than in an effect on `styleId`, because this click is the
+   * thing that causes it and an effect would also fire on the first render.
+   */
+  const chooseStyle = useCallback((next: string) => {
+    setStyleId(next);
+    setPlacement(null);
+    setSizeOverride(null);
+  }, []);
+
+  const pointerPlacement = useCallback((event: { clientX: number; clientY: number }) => {
+    const frame = frameRef.current?.getBoundingClientRect();
+    if (!frame) return;
+    setPlacement((current) => placementFromPoint(
+      { x: event.clientX - frame.left, y: event.clientY - frame.top },
+      { width: frame.width, height: frame.height },
+      source,
+      current ?? presetPlacement,
+    ));
+  }, [source, presetPlacement]);
+
+  // Pointer capture rather than window listeners: the gesture belongs to the
+  // element it started on, so a pointer that leaves the frame - or a dialog
+  // that closes mid-drag - cannot leave a listener behind.
+  useEffect(() => {
+    if (!dragging) return;
+    const startY = { value: 0, size: activeSize };
+    function move(event: PointerEvent) {
+      if (dragging === "move") { pointerPlacement(event); return; }
+      const frame = frameRef.current?.getBoundingClientRect();
+      if (!frame) return;
+      if (!startY.value) startY.value = event.clientY;
+      setSizeOverride(sizeFromDrag(startY.size, event.clientY - startY.value, frame.height, source));
+    }
+    function stop() { setDragging(null); }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+    // `activeSize` is read once at the start of a drag on purpose: depending on
+    // it would restart the gesture on every frame of it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragging, pointerPlacement, source]);
+
   const load = useCallback(async () => {
     if (!open || !workspaceId || !primaryAssetId) return;
     const ticket = ++latest.current;
@@ -351,6 +508,10 @@ export function CaptionEditor({
           body: JSON.stringify({
             style_id: styleId,
             translate_to: translateTo || null,
+            // Only what was actually changed. The preview has to be built with
+            // the same overrides the render will use, or dragging a caption
+            // would move it on screen and nowhere else.
+            style_overrides: styleOverrides,
           }),
         },
       );
@@ -368,7 +529,7 @@ export function CaptionEditor({
     } finally {
       if (ticket === latest.current) setBusy(false);
     }
-  }, [open, workspaceId, primaryAssetId, styleId, translateTo, apiFetch]);
+  }, [open, workspaceId, primaryAssetId, styleId, translateTo, styleOverrides, apiFetch]);
 
   useEffect(() => {
     // Deferred out of the effect body: `load` sets state on its first line, and
@@ -441,6 +602,7 @@ export function CaptionEditor({
                 style_id: styleId,
                 translate_to: translateTo || null,
                 delivery: canBurn ? delivery : "sidecar",
+                style_overrides: styleOverrides,
                 batch: { id: batchId, total: compatibleTargets.length },
               }),
             },
@@ -496,13 +658,12 @@ export function CaptionEditor({
     onQueued,
     refreshJobs,
     styleId,
+    styleOverrides,
     t,
     translateTo,
     workspaceId,
   ]);
 
-  const chosen = catalogue?.styles.find((item) => item.id === styleId);
-  const previewPreset = chosen ?? catalogue?.styles[0] ?? null;
   const activeCue = preview?.cues.find(
     (cue) => playbackMs >= cue.start_ms && playbackMs <= cue.end_ms,
   ) ?? (playbackMs === 0 ? preview?.cues[0] ?? null : null);
@@ -537,6 +698,21 @@ export function CaptionEditor({
   const availableTranslations = sourceLanguage
     ? pairs.filter((pair) => pair.from === sourceLanguage && pair.to !== sourceLanguage)
     : [];
+  /**
+   * What the captions are being turned into, when they are being turned into
+   * anything.
+   *
+   * Said out loud wherever the captions are, and not only while the request is
+   * in the air. A translated caption is still a translation once it has
+   * finished arriving, and the difference between "these are the words" and
+   * "these are the words in another language" is exactly the thing somebody
+   * proofreading needs to know before they trust what they are reading.
+   */
+  const translatingTo = translateTo
+    ? availableTranslations
+      .find((pair) => pair.to === translateTo)?.label.replace(/^.*? to /, "")
+      ?? translateTo.toUpperCase()
+    : "";
 
   return (
     <Dialog
@@ -599,13 +775,22 @@ export function CaptionEditor({
               <strong>This clip has no speech transcript yet.</strong>{" "}
               Transcribe it here and the machine draft unlocks caption timing
               automatically when it finishes — review the wording before publishing.
+              Reading the on-screen text is the other half: it does not feed the
+              captions, it records what is already written on the picture and
+              where, which is what covering or replacing it needs.
             </p>
             <AutoTranscribe
               workspaceId={workspaceId}
               assetId={primary.id}
               hasAudio={hasAudio}
               mediaKind={primary.mediaKind}
-              modesAvailable={["speech"]}
+              // Both readings, not just speech. Captions are built from the
+              // spoken transcript, but this is the screen somebody is on when
+              // they are thinking about the words in a video - and the
+              // on-screen reading is what the cover-and-replace step needs,
+              // so sending them elsewhere to start it was a detour with no
+              // reason behind it.
+              modesAvailable={["speech", "ocr"]}
               apiFetch={apiFetch}
               canEdit={canEdit}
               onFinished={() => {
@@ -648,9 +833,15 @@ export function CaptionEditor({
                 <h4>On-media preview</h4>
                 <small>Play the clip or choose a cue to inspect its real timing.</small>
               </div>
-              {busy && <Badge tone="neutral">Updating…</Badge>}
+              {/* Translating is the slow pass and the one worth naming: a
+                  generic "updating" on a wait that is several times longer
+                  reads as the dialog having stalled. */}
+              {busy && <Badge tone="neutral">{translatingTo ? "Translating…" : "Updating…"}</Badge>}
+              {!busy && translatingTo && (
+                <Badge tone="info">Translated · {translatingTo}</Badge>
+              )}
             </header>
-            <div className="caption-media-frame">
+            <div className="caption-media-frame" ref={attachFrame} data-dragging={dragging || undefined}>
               {mediaLoading && !mediaUrl && (
                 <div className="caption-media-placeholder">Loading media…</div>
               )}
@@ -662,7 +853,13 @@ export function CaptionEditor({
                   muted
                   playsInline
                   preload="metadata"
-                  onLoadedMetadata={(event) => setMediaSourceWidth(event.currentTarget.videoWidth || 1920)}
+                  onLoadedMetadata={(event) => {
+                    setMediaSourceWidth(event.currentTarget.videoWidth || 1920);
+                    // The height matters as much as the width now: a vertical
+                    // margin is a fraction of it, and assuming 1080 on a
+                    // portrait clip puts every caption in the wrong place.
+                    setMediaSourceHeight(event.currentTarget.videoHeight || 1080);
+                  }}
                   onTimeUpdate={(event) => setPlaybackMs(event.currentTarget.currentTime * 1000)}
                   onSeeked={(event) => setPlaybackMs(event.currentTarget.currentTime * 1000)}
                 />
@@ -687,19 +884,65 @@ export function CaptionEditor({
                   {mediaProblem || "Media preview unavailable — showing the caption look."}
                 </div>
               )}
+              {/* The thirds a drop snaps to, shown only while dragging. The
+                  anchor grid is the actual model, so hiding it would make the
+                  snap feel like the drag failing to track the pointer. */}
+              {dragging === "move" && <div className="caption-drop-grid" aria-hidden="true" />}
               {previewPreset && activeCue && (
-                <div
-                  className="caption-media-overlay"
-                  style={captionPosition(previewPreset.style.alignment)}
-                  aria-live="off"
-                >
-                  <CaptionLook
-                    preset={previewPreset}
-                    cue={activeCue}
-                    activeMs={playbackMs}
-                    highlightWords={!translateTo}
-                    sourceWidth={mediaSourceWidth}
-                  />
+                <div className="caption-media-overlay" aria-live="off">
+                  {/* An inner box the exact shape of the picture, so a margin
+                      written as a percentage is a percentage of the video and
+                      not of the black around it. `aspect-ratio` lets the
+                      browser do the letterbox arithmetic the same way
+                      `object-fit: contain` does for the video itself, which is
+                      the only way the two are guaranteed to agree. */}
+                  <div
+                    className="caption-media-picture"
+                    style={{
+                      width: picture.width || undefined,
+                      height: picture.height || undefined,
+                      ...overlayStyle,
+                    }}
+                  >
+                  {/* Draggable, and it says so. The caption itself is the
+                      handle - there is nothing else on the frame it could
+                      mean - and the whole gesture is pointer events so a pen
+                      or a finger works the same as a mouse. */}
+                  <span
+                    className="caption-media-handle"
+                    role="application"
+                    aria-label={`Caption position: ${activePlacement.alignment}. Drag to move, or use the fields below.`}
+                    data-dragging={dragging === "move" || undefined}
+                    onPointerDown={(event) => {
+                      if (!canEdit) return;
+                      event.preventDefault();
+                      setDragging("move");
+                      pointerPlacement(event);
+                    }}
+                  >
+                    <CaptionLook
+                      preset={previewPreset}
+                      cue={activeCue}
+                      activeMs={playbackMs}
+                      highlightWords={!translateTo}
+                      sourceWidth={mediaSourceWidth}
+                      sizeOverride={activeSize}
+                    />
+                    {canEdit && (
+                      <button
+                        type="button"
+                        className="caption-size-handle"
+                        aria-label={`Caption size ${activeSize}. Drag to resize.`}
+                        title="Drag to resize"
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setDragging("resize");
+                        }}
+                      />
+                    )}
+                  </span>
+                  </div>
                 </div>
               )}
             </div>
@@ -708,6 +951,80 @@ export function CaptionEditor({
                 ? `${previewPreset.label} · ${activeCue ? `${timecode(activeCue.start_ms)}–${timecode(activeCue.end_ms)}` : "No caption at this position"}`
                 : "Choose a preset to preview it."}
             </p>
+            {/* The same placement as numbers. A drag is quick and a field is
+                exact, and the two are the same three values - so a caption
+                nudged by hand can be squared off by typing, and one typed can
+                be checked against the frame. */}
+            {canEdit && previewPreset && (
+              <div className="caption-place-fields">
+                <label>
+                  <span>Anchor</span>
+                  <Select
+                    value={activePlacement.alignment}
+                    onChange={(event) => setPlacement({
+                      ...activePlacement,
+                      alignment: event.target.value as Alignment,
+                    })}
+                  >
+                    {ALIGNMENTS.map((name) => (
+                      <option key={name} value={name}>{name.replace("-", " ")}</option>
+                    ))}
+                  </Select>
+                </label>
+                <label>
+                  <span>Side margin</span>
+                  <input
+                    type="number" min={0} max={2000} step={2}
+                    value={activePlacement.margin_h}
+                    onChange={(event) => setPlacement({
+                      ...activePlacement,
+                      margin_h: checkedMargin(event.target.valueAsNumber),
+                    })}
+                  />
+                </label>
+                <label data-off={!canMove.vertical || undefined}>
+                  <span>Edge margin</span>
+                  <input
+                    type="number" min={0} max={2000} step={2}
+                    value={activePlacement.margin_v}
+                    disabled={!canMove.vertical}
+                    onChange={(event) => setPlacement({
+                      ...activePlacement,
+                      margin_v: checkedMargin(event.target.valueAsNumber),
+                    })}
+                  />
+                </label>
+                <label>
+                  <span>Size</span>
+                  <input
+                    type="number" min={8} max={400} step={1}
+                    value={activeSize}
+                    onChange={(event) => setSizeOverride(
+                      checkedSize(event.target.valueAsNumber, activeSize),
+                    )}
+                  />
+                </label>
+                {moved && (
+                  <Button variant="quiet" size="sm"
+                    onClick={() => { setPlacement(null); setSizeOverride(null); }}>
+                    Reset to preset
+                  </Button>
+                )}
+              </div>
+            )}
+            {/* Said rather than left to be discovered by pulling at something
+                that will not move. The format writes one horizontal margin to
+                both sides, so a centred caption cannot be nudged sideways, and
+                a middle one has no edge to measure a vertical margin from. */}
+            {canEdit && previewPreset && !(canMove.horizontal && canMove.vertical) && (
+              <p className="caption-editor-note">
+                {!canMove.horizontal && !canMove.vertical
+                  ? "A middle anchor is fixed to the centre of the frame. Choose an edge or a corner to place it by hand."
+                  : !canMove.horizontal
+                    ? "Centred captions stay centred: the side margin sets how wide they may run, not where they sit. Anchor left or right to move it across."
+                    : "This anchor has no edge to measure from, so the edge margin does nothing. Anchor to the top or bottom to set it."}
+              </p>
+            )}
           </section>
 
           <div className="caption-editor-controls">
@@ -722,7 +1039,7 @@ export function CaptionEditor({
                 className="caption-style-choice"
                 data-on={item.id === styleId ? "" : undefined}
                 aria-pressed={item.id === styleId}
-                onClick={() => setStyleId(item.id)}
+                onClick={() => chooseStyle(item.id)}
               >
                 <span className="caption-style-swatch" style={captionPosition(item.style.alignment)} aria-hidden="true">
                   <CaptionLook preset={item} sample={catalogue?.sample} compact />
@@ -737,7 +1054,16 @@ export function CaptionEditor({
         </section>
 
         <section className="caption-editor-language" aria-label="Language">
-          <h4>Language</h4>
+          <h4>Caption language</h4>
+          {/* Named as the action rather than as a noun. "Language" beside a
+              dropdown reads as which language the clip is in - a fact - when
+              it is actually an instruction to translate, and the difference
+              is a feature people did not know was here. */}
+          <p className="caption-editor-note">
+            Captions are written in the language spoken unless you choose
+            another here, and the transcript itself is left as it was — this
+            translates the captions, not the words on record.
+          </p>
           {pairs.length === 0 ? (
             <div className="caption-editor-setup">
               <p>Captions will be in the language spoken.</p>
@@ -789,6 +1115,10 @@ export function CaptionEditor({
                 {preview.cue_count} cues · {timecode(preview.duration_ms)}
               </Badge>
             )}
+            {/* Again here, because this is the list somebody actually reads
+                the wording in - and cues that are a translation should not
+                have to be recognised as one from the words themselves. */}
+            {translatingTo && <Badge tone="info">in {translatingTo}</Badge>}
           </h4>
           {problem && <p className="caption-editor-problem">{problem}</p>}
           {queued && <p className="caption-editor-queued">{queued}</p>}

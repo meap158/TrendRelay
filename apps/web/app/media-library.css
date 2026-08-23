@@ -732,7 +732,78 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .caption-audio-preview { align-content: center; gap: 20px; }
 .caption-audio-preview > span { color: rgb(255 255 255 / .72); font-size: 13px; font-weight: 700; }
 .caption-audio-preview audio { position: relative; z-index: 2; width: min(420px, 90%); }
-.caption-media-overlay { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; padding: 7% 6%; pointer-events: none; }
+/* No fixed inset any more: the padding is the caption's real margins, worked
+   out from the placement so the preview shows where the render will put it.
+   A fixed 7%/6% looked tidy and was a lie the moment anybody moved one. */
+.caption-media-overlay { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; pointer-events: none; }
+/* The picture's own box inside the frame, letterboxed by aspect-ratio exactly
+   as the video is by object-fit. Percentages resolve against this, so a margin
+   lands where the renderer will put it rather than a few per cent out on any
+   clip whose shape differs from its container. */
+/* border-box because the placement's margins are applied as padding here, and
+   they have to sit inside the picture rather than growing it past the video. */
+/* No max-* here on purpose: the size is computed from the frame and the
+   source, and a percentage ceiling on top of that can only disagree with it -
+   silently, and only on the clips whose shape differs most from their box. */
+.caption-media-picture { box-sizing: border-box; display: flex; flex-direction: column; }
+/* The caption is its own handle - there is nothing else on the frame a drag
+   could mean. Pointer events come back on for it alone, so the video's own
+   controls underneath stay usable. */
+.caption-media-handle { position: relative; display: inline-block; max-width: 100%; pointer-events: auto; cursor: grab; touch-action: none; }
+.caption-media-handle::after {
+  position: absolute;
+  inset: -7px -9px;
+  border: 1px dashed rgb(255 255 255 / .5);
+  border-radius: var(--radius-sm);
+  content: "";
+  opacity: 0;
+  transition: opacity .12s ease-out;
+  pointer-events: none;
+}
+.caption-media-handle:hover::after,
+.caption-media-handle:focus-visible::after,
+.caption-media-handle[data-dragging]::after { opacity: 1; }
+.caption-media-handle[data-dragging] { cursor: grabbing; }
+/* The resize grip, on the corner a caption grows away from. Only while the
+   pointer is on the caption: a permanent dot over the video reads as part of
+   the picture. */
+.caption-size-handle {
+  position: absolute;
+  inset-block-end: -8px;
+  inset-inline-end: -10px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--panel);
+  opacity: 0;
+  cursor: ns-resize;
+  touch-action: none;
+  transition: opacity .12s ease-out;
+}
+.caption-media-handle:hover .caption-size-handle,
+.caption-size-handle:focus-visible,
+.caption-media-frame[data-dragging] .caption-size-handle { opacity: 1; }
+/* The thirds a drop snaps to. Shown only mid-drag, because the snap is the
+   model and hiding it makes the drag look like it is failing to track. */
+.caption-drop-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background:
+    linear-gradient(to right, transparent calc(33.333% - 1px), rgb(255 255 255 / .28) calc(33.333% - 1px) 33.333%, transparent 33.333%),
+    linear-gradient(to right, transparent calc(66.667% - 1px), rgb(255 255 255 / .28) calc(66.667% - 1px) 66.667%, transparent 66.667%),
+    linear-gradient(to bottom, transparent calc(33.333% - 1px), rgb(255 255 255 / .28) calc(33.333% - 1px) 33.333%, transparent 33.333%),
+    linear-gradient(to bottom, transparent calc(66.667% - 1px), rgb(255 255 255 / .28) calc(66.667% - 1px) 66.667%, transparent 66.667%);
+  pointer-events: none;
+}
+/* The same placement as numbers, under the frame it describes. */
+.caption-place-fields { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-block-start: 8px; }
+.caption-place-fields label { display: grid; gap: 3px; flex: 1 1 96px; min-width: 0; color: var(--muted); font-size: 10px; font-weight: 600; }
+.caption-place-fields label[data-off] { opacity: .5; }
+.caption-place-fields input, .caption-place-fields select { width: 100%; min-width: 0; min-height: 30px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 5px 7px; background: var(--panel); color: var(--text); font: inherit; font-size: 12px; }
+.caption-place-fields .ui-button { flex: 0 0 auto; }
 .caption-look { display: inline-block; max-width: 92%; color: white; line-height: 1.12; text-align: center; white-space: normal; overflow-wrap: anywhere; paint-order: stroke fill; }
 .caption-look-line { display: block; }
 .caption-look.caption-look-compact { max-width: 94%; line-height: 1.08; }
