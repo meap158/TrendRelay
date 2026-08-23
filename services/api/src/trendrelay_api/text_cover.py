@@ -50,12 +50,20 @@ PAD_SHARE = 0.06
 #: dropped rather than finding a truncated command.
 MAX_COVERED_LINES = 120
 
+#: The smallest share of a frame worth covering, on either side.
+#:
+#: In shares rather than pixels because that is what gets stored, and "smaller
+#: than two pixels" is not a question a recipe can answer - it depends on a
+#: size nobody has committed to yet. Four per thousand is a few pixels wide on
+#: anything from a phone crop upwards, and text below it was never legible.
+MIN_SHARE = 0.004
+
 
 class CoverUnavailable(ValueError):
     """The cover cannot be built from what was asked for."""
 
 
-def _bounds(box: Sequence[Sequence[float]]) -> tuple[int, int, int, int]:
+def _bounds(box: Sequence[Sequence[float]]) -> tuple[float, float, float, float]:
     """The upright rectangle around a detector's quadrilateral.
 
     Rotated text gives a genuinely slanted quad, and FFmpeg's `drawbox` and
@@ -65,21 +73,29 @@ def _bounds(box: Sequence[Sequence[float]]) -> tuple[int, int, int, int]:
     """
     xs = [float(point[0]) for point in box]
     ys = [float(point[1]) for point in box]
-    return round(min(xs)), round(min(ys)), round(max(xs)), round(max(ys))
+    return min(xs), min(ys), max(xs), max(ys)
 
 
 def _padded(
     box: Sequence[Sequence[float]], width: int, height: int
-) -> tuple[int, int, int, int] | None:
-    """The box grown by `PAD_SHARE` and clipped to the frame, or None if empty."""
+) -> tuple[float, float, float, float] | None:
+    """The box as shares of the frame, grown by `PAD_SHARE` and clipped to it.
+
+    Shares rather than pixels, because these are stored in a recipe and a
+    recipe outlives the file it was written against. A clip re-encoded at
+    another size would otherwise have its covers land in the wrong place - and
+    the render already speaks in `iw` and `ih` for exactly this reason.
+    """
+    if width <= 0 or height <= 0:
+        return None
     left, top, right, bottom = _bounds(box)
-    pad_x = round((right - left) * PAD_SHARE)
-    pad_y = round((bottom - top) * PAD_SHARE)
-    left = max(0, left - pad_x)
-    top = max(0, top - pad_y)
-    right = min(width, right + pad_x)
-    bottom = min(height, bottom + pad_y)
-    if right - left < 2 or bottom - top < 2:
+    pad_x = (right - left) * PAD_SHARE
+    pad_y = (bottom - top) * PAD_SHARE
+    left = max(0.0, (left - pad_x) / width)
+    top = max(0.0, (top - pad_y) / height)
+    right = min(1.0, (right + pad_x) / width)
+    bottom = min(1.0, (bottom + pad_y) / height)
+    if right - left < MIN_SHARE or bottom - top < MIN_SHARE:
         return None
     return left, top, right - left, bottom - top
 
@@ -88,6 +104,8 @@ def readable_lines(
     segments: Iterable[dict[str, Any]],
     *,
     interval_ms: int,
+    width: int,
+    height: int,
     limit: int = MAX_COVERED_LINES,
 ) -> tuple[list[dict[str, Any]], int]:
     """Every OCR line that has somewhere to be, and how many were left out.
@@ -108,8 +126,14 @@ def readable_lines(
         for line in segment.get("lines") or []:
             if not isinstance(line, dict) or not line.get("box"):
                 continue
+            placed = _padded(line["box"], width, height)
+            if placed is None:
+                continue
             found.append({
-                "box": line["box"],
+                "x": round(placed[0], 5),
+                "y": round(placed[1], 5),
+                "width": round(placed[2], 5),
+                "height": round(placed[3], 5),
                 "text": line.get("text", ""),
                 "confidence": float(line.get("confidence") or 0.0),
                 "start_ms": at,
@@ -118,7 +142,7 @@ def readable_lines(
     if len(found) <= limit:
         return found, 0
     kept = sorted(found, key=lambda line: line["confidence"], reverse=True)[:limit]
-    kept.sort(key=lambda line: (line["start_ms"], line["box"][0][1]))
+    kept.sort(key=lambda line: (line["start_ms"], line["y"]))
     return kept, len(found) - limit
 
 
@@ -126,12 +150,13 @@ def cover_filters(
     lines: Sequence[dict[str, Any]],
     *,
     mode: str,
-    width: int,
-    height: int,
     colour: str = "black",
     strength: float = 0.08,
 ) -> list[str]:
     """FFmpeg fragments that hide each line for as long as it is on screen.
+
+    Written in `iw` and `ih` rather than pixels, so the same recipe covers the
+    same words whatever size the source is decoded at.
 
     One fragment per line, each gated by `enable` so a cover appears with its
     text and leaves with it. They chain in order, which is what lets a frame
@@ -140,15 +165,16 @@ def cover_filters(
     """
     if mode not in MODES:
         raise CoverUnavailable(f"Unknown cover: {mode}. Expected one of {', '.join(MODES)}.")
-    if width <= 0 or height <= 0:
-        raise CoverUnavailable("The frame size is needed to place a cover.")
 
     filters: list[str] = []
     for index, line in enumerate(lines):
-        placed = _padded(line["box"], width, height)
-        if placed is None:
-            continue
-        left, top, box_width, box_height = placed
+        # Even dimensions, because a cropped region with an odd side is
+        # rejected by several pixel formats - the same rounding the aspect and
+        # zoom steps do for the same reason.
+        left = f"trunc(iw*{float(line['x']):.5f})"
+        top = f"trunc(ih*{float(line['y']):.5f})"
+        box_width = f"trunc(iw*{float(line['width']):.5f}/2)*2"
+        box_height = f"trunc(ih*{float(line['height']):.5f}/2)*2"
         # Seconds, because that is what `enable` speaks. Written to the
         # millisecond so a cover cannot drift off its text over a long clip.
         window = (
@@ -167,17 +193,19 @@ def cover_filters(
         main, cut, done = f"[tc{index}m]", f"[tc{index}c]", f"[tc{index}d]"
         crop = f"crop={box_width}:{box_height}:{left}:{top}"
         if mode == "blur":
-            # Against the region's own size, so a short line is not smeared
-            # far past its edges while a long one is barely touched.
-            radius = max(1, round(min(box_width, box_height) * float(strength)))
-            treat = f"boxblur={radius}:1"
+            # Against the region's own size - `iw` and `ih` here are the crop's
+            # - so a short line is not smeared far past its edges while a long
+            # one is barely touched.
+            treat = rf"boxblur=max(1\,min(iw\,ih)*{float(strength):.4f}):1"
         else:
             # Down and back up with no interpolation, which is what makes
-            # blocks rather than a smooth blur.
+            # blocks rather than a smooth blur. Up by the same factor rather
+            # than to a remembered size: inside the chain `iw` is whatever the
+            # previous filter produced, not the source.
             blocks = max(2, round(1.0 / max(0.02, float(strength))))
             treat = (
-                f"scale=max(1\\,{box_width}/{blocks}):max(1\\,{box_height}/{blocks})"
-                f":flags=neighbor,scale={box_width}:{box_height}:flags=neighbor"
+                rf"scale=max(1\,iw/{blocks}):max(1\,ih/{blocks}):flags=neighbor,"
+                rf"scale=iw*{blocks}:ih*{blocks}:flags=neighbor"
             )
         filters.append(
             f"split=2{main}{cut};{cut}{crop},{treat}{done};"
