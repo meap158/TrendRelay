@@ -522,6 +522,47 @@ def exposed_tool_names() -> list[str]:
     return policy.allowed_operations()
 
 
+#: The surface, grouped the way an operator reads it rather than the flat
+#: alphabet the wire listing is. Every exposed tool must be named in exactly
+#: one group - `tool_catalog` refuses an uncategorised tool, so adding an
+#: operation forces the decision of where it belongs instead of letting the
+#: list silt up. Order here is display order.
+TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
+    "Guidance": ("list_sops", "get_sop"),
+    "Campaign context": (
+        "list_campaigns", "list_posts_needing_copy",
+        "get_post_context", "get_campaign_config",
+    ),
+    "Copy": (
+        "write_caption", "write_first_comment", "write_thread",
+        "write_post_copy", "write_disclosure", "write_bio_hint",
+    ),
+    "Media & posts": ("upload_image", "get_import_status", "create_campaign_post"),
+    "Posting schedule": (
+        "list_posting_times", "get_campaign_posting_times",
+        "create_posting_preset", "set_campaign_posting_times",
+        "set_page_posting_times", "set_workspace_posting_times",
+    ),
+}
+
+#: The tab where each group's work shows up in the app, so an operator can
+#: relate a tool to a screen they know. None where the work has no tab of its
+#: own (guidance is read, not shown anywhere). Per-tool overrides carry the
+#: exceptions - an upload lands in the Library even though the post it feeds
+#: is a Campaigns matter.
+CATEGORY_TABS: dict[str, str | None] = {
+    "Guidance": None,
+    "Campaign context": "Campaigns",
+    "Copy": "Campaigns",
+    "Media & posts": "Campaigns",
+    "Posting schedule": "Campaigns",
+}
+TOOL_TAB_OVERRIDES: dict[str, str] = {
+    "upload_image": "Library",
+    "get_import_status": "Library",
+}
+
+
 @lru_cache(maxsize=1)
 def tool_catalog() -> tuple[dict[str, Any], ...]:
     """Every exposed tool with what it does, read off the server itself.
@@ -531,31 +572,49 @@ def tool_catalog() -> tuple[dict[str, Any], ...]:
     Read from a built server so the descriptions shown are the ones served and
     the two cannot drift; cached because the answer only changes with the code.
     Requires the mcp extra, like everything that builds a server - callers
-    guard on availability.
+    guard on availability. Ordered by category, then by each category's own
+    order, which is the order the surface is explained in.
     """
     import asyncio
 
-    listed = asyncio.run(build_server("catalog").list_tools())
+    listed = {tool.name: tool for tool in asyncio.run(build_server("catalog").list_tools())}
+    category_of = {
+        name: category
+        for category, names in TOOL_CATEGORIES.items()
+        for name in names
+    }
+    uncategorised = sorted(set(listed) - set(category_of))
+    if uncategorised:
+        raise RuntimeError(
+            "Every MCP tool belongs to one TOOL_CATEGORIES group; missing: "
+            + ", ".join(uncategorised)
+        )
     catalog = []
-    for tool in sorted(listed, key=lambda entry: entry.name):
-        schema = tool.inputSchema or {}
-        required = set(schema.get("required") or [])
-        access = policy.classify(tool.name)
-        catalog.append({
-            "name": tool.name,
-            "description": " ".join((tool.description or "").split()),
-            # Read or write, so the list can say which tools only look.
-            "access": access.value if access else None,
-            "params": [
-                {
-                    "name": param,
-                    "required": param in required,
-                    "type": (detail or {}).get("type"),
-                }
-                for param, detail in (schema.get("properties") or {}).items()
-            ],
-            # The ChatGPT file-parameter declaration, and anything like it:
-            # part of what the tool is, so the inspector shows it.
-            "meta": tool.meta or None,
-        })
+    for category, names in TOOL_CATEGORIES.items():
+        for name in names:
+            tool = listed.get(name)
+            if tool is None:
+                continue
+            schema = tool.inputSchema or {}
+            required = set(schema.get("required") or [])
+            access = policy.classify(tool.name)
+            catalog.append({
+                "name": tool.name,
+                "category": category,
+                "tab": TOOL_TAB_OVERRIDES.get(name, CATEGORY_TABS.get(category)),
+                "description": " ".join((tool.description or "").split()),
+                # Read or write, so the list can say which tools only look.
+                "access": access.value if access else None,
+                "params": [
+                    {
+                        "name": param,
+                        "required": param in required,
+                        "type": (detail or {}).get("type"),
+                    }
+                    for param, detail in (schema.get("properties") or {}).items()
+                ],
+                # The ChatGPT file-parameter declaration, and anything like it:
+                # part of what the tool is, so the inspector shows it.
+                "meta": tool.meta or None,
+            })
     return tuple(catalog)

@@ -875,3 +875,35 @@ def test_the_upload_tool_declares_the_chatgpt_file_param() -> None:
     built = server.build_server("ws")
     tools = {tool.name: tool for tool in asyncio.run(built.list_tools())}
     assert tools["upload_image"].meta == {"openai/fileParams": ["image"]}
+
+
+def test_every_tool_is_categorised_and_the_catalog_is_grouped() -> None:
+    """Adding a tool without placing it in a group must fail loudly - the
+    categorised list is what keeps the surface readable as it grows."""
+    catalog = server.tool_catalog()
+
+    assert sorted(entry["name"] for entry in catalog) == policy.allowed_operations()
+    # Grouped, in the categories' own declared order, never interleaved.
+    seen: list[str] = []
+    for entry in catalog:
+        if not seen or seen[-1] != entry["category"]:
+            seen.append(entry["category"])
+    assert seen == list(server.TOOL_CATEGORIES)
+    # The tab tags: uploads land in the Library even though the post they
+    # feed is a Campaigns matter, and guidance has no tab at all.
+    by_name = {entry["name"]: entry for entry in catalog}
+    assert by_name["upload_image"]["tab"] == "Library"
+    assert by_name["create_campaign_post"]["tab"] == "Campaigns"
+    assert by_name["list_sops"]["tab"] is None
+
+
+def test_a_tool_left_out_of_the_categories_is_refused(monkeypatch) -> None:
+    monkeypatch.setattr(
+        server, "TOOL_CATEGORIES", {"Guidance": ("list_sops", "get_sop")}
+    )
+    server.tool_catalog.cache_clear()
+    try:
+        with pytest.raises(RuntimeError, match="TOOL_CATEGORIES"):
+            server.tool_catalog()
+    finally:
+        server.tool_catalog.cache_clear()

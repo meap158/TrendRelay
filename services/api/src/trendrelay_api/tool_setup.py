@@ -272,9 +272,13 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                     "server",
                     "Server running",
                     "ready" if running else "setup-required",
+                    # The live message, not a restatement of it: this row used
+                    # to say "start the server" while a separate line further
+                    # down said what state it was actually in, and two places
+                    # answering one question is how a dialog reads scattered.
                     f"Listening on {status['url']}."
                     if running
-                    else "Start the server to let an assistant connect.",
+                    else status["message"],
                 ),
                 _requirement(
                     "tunnel",
@@ -282,21 +286,23 @@ def setup_report(tool_id: str) -> dict[str, Any]:
                     "ready" if tunnel_state["state"] == "running" else "optional",
                     tunnel_state["message"],
                 ),
+                # "info", not "optional": these two rows state facts about the
+                # boundary rather than steps to take, and the optional chip's
+                # amber made them read as warnings sitting between real steps.
                 _requirement(
                     "boundary",
                     "What a caller may do",
-                    "optional",
+                    "info",
                     status["boundary"],
                 ),
                 _requirement(
                     "tools",
                     "Tools exposed",
-                    "optional",
-                    # The list itself is its own section in the dialog, with
-                    # each tool's description - a comma-joined line of names
-                    # answered "how many" while looking like it answered more.
-                    f"{len(status['tools'])} operations, listed below with "
-                    "what each one does.",
+                    "info",
+                    # The row is the section: it expands in place to the full
+                    # list, each tool with what it does.
+                    f"{len(status['tools'])} operations. Expand to read what "
+                    "each one does.",
                 ),
             ],
             actions=[

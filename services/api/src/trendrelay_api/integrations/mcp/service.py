@@ -219,17 +219,26 @@ def server_status() -> dict[str, Any]:
 
     status = _read_status()
     state = status.get("state", "stopped")
+    message = status.get("message", "The MCP server is stopped.")
     alive = SERVER_PROCESS is not None and SERVER_PROCESS.poll() is None
     if state in {"starting", "running"} and not alive:
         # The file says it is up but the process is gone: a crash, not a state.
+        # The message is reconciled with the state, not left as the file's
+        # last word - "serving workspace ..." beside a stopped state read as
+        # both at once, which is worse than either.
         state = "stopped" if state == "starting" else "failed"
+        message = (
+            "The MCP server is stopped."
+            if state == "stopped"
+            else "The MCP server stopped unexpectedly. Start it again."
+        )
     running = state == "running" and alive
     available = mcp_available()
     return {
         "state": state,
         "running": running,
         "available": available,
-        "message": status.get("message", "The MCP server is stopped."),
+        "message": message,
         "url": server_url(),
         "port": port(),
         "workspace_id": status.get("workspace_id"),

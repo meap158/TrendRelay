@@ -130,6 +130,10 @@ type SetupReport = {
 };
 type McpToolDetail = {
   name: string;
+  /** The group the surface is explained in - already in display order. */
+  category: string;
+  /** The app tab where this tool's work shows up, if it has one. */
+  tab?: string | null;
   description: string;
   access: "read" | "workspace_write" | null;
   params: { name: string; required: boolean; type: string | null }[];
@@ -905,13 +909,56 @@ export default function ToolsPage() {
       >
         {setup && <>
           <div className="setup-steps">
-            {setup.requirements.map((requirement, index) => (
-              <article key={requirement.id} className={`setup-step ${requirement.status}`}>
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                <div><strong>{requirement.label}</strong><p>{requirement.detail}</p></div>
-                <small>{requirement.status.replace("-", " ")}</small>
-              </article>
-            ))}
+            {setup.requirements.map((requirement, index) => {
+              // The tool inspector: the "Tools exposed" row is the section,
+              // expanding in place to what a connected assistant may call -
+              // the way its own client shows a connector's tools - instead
+              // of a separate block pushing the settings below a wall.
+              const inspectable = requirement.id === "tools"
+                && setup.tool_id === "mcp-server"
+                && (setup.tool_details?.length ?? 0) > 0;
+              if (!inspectable) {
+                return (
+                  <article key={requirement.id} className={`setup-step ${requirement.status}`}>
+                    <span>{String(index + 1).padStart(2, "0")}</span>
+                    <div><strong>{requirement.label}</strong><p>{requirement.detail}</p></div>
+                    <small>{requirement.status.replace("-", " ")}</small>
+                  </article>
+                );
+              }
+              return (
+                <details key={requirement.id} className={`setup-step setup-step-expand ${requirement.status}`}>
+                  <summary>
+                    <span>{String(index + 1).padStart(2, "0")}</span>
+                    <div><strong>{requirement.label}</strong><p>{requirement.detail}</p></div>
+                    <small>{requirement.status.replace("-", " ")}</small>
+                  </summary>
+                  <ul className="mcp-tool-rows" aria-label="Tools exposed over MCP">
+                    {setup.tool_details!.map((tool, at) => {
+                      const heads = at === 0 || setup.tool_details![at - 1].category !== tool.category;
+                      return (
+                        <li key={tool.name}>
+                          {heads && <h5>{tool.category}</h5>}
+                          <div>
+                            <code>{tool.name}</code>
+                            <em className={tool.access === "read" ? "read" : "write"}>
+                              {tool.access === "read" ? "read" : "write"}
+                            </em>
+                            {tool.tab && <em className="tab" title={`Its work shows up in the ${tool.tab} tab`}>{tool.tab}</em>}
+                            {Boolean((tool.meta as Record<string, unknown> | null)?.["openai/fileParams"]) && (
+                              <em className="file" title="Accepts a file attached in chat (openai/fileParams)">
+                                chat file
+                              </em>
+                            )}
+                          </div>
+                          <p>{tool.description}</p>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </details>
+              );
+            })}
           </div>
           {/* The read-only checklist is for tools whose keys are still added by
               hand. A tool with editable settings shows the same keys in the
@@ -940,37 +987,9 @@ export default function ToolsPage() {
             </div>
           )}
           {setup.tool_id === "douyin-downloader" && setup.connection && <p className="connection-note">{t("tools.douyinConnection")} <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
-          {setup.tool_id === "mcp-server" && setup.connection && <p className="connection-note">Assistant access: <strong>{setup.connection.state}</strong> · {setup.connection.message}</p>}
-          {/* The tool inspector: what a connected assistant is offered, shown
-              the way its own client shows a connector's tools - each with what
-              it does - rather than a comma-joined line of names. */}
-          {setup.tool_id === "mcp-server" && (setup.tool_details?.length ?? 0) > 0 && (
-            <section className="mcp-tool-list" aria-label="Tools exposed over MCP">
-              <strong>Tools exposed · {setup.tool_details!.length}</strong>
-              <p>
-                What a connected assistant may call. Reads only look;
-                writes stay drafts a person still approves in the app.
-              </p>
-              <ul>
-                {setup.tool_details!.map((tool) => (
-                  <li key={tool.name}>
-                    <div>
-                      <code>{tool.name}</code>
-                      <em className={tool.access === "read" ? "read" : "write"}>
-                        {tool.access === "read" ? "read" : "write"}
-                      </em>
-                      {Boolean((tool.meta as Record<string, unknown> | null)?.["openai/fileParams"]) && (
-                        <em className="file" title="Accepts a file attached in chat (openai/fileParams)">
-                          chat file
-                        </em>
-                      )}
-                    </div>
-                    <p>{tool.description}</p>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+          {/* No mcp connection note here: the "Server running" step above
+              already carries the live state and message, and a second line
+              restating it floated between sections as noise. */}
           {setup.media_ai?.job && (
             /* The download's own words. A job that failed after twenty minutes
                of pip output has a reason, and this is the only place the
