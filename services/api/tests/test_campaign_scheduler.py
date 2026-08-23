@@ -1439,3 +1439,45 @@ def test_a_different_clip_on_that_account_is_still_free_to_post(session) -> None
     )
 
     assert len(posts) == 1
+
+
+def test_a_package_with_no_title_is_named_from_its_library_asset(session) -> None:
+    """Packages added straight from the Library arrived without a title.
+
+    The name was never lost - it is on the asset - so a post reading "Untitled
+    campaign video" was the timeline declining to look one step further.
+    """
+    asset = MediaAsset(
+        id="asset-named", workspace_id="ws", title="A clip with a name",
+        media_kind="video", source_type="test", original_path=r"S:\media\clip.mp4",
+        original_sha256="abc", mime_type="video/mp4", size_bytes=10,
+        created_by="user-1",
+    )
+    session.add(asset)
+    session.commit()
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(session, "q1", title=None, asset_id="asset-named")
+
+    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert [post.title for post in posts] == ["A clip with a name"]
+
+
+def test_a_package_with_its_own_title_keeps_it(session) -> None:
+    # The fallback is for a blank, not an override: a title somebody typed
+    # outranks the filename the clip was imported under.
+    session.add(MediaAsset(
+        id="asset-other", workspace_id="ws", title="The filename",
+        media_kind="video", source_type="test", original_path=r"S:\media\clip.mp4",
+        original_sha256="abc", mime_type="video/mp4", size_bytes=10,
+        created_by="user-1",
+    ))
+    session.commit()
+    destination(session, "d1", "youtube")
+    slot(session, 12)
+    queue_item(session, "q1", title="What somebody called it", asset_id="asset-other")
+
+    posts, _ = plan_campaign(session, autopilot(session), now=NOW, link_for=None)
+
+    assert [post.title for post in posts] == ["What somebody called it"]

@@ -995,7 +995,7 @@ def plan_campaign(
                 asset_version_id=frozen.version_id,
                 media_sha256=frozen.sha256,
                 effect_ids=frozen.effect_ids,
-                title=item.title,
+                title=item.title or _asset_title(session, item),
                 caption=post.caption,
                 first_comment=post.first_comment,
                 placement=post.placement.placement,
@@ -1201,6 +1201,28 @@ def record_published(
     )
     if destination:
         destination.last_posted_at = posted_at
+
+
+def _asset_title(session: Session, item: CampaignQueueItem) -> str | None:
+    """The Library's name for this clip, when the package never got one.
+
+    Packages added straight from the Library arrived without a title for a
+    while, and a post with no title reads as "Untitled campaign video" on the
+    timeline however well the rest of it is filled in. The name is not lost -
+    it is on the asset - so it is read from there rather than left blank.
+
+    Resolved at planning time rather than backfilled: the queue row is what
+    somebody may yet edit, and writing a title into it would quietly overwrite
+    a blank that was deliberate.
+    """
+    if not item.asset_id:
+        return None
+    return session.scalar(
+        select(MediaAsset.title).where(
+            MediaAsset.id == item.asset_id,
+            MediaAsset.workspace_id == item.workspace_id,
+        )
+    )
 
 
 def campaign_status(session: Session, autopilot: CampaignAutopilot) -> dict[str, Any]:

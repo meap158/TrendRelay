@@ -98,11 +98,22 @@ export function CampaignPicker({
           {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify(
-              asset.media_kind === "image"
-                ? { asset_id: asset.id, image_paths: [handoffPath(asset)] }
-                : { asset_id: asset.id, video_path: handoffPath(asset) },
-            ),
+            body: JSON.stringify({
+              // The identity and the name, both of which the queue item keeps
+              // and neither of which the file path carries.
+              //
+              // `asset_id` is how the scheduler resolves the newest rendered
+              // cut, how the rest window recognises the same clip queued
+              // twice, and how the timeline draws a thumbnail. `title` is what
+              // that timeline shows - without it every row added this way read
+              // "Untitled campaign video", which is what sent somebody looking
+              // at this flow in the first place.
+              asset_id: asset.id,
+              title: asset.title,
+              ...(asset.media_kind === "image"
+                ? { image_paths: [handoffPath(asset)] }
+                : { video_path: handoffPath(asset) }),
+            }),
           },
         );
         if (!response.ok) {
