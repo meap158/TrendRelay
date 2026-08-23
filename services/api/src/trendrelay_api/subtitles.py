@@ -128,6 +128,18 @@ class Cue:
     end_ms: int
     lines: list[str]
     words: list[Word] = field(default_factory=list)
+    #: Where on the frame this belongs, as `(x, y, width, height)` shares.
+    #:
+    #: A spoken caption has no opinion about this - it goes wherever the style
+    #: says, which is nearly always the bottom. A line replacing text burned
+    #: into the picture has exactly one place it can go: over the words it
+    #: replaces, or it is a translation of something the reader can still see
+    #: underneath it.
+    #:
+    #: Shares rather than pixels, for the same reason the covers are: this
+    #: outlives the file it was measured against. Only ASS can honour it; SRT
+    #: and VTT have nowhere to put it and correctly ignore it.
+    place: tuple[float, float, float, float] | None = None
 
     @property
     def text(self) -> str:

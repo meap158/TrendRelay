@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from unicodedata import east_asian_width
 
 from trendrelay_api.subtitles import Cue, Layout
 
@@ -274,6 +275,68 @@ def escape_ass(text: str) -> str:
     return cleaned.replace("  ", " \\h")
 
 
+#: How wide a character is, in ems, for the two cases worth telling apart.
+#:
+#: There is no way to measure a glyph without the font, and libass will not be
+#: asked until the render. This is the estimate that decides whether a
+#: replacement line fits the box it has to sit in - deliberately generous, since
+#: text that overflows its cover is worse than text a little smaller than it
+#: needed to be.
+WIDE_EM = 1.0
+NARROW_EM = 0.52
+
+#: Never shrink a replacement past this share of its box's height.
+#:
+#: Below it the text is unreadable and the honest outcome is a line that
+#: overflows a little, which somebody can see and fix, rather than one that
+#: technically fits and cannot be read.
+MIN_FITTED_SHARE = 0.35
+
+
+def em_width(text: str) -> float:
+    """Roughly how many ems wide a string is.
+
+    Full-width scripts get a whole em because they occupy one; everything else
+    gets about half, which is the usual average advance for Latin and Cyrillic
+    text. Wrong for a line of capital Ws and wrong the safe way.
+    """
+    total = 0.0
+    for character in text:
+        total += WIDE_EM if east_asian_width(character) in ("W", "F") else NARROW_EM
+    return max(total, NARROW_EM)
+
+
+def fitted_size(text: str, box: tuple[float, float, float, float],
+                width: int, height: int) -> int:
+    """The largest font size that keeps `text` inside `box`.
+
+    Two limits, whichever bites first: the box's height, because a line taller
+    than its cover sticks out above and below it, and the box's width, because
+    a line wider than its cover is the original text showing at both ends.
+    """
+    box_height = max(1.0, box[3] * height)
+    box_width = max(1.0, box[2] * width)
+    by_height = box_height * 0.82
+    by_width = box_width / em_width(text)
+    return max(int(box_height * MIN_FITTED_SHARE), int(min(by_height, by_width)))
+
+
+def placement(cue: Cue, width: int, height: int) -> str:
+    r"""The override block that puts a cue over the words it replaces.
+
+    `\an5` centres the line on a point rather than aligning it to a corner,
+    so it sits in the middle of its box whichever way it over- or
+    under-fills it.
+    """
+    if cue.place is None:
+        return ""
+    x, y, box_width, box_height = cue.place
+    centre_x = round((x + box_width / 2) * width)
+    centre_y = round((y + box_height / 2) * height)
+    size = fitted_size(cue.text, cue.place, width, height)
+    return rf"{{\an5\pos({centre_x},{centre_y})\fs{size}}}"
+
+
 def to_ass(
     cues: Sequence[Cue],
     style: Style | None = None,
@@ -295,8 +358,14 @@ def to_ass(
         if look.highlight_active_word and cue.words:
             events.extend(_highlight_events(cue, look))
         else:
-            events.append(_dialogue(cue.start_ms, cue.end_ms, look.name,
-                                    escape_ass(_cased(cue.text, look))))
+            # The override goes on after escaping, not before: `escape_ass`
+            # escapes braces, and these braces are the ones that have to
+            # survive as an override block.
+            events.append(_dialogue(
+                cue.start_ms, cue.end_ms, look.name,
+                placement(cue, play_width, play_height)
+                + escape_ass(_cased(cue.text, look)),
+            ))
     return header + "\n".join(events) + "\n"
 
 
