@@ -1020,6 +1020,40 @@ export default function PublishPage() {
       }
     });
   }, []);
+  /**
+   * Arriving from the Library's "Prepare to publish".
+   *
+   * The asset is resolved and chosen exactly as this page's own picker chooses
+   * one, rather than having its path pasted into the field. A path alone left
+   * `clip` unset, so the card naming the clip, its length and its blurred-faces
+   * tag never appeared - the hand-off filled a text box while the normal flow
+   * filled the form, and the two did not look like the same act.
+   *
+   * `?video=` still works and still sets the path alone: links already sent
+   * carry it, and a raw path is all some of them ever had.
+   */
+  useEffect(() => {
+    if (!workspaceId) return undefined;
+    const wanted = new URLSearchParams(window.location.search).get("asset");
+    if (!wanted) return undefined;
+    const controller = new AbortController();
+    // Scrubbed immediately, so a refresh or a shared link does not re-run a
+    // hand-off that already happened.
+    window.history.replaceState(null, "", "/publish");
+    apiFetch(`/api/workspaces/${workspaceId}/media/library/assets/${wanted}`,
+      { signal: controller.signal })
+      .then(async (response) => {
+        const asset = (await response.json()) as LibraryAsset & { detail?: string };
+        if (!response.ok || !asset.id) throw new Error(asset.detail ?? "That clip could not be read.");
+        pickClip(asset);
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === "AbortError") return;
+        setError(reason instanceof Error ? reason.message : "That clip could not be read.");
+      });
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per workspace on arrival
+  }, [workspaceId]);
 
   useEffect(() => {
     if (!workspaceId) return;

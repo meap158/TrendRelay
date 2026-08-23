@@ -103,6 +103,9 @@ type Transcript = {
   status: string;
   language?: string | null;
   text?: string | null;
+  /** Who produced it - "faster-whisper", "operator-reviewed". The API has
+      always sent this; it was read here before it was declared. */
+  provider?: string | null;
 };
 
 type VoiceTarget = {

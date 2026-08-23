@@ -50,6 +50,7 @@ import {
 // because they are client-only anyway - there is nothing to render on the server.
 const CaptionEditor = dynamic(() => import("./caption-editor").then((m) => m.CaptionEditor), { ssr: false });
 const VoiceEditor = dynamic(() => import("./voice-editor").then((m) => m.VoiceEditor), { ssr: false });
+const CampaignPicker = dynamic(() => import("./campaign-picker").then((m) => m.CampaignPicker), { ssr: false });
 const BulkVoiceEditor = dynamic(() => import("./bulk-voice-editor").then((m) => m.BulkVoiceEditor), { ssr: false });
 const BatchTranscribe = dynamic(() => import("./batch-transcribe").then((m) => m.BatchTranscribe), { ssr: false });
 const ClipEditor = dynamic(() => import("./clip-editor").then((m) => m.ClipEditor), { ssr: false });
@@ -1134,6 +1135,8 @@ function LibraryContent() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [captionsOpen, setCaptionsOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  /** What the campaign picker is about to add. Empty closes it. */
+  const [campaignPickerFor, setCampaignPickerFor] = useState<Asset[]>([]);
   const [effectsOpen, setEffectsOpen] = useState(false);
   const [selectionAction, setSelectionAction] = useState<LibrarySelectionActionId | null>(null);
   const [cancellingEffectJobId, setCancellingEffectJobId] = useState("");
@@ -1906,7 +1909,9 @@ function LibraryContent() {
                       size="sm"
                       disabled={!canImport || selection.size === 0}
                       title="Queue the selected clips into a campaign"
-                      onClick={() => router.push(`/campaigns?add=${[...selection].slice(0, 200).join(",")}`)}
+                      onClick={() => setCampaignPickerFor(
+                        assets.filter((asset) => selection.has(asset.id)),
+                      )}
                     ><ActionIcon name="clip" />Add to campaign</Button>
                     <ActionMenu
                       label={t("library.selectionActions")}
@@ -2103,20 +2108,6 @@ function LibraryContent() {
                           : t("library.videoOnlyClip")}
                         onClick={() => setEditorOpen(true)}
                         ><ActionIcon name="clip" />{t("library.clipPlan")}</Button>
-                      <Button
-                        variant="secondary"
-                        title="Start or open a campaign with this clip queued"
-                        onClick={() => router.push(`/campaigns?add=${selected.id}`)}
-                      ><ActionIcon name="clip" />Plan campaign</Button>
-                      <Button
-                        variant="secondary"
-                        title="Send this cut to the Publish desk"
-                        onClick={() => {
-                          const rendered = renderedCut(selected.versions);
-                          const path = rendered?.path ?? selected.original_path;
-                          router.push(`/publish?video=${encodeURIComponent(path)}`);
-                        }}
-                      ><ActionIcon name="play" />Prepare to publish</Button>
                       {/* Captions are not an effect: they come from the audio,
                           need not touch the picture, and do not stack. So they
                           get their own button rather than a row in the stack. */}
@@ -2155,8 +2146,21 @@ function LibraryContent() {
                   <section className="library-action-group" aria-label={t("library.handoffActions")}>
                     <h4>{t("library.handoffActions")}</h4>
                     <div className="library-action-row">
-                      <Link href={`/campaigns?video=${encodeURIComponent(handoffPath(selected))}`}><ActionIcon name="campaign" />{t("library.planCampaign")}</Link>
-                      <Link href={`/publish?video=${encodeURIComponent(handoffPath(selected))}`}><ActionIcon name="publish" />{t("library.prepareToPublish")}</Link>
+                      {/* Asked and answered here rather than by navigating.
+                          "Which campaign" is a list and a click; going to the
+                          campaign workspace to answer it left somebody in
+                          another tab with a picker open over a campaign they
+                          had not chosen. */}
+                      <Button
+                        variant="secondary"
+                        disabled={!canImport}
+                        onClick={() => setCampaignPickerFor([selected])}
+                      ><ActionIcon name="campaign" />Add to campaign</Button>
+                      {/* The asset, not just its path. Publish resolves it and
+                          selects it exactly as its own library picker would -
+                          a path alone filled the field and left the clip
+                          card, its length and its blur tag missing. */}
+                      <Link href={`/publish?asset=${encodeURIComponent(selected.id)}`}><ActionIcon name="publish" />{t("library.prepareToPublish")}</Link>
                     </div>
                   </section>
 
@@ -2396,6 +2400,16 @@ function LibraryContent() {
           canEdit={canImport}
           apiFetch={apiFetch}
           onClose={() => setVoiceOpen(false)}
+        />
+      )}
+      {workspaceId && (
+        <CampaignPicker
+          open={campaignPickerFor.length > 0}
+          workspaceId={workspaceId}
+          assets={campaignPickerFor}
+          apiFetch={apiFetch}
+          onClose={() => setCampaignPickerFor([])}
+          onAdded={(text) => { setMessage(text); setSelection(new Set()); }}
         />
       )}
       {workspaceId && selected && (
