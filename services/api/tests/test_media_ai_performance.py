@@ -90,3 +90,32 @@ def test_batched_whisper_wrapper_is_reused_for_the_same_model(monkeypatch) -> No
 
     assert first is second
     assert len(wrapped) == 1
+
+
+def test_gpu_support_is_downloaded_only_where_there_is_a_gpu(monkeypatch) -> None:
+    asked: list[tuple[str, ...]] = []
+    monkeypatch.setattr(media_ai, "pip_install", lambda packages: asked.append(tuple(packages)))
+
+    monkeypatch.setattr(media_ai, "_cuda_devices_visible", lambda: 0)
+    assert media_ai._prepare_speech_cuda() == []
+    assert asked == []
+
+    monkeypatch.setattr(media_ai, "_cuda_devices_visible", lambda: 1)
+    assert media_ai._prepare_speech_cuda() == []
+    assert asked == [media_ai.SPEECH_CUDA_PACKAGES]
+
+
+def test_a_failed_gpu_download_is_reported_rather_than_fatal(monkeypatch) -> None:
+    """Transcription still works without it, only slower - so it must not fail."""
+
+    def refuse(packages):
+        raise RuntimeError("The download failed. No network.")
+
+    monkeypatch.setattr(media_ai, "_cuda_devices_visible", lambda: 1)
+    monkeypatch.setattr(media_ai, "pip_install", refuse)
+
+    skipped = media_ai._prepare_speech_cuda()
+
+    assert len(skipped) == 1
+    assert "GPU acceleration" in skipped[0]
+    assert "No network." in skipped[0]

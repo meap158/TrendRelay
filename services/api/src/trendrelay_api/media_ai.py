@@ -307,6 +307,21 @@ PROVIDER_PACKAGES: dict[str, tuple[str, ...]] = {
     "translate": (f"argostranslate=={TRANSLATE_VERSION}",),
 }
 
+#: What transcribing on the GPU needs beyond faster-whisper itself.
+#:
+#: The CTranslate2 wheel carries its own cuDNN and links cuBLAS without shipping
+#: it, so a default install runs on the CPU and fails the moment it is pointed
+#: at a GPU. NVIDIA publishes the missing half as a wheel; this is that wheel.
+#:
+#: Half a gigabyte, and fetched only where there is a card to use it - which is
+#: why it is separate from the package list above rather than part of it. A
+#: laptop with no NVIDIA GPU should never pay for a library it cannot load.
+#:
+#: Bounded to CUDA 12 rather than pinned to a patch, because the constraint is
+#: real and the patch is not: CTranslate2 asks the loader for `cublas64_12.dll`
+#: by that name, so any CUDA 12 build answers and no CUDA 13 build does.
+SPEECH_CUDA_PACKAGES: tuple[str, ...] = ("nvidia-cublas-cu12>=12.4,<13",)
+
 #: Prepared by default because they are the directions TrendRelay's own
 #: interface implies: the languages it is translated into, paired with English,
 #: which is the hub Argos routes most pairs through anyway.
@@ -394,6 +409,44 @@ def _prepare_speech(stage: Any = None) -> list[str]:
         download_root=str(model_root),
         use_auth_token=False,
     )
+    return _prepare_speech_cuda(stage)
+
+
+def _cuda_devices_visible() -> int:
+    """How many GPUs CTranslate2 can see, which is a driver question."""
+    _runtime_path()
+    try:
+        import ctranslate2
+
+        return int(ctranslate2.get_cuda_device_count())
+    except Exception:
+        return 0
+
+
+def _prepare_speech_cuda(stage: Any = None) -> list[str]:
+    """Fetch the CUDA half of the runtime, on a machine that has a GPU.
+
+    Part of preparing the provider rather than a second button, because "make
+    transcription work well here" is one decision and the operator cannot be
+    expected to know that CTranslate2 ships two thirds of a CUDA stack. It is
+    also why this runs on every prepare rather than only the first: a runtime
+    installed before this existed is complete apart from these files, and
+    re-running Download and switch on is what an operator does when a provider
+    is not behaving.
+
+    Never fatal. Every failure here costs speed and nothing else - the CPU path
+    is the same transcription - so a machine with no network, no wheel for its
+    Python, or no room on disk should end up transcribing slowly rather than not
+    at all.
+    """
+    if not _cuda_devices_visible():
+        return []
+    if stage:
+        stage(0.5, "Downloading GPU support for transcription")
+    try:
+        pip_install(SPEECH_CUDA_PACKAGES)
+    except Exception as error:
+        return [f"GPU acceleration: {type(error).__name__}: {error}"]
     return []
 
 
