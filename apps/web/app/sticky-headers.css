@@ -70,6 +70,72 @@
   justify-content: flex-end;
 }
 
+/* --- Reclaim the height every tab's heading spends -------------------------
+   A heading pinned to the top is chrome: it is on screen the whole time the
+   tab is, so its height is height the work below never gets back. The tab's
+   name is already in the nav directly above it, and one ellipsed line is
+   enough to say what the tab is for. The Library heading was already this
+   small; the rest now match it.
+
+   1. Drop the eyebrow - it only repeats the tab name from the nav above. */
+.console-page > .console-heading .eyebrow,
+.research-radar > .research-radar-header .eyebrow,
+.opportunity-page > .opportunity-header .eyebrow,
+.campaign-page > .campaign-heading .section-kicker,
+.publish-page > header:first-child .eyebrow,
+.tools-sticky-header .eyebrow,
+.workspace-heading .eyebrow {
+  display: none;
+}
+
+/* 2. The explanation to a single ellipsed line, rather than wrapping to three. */
+.console-page > .console-heading > div > p:last-child,
+.research-radar > .research-radar-header .lede,
+.opportunity-page > .opportunity-header .lede,
+.publish-page > header:first-child .lede,
+.tools-sticky-header .lede {
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 3. The heading to the Library's size, and the downloader heading down from
+      the hero padding it alone still carried. */
+.console-page > .console-heading {
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 12px 16px;
+}
+.workspace-heading {
+  margin-bottom: 14px;
+}
+.console-page > .console-heading h1,
+.publish-page > header:first-child h1,
+.tools-sticky-header h1,
+.workspace-heading h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 550;
+  letter-spacing: normal;
+}
+
+/* 4. Title and its one-line note share a row, the way the Library heading
+      does, instead of stacking - so the whole heading is a single line high. */
+.console-page > .console-heading > div,
+.publish-page > header:first-child > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  max-width: none;
+}
+.console-page > .console-heading h1,
+.publish-page > header:first-child h1 {
+  white-space: nowrap;
+}
+
 @media (min-width: 901px) {
   .console-page .download-composer,
   .console-page .download-queue-card {
@@ -185,6 +251,7 @@
   .publish-page > header:first-child .lede {
     display: block;
     overflow: visible;
+    white-space: normal;
     -webkit-line-clamp: unset;
   }
 }
