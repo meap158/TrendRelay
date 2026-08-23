@@ -608,6 +608,22 @@ const WEEKDAY_NAMES = [
   "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
 ];
 export const EVERY_DAY = -1;
+/**
+ * The groups a time can be added to in one go, past the single day.
+ *
+ * Buffer and Publer both offer these, and for the same reason: a rhythm is
+ * rarely "Tuesday". It is every day, or the working week, or the weekend - and
+ * building the working week one day at a time is five trips through the same
+ * form to say one thing.
+ *
+ * `EVERY_DAY` stays its own stored value rather than expanding to seven rows:
+ * it means "whatever the week turns out to be", and seven rows would have to
+ * be edited seven times to change it back.
+ */
+const WEEKDAY_GROUPS: { value: string; label: string; days: number[] }[] = [
+  { value: "weekdays", label: "Weekdays", days: [0, 1, 2, 3, 4] },
+  { value: "weekends", label: "Weekends", days: [5, 6] },
+];
 
 /** The Monday of the week containing `from`. */
 function weekStart(from: Date) {
@@ -1066,15 +1082,32 @@ export function SlotEditor({
 }) {
   const t = useT();
   const [draft, setDraft] = useState("");
-  const [weekday, setWeekday] = useState(EVERY_DAY);
+  /** A weekday number, or one of the group values above. */
+  const [weekday, setWeekday] = useState<string>(String(EVERY_DAY));
   const [presetName, setPresetName] = useState("");
 
   const entries = slots.map((slot) => ({ weekday: slot.weekday, time: slot.time }));
+  const everyDay = slots.filter((slot) => slot.weekday === EVERY_DAY);
+
+  /** Everything except this one, in the shape the save takes. */
+  function withoutSlot(slot: Slot) {
+    return entries.filter(
+      (entry) => !(entry.weekday === slot.weekday && entry.time === slot.time),
+    );
+  }
 
   function add() {
     if (!draft) return;
-    if (entries.some((entry) => entry.time === draft && entry.weekday === weekday)) return;
-    onSave([...entries, { weekday, time: draft }]);
+    const group = WEEKDAY_GROUPS.find((item) => item.value === weekday);
+    const days = group ? group.days : [Number(weekday)];
+    // Whatever of the selection is not already there. Adding "weekdays" over a
+    // week that already posts on Monday should add the other four rather than
+    // refuse the lot, which is what checking the group as a unit would do.
+    const wanted = days
+      .filter((day) => !entries.some((entry) => entry.time === draft && entry.weekday === day))
+      .map((day) => ({ weekday: day, time: draft }));
+    if (!wanted.length) return;
+    onSave([...entries, ...wanted]);
     setDraft("");
   }
 
@@ -1091,25 +1124,69 @@ export function SlotEditor({
           </Button>
         )}
       </div>
-      {slots.length > 0 && (
-        <ul className="slot-list">
-          {slots.map((slot, index) => (
-            <li key={slot.id}>
-              <b>{slotLabel(slot)}</b>
-              {slot.weekday !== EVERY_DAY && <i>{slot.weekday_label}</i>}
-              {canEdit && (
-                <button
-                  type="button"
-                  className="slot-remove"
-                  aria-label={`Remove ${slotLabel(slot)}`}
-                  disabled={busy}
-                  onClick={() => onSave(entries.filter((_entry, at) => at !== index))}
-                ><ActionIcon name="dismiss" /></button>
-              )}
-            </li>
-          ))}
-        </ul>
+      {/* Every day first, on its own line: it applies to all seven columns,
+          and repeating it under each of them would say seven times what it
+          says once - and imply seven rows somebody could edit apart. */}
+      {everyDay.length > 0 && (
+        <div className="slot-week-everyday">
+          <span>Every day</span>
+          <ul>
+            {everyDay.map((slot) => (
+              <li key={slot.id}>
+                <b>{slotLabel(slot)}</b>
+                {canEdit && (
+                  <button
+                    type="button"
+                    className="slot-remove"
+                    aria-label={`Remove ${slotLabel(slot)} from every day`}
+                    disabled={busy}
+                    onClick={() => onSave(withoutSlot(slot))}
+                  ><ActionIcon name="dismiss" /></button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
+      {/* The week as a week. It was a flat list of every slot with its day
+          written beside it, which answers "what times are set" and not "what
+          does a Tuesday look like" - and the second is the question somebody
+          opens this to ask. Both references it is modelled on show seven
+          columns for the same reason. */}
+      <div className="slot-week" role="group" aria-label={t("composer.postingTimes")}>
+        {WEEKDAY_NAMES.map((name, day) => {
+          const times = slots
+            .filter((slot) => slot.weekday === day)
+            .sort((left, right) => slotLabel(left).localeCompare(slotLabel(right)));
+          return (
+            <div className="slot-week-day" key={name}>
+              {/* Short on the header, full in the label a reader hears. */}
+              <h5 title={name}>{name.slice(0, 3)}</h5>
+              <ul>
+                {times.map((slot) => (
+                  <li key={slot.id}>
+                    <b>{slotLabel(slot)}</b>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        className="slot-remove"
+                        aria-label={`Remove ${slotLabel(slot)} on ${name}`}
+                        disabled={busy}
+                        onClick={() => onSave(withoutSlot(slot))}
+                      ><ActionIcon name="dismiss" /></button>
+                    )}
+                  </li>
+                ))}
+                {/* A day with no times is a day nothing posts on, which is
+                    worth seeing rather than inferring from an absence. */}
+                {times.length === 0 && everyDay.length === 0 && (
+                  <li className="slot-week-none" aria-label={`Nothing posts on ${name}`}>—</li>
+                )}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
       {canEdit && (
         <div className="slot-add">
           <input
@@ -1121,9 +1198,12 @@ export function SlotEditor({
           <Select
             value={weekday}
             aria-label={t("composer.repeats")}
-            onChange={(event) => setWeekday(Number(event.target.value))}
+            onChange={(event) => setWeekday(event.target.value)}
           >
             <option value={EVERY_DAY}>{t("composer.everyDay")}</option>
+            {WEEKDAY_GROUPS.map((group) => (
+              <option key={group.value} value={group.value}>{group.label}</option>
+            ))}
             {WEEKDAY_NAMES.map((name, index) => (
               <option key={name} value={index}>{name} only</option>
             ))}
