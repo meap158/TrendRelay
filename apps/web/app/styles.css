@@ -537,6 +537,24 @@ nav strong { color: var(--text); }
 .ui-dialog-wide .picker-meta { gap: 3px; padding: 10px; }
 .ui-dialog-wide .picker-meta strong { display: -webkit-box; min-height: 2.8em; overflow: hidden; line-height: 1.4; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .ui-dialog-wide .picker-result > .ui-badge { position: absolute; inset: 8px 8px auto auto; box-shadow: 0 1px 4px rgba(17, 31, 44, .16); }
+/* Picked, and where in the swipe.
+
+   The click used to have nothing to show for it: the picture went into the
+   carousel behind the dialog, and clicking the same one again was refused
+   in silence. The number rather than a tick because the order is the post -
+   a tick confirms the click and still leaves you guessing where it landed. */
+.picker-result[data-picked] { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+.picker-order { display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--green); color: var(--panel); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Opposite corner from the blurred badge, which owns the right one. */
+.ui-dialog-wide .picker-order { position: absolute; inset: 8px auto auto 8px; box-shadow: 0 1px 4px rgba(17, 31, 44, .16); }
+/* At capacity the ones not in it stop being choices. Dimmed rather than
+   hidden: the picture is still in the library, and it is the limit that
+   changed, not the catalogue. */
+.picker-result:disabled { opacity: .5; cursor: not-allowed; }
+.picker-result:disabled:hover { border-color: var(--line); background: transparent; }
+/* The running count, where the counting happens. */
+.picker-tally { margin: 0; color: var(--muted); font-size: 12px; }
+.picker-tally-full { color: var(--bad); }
 @media (max-width: 800px) {
   .ui-dialog-wide .picker-results { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

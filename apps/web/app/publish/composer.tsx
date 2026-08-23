@@ -176,6 +176,9 @@ export function MediaPicker({
   onPick,
   onClose,
   mediaKind = "video",
+  chosen = [],
+  pathOf,
+  capacity = 0,
 }: {
   open: boolean;
   assets: LibraryAsset[];
@@ -189,9 +192,26 @@ export function MediaPicker({
   onClose: () => void;
   /** What this dialog is being opened to find. */
   mediaKind?: "video" | "image";
+  /**
+   * What is already in the carousel, in the order it will be swiped.
+   *
+   * The dialog had no idea. Clicking a picture added it behind the dialog with
+   * nothing to show for it - no mark on the row, no count, and a second click
+   * on the same one did nothing at all, because the caller silently refuses a
+   * duplicate. Three clicks and a wrong guess about which of them landed is
+   * indistinguishable from a broken button.
+   */
+  chosen?: string[];
+  /** How a row's asset maps to the value `chosen` holds. */
+  pathOf?: (asset: LibraryAsset) => string;
+  /** The tightest destination's limit, or 0 when nothing constrains it. */
+  capacity?: number;
 }) {
   const t = useT();
   const images = mediaKind === "image";
+  /** Where each chosen path sits in the swipe order, by path. */
+  const order = new Map(chosen.map((path, index) => [path, index + 1]));
+  const full = capacity > 0 && chosen.length >= capacity;
   const base = images ? IMAGE_PICKER_BASE : PICKER_BASE;
   // Initialised from what this dialog was opened for. The caller keys it on
   // `mediaKind`, so opening it for carousel frames after opening it for a clip
@@ -222,7 +242,8 @@ export function MediaPicker({
       size="wide"
       title={images ? t("composer.chooseImages") : t("composer.chooseMedia")}
       description={images
-        ? "Images in this workspace's library. Pick them in the order they are swiped."
+        ? "Images in this workspace's library. Pick them in the order they are"
+          + " swiped, and click a picked one to take it out again."
         : "Clips and pictures in this workspace's library. A clip fills the video "
           + "slot; a picture starts a carousel."}
       onClose={onClose}
@@ -238,6 +259,23 @@ export function MediaPicker({
         cleared={base}
         onChange={apply}
       />
+      {/* What the picking has added up to, where the picking happens. It was
+          only ever shown on the page behind this dialog, so the answer to "how
+          many have I got" meant closing the thing you were counting with. */}
+      {images && (
+        <p className="picker-tally" role="status" aria-live="polite">
+          {chosen.length === 0
+            ? "Nothing picked yet."
+            : `${chosen.length} picked, in swipe order.`}
+          {capacity > 0 && (
+            <span className={full ? "picker-tally-full" : undefined}>
+              {full
+                ? ` The tightest destination takes ${capacity}.`
+                : ` Room for ${capacity - chosen.length} more.`}
+            </span>
+          )}
+        </p>
+      )}
       {failure && <p className="engine-warning" role="status">{failure}</p>}
       {!failure && !loading && !assets.length && (
         <p className="picker-empty">
@@ -247,11 +285,25 @@ export function MediaPicker({
         </p>
       )}
       <ul className="picker-results">
-        {assets.map((asset) => (
+        {assets.map((asset) => {
+          // Undefined when it is not in the carousel; its 1-based swipe
+          // position when it is.
+          const place = images && pathOf ? order.get(pathOf(asset)) : undefined;
+          return (
           <li key={asset.id}>
             <button
               type="button"
               className="picker-result"
+              // Pressed rather than selected: this is a toggle, and a screen
+              // reader should say so before the tick is described.
+              aria-pressed={images ? place !== undefined : undefined}
+              data-picked={place === undefined ? undefined : true}
+              // At capacity, only the ones already in can be touched - and
+              // those only to come back out.
+              disabled={images && full && place === undefined}
+              title={images && full && place === undefined
+                ? `The tightest destination takes ${capacity} images.`
+                : undefined}
               draggable
               onDragStart={(event) => {
                 // The path is what the field takes, and a plain-text payload
@@ -270,9 +322,17 @@ export function MediaPicker({
                 </small>
               </span>
               {isBlurred(asset) && <Badge tone="accent">{t("composer.facesBlurred")}</Badge>}
+              {/* The number, not just a tick: the order is the post, and the
+                  description above promises it is the order they are picked
+                  in. A tick would confirm the click and still leave somebody
+                  guessing where in the swipe it landed. */}
+              {place !== undefined && (
+                <span className="picker-order" aria-hidden="true">{place}</span>
+              )}
             </button>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </Dialog>
   );

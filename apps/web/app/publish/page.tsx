@@ -1476,7 +1476,13 @@ export default function PublishPage() {
       ...current,
       [path]: { title: asset.title, blurred: isBlurred(asset) },
     }));
-    setImagePaths((current) => (current.includes(path) ? current : [...current, path]));
+    // A second click takes it back out. It used to be refused in silence -
+    // the safe half of "do not add it twice", with nothing to say which half
+    // had happened, so an accidental pick could only be undone behind the
+    // dialog that made it.
+    setImagePaths((current) => (current.includes(path)
+      ? current.filter((item) => item !== path)
+      : [...current, path]));
   }
 
   /** Move an image one place along. Order is the post, so it is editable. */
@@ -3795,6 +3801,11 @@ export default function PublishPage() {
           // dialog. "Choose from Library" now shows pictures too, and a
           // picture chosen there belongs in the carousel - sending it to the
           // video slot would set a path no destination can post.
+          // What is in the carousel already, so a row can show its place in
+          // the swipe rather than leaving the click to be taken on faith.
+          chosen={imagePaths}
+          pathOf={handoffPath}
+          capacity={imageCapacity}
           onPick={(asset) =>
             (asset.media_kind === "image" ? addCarouselImage : pickClip)(asset)}
           onClose={() => setPickerOpen(false)}
