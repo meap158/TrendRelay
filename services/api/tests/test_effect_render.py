@@ -22,6 +22,10 @@ STREAM_RENDER_CASES = [
     ("fit", {"ratio": "9:16", "blur": 0.05}),
     ("zoom", {"factor": 1.2, "anchor": "centre"}),
     ("region_blur", {"x": 0.5, "y": 0.7, "width": 0.4, "height": 0.2}),
+    ("cover_text", {"mode": "solid", "regions": [
+        {"x": 0.1, "y": 0.8, "width": 0.6, "height": 0.08,
+         "start_ms": 0, "end_ms": 1500},
+    ]}),
     ("colour", {"contrast": 1.1, "brightness": 0.03}),
     ("speed", {"rate": 1.25}),
     ("trim", {"start": 0.1, "length": 0.4}),

@@ -40,7 +40,7 @@ FFMPEG = (
     / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
 )
 
-ParamKind = Literal["number", "choice", "toggle"]
+ParamKind = Literal["number", "choice", "toggle", "regions"]
 Stage = Literal["stream", "frame"]
 
 #: FFmpeg's atempo filter only accepts a rate in this range, so anything beyond
@@ -167,6 +167,58 @@ class Effect:
         return next((item for item in self.params if item.id == param_id), None)
 
 
+#: The most regions one step will carry.
+#:
+#: Each becomes at least one filter with its own `enable` expression, and
+#: FFmpeg is handed the result as a command line. Matched to the cap the
+#: reading itself applies, so a step cannot be built that the reader would not
+#: have produced.
+MAX_REGIONS = 120
+
+
+def _regions(param: EffectParam, raw: Any) -> tuple[dict[str, float], ...]:
+    """Rectangles and the window each is wanted for, checked one by one.
+
+    Not a knob. These arrive from a machine reading of the clip rather than
+    from anybody's hands, which is exactly why they are checked rather than
+    trusted: a step is stored, edited, replayed, and eventually pasted into a
+    command line, and by then nothing remembers where the numbers came from.
+
+    Shares of the frame, so the step survives a re-encode at another size, and
+    bounded to the frame because a region outside it is not a region.
+    """
+    if not isinstance(raw, (list, tuple)):
+        raise EffectError(f"{param.label} must be a list of regions.")
+    if len(raw) > MAX_REGIONS:
+        raise EffectError(
+            f"{param.label} holds at most {MAX_REGIONS} regions; {len(raw)} were sent."
+        )
+    checked: list[dict[str, float]] = []
+    for index, entry in enumerate(raw, start=1):
+        if not isinstance(entry, dict):
+            raise EffectError(f"{param.label}: region {index} is not a rectangle.")
+        try:
+            box = {key: float(entry[key]) for key in ("x", "y", "width", "height")}
+            start = float(entry.get("start_ms") or 0.0)
+            end = float(entry.get("end_ms") or 0.0)
+        except (KeyError, TypeError, ValueError) as error:
+            raise EffectError(
+                f"{param.label}: region {index} needs x, y, width and height."
+            ) from error
+        if any(value != value for value in (*box.values(), start, end)):
+            raise EffectError(f"{param.label}: region {index} is not a number.")
+        if not (0.0 <= box["x"] <= 1.0 and 0.0 <= box["y"] <= 1.0):
+            raise EffectError(f"{param.label}: region {index} starts outside the frame.")
+        if not (0.0 < box["width"] <= 1.0 and 0.0 < box["height"] <= 1.0):
+            raise EffectError(f"{param.label}: region {index} has no area.")
+        if box["x"] + box["width"] > 1.0 or box["y"] + box["height"] > 1.0:
+            raise EffectError(f"{param.label}: region {index} runs past the frame.")
+        if end < start:
+            raise EffectError(f"{param.label}: region {index} ends before it starts.")
+        checked.append({**box, "start_ms": start, "end_ms": end})
+    return tuple(checked)
+
+
 def _number(param: EffectParam, raw: Any) -> float:
     try:
         value = float(raw)
@@ -212,6 +264,8 @@ def coerce_params(effect: Effect, raw: dict[str, Any] | None) -> dict[str, Any]:
             values[param.id] = _number(param, given)
         elif param.kind == "toggle":
             values[param.id] = bool(given)
+        elif param.kind == "regions":
+            values[param.id] = _regions(param, given)
         else:
             allowed = {str(option["value"]) for option in param.choices()}
             if str(given) not in allowed:
@@ -660,6 +714,135 @@ REGION_BLUR = Effect(
     media_kinds=STILL_AND_MOVING,
 )
 
+def _cover_text_filters(values: dict[str, Any]) -> list[str]:
+    from trendrelay_api.text_cover import CoverUnavailable, cover_filters
+
+    # Refused rather than rendered as a no-op. A step with nothing to cover
+    # produces no filters, and a render that quietly changes nothing is the
+    # worst of the three outcomes: it costs the encode, reports success, and
+    # leaves somebody looking for the mistake in the wrong place.
+    if not values.get("regions"):
+        raise EffectError(
+            "Cover on-screen text has nothing to cover yet. Read the clip's "
+            "on-screen text in the Library first, then add this."
+        )
+    try:
+        return cover_filters(
+            values.get("regions") or (),
+            mode=str(values.get("mode") or "solid"),
+            colour=str(values.get("colour") or "black"),
+            strength=float(values.get("strength") or 0.08),
+        )
+    except CoverUnavailable as error:
+        raise EffectError(str(error)) from error
+
+
+def _cover_text_preview(
+    source: Path, values: dict[str, Any], at: float | None
+) -> dict[str, Any]:
+    """The cover as it lands on one frame, which is the only way to judge it.
+
+    A still has no clock. Every region carries the window it is wanted for, and
+    on a single decoded frame `t` is zero, so a cover timed to eleven seconds in
+    would render as nothing at all and read as a broken effect rather than as a
+    preview of a moment it does not apply to.
+
+    So the frame is chosen first and the regions are the ones alive at that
+    moment, held open for it. The filters are the render's own - the same
+    function, the same fragments - because a preview that builds its picture a
+    different way is a preview of something else.
+    """
+    from trendrelay_api.integrations.effect_render import (
+        _source_preview_frame,
+        preview_recipe_frame,
+    )
+
+    base = _source_preview_frame(source, at)
+    position = float(base.get("position") or 0.0)
+    duration = base.get("duration_seconds")
+    at_ms = position * float(duration or 0.0) * 1000.0
+
+    regions = tuple(values.get("regions") or ())
+    live = [
+        region for region in regions
+        if float(region.get("start_ms", 0)) <= at_ms < float(region.get("end_ms", 0))
+    ]
+    if not live:
+        # The source frame, untouched, and told why. Rendering an empty
+        # filtergraph to arrive at the same picture would cost an encode to
+        # show nothing, and showing nothing without saying so reads as an
+        # effect that does not work rather than a moment it does not apply to.
+        return {
+            "image": base["image"],
+            "position": round(position, 4),
+            "duration_seconds": duration,
+            "note": (
+                "Nothing has been read off this clip yet, so there is nothing "
+                "to cover. Read its on-screen text in the Library first."
+                if not regions else
+                f"No text was read at {position * float(duration or 0.0):.1f}s. "
+                f"{len(regions)} region{'s' if len(regions) != 1 else ''} "
+                "elsewhere in the clip."
+            ),
+        }
+
+    # Held open from zero, because that is where a still sits. The stored step
+    # keeps its real windows; this rewrite exists for the length of one frame.
+    shown = tuple({**region, "start_ms": 0.0, "end_ms": 1.0} for region in live)
+    result = preview_recipe_frame(
+        source, [RecipeStep(COVER_TEXT, {**values, "regions": shown})], at
+    )
+    return {**result, "note": (
+        f"{len(shown)} of {len(regions)} region"
+        f"{'s' if len(regions) != 1 else ''} on screen at "
+        f"{position * float(duration or 0.0):.1f}s."
+    )}
+
+
+COVER_TEXT = Effect(
+    id="cover_text",
+    label="Cover on-screen text",
+    tag="Cover text",
+    summary="Hide the words burned into the picture, so a translation can sit there.",
+    stage="stream",
+    params=(
+        EffectParam(
+            id="mode", label="How to cover it", kind="choice", default="solid",
+            options=(
+                ("solid", "Solid colour"),
+                ("blur", "Blur"),
+                ("pixelate", "Pixelate"),
+            ),
+            help="Solid is exact and shows as a sticker on a busy frame. Blur "
+                 "keeps the background's colour and motion. Pixelate is the "
+                 "most obviously deliberate of the three.",
+        ),
+        EffectParam(
+            id="colour", label="Colour", kind="choice", default="black",
+            options=(
+                ("black", "Black"),
+                ("white", "White"),
+                ("gray", "Grey"),
+            ),
+            help="Solid only. Match the footage behind the words, not the words.",
+        ),
+        EffectParam(
+            id="strength", label="Strength", kind="number", default=0.08,
+            minimum=0.02, maximum=0.2, step=0.01,
+            help="Blur and pixelate only. Against each region's own size, so a "
+                 "short line is not smeared far past its edges.",
+        ),
+        EffectParam(
+            id="regions", label="What to cover", kind="regions", default=(),
+            help="Taken from the clip's on-screen text reading, as shares of "
+                 "the frame. Read the clip in the Library to fill this in.",
+        ),
+    ),
+    video_filters=_cover_text_filters,
+    preview=_cover_text_preview,
+    media_kinds=STILL_AND_MOVING,
+)
+
 VOLUME = Effect(
     id="volume",
     label="Volume",
@@ -684,7 +867,10 @@ VOLUME = Effect(
 #: anything that needs a model after all of them.
 REGISTRY: dict[str, Effect] = {
     effect.id: effect
-    for effect in (FLIP, ROTATE, ASPECT, FIT, ZOOM, REGION_BLUR, COLOUR, SPEED, TRIM, VOLUME)
+    for effect in (
+        FLIP, ROTATE, ASPECT, FIT, ZOOM, REGION_BLUR, COVER_TEXT, COLOUR, SPEED,
+        TRIM, VOLUME,
+    )
 }
 
 

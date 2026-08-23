@@ -188,7 +188,7 @@ def test_every_effect_describes_itself_completely() -> None:
         assert effect["stage"] in {"stream", "frame"}
         for param in effect["params"]:
             assert param["label"]
-            assert param["kind"] in {"number", "choice", "toggle"}
+            assert param["kind"] in {"number", "choice", "toggle", "regions"}
             # A form can be built from this alone, which is the point: adding an
             # effect must not mean writing frontend for it.
             if param["kind"] == "choice":

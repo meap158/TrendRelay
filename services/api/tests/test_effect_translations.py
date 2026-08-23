@@ -34,6 +34,11 @@ OPTION_KEYS = {
     "1:1": "square11", "16:9": "landscape169",
     "centre": "middle", "top": "top", "bottom": "bottom",
     "largest": "mainFace", "all": "everyone",
+    # How a cover hides what it covers, and what colour it uses when it
+    # paints. Named here for the same reason as the anchors above: the
+    # value is the FFmpeg word, and nobody should have to read it.
+    "solid": "solidColour", "blur": "blurred", "pixelate": "pixelated",
+    "black": "black", "white": "white", "gray": "grey",
     # The objects that ship with the overlay catalogue. Fixed strings, exactly
     # like the effect labels around them — leaving them out put an English
     # "Smiley" directly under a translated effect title. A *dropped-in* object
