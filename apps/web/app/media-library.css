@@ -877,7 +877,7 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .caption-style-choice strong { font-size: 12px; }
 .caption-style-choice small { color: var(--muted); font-size: 10px; line-height: 1.35; }
 
-.caption-editor-language select { width: 100%; max-width: 420px; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); font-size: 13px; }
+.caption-editor-language select, .caption-editor-source select { width: 100%; max-width: 420px; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); font-size: 13px; }
 .caption-editor-note { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .caption-editor-problem { margin: 0 0 8px; color: var(--bad); font-size: 12px; }
 

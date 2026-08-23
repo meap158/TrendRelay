@@ -329,6 +329,11 @@ def preview(cues: Sequence[Cue], limit: int = 8) -> list[dict[str, Any]]:
             "words": [asdict(word) for word in cue.words],
             # Rounded, because this is shown to a person rather than compared.
             "cps": round(cue.cps, 1),
+            # Where it goes, when it has an opinion. A spoken caption does not
+            # and leaves this null; a line replacing on-screen text carries the
+            # box it was measured onto, and an interface drawing it anywhere
+            # else would be showing a placement the render will not use.
+            "place": list(cue.place) if cue.place else None,
         }
         for cue in list(cues)[:limit]
     ]

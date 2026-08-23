@@ -331,3 +331,116 @@ def test_a_machine_transcript_is_used_as_it_stands() -> None:
         segments = caption_jobs.caption_segments(session, "ws1", "asset1", chosen)
 
     assert segments == list(chosen.segments)
+
+
+# --- captioning the words already on the picture ------------------------------
+
+
+def add_on_screen_reading(*, language: str = "zh") -> None:
+    """An OCR reading with boxes, which is what makes a line placeable."""
+    with Factory.begin() as session:
+        session.get(MediaAsset, "asset1").width = 720
+        session.get(MediaAsset, "asset1").height = 1280
+        session.add(
+            MediaTranscript(
+                workspace_id="ws1",
+                asset_id="asset1",
+                kind="ocr",
+                language=language,
+                provider="rapidocr",
+                status="machine",
+                text="限时优惠",
+                segments=[
+                    {
+                        "timestamp_ms": 0,
+                        "lines": [
+                            {
+                                "text": "限时优惠",
+                                "confidence": 0.94,
+                                # A band across the middle of a 720x1280 frame.
+                                "box": [[100, 500], [620, 500], [620, 620], [100, 620]],
+                            }
+                        ],
+                    }
+                ],
+                created_by="owner",
+            )
+        )
+
+
+def test_on_screen_text_is_captioned_over_the_words_it_replaces() -> None:
+    """A translation of on-screen text has exactly one place it can go.
+
+    At the bottom of the frame it is a second thing to read beside the thing it
+    translates - and over a covered original it is a blank rectangle and an
+    unexplained caption.
+    """
+    add_asset(transcript=False)
+    add_on_screen_reading()
+
+    job = caption_jobs.queue(
+        "ws1", "asset1", actor_user_id="owner",
+        request=request(source="on_screen"), factory=Factory,
+    )
+    done = caption_jobs.run_caption_job(job["id"], factory=Factory)
+
+    assert done["result"]["cue_count"] == 1
+    written = Path(done["result"]["files"]["srt"]).read_text(encoding="utf-8")
+    assert "限时优惠" in written
+    # Named apart from the spoken track, because one clip can have both and a
+    # shared name would have the second render overwrite the first.
+    assert "on-screen" in done["result"]["files"]["srt"]
+
+
+def test_captioning_the_speech_and_the_picture_are_different_jobs() -> None:
+    """Without the source in the id they content-address to the same job.
+
+    Asking for the second would hand back the first, which reports success and
+    renders nothing new.
+    """
+    add_asset()
+    add_on_screen_reading()
+
+    spoken = caption_jobs.queue(
+        "ws1", "asset1", actor_user_id="owner", request=request(), factory=Factory,
+    )
+    printed = caption_jobs.queue(
+        "ws1", "asset1", actor_user_id="owner",
+        request=request(source="on_screen"), factory=Factory,
+    )
+
+    assert spoken["id"] != printed["id"]
+
+
+def test_a_clip_whose_text_was_never_read_says_so() -> None:
+    add_asset(transcript=False)
+
+    job = caption_jobs.queue(
+        "ws1", "asset1", actor_user_id="owner",
+        request=request(source="on_screen"), factory=Factory,
+    )
+    try:
+        caption_jobs.run_caption_job(job["id"], factory=Factory)
+    except RuntimeError as error:
+        assert "on-screen text has not been read" in str(error)
+    else:
+        raise AssertionError("a clip with no reading rendered anyway")
+
+
+def test_a_clip_that_was_never_measured_cannot_place_anything() -> None:
+    """Shares of the frame need a frame. Refused rather than placed at zero."""
+    add_asset(transcript=False)
+    add_on_screen_reading()
+    with Factory.begin() as session:
+        session.get(MediaAsset, "asset1").width = None
+
+    job = caption_jobs.queue(
+        "ws1", "asset1", actor_user_id="owner",
+        request=request(source="on_screen"), factory=Factory,
+    )
+    try:
+        caption_jobs.run_caption_job(job["id"], factory=Factory)
+    except RuntimeError as error:
+        assert "never measured" in str(error)
+    else:
+        raise AssertionError("an unmeasured clip placed a line anyway")

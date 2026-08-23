@@ -1717,6 +1717,14 @@ class CaptionRequest(BaseModel):
     #: one, then the most recent machine one - a correction somebody made by
     #: hand should win over the draft it corrected.
     transcript_id: str | None = Field(default=None, max_length=64)
+    #: What is being captioned.
+    #:
+    #: `speech` is the spoken transcript, placed wherever the style says.
+    #: `on_screen` is the text already burned into the picture, placed over the
+    #: words it replaces - which is the only place it can go, since a
+    #: translation of on-screen text that lands at the bottom of the frame is a
+    #: second thing to read beside the thing it translates.
+    source: Literal["speech", "on_screen"] = "speech"
     #: `sidecar` writes the subtitle files and leaves the video alone.
     #: `burned` re-encodes it with the captions in the picture. `both` does
     #: both, which is the useful default once an encode is being paid for
@@ -1933,15 +1941,25 @@ def render_captions(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
-    transcript = _caption_transcript(session, workspace_id, asset_id, body.transcript_id)
-    if transcript is None:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "This asset has no speech transcript yet. Transcribe it, or "
-                "paste a reviewed one, before building captions."
-            ),
+    # Which reading has to exist depends on what is being captioned, and both
+    # are refused here rather than in the worker so a missing one is a sentence
+    # on the button instead of a job that fails a minute later.
+    if body.source == "on_screen":
+        reading = _ocr_reading(session, workspace_id, asset_id)
+        transcript_id = reading.id
+    else:
+        transcript = _caption_transcript(
+            session, workspace_id, asset_id, body.transcript_id
         )
+        if transcript is None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "This asset has no speech transcript yet. Transcribe it, or "
+                    "paste a reviewed one, before building captions."
+                ),
+            )
+        transcript_id = transcript.id
     try:
         job = caption_jobs.queue(
             workspace_id,
@@ -1952,8 +1970,9 @@ def render_captions(
                 "style_overrides": body.style_overrides,
                 "layout_overrides": body.layout_overrides,
                 "translate_to": body.translate_to,
-                "transcript_id": transcript.id,
+                "transcript_id": transcript_id,
                 "delivery": body.delivery,
+                "source": body.source,
             },
         )
     except LookupError as error:
@@ -2800,7 +2819,13 @@ def _measured(item: Any) -> None:
 class TextOverlayRequest(BaseModel):
     """Translate what a clip shows, and put it where the clip shows it."""
 
-    target: str = Field(min_length=2, max_length=16)
+    #: What to translate into, or nothing to place the lines as they are.
+    #:
+    #: Absent is not a no-op: it letters the original text onto its own boxes,
+    #: which is how somebody checks the boxes line up and the sizes fit before
+    #: paying for a translation or an encode. The render allows the same, and
+    #: the preview has to agree with it.
+    target: str | None = Field(default=None, min_length=2, max_length=16)
     #: The language the on-screen text is in. Required in practice, because a
     #: reading of glyphs never knows - see `TranscriptTranslation.source`.
     source: str | None = Field(default=None, min_length=2, max_length=16)
@@ -2838,25 +2863,29 @@ def preview_text_overlay(
     source = (found.language or "").strip().lower()
     if not source or source == "und":
         source = (body.source or "").strip().lower()
-    if not source:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "Say which language the on-screen text is in. It was read as "
-                "glyphs, so the reading itself does not know."
-            ),
-        )
-    if source == body.target.strip().lower():
-        raise HTTPException(
-            status_code=422, detail="That is already the language it is in."
-        )
+    target = (body.target or "").strip().lower()
 
-    from trendrelay_api.subtitle_translate import live_translator
+    if target and target != source:
+        if not source:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Say which language the on-screen text is in. It was read "
+                    "as glyphs, so the reading itself does not know."
+                ),
+            )
+        from trendrelay_api.subtitle_translate import live_translator
 
-    try:
-        translate = live_translator(source, body.target)
-    except RuntimeError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
+        try:
+            translate = live_translator(source, target)
+        except RuntimeError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+    else:
+        # Asked for the language it is already in, or for no language at all.
+        # Both mean the same thing here and neither is a mistake: put the words
+        # back on their own boxes so the placement can be judged.
+        def translate(text: str) -> str:
+            return text
 
     regions, dropped = readable_lines(
         found.segments or [],

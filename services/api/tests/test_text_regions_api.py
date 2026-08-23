@@ -310,14 +310,28 @@ def test_a_reading_of_glyphs_has_to_be_told_its_language(workspace, monkeypatch)
     assert "which language" in response.json()["detail"]
 
 
-def test_translating_into_the_language_it_is_already_in_is_refused(workspace, monkeypatch) -> None:
+def test_asking_for_the_language_it_is_already_in_places_it_unchanged(
+    workspace, monkeypatch
+) -> None:
+    """Not a mistake: it is how the boxes get checked before an encode.
+
+    This used to be refused, on the reasoning that translating into the source
+    language is a no-op. It is not a no-op here - lettering puts the words onto
+    their own boxes, and seeing that is exactly what somebody wants before
+    paying for a translation or a render. The render allows it, so the preview
+    has to agree or the two disagree about what is possible.
+    """
     with_translator(monkeypatch)
     asset_id = read_sale(workspace)
 
-    response = overlay(workspace, asset_id, source="en", target="en")
+    same = overlay(workspace, asset_id, source="en", target="en")
+    none_at_all = overlay(workspace, asset_id, source="en", target=None)
 
-    assert response.status_code == 422
-    assert "already" in response.json()["detail"]
+    assert same.status_code == 200, same.text
+    assert none_at_all.status_code == 200, none_at_all.text
+    assert same.json()["cue_count"] >= 1
+    # Placed on the box it was read from, which is the whole point of it.
+    assert same.json()["cues"][0]["place"] is not None
 
 
 def test_a_missing_language_package_is_a_conflict_not_a_failure(workspace, monkeypatch) -> None:

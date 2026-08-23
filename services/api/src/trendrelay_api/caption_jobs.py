@@ -23,7 +23,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import case, select
 
 from trendrelay_api import captions, subtitle_render
 from trendrelay_api.database import SessionFactory
@@ -88,6 +88,11 @@ def queue(
                 str(request.get("style_id")),
                 str(request.get("translate_to") or ""),
                 str(request.get("delivery")),
+                # What is being captioned. Speech and the words on the picture
+                # are different tracks from one clip, and without this they
+                # content-address to the same job - so asking for the second
+                # would hand back the first and quietly render nothing new.
+                str(request.get("source") or "speech"),
                 # Overrides change the output, so they change the identity.
                 repr(sorted((request.get("style_overrides") or {}).items())),
                 repr(sorted((request.get("layout_overrides") or {}).items())),
@@ -160,6 +165,11 @@ def _render(
     workspace_id = payload["workspace_id"]
     asset_id = payload["asset_id"]
     delivery = payload.get("delivery", "sidecar")
+    # What is being captioned: what was said, or what is written on the picture.
+    # The second is a different reading of the same clip and a different place
+    # on the frame, but everything from the cues onward - sidecars, the burn,
+    # filing the cut - is the same work, so it is a source rather than a job.
+    on_screen = payload.get("source") == "on_screen"
 
     with factory() as session:
         asset = session.scalar(
@@ -169,13 +179,25 @@ def _render(
         )
         if asset is None:
             raise LookupError("That asset is no longer in this workspace.")
-        transcript = _transcript(session, workspace_id, asset_id, payload.get("transcript_id"))
-        if transcript is None:
-            raise RuntimeError("This asset has no speech transcript to caption.")
-        segments = caption_segments(session, workspace_id, asset_id, transcript)
-        source_language = transcript.language or "en"
+        if on_screen:
+            reading = _on_screen_reading(session, workspace_id, asset_id)
+            if reading is None:
+                raise RuntimeError("This asset's on-screen text has not been read yet.")
+            regions = _on_screen_regions(reading, asset)
+            source_language = reading.language or "en"
+            transcript_id = reading.id
+            segments = []
+        else:
+            transcript = _transcript(
+                session, workspace_id, asset_id, payload.get("transcript_id")
+            )
+            if transcript is None:
+                raise RuntimeError("This asset has no speech transcript to caption.")
+            segments = caption_segments(session, workspace_id, asset_id, transcript)
+            source_language = transcript.language or "en"
+            transcript_id = transcript.id
+            regions = []
         source_path = Path(asset.original_path)
-        transcript_id = transcript.id
 
     progress(0.16, "Building caption cues")
     translator = None
@@ -185,22 +207,37 @@ def _render(
 
         translator = live_translator(source_language, target)
 
-    built = captions.build(
-        segments,
-        style_id=payload.get("style_id", "broadcast"),
-        style_overrides=payload.get("style_overrides") or {},
-        layout_overrides=payload.get("layout_overrides") or {},
-        translate_to=target,
-        translator=translator,
-    )
+    if on_screen:
+        built = _lettering(
+            regions,
+            translator,
+            style_id=payload.get("style_id", "broadcast"),
+            style_overrides=payload.get("style_overrides") or {},
+        )
+    else:
+        built = captions.build(
+            segments,
+            style_id=payload.get("style_id", "broadcast"),
+            style_overrides=payload.get("style_overrides") or {},
+            layout_overrides=payload.get("layout_overrides") or {},
+            translate_to=target,
+            translator=translator,
+        )
     cues = built["cues"]
     if not cues:
-        raise RuntimeError("The transcript produced no captions.")
+        raise RuntimeError(
+            "That reading produced no lines to place." if on_screen
+            else "The transcript produced no captions."
+        )
 
     progress(0.42, "Writing subtitle files")
     # Named for the track rather than the job, so two languages of the same clip
     # sit beside each other and read as what they are.
     stem = f"{asset_id}.{target or source_language}"
+    # Beside the spoken track rather than over it: one clip can have both, and
+    # a shared name would have the second render overwrite the first.
+    if on_screen:
+        stem = f"{stem}.on-screen"
     destination = CAPTION_ROOT / workspace_id
     written = subtitle_render.write_sidecars(cues, destination, stem)
     produced = {kind: str(path) for kind, path in written.items()}
@@ -226,6 +263,82 @@ def _render(
         # span is the kind of thing somebody needs to see after the render too.
         "notes": built["notes"],
     }
+
+
+def _on_screen_reading(session: Any, workspace_id: str, asset_id: str) -> Any:
+    """This clip's on-screen text, the reviewed reading for preference.
+
+    The same order the preview uses. Somebody corrected it on purpose, and a
+    correction to what is written on the picture is a correction to what the
+    replacement has to say.
+    """
+    return session.scalar(
+        select(MediaTranscript).where(
+            MediaTranscript.workspace_id == workspace_id,
+            MediaTranscript.asset_id == asset_id,
+            MediaTranscript.kind == "ocr",
+        ).order_by(
+            case((MediaTranscript.status == "reviewed", 0), else_=1),
+            MediaTranscript.created_at.desc(),
+        ).limit(1)
+    )
+
+
+def _on_screen_regions(reading: Any, asset: Any) -> list[dict[str, Any]]:
+    """Where each read line sits, as shares of the frame.
+
+    The same resolution the cover step gets, from the same function, so the
+    words being covered and the words replacing them cannot disagree about
+    where the original was.
+    """
+    from trendrelay_api.config import get_settings
+    from trendrelay_api.text_cover import readable_lines
+
+    if not (asset.width and asset.height):
+        raise RuntimeError(
+            "This clip's dimensions were never measured, so there is nowhere "
+            "to place a replacement line."
+        )
+    regions, _dropped = readable_lines(
+        reading.segments or [],
+        interval_ms=round(get_settings().media_ai_ocr_interval_seconds * 1000),
+        width=asset.width,
+        height=asset.height,
+    )
+    return regions
+
+
+def _lettering(
+    regions: list[dict[str, Any]],
+    translator: Any,
+    *,
+    style_id: str,
+    style_overrides: dict[str, Any],
+) -> dict[str, Any]:
+    """Placed replacement lines, in the shape `captions.build` returns.
+
+    The same shape on purpose: everything after this - the sidecars, the burn,
+    the version filed at the end - already knows how to read it, and a second
+    result type would be a second thing for all of them to learn.
+
+    Untranslated is a valid answer here in a way it is not for speech. Reading
+    a clip's on-screen text and placing it back unchanged is how somebody
+    checks the boxes line up before spending an encode on a translation.
+    """
+    from trendrelay_api.text_lettering import lettered_cues, merge_overlapping
+
+    style, _layout = captions.resolve(style_id, style_overrides=style_overrides)
+    speak = translator if translator is not None else (lambda text: text)
+    cues, skipped = lettered_cues(regions, speak)
+    cues = merge_overlapping(cues)
+    notes: list[str] = []
+    if skipped:
+        notes.append(
+            f"{len(skipped)} line{'s' if len(skipped) != 1 else ''} could not be "
+            "lettered: too small to read at that size, or nothing came back for "
+            "them."
+        )
+    return {"cues": cues, "style": style, "notes": notes}
 
 
 def caption_segments(session: Any, workspace_id: str, asset_id: str, transcript: Any) -> list:

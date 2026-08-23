@@ -100,6 +100,14 @@ type Cue = {
   lines: string[];
   words: { text: string; start_ms: number; end_ms: number }[];
   cps: number;
+  /**
+   * Where this line goes, when it has an opinion.
+   *
+   * `[x, y, width, height]` as shares of the frame. Null for a spoken caption,
+   * which goes wherever the style says; set for a line replacing on-screen
+   * text, which has exactly one place it can be.
+   */
+  place?: [number, number, number, number] | null;
 };
 
 function blobFromBase64(content: string, mimeType: string): Blob {
@@ -116,6 +124,26 @@ function colourWithTransparency(colour = "#000000", transparency = 0): string {
   const green = Number.parseInt(full.slice(2, 4), 16) || 0;
   const blue = Number.parseInt(full.slice(4, 6), 16) || 0;
   return `rgba(${red}, ${green}, ${blue}, ${Math.max(0, Math.min(1, (255 - transparency) / 255))})`;
+}
+
+/**
+ * A measured box, as padding inside the picture.
+ *
+ * The same shape `placementStyle` returns, so the overlay does not care which
+ * of the two produced it. Centred in the box on both axes, which is what the
+ * ASS override does: `n5` puts the line on a point rather than against a
+ * corner, so it sits in the middle of the box however it over- or under-fills
+ * it.
+ */
+function boxStyle(
+  place: [number, number, number, number],
+): { alignItems: string; justifyContent: string; padding: string } {
+  const [x, y, width, height] = place;
+  return {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: `${y * 100}% ${(1 - x - width) * 100}% ${(1 - y - height) * 100}% ${x * 100}%`,
+  };
 }
 
 function captionPosition(alignment = "bottom"): CSSProperties {
@@ -290,6 +318,15 @@ export function CaptionEditor({
   const batch = requestedTargets.length > 1;
   const [catalogue, setCatalogue] = useState<StylesResponse | null>(null);
   const [styleId, setStyleId] = useState("broadcast");
+  /**
+   * What is being captioned: what was said, or what is written on the picture.
+   *
+   * The second is a different reading of the same clip and lands somewhere
+   * else entirely - over the words it replaces, because a translation of
+   * on-screen text at the bottom of the frame is a second thing to read beside
+   * the thing it translates.
+   */
+  const [captionOf, setCaptionOf] = useState<"speech" | "on_screen">("speech");
   const [translateTo, setTranslateTo] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -329,6 +366,14 @@ export function CaptionEditor({
   // A preview asked for after a newer one must not overwrite it: the requests
   // are independent and the slower one can land last.
   const latest = useRef(0);
+  /**
+   * What language the last preview said this clip is in.
+   *
+   * Held in a ref rather than read from `preview`, because the request that
+   * needs it is the one that produces it: depending on the state would have
+   * each answer ask for the next one, forever.
+   */
+  const knownLanguage = useRef<string | null>(null);
   // Only polled while this dialog is open; a closed one has no reason to keep
   // asking whether a runtime appeared.
   const mediaAi = useMediaAi(apiFetch, open);
@@ -549,9 +594,22 @@ export function CaptionEditor({
     const ticket = ++latest.current;
     setBusy(true);
     try {
-      const response = await apiFetch(
-        `/api/workspaces/${workspaceId}/media/library/assets/${primaryAssetId}/captions/preview`,
-        {
+      // Two readings, two previews. Captioning the picture places every line
+      // over the words it replaces, so it is answered by the endpoint that
+      // knows where those words are rather than by the caption builder.
+      const base = `/api/workspaces/${workspaceId}/media/library/assets/${primaryAssetId}`;
+      const response = captionOf === "on_screen"
+        ? await apiFetch(`${base}/text-overlay/preview`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            // No target means place the lines as they are, which is how the
+            // boxes get checked before paying for a translation.
+            target: translateTo || null,
+            source: knownLanguage.current,
+          }),
+        })
+        : await apiFetch(`${base}/captions/preview`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -562,8 +620,7 @@ export function CaptionEditor({
             // would move it on screen and nowhere else.
             style_overrides: styleOverrides,
           }),
-        },
-      );
+        });
       if (ticket !== latest.current) return;
       const body = await response.json();
       if (!response.ok) {
@@ -572,13 +629,15 @@ export function CaptionEditor({
         return;
       }
       setProblem(null);
+      knownLanguage.current = (body as Preview).source_language ?? knownLanguage.current;
       setPreview(body as Preview);
     } catch {
       if (ticket === latest.current) setProblem("The preview could not be built.");
     } finally {
       if (ticket === latest.current) setBusy(false);
     }
-  }, [open, workspaceId, primaryAssetId, styleId, translateTo, styleOverrides, apiFetch]);
+  }, [open, workspaceId, primaryAssetId, styleId, translateTo, styleOverrides,
+      captionOf, apiFetch]);
 
   useEffect(() => {
     // Deferred out of the effect body: `load` sets state on its first line, and
@@ -652,6 +711,7 @@ export function CaptionEditor({
                 translate_to: translateTo || null,
                 delivery: canBurn ? delivery : "sidecar",
                 style_overrides: styleOverrides,
+                source: captionOf,
                 batch: { id: batchId, total: compatibleTargets.length },
               }),
             },
@@ -705,6 +765,7 @@ export function CaptionEditor({
     delivery,
     loadFiles,
     onQueued,
+    captionOf,
     refreshJobs,
     styleId,
     styleOverrides,
@@ -950,7 +1011,13 @@ export function CaptionEditor({
                     style={{
                       width: picture.width || undefined,
                       height: picture.height || undefined,
-                      ...overlayStyle,
+                      // A line replacing on-screen text carries the box it was
+                      // measured onto, and that beats the style: drawing it
+                      // where the style says would show a placement the render
+                      // is not going to use.
+                      ...(activeCue?.place
+                        ? boxStyle(activeCue.place)
+                        : overlayStyle),
                     }}
                   >
                   {/* Draggable, and it says so. The caption itself is the
@@ -960,7 +1027,7 @@ export function CaptionEditor({
                   <span
                     className="caption-media-handle"
                     role="application"
-                    tabIndex={canEdit ? 0 : -1}
+                    tabIndex={canEdit && captionOf === "speech" ? 0 : -1}
                     aria-label={
                       `Caption position: ${activePlacement.alignment}, `
                       + `${activePlacement.margin_h} from the side, `
@@ -969,9 +1036,11 @@ export function CaptionEditor({
                       + "hold Alt while dragging to place it without snapping."
                     }
                     data-dragging={dragging === "move" || undefined}
-                    onKeyDown={canEdit ? nudgeBy : undefined}
+                    onKeyDown={canEdit && captionOf === "speech" ? nudgeBy : undefined}
+                    data-fixed={captionOf === "on_screen" || undefined}
                     onPointerDown={(event) => {
-                      if (!canEdit) return;
+                      // Nothing to drag when the reading decides the place.
+                      if (!canEdit || captionOf === "on_screen") return;
                       event.preventDefault();
                       event.currentTarget.focus();
                       setDragging("move");
@@ -1013,7 +1082,18 @@ export function CaptionEditor({
                 exact, and the two are the same three values - so a caption
                 nudged by hand can be squared off by typing, and one typed can
                 be checked against the frame. */}
-            {canEdit && previewPreset && (
+            {/* Placement belongs to the reading when the reading is the
+                picture: every line goes over the words it replaces, so an
+                anchor and a margin have nothing to decide and a drag would
+                move something the render puts back. Said, not just hidden. */}
+            {captionOf === "on_screen" && (
+              <p className="caption-editor-note">
+                Position comes from where the words are on the picture, so there
+                is nothing to place by hand. The style still decides how they
+                look.
+              </p>
+            )}
+            {canEdit && previewPreset && captionOf === "speech" && (
               <div className="caption-place-fields">
                 <label>
                   <span>Anchor</span>
@@ -1074,7 +1154,7 @@ export function CaptionEditor({
                 margin into both sides, so pushing a caption towards the middle
                 squeezes it from both at once - and the render will do it
                 whether or not anybody was told. */}
-            {canEdit && previewPreset && canMove.horizontal
+            {canEdit && previewPreset && captionOf === "speech" && canMove.horizontal
               && usableWidth(activePlacement, source) < source.width * 0.35 && (
               <p className="caption-editor-note">
                 Only {Math.round(usableWidth(activePlacement, source))} of{" "}
@@ -1087,7 +1167,8 @@ export function CaptionEditor({
                 that will not move. The format writes one horizontal margin to
                 both sides, so a centred caption cannot be nudged sideways, and
                 a middle one has no edge to measure a vertical margin from. */}
-            {canEdit && previewPreset && !(canMove.horizontal && canMove.vertical) && (
+            {canEdit && previewPreset && captionOf === "speech"
+              && !(canMove.horizontal && canMove.vertical) && (
               <p className="caption-editor-note">
                 {!canMove.horizontal && !canMove.vertical
                   ? "A middle anchor is fixed to the centre of the frame. Choose an edge or a corner to place it by hand."
@@ -1099,6 +1180,31 @@ export function CaptionEditor({
           </section>
 
           <div className="caption-editor-controls">
+
+        {/* Which reading is being captioned. Two different things about one
+            clip: what the speaker said, and what is written on the picture -
+            and the second lands over the words it replaces rather than at the
+            bottom, which is the only place a translation of on-screen text can
+            go without becoming a second thing to read beside it. */}
+        <section className="caption-editor-source" aria-label="What to caption">
+          <h4>What to caption</h4>
+          <Select
+            value={captionOf}
+            aria-label="What to caption"
+            onChange={(event) => setCaptionOf(event.target.value as "speech" | "on_screen")}
+          >
+            <option value="speech">Speech — what is said</option>
+            <option value="on_screen">On-screen text — what is written on the picture</option>
+          </Select>
+          {captionOf === "on_screen" && (
+            <p className="caption-editor-note">
+              Each line is placed over the words it replaces, from this
+              clip&rsquo;s on-screen text reading — so the style decides how it looks and the
+              reading decides where it goes. Cover the originals with the
+              Effects step first, or the translation sits on top of them.
+            </p>
+          )}
+        </section>
 
         <section className="caption-editor-styles" aria-label="Caption style">
           <h4>Style</h4>
