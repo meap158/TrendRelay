@@ -2,6 +2,7 @@
 
 import { optionLabel, paramHelp, paramLabel } from "../../lib/i18n/effects";
 import { useT } from "../i18n-provider";
+import { Button } from "../ui/button";
 import { Select } from "../ui/select";
 
 /**
@@ -44,7 +45,14 @@ export type ParamOption = {
 export type EffectParam = {
   id: string;
   label: string;
-  kind: "number" | "choice" | "toggle";
+  /**
+   * `regions` is not a knob. It holds rectangles read off the clip itself, so
+   * it is filled from the asset rather than dragged — and it is listed here
+   * because a kind this file does not know falls through to the number branch,
+   * which would render a slider over an array and replace it with a number on
+   * the first drag.
+   */
+  kind: "number" | "choice" | "toggle" | "regions";
   default: unknown;
   help: string;
   minimum: number | null;
@@ -106,6 +114,8 @@ export function ParamControl({
   onChange,
   onCommit,
   disabled,
+  fill,
+  filling,
 }: {
   param: EffectParam;
   effectId: string;
@@ -118,6 +128,17 @@ export function ParamControl({
    */
   onCommit?: (next: unknown) => void;
   disabled?: boolean;
+  /**
+   * How to fill a parameter that is read off the clip rather than chosen.
+   *
+   * Passed in rather than done here: this file renders controls from a
+   * description and knows nothing about assets or endpoints, which is what
+   * lets a new effect arrive without frontend. `canFill` is false with a
+   * reason when the answer would be wrong — covering text is per-clip, and one
+   * clip's rectangles are in the wrong places on another.
+   */
+  fill?: { onFill: () => void | Promise<void>; canFill: boolean; reason?: string };
+  filling?: boolean;
 }) {
   const t = useT();
   const label = paramLabel(t, effectId, param.id, param.label);
@@ -159,6 +180,36 @@ export function ParamControl({
         <span>{label}</span>
         {help && <small>{help}</small>}
       </label>
+    );
+  }
+  if (param.kind === "regions") {
+    const regions = Array.isArray(value) ? value : [];
+    return (
+      <div className="effect-param effect-param-regions">
+        <span>
+          {label}
+          <b>{regions.length ? `${regions.length}` : "—"}</b>
+        </span>
+        {/* What is there, in the terms somebody chose it in. A count alone
+            does not say whether it is this clip's reading or a stale one
+            carried in from the step it was copied from. */}
+        <small>
+          {regions.length
+            ? `Taken from this clip's on-screen text reading.`
+            : `Nothing to cover yet.`}
+          {help ? ` ${help}` : ""}
+        </small>
+        {fill && (
+          <Button
+            variant="secondary"
+            size="sm"
+            busy={filling}
+            disabled={disabled || filling || !fill.canFill}
+            title={fill.reason}
+            onClick={() => void fill.onFill()}
+          >{regions.length ? "Read it again" : "Read this clip"}</Button>
+        )}
+      </div>
     );
   }
   const numeric = typeof value === "number" ? value : Number(param.default ?? 0);

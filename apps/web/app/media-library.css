@@ -592,6 +592,12 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
    lands in the first column and widens it to its own length — which pushes the
    checkbox into the middle of the row, away from the label it belongs to. */
 .effect-param-toggle small { grid-column: 1 / -1; }
+/* Rectangles read off the clip, not a value to drag. The button sits under
+   the count because it is an action on the parameter rather than the
+   parameter itself, and the row keeps the same height as its neighbours
+   whether or not anything has been read. */
+.effect-param-regions { align-content: start; }
+.effect-param-regions > button { justify-self: start; }
 
 .effect-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 

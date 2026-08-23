@@ -84,11 +84,54 @@ export function EffectEditor({
   const [previewNote, setPreviewNote] = useState("");
   const previewUrlRef = useRef("");
   const previewSpecRef = useRef<PreviewSpec | null>(null);
+  /** Which step is having its regions read off the clip, if any. */
+  const [reading, setReading] = useState<number | null>(null);
   /** Which step has its gallery open, if any. */
   const [picking, setPicking] = useState<number | null>(null);
 
   const base = `/api/workspaces/${workspaceId}/media/library`;
   const targetIds = assetIds?.length ? assetIds : targets.map((target) => target.id);
+  /**
+   * Read a clip's on-screen text into a step that covers it.
+   *
+   * Resolved into the step rather than looked up when it renders, because a
+   * step is a self-contained set of values everywhere else in the recipe and
+   * the preview is only honest if it holds what the render will get.
+   *
+   * One clip only. Rectangles are shares of *this* frame, and the same numbers
+   * over another clip cover whatever happens to be in those places - so a
+   * multi-asset edit is refused with the reason rather than filled with the
+   * first one's answer.
+   */
+  const fillRegions = useCallback(async (index: number, paramId: string) => {
+    setReading(index);
+    setFailure("");
+    try {
+      const response = await apiFetch(`${base}/assets/${targetIds[0]}/text-regions`);
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.detail ?? "That clip's text could not be read.");
+      const regions = body.regions ?? [];
+      setSteps((current) => current.map((item, at) => at === index
+        ? { ...item, values: { ...item.values, [paramId]: regions } }
+        : item));
+      setSaved(false);
+      if (!regions.length) {
+        setFailure("Nothing was read off this clip, so there is nothing to cover.");
+      } else if (body.dropped) {
+        // Said rather than left to be noticed: the count in the control would
+        // otherwise quietly disagree with the reading it came from.
+        setFailure(
+          `${regions.length} regions taken. ${body.dropped} less certain `
+          + `${body.dropped === 1 ? "line was" : "lines were"} left out.`,
+        );
+      }
+    } catch (reason) {
+      setFailure(reason instanceof Error ? reason.message : "That clip's text could not be read.");
+    } finally {
+      setReading(null);
+    }
+  }, [apiFetch, base, targetIds]);
+
   /**
    * How many assets one request queues.
    *
@@ -547,6 +590,15 @@ export function EffectEditor({
                           param={param}
                           effectId={effect.id}
                           value={step.values?.[param.id] ?? param.default}
+                          filling={reading === index}
+                          fill={param.kind === "regions" ? {
+                            onFill: () => fillRegions(index, param.id),
+                            canFill: targetIds.length === 1,
+                            reason: targetIds.length === 1
+                              ? "Reads this clip's on-screen text"
+                              : "Text sits in different places on each clip, so "
+                                + "this can only be read for one at a time.",
+                          } : undefined}
                           onChange={(next) => edit(steps.map((item, at) => at === index
                             ? { ...item, values: { ...item.values, [param.id]: next } }
                             : item))}
