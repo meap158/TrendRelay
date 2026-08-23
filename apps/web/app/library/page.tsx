@@ -2277,24 +2277,11 @@ function LibraryContent() {
                 </div>
               </article>
 
-              <div className="library-detail-grid">
-                <article>
-                  <h3>{t("recipe.heading")}</h3>
-                  {selected.analysis ? (
-                    <dl className="recipe-grid">
-                      <div><dt>{t("recipe.spokenHook")}</dt><dd>{selected.analysis.spoken_hook || "—"}</dd></div>
-                      <div><dt>{t("recipe.textHook")}</dt><dd>{selected.analysis.text_hook || "—"}</dd></div>
-                      <div><dt>{t("recipe.cta")}</dt><dd>{selected.analysis.call_to_action || "—"}</dd></div>
-                      <div><dt>{t("recipe.product")}</dt><dd>{selected.analysis.product_shown || "—"}</dd></div>
-                      <div><dt>{t("recipe.format")}</dt><dd>{selected.analysis.creative_format || "—"}</dd></div>
-                      <div><dt>{t("recipe.editing")}</dt><dd>{selected.analysis.shot_count ? `${selected.analysis.shot_count} shots · ${selected.analysis.average_shot_ms}ms average` : "—"}</dd></div>
-                      <div><dt>{t("recipe.structure")}</dt><dd>{selected.analysis.structure_tags.join(", ") || "—"}</dd></div>
-                      <div><dt>{t("recipe.keywords")}</dt><dd>{selected.analysis.keywords.join(", ") || "—"}</dd></div>
-                    </dl>
-                  ) : <p>{t("recipe.empty")}</p>}
-                </article>
-              </div>
-
+              {/* The recipe card that sat here showed the derived analysis back
+                  to the operator, and mostly showed "no recipe yet". The
+                  analysis itself is kept - it is what search and campaign
+                  matching read - but it earns its keep there rather than as a
+                  card of dashes above the form that produces it. */}
               {canEnrich && (
                 <article className="library-enrichment">
                   <header className="library-enrichment-head">
