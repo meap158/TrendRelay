@@ -109,7 +109,24 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
     allow_origin_regex=(
-        r"^http://(?:localhost|127\.0\.0\.1|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}):(3000|3001)$"
+        # Development admits the origins a browser actually sends when the app
+        # is opened from another device on the local network. The numeric IPv4
+        # shapes cover the address someone types; the rest cover how machines
+        # are named on a real LAN - an mDNS `.local` name, a bare Windows
+        # computer name (NetBIOS), and private IPv6 once something resolves
+        # one. Everything is wrapped in a case-insensitive group because hosts
+        # are case-insensitive even though browsers usually send them lowered.
+        # Public names never match: a page from anywhere on the internet gets
+        # no read access to this API.
+        r"^http://(?i:(?:"
+        r"localhost|127\.0\.0\.1"
+        r"|10(?:\.\d{1,3}){3}"
+        r"|192\.168(?:\.\d{1,3}){2}"
+        r"|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}"
+        r"|[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.local"
+        r"|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+        r"|\[(?:f[cd][0-9a-f]{0,2}(?::[0-9a-f]*)+|fe[89ab][0-9a-f]{0,2}(?::[0-9a-f]*)*|::1)\]"
+        r")):(3000|3001)$"
         if settings.environment != "production"
         else None
     ),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from dataclasses import dataclass
 from typing import Literal
 
@@ -24,6 +25,50 @@ class CurrentUser:
 LOCAL_ADMIN_ID = "local-admin"
 LOCAL_ADMIN_EMAIL = "local-admin@trendrelay.local"
 
+#: Hostnames the ASGI stack may report instead of an address. `testclient` is
+#: what Starlette's test client claims to be.
+_TESTCLIENT_HOSTS = {"testclient"}
+
+#: The addresses a client may arrive from and still be treated as this
+#: machine's operator in development: loopback, plus the ranges a home or
+#: office network actually hands out - RFC 1918 for IPv4, link-local and
+#: unique-local for IPv6.
+#:
+#: The app is built to be opened from another device on the same network: both
+#: servers bind 0.0.0.0, development CORS admits private origins, and the web
+#: front end follows the page's host so a LAN browser reaches the API on that
+#: same address. The login bypass is the one layer that has to agree with all
+#: of that, or every other device dead-ends at "local sign-in is disabled".
+#: Anything publicly routable stays untrusted (a documentation-range address
+#: such as 192.0.2.x must fail here), and machine-level actions - tool
+#: installs, credential writes, browser-session capture - keep their separate
+#: loopback-only guards on top of authentication.
+_TRUSTED_CLIENT_NETWORKS = tuple(
+    ipaddress.ip_network(network)
+    for network in (
+        "127.0.0.0/8",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "::1/128",
+        "fe80::/10",
+        "fc00::/7",
+    )
+)
+
+
+def client_is_local_operator(host: str | None) -> bool:
+    """Whether the client address belongs to this machine or its private LAN."""
+    if not host:
+        return False
+    if host in _TESTCLIENT_HOSTS:
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(address in network for network in _TRUSTED_CLIENT_NETWORKS)
+
 
 def local_auth_allowed(request: Request | None) -> bool:
     settings = get_settings()
@@ -31,7 +76,7 @@ def local_auth_allowed(request: Request | None) -> bool:
     return (
         settings.environment == "development"
         and settings.local_auth_bypass
-        and host in {"127.0.0.1", "::1", "testclient"}
+        and client_is_local_operator(host)
     )
 
 

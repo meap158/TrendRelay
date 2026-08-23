@@ -54,7 +54,7 @@ def local_request(host: str = "127.0.0.1") -> Request:
     return Request({"type": "http", "client": (host, 50000), "headers": []})
 
 
-def test_local_development_bypass_is_loopback_only(monkeypatch) -> None:
+def test_local_development_bypass_trusts_this_machine_and_its_private_lan(monkeypatch) -> None:
     monkeypatch.setattr(
         auth,
         "get_settings",
@@ -62,14 +62,21 @@ def test_local_development_bypass_is_loopback_only(monkeypatch) -> None:
     )
 
     user = auth.current_user(local_request(), None)
-
     assert user.id == "local-admin"
     assert user.assurance_level == "aal2"
     assert user.local_development is True
 
-    with pytest.raises(HTTPException) as error:
-        auth.current_user(local_request("192.168.1.25"), None)
-    assert error.value.status_code == 401
+    # The app is meant to be opened from another device on the same network,
+    # so a private-LAN client is treated as this machine's operator too.
+    lan_user = auth.current_user(local_request("192.168.1.25"), None)
+    assert lan_user.id == "local-admin"
+    assert lan_user.local_development is True
+
+    # Anything outside the private ranges is still refused.
+    for host in ("192.0.2.10", "8.8.8.8", ""):
+        with pytest.raises(HTTPException) as error:
+            auth.current_user(local_request(host), None)
+        assert error.value.status_code == 401
 
 
 def test_local_bypass_is_disabled_outside_development(monkeypatch) -> None:

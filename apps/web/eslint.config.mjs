@@ -3,7 +3,10 @@ import nextVitals from "eslint-config-next/core-web-vitals";
 
 export default defineConfig([
   ...nextVitals,
-  globalIgnores([".next/**"]),
+  // Dev builds go to .next-dev and production builds to .next (see
+  // next.config.ts), so both must stay out of lint: the compiled chunks fail
+  // no-use-before-define by construction.
+  globalIgnores([".next/**", ".next-dev/**"]),
   {
     rules: {
       /**

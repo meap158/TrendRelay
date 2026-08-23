@@ -47,6 +47,10 @@ const nextConfig: NextConfig = {
     "10.*.*.*",
     "172.*.*.*",
     "192.168.*.*",
+    // mDNS names, how phones and tablets reach this machine by name. Bare
+    // computer names (NetBIOS) cannot be listed here because they differ per
+    // machine; the API's CORS layer is what has to accept those origins.
+    "*.local",
   ],
 };
 
