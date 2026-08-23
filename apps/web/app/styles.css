@@ -1228,7 +1228,17 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
 .campaign-affiliate-route small { color: var(--muted); font-size: 10px; line-height: 1.4; }
 .campaign-pipeline-products { display: flex; flex-wrap: wrap; gap: 5px; margin: 0; padding: 0; list-style: none; }
 .campaign-pipeline-products li { display: flex; align-items: center; min-width: 0; gap: 5px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); }
-.campaign-pipeline-products li > span { display: grid; place-items: center; inline-size: 15px; block-size: 15px; border-radius: 50%; background: var(--link); color: var(--on-ink); font-size: 9px; }
+/* The ordinal, which is an index rather than an accent.
+ *
+ * It was a solid `--link` disc: the most saturated thing in the row, at 15px
+ * carrying 9px type, sitting in front of the product name it was only
+ * numbering. A tint of the same colour keeps the relationship to the placement
+ * line below without competing with the name, and 16px against 10px is a
+ * proportion that reads as a number rather than a dot with something in it. */
+.campaign-pipeline-products li > span { display: grid; place-items: center; inline-size: 16px; block-size: 16px; border-radius: 50%; background: color-mix(in srgb, var(--link) 14%, transparent); color: var(--link); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* One product needs no number. "1" of one is not information, and it is the
+   common case - most posts carry a single offer. */
+.campaign-pipeline-products li:only-child > span { display: none; }
 .campaign-pipeline-products strong { max-inline-size: 260px; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-pipeline-products small { color: var(--muted); font-size: 9px; }
 .campaign-pipeline-content { border-block-start: 1px solid var(--line); padding-block-start: 7px; }
@@ -1242,13 +1252,17 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
    Folded shut by default - a row that opened four post previews would bury
    the queue it belongs to. */
 .campaign-row-rehearsal { margin-block-start: 6px; }
-.campaign-row-rehearsal > summary { display: flex; align-items: baseline; gap: 7px; width: max-content; max-inline-size: 100%; cursor: pointer; }
+/* Centred, not baseline-aligned. An SVG has no text baseline, so a baseline
+   row lines it up by its bottom edge instead - which left the chevron sitting
+   low against the words beside it. Both labels here are the same size, so
+   centring costs nothing that baseline was buying. */
+.campaign-row-rehearsal > summary { display: flex; align-items: center; gap: 7px; width: max-content; max-inline-size: 100%; cursor: pointer; }
 .campaign-row-rehearsal > summary > span { color: var(--link); font-size: 10px; font-weight: 700; }
 .campaign-row-rehearsal > summary > small { min-width: 0; overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-rehearsal-list { display: grid; gap: 8px; margin-block-start: 8px; }
 /* The chevron that says this opens. `display: flex` on a summary suppresses
    the native marker, so without one the row was blue text and nothing else. */
-.campaign-row-rehearsal > summary > svg { flex: none; color: var(--link); transition: transform 150ms ease; }
+.campaign-row-rehearsal > summary > svg { display: block; flex: none; color: var(--link); transition: transform 150ms ease; }
 .campaign-row-rehearsal[open] > summary > svg { transform: rotate(90deg); }
 .campaign-row-rehearsal > summary:hover > span { text-decoration: underline; }
 /* Each posting previewed, several across rather than one under another.
