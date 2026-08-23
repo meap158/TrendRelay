@@ -857,6 +857,7 @@ export const en = {
       "No products yet. Use Add products to bring your Shopee offers in; their affiliate links and any commission appear here.",
     product: "Product",
     creator: "Creator",
+    network: "Network",
     searchProducts: "Search products",
     price: "Price",
     rate: "Rate",

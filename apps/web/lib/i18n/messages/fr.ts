@@ -864,6 +864,7 @@ export const fr: Messages = {
       "Aucun produit pour l'instant. Utilisez Ajouter des produits pour importer vos offres Shopee ; leurs liens d'affiliation et les commissions éventuelles apparaîtront ici.",
     product: "Produit",
     creator: "Créateur",
+    network: "Réseau",
     searchProducts: "Rechercher un produit",
     price: "Prix",
     rate: "Taux",

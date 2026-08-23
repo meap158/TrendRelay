@@ -226,9 +226,15 @@ type Connection = {
   link_placement?: Record<string, LinkPlacement>;
   providers: Provider[];
 };
+/** Campaigns a product may be promoted by, keyed as the endpoint returns them. */
+type CampaignTags = {
+  campaigns: { id: string; name: string; status: string; tagged_products: number }[];
+  by_offer: Record<string, string[]>;
+};
 type PublishSnapshot = {
   connection: Connection;
   products: ProductRow[];
+  tags: CampaignTags;
   slots: Slot[];
   presets: SlotPreset[];
   pageAssignments: Record<string, string>;
@@ -444,6 +450,17 @@ export default function PublishPage() {
   // This held minted tracking links until ADR 0022 retired them; a post now
   // carries the network's own affiliate URL, which lives on the offer.
   const [linkableProducts, setLinkableProducts] = useState<ProductRow[]>([]);
+  /**
+   * Which campaigns promote which offers.
+   *
+   * Read here rather than in the picker because it is one question about the
+   * workspace, not one per dialog opening - and it rides along with the
+   * products it describes, in the same parallel batch, so it costs no extra
+   * round-trip on the way in.
+   */
+  const [campaignTags, setCampaignTags] = useState<CampaignTags>(
+    { campaigns: [], by_offer: {} },
+  );
   // The workspace's posting clock, not the reader's. Slots are stored as a
   // wall time and mean nothing without it.
   const [workspaceZone, setWorkspaceZone] = useState("UTC");
@@ -1188,6 +1205,7 @@ export default function PublishPage() {
     const apply = (snapshot: PublishSnapshot) => {
       setConnection(snapshot.connection);
       setLinkableProducts(snapshot.products);
+      setCampaignTags(snapshot.tags ?? { campaigns: [], by_offer: {} });
       setSlots(snapshot.slots);
       setSlotPresets(snapshot.presets);
       setPageAssignments(snapshot.pageAssignments ?? {});
@@ -1199,7 +1217,7 @@ export default function PublishPage() {
       // These are independent workspace reads. Keeping them in one snapshot
       // lets Publish return with its entire working context, not one panel at a
       // time, while the fresh reads still run together in the background.
-      const [slotBody, productBody, connectionBody] = await Promise.all([
+      const [slotBody, productBody, connectionBody, tagBody] = await Promise.all([
         json<{
           slots: Slot[]; presets: SlotPreset[]; page_assignments?: Record<string, string>;
           timezone?: string;
@@ -1212,10 +1230,14 @@ export default function PublishPage() {
         json<{ connection: Connection }>(
           await apiFetch(`/api/workspaces/${workspaceId}/publishing/connection`),
         ),
+        json<CampaignTags>(
+          await apiFetch(`/api/workspaces/${workspaceId}/attribution/campaign-tags`),
+        ),
       ]);
       return {
         connection: connectionBody.connection,
         products: productBody.products ?? [],
+        tags: tagBody ?? { campaigns: [], by_offer: {} },
         slots: slotBody.slots,
         presets: slotBody.presets,
         pageAssignments: slotBody.page_assignments ?? {},
@@ -3339,6 +3361,8 @@ export default function PublishPage() {
               typed - and above the first comment, because it can fill either. */}
           <AffiliateLink
             products={linkableProducts}
+            campaigns={campaignTags.campaigns}
+            campaignsByOffer={campaignTags.by_offer}
             placementByPlatform={connection?.link_placement ?? {}}
             platforms={chosen}
             caption={caption}

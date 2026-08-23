@@ -853,6 +853,7 @@ export const vi: Messages = {
       "Chưa có sản phẩm nào. Dùng Thêm sản phẩm để đưa ưu đãi Shopee vào; liên kết tiếp thị của chúng và hoa hồng (nếu có) sẽ hiện ở đây.",
     product: "Sản phẩm",
     creator: "Nhà sáng tạo",
+    network: "Mạng lưới",
     searchProducts: "Tìm sản phẩm",
     price: "Giá",
     rate: "Tỉ lệ",

@@ -48,6 +48,8 @@ export const DEFAULT_DISCLOSURE = "Affiliate link; we may earn a commission.";
 
 export function AffiliateLink({
   products,
+  campaigns,
+  campaignsByOffer,
   placementByPlatform,
   platforms,
   caption,
@@ -61,6 +63,9 @@ export function AffiliateLink({
   disabled,
 }: {
   products: ProductRow[];
+  /** Passed straight through to the picker, which filters and columns by them. */
+  campaigns?: { id: string; name: string; status: string; tagged_products: number }[];
+  campaignsByOffer?: Record<string, string[]>;
   placementByPlatform: Record<string, LinkPlacement>;
   /** The networks this post is actually going to. */
   platforms: string[];
@@ -175,6 +180,8 @@ export function AffiliateLink({
       <OfferPicker
         open={picking}
         products={products}
+        campaigns={campaigns}
+        campaignsByOffer={campaignsByOffer}
         chosen={offer?.offer_id ?? ""}
         onChoose={(next) => { setOffer(next); setPicking(false); }}
         onClose={() => setPicking(false)}

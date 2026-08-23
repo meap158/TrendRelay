@@ -26,13 +26,16 @@
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Check, ChevronsUpDown, Search } from "lucide-react";
 
+import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
+import { Select } from "../ui/select";
 import { useT } from "../i18n-provider";
 import { commissionRate } from "../commission";
 import { money } from "../attribution/format";
 import { sortRows } from "../attribution/sort";
 import {
   offerChoices,
+  offerMatches,
   offerValue,
   type OfferChoice,
   type OfferSortKey as SortKey,
@@ -41,29 +44,62 @@ import type { ProductRow } from "../attribution/types";
 
 export type { OfferChoice } from "./offer-rows";
 
+/**
+ * The columns, in the order Attribution shows them.
+ *
+ * `label` is a dictionary key rather than a word, because this table and the
+ * one in Attribution are the same table in two places and a column named twice
+ * is a column that can be named two different things.
+ */
 const COLUMNS: { key: SortKey; label: string; numeric?: boolean }[] = [
-  { key: "product", label: "Product" },
-  { key: "network", label: "Network" },
-  { key: "price", label: "Price", numeric: true },
-  { key: "rate", label: "Rate", numeric: true },
-  { key: "commission", label: "Commission", numeric: true },
+  { key: "product", label: "attribution.product" },
+  { key: "creator", label: "attribution.creator" },
+  { key: "network", label: "attribution.network" },
+  { key: "price", label: "attribution.price", numeric: true },
+  { key: "rate", label: "attribution.rate", numeric: true },
+  { key: "commission", label: "attribution.commission", numeric: true },
 ];
 
 export function OfferPicker({
   open,
   products,
   chosen,
+  campaigns = [],
+  campaignsByOffer = {},
   onChoose,
   onClose,
 }: {
   open: boolean;
   products: ProductRow[];
   chosen: string;
+  /**
+   * Campaigns a product can be promoted by, and which ones already promote
+   * each offer.
+   *
+   * Both optional: the picker is useful without them and a workspace with no
+   * campaigns simply has no campaign filter. Shaped exactly as the Attribution
+   * table takes them, because they come from the same endpoint.
+   */
+  campaigns?: { id: string; name: string; status: string; tagged_products: number }[];
+  campaignsByOffer?: Record<string, string[]>;
   onChoose: (offer: OfferChoice) => void;
   onClose: () => void;
 }) {
   const t = useT();
   const [query, setQuery] = useState("");
+  /**
+   * The same three filters the Attribution table carries, for the same reason.
+   *
+   * A catalogue is hundreds of rows and a post links to one of them. Typing a
+   * name works when you know it; the reason somebody opens this dialog without
+   * one is usually "the thing this campaign is about", which is a filter, not a
+   * search. The import file and date narrow the other way somebody actually
+   * remembers a product: by the batch it arrived in.
+   */
+  const [filterCampaign, setFilterCampaign] = useState("");
+  const [filterFile, setFilterFile] = useState("");
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>({
     // Opens on the rate, descending: the best-paying offer is what somebody
     // scanning this list is nearly always looking for.
@@ -81,15 +117,25 @@ export function OfferPicker({
    * otherwise the name starts where the eye already is.
    */
   const showThumbnails = useMemo(() => all.some((row) => row.image_url), [all]);
+  /** Only the batches actually represented here, so no filter finds nothing. */
+  const fileNames = useMemo(
+    () => [...new Set(all.map((row) => row.import_filename).filter(Boolean))].sort() as string[],
+    [all],
+  );
+  const hasImportDates = useMemo(() => all.some((row) => row.imported_at), [all]);
+  const filtered = Boolean(filterCampaign || filterFile || filterFrom || filterTo);
   const rows = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const matching = needle
-      ? all.filter((row) => [row.name, row.brand, row.marketplace, row.network]
-          .filter(Boolean)
-          .some((field) => String(field).toLowerCase().includes(needle)))
-      : all;
+    const matching = all.filter((row) => offerMatches(row, {
+      query,
+      campaign: filterCampaign,
+      file: filterFile,
+      from: filterFrom,
+      to: filterTo,
+    }, campaignsByOffer));
     return sortRows(matching, sort.direction, (row) => offerValue(row, sort.key));
-  }, [all, query, sort]);
+  }, [
+    all, query, sort, filterCampaign, filterFile, filterFrom, filterTo, campaignsByOffer,
+  ]);
 
   function reorder(key: SortKey) {
     setSort((current) => current.key === key
@@ -120,11 +166,78 @@ export function OfferPicker({
             />
           </span>
           <span className="product-picker-count">
-            {query.trim() && rows.length !== all.length
+            {(query.trim() || filtered) && rows.length !== all.length
               ? `${rows.length} of ${all.length}`
               : t("attribution.productCount", { count: rows.length })}
           </span>
         </div>
+
+        {/* Reusing Attribution's own filter classes rather than restyling them
+            here: this is that toolbar, in a dialog, and two sets of rules for
+            one row of controls is how they drift apart. */}
+        {(campaigns.length > 0 || fileNames.length > 0 || hasImportDates) && (
+          <div className="product-filters">
+            {campaigns.length > 0 && (
+              <Select
+                className="product-filter"
+                value={filterCampaign}
+                aria-label={t("attribution.filterByCampaign")}
+                onChange={(event) => setFilterCampaign(event.target.value)}
+              >
+                <option value="">{t("attribution.allCampaigns")}</option>
+                {campaigns.map((campaign) => (
+                  <option key={campaign.id} value={campaign.id}>{campaign.name}</option>
+                ))}
+              </Select>
+            )}
+            {fileNames.length > 0 && (
+              <Select
+                className="product-filter"
+                value={filterFile}
+                aria-label={t("attribution.filterByFile")}
+                onChange={(event) => setFilterFile(event.target.value)}
+              >
+                <option value="">{t("attribution.allImports")}</option>
+                {fileNames.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </Select>
+            )}
+            {hasImportDates && (
+              <span className="product-filter-dates">
+                <input
+                  type="date"
+                  className="product-filter"
+                  value={filterFrom}
+                  max={filterTo || undefined}
+                  aria-label={t("attribution.importedAfter")}
+                  onChange={(event) => setFilterFrom(event.target.value)}
+                />
+                <span aria-hidden="true">–</span>
+                <input
+                  type="date"
+                  className="product-filter"
+                  value={filterTo}
+                  min={filterFrom || undefined}
+                  aria-label={t("attribution.importedBefore")}
+                  onChange={(event) => setFilterTo(event.target.value)}
+                />
+              </span>
+            )}
+            {filtered && (
+              <Button
+                variant="quiet"
+                size="sm"
+                onClick={() => {
+                  setFilterCampaign("");
+                  setFilterFile("");
+                  setFilterFrom("");
+                  setFilterTo("");
+                }}
+              >{t("attribution.clearFilters")}</Button>
+            )}
+          </div>
+        )}
 
         {rows.length === 0 ? (
           <p className="product-picker-empty">
@@ -154,12 +267,20 @@ export function OfferPicker({
                           data-active={active || undefined}
                           onClick={() => reorder(column.key)}
                         >
-                          {column.label}
+                          {t(column.label)}
                           <Icon size={12} aria-hidden="true" />
                         </button>
                       </th>
                     );
                   })}
+                  {/* Not sortable, exactly as in Attribution: a list of names
+                      does not order, and a header that pretends to is a control
+                      that does nothing. */}
+                  {campaigns.length > 0 && (
+                    <th scope="col" className="product-campaigns">
+                      {t("attribution.campaignsColumn")}
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -191,6 +312,11 @@ export function OfferPicker({
                           {picked && <Check className="product-picker-tick" size={15} aria-label="Chosen" />}
                         </span>
                       </th>
+                      {/* Every creator, not the first: a product credited to
+                          two people is not "by" either one of them. */}
+                      <td className="product-creator">
+                        {row.creators.length ? row.creators.join(", ") : "—"}
+                      </td>
                       <td>{row.network}</td>
                       <td className="numeric">
                         {row.price_cents === null ? "—" : money(row.price_cents, row.currency)}
@@ -205,6 +331,16 @@ export function OfferPicker({
                           ? "—"
                           : money(row.commission_flat_cents, row.currency)}
                       </td>
+                      {campaigns.length > 0 && (
+                        <td className="product-campaigns">
+                          {(() => {
+                            const named = (campaignsByOffer[row.offer_id] ?? [])
+                              .map((id) => campaigns.find((item) => item.id === id)?.name)
+                              .filter(Boolean);
+                            return named.length ? named.join(", ") : "—";
+                          })()}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

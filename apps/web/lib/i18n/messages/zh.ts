@@ -839,6 +839,7 @@ export const zh: Messages = {
       "还没有商品。用“添加商品”把 Shopee 的优惠带进来，它们的推广链接和佣金会显示在这里。",
     product: "商品",
     creator: "创作者",
+    network: "联盟网络",
     searchProducts: "搜索商品",
     price: "价格",
     rate: "佣金率",

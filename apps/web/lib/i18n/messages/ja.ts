@@ -852,6 +852,7 @@ export const ja: Messages = {
       "商品はまだありません。「商品を追加」から Shopee のオファーを取り込むと、そのアフィリエイトリンクと報酬がここに表示されます。",
     product: "商品",
     creator: "投稿者",
+    network: "ネットワーク",
     searchProducts: "商品を検索",
     price: "価格",
     rate: "料率",

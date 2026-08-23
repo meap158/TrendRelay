@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { offerChoices } from "../app/publish/offer-rows.ts";
+import {
+  NO_OFFER_FILTERS,
+  offerChoices,
+  offerMatches,
+  offerValue,
+  type OfferFilters,
+} from "../app/publish/offer-rows.ts";
 import { sortRows } from "../app/attribution/sort.ts";
 import type { ProductOffer, ProductRow } from "../app/attribution/types.ts";
 
@@ -119,4 +125,93 @@ test("ties keep the order they arrived in", () => {
 
   assert.deepEqual(byRate(rows, "desc"), ["o1", "o2"]);
   assert.deepEqual(byRate(rows, "asc"), ["o1", "o2"]);
+});
+
+// --- the filters -------------------------------------------------------------
+//
+// Feature parity with the Attribution table, which is where somebody learns
+// what these controls do. A picker that filters differently from the table it
+// copies is worse than one that does not filter at all.
+
+const filters = (overrides: Partial<OfferFilters> = {}): OfferFilters =>
+  ({ ...NO_OFFER_FILTERS, ...overrides });
+
+function catalogued(): ReturnType<typeof offerChoices> {
+  const row = product("p1", [offer("o1")], "Ceramic mug");
+  row.creators = ["Đông Nhi"];
+  row.import_filename = "shopee-june.xlsx";
+  row.imported_at = "2026-06-14T09:30:00Z";
+  const other = product("p2", [offer("o2")], "Steel bottle");
+  other.import_filename = "shopee-may.xlsx";
+  other.imported_at = "2026-05-02T11:00:00Z";
+  return offerChoices([row, other]);
+}
+
+test("a product is found by the name on the box, not only its own", () => {
+  const [mug] = catalogued();
+
+  assert.equal(offerMatches(mug, filters({ query: "đông" })), true);
+  assert.equal(offerMatches(mug, filters({ query: "nobody" })), false);
+});
+
+test("choosing a campaign hides every offer that campaign does not promote", () => {
+  const [mug, bottle] = catalogued();
+  const byOffer = { o1: ["camp-1"] };
+
+  assert.equal(offerMatches(mug, filters({ campaign: "camp-1" }), byOffer), true);
+  assert.equal(offerMatches(bottle, filters({ campaign: "camp-1" }), byOffer), false);
+});
+
+test("a campaign filter reads the offer, not the product", () => {
+  // A product with two offers can be in a campaign on one of them, and that
+  // offer is the one worth showing - the other is a different link and rate.
+  const row = product("p1", [offer("o1"), offer("o2")], "Ceramic mug");
+  const [first, second] = offerChoices([row]);
+
+  const byOffer = { o2: ["camp-1"] };
+  assert.equal(offerMatches(first, filters({ campaign: "camp-1" }), byOffer), false);
+  assert.equal(offerMatches(second, filters({ campaign: "camp-1" }), byOffer), true);
+});
+
+test("the import range includes both of the days it names", () => {
+  const [mug] = catalogued();
+
+  assert.equal(offerMatches(mug, filters({ from: "2026-06-14", to: "2026-06-14" })), true);
+  assert.equal(offerMatches(mug, filters({ from: "2026-06-15" })), false);
+  assert.equal(offerMatches(mug, filters({ to: "2026-06-13" })), false);
+});
+
+test("a product with no import date is in no range at all", () => {
+  // Absence of a date is not evidence of one, either way.
+  const [row] = offerChoices([product("p1", [offer("o1")])]);
+
+  assert.equal(offerMatches(row, filters({ from: "2020-01-01" })), false);
+  assert.equal(offerMatches(row, filters({ to: "2030-01-01" })), false);
+  assert.equal(offerMatches(row, filters()), true);
+});
+
+test("every filter narrows, so all of them have to pass", () => {
+  const [mug] = catalogued();
+  const byOffer = { o1: ["camp-1"] };
+
+  assert.equal(offerMatches(mug, filters({
+    query: "mug", campaign: "camp-1", file: "shopee-june.xlsx", from: "2026-06-01",
+  }), byOffer), true);
+  // One wrong answer is enough, even with the rest matching.
+  assert.equal(offerMatches(mug, filters({
+    query: "mug", campaign: "camp-1", file: "shopee-may.xlsx", from: "2026-06-01",
+  }), byOffer), false);
+});
+
+test("creators order the column and a product without one is not dropped", () => {
+  const named = product("p1", [offer("o1")], "Mug");
+  named.creators = ["Zoe"];
+  const anonymous = product("p2", [offer("o2")], "Bottle");
+  const rows = offerChoices([named, anonymous]);
+
+  const sorted = sortRows(rows, "asc", (row) => offerValue(row, "creator"));
+
+  assert.equal(sorted.length, 2);
+  assert.equal(sorted[0].creators.length, 0);
+  assert.deepEqual(sorted[1].creators, ["Zoe"]);
 });
