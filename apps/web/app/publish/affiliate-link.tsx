@@ -356,38 +356,20 @@ export function AffiliateLink({
             {!platforms.length && <li><span>{t("publish.chooseDestinationsFirst")}</span></li>}
           </ul>
 
-          <div className="affiliate-actions">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={disabled || !captionWorks}
-              title={captionWorks ? undefined : t("publish.noCaptionLinkHere")}
-              onClick={addToCaption}
-            >{t("publish.addToCaption")}</Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={disabled || !commentPlatforms.length}
-              title={commentPlatforms.length
-                ? t("publish.commentReach")
-                // The network, the plan and the engine are different
-                // culprits. Facebook takes a first comment; a Buffer Free
-                // login does not send one, and Zernio cannot - and blaming
-                // the network sent the operator investigating the wrong
-                // thing.
-                : commentUnavailableReason ?? t("publish.noCommentHere")}
-              onClick={addToComment}
-            >{t("publish.addToFirstComment")}</Button>
-          </div>
-
-          {/* Editable, and stated before it is used.
+          {/* Above the two buttons, because it decides what they insert.
            *
-           * It was a fixed sentence read off the tracking link, which made the
-           * one line of a post carrying a legal obligation the one line that
-           * could not be changed here. It is not one sentence for everybody:
-           * wording differs by market and by each network's own rules, and
-           * somebody posting in Vietnamese should not have to disclose in
-           * English. Emptying it is allowed, and says what that means. */}
+           * It sat under them, which meant the switch that changes what "Add
+           * to caption" writes came after the thing it changes: by the time
+           * anybody saw the option the caption already had a disclosure in it,
+           * or was missing one. A control that governs an action belongs
+           * before it, and this one is off by default, so its absence is the
+           * state somebody most needs to notice.
+           *
+           * The wording is editable and was not always. It was a fixed
+           * sentence read off the tracking link, which made the one line of a
+           * post carrying a legal obligation the one line that could not be
+           * changed here - and it is not one sentence for everybody, since
+           * wording differs by market and by each network's own rules. */}
           <div className="affiliate-disclosure-block">
             <label className="affiliate-disclosure-switch">
               <input
@@ -423,6 +405,31 @@ export function AffiliateLink({
                 ? t("publish.disclosureLeads")
                 : t("publish.disclosureEmpty")}
           </small>
+
+          <div className="affiliate-actions">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={disabled || !captionWorks}
+              title={captionWorks ? undefined : t("publish.noCaptionLinkHere")}
+              onClick={addToCaption}
+            >{t("publish.addToCaption")}</Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={disabled || !commentPlatforms.length}
+              title={commentPlatforms.length
+                ? t("publish.commentReach")
+                // The network, the plan and the engine are different
+                // culprits. Facebook takes a first comment; a Buffer Free
+                // login does not send one, and Zernio cannot - and blaming
+                // the network sent the operator investigating the wrong
+                // thing.
+                : commentUnavailableReason ?? t("publish.noCommentHere")}
+              onClick={addToComment}
+            >{t("publish.addToFirstComment")}</Button>
+          </div>
+
           {bioOnly && (
             <small className="affiliate-note warn">
               {t("publish.bioOnlyHere", {

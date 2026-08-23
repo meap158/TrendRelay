@@ -1099,7 +1099,10 @@ button.affiliate-product:disabled { cursor: default; opacity: .6; }
    while it is off - the two are separate choices, and greying out what
    somebody typed for their market would lose it on the way past. */
 .affiliate-disclosure-block { display: grid; gap: 7px; }
-.affiliate-disclosure-switch { display: flex; gap: 7px; align-items: center; cursor: pointer; }
+/* Scoped to the panel so it outranks `.publish-form label`, which is a class
+   plus an element and therefore beats a class on its own. Unscoped, the page
+   rule turned this row into a grid and stood the tick above its own label. */
+.affiliate-link .affiliate-disclosure-switch { display: flex; gap: 7px; align-items: center; cursor: pointer; }
 .affiliate-disclosure-switch input { flex: none; inline-size: 15px; block-size: 15px; margin: 0; accent-color: var(--green); cursor: pointer; }
 .affiliate-disclosure-switch > span { color: var(--text); font-size: 12px; font-weight: 600; }
 .affiliate-disclosure { display: grid; gap: 4px; }
