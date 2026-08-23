@@ -179,3 +179,34 @@ def test_schedule_resolution_reads_narrowest_statement_first(slots) -> None:
     assert [(item.hour, item.minute) for item in fallback_slots] == [(11, 0)]
     assert [(item.hour, item.minute) for item in inherited_slots] == [(19, 30)]
     assert inherited_rule["source"] == "page"
+
+
+def test_a_saved_preset_can_be_deleted_and_its_pages_fall_back(slots) -> None:
+    with slots() as session, session.begin():
+        saved = posting_slots.create_preset(
+            "w1", "Trial hours", "", [{"time": "10:00"}], session=session
+        )
+        posting_slots.assign_page("w1", "facebook:@brand", saved["id"], session=session)
+        posting_slots.delete_preset("w1", saved["id"], session=session)
+
+        assert posting_slots.preset_by_id("w1", saved["id"], session=session) is None
+        # The page it was assigned to inherits again rather than pointing at
+        # a rhythm that no longer exists.
+        assert posting_slots.page_assignments("w1", session=session) == {}
+
+
+def test_a_built_in_preset_refuses_deletion(slots) -> None:
+    """It exists in every workspace and would resurrect on the next read - a
+    delete that does not delete is worse than no delete."""
+    with slots() as session, session.begin():
+        with pytest.raises(ValueError, match="built in"):
+            posting_slots.delete_preset("w1", "commute", session=session)
+
+
+def test_deleting_another_workspaces_preset_is_not_found(slots) -> None:
+    with slots() as session, session.begin():
+        theirs = posting_slots.create_preset(
+            "w2", "Their hours", "", [{"time": "10:00"}], session=session
+        )
+        with pytest.raises(LookupError):
+            posting_slots.delete_preset("w1", theirs["id"], session=session)

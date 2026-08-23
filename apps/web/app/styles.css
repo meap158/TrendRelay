@@ -756,6 +756,19 @@ nav strong { color: var(--text); }
 .slot-presets button b { font-size: 12px; font-weight: 500; }
 .slot-presets button small { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .slot-presets > p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+/* The autofill row: reads as one sentence, controls where its numbers are. */
+.slot-spread { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; }
+.slot-spread > input { inline-size: auto; min-inline-size: 0; min-height: 32px; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--text); }
+.slot-spread > input[type="number"] { width: 58px; font-variant-numeric: tabular-nums; }
+.slot-spread > small { flex-basis: 100%; color: var(--muted-soft); font-size: 10px; line-height: 1.4; }
+/* A preset and its delete, as one card: the delete belongs to the preset it
+   removes, not to a row of controls somewhere else. */
+.slot-preset-card { position: relative; display: inline-flex; }
+.slot-preset-card .slot-preset { padding-inline-end: 30px; }
+.slot-preset b em { margin-inline-start: 6px; border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 6px; color: var(--muted); font-size: 9px; font-style: normal; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.slot-preset-delete { position: absolute; inset-block-start: 6px; inset-inline-end: 6px; display: grid; place-items: center; width: 20px; height: 20px; border: 0; border-radius: 5px; padding: 0; background: transparent; color: var(--muted-soft); cursor: pointer; }
+.slot-preset-delete:hover:not(:disabled) { color: var(--bad); background: var(--bad-bg); }
+.slot-preset-delete:disabled { cursor: not-allowed; opacity: .5; }
 .slot-preset-save { display: flex; gap: 6px; align-items: center; }
 .slot-preset-save input { min-width: 0; flex: 1; height: 32px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: inherit; }
 .page-schedule-assignments { display: grid; gap: 8px; margin: 0 12px 12px; padding: 12px; border-top: 1px solid var(--line); }

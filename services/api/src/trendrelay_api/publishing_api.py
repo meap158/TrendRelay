@@ -522,6 +522,28 @@ def create_posting_preset(
     }
 
 
+@router.delete("/slots/presets/{preset_id}")
+def delete_posting_preset(
+    workspace_id: str,
+    preset_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Remove a saved preset. Built-ins are refused; pages assigned to it fall
+    back to the workspace times."""
+    require_role(membership(session, workspace_id, user.id), {"owner", "approver"})
+    try:
+        posting_slots.delete_preset(workspace_id, preset_id, session=session)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return {
+        "presets": posting_slots.preset_payload(workspace_id, session=session),
+        "page_assignments": posting_slots.page_assignments(workspace_id, session=session),
+    }
+
+
 @router.post("/slots/pages")
 def set_page_posting_preset(
     workspace_id: str,

@@ -13,6 +13,7 @@ import {
 } from "../ui/asset-filters";
 import { Button } from "../ui/button";
 import { useLibraryAssets } from "../../lib/use-library-assets";
+import { spreadTimes } from "../../lib/spread-times";
 import { Select } from "../ui/select";
 import { Dialog } from "../ui/dialog";
 import { Badge } from "../ui/primitives";
@@ -1070,6 +1071,7 @@ export function SlotEditor({
   busy,
   onSave,
   onCreatePreset,
+  onDeletePreset,
 }: {
   slots: Slot[];
   presets: SlotPreset[];
@@ -1077,12 +1079,18 @@ export function SlotEditor({
   busy: boolean;
   onSave: (entries: { weekday: number; time: string }[]) => void;
   onCreatePreset: (label: string, entries: { weekday: number; time: string }[]) => void;
+  /** Offered on the workspace's own saved presets; built-ins have no delete. */
+  onDeletePreset?: (preset: SlotPreset) => void;
 }) {
   const t = useT();
   const [draft, setDraft] = useState("");
   /** A weekday number, or one of the group values above. */
   const [weekday, setWeekday] = useState<string>(String(EVERY_DAY));
   const [presetName, setPresetName] = useState("");
+  /** The autofill: how many times, spread across which window. */
+  const [spreadCount, setSpreadCount] = useState(4);
+  const [spreadFrom, setSpreadFrom] = useState("08:00");
+  const [spreadTo, setSpreadTo] = useState("21:00");
 
   const entries = slots.map((slot) => ({ weekday: slot.weekday, time: slot.time }));
   const everyDay = slots.filter((slot) => slot.weekday === EVERY_DAY);
@@ -1107,6 +1115,27 @@ export function SlotEditor({
     if (!wanted.length) return;
     onSave([...entries, ...wanted]);
     setDraft("");
+  }
+
+  /**
+   * Fill the chosen days with evenly spread times, replacing what they had.
+   *
+   * Replacement rather than merge, and said so beside the button: spreading
+   * four times over a day that already has three is how a schedule ends up
+   * posting seven, and both references erase the selected days before they
+   * fill them. Only the selection's own rows are replaced - an every-day fill
+   * leaves day-specific times alone, and a weekday fill leaves the every-day
+   * row alone, because each is somebody's separate decision.
+   */
+  function autofill() {
+    const group = WEEKDAY_GROUPS.find((item) => item.value === weekday);
+    const days = group ? group.days : [Number(weekday)];
+    const times = spreadTimes(spreadCount, spreadFrom, spreadTo);
+    const kept = entries.filter((entry) => !days.includes(entry.weekday));
+    onSave([
+      ...kept,
+      ...days.flatMap((day) => times.map((time) => ({ weekday: day, time }))),
+    ]);
   }
 
   return (
@@ -1222,26 +1251,79 @@ export function SlotEditor({
           </Button>
         </div>
       )}
+      {/* The generator both references lead with: pick how many and a window,
+          and the times land evenly spread instead of being typed one by one.
+          It fills whatever the scope above says - the same control, so the
+          add row and the fill never disagree about what "Weekdays" means. */}
+      {canEdit && (
+        <div className="slot-spread">
+          <span>or spread</span>
+          <input
+            type="number"
+            min={1}
+            max={12}
+            value={spreadCount}
+            aria-label="How many times to spread"
+            onChange={(event) => setSpreadCount(
+              Math.max(1, Math.min(12, Number(event.target.value) || 1)),
+            )}
+          />
+          <span>times between</span>
+          <input
+            type="time"
+            value={spreadFrom}
+            aria-label="Spread from"
+            onChange={(event) => setSpreadFrom(event.target.value || "08:00")}
+          />
+          <span>and</span>
+          <input
+            type="time"
+            value={spreadTo}
+            aria-label="Spread until"
+            onChange={(event) => setSpreadTo(event.target.value || "21:00")}
+          />
+          <Button variant="secondary" size="sm" busy={busy} onClick={autofill}>
+            Fill
+          </Button>
+          <small>Replaces the selection&rsquo;s own times. A window ending
+            earlier than it starts runs overnight.</small>
+        </div>
+      )}
       {canEdit && (
         <div className="slot-presets">
           <span>{t("composer.startFromPreset")}</span>
           <div>
             {presets.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                className="slot-preset"
-                disabled={busy}
-                title={preset.summary}
-                onClick={() => onSave(preset.slots)}
-              >
-                <b>{preset.label}</b>
-                <small>{preset.slots.map((entry) => (
-                  entry.weekday === EVERY_DAY
-                    ? entry.time
-                    : `${DAY_NAMES[entry.weekday]} ${entry.time}`
-                )).join(" · ")}</small>
-              </button>
+              <span className="slot-preset-card" key={preset.id}>
+                <button
+                  type="button"
+                  className="slot-preset"
+                  disabled={busy}
+                  title={preset.summary}
+                  onClick={() => onSave(preset.slots)}
+                >
+                  <b>{preset.label}
+                    {preset.kind === "custom" && <em>saved</em>}</b>
+                  <small>{preset.slots.map((entry) => (
+                    entry.weekday === EVERY_DAY
+                      ? entry.time
+                      : `${DAY_NAMES[entry.weekday]} ${entry.time}`
+                  )).join(" · ")}</small>
+                </button>
+                {/* Only what this workspace saved can be deleted: a built-in
+                    would resurrect on the next read, and a delete that does
+                    not delete is worse than no button. */}
+                {preset.kind === "custom" && onDeletePreset && (
+                  <button
+                    type="button"
+                    className="slot-preset-delete"
+                    aria-label={`Delete the ${preset.label} preset`}
+                    title={`Delete the ${preset.label} preset`}
+                    disabled={busy}
+                    onClick={() => onDeletePreset(preset)}
+                  ><ActionIcon name="delete" /></button>
+                )}
+              </span>
             ))}
           </div>
           <p>{t("composer.presetWarning")}</p>

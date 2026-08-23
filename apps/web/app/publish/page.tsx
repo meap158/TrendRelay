@@ -1585,6 +1585,30 @@ export default function PublishPage() {
     }
   }
 
+  async function deleteSlotPreset(preset: SlotPreset) {
+    if (!window.confirm(
+      `Delete the “${preset.label}” preset? Pages assigned to it fall back to `
+      + "the workspace times.",
+    )) return;
+    setBusy("slots");
+    setError(null);
+    try {
+      const body = await json<{
+        presets: SlotPreset[]; page_assignments?: Record<string, string>;
+      }>(await apiFetch(
+        `/api/workspaces/${workspaceId}/publishing/slots/presets/${preset.id}`,
+        { method: "DELETE" },
+      ));
+      setSlotPresets(body.presets);
+      setPageAssignments(body.page_assignments ?? {});
+      setNotice(`Deleted the “${preset.label}” preset.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The preset could not be deleted.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function assignPagePreset(pageKey: string, presetId: string) {
     setBusy(`page-schedule:${pageKey}`);
     setError(null);
@@ -3638,6 +3662,7 @@ export default function PublishPage() {
                   busy={busy === "slots"}
                   onSave={(entries) => void saveSlots(entries)}
                   onCreatePreset={(label, entries) => void createSlotPreset(label, entries)}
+                  onDeletePreset={(preset) => void deleteSlotPreset(preset)}
                 />
                 {pages.length > 0 && (
                   <section className="page-schedule-assignments">

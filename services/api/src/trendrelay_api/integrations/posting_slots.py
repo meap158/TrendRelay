@@ -166,6 +166,39 @@ def create_preset(
     return preset_by_id(workspace_id, item.id, session=session) or {}
 
 
+def delete_preset(
+    workspace_id: str, preset_id: str, *, session: Session
+) -> None:
+    """Remove one saved preset, and everything that pointed at it.
+
+    Only the workspace's own presets: the built-ins are the catalogue's, exist
+    in every workspace, and deleting one here would quietly resurrect on the
+    next read - a delete that does not delete. Refused by name instead.
+
+    Page assignments referencing the preset go with it, so no page is left
+    assigned to a rhythm that no longer exists; those pages fall back to the
+    workspace times, which is what an assignment's absence already means.
+    """
+    if any(item["id"] == preset_id for item in _builtin_payload()):
+        raise ValueError(
+            "That preset is built in and cannot be deleted. Only presets "
+            "saved in this workspace can be removed."
+        )
+    found = session.scalar(select(PostingSchedulePreset).where(
+        PostingSchedulePreset.workspace_id == workspace_id,
+        PostingSchedulePreset.id == preset_id,
+    ))
+    if found is None:
+        raise LookupError("That preset is not in this workspace.")
+    for assignment in session.scalars(select(PagePostingSchedule).where(
+        PagePostingSchedule.workspace_id == workspace_id,
+        PagePostingSchedule.preset_id == preset_id,
+    )):
+        session.delete(assignment)
+    session.delete(found)
+    session.flush()
+
+
 def assign_page(
     workspace_id: str, page_key: str, preset_id: str | None, *, session: Session
 ) -> dict[str, str] | None:
