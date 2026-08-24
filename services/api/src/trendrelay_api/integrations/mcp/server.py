@@ -29,8 +29,11 @@ INSTRUCTIONS = (
     "thread reply lands there, and the campaign's brief. Write with "
     "`write_caption`, `write_first_comment` and `write_thread` (or `write_post_copy` "
     "for several at once).\n\n"
-    "To add a new post: `upload_image` brings an image into the Library (attach "
-    "one in chat, or pass image_url), `get_import_status` reports when its "
+    "To add a new post: `list_library_assets` finds media the workspace already "
+    "holds - look before uploading, because re-importing a file the Library "
+    "has records provenance that is not true. `upload_image` brings in one "
+    "that is new (attach one in chat, or pass image_url), "
+    "`get_import_status` reports when its "
     "asset_id exists, and `create_campaign_post` proposes a post from Library "
     "assets into a campaign. A post you create arrives as a draft outside the "
     "rotation - the operator promotes it in the app - so say it is waiting for "
@@ -330,6 +333,34 @@ def build_server(workspace_id: str) -> FastMCP:
     # pipeline, and a created post is a draft only a person promotes.
 
     @server.tool(
+        name="list_library_assets",
+        description=(
+            "Find media already in the media library, newest first, to build a "
+            "post from without uploading anything. `query` searches titles and "
+            "captions, `kind` narrows to 'image', 'video' or 'audio', and "
+            "`collected_within_days` limits it to what arrived recently. Page "
+            "with `offset`; `more` says whether any are left. Returns asset "
+            "ids, which is what `create_campaign_post` takes - never file "
+            "paths."
+        ),
+    )
+    def list_library_assets(
+        query: str | None = None,
+        kind: str | None = None,
+        collected_within_days: int | None = None,
+        limit: int = 25,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        return _call(
+            "list_library_assets",
+            lambda s: intake.list_library_assets(
+                s, workspace_id, query=query, kind=kind,
+                collected_within_days=collected_within_days,
+                limit=limit, offset=offset,
+            ),
+        )
+
+    @server.tool(
         name="upload_image",
         description=(
             "Bring one image into the media library, to post later. Attach the "
@@ -547,7 +578,10 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
         "write_caption", "write_first_comment", "write_thread",
         "write_post_copy", "write_disclosure", "write_bio_hint",
     ),
-    "Media & posts": ("upload_image", "get_import_status", "create_campaign_post"),
+    "Media & posts": (
+        "list_library_assets", "upload_image", "get_import_status",
+        "create_campaign_post",
+    ),
     "Posting schedule": (
         "list_posting_times", "get_campaign_posting_times",
         "create_posting_preset", "set_campaign_posting_times",

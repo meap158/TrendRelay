@@ -37,7 +37,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 #: The image types the Library accepts, keyed by the content type the server
@@ -226,6 +226,105 @@ def get_import_status(job_id: str) -> dict[str, Any]:
         "status": record.get("status"),
         "error": record.get("error"),
         "asset_id": result.get("asset_id"),
+    }
+
+
+def list_library_assets(
+    session: Session,
+    workspace_id: str,
+    *,
+    query: str | None = None,
+    kind: str | None = None,
+    collected_within_days: int | None = None,
+    limit: int = 25,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """Find media already in the Library, so a post can be made from it.
+
+    Without this the only asset ids a caller could name were the ones its own
+    uploads had just returned. Everything the operator collected - the whole
+    library, which is what a campaign is normally built from - was unreachable,
+    and re-uploading a file to learn its id is both wasteful and a lie about
+    where the media came from. (The ingest deduplicates by content, so it would
+    have returned the existing id and the wrong provenance with it.)
+
+    The filter is the Library's own `asset_conditions`, not a second query that
+    reads "the same" - a browse that disagreed with the screen the operator is
+    looking at would have them talking past each other about which clips exist.
+
+    Paths are not returned. A caller names media by asset id, here as
+    everywhere else on this boundary: a filesystem path is not a remote
+    caller's to know, and `create_campaign_post` would not take one.
+    """
+    from trendrelay_api.media_library_api import AssetFilter, asset_conditions
+    from trendrelay_api.media_models import MediaAsset
+
+    if kind is not None and kind not in {"video", "image", "audio"}:
+        raise ValueError(
+            f"Unknown media kind {kind!r}. It is 'video', 'image' or 'audio'."
+        )
+    limit = max(1, min(int(limit), 100))
+    offset = max(0, int(offset))
+    filters = AssetFilter(
+        q=query,
+        media_kind=kind,
+        collected_within_days=collected_within_days,
+    )
+    where = asset_conditions(workspace_id, filters)
+    total = session.scalar(select(func.count(MediaAsset.id)).where(*where)) or 0
+    # Newest first, and every sort ends on the id: `collected_at` is not unique,
+    # and two rows sharing one let the database order them differently between
+    # requests - which across a page boundary silently drops assets.
+    rows = session.scalars(
+        select(MediaAsset)
+        .where(*where)
+        .order_by(MediaAsset.collected_at.desc(), MediaAsset.id.asc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
+    return {
+        "assets": [_library_row(asset) for asset in rows],
+        "total": total,
+        "offset": offset,
+        "returned": len(rows),
+        # Said rather than left to arithmetic. A caller that stops at the first
+        # page because it did not compare three numbers reports "these are your
+        # clips" about the newest twenty-five of two thousand.
+        "more": offset + len(rows) < total,
+    }
+
+
+def _library_row(asset: Any) -> dict[str, Any]:
+    """One asset, as much as is needed to choose it and no more.
+
+    Enough to recognise the media and to judge whether it suits a post: what it
+    is, how long, where it came from and when it arrived. Not the whole
+    Library view - a caller choosing between clips does not need codecs, and a
+    long payload of them crowds out the titles it is actually reading.
+    """
+    return {
+        "asset_id": asset.id,
+        "title": asset.title,
+        "kind": asset.media_kind,
+        # How it got here, which is how a caller tells its own uploads
+        # ("mcp-upload") from what the operator collected.
+        "source": asset.source_type,
+        "platform": asset.platform,
+        "creator": asset.creator,
+        "caption": asset.caption,
+        # Seconds, because a caller writing to length thinks in seconds and
+        # milliseconds invite an order-of-magnitude mistake.
+        "duration_seconds": (
+            round(asset.duration_ms / 1000, 1) if asset.duration_ms else None
+        ),
+        "dimensions": (
+            f"{asset.width}x{asset.height}" if asset.width and asset.height else None
+        ),
+        # When it arrived in the Library, which is what "the ones from
+        # yesterday" means to the operator asking.
+        "collected_at": (
+            asset.collected_at.isoformat() if asset.collected_at else None
+        ),
     }
 
 

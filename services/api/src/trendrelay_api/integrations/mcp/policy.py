@@ -109,6 +109,11 @@ EXPOSURE: dict[str, Access] = {
     # that state; a caller cannot ask for another.
     "upload_image": Access.WORKSPACE_WRITE,
     "get_import_status": Access.READ,
+    # Reading the Library is a read like any other, and the alternative was
+    # worse than the exposure: without it the only asset ids a caller could
+    # name were ones its own uploads returned, so building a post from media
+    # the operator already collected meant uploading it again.
+    "list_library_assets": Access.READ,
     "create_campaign_post": Access.WORKSPACE_WRITE,
     # --- Named, and refused ------------------------------------------------
     # Credentials and sessions.

@@ -3,7 +3,7 @@ id: campaigns.add-post-with-media
 action: campaigns.add-post-with-media
 title: Add a post with media to a campaign
 summary: Upload an image into the media library and propose a draft post from Library assets into a campaign, for the operator to promote.
-version: 2
+version: 3
 tags: [campaigns, media, upload, posts]
 aliases: [upload-image, add-campaign-post, campaigns.upload-media, create-campaign-post]
 ---
@@ -11,8 +11,8 @@ aliases: [upload-image, add-campaign-post, campaigns.upload-media, create-campai
 
 This SOP covers bringing images into the workspace and proposing a post made
 from Library media into a campaign - one picture, or several as a carousel. It
-uses four operations: `list_campaigns`, `upload_image`, `get_import_status`,
-and `create_campaign_post`.
+uses five operations: `list_campaigns`, `list_library_assets`, `upload_image`,
+`get_import_status`, and `create_campaign_post`.
 
 ## What you can and cannot do here
 
@@ -37,7 +37,10 @@ afterwards costs the user an import per picture.
 
 ## 2. Bring the images in
 
-Call `upload_image` once per picture, with one source each:
+If the pictures are already in the library - the operator's own downloads, or
+something an earlier session uploaded - skip to step 4 and find them with
+`list_library_assets`. Otherwise call `upload_image` once per picture, with one
+source each:
 
 - **A chat attachment.** In clients that support the `openai/fileParams`
   convention (ChatGPT), an image the user attaches arrives automatically as the
@@ -95,9 +98,15 @@ Call `create_campaign_post` with the campaign id and the Library asset ids:
   campaign carries the affiliate link itself and adds its own disclosure.
   Name the product in words; never paste a URL into copy.
 
-Existing Library media can be posted without an upload: find its asset id
-through the operator (there is no Library browse over MCP), or use the asset
-id an earlier upload returned.
+Existing Library media can be posted without an upload. `list_library_assets`
+reads the library newest-first: `query` searches titles and captions, `kind`
+narrows to `image`, `video` or `audio`, `collected_within_days` limits it to
+what arrived recently, and `offset` pages through it - `more` says whether any
+are left. It returns asset ids, which is exactly what this step takes.
+
+Prefer it to re-uploading. Uploading a file the library already holds returns
+the existing asset id anyway (the ingest deduplicates by content) but records
+provenance that is not true.
 
 The answer carries `carousel_warnings`: any of the campaign's accounts that
 cannot post this gallery, and why - an engine that sends none, or a network

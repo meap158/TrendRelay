@@ -115,7 +115,8 @@ def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> 
     assert policy.allowed_operations() == [
         "create_campaign_post", "create_posting_preset", "get_campaign_config",
         "get_campaign_posting_times", "get_import_status",
-        "get_post_context", "get_sop", "list_campaigns", "list_posting_times",
+        "get_post_context", "get_sop", "list_campaigns", "list_library_assets",
+        "list_posting_times",
         "list_posts_needing_copy", "list_sops", "set_campaign_posting_times",
         "set_page_posting_times", "set_workspace_posting_times", "upload_image",
         "write_bio_hint", "write_caption", "write_disclosure", "write_first_comment",
@@ -1152,3 +1153,190 @@ def test_the_order_pictures_are_named_in_is_the_order_they_swipe(session) -> Non
     ]
     stored = session.get(CampaignQueueItem, view["id"])
     assert stored.image_paths == view["image_paths"], "the queue reordered them"
+
+
+# --- finding media that is already there --------------------------------------
+
+
+def _collected(session, asset_id: str, title: str, *, kind="video", days_ago=0,
+                source="download", caption=None):
+    from datetime import timedelta
+
+    from trendrelay_api.media_models import MediaAsset
+    from trendrelay_api.models import utc_now
+
+    asset = MediaAsset(
+        id=asset_id, workspace_id="ws", title=title, media_kind=kind,
+        source_type=source, original_path=rf"S:\media\{asset_id}.mp4",
+        original_sha256=(asset_id * 64)[:64], mime_type="video/mp4",
+        size_bytes=10, duration_ms=7_400, width=1080, height=1920,
+        collected_at=utc_now() - timedelta(days=days_ago), caption=caption,
+        created_by="local-admin",
+    )
+    session.add(asset)
+    session.commit()
+    return asset
+
+
+def test_the_library_can_be_read_without_uploading_anything(session) -> None:
+    """The gap this closes.
+
+    A caller could only name asset ids its own uploads had just returned, so
+    a post built from media the operator collected - which is nearly all of it
+    - meant uploading the file again to learn its id. The ingest deduplicates
+    by content, so that returned the existing id and wrote the wrong
+    provenance beside it.
+    """
+    from trendrelay_api.integrations.mcp import intake
+
+    _collected(session, "a1", "Desk tour")
+
+    found = intake.list_library_assets(session, "ws")
+
+    assert [row["asset_id"] for row in found["assets"]] == ["a1"]
+    assert found["assets"][0]["title"] == "Desk tour"
+
+
+def test_no_file_path_is_handed_out(session) -> None:
+    """Media is named by asset id on this boundary, here as everywhere.
+
+    A path is not a remote caller's to know, and `create_campaign_post` would
+    not accept one anyway - so returning it would only be an invitation.
+    """
+    from trendrelay_api.integrations.mcp import intake
+
+    _collected(session, "a1", "Desk tour")
+
+    row = intake.list_library_assets(session, "ws")["assets"][0]
+
+    assert not any("S:\\" in str(value) for value in row.values())
+    assert "original_path" not in row
+
+
+def test_it_is_the_librarys_own_filter_rather_than_a_second_one(session) -> None:
+    """A browse that disagreed with the screen the operator is looking at would
+    have the two of them talking past each other about which clips exist."""
+    from trendrelay_api.integrations.mcp import intake
+
+    _collected(session, "a1", "Desk tour")
+    _collected(session, "a2", "Kitchen gadget", caption="a quiet desk fan")
+
+    assert [row["asset_id"] for row in
+            intake.list_library_assets(session, "ws", query="desk")["assets"]] == [
+        "a2", "a1",
+    ], "the free-text search did not read titles and captions the way the app does"
+
+
+def test_pictures_can_be_asked_for_on_their_own(session) -> None:
+    from trendrelay_api.integrations.mcp import intake
+
+    _collected(session, "a1", "Desk tour")
+    _image_asset(session, "img1", r"S:\media\shot.png")
+
+    found = intake.list_library_assets(session, "ws", kind="image")
+
+    assert [row["asset_id"] for row in found["assets"]] == ["img1"]
+    assert found["total"] == 1
+
+
+def test_a_kind_no_library_holds_is_named_rather_than_silently_empty(session) -> None:
+    """An empty list reads as "you have no pictures", which is a different
+    answer from "there is no such thing as that kind"."""
+    from trendrelay_api.integrations.mcp import intake
+
+    with pytest.raises(ValueError, match="photo"):
+        intake.list_library_assets(session, "ws", kind="photo")
+
+
+def test_what_arrived_recently_can_be_asked_for(session) -> None:
+    """"The ones from yesterday" is how an operator refers to a download run."""
+    from trendrelay_api.integrations.mcp import intake
+
+    _collected(session, "a1", "Today", days_ago=0)
+    _collected(session, "a2", "Last month", days_ago=32)
+
+    found = intake.list_library_assets(session, "ws", collected_within_days=7)
+
+    assert [row["asset_id"] for row in found["assets"]] == ["a1"]
+
+
+def test_paging_says_there_is_more_rather_than_leaving_it_to_arithmetic(
+    session,
+) -> None:
+    """A caller that stops at the first page because it did not compare three
+    numbers reports "these are your clips" about the newest few of thousands."""
+    from trendrelay_api.integrations.mcp import intake
+
+    for index in range(5):
+        _collected(session, f"a{index}", f"Clip {index}", days_ago=index)
+
+    first = intake.list_library_assets(session, "ws", limit=2)
+    second = intake.list_library_assets(session, "ws", limit=2, offset=2)
+    last = intake.list_library_assets(session, "ws", limit=2, offset=4)
+
+    assert first["more"] is True and second["more"] is True
+    assert last["more"] is False
+    assert first["total"] == 5
+    # Newest first, and no row appears on two pages.
+    assert [row["asset_id"] for row in first["assets"]] == ["a0", "a1"]
+    assert [row["asset_id"] for row in second["assets"]] == ["a2", "a3"]
+
+
+def test_a_caller_cannot_ask_for_the_whole_library_at_once(session) -> None:
+    """The cap is applied rather than argued about: a thousand rows would not
+    help a caller choose, and it is a page of context spent on titles."""
+    from trendrelay_api.integrations.mcp import intake
+
+    _collected(session, "a1", "Desk tour")
+
+    assert intake.list_library_assets(session, "ws", limit=5_000)["returned"] == 1
+    assert intake.list_library_assets(session, "ws", limit=0)["returned"] == 1
+
+
+def test_another_workspaces_media_is_not_reachable(session) -> None:
+    from trendrelay_api.integrations.mcp import intake
+    from trendrelay_api.media_models import MediaAsset
+
+    session.add(Workspace(id="other", name="O", slug="o", created_by="local-admin"))
+    session.add(MediaAsset(
+        id="theirs", workspace_id="other", title="Not yours", media_kind="video",
+        source_type="download", original_path=r"S:\other\clip.mp4",
+        original_sha256="f" * 64, mime_type="video/mp4", size_bytes=10,
+        created_by="local-admin",
+    ))
+    session.commit()
+
+    found = intake.list_library_assets(session, "ws")
+
+    assert found["assets"] == []
+    assert found["total"] == 0
+
+
+def test_the_length_is_in_seconds_not_milliseconds(session) -> None:
+    """A caller writing to length thinks in seconds, and milliseconds invite an
+    order-of-magnitude mistake in copy written for a seven-second cut."""
+    from trendrelay_api.integrations.mcp import intake
+
+    _collected(session, "a1", "Desk tour")
+
+    assert intake.list_library_assets(session, "ws")["assets"][0][
+        "duration_seconds"
+    ] == 7.4
+
+
+def test_an_assistant_can_tell_its_own_uploads_from_what_was_collected(
+    session,
+) -> None:
+    """`source` is how it knows which of these it put there itself."""
+    from trendrelay_api.integrations.mcp import intake
+
+    _collected(session, "a1", "Downloaded", source="douyin")
+    _image_asset(session, "img1", r"S:\media\shot.png")
+
+    by_id = {
+        row["asset_id"]: row
+        for row in intake.list_library_assets(session, "ws")["assets"]
+    }
+
+    assert by_id["a1"]["source"] == "douyin"
+    assert by_id["img1"]["source"] == "mcp-upload"
