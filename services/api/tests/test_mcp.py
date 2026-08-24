@@ -803,7 +803,7 @@ def test_a_created_post_arrives_as_a_draft_outside_the_rotation(session) -> None
     )
 
     item = session.scalar(
-        select_queue_item := __import__("sqlalchemy").select(CampaignQueueItem).where(
+        __import__("sqlalchemy").select(CampaignQueueItem).where(
             CampaignQueueItem.campaign_id == "camp",
             CampaignQueueItem.id != "q1",
         )
