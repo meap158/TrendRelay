@@ -212,8 +212,13 @@ def upload_image(
     }
 
 
-def get_import_status(job_id: str) -> dict[str, Any]:
-    """How one upload's import is going, and the asset id once it has one."""
+#: How many imports one status call will report on. A carousel is at most
+#: `MAX_CAROUSEL_IMAGES` pictures, so a caller never needs more than that in
+#: flight for one post, and a bound stops a stray call reading the whole queue.
+MAX_TRACKED_IMPORTS = 40
+
+
+def _import_record(job_id: str) -> dict[str, Any]:
     from trendrelay_api.jobs import get_job_record
 
     try:
@@ -226,6 +231,50 @@ def get_import_status(job_id: str) -> dict[str, Any]:
         "status": record.get("status"),
         "error": record.get("error"),
         "asset_id": result.get("asset_id"),
+    }
+
+
+def get_import_status(
+    job_id: str | None = None, job_ids: list[str] | None = None
+) -> dict[str, Any]:
+    """How the uploads for one post are going, and their asset ids once ready.
+
+    Several at once, because a carousel is several uploads and polling is a
+    loop: six pictures polled one at a time is six calls per round, and a
+    caller waiting on the slowest of them makes that round several times. The
+    whole set is the unit a caller actually waits on.
+
+    `all_done` and `ready` are stated rather than left to be derived. A caller
+    that has to compare statuses itself to decide whether to go on is a caller
+    that will sometimes decide wrong, and creating the post one picture short
+    is a failure nothing downstream can see.
+    """
+    wanted = list(dict.fromkeys([*(job_ids or []), *([job_id] if job_id else [])]))
+    if not wanted:
+        raise ValueError("Name the import job to check: `job_id`, or `job_ids`.")
+    if len(wanted) > MAX_TRACKED_IMPORTS:
+        raise ValueError(
+            f"{len(wanted)} import jobs at once; {MAX_TRACKED_IMPORTS} is the "
+            "most this reports on. A post holds fewer pictures than that."
+        )
+    imports = [_import_record(one) for one in wanted]
+    return {
+        "imports": imports,
+        # In the order asked for, which for a carousel is the order the
+        # pictures swipe through - so the list can be handed straight to
+        # `create_campaign_post` once `all_done` is true.
+        "ready": [
+            entry["asset_id"] for entry in imports
+            if entry["status"] == "succeeded" and entry["asset_id"]
+        ],
+        "pending": [
+            entry["job_id"] for entry in imports
+            if entry["status"] not in {"succeeded", "failed"}
+        ],
+        "failed": [entry for entry in imports if entry["status"] == "failed"],
+        "all_done": all(
+            entry["status"] in {"succeeded", "failed"} for entry in imports
+        ),
     }
 
 

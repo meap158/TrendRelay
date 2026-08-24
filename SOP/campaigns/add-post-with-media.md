@@ -3,7 +3,7 @@ id: campaigns.add-post-with-media
 action: campaigns.add-post-with-media
 title: Add a post with media to a campaign
 summary: Upload an image into the media library and propose a draft post from Library assets into a campaign, for the operator to promote.
-version: 3
+version: 4
 tags: [campaigns, media, upload, posts]
 aliases: [upload-image, add-campaign-post, campaigns.upload-media, create-campaign-post]
 ---
@@ -73,13 +73,18 @@ carousel.
 
 - `asset_id` immediately, with `duplicate: true` - the library already holds
   this exact image; use the asset id as it is; or
-- a `job_id` - poll `get_import_status` with it until `status` is
-  `succeeded` and take the `asset_id`. A `failed` status carries the error to
-  read back to the user.
+- a `job_id` - poll `get_import_status` until the import finishes.
 
-Poll one job at a time; `get_import_status` takes a single `job_id`. Collect
-every `asset_id` before creating the post - a carousel is created once, from
-the whole set.
+**Poll the whole set at once.** Pass every job id for this post as `job_ids`
+in one call. Polling is a loop, so checking six pictures one at a time is six
+calls per round, several rounds over. Wait until `all_done` is true, then:
+
+- `ready` holds the asset ids, in the order you asked for them - which for a
+  carousel is the order they will swipe through, so it can be passed straight
+  to `create_campaign_post`.
+- `failed` holds any that did not import, each with the error to read back to
+  the user. Decide with them whether to post the rest or fix the failure
+  first; do not quietly create a carousel a picture short.
 
 ## 4. Propose the post
 

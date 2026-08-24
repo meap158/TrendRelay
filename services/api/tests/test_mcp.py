@@ -1340,3 +1340,118 @@ def test_an_assistant_can_tell_its_own_uploads_from_what_was_collected(
 
     assert by_id["a1"]["source"] == "douyin"
     assert by_id["img1"]["source"] == "mcp-upload"
+
+
+# --- waiting on a whole carousel's imports ------------------------------------
+
+
+@pytest.fixture
+def imports(monkeypatch):
+    """Stand-in job records, keyed by id, that a test can set the state of."""
+    from trendrelay_api.integrations.mcp import intake
+
+    records: dict[str, dict[str, object]] = {}
+
+    def fake_get(job_id: str):
+        if job_id not in records:
+            raise FileNotFoundError(job_id)
+        return records[job_id]
+
+    monkeypatch.setattr("trendrelay_api.jobs.get_job_record", fake_get)
+
+    def add(job_id: str, status: str, *, asset_id=None, error=None):
+        records[job_id] = {
+            "id": job_id, "status": status, "error": error,
+            "result": {"asset_id": asset_id} if asset_id else {},
+        }
+
+    add.intake = intake
+    return add
+
+
+def test_one_call_reports_on_every_picture_in_the_post(imports) -> None:
+    """Polling is a loop, so per-picture calls multiply by the number of rounds.
+
+    Six uploads polled one at a time is six calls each time round, and a
+    caller waits on the slowest of them - the whole set is the unit it is
+    actually waiting for.
+    """
+    intake = imports.intake
+    imports("j1", "succeeded", asset_id="a1")
+    imports("j2", "running")
+
+    state = intake.get_import_status(job_ids=["j1", "j2"])
+
+    assert state["ready"] == ["a1"]
+    assert state["pending"] == ["j2"]
+    assert state["all_done"] is False
+
+
+def test_the_ready_ids_come_back_in_the_order_they_were_asked_for(imports) -> None:
+    """Which for a carousel is the order they swipe through, so the list can be
+    handed straight to `create_campaign_post`."""
+    intake = imports.intake
+    for index, name in enumerate(["j3", "j1", "j2"]):
+        imports(name, "succeeded", asset_id=f"asset-{index}")
+
+    state = intake.get_import_status(job_ids=["j3", "j1", "j2"])
+
+    assert state["ready"] == ["asset-0", "asset-1", "asset-2"]
+    assert state["all_done"] is True
+
+
+def test_a_finished_set_says_so_rather_than_leaving_it_to_be_derived(
+    imports,
+) -> None:
+    """A caller that compares statuses itself will sometimes decide wrong, and
+    creating the post one picture short is a failure nothing downstream sees."""
+    intake = imports.intake
+    imports("j1", "succeeded", asset_id="a1")
+    imports("j2", "failed", error="The URL served text/html")
+
+    state = intake.get_import_status(job_ids=["j1", "j2"])
+
+    assert state["all_done"] is True, "a failure is finished, not pending"
+    assert state["pending"] == []
+    assert state["failed"][0]["error"] == "The URL served text/html"
+    assert state["ready"] == ["a1"], "the failed one contributed no asset id"
+
+
+def test_one_job_is_still_asked_for_the_old_way(imports) -> None:
+    """A single upload is the ordinary case and keeps its own argument."""
+    intake = imports.intake
+    imports("j1", "succeeded", asset_id="a1")
+
+    assert intake.get_import_status("j1")["ready"] == ["a1"]
+
+
+def test_naming_no_job_at_all_is_refused(imports) -> None:
+    intake = imports.intake
+
+    with pytest.raises(ValueError, match="job_id"):
+        intake.get_import_status()
+
+
+def test_a_job_that_does_not_exist_is_named(imports) -> None:
+    intake = imports.intake
+    imports("j1", "succeeded", asset_id="a1")
+
+    with pytest.raises(LookupError, match="ghost"):
+        intake.get_import_status(job_ids=["j1", "ghost"])
+
+
+def test_the_same_job_twice_is_reported_once(imports) -> None:
+    """A caller assembling ids from two places should not be told a picture is
+    ready twice and build a carousel with a duplicate in it."""
+    intake = imports.intake
+    imports("j1", "succeeded", asset_id="a1")
+
+    assert intake.get_import_status("j1", ["j1"])["ready"] == ["a1"]
+
+
+def test_more_imports_than_a_post_could_hold_is_refused(imports) -> None:
+    """A bound, so a stray call cannot read the whole job queue through this."""
+    intake = imports.intake
+
+    with pytest.raises(ValueError, match="most this reports on"):
+        intake.get_import_status(job_ids=[f"j{index}" for index in range(60)])

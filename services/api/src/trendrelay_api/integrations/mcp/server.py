@@ -402,14 +402,18 @@ def build_server(workspace_id: str) -> FastMCP:
     @server.tool(
         name="get_import_status",
         description=(
-            "How an upload_image import is going. Poll until status is "
-            "'succeeded' and take the asset_id; a 'failed' status carries the "
-            "error to read."
+            "How upload_image imports are going. Pass every `job_ids` for the "
+            "post at once - a carousel is several uploads and polling is a "
+            "loop, so one call a round beats one per picture. Poll until "
+            "`all_done`, then take `ready` (the asset ids, in the order asked "
+            "for); anything in `failed` carries the error to read back."
         ),
     )
-    def get_import_status(job_id: str) -> dict[str, Any]:
+    def get_import_status(
+        job_id: str | None = None, job_ids: list[str] | None = None
+    ) -> dict[str, Any]:
         _guard("get_import_status")
-        return intake.get_import_status(job_id)
+        return intake.get_import_status(job_id, job_ids)
 
     @server.tool(
         name="create_campaign_post",
