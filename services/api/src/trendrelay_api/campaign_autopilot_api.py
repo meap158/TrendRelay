@@ -41,6 +41,7 @@ from trendrelay_api.foundation import (
     require_role,
 )
 from trendrelay_api.integrations.publishing import (
+    MAX_CAROUSEL_IMAGES,
     PROVIDERS,
     cached_identity,
     carousel_fits_destination,
@@ -209,7 +210,14 @@ class QueueItemCreate(BaseModel):
     """
 
     video_path: str = Field(default="", max_length=1200)
-    image_paths: list[str] = Field(default_factory=list, max_length=20)
+    #: The widest any network here swipes through, which is TikTok's thirty-five
+    #: - not a figure of its own. What a given post may carry is narrower and
+    #: depends on where it is going, and `carousel_fits_destination` answers
+    #: that against the destinations actually chosen. A second number here only
+    #: refused packages the publisher would have taken.
+    image_paths: list[str] = Field(
+        default_factory=list, max_length=MAX_CAROUSEL_IMAGES
+    )
     #: Optional, unlike Publish's. Media chosen from the library often arrives
     #: before anybody has written its copy; `PLACEHOLDER_BODY` stands in.
     body: str = Field(default="", max_length=4000)

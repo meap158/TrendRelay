@@ -82,8 +82,12 @@ the whole set.
 
 Call `create_campaign_post` with the campaign id and the Library asset ids:
 
-- One video asset, **or** up to twenty image assets (a carousel) - never a mix.
+- One video asset, **or** several image assets (a carousel) - never a mix.
   The order of `asset_ids` is the order of the carousel.
+- How many pictures a carousel may hold is the receiving network's own figure,
+  not one number: X swipes through 4, Instagram and Facebook 10, LinkedIn 20,
+  TikTok 35. A post above a destination's limit is still created; that
+  destination is named in `carousel_warnings`.
 - Copy fields are optional: `caption`, `title`, `hashtags`, `first_comment`,
   `thread`. A post created without a caption is marked as needing copy, and
   the `campaigns.fill-needs-copy` SOP applies to it.

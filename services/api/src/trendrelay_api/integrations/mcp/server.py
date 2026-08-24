@@ -384,7 +384,11 @@ def build_server(workspace_id: str) -> FastMCP:
         name="create_campaign_post",
         description=(
             "Propose a post into a campaign from Library assets: one video "
-            "asset, or up to twenty image assets as a carousel. Copy fields "
+            "asset, or several image assets as a carousel. How many a "
+            "carousel may hold is the network's own figure - X swipes "
+            "through 4, Instagram and Facebook 10, LinkedIn 20, TikTok 35 - "
+            "and `carousel_warnings` names any destination this post "
+            "exceeds. Copy fields "
             "are optional and follow the same rules as the write_* tools - no "
             "links; the campaign adds its own. The post is created as a DRAFT "
             "outside the rotation, and only the operator can promote it in "

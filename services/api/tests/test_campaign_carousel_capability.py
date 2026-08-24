@@ -134,3 +134,30 @@ def test_a_video_post_is_not_asked_about_carousels() -> None:
     )
 
     assert problems == []
+
+
+def test_the_queue_and_the_publisher_agree_on_how_many_pictures_fit() -> None:
+    """Two ceilings, and the lower one was a magic number.
+
+    `QueueItemCreate` capped a package at twenty while the publisher accepted
+    thirty-five, so a TikTok carousel of twenty-five - which TikTok takes and
+    Zernio delivers - was refused on the way in by a limit nothing justified.
+    The real per-network figure is checked against the destinations actually
+    chosen; this is only the outer bound.
+    """
+    from trendrelay_api.campaign_autopilot_api import QueueItemCreate
+    from trendrelay_api.integrations.publishing import (
+        MAX_CAROUSEL_IMAGES,
+        PublishRequest,
+    )
+
+    queue_cap = QueueItemCreate.model_fields["image_paths"].metadata[0].max_length
+    request_cap = PublishRequest.model_fields["image_paths"].metadata[0].max_length
+
+    assert queue_cap == request_cap == MAX_CAROUSEL_IMAGES
+
+    # And the package the mismatch used to refuse now goes in.
+    package = QueueItemCreate(
+        image_paths=[rf"S:\media\{index}.png" for index in range(25)],
+    )
+    assert len(package.image_paths) == 25
