@@ -805,6 +805,47 @@ def test_zernio_carries_a_first_comment_on_the_comment_networks(
     assert "firstComment" not in by_platform["tiktok"]
 
 
+def test_zernio_threads_bluesky_with_the_root_post_first(
+    monkeypatch, media_file: Path, tmp_path: Path
+) -> None:
+    # Bluesky's follow-up is the thread itself: `threadItems` carries the whole
+    # chain with the caption as its root, replies in order, and a first comment
+    # - a network with no comment box - riding as the last post, the same
+    # reading Buffer's thread array gives it. A network Zernio cannot thread
+    # never carries the field.
+    use_provider(monkeypatch, tmp_path, "zernio")
+    sent: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):
+        sent["body"] = kwargs.get("body")
+        return {"post": {"_id": "p1", "status": "DRAFT"}}
+
+    monkeypatch.setattr(publishing, "_zernio_request", fake_request)
+    monkeypatch.setattr(publishing, "_zernio_upload", lambda video: "https://cdn/x.mp4")
+    body = request(
+        media_file,
+        caption="The short of it.",
+        thread=["The middle of it.", "The rest of it."],
+        first_comment="And where to find it.",
+        targets=[
+            publishing.PublishTarget(platform="bluesky", integration_id="a1"),
+            publishing.PublishTarget(platform="twitter", integration_id="a2"),
+        ],
+    )
+
+    publishing._zernio_publish(body, media_file)
+
+    by_platform = {
+        entry["platform"]: entry.get("platformSpecificData", {})
+        for entry in sent["body"]["platforms"]
+    }
+    assert by_platform["bluesky"]["threadItems"] == [
+        "The short of it.", "The middle of it.", "The rest of it.",
+        "And where to find it.",
+    ]
+    assert "threadItems" not in by_platform["twitter"]
+
+
 def test_the_dry_run_names_the_post_type_for_every_destination(media_file: Path) -> None:
     body = request(
         media_file,

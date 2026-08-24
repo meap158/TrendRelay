@@ -188,9 +188,10 @@ def capability_matrix() -> dict[str, Any]:
             (
                 "Text after a post needs an engine that reaches it. Buffer and "
                 "Zernio both post a first comment on Instagram, Facebook and "
-                "LinkedIn; only Buffer also posts a reply in a thread. On Buffer "
-                "a first comment additionally depends on the plan the account is "
-                "on; Zernio gates nothing."
+                "LinkedIn. Buffer posts a reply in a thread on all four reply "
+                "networks; Zernio threads on Bluesky only. On Buffer a first "
+                "comment additionally depends on the plan the account is on; "
+                "Zernio gates nothing."
             ),
             (
                 "Where a link is clickable is the network's decision. On "

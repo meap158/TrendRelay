@@ -112,8 +112,11 @@ def test_two_engines_carry_text_after_a_post_and_only_one_reaches_threads() -> N
     assert carriers == {"buffer", "zernio"}
     # A comment network is reached by both engines...
     assert set(found["instagram"]["follow_up_engines"]) == {"buffer", "zernio"}
-    # ...while a thread network is Buffer's alone: Zernio has no thread endpoint.
+    # ...Bluesky's thread is reached by both - Zernio's `threadItems` takes the
+    # whole chain there - while the other reply networks stay Buffer's alone.
+    assert set(found["bluesky"]["follow_up_engines"]) == {"buffer", "zernio"}
     assert found["threads"]["follow_up_engines"] == ["buffer"]
+    assert found["mastodon"]["follow_up_engines"] == ["buffer"]
 
 
 def test_an_engine_that_cannot_fetch_a_url_says_so() -> None:

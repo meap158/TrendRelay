@@ -498,9 +498,11 @@ POST_TYPES: dict[str, tuple[PostType, ...]] = {
 # which of Buffer's fields carries it.
 #
 # Zernio carries the same first comment on the three comment networks, through a
-# per-platform `firstComment` field of its own, but has no thread array - so its
-# reach is those three and not the four reply networks. `first_comment_deliverable`
-# is where that split lives; everything downstream reads it rather than an engine id.
+# per-platform `firstComment` field of its own, and a thread on exactly one of
+# the reply networks: Bluesky's `threadItems` takes the whole chain, root post
+# first. X, Threads and Mastodon through Zernio still take no follow-up.
+# `first_comment_deliverable` is where that split lives; everything downstream
+# reads it rather than an engine id.
 
 #: Buffer's schema declares a thread array on exactly these four networks. A
 #: thread is one post per reply, so each part is measured against the network's
@@ -513,6 +515,11 @@ MAX_THREAD_PARTS = 25
 #: first comment keep them out of the caption while still counting for reach,
 #: which is why anyone wants this.
 FIRST_COMMENT_PLATFORMS = frozenset({"instagram", "facebook", "linkedin"})
+
+#: The one reply network Zernio can thread on. Its `threadItems` takes the
+#: whole chain - the root post first, each item within Bluesky's 300
+#: characters - and no such field exists for X, Threads or Mastodon there.
+ZERNIO_THREAD_PLATFORMS = frozenset({"bluesky"})
 
 #: Every network where a follow-up can be delivered at all, by either field.
 FOLLOW_UP_PLATFORMS = FIRST_COMMENT_PLATFORMS | THREAD_PLATFORMS
@@ -539,9 +546,10 @@ def first_comment_deliverable(provider: str | None, platform: str | None) -> boo
 
     Two engines reach it, and not the same networks. Buffer carries both fields,
     so it delivers on every follow-up network. Zernio has a `firstComment` per
-    platform on the three comment networks but no thread endpoint, so its reach
-    stops at those three - a reply network routed through Zernio has nowhere to
-    put the follow-up.
+    platform on the three comment networks, and a thread on exactly one reply
+    network: Bluesky, whose `platformSpecificData.threadItems` takes the whole
+    chain with the root post as its first item. The other reply networks
+    routed through Zernio still have nowhere to put a follow-up.
 
     The other two carry no follow-up on the publish request, checked against
     their docs on 2026-08-23. WoopSocial's create endpoint has no such field.
@@ -553,7 +561,7 @@ def first_comment_deliverable(provider: str | None, platform: str | None) -> boo
     if provider == "buffer":
         return platform in FOLLOW_UP_PLATFORMS
     if provider == "zernio":
-        return platform in FIRST_COMMENT_PLATFORMS
+        return platform in FIRST_COMMENT_PLATFORMS or platform in ZERNIO_THREAD_PLATFORMS
     return False
 
 # YouTube requires a category on create. 22 is People & Blogs, the general
@@ -1786,12 +1794,22 @@ def _zernio_publish(
             specific["boardId"] = request.board
             specific["title"] = _post_title(request)[:100]
         # Zernio carries the follow-up on the comment networks as a per-platform
-        # `firstComment`, the same field its own composer writes into. It is the
-        # only follow-up Zernio has - there is no thread endpoint - so it is set
-        # only for the three networks that take a comment, and Zernio skips it on
-        # a draft, delivering it when the post itself goes out.
+        # `firstComment`, the same field its own composer writes into - set only
+        # for the three networks that take a comment, and skipped by Zernio on
+        # a draft, delivered when the post itself goes out.
         if target.platform in FIRST_COMMENT_PLATFORMS and request.first_comment:
             specific["firstComment"] = request.first_comment
+        # On Bluesky the follow-up is the thread itself: `threadItems` is the
+        # whole chain with the root post first, so the caption leads and the
+        # replies follow in order - a first comment written for a network with
+        # no comment box rides as the next post, the same reading Buffer's
+        # thread array gives it.
+        if target.platform in ZERNIO_THREAD_PLATFORMS:
+            following = [*(request.thread or [])]
+            if request.first_comment:
+                following.append(request.first_comment)
+            if following:
+                specific["threadItems"] = [request.caption, *following]
         if specific:
             entry["platformSpecificData"] = specific
         post["platforms"].append(entry)
