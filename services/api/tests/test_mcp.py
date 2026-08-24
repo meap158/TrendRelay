@@ -1455,3 +1455,72 @@ def test_more_imports_than_a_post_could_hold_is_refused(imports) -> None:
 
     with pytest.raises(ValueError, match="most this reports on"):
         intake.get_import_status(job_ids=[f"j{index}" for index in range(60)])
+
+
+# --- the whole road, as an outside assistant walks it -------------------------
+
+
+def test_pictures_become_a_publishable_carousel_without_a_path_being_spoken(
+    session, imports,
+) -> None:
+    """The journey this boundary exists for, end to end.
+
+    An assistant is told "put these in the launch campaign as a carousel". It
+    chooses the campaign knowing whether one will fit, uploads what is new,
+    waits on the set, finds what was already there, and proposes the post -
+    naming media by asset id at every step, because a path is never handed to
+    it and `create_campaign_post` would not take one.
+
+    Each leg is covered on its own above. This pins that they compose: the ids
+    one step returns are the ids the next step accepts, in the order given.
+    """
+    from datetime import UTC, datetime
+
+    from trendrelay_api.campaign_runner import _post_type_for
+    from trendrelay_api.integrations.mcp import context
+    from trendrelay_api.integrations.publishing import PublishRequest
+
+    intake = imports.intake
+    _destination(session, "d2", "tiktok", "zernio")
+
+    # 1. Which campaign can hold a carousel at all.
+    listed = {row["campaign_id"]: row for row in context.list_campaigns(session, "ws")}
+    assert listed["camp"]["accepts_carousel"] is True
+
+    # 2. One picture was uploaded; the other the operator already had.
+    imports("job-new", "succeeded", asset_id="img1")
+    waited = intake.get_import_status(job_ids=["job-new"])
+    assert waited["all_done"] and waited["ready"] == ["img1"]
+    _image_asset(session, "img1", r"S:\media\new.png")
+    _image_asset(session, "img2", r"S:\media\already-here.png")
+
+    # 3. Found by title, not by knowing where it lives on disk.
+    found = intake.list_library_assets(session, "ws", kind="image")
+    assert {row["asset_id"] for row in found["assets"]} == {"img1", "img2"}
+    assert all("path" not in key for row in found["assets"] for key in row)
+
+    # 4. Proposed, in the order chosen.
+    view = intake.create_campaign_post(
+        session, "ws", "camp", ["img2", "img1"], caption="Two ways to wear it",
+    )
+    assert view["image_paths"] == [r"S:\media\already-here.png", r"S:\media\new.png"]
+    assert any("Buffer" in note for note in view["carousel_warnings"]), \
+        "the Threads account that cannot carry it went unmentioned"
+    assert "TikTok" in view["note"]
+
+    # 5. And the runner can actually send it, which is where this used to end.
+    execution = SimpleNamespace(
+        image_paths=view["image_paths"], platform="tiktok", post_type="video",
+    )
+    request = PublishRequest(
+        workspace_id="ws",
+        image_paths=view["image_paths"],
+        caption="Two ways to wear it",
+        date=datetime.now(UTC),
+        targets=[{
+            "platform": "tiktok", "integration_id": "acct-2",
+            "post_type": _post_type_for(execution), "provider": "zernio",
+        }],
+        confirm_external_action=True,
+    )
+    assert request.image_paths == view["image_paths"]
