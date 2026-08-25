@@ -4025,7 +4025,7 @@ export default function PublishPage() {
                 </div>
               </div>
               <PostPreview
-                width={previewWidth
+                width={previewWidth}
                 platform={previewPlatform}
                 postTypeLabel={previewType?.label ?? "Post"}
                 handle={previewHandle}
