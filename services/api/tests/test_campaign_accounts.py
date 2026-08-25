@@ -67,6 +67,16 @@ def test_every_recommendation_carries_its_reasons(session) -> None:
     assert any("No measured history" in reason for reason in row["reasons"])
 
 
+def test_recommendations_offer_compact_video_format_defaults(session) -> None:
+    result = recommend_accounts(session, pilot(session), inventory={
+        "accounts": [account("a1", "instagram")], "engines": [],
+    })
+
+    assert [kind["id"] for kind in result["accounts"][0]["post_types"]] == [
+        "reel", "story", "post",
+    ]
+
+
 def test_a_bio_network_says_where_its_link_actually_lives(session) -> None:
     result = recommend_accounts(session, pilot(session), inventory={
         "accounts": [account("a1", "tiktok")], "engines": [],
@@ -160,3 +170,68 @@ def test_a_non_commercial_campaign_skips_link_policy_noise(session) -> None:
 
     [row] = result["accounts"]
     assert not any("bio link" in reason for reason in row["reasons"])
+
+
+# --- what happens to a post that is not a video ---------------------------------
+
+
+def test_an_account_that_posts_carousels_says_so(session) -> None:
+    """`photo` is filtered out of the format list on purpose - a carousel is
+    decided per post from its media, never as a standing account default,
+    because a destination set to it would break every video in the same queue.
+
+    That left the picker unable to see the capability at all. TikTok has
+    exactly one standing default, so the dialog reported "one format" on a
+    network that publishes carousels - which reads as "no carousels here".
+    """
+    result = recommend_accounts(session, pilot(session), inventory={
+        "accounts": [account("a1", "tiktok", provider="zernio")], "engines": [],
+    })
+
+    [row] = result["accounts"]
+    assert [kind["id"] for kind in row["post_types"]] == ["video"]
+    assert row["photo_automatic"] is True
+
+
+def test_an_engine_that_sends_no_gallery_does_not_claim_one(session) -> None:
+    """The same mistake pointed the other way. Buffer reaches TikTok and posts
+    no carousel to it, so promising one would be a lie the operator only finds
+    out about when a post fails."""
+    result = recommend_accounts(session, pilot(session), inventory={
+        "accounts": [account("a1", "tiktok", provider="buffer")], "engines": [],
+    })
+
+    assert result["accounts"][0]["photo_automatic"] is False
+
+
+def test_a_network_with_no_photo_format_makes_no_claim_either(session) -> None:
+    """Facebook takes several pictures on an ordinary feed post rather than as
+    a separately named format, so there is nothing here to explain."""
+    result = recommend_accounts(session, pilot(session), inventory={
+        "accounts": [account("a1", "facebook", provider="zernio")], "engines": [],
+    })
+
+    assert result["accounts"][0]["photo_automatic"] is False
+
+
+def test_the_claim_matches_what_the_runner_would_actually_send(session) -> None:
+    """The picker's promise and the runner's behaviour are two statements about
+    one thing, so they are checked against each other rather than separately."""
+    from types import SimpleNamespace
+
+    from trendrelay_api.campaign_runner import _post_type_for
+
+    result = recommend_accounts(session, pilot(session), inventory={
+        "accounts": [
+            account("a1", "tiktok", provider="zernio"),
+            account("a2", "facebook", provider="zernio"),
+        ],
+        "engines": [],
+    })
+
+    for row in result["accounts"]:
+        sent = _post_type_for(SimpleNamespace(
+            image_paths=[r"S:\media\one.png"], platform=row["platform"],
+            post_type="video",
+        ))
+        assert (sent == "photo") is row["photo_automatic"], row["platform"]

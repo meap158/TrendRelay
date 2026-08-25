@@ -117,6 +117,15 @@ type Account = {
   unavailable_reason?: string | null;
   page_key?: string;
   post_types?: { id: string; label: string; help: string }[];
+  /**
+   * Whether a post carrying pictures goes out here as a carousel on its own.
+   *
+   * Not in `post_types`: a carousel is decided per post by its media, never as
+   * a standing account default, so it is a fact about the account rather than
+   * an option to pick. True only where the network has the format and this
+   * engine can actually carry a gallery to it.
+   */
+  photo_automatic?: boolean;
 };
 
 /** An engine as the inventory reports it, for saying why accounts are absent. */
@@ -5391,12 +5400,24 @@ export function AutopilotPanel({
                             ) : null}
                           </span>
                         </label>
-                        {/* One format is not a choice, and showing nothing at
-                            all made it look like the control had failed to
-                            appear - the first question asked of this dialog
-                            was why TikTok had no post types. It has one, so it
-                            is stated rather than offered. */}
+                        {/* What this account does with a post that is not a
+                            video, which the format list cannot say: `photo` is
+                            filtered out of it because a carousel is not a
+                            standing default - a destination set to it would
+                            break every video in the same queue. The campaign
+                            picks it per post instead, from the media.
+
+                            Saying "one format" here instead was worse than
+                            saying nothing: on TikTok, which has exactly one
+                            standing default and publishes carousels, it read
+                            as "no carousels here". */}
+                        {selectedAccounts.has(key) && account.photo_automatic && (
+                          <p className="campaign-account-one-format">
+                            {t("autopilot.carouselAutomatic")}
+                          </p>
+                        )}
                         {selectedAccounts.has(key)
+                          && !account.photo_automatic
                           && (account.post_types?.length ?? 0) === 1 && (
                           <p className="campaign-account-one-format">
                             {t("autopilot.onlyFormat", {

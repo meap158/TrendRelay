@@ -716,6 +716,7 @@ export const ar: Messages = {
     enginesUnreadable: "لا توفّر حسابات حاليًا: {engines}. اضبطها من شاشة Publish.",
     allAccountsAdded: "جميع الحسابات المتصلة موجودة بالفعل في هذه الحملة.",
     onlyFormat: "‏{format} فقط — لهذه الشبكة تنسيق واحد",
+    carouselAutomatic: "تُنشر الصور هنا كدوّارة، ويُحدَّد ذلك لكل منشور حسب وسائطه.",
   },
   campaigns: {
     loading: "جارٍ تحميل الحملات…",

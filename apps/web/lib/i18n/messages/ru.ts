@@ -726,6 +726,7 @@ export const ru: Messages = {
     enginesUnreadable: "Сейчас не предоставляют аккаунты: {engines}. Настройте их на экране Publish.",
     allAccountsAdded: "Все подключённые аккаунты уже в этой кампании.",
     onlyFormat: "Только {format} — у этой сети один формат",
+    carouselAutomatic: "Изображения выходят здесь каруселью — это решается для каждого поста по его медиа.",
   },
   campaigns: {
     loading: "Загружаем кампании…",

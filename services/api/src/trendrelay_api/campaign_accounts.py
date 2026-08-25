@@ -18,6 +18,10 @@ from sqlalchemy.orm import Session
 from trendrelay_api.autopilot_models import CampaignAutopilot, CampaignDestination
 from trendrelay_api.campaign_autopilot import resolve_placement
 from trendrelay_api.campaign_scheduler import _performance
+from trendrelay_api.integrations.publishing import (
+    carousel_fits_destination,
+    post_types_for,
+)
 
 #: Below this many settled conversions a destination is not ranked, only
 #: explored - the same threshold the scheduler's ranking refuses to print a
@@ -146,6 +150,34 @@ def recommend_accounts(
             "link_placement": placement.placement,
             "confidence": confidence,
             "reasons": reasons,
+            # The Campaign picker uses the same provider-filtered catalogue as
+            # Publish. Photo is media-specific rather than a standing account
+            # default, so it is chosen by an image post, not here.
+            "post_types": [
+                {"id": kind.id, "label": kind.label, "help": kind.help}
+                for kind in post_types_for(str(account.get("platform") or ""))
+                if kind.id != "photo"
+            ],
+            # ...and because it is filtered out above, the picker cannot see
+            # that this account posts carousels at all. TikTok has exactly one
+            # standing default, so the dialog reported "one format" - which
+            # reads as "no carousels here" on a network that publishes them.
+            #
+            # True only where the network has the type *and* this engine can
+            # actually carry a gallery to it. Saying pictures become a carousel
+            # on an engine that sends none would be the same mistake pointed
+            # the other way. `campaign_runner._post_type_for` is what does it.
+            "photo_automatic": bool(
+                any(
+                    kind.id == "photo"
+                    for kind in post_types_for(str(account.get("platform") or ""))
+                )
+                and carousel_fits_destination(
+                    str(account.get("provider") or ""),
+                    str(account.get("platform") or ""),
+                    1,
+                )[0]
+            ),
         })
 
     # Strongest case first: deliverable, then measured, then by evidence size.

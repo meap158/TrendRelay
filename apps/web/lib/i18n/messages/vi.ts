@@ -719,6 +719,7 @@ export const vi: Messages = {
     enginesUnreadable: "Hiện chưa cung cấp tài khoản: {engines}. Thiết lập ở màn hình Publish.",
     allAccountsAdded: "Mọi tài khoản đã kết nối đều đã có trong chiến dịch này.",
     onlyFormat: "Chỉ {format} — nền tảng này chỉ có một định dạng",
+    carouselAutomatic: "Ảnh sẽ đăng ở đây dạng carousel, tự chọn theo media của từng bài.",
   },
   campaigns: {
     loading: "Đang tải chiến dịch…",

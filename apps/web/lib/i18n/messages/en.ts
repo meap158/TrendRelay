@@ -723,6 +723,7 @@ export const en = {
     enginesUnreadable: "Not offering accounts right now: {engines}. Set them up on the Publish screen.",
     allAccountsAdded: "Every connected account is already in this campaign.",
     onlyFormat: "{format} only — this network has one format",
+    carouselAutomatic: "Pictures go out here as a carousel, chosen per post from its media.",
   },
   campaigns: {
     loading: "Loading campaigns…",

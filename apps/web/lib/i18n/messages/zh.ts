@@ -708,6 +708,7 @@ export const zh: Messages = {
     enginesUnreadable: "当前未提供账号：{engines}。请在 Publish 页面进行设置。",
     allAccountsAdded: "所有已连接的账号都已加入本活动。",
     onlyFormat: "仅 {format} — 该平台只有一种格式",
+    carouselAutomatic: "图片在这里会以轮播形式发布，按每条帖子的媒体自动决定。",
   },
   campaigns: {
     loading: "正在加载广告系列…",
