@@ -10,6 +10,11 @@ from sqlalchemy.pool import StaticPool
 from trendrelay_api.integrations import publishing
 from trendrelay_api.models import Base
 
+# Registers every table on Base.metadata - the publication plan carries a
+# foreign key to product_offers, and a metadata that has seen only this
+# module's imports cannot resolve it when the job fixture creates tables.
+import trendrelay_api.main  # noqa: E402,F401  isort:skip
+
 
 @pytest.fixture(autouse=True)
 def engines_only(monkeypatch):
