@@ -614,6 +614,46 @@ nav strong { color: var(--text); }
    tall vertical from pushing everything below it off the screen. */
 .post-preview-frame { display: grid; place-items: center; justify-self: center; max-inline-size: 100%; aspect-ratio: var(--preview-ratio, 4 / 5); max-block-size: min(56vh, 440px); border-radius: var(--radius); background: var(--panel-raised); overflow: hidden; }
 .post-preview.story .post-preview-frame { --preview-ratio: 9 / 16; }
+
+/* The surface's own furniture, over the media.
+
+   Absolutely placed inside the frame rather than laid out around it: on
+   these surfaces the account, the caption and the actions float on the
+   video, and where they sit is exactly what somebody is checking when they
+   ask whether a long caption will clear the buttons. */
+.preview-surface { position: absolute; inset: 0; display: grid; grid-template-rows: 1fr auto; pointer-events: none; }
+/* A wash under the bottom half only. The furniture is white and the video
+   underneath it is whatever it is; without this a pale frame swallows the
+   handle and the caption, which is the one thing this is drawn to show. */
+.preview-surface::after { content: ""; position: absolute; inset: 45% 0 0; background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, .55)); }
+.preview-surface > * { position: relative; z-index: 1; }
+
+/* Down the right, in the order every one of these networks uses: react,
+   reply, send on, keep, more. */
+.preview-surface-rail { display: grid; gap: 14px; justify-items: center; align-content: end; justify-self: end; grid-row: 1 / -1; padding: 0 10px 74px; color: var(--on-media); filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .5)); }
+
+.preview-surface-foot { display: grid; gap: 4px; padding: 0 46px 10px 12px; color: var(--on-media); text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
+.preview-surface-who { display: flex; gap: 6px; align-items: center; font-size: 12px; font-weight: 600; }
+/* A ring where the network puts a photograph. The engines report a handle
+   and no picture, so this carries the platform rather than pretending to
+   an avatar nobody supplied. */
+.preview-surface-who i { display: grid; place-items: center; inline-size: 22px; block-size: 22px; border: 1px solid rgba(255, 255, 255, .8); border-radius: 999px; background: rgba(0, 0, 0, .35); }
+/* Two lines, like the real one: past that a caption is behind a More. */
+.preview-surface-caption { display: -webkit-box; overflow: hidden; margin: 0; font-size: 11px; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.preview-surface-audio { display: flex; gap: 5px; align-items: center; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+
+/* How each width frames a full-bleed surface.
+
+   On a phone a Reel is the screen: edge to edge, no corners. On a desktop it
+   is a player centred in a page, inset and rounded. Both references show
+   exactly that, and it is the whole visible difference between the two
+   modes on these surfaces - so the toggle changes what it says it does. */
+.post-preview[data-width="mobile"]:has(.preview-surface) .post-preview-frame { inline-size: 100%; border-radius: 0; }
+.post-preview[data-width="mobile"]:has(.preview-surface) { padding: 0; overflow: hidden; }
+.post-preview[data-width="mobile"]:has(.preview-surface) figcaption,
+.post-preview[data-width="mobile"]:has(.preview-surface) .post-preview-copy { padding-inline: 12px; }
+.post-preview[data-width="mobile"]:has(.preview-surface) figcaption { padding-block-start: 12px; }
+.post-preview[data-width="desktop"]:has(.preview-surface) .post-preview-frame { border-radius: var(--radius-lg); }
 .post-preview-frame { position: relative; }
 /* Contain, like the video below it. The frame is already the media's own
    shape, so there is nothing to crop away - and cropping here hid the

@@ -1,7 +1,16 @@
 "use client";
 
 import { zonedInstant, zonedParts } from "../../lib/schedule-time";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Bookmark,
+  ChevronLeft,
+  ChevronRight,
+  Heart,
+  MessageCircle,
+  MoreHorizontal,
+  Music2,
+  Send,
+} from "lucide-react";
 import { clipLength, fileName, handoffPath, isBlurred } from "../../lib/media-rules";
 import { apiBaseUrl } from "../../lib/api";
 import {
@@ -424,6 +433,18 @@ export function PostPreview({
 }) {
   const t = useT();
   const story = postTypeLabel.toLowerCase() === "story";
+  /**
+   * Whether this surface puts its own controls over the media.
+   *
+   * A Reel, a Story and a TikTok are read full-bleed with the account, the
+   * caption and the action rail floating on top of the video. A feed post is
+   * not: the picture sits in a card and the caption is under it. Drawing the
+   * rail on both would make a Facebook post look like something it is not.
+   */
+  const overlaid = story
+    || platform === "tiktok"
+    || postTypeLabel.toLowerCase().includes("reel")
+    || postTypeLabel.toLowerCase().includes("short");
   // Which frame the preview is showing. A carousel is swiped, so the question
   // "does this read" is asked of each one, not only of the cover.
   const [frame, setFrame] = useState(0);
@@ -507,6 +528,43 @@ export function PostPreview({
           <p>{wantsCarousel
             ? t("composer.choosePicturesForFrames")
             : t("composer.chooseClipForFrame")}</p>
+        )}
+        {/* The surface's own furniture, over the media the way the network
+            draws it: who posted, what they said, and the rail of actions down
+            the side. Without it a 9:16 clip previews as a bare video and the
+            question "will the caption clear the buttons" cannot be asked.
+
+            The actions carry no counts. Every number here would be invented -
+            this post has not been published and has no engagement - and a
+            preview that shows "17.3K" is a preview somebody can misread as a
+            forecast. The shapes are what make it legible as Instagram; the
+            figures would only make it a lie. */}
+        {overlaid && showing && (
+          <div className="preview-surface" aria-hidden="true">
+            <div className="preview-surface-rail">
+              <Heart size={20} />
+              <MessageCircle size={20} />
+              <Send size={20} />
+              <Bookmark size={20} />
+              <MoreHorizontal size={18} />
+            </div>
+            {!story && (
+              <div className="preview-surface-foot">
+                <span className="preview-surface-who">
+                  {/* The engines report a handle and no picture, so the circle
+                      carries the platform rather than pretending to a photo
+                      nobody supplied. */}
+                  <i><PlatformIcon platform={platform} size={13} /></i>
+                  <b>{handle || "your account"}</b>
+                </span>
+                {caption && <p className="preview-surface-caption">{caption}</p>}
+                <span className="preview-surface-audio">
+                  <Music2 size={11} />
+                  {handle || "your account"} · Original audio
+                </span>
+              </div>
+            )}
+          </div>
         )}
         {neighbours.map((source) => (
           // eslint-disable-next-line @next/next/no-img-element

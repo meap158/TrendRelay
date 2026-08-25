@@ -45,6 +45,13 @@
    * Written without naming those tokens followed by a colon - inside a
    * comment that still reads as a declaration to anything scanning for one. */
   --muted-soft: #7c8792;
+  /* Text and icons drawn over somebody's video.
+   *
+   * White in both themes, deliberately: the ground is the footage, not the
+   * page, and every network draws this furniture white whatever the reader's
+   * theme is. A token that flipped with the theme would put black text on a
+   * dark clip. Paired with a wash underneath rather than trusted alone. */
+  --on-media: #ffffff;
   /* The mid green, for a border beside --green-dark's fill. */
   --green-line: #b7d9cd;
   /* A filled bar that is not advancing: a job whose worker went away. Lighter
