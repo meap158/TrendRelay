@@ -51,6 +51,7 @@ MEDIA_AI_TOOLS = {
     "faster-whisper": ("speech", "speech"),
     "rapidocr": ("ocr", "ocr"),
     "argos-translate": ("translate", "translation"),
+    "fastembed": ("vision", "vision"),
 }
 
 
@@ -81,6 +82,17 @@ def _media_ai_report(tool_id: str, prerequisites: list[dict[str, str]]) -> dict[
                 "Transcription runs entirely offline from here."
                 if status["model_cached"]
                 else "Fetched once; after that nothing leaves the machine during analysis.",
+            )
+        )
+    if provider == "vision":
+        requirements.append(
+            _requirement(
+                "model",
+                "CLIP models cached",
+                "ready" if status["model_cached"] else "setup-required",
+                "Content recognition runs entirely offline from here."
+                if status["model_cached"]
+                else "Both halves of CLIP are fetched once, about a third of a gigabyte.",
             )
         )
     if provider == "translate":

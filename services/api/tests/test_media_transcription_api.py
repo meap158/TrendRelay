@@ -653,3 +653,83 @@ def test_a_job_queued_on_its_own_carries_no_batch(tmp_path, monkeypatch) -> None
     )).json()["job"]
 
     assert "batch" not in (job.get("payload") or {})
+
+
+def test_the_third_reading_recognises_what_the_clip_shows(tmp_path, monkeypatch) -> None:
+    """Vision rides the same rails as speech and OCR: queued the same way,
+    drafted the same way, reviewed the same way."""
+    workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)
+    ready = {
+        **READY,
+        "vision": {"ready": True, "prepared": True, "provider": "fastembed 0.8.0"},
+    }
+    monkeypatch.setattr(media_ai, "provider_status", lambda: ready)
+    monkeypatch.setattr(
+        media_ai,
+        "VISION_RUNNER",
+        lambda asset, source, work: {
+            "language": "en",
+            "provider": "fastembed@0.8.0:clip-vit-b-32",
+            "text": "a dog, a park or garden",
+            "segments": [
+                {
+                    "timestamp_ms": 0,
+                    "labels": [{"label": "a dog", "category": "subject", "score": 0.31}],
+                }
+            ],
+        },
+    )
+    queued = asyncio.run(
+        request(
+            "POST",
+            f"/api/workspaces/{workspace_id}/media/library/assets/{asset_id}/transcription",
+            json={"modes": ["vision"]},
+        )
+    )
+    assert queued.status_code == 202, queued.text
+
+    media_ai.run_enrichment_job(queued.json()["job"]["id"], factory=TestingSession)
+
+    with TestingSession() as session:
+        transcript = session.scalar(
+            select(MediaTranscript).where(
+                MediaTranscript.asset_id == asset_id, MediaTranscript.kind == "vision"
+            )
+        )
+    assert transcript is not None
+    assert transcript.status == "machine", "a recognition is a draft, not a fact"
+    assert transcript.text == "a dog, a park or garden"
+    assert transcript.segments[0]["labels"][0]["label"] == "a dog"
+
+
+def test_an_extended_vocabulary_is_a_new_reading_not_the_stale_one(
+    tmp_path, monkeypatch
+) -> None:
+    """The job is content-addressed; the vocabulary is part of the content."""
+    from trendrelay_api import media_vision
+
+    workspace_id, asset_id = workspace_with_asset(tmp_path, monkeypatch)
+
+    first = media_ai.create_enrichment_job(
+        workspace_id=workspace_id,
+        asset_id=asset_id,
+        actor_user_id="library-owner",
+        modes=["vision"],
+        language=None,
+        factory=TestingSession,
+    )
+    monkeypatch.setattr(
+        media_vision,
+        "VOCABULARY",
+        (*media_vision.VOCABULARY, ("a hot air balloon", "subject")),
+    )
+    second = media_ai.create_enrichment_job(
+        workspace_id=workspace_id,
+        asset_id=asset_id,
+        actor_user_id="library-owner",
+        modes=["vision"],
+        language=None,
+        factory=TestingSession,
+    )
+
+    assert first["id"] != second["id"]

@@ -49,12 +49,20 @@ SPEECH_PACKAGE = "faster-whisper"
 SPEECH_VERSION = "1.2.1"
 OCR_PACKAGE = "rapidocr"
 OCR_VERSION = "3.9.2"
+# The vision reader's own constants live in `media_vision`; the version is
+# quoted here because the package lists and status page below name every
+# provider side by side.
+from trendrelay_api.media_vision import (  # noqa: E402
+    VISION_VERSION,
+    vision_draft,
+    vocabulary_digest as _vision_vocabulary_digest,
+)
 ONNX_VERSION = "1.28.0"
 #: Shares the CTranslate2 runtime faster-whisper already installs, so this is a
 #: package rather than a second stack. Language pairs arrive separately.
 TRANSLATE_PACKAGE = "argostranslate"
 TRANSLATE_VERSION = "1.11.0"
-Mode = Literal["speech", "ocr"]
+Mode = Literal["speech", "ocr", "vision"]
 
 
 def _runtime_path() -> None:
@@ -146,6 +154,7 @@ PROVIDER_MODULES: dict[str, tuple[str, ...]] = {
     "speech": ("faster_whisper",),
     "ocr": ("rapidocr", "onnxruntime"),
     "translate": ("argostranslate",),
+    "vision": ("fastembed", "onnxruntime"),
 }
 
 
@@ -188,6 +197,10 @@ def provider_status(*, speech_provider: str | None = None) -> dict[str, Any]:
     speech_runtime = runtime_ready("speech")
     ocr_runtime = runtime_ready("ocr")
     translate_runtime = runtime_ready("translate")
+    vision_runtime = runtime_ready("vision")
+    from trendrelay_api.media_vision import models_cached as _vision_models_cached
+
+    vision_models = _vision_models_cached()
     translation_pairs = _translation_pairs() if translate_runtime else []
     local_speech = {
         "provider": f"faster-whisper {SPEECH_VERSION}",
@@ -236,6 +249,16 @@ def provider_status(*, speech_provider: str | None = None) -> dict[str, Any]:
             "runtime_ready": ocr_runtime,
             "prepared": ocr_runtime,
             "ready": bool(active.get("rapidocr", False) and ocr_runtime),
+            "network_during_analysis": False,
+        },
+        "vision": {
+            "provider": f"fastembed {VISION_VERSION} / CLIP ViT-B-32",
+            "tool_id": PROVIDER_TOOL["vision"],
+            "source_active": active.get("fastembed", False),
+            "runtime_ready": vision_runtime,
+            "model_cached": vision_models,
+            "prepared": bool(vision_runtime and vision_models),
+            "ready": bool(active.get("fastembed", False) and vision_runtime and vision_models),
             "network_during_analysis": False,
         },
         "translation": {
@@ -297,6 +320,7 @@ PROVIDER_TOOL: dict[str, str] = {
     "speech": "faster-whisper",
     "ocr": "rapidocr",
     "translate": "argos-translate",
+    "vision": "fastembed",
 }
 
 #: Pinned to the same versions `provider_status` reports, so what the page says
@@ -305,7 +329,20 @@ PROVIDER_PACKAGES: dict[str, tuple[str, ...]] = {
     "speech": (f"faster-whisper=={SPEECH_VERSION}",),
     "ocr": (f"rapidocr=={OCR_VERSION}", f"onnxruntime=={ONNX_VERSION}"),
     "translate": (f"argostranslate=={TRANSLATE_VERSION}",),
+    "vision": (f"fastembed=={VISION_VERSION}",),
 }
+
+#: What the vision reader needs when its dependencies cannot be resolved
+#: normally - see `_prepare_vision`. Everything else it imports (onnxruntime,
+#: numpy, pillow, tokenizers, huggingface-hub, requests) is already in the
+#: runtime once speech or OCR has been prepared.
+VISION_OWN_PACKAGES: tuple[str, ...] = (
+    f"fastembed=={VISION_VERSION}",
+    "loguru",
+    "mmh3",
+    "py_rust_stemmers",
+    "win32_setctime",
+)
 
 #: What transcribing on the GPU needs beyond faster-whisper itself.
 #:
@@ -341,13 +378,19 @@ DEFAULT_TRANSLATION_PAIRS: tuple[tuple[str, str], ...] = (
 )
 
 
-def pip_install(packages: tuple[str, ...] | list[str]) -> None:
+def pip_install(packages: tuple[str, ...] | list[str], *, no_deps: bool = False) -> None:
     """Packages into the isolated runtime, never into the API's own environment.
 
     `--target` rather than a virtual environment because the API already adds
     this directory to `sys.path` on demand: a provider the operator never
     prepared costs nothing, and one they did is importable without a second
     interpreter to keep in step with this one.
+
+    `no_deps` exists for the case where a dependency is already in the runtime
+    *and in use*: `--target` reinstalls dependencies unconditionally, and on
+    Windows rewriting a loaded `.pyd` is denied - so preparing one provider
+    while another is mid-analysis failed on a file it had no need to touch.
+    The caller then names exactly what is missing instead.
     """
     RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
     completed = subprocess.run(
@@ -359,6 +402,7 @@ def pip_install(packages: tuple[str, ...] | list[str]) -> None:
             "--upgrade",
             "--target",
             str(RUNTIME_ROOT),
+            *(["--no-deps"] if no_deps else []),
             *packages,
         ],
         cwd=PROJECT_ROOT,
@@ -697,10 +741,28 @@ def _install_translation_packages(package: Any, stage: Any = None) -> list[str]:
     return skipped
 
 
+def _prepare_vision(stage: Any = None) -> list[str]:
+    _runtime_path()
+    if importlib.util.find_spec("fastembed") is None:
+        raise RuntimeError("fastembed was downloaded but cannot be imported.")
+    report = stage or (lambda fraction, label: None)
+    from trendrelay_api import media_vision
+
+    report(0.05, "Downloading the CLIP models")
+    media_vision.download_models()
+    # Embedding the vocabulary here rather than on the first clip: it is the
+    # last thing that can fail, and setup is where failure has a progress bar
+    # and a retry button instead of a stuck enrichment job.
+    report(0.9, "Reading the vocabulary")
+    media_vision._label_matrix()
+    return []
+
+
 PROVIDER_PREPARE = {
     "speech": _prepare_speech,
     "ocr": _prepare_ocr,
     "translate": _prepare_translate,
+    "vision": _prepare_vision,
 }
 
 
@@ -727,7 +789,19 @@ def prepare_provider(provider: str, *, on_stage: Any = None) -> list[str]:
         install_tool(tool_id)
     if not runtime_ready(provider):
         stage(0.25, "Downloading the runtime")
-        pip_install(PROVIDER_PACKAGES[provider])
+        try:
+            pip_install(PROVIDER_PACKAGES[provider])
+        except RuntimeError:
+            if provider != "vision":
+                raise
+            # A full install rewrites dependencies the other readers already
+            # put here - and cannot, while one of them is mid-analysis with
+            # the files loaded. Everything the vision reader needs beyond its
+            # own five packages is exactly those shared dependencies, so the
+            # fallback installs only what is new.
+            pip_install(VISION_OWN_PACKAGES, no_deps=True)
+            if not runtime_ready(provider):
+                raise
     stage(0.6, "Preparing the model")
     # The prepare step owns the longest stretch of this job by far - one
     # language package here took an hour and fifty minutes - so it is given the
@@ -1370,6 +1444,7 @@ def _ocr_draft(asset: MediaAsset, source: Path, work: Path) -> dict[str, Any]:
 
 
 SPEECH_RUNNER = _speech_draft
+VISION_RUNNER = vision_draft
 OCR_RUNNER = _ocr_draft
 
 
@@ -1399,6 +1474,8 @@ def create_enrichment_job(
             raise ValueError("This asset has no audio track to transcribe.")
         if "ocr" in normalized_modes and asset.media_kind not in {"video", "image"}:
             raise ValueError("OCR requires a video or image asset.")
+        if "vision" in normalized_modes and asset.media_kind not in {"video", "image"}:
+            raise ValueError("Content recognition requires a video or image asset.")
         speech_provider = _selected_speech_provider()
         from trendrelay_api.integrations.elevenlabs import defaults as eleven_defaults
 
@@ -1422,6 +1499,15 @@ def create_enrichment_job(
                 str(get_settings().media_ai_ocr_interval_seconds),
                 SPEECH_VERSION,
                 OCR_VERSION,
+                # The vision reading's identity includes what it was looking
+                # for: the same clip read against an extended vocabulary is a
+                # different draft, and without this it would content-address
+                # to the stale one.
+                *(
+                    [VISION_VERSION, _vision_vocabulary_digest()]
+                    if "vision" in normalized_modes
+                    else []
+                ),
             ]
         )
         job_id = "mediaai_" + hashlib.sha256(signature.encode()).hexdigest()[:24]
@@ -1520,7 +1606,7 @@ def run_enrichment_job(
                     audio = _version_path(session, asset.id, "audio") or _version_path(
                         session, asset.id, "original"
                     )
-                if "ocr" in payload["modes"]:
+                if {"ocr", "vision"} & set(payload["modes"]):
                     source = _version_path(session, asset.id, "original")
                 # Detached, but its loaded values stay readable. The OCR pass wants
                 # `media_kind` and nothing else, so this keeps the answer without
@@ -1532,7 +1618,11 @@ def run_enrichment_job(
             mode_count = len(payload["modes"])
             for index, mode in enumerate(payload["modes"]):
                 start = 0.12 + (0.76 * index / mode_count)
-                label = "Transcribing speech" if mode == "speech" else "Reading on-screen text"
+                label = {
+                    "speech": "Transcribing speech",
+                    "ocr": "Reading on-screen text",
+                    "vision": "Recognising what the clip shows",
+                }[mode]
                 report_progress(job_id, start, label, factory=factory)
                 if mode == "speech":
                     if not audio:
@@ -1556,10 +1646,17 @@ def run_enrichment_job(
                         )
                     else:
                         drafts.append(("speech", SPEECH_RUNNER(audio, payload.get("language"))))
-                else:
+                elif mode == "ocr":
                     if not source:
                         raise RuntimeError("The original version is unavailable.")
                     drafts.append(("ocr", OCR_RUNNER(asset, source, work)))
+                else:
+                    if not source:
+                        raise RuntimeError("The original version is unavailable.")
+                    # Its own frame folder: the OCR pass cleans up the shared
+                    # one by name, and both readers running in one job must
+                    # not race over the same files.
+                    drafts.append(("vision", VISION_RUNNER(asset, source, work / "vision")))
                 report_progress(
                     job_id,
                     0.12 + (0.76 * (index + 1) / mode_count),

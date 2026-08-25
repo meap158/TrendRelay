@@ -3013,14 +3013,15 @@ def run_bulk_action(
 
 
 class TranscriptionRequest(BaseModel):
-    """Which of the two readings to take, and in what language.
+    """Which of the three readings to take, and in what language.
 
-    Both are optional individually and at least one is required, because they
-    answer different questions: what the clip says and what it shows. A product
-    name typed onto the first frame is not in the audio at all.
+    Each is optional individually and at least one is required, because they
+    answer different questions: what the clip says, what it shows in writing,
+    and what it shows at all. A product name typed onto the first frame is not
+    in the audio, and a product held up wordlessly is in neither text.
     """
 
-    modes: list[Literal["speech", "ocr"]] = Field(min_length=1, max_length=2)
+    modes: list[Literal["speech", "ocr", "vision"]] = Field(min_length=1, max_length=3)
     #: Left to the model by default. Naming a language it then disagrees with is
     #: worse than letting it detect one, but a clip with music over speech
     #: detects badly and the operator usually knows the answer.

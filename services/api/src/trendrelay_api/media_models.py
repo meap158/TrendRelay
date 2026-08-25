@@ -145,7 +145,9 @@ class MediaTranscript(Base):
             "job_id",
             name="unique_media_transcript_job_kind",
         ),
-        CheckConstraint("kind IN ('speech','ocr')", name="valid_media_transcript_kind"),
+        CheckConstraint(
+            "kind IN ('speech','ocr','vision')", name="valid_media_transcript_kind"
+        ),
         CheckConstraint(
             "status IN ('machine','reviewed')",
             name="valid_media_transcript_status",

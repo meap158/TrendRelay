@@ -330,6 +330,34 @@
       "runs": "local"
     },
     {
+      "id": "fastembed",
+      "name": "FastEmbed content recognition",
+      "repository": "https://github.com/qdrant/fastembed",
+      "revision": "0.8.0",
+      "version": "0.8.0",
+      "license": "Apache-2.0",
+      "license_url": "https://github.com/qdrant/fastembed/blob/main/LICENSE",
+      "category": "Media intelligence",
+      "summary": "Recognises what a clip shows - the subject, the scene, the product - using CLIP run locally.",
+      "capabilities": [
+        "Zero-shot content tagging with CLIP ViT-B-32",
+        "Runs on ONNX Runtime",
+        "Shares the media analysis runtime"
+      ],
+      "integration_status": "adapted",
+      "commercial_use": "allowed",
+      "install_strategy": "pypi",
+      "distribution": "fastembed",
+      "install_allowed": true,
+      "activation_allowed": true,
+      "default_active": false,
+      "root_path": ".tools/catalog/fastembed",
+      "source_path": ".tools/catalog/fastembed/source",
+      "documentation": "docs/third-party/fastembed.md",
+      "surface": "library",
+      "runs": "local"
+    },
+    {
       "id": "birefnet",
       "name": "BiRefNet",
       "repository": "https://github.com/ZhengPeng7/BiRefNet",
