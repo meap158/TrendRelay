@@ -1024,6 +1024,520 @@ _SUNGLASSES_3D = Overlay(
 )
 
 
+# --------------------------------------------------------------------------- #
+# The trend batch
+# --------------------------------------------------------------------------- #
+#
+# Chosen from two kinds of evidence, because the first kind alone is thin.
+#
+# What the platforms are doing: butterflies around the head, star stickers on
+# the face, halo and fairy looks, and anime styling come up repeatedly in
+# reporting on TikTok and Douyin effects. That is trade-press evidence and it
+# is soft, so it decides *which* of the durable prop families to draw next
+# rather than being taken as a list.
+#
+# What this workspace is actually posting: 2,540 Douyin clips whose commonest
+# tags are 变装 (transformation), 健身 / 腹肌 / 马甲线 (fitness, abs, core),
+# 御姐, and 女摄. That is hard evidence, it is local, and it is why a sweatband
+# and a visor are in this batch at all - nothing in the pack suited the second
+# biggest thing this library posts about.
+#
+# See `docs/architecture/0026-adding-overlay-objects.md` for the process.
+
+BUTTERFLY_WING: RGBA = (146, 112, 232, 255)
+BUTTERFLY_EDGE: RGBA = (86, 62, 168, 255)
+BLUSH: RGBA = (255, 148, 158, 210)
+FLAME: RGBA = (250, 118, 44, 255)
+FLAME_CORE: RGBA = (255, 208, 72, 255)
+SWEAT: RGBA = (126, 200, 240, 240)
+TERRY: RGBA = (238, 240, 244, 255)
+SPORT_STRIPE: RGBA = (216, 62, 74, 255)
+SANTA_RED: RGBA = (206, 54, 58, 255)
+LEAF: RGBA = (86, 178, 122, 255)
+
+
+def _butterfly(
+    centre: UnitPoint, size: float, tilt: float, aspect: float
+) -> tuple[Shape, ...]:
+    """One butterfly: two wing pairs and a body, at a size and a lean.
+
+    Written as a helper because the object is four of them at different sizes -
+    hand-placing sixteen ellipses is how two of them end up subtly different
+    shapes and nobody can find which.
+    """
+    x, y = centre
+    # Both axes run 0 to 1 while the sprite itself is `aspect` times as tall as
+    # it is wide, so a shape given the same number twice comes out squashed by
+    # exactly that factor. Every vertical measurement here is divided by it.
+    # Getting this backwards - multiplying - is what turned the first version
+    # into a row of purple blobs, and it does not look like an aspect bug, it
+    # looks like badly drawn wings.
+    def tall(value: float) -> float:
+        return value / aspect
+
+    return (
+        Shape("ellipse", fill=BUTTERFLY_WING, centre=(x - size * 0.26, y - tall(size * 0.16)),
+              size=(size * 0.50, tall(size * 0.66)), rotation=tilt - 26),
+        Shape("ellipse", fill=BUTTERFLY_WING, centre=(x + size * 0.26, y - tall(size * 0.16)),
+              size=(size * 0.50, tall(size * 0.66)), rotation=-tilt + 26),
+        Shape("ellipse", fill=BUTTERFLY_EDGE, centre=(x - size * 0.20, y + tall(size * 0.24)),
+              size=(size * 0.34, tall(size * 0.38)), rotation=tilt - 12),
+        Shape("ellipse", fill=BUTTERFLY_EDGE, centre=(x + size * 0.20, y + tall(size * 0.24)),
+              size=(size * 0.34, tall(size * 0.38)), rotation=-tilt + 12),
+        Shape("ellipse", fill=INK, centre=(x, y + tall(size * 0.04)),
+              size=(size * 0.07, tall(size * 0.56)), rotation=tilt),
+    )
+
+
+def _star(centre: UnitPoint, size: float, colour: RGBA) -> Shape:
+    """A five-pointed star, generated rather than typed.
+
+    Ten points written by hand is ten chances to put one at the wrong radius,
+    and a star with one short arm reads as a mistake rather than as a style.
+    """
+    x, y = centre
+    points: list[UnitPoint] = []
+    for index in range(10):
+        angle = math.radians(-90 + index * 36)
+        reach = size / 2 if index % 2 == 0 else size / 5
+        points.append((x + math.cos(angle) * reach, y + math.sin(angle) * reach))
+    return Shape("polygon", fill=colour, points=tuple(points))
+
+
+_BUTTERFLIES = Overlay(
+    id="butterflies",
+    label="Butterflies",
+    group=REACTIONS,
+    anchor="forehead",
+    width_in_faces=1.5,
+    aspect=0.72,
+    offset=(0.0, -0.10),
+    note="Drifts around the head. Reads as dreamy rather than as a costume.",
+    shapes=(
+        *_butterfly((0.15, 0.60), 0.26, 14, 0.72),
+        *_butterfly((0.50, 0.28), 0.32, -6, 0.72),
+        *_butterfly((0.85, 0.56), 0.24, -18, 0.72),
+        *_butterfly((0.33, 0.90), 0.16, 22, 0.72),
+    ),
+)
+
+_STAR_FACE = Overlay(
+    id="star_face",
+    label="Face stars",
+    group=FEATURES,
+    anchor="eyes",
+    width_in_faces=1.30,
+    aspect=0.62,
+    offset=(0.0, 0.10),
+    note="Scattered across the cheekbones, not over the eyes.",
+    shapes=(
+        _star((0.15, 0.30), 0.30, YELLOW),
+        _star((0.33, 0.66), 0.20, GOLD),
+        _star((0.05, 0.72), 0.16, WHITE),
+        _star((0.85, 0.30), 0.30, YELLOW),
+        _star((0.67, 0.66), 0.20, GOLD),
+        _star((0.95, 0.72), 0.16, WHITE),
+    ),
+)
+
+_BUNNY_EARS = Overlay(
+    id="bunny_ears",
+    label="Bunny ears",
+    group=HEADWEAR,
+    anchor="forehead",
+    width_in_faces=1.05,
+    aspect=1.05,
+    offset=(0.0, -0.44),
+    shapes=(
+        *_pair(Shape("ellipse", fill=BONE, centre=(0.30, 0.42),
+                     size=(0.26, 0.82), rotation=-9)),
+        *_pair(Shape("ellipse", fill=PINK, centre=(0.31, 0.44),
+                     size=(0.13, 0.60), rotation=-9)),
+    ),
+)
+
+_FLOWER_CROWN = Overlay(
+    id="flower_crown",
+    label="Flower crown",
+    group=HEADWEAR,
+    anchor="forehead",
+    width_in_faces=1.34,
+    # Half as tall again as the first attempt. At 0.40 the blooms were flatter
+    # than they were wide and read as a smear of colour on a green line; a
+    # flower needs room above the band it sits on.
+    aspect=0.60,
+    offset=(0.0, -0.10),
+    note="A band of blooms rather than a full cover — the face stays visible.",
+    shapes=(
+        # A thin band of leaf behind them rather than a bed under them: at any
+        # weight it competes with the blooms, which are the object.
+        Shape("ellipse", fill=LEAF, centre=(0.50, 0.74), size=(0.94, 0.10)),
+        *[
+            shape
+            for index, (x, size, colour) in enumerate((
+                # Four, not five, and spaced by what one actually occupies: a
+                # bloom reaches 1.34 times its own `size` across once its
+                # petals are counted, so five of them at any readable size add
+                # up to more than the sprite is wide and merge into one mass.
+                # No white bloom. It reads perfectly on a face and disappears
+                # on the picker's own light background, and the tile is where
+                # somebody decides whether to use it at all.
+                (0.13, 0.17, SOFT_PINK), (0.38, 0.19, BUTTERFLY_WING),
+                (0.63, 0.19, YELLOW), (0.87, 0.17, SOFT_PINK),
+            ))
+            for shape in (
+                # Five petals around a centre, which is what makes it a flower
+                # rather than a dot: a single circle reads as a bead.
+                *(
+                    Shape(
+                        "ellipse", fill=colour,
+                        centre=(
+                            x + math.cos(math.radians(-90 + petal * 72)) * size * 0.34,
+                            0.44 + math.sin(math.radians(-90 + petal * 72))
+                            * size * 0.34 / 0.60,
+                        ),
+                        # Divided by the aspect, not multiplied by it: the sprite
+                        # is 0.60 as tall as it is wide, so a petal given equal
+                        # numbers comes out flat. Multiplying squashed them into
+                        # each other and five flowers became one smear.
+                        size=(size * 0.66, size * 0.66 / 0.60),
+                    )
+                    for petal in range(5)
+                ),
+                Shape("ellipse", fill=GOLD, centre=(x, 0.44),
+                      size=(size * 0.30, size * 0.30 / 0.60)),
+            )
+        ],
+    ),
+)
+
+_ANIME_BLUSH = Overlay(
+    id="anime_blush",
+    label="Anime blush",
+    group=FEATURES,
+    anchor="nose",
+    width_in_faces=1.10,
+    aspect=0.36,
+    offset=(0.0, 0.06),
+    note="Cheek blush with the drawn-on lines, the way an edit marks a reaction.",
+    shapes=(
+        # The soft patch first and much larger, with three short strokes drawn
+        # over it. The first version had full-height lines on a small patch, so
+        # it read as a barcode rather than as a blush.
+        *_pair(Shape("ellipse", fill=BLUSH, centre=(0.19, 0.50), size=(0.34, 0.70))),
+        *_pair(Shape("line", stroke=SOFT_PINK, stroke_width=0.016,
+                     points=((0.11, 0.36), (0.15, 0.64)))),
+        *_pair(Shape("line", stroke=SOFT_PINK, stroke_width=0.016,
+                     points=((0.19, 0.32), (0.23, 0.68)))),
+        *_pair(Shape("line", stroke=SOFT_PINK, stroke_width=0.016,
+                     points=((0.27, 0.36), (0.31, 0.64)))),
+    ),
+)
+
+_SWEAT_DROP = Overlay(
+    id="sweat_drop",
+    label="Sweat drop",
+    group=REACTIONS,
+    anchor="forehead",
+    width_in_faces=0.44,
+    aspect=1.30,
+    offset=(0.46, 0.02),
+    follows_roll=False,
+    note="The anime beat for awkwardness. Sits off to one side of the head.",
+    shapes=(
+        # A round belly with a point drawn on top of it, rather than a polygon
+        # trying to be both - the polygon version came out a kite.
+        Shape("ellipse", fill=SWEAT, centre=(0.50, 0.68), size=(0.78, 0.60)),
+        Shape("polygon", fill=SWEAT, points=(
+            (0.50, 0.04), (0.79, 0.72), (0.21, 0.72),
+        )),
+        Shape("ellipse", fill=WHITE, centre=(0.34, 0.66), size=(0.16, 0.20)),
+    ),
+)
+
+_SWEATBAND = Overlay(
+    id="sweatband",
+    label="Sweatband",
+    group=HEADWEAR,
+    anchor="forehead",
+    width_in_faces=1.24,
+    aspect=0.30,
+    offset=(0.0, 0.06),
+    note="For gym and training clips — sits on the brow rather than the crown.",
+    shapes=(
+        # Full height, and the band itself carries the colour. The first version
+        # was near-white terry with two thin stripes on it, which on a light
+        # frame was three red lines floating over nothing.
+        Shape("rect", fill=SPORT_STRIPE, centre=(0.5, 0.5), size=(1.0, 1.0), radius=0.06),
+        Shape("rect", fill=TERRY, centre=(0.5, 0.5), size=(1.0, 0.44)),
+        Shape("rect", fill=INK, centre=(0.5, 0.5), size=(0.16, 0.30), radius=0.03),
+    ),
+)
+
+_SANTA_HAT = Overlay(
+    id="santa_hat",
+    label="Santa hat",
+    group=HEADWEAR,
+    anchor="forehead",
+    width_in_faces=1.22,
+    aspect=0.86,
+    offset=(0.06, -0.26),
+    shapes=(
+        Shape("polygon", fill=SANTA_RED, points=(
+            (0.06, 0.74), (0.44, 0.10), (0.86, 0.30), (0.62, 0.78),
+        )),
+        Shape("rect", fill=BONE, centre=(0.36, 0.82), size=(0.70, 0.24), radius=0.10),
+        Shape("ellipse", fill=BONE, centre=(0.88, 0.30), size=(0.24, 0.24)),
+    ),
+)
+
+_FIRE = Overlay(
+    id="fire",
+    label="Fire",
+    group=REACTIONS,
+    anchor="forehead",
+    width_in_faces=0.70,
+    aspect=1.10,
+    offset=(0.0, -0.18),
+    follows_roll=False,
+    note="For a clip somebody is calling hot. Stays upright however the head leans.",
+    shapes=(
+        Shape("polygon", fill=FLAME, points=(
+            (0.50, 0.02), (0.84, 0.44), (0.88, 0.74), (0.50, 0.98),
+            (0.12, 0.74), (0.16, 0.44),
+        )),
+        Shape("polygon", fill=FLAME_CORE, points=(
+            (0.50, 0.34), (0.70, 0.62), (0.50, 0.90), (0.30, 0.62),
+        )),
+    ),
+)
+
+_MUSIC_NOTES = Overlay(
+    id="music_notes",
+    label="Music notes",
+    group=REACTIONS,
+    anchor="forehead",
+    width_in_faces=1.15,
+    aspect=0.68,
+    offset=(0.0, -0.08),
+    follows_roll=False,
+    note="For dance and sound clips. Floats beside the head rather than on it.",
+    shapes=(
+        Shape("ellipse", fill=INK, centre=(0.14, 0.74), size=(0.22, 0.17), rotation=-18),
+        Shape("rect", fill=INK, centre=(0.24, 0.44), size=(0.045, 0.58)),
+        Shape("polygon", fill=INK, points=(
+            (0.24, 0.16), (0.44, 0.24), (0.44, 0.38), (0.24, 0.30),
+        )),
+        Shape("ellipse", fill=INK, centre=(0.66, 0.86), size=(0.19, 0.15), rotation=-18),
+        Shape("rect", fill=INK, centre=(0.745, 0.60), size=(0.04, 0.50)),
+        Shape("ellipse", fill=INK, centre=(0.90, 0.62), size=(0.19, 0.15), rotation=-18),
+        Shape("rect", fill=INK, centre=(0.985, 0.36), size=(0.04, 0.50)),
+        Shape("rect", fill=INK, centre=(0.865, 0.13), size=(0.28, 0.09)),
+    ),
+)
+
+
+def _bucket_hat() -> Any:
+    """A shallow crown and a brim that slopes down, which is the whole shape."""
+    crown = meshes.painted(
+        meshes.moved(
+            meshes.scaled(meshes.cylinder(BUCKET, sides=28), 0.62, 0.40, 0.62), y=0.22
+        ),
+        BUCKET,
+    )
+    # A short wide cylinder tipped forward, not an inverted cone: the cone came
+    # to a point below the head and the whole hat read as a funnel.
+    brim = meshes.painted(
+        meshes.moved(
+            meshes.scaled(meshes.cylinder(BUCKET_SHADE, sides=30), 0.98, 0.13, 0.98),
+            y=-0.08,
+        ),
+        BUCKET_SHADE,
+    )
+    return brim + crown
+
+
+def _beanie() -> Any:
+    """A dome with a folded cuff round the bottom."""
+    dome = meshes.painted(
+        meshes.moved(
+            meshes.scaled(meshes.sphere(KNIT, segments=24, rings=14), 0.84, 0.70, 0.84),
+            y=0.06,
+        ),
+        KNIT,
+    )
+    cuff = meshes.painted(
+        meshes.moved(
+            meshes.scaled(meshes.cylinder(KNIT_CUFF, sides=28), 0.90, 0.26, 0.90),
+            y=-0.20,
+        ),
+        KNIT_CUFF,
+    )
+    bobble = meshes.painted(
+        meshes.moved(
+            meshes.scaled(meshes.sphere(KNIT_CUFF, segments=14, rings=9), 0.20, 0.20, 0.20),
+            y=0.39,
+        ),
+        KNIT_CUFF,
+    )
+    return dome + cuff + bobble
+
+
+def _headphones() -> Any:
+    """A band over the head and a cup on each side.
+
+    The band is the reason this one wants depth: seen from the front it is an
+    arc, and seen from the side it is the whole object.
+    """
+    band = meshes.Mesh()
+    for step in range(15):
+        angle = math.radians(-72 + step * (144 / 14))
+        band = band + meshes.painted(
+            meshes.moved(
+                meshes.scaled(meshes.box(BAND_STEEL), 0.075, 0.075, 0.10),
+                x=math.sin(angle) * 0.40,
+                y=math.cos(angle) * 0.40 - 0.02,
+            ),
+            BAND_STEEL,
+        )
+    cups = meshes.Mesh()
+    for side in (-1.0, 1.0):
+        cup = meshes.painted(
+            meshes.moved(
+                meshes.turned(
+                    meshes.scaled(meshes.cylinder(EARCUP, sides=20), 0.30, 0.16, 0.34),
+                    z=90.0,
+                ),
+                x=side * 0.42, y=-0.16,
+            ),
+            EARCUP,
+        )
+        cups = cups + cup
+    return band + cups
+
+
+def _visor() -> Any:
+    """A band and a peak, and nothing on top - which is the point of a visor."""
+    band = meshes.painted(
+        meshes.moved(
+            meshes.scaled(
+                meshes.cylinder(VISOR_BAND, sides=26, caps=False), 0.80, 0.26, 0.80
+            ),
+            y=0.14,
+        ),
+        VISOR_BAND,
+    )
+    # Wider and flatter than the cap's, and further forward: a visor is mostly
+    # peak, and at the cap's proportions it read as a cap with the top cut off.
+    peak = meshes.painted(
+        meshes.moved(
+            meshes.turned(
+                meshes.scaled(meshes.cylinder(VISOR_PEAK, sides=26), 0.96, 0.06, 1.0),
+                x=12.0,
+            ),
+            y=-0.02, z=0.44,
+        ),
+        VISOR_PEAK,
+    )
+    return band + peak
+
+
+def _cowboy_hat() -> Any:
+    """A crown and a wide brim that lifts at the sides."""
+    crown = meshes.painted(
+        meshes.moved(
+            meshes.scaled(meshes.cylinder(SUEDE, sides=26), 0.52, 0.40, 0.58), y=0.22
+        ),
+        SUEDE,
+    )
+    brim = meshes.painted(
+        meshes.moved(
+            meshes.scaled(meshes.cylinder(SUEDE, sides=32), 0.98, 0.05, 0.74), y=-0.02
+        ),
+        SUEDE,
+    )
+    band = meshes.painted(
+        meshes.moved(
+            meshes.scaled(meshes.cylinder(SUEDE_BAND, sides=26), 0.54, 0.11, 0.60), y=0.06
+        ),
+        SUEDE_BAND,
+    )
+    return brim + crown + band
+
+
+BUCKET: RGBA = (86, 116, 92, 255)
+BUCKET_SHADE: RGBA = (70, 96, 76, 255)
+KNIT: RGBA = (176, 84, 96, 255)
+KNIT_CUFF: RGBA = (146, 64, 78, 255)
+BAND_STEEL: RGBA = (54, 58, 68, 255)
+EARCUP: RGBA = (34, 36, 44, 255)
+VISOR_BAND: RGBA = (240, 242, 246, 255)
+VISOR_PEAK: RGBA = (36, 122, 200, 255)
+SUEDE: RGBA = (168, 122, 68, 255)
+SUEDE_BAND: RGBA = (92, 66, 40, 255)
+
+
+_BUCKET_HAT_3D = Overlay(
+    id="bucket_hat_3d",
+    label="Bucket hat",
+    group=SOLID,
+    anchor="forehead",
+    width_in_faces=1.34,
+    aspect=1.0,
+    offset=(0.0, 0.16),
+    note="Turns with the head — the brim slopes all the way round.",
+    mesh=_bucket_hat(),
+)
+
+_BEANIE_3D = Overlay(
+    id="beanie_3d",
+    label="Beanie",
+    group=SOLID,
+    anchor="forehead",
+    width_in_faces=1.24,
+    aspect=1.0,
+    offset=(0.0, 0.18),
+    note="Turns with the head, cuff and all.",
+    mesh=_beanie(),
+)
+
+_HEADPHONES_3D = Overlay(
+    id="headphones_3d",
+    label="Headphones",
+    group=SOLID,
+    anchor="forehead",
+    width_in_faces=1.42,
+    aspect=1.0,
+    offset=(0.0, 0.30),
+    note="The band is an arc from the front and the whole object from the side.",
+    mesh=_headphones(),
+)
+
+_VISOR_3D = Overlay(
+    id="visor_3d",
+    label="Sun visor",
+    group=SOLID,
+    anchor="forehead",
+    width_in_faces=1.28,
+    aspect=1.0,
+    offset=(0.0, 0.08),
+    note="For training clips. Open on top, so the peak swings and the crown does not.",
+    mesh=_visor(),
+)
+
+_COWBOY_HAT_3D = Overlay(
+    id="cowboy_hat_3d",
+    label="Cowboy hat",
+    group=SOLID,
+    anchor="forehead",
+    width_in_faces=1.46,
+    aspect=1.0,
+    offset=(0.0, 0.22),
+    note="Turns with the head, and the wide brim foreshortens as it does.",
+    mesh=_cowboy_hat(),
+)
+
+
 BUILT_IN: tuple[Overlay, ...] = (
     _CENSOR_BLOCK,
     _SMILEY,
@@ -1042,6 +1556,21 @@ BUILT_IN: tuple[Overlay, ...] = (
     _PARTY_CONE_3D,
     _CROWN_3D,
     _SUNGLASSES_3D,
+    _BUCKET_HAT_3D,
+    _BEANIE_3D,
+    _HEADPHONES_3D,
+    _VISOR_3D,
+    _COWBOY_HAT_3D,
+    _BUTTERFLIES,
+    _STAR_FACE,
+    _BUNNY_EARS,
+    _FLOWER_CROWN,
+    _ANIME_BLUSH,
+    _SWEAT_DROP,
+    _SWEATBAND,
+    _SANTA_HAT,
+    _FIRE,
+    _MUSIC_NOTES,
     _PIXEL_MASK,
     _ALIEN,
     _FLOWER_FACE,
@@ -1261,6 +1790,67 @@ OBJECT_KEYWORDS: dict[str, tuple[str, ...]] = {
     "sunglasses_3d": (
         "cool", "summer", "sunglasses", "confident", "swagger", "style", "drip",
         "墨镜", "酷", "帅", "夏天", "御姐", "变装",
+    ),
+    # --- the trend batch -----------------------------------------------------
+    "butterflies": (
+        "butterfly", "dreamy", "fairy", "aesthetic", "spring", "pretty", "soft",
+        "蝴蝶", "梦幻", "唯美", "仙", "变装", "氛围感",
+    ),
+    "star_face": (
+        "star", "sparkle", "glam", "makeup", "pretty", "shine", "y2k",
+        "星星", "闪", "妆", "美", "变装", "氛围感",
+    ),
+    "bunny_ears": (
+        "bunny", "rabbit", "cute", "easter", "soft", "sweet", "kawaii",
+        "兔子", "兔耳", "可爱", "萌", "变装",
+    ),
+    "flower_crown": (
+        "flower", "fairy", "spring", "wedding", "festival", "bloom", "garden",
+        "花环", "仙女", "春天", "花", "变装", "古风",
+    ),
+    "anime_blush": (
+        "anime", "blush", "shy", "cute", "reaction", "manga", "flustered",
+        "害羞", "脸红", "二次元", "动漫", "可爱", "萌",
+    ),
+    "sweat_drop": (
+        "awkward", "nervous", "oops", "anime", "reaction", "embarrassed",
+        "尴尬", "无语", "汗", "二次元", "紧张",
+    ),
+    "sweatband": (
+        "gym", "workout", "training", "fitness", "run", "sport", "sweat", "abs",
+        "健身", "运动", "训练", "腹肌", "马甲线", "跑步", "撸铁",
+    ),
+    "santa_hat": (
+        "christmas", "santa", "winter", "holiday", "festive", "december", "gift",
+        "圣诞", "圣诞节", "冬天", "节日", "过节",
+    ),
+    "fire": (
+        "fire", "hot", "amazing", "lit", "impressive", "banger", "strong",
+        "火", "厉害", "牛", "绝了", "燃", "热",
+    ),
+    "music_notes": (
+        "music", "dance", "song", "sing", "beat", "rhythm", "sound", "audio",
+        "音乐", "跳舞", "唱歌", "歌", "节奏", "舞蹈", "卡点",
+    ),
+    "bucket_hat_3d": (
+        "bucket hat", "street", "summer", "casual", "festival", "fishing", "y2k",
+        "渔夫帽", "街头", "夏天", "潮流", "休闲",
+    ),
+    "beanie_3d": (
+        "beanie", "winter", "cold", "cosy", "knit", "autumn", "street",
+        "毛线帽", "冬天", "保暖", "针织", "秋天", "潮流",
+    ),
+    "headphones_3d": (
+        "music", "dj", "listen", "podcast", "gaming", "audio", "beat", "studio",
+        "耳机", "音乐", "听歌", "游戏", "电台", "节奏",
+    ),
+    "visor_3d": (
+        "gym", "training", "run", "tennis", "golf", "sport", "summer", "fitness",
+        "运动", "健身", "训练", "跑步", "网球", "遮阳",
+    ),
+    "cowboy_hat_3d": (
+        "cowboy", "western", "country", "ranch", "rodeo", "americana", "boots",
+        "牛仔", "西部", "乡村", "牛仔帽",
     ),
 }
 
