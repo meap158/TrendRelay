@@ -141,9 +141,16 @@ def open_h264_stream_writer(
     *,
     quality: int = 20,
     preset: str = "p4",
+    force_software: bool = False,
 ) -> subprocess.Popen[bytes]:
-    """Stream raw BGR24 frames directly into FFmpeg H.264 hardware encoder."""
-    selected = preferred_encoder(str(ffmpeg.resolve()))
+    """Stream raw BGR24 frames directly into an H.264 encoder.
+
+    ``force_software`` is deliberately available to callers which retain their
+    decoded-frame plan.  A hardware probe can pass and a later concurrent
+    render can still lose an encoder session; those callers can replay their
+    already-computed render plan with libx264 instead of failing the item.
+    """
+    selected = SOFTWARE if force_software else preferred_encoder(str(ffmpeg.resolve()))
     destination.unlink(missing_ok=True)
     destination.parent.mkdir(parents=True, exist_ok=True)
     args = [
@@ -162,4 +169,3 @@ def open_h264_stream_writer(
         stderr=subprocess.PIPE,
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
-

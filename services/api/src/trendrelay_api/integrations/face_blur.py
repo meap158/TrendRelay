@@ -611,45 +611,68 @@ def render_blurred(
     )
     from trendrelay_api.video_encoding import open_h264_stream_writer
 
-    stream_proc = None
-    writer = None
-    if FFMPEG.is_file():
-        try:
-            stream_proc = open_h264_stream_writer(FFMPEG, silent, out_size[0], out_size[1], fps)
-        except Exception:
-            stream_proc = None
-    if stream_proc is None:
-        writer = cv2.VideoWriter(
-            str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, out_size
-        )
-    capture = _open()
     covering = (progress or ProgressReporter(None)).stage(
         "Covering faces", DETECT_SHARE, 1.0 - DETECT_SHARE
     )
-    try:
-        for index in range(len(timeline)):
-            ok, frame = capture.read()
-            if not ok:
-                break
-            covering.at(index, len(timeline))
-            for track in tracks:
-                box = track[index]
-                if box is not None:
-                    apply_blur(cv2, frame, box, settings)
-            if out_scale < 1.0:
-                frame = cv2.resize(frame, out_size, interpolation=cv2.INTER_AREA)
-            if stream_proc and stream_proc.stdin:
-                stream_proc.stdin.write(frame.tobytes())
-            elif writer:
-                writer.write(frame)
-    finally:
-        if stream_proc:
-            if stream_proc.stdin:
-                stream_proc.stdin.close()
-            stream_proc.wait(timeout=30)
-        if writer:
-            writer.release()
-        capture.release()
+
+    def write_pass(*, force_software: bool = False) -> bool:
+        """Replay the tracked frames, returning whether FFmpeg kept the stream."""
+        stream_proc = None
+        writer = None
+        if FFMPEG.is_file():
+            try:
+                stream_proc = open_h264_stream_writer(
+                    FFMPEG, silent, out_size[0], out_size[1], fps,
+                    force_software=force_software,
+                )
+            except Exception:
+                stream_proc = None
+        if stream_proc is None:
+            writer = cv2.VideoWriter(
+                str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, out_size
+            )
+            if not writer.isOpened():
+                raise FaceBlurUnavailable(
+                    f"No encoder was available to write {out_size[0]}x{out_size[1]} video."
+                )
+        capture = _open()
+        try:
+            for index in range(len(timeline)):
+                ok, frame = capture.read()
+                if not ok:
+                    break
+                covering.at(index, len(timeline))
+                for track in tracks:
+                    box = track[index]
+                    if box is not None:
+                        apply_blur(cv2, frame, box, settings)
+                if out_scale < 1.0:
+                    frame = cv2.resize(frame, out_size, interpolation=cv2.INTER_AREA)
+                if stream_proc and stream_proc.stdin:
+                    stream_proc.stdin.write(frame.tobytes())
+                elif writer:
+                    writer.write(frame)
+        except BrokenPipeError:
+            # The encoder's probe succeeded, but this particular concurrent
+            # session did not.  The second pass below uses the same tracked
+            # boxes with libx264, not a weaker or partial effect.
+            return False
+        finally:
+            if stream_proc:
+                if stream_proc.stdin:
+                    stream_proc.stdin.close()
+                stream_proc.wait(timeout=30)
+            if writer:
+                writer.release()
+            capture.release()
+        return stream_proc is None or stream_proc.returncode == 0
+
+    if not write_pass():
+        # The two-pass design holds only inexpensive tracks, so replaying this
+        # writing pass is safer and cheaper than retrying face detection.
+        silent.unlink(missing_ok=True)
+        if not write_pass(force_software=True):
+            raise FaceBlurUnavailable("FFmpeg could not encode the blurred video.")
 
     if _remux_audio(silent, source, destination):
         silent.unlink(missing_ok=True)

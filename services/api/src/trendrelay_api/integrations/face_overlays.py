@@ -750,63 +750,85 @@ def render_overlaid(
     from trendrelay_api.integrations.face_blur import FFMPEG
     from trendrelay_api.video_encoding import open_h264_stream_writer
 
-    stream_proc = None
-    writer = None
-    if FFMPEG.is_file():
-        try:
-            stream_proc = open_h264_stream_writer(FFMPEG, silent, out_size[0], out_size[1], fps)
-        except Exception:
-            stream_proc = None
-    if stream_proc is None:
-        writer = cv2.VideoWriter(str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, out_size)
-        if not writer.isOpened():
-            raise OverlayUnavailable(
-                f"No encoder was available to write {out_size[0]}x{out_size[1]} video."
-            )
-    capture = _open()
     placed = 0
     covered_frames = 0
     drawing = (progress or ProgressReporter(None)).stage(
         "Drawing the object", DETECT_SHARE, 1.0 - DETECT_SHARE
     )
-    try:
-        for index in range(len(per_frame)):
-            ok, frame = capture.read()
-            if not ok:
-                break
-            drawing.at(index, len(per_frame))
-            landed = False
-            # One face for the subject, or one per person when everybody was
-            # asked for.
-            here = (
-                [subject[index]] if single and subject[index]
-                else [] if single
-                else [track.frames[index] for track in chosen if track.frames[index]]
+
+    def write_pass(*, force_software: bool = False) -> bool:
+        """Replay the already-tracked placements when a GPU session is busy."""
+        nonlocal placed, covered_frames
+        stream_proc = None
+        writer = None
+        if FFMPEG.is_file():
+            try:
+                stream_proc = open_h264_stream_writer(
+                    FFMPEG, silent, out_size[0], out_size[1], fps,
+                    force_software=force_software,
+                )
+            except Exception:
+                stream_proc = None
+        if stream_proc is None:
+            writer = cv2.VideoWriter(
+                str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, out_size
             )
-            for face in here:
-                placement = place(face, overlay, settings)
-                sprite = sprites.at(placement.sprite_width())
-                if paste(
-                    cv2, np, frame, sprite, placement, settings.opacity, settings.mirror
-                ):
-                    placed += 1
-                    landed = True
-            covered_frames += 1 if landed else 0
-            # Scaled after the object is burned in, so a proxy shows the master.
-            if out_scale < 1.0:
-                frame = cv2.resize(frame, out_size, interpolation=cv2.INTER_AREA)
-            if stream_proc and stream_proc.stdin:
-                stream_proc.stdin.write(frame.tobytes())
-            elif writer:
-                writer.write(frame)
-    finally:
-        if stream_proc:
-            if stream_proc.stdin:
-                stream_proc.stdin.close()
-            stream_proc.wait(timeout=30)
-        if writer:
-            writer.release()
-        capture.release()
+            if not writer.isOpened():
+                raise OverlayUnavailable(
+                    f"No encoder was available to write {out_size[0]}x{out_size[1]} video."
+                )
+        capture = _open()
+        run_placed = 0
+        run_covered = 0
+        try:
+            for index in range(len(per_frame)):
+                ok, frame = capture.read()
+                if not ok:
+                    break
+                drawing.at(index, len(per_frame))
+                landed = False
+                # One face for the subject, or one per person when everybody was
+                # asked for.
+                here = (
+                    [subject[index]] if single and subject[index]
+                    else [] if single
+                    else [track.frames[index] for track in chosen if track.frames[index]]
+                )
+                for face in here:
+                    placement = place(face, overlay, settings)
+                    sprite = sprites.at(placement.sprite_width())
+                    if paste(
+                        cv2, np, frame, sprite, placement, settings.opacity, settings.mirror
+                    ):
+                        run_placed += 1
+                        landed = True
+                run_covered += 1 if landed else 0
+                # Scaled after the object is burned in, so a proxy shows the master.
+                if out_scale < 1.0:
+                    frame = cv2.resize(frame, out_size, interpolation=cv2.INTER_AREA)
+                if stream_proc and stream_proc.stdin:
+                    stream_proc.stdin.write(frame.tobytes())
+                elif writer:
+                    writer.write(frame)
+        except BrokenPipeError:
+            return False
+        finally:
+            if stream_proc:
+                if stream_proc.stdin:
+                    stream_proc.stdin.close()
+                stream_proc.wait(timeout=30)
+            if writer:
+                writer.release()
+            capture.release()
+        if stream_proc is not None and stream_proc.returncode != 0:
+            return False
+        placed, covered_frames = run_placed, run_covered
+        return True
+
+    if not write_pass():
+        silent.unlink(missing_ok=True)
+        if not write_pass(force_software=True):
+            raise OverlayUnavailable("FFmpeg could not encode the covered video.")
 
     if _remux_audio(silent, source, destination):
         silent.unlink(missing_ok=True)

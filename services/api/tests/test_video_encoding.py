@@ -59,3 +59,28 @@ def test_failed_hardware_encode_retries_with_libx264(monkeypatch, tmp_path: Path
     assert used == video_encoding.SOFTWARE
     assert "h264_nvenc" in calls[0]
     assert "libx264" in calls[1]
+
+
+def test_stream_writer_can_bypass_a_busy_hardware_encoder(monkeypatch, tmp_path: Path) -> None:
+    ffmpeg = tmp_path / "ffmpeg"
+    ffmpeg.write_bytes(b"")
+    output = tmp_path / "out.mp4"
+    monkeypatch.setattr(
+        video_encoding, "preferred_encoder",
+        lambda _path: video_encoding.EncoderProfile("h264_nvenc", hardware=True),
+    )
+    captured: dict[str, object] = {}
+
+    def popen(command, **options):
+        captured["command"] = command
+        captured["options"] = options
+        return SimpleNamespace()
+
+    monkeypatch.setattr(video_encoding.subprocess, "Popen", popen)
+
+    video_encoding.open_h264_stream_writer(
+        ffmpeg, output, 720, 1280, 30, force_software=True
+    )
+
+    assert "libx264" in captured["command"]
+    assert "h264_nvenc" not in captured["command"]
