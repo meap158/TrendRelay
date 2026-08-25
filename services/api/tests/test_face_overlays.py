@@ -1622,3 +1622,41 @@ def test_every_solid_object_actually_has_triangles() -> None:
         assert overlay.mesh.faces, overlay.id
         assert overlay.mesh.vertices, overlay.id
         assert not overlay.shapes, f"{overlay.id} declares both a mesh and shapes"
+
+
+def test_no_solid_object_is_drawn_outside_the_sprite_it_gets() -> None:
+    """The unit cube is mapped to the sprite, so a vertex outside it is cut off.
+
+    Caught by measuring rather than by looking: the top hat's crown ran a tenth
+    of a unit above the top and the party cone's bobble ran off both ends, and
+    in a gallery thumbnail both just looked like slightly stubby objects.
+
+    Only x and y. Depth is not clipped - the projection is orthographic and z
+    decides nothing but which surface is in front - so an object reaching
+    towards the camera is fine, and the cap's peak does.
+    """
+    for overlay in overlay_catalogue.BUILT_IN:
+        if overlay.mesh is None:
+            continue
+        for axis, name in ((0, "x"), (1, "y")):
+            reach = [vertex[axis] for vertex in overlay.mesh.vertices]
+            assert min(reach) >= -0.5 - 1e-6, f"{overlay.id} runs off the {name} start"
+            assert max(reach) <= 0.5 + 1e-6, f"{overlay.id} runs off the {name} end"
+
+
+def test_a_solid_object_reaches_most_of_the_sprite_it_is_given() -> None:
+    """The other half of the same measurement.
+
+    An object drawn well inside its box is a prop that renders smaller than the
+    size the operator asked for, and the fix looks like turning the scale up -
+    which then makes the sprite bigger than the face it is sized against.
+    """
+    for overlay in overlay_catalogue.BUILT_IN:
+        if overlay.mesh is None:
+            continue
+        spans = [
+            max(vertex[axis] for vertex in overlay.mesh.vertices)
+            - min(vertex[axis] for vertex in overlay.mesh.vertices)
+            for axis in (0, 1)
+        ]
+        assert max(spans) > 0.7, f"{overlay.id} uses little of its own sprite"

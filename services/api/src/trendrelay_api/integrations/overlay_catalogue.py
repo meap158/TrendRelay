@@ -828,13 +828,15 @@ def _cap() -> Any:
     # the crown shows rather than being cut - a hemisphere would leave an open
     # edge, and an open edge lit from behind reads as a hole.
     dome = meshes.moved(dome, y=0.10)
+    # Reaching further forward than it is wide, and angled down, so it reads as
+    # a peak head-on instead of as a rim around the dome.
     peak = meshes.painted(
         meshes.moved(
             meshes.turned(
-                meshes.scaled(meshes.cylinder(CAP_PEAK, sides=28), 0.80, 0.045, 0.80),
-                x=12.0,
+                meshes.scaled(meshes.cylinder(CAP_PEAK, sides=28), 0.78, 0.05, 0.98),
+                x=16.0,
             ),
-            y=-0.10, z=0.34,
+            y=-0.13, z=0.40,
         ),
         CAP_PEAK,
     )
@@ -844,11 +846,15 @@ def _cap() -> Any:
 def _top_hat() -> Any:
     """A crown and a brim, which is the whole of a top hat."""
     crown = meshes.painted(
-        meshes.moved(meshes.scaled(meshes.cylinder(FELT, sides=30), 0.58, 0.78, 0.58), y=0.22),
+        meshes.moved(
+            meshes.scaled(meshes.cylinder(FELT, sides=30), 0.58, 0.64, 0.58), y=0.16
+        ),
         FELT,
     )
     brim = meshes.painted(
-        meshes.moved(meshes.scaled(meshes.cylinder(FELT, sides=34), 1.0, 0.05, 1.0), y=-0.17),
+        meshes.moved(
+            meshes.scaled(meshes.cylinder(FELT, sides=34), 0.96, 0.05, 0.96), y=-0.17
+        ),
         FELT,
     )
     band = meshes.painted(
@@ -861,12 +867,15 @@ def _top_hat() -> Any:
 def _party_cone() -> Any:
     """A cone and a bobble, leaning the way a party hat actually sits."""
     cone = meshes.painted(
-        meshes.scaled(meshes.cone(CONE_PARTY, sides=26), 0.62, 1.0, 0.62), CONE_PARTY
+        meshes.moved(
+            meshes.scaled(meshes.cone(CONE_PARTY, sides=26), 0.62, 0.80, 0.62), y=-0.05
+        ),
+        CONE_PARTY,
     )
     bobble = meshes.painted(
         meshes.moved(
-            meshes.scaled(meshes.sphere(POM, segments=16, rings=10), 0.22, 0.22, 0.22),
-            y=0.54,
+            meshes.scaled(meshes.sphere(POM, segments=16, rings=10), 0.20, 0.20, 0.20),
+            y=0.40,
         ),
         POM,
     )
@@ -908,20 +917,27 @@ def _solid_sunglasses() -> Any:
     The arms are the reason this is worth having in three dimensions: face the
     camera and they are invisible, turn and they are most of what is seen.
     """
-    lens = meshes.scaled(meshes.cylinder(LENS_SOLID, sides=22), 0.40, 0.035, 0.30)
-    lens = meshes.turned(lens, x=90.0)
-    left = meshes.painted(meshes.moved(lens, x=-0.26, z=0.20), LENS_SOLID)
-    right = meshes.painted(meshes.moved(lens, x=0.26, z=0.20), LENS_SOLID)
+    # Lenses nearly touching, with a short bridge between them. Set wide apart
+    # with a long bridge they read as two goggles rather than one pair - the
+    # gap between the lenses of real shades is a few millimetres.
+    lens = meshes.turned(
+        meshes.scaled(meshes.cylinder(LENS_SOLID, sides=22), 0.38, 0.04, 0.30), x=90.0
+    )
+    left = meshes.painted(meshes.moved(lens, x=-0.21, z=0.20), LENS_SOLID)
+    right = meshes.painted(meshes.moved(lens, x=0.21, z=0.20), LENS_SOLID)
     bridge = meshes.painted(
-        meshes.moved(meshes.scaled(meshes.box(METAL), 0.16, 0.035, 0.05), y=0.05, z=0.22),
+        meshes.moved(meshes.scaled(meshes.box(METAL), 0.09, 0.03, 0.05), y=0.05, z=0.21),
         METAL,
     )
     arms = meshes.Mesh()
     for side in (-1.0, 1.0):
+        # Hinged at the top outer corner and running back, which is where an
+        # arm actually joins and why it appears from behind the lens as the
+        # head turns rather than sliding out of its middle.
         arm = meshes.painted(
             meshes.moved(
-                meshes.scaled(meshes.box(METAL), 0.035, 0.035, 0.55),
-                x=side * 0.44, y=0.04, z=-0.06,
+                meshes.scaled(meshes.box(METAL), 0.03, 0.03, 0.58),
+                x=side * 0.38, y=0.09, z=-0.08,
             ),
             METAL,
         )
