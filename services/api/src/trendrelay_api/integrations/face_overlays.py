@@ -20,6 +20,7 @@ could switch off.
 
 from __future__ import annotations
 
+import math
 import os
 import statistics
 from collections.abc import Sequence
@@ -244,30 +245,46 @@ def smooth_poses(raw: Sequence[Any | None]) -> list[Any | None]:
     return smoothed
 
 
-def _filtered(signal: list[float]) -> list[float]:
+def _filtered(
+    signal: list[float],
+    median_window: int = POSE_MEDIAN_WINDOW,
+    mean_window: int = POSE_MEAN_WINDOW,
+) -> list[float]:
     """A median then a mean over the timeline, both centred and bounded."""
     if len(signal) <= 2:
         return signal
-    half = POSE_MEDIAN_WINDOW // 2
+    half = median_window // 2
     despiked = [
         statistics.median(signal[max(0, index - half) : index + half + 1])
         for index in range(len(signal))
     ]
-    half = POSE_MEAN_WINDOW // 2
+    half = mean_window // 2
     return [
         statistics.fmean(despiked[max(0, index - half) : index + half + 1])
         for index in range(len(despiked))
     ]
 
 
-def place(anchors: FaceAnchors, overlay: Overlay, settings: OverlaySettings) -> Placement:
+def place(
+    anchors: FaceAnchors,
+    overlay: Overlay,
+    settings: OverlaySettings,
+    width_scale: float = 1.0,
+) -> Placement:
     """Work out where an object sits on a face.
 
     Everything is in face widths rather than pixels, so the same numbers work on
     a face filling a 4K frame and a face forty pixels across, and the object
     does not swim as the subject walks towards the camera.
+
+    `width_scale` corrects the measured face width before anything is placed
+    by it - see `placement_timeline`, which uses it to undo the foreshortening
+    a turned head puts into the eye span. It scales the offsets along with the
+    sprite, because a hat's height above the eyes is quoted in face widths and
+    shrinking one without the other tips the hat down the forehead as the head
+    turns.
     """
-    face_width = anchors.width
+    face_width = anchors.width * width_scale
     anchor_x, anchor_y = anchors.anchor(overlay.anchor)
     tilted = settings.follow_tilt and overlay.follows_roll
     # An object that does not turn with the head is also not offset along it,
@@ -288,6 +305,99 @@ def place(anchors: FaceAnchors, overlay: Overlay, settings: OverlaySettings) -> 
         width=width,
         angle=tracked_angle + settings.rotation,
     )
+
+
+#: The placement smoothing windows, in frames. Tighter than the pose's on
+#: purpose: an angle can trail a turn by a hundred milliseconds and read as a
+#: prop with weight, but a position that trails a moving head reads as a prop
+#: sliding off it. Three and seven flatten the sawtooth that detecting on
+#: alternate frames leaves in the landmarks - measured on the clip that
+#: prompted this, they take the frame-to-frame roughness from a few pixels to
+#: under half a pixel - and a centred mean adds no lag at all while the
+#: motion is steady.
+PLACE_MEDIAN_WINDOW = 3
+PLACE_MEAN_WINDOW = 7
+
+#: How far the width correction will follow a turned head. cos(yaw) below
+#: this - past sixty degrees - is where the pose itself stops being believed
+#: long before, so a larger multiplier would be amplifying a guess.
+FORESHORTEN_FLOOR = 0.5
+
+
+def placement_timeline(
+    faces: Sequence[FaceAnchors | None],
+    overlay: Overlay,
+    settings: OverlaySettings,
+    poses: Sequence[Any | None] | None = None,
+) -> list[Placement | None]:
+    """Each frame's placement, steadied over the clip before anything is drawn.
+
+    The sprite's angle was smoothed and the object still jiggled, because the
+    other three numbers it is pasted by - centre, width, lean - still arrived
+    raw from each frame's landmarks. A cap is the worst case: it hangs off the
+    anchor by most of a face width, so eye-span noise works a lever arm the
+    face itself never shows.
+
+    Two corrections, in order:
+
+    * The measured face width is *foreshortened* - it is the eye span, and the
+      eye span shrinks by cos(yaw) as the head turns, so a cap pulsed smaller
+      with every shake of the head. Where the pose is known, the width is
+      divided back out, because the head under the hat did not change size.
+    * Centre, width and lean are then filtered over the timeline, exactly as
+      the pose is, with tighter windows so position keeps up with real motion.
+    """
+    placements: list[Placement | None] = []
+    for index, face in enumerate(faces):
+        if face is None:
+            placements.append(None)
+            continue
+        scale = 1.0
+        pose = poses[index] if poses is not None and index < len(poses) else None
+        if pose is not None:
+            scale = 1.0 / max(math.cos(math.radians(pose.yaw)), FORESHORTEN_FLOOR)
+        placements.append(place(face, overlay, settings, width_scale=scale))
+
+    present = [index for index, item in enumerate(placements) if item is not None]
+    if len(present) <= 2:
+        return placements
+
+    # One continuous series per channel, gaps interpolated and ends held so
+    # the filters see a signal rather than islands; only the frames that have
+    # a face are rebuilt, so nothing is drawn where nothing was.
+    channels: dict[str, list[float]] = {}
+    for name, value_of in (
+        ("x", lambda p: p.centre[0]),
+        ("y", lambda p: p.centre[1]),
+        ("width", lambda p: p.width),
+        ("angle", lambda p: p.angle),
+    ):
+        series = [0.0] * len(placements)
+        for index in present:
+            series[index] = value_of(placements[index])
+        for previous, following in zip(present, present[1:], strict=False):
+            span = following - previous
+            for offset in range(1, span):
+                blend = offset / span
+                series[previous + offset] = (
+                    series[previous] * (1 - blend) + series[following] * blend
+                )
+        for index in range(present[0]):
+            series[index] = series[present[0]]
+        for index in range(present[-1] + 1, len(placements)):
+            series[index] = series[present[-1]]
+        channels[name] = _filtered(series, PLACE_MEDIAN_WINDOW, PLACE_MEAN_WINDOW)
+
+    return [
+        Placement(
+            centre=(channels["x"][index], channels["y"][index]),
+            width=channels["width"][index],
+            angle=channels["angle"][index],
+        )
+        if item is not None
+        else None
+        for index, item in enumerate(placements)
+    ]
 
 
 def paste(
@@ -972,6 +1082,20 @@ def render_overlaid(
                 smooth_poses(pose_timeline(track.frames, width, height))
                 for track in chosen
             ]
+    # And where each frame's object goes, steadied the same way - the centre,
+    # width and lean it is pasted by carried the landmarks' noise even once
+    # the angle was calm. See `placement_timeline`.
+    if single:
+        subject_placements = placement_timeline(
+            subject, overlay, settings, subject_poses if solid else None
+        )
+    else:
+        track_placements = [
+            placement_timeline(
+                track.frames, overlay, settings, track_poses[at] if solid else None
+            )
+            for at, track in enumerate(chosen)
+        ]
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     silent = destination.with_suffix(".silent.mp4")
@@ -1022,21 +1146,25 @@ def render_overlaid(
                 drawing.at(index, len(per_frame))
                 landed = False
                 # One face for the subject, or one per person when everybody was
-                # asked for - each with the pose its own smoothed timeline says,
-                # and a slot so the cache's hysteresis is held per face.
+                # asked for - each drawn at the placement and pose its own
+                # smoothed timeline says, with a slot so the cache's hysteresis
+                # is held per face.
                 if single:
                     here = (
-                        [(subject[index], subject_poses[index] if solid else None, 0)]
+                        [(subject_placements[index], subject_poses[index] if solid else None, 0)]
                         if subject[index] else []
                     )
                 else:
                     here = [
-                        (track.frames[index], track_poses[at][index] if solid else None, at)
+                        (
+                            track_placements[at][index],
+                            track_poses[at][index] if solid else None,
+                            at,
+                        )
                         for at, track in enumerate(chosen)
                         if track.frames[index]
                     ]
-                for face, pose, slot in here:
-                    placement = place(face, overlay, settings)
+                for placement, pose, slot in here:
                     sprite = sprites.at(placement.sprite_width(), pose, slot=slot)
                     if paste(
                         cv2, np, frame, sprite, placement, settings.opacity, settings.mirror

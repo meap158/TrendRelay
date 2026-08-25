@@ -1768,3 +1768,69 @@ def test_each_face_holds_its_own_cell() -> None:
     cache.at(120, _pose(2.0), slot=0)
 
     assert len(cache._sprites) == 2
+
+
+# --- steadying the placement itself --------------------------------------------
+
+
+def test_placement_jitter_is_flattened_over_the_timeline() -> None:
+    """The angle was smoothed and the object still jiggled: the centre, width
+    and lean it is pasted by carried the landmarks' noise all the same."""
+    overlay = overlay_catalogue.get("smiley")
+    settings = OverlaySettings(overlay_id="smiley")
+    faces = [
+        upright(100.0, (500.0 + (1.5 if index % 2 else -1.5), 400.0))
+        for index in range(30)
+    ]
+
+    steadied = face_overlays.placement_timeline(faces, overlay, settings)
+
+    xs = [item.centre[0] for item in steadied]
+    deltas = [abs(a - b) for a, b in zip(xs, xs[1:])]
+    assert max(deltas) < 1.0, "a three-pixel sawtooth survived the smoothing"
+
+
+def test_a_moving_head_is_followed_without_lag() -> None:
+    """A centred filter adds no lag while the motion is steady - the cost of
+    smoothing must not be a hat trailing behind a walking subject."""
+    overlay = overlay_catalogue.get("smiley")
+    settings = OverlaySettings(overlay_id="smiley")
+    faces = [upright(100.0, (300.0 + index * 5.0, 400.0)) for index in range(30)]
+
+    raw = [face_overlays.place(face, overlay, settings) for face in faces]
+    steadied = face_overlays.placement_timeline(faces, overlay, settings)
+
+    for index in range(5, 25):
+        assert abs(steadied[index].centre[0] - raw[index].centre[0]) < 0.01
+
+
+def test_a_turned_head_does_not_shrink_its_hat() -> None:
+    """The measured width is the eye span, and the eye span forehortens by
+    cos(yaw) as the head turns - so a cap pulsed smaller with every shake of
+    the head while the head itself stayed the same size on screen."""
+    from trendrelay_api.integrations import face_pose
+
+    overlay = overlay_catalogue.get("cap_3d")
+    settings = OverlaySettings(overlay_id="cap_3d")
+    square_on = [upright(100.0)] * 20
+    turned = [upright(100.0 * math.cos(math.radians(45.0)))] * 20
+    poses = [face_pose.HeadPose(yaw=0.0, pitch=0.0, roll=0.0, points=4)] * 20 + [
+        face_pose.HeadPose(yaw=45.0, pitch=0.0, roll=0.0, points=4)
+    ] * 20
+
+    steadied = face_overlays.placement_timeline(
+        square_on + turned, overlay, settings, poses
+    )
+
+    assert abs(steadied[5].width - steadied[35].width) < steadied[5].width * 0.03
+
+
+def test_frames_with_no_face_stay_empty_in_a_steadied_timeline() -> None:
+    overlay = overlay_catalogue.get("smiley")
+    settings = OverlaySettings(overlay_id="smiley")
+    faces = [upright(100.0)] * 5 + [None] * 3 + [upright(100.0)] * 5
+
+    steadied = face_overlays.placement_timeline(faces, overlay, settings)
+
+    assert all(item is None for item in steadied[5:8])
+    assert all(item is not None for item in steadied[:5] + steadied[8:])
