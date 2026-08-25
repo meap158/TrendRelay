@@ -61,6 +61,7 @@ export const vi: Messages = {
     unavailable: "Không khả dụng",
     comingSoon: "Sắp có",
     other: "Khác",
+    loadMore: "Tải thêm",
   },
 
   status: {
@@ -1403,6 +1404,7 @@ export const vi: Messages = {
     chooseFile: "Chọn tệp PNG…",
     dropHint: "Hoặc thả tệp vào {directory}.",
     suggested: "Gợi ý cho video này",
+    noPictures: "Thư viện chưa có ảnh nào.",
   },
 
   ui: {

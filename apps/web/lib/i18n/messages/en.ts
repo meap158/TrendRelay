@@ -67,6 +67,7 @@ export const en = {
     unavailable: "Unavailable",
     comingSoon: "Coming soon",
     other: "Other",
+    loadMore: "Load more",
   },
 
   status: {
@@ -1406,6 +1407,7 @@ export const en = {
     chooseFile: "Choose a PNG…",
     dropHint: "Or drop a file into {directory}.",
     suggested: "Suggested for this clip",
+    noPictures: "No pictures in the library yet.",
   },
 
   ui: {

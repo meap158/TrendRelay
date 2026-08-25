@@ -13,6 +13,9 @@ import { ParamControl } from "./effect-params";
 import type { EffectDefinition, EffectParam, ParamOption } from "./effect-params";
 import { optionGroup, optionLabel } from "../../lib/i18n/effects";
 import { useT } from "../i18n-provider";
+import { useLibraryAssets } from "../../lib/use-library-assets";
+import { AssetThumbnail, IMAGE_PICKER_BASE } from "../publish/composer";
+import type { LibraryAsset } from "../publish/composer";
 
 /**
  * Choosing between picture-shaped options, and seeing the choice on a real
@@ -274,44 +277,28 @@ export function GalleryPanel({
   // Declared alongside the options rather than fetched: a choice fed by a
   // folder says where that folder is, and a choice that is not simply has none.
   const folder = param.folder;
-  const [pictures, setPictures] = useState<{ id: string; title: string }[]>([]);
-  const [importing, setImporting] = useState("");
+  const [browsing, setBrowsing] = useState(false);
   const [suggested, setSuggested] = useState<Suggestion[]>([]);
   const [adding, setAdding] = useState(false);
   const [addFailure, setAddFailure] = useState("");
 
-  useEffect(() => {
-    if (!open || !folder?.import_from_library) return;
-    let active = true;
-    // Only the pictures. A clip cannot be a portrait, and offering one would
-    // be a choice that can only fail.
-    //
-    // `limit=100` is the endpoint's own ceiling. This asked for 200, the API
-    // answered 422, `response.ok` was quietly false and the catch swallowed
-    // it - so the dropdown rendered with no options and no explanation, which
-    // is the failure mode this now refuses to reproduce: a refused read is a
-    // message, not an empty list.
-    apiFetch(`${base}/assets?media_kind=image&limit=100`)
-      .then(async (response) => {
-        const body = await response.json().catch(() => ({}));
-        if (!active) return;
-        if (!response.ok) {
-          throw new Error(body.detail ?? "The library's pictures could not be read.");
-        }
-        setPictures(((body.assets ?? []) as { id: string; title: string }[]).map(
-          (asset) => ({ id: asset.id, title: asset.title }),
-        ));
-      })
-      .catch((reason: unknown) => {
-        if (!active) return;
-        setAddFailure(
-          reason instanceof Error ? reason.message : "The library's pictures could not be read.",
-        );
-      });
-    return () => {
-      active = false;
-    };
-  }, [apiFetch, base, folder?.import_from_library, open]);
+  /**
+   * The library's pictures, through the loop every other picker reads with.
+   *
+   * This used to be a hand-rolled fetch of `assets?media_kind=image&limit=100`
+   * with no paging, no filter and no thumbnails - a copy of the shared loop
+   * born already behind it, which is the failure ADR 0025 is about. The hook
+   * owns the debounce, the paging, the stale-response guard and the counts.
+   */
+  const libraryPictures = useLibraryAssets<LibraryAsset>({
+    workspaceId,
+    apiFetch,
+    baseline: IMAGE_PICKER_BASE,
+    enabled: open && Boolean(folder?.import_from_library),
+    keep: (asset) => asset.media_kind === "image",
+  });
+
+
 
   /**
    * Copy a library picture into the folder this choice is fed from.
@@ -321,20 +308,20 @@ export function GalleryPanel({
    * what the API now says. A locally patched list would be a second version of
    * the truth, and the one that validation does not read.
    */
-  async function addFromLibrary() {
-    if (!folder?.import_from_library || !importing) return;
+  async function addFromLibrary(assetId: string) {
+    if (!folder?.import_from_library || !assetId) return;
     setAdding(true);
     setAddFailure("");
     try {
       const response = await apiFetch(`${base}/${folder.import_from_library}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ asset_id: importing }),
+        body: JSON.stringify({ asset_id: assetId }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.detail ?? "That picture could not be added.");
-      setImporting("");
-      onCatalogueChanged?.(String(body.face?.value ?? ""));
+      setBrowsing(false);
+      onCatalogueChanged?.(String(body.face?.value ?? body.object?.value ?? ""));
     } catch (reason) {
       setAddFailure(reason instanceof Error ? reason.message : "That picture could not be added.");
     } finally {
@@ -711,29 +698,23 @@ export function GalleryPanel({
                   rarer cases and each folds into an icon whose tooltip says
                   the sentence the row no longer spends a line on. */}
               <div className="overlay-import">
+                {/* A dropdown of filenames was the wrong control here for the
+                    same reason it was wrong for the objects themselves - see
+                    the note at the top of this file. These are pictures, and
+                    nobody picks one by reading its name.
+
+                    Folded behind a toggle rather than always open: this is
+                    supporting chrome under the grid people came for, and a
+                    permanent second grid underneath it competes with the one
+                    the dialog is about. */}
                 {folder.import_from_library && (
-                  <>
-                    <label>
-                      <span className="sr-only">{t("overlayPicker.addFromLibrary")}</span>
-                      <Select
-                        value={importing}
-                        disabled={!canEdit || adding}
-                        onChange={(event) => setImporting(event.target.value)}
-                      >
-                        <option value="">{t("overlayPicker.addFromLibrary")}</option>
-                        {pictures.map((asset) => (
-                          <option key={asset.id} value={asset.id}>{asset.title}</option>
-                        ))}
-                      </Select>
-                    </label>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      busy={adding}
-                      disabled={!canEdit || !importing}
-                      onClick={() => void addFromLibrary()}
-                    >{t("overlayPicker.add")}</Button>
-                  </>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={!canEdit || adding}
+                    aria-expanded={browsing}
+                    onClick={() => setBrowsing((current) => !current)}
+                  >{t("overlayPicker.addFromLibrary")}</Button>
                 )}
                 {/* A file on their own machine, which is where a sticker they
                     have just exported actually is. */}
@@ -765,6 +746,50 @@ export function GalleryPanel({
                   </span>
                 </span>
               </div>
+              {/* The pictures themselves, at a size somebody can recognise one
+                  at. One click imports: there is a single choice to make here,
+                  so a separate Add press would be a second click for nothing. */}
+              {browsing && folder.import_from_library && (
+                <div className="overlay-library">
+                  {libraryPictures.loading === "list" && !libraryPictures.assets.length ? (
+                    <p className="overlay-note">{t("common.loading")}</p>
+                  ) : libraryPictures.assets.length ? (
+                    <>
+                      <div className="overlay-library-grid">
+                        {libraryPictures.assets.map((asset) => (
+                          <button
+                            key={asset.id}
+                            type="button"
+                            disabled={!canEdit || adding}
+                            title={asset.title}
+                            onClick={() => void addFromLibrary(asset.id)}
+                          >
+                            <AssetThumbnail
+                              asset={asset}
+                              workspaceId={workspaceId}
+                              apiFetch={apiFetch}
+                            />
+                            <span>{asset.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                      {/* The loop pages; without this the grid stops at the
+                          first page and looks like the whole library. */}
+                      {libraryPictures.canLoadMore && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          busy={Boolean(libraryPictures.loading)}
+                          onClick={() => libraryPictures.loadMore()}
+                        >{t("common.loadMore")}</Button>
+                      )}
+                    </>
+                  ) : (
+                    <p className="overlay-note">{t("overlayPicker.noPictures")}</p>
+                  )}
+                </div>
+              )}
+
               {/* Failures keep their own line: a rejection folded into a
                   tooltip is a rejection nobody sees. */}
               {(folder.skipped.length > 0 || addFailure) && (

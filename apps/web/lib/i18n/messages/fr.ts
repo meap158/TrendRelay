@@ -61,6 +61,7 @@ export const fr: Messages = {
     unavailable: "Indisponible",
     comingSoon: "Bientôt disponible",
     other: "Autre",
+    loadMore: "Charger plus",
   },
 
   status: {
@@ -1423,6 +1424,7 @@ export const fr: Messages = {
     chooseFile: "Choisir un PNG…",
     dropHint: "Ou déposez un fichier dans {directory}.",
     suggested: "Suggéré pour ce clip",
+    noPictures: "Aucune image dans la bibliothèque pour l'instant.",
   },
 
   ui: {

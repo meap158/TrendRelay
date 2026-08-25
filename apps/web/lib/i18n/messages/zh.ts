@@ -61,6 +61,7 @@ export const zh: Messages = {
     unavailable: "不可用",
     comingSoon: "即将推出",
     other: "其他",
+    loadMore: "加载更多",
   },
 
   status: {
@@ -1378,6 +1379,7 @@ export const zh: Messages = {
     chooseFile: "选择 PNG 文件…",
     dropHint: "或将文件放入 {directory}。",
     suggested: "为这个视频推荐",
+    noPictures: "素材库中还没有图片。",
   },
 
   ui: {

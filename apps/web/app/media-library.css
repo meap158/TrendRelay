@@ -706,6 +706,20 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .overlay-warning { margin: 0; padding: 7px 9px; border-inline-start: 3px solid var(--amber); background: var(--warn-bg); color: var(--text); font-size: 11px; line-height: 1.45; }
 .overlay-empty { margin: 0; color: var(--muted); font-size: 11px; }
 .overlay-folder { display: grid; gap: 6px; }
+/* The library's own pictures, at a size somebody can recognise one at. A
+   dropdown of filenames was the wrong control here for exactly the reason the
+   objects above are a gallery rather than a select. */
+.overlay-library { display: grid; gap: 7px; justify-items: start; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-raised); }
+.overlay-library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 7px; width: 100%; max-height: 190px; overflow-y: auto; overscroll-behavior: contain; }
+.overlay-library-grid button { display: grid; justify-items: center; gap: 3px; padding: 5px 4px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); font: inherit; cursor: pointer; }
+.overlay-library-grid button:hover:not(:disabled) { border-color: var(--link); background: var(--panel-raised); }
+.overlay-library-grid button:disabled { opacity: .5; cursor: not-allowed; }
+.overlay-library-grid span { max-width: 100%; overflow: hidden; font-size: 9px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+/* The shared thumbnail publishes the picture's own shape; a fixed box here
+   would crop it the way the campaign queue row was cropping its clips. */
+.overlay-library-grid .picker-thumb { inline-size: 100%; block-size: auto; aspect-ratio: var(--thumb-ratio, 1); border-radius: var(--radius-sm); overflow: hidden; background: var(--line); }
+.overlay-library-grid .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.overlay-library-grid .picker-thumb i { display: none; }
 /* The native file input, dressed as the icon button beside the select. Its own
    control is an unstyleable "Choose file / no file chosen" pair, so the input
    is hidden inside the label and the label is what gets drawn - as an icon,

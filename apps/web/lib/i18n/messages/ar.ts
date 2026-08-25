@@ -63,6 +63,7 @@ export const ar: Messages = {
     unavailable: "غير متاح",
     comingSoon: "قريبًا",
     other: "أخرى",
+    loadMore: "تحميل المزيد",
   },
 
   status: {
@@ -1406,6 +1407,7 @@ export const ar: Messages = {
     chooseFile: "اختر ملف PNG…",
     dropHint: "أو ضع ملفًا في {directory}.",
     suggested: "مقترح لهذا المقطع",
+    noPictures: "لا توجد صور في المكتبة بعد.",
   },
 
   ui: {

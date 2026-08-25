@@ -62,6 +62,7 @@ export const ru: Messages = {
     unavailable: "Недоступно",
     comingSoon: "Скоро",
     other: "Другое",
+    loadMore: "Показать ещё",
   },
 
   status: {
@@ -1422,6 +1423,7 @@ export const ru: Messages = {
     chooseFile: "Выбрать PNG…",
     dropHint: "Или положите файл в {directory}.",
     suggested: "Подходит этому клипу",
+    noPictures: "В библиотеке пока нет изображений.",
   },
 
   ui: {

@@ -61,6 +61,7 @@ export const ja: Messages = {
     unavailable: "利用できません",
     comingSoon: "近日公開",
     other: "その他",
+    loadMore: "さらに読み込む",
   },
 
   status: {
@@ -1396,6 +1397,7 @@ export const ja: Messages = {
     chooseFile: "PNGを選ぶ…",
     dropHint: "または {directory} にファイルを入れてください。",
     suggested: "このクリップへのおすすめ",
+    noPictures: "ライブラリにまだ画像がありません。",
   },
 
   ui: {
