@@ -79,6 +79,7 @@ def burn_in(
     output: Path,
     *,
     style: fmt.Style | None = None,
+    prefilters: Sequence[str] = (),
     crf: int = 18,
     preset: str = "medium",
 ) -> Path:
@@ -91,6 +92,12 @@ def burn_in(
     separates options and a backslash escapes - so `C:\\clips\\a.ass` is read as
     an option named `C` and the render fails, or worse, silently draws nothing.
     Running from the directory sidesteps the whole quoting problem.
+
+    `prefilters` run in the same encode, before the subtitles are drawn - which
+    is what lets a cover land under the lettering that replaces the covered
+    text without paying for a second generation of quality. They are fragments
+    in the shape `text_cover.cover_filters` returns: joined with commas into
+    one filtergraph, so a fragment may open its own labelled chains.
 
     The audio stream is copied rather than re-encoded. Only the picture changed,
     and re-encoding it would cost quality and time for no reason.
@@ -118,7 +125,7 @@ def burn_in(
             [
                 str(FFMPEG), "-y", "-hide_banner", "-loglevel", "error",
                 "-i", str(source),
-                "-vf", f"subtitles={subtitle_file.name}",
+                "-vf", ",".join([*prefilters, f"subtitles={subtitle_file.name}"]),
                 "-c:a", "copy",
             ],
             [

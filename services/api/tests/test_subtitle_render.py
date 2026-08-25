@@ -93,6 +93,35 @@ def test_the_filter_gets_a_bare_filename(tmp_path: Path, monkeypatch) -> None:
     assert (seen["cwd"] / "captions.ass").name == "captions.ass"
 
 
+def test_prefilters_run_in_the_same_encode_before_the_subtitles(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A cover under the lettering, without a second generation of quality."""
+    source = tmp_path / "clip.mp4"
+    source.write_bytes(b"video")
+    monkeypatch.setattr(render, "FFMPEG", source)
+    monkeypatch.setattr(render, "probe_size", lambda _video: (1080, 1920))
+    seen: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        if "-vf" not in command:
+            return type("Done", (), {"returncode": 1, "stderr": "", "stdout": ""})()
+        seen["filter"] = command[command.index("-vf") + 1]
+        Path(command[-1]).write_bytes(b"burned")
+        return type("Done", (), {"returncode": 0, "stderr": ""})()
+
+    monkeypatch.setattr(render.subprocess, "run", fake_run)
+
+    render.burn_in(
+        source, [cue("hi", 0, 1000)], tmp_path / "out.mp4", style=Style(),
+        prefilters=["drawbox=x=0:y=0:w=100:h=50:color=black:t=fill"],
+    )
+
+    assert seen["filter"] == (
+        "drawbox=x=0:y=0:w=100:h=50:color=black:t=fill,subtitles=captions.ass"
+    )
+
+
 def test_a_failed_encode_reports_what_ffmpeg_said(tmp_path: Path, monkeypatch) -> None:
     source = tmp_path / "clip.mp4"
     source.write_bytes(b"video")

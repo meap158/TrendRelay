@@ -889,6 +889,11 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 
 .caption-editor-language select, .caption-editor-source select { width: 100%; max-width: 420px; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); font-size: 13px; }
 .caption-editor-note { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+/* One line per choice: the label a quiet caption, the control carrying the
+   value - the same shape as the Deliver control in the footer. */
+.caption-cover-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.caption-cover-row > span { flex: none; }
+.caption-cover-row select { flex: 1; max-width: 300px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--text); font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; }
 .caption-editor-problem { margin: 0 0 8px; color: var(--bad); font-size: 12px; }
 
 /* The cue list is the preview. Times and reading speed are fixed columns so

@@ -96,6 +96,13 @@ def queue(
                 # Overrides change the output, so they change the identity.
                 repr(sorted((request.get("style_overrides") or {}).items())),
                 repr(sorted((request.get("layout_overrides") or {}).items())),
+                # So does the cover: the same lettering over a blurred original
+                # and over a solid box are different pictures.
+                repr((
+                    request.get("cover") or "backdrop",
+                    request.get("cover_colour") or "black",
+                    request.get("cover_strength") or 0.08,
+                )),
             ]
         )
         job_id = "caption_" + hashlib.sha256(signature.encode()).hexdigest()[:24]
@@ -207,12 +214,24 @@ def _render(
 
         translator = live_translator(source_language, target)
 
+    # How the original text is hidden under the replacement. `backdrop` is the
+    # lettering's own opaque box; the picture covers patch the frame itself,
+    # which is what lets a blur or a pixelation show the footage through.
+    cover = payload.get("cover") or "backdrop"
+
     if on_screen:
+        style_overrides = dict(payload.get("style_overrides") or {})
+        if cover != "backdrop":
+            # The patch is what hides the original now. Left opaque, the box
+            # would sit on top of the blur somebody chose precisely because a
+            # solid box was not what they wanted. An explicit override still
+            # wins - somebody asking for both gets both.
+            style_overrides.setdefault("back_alpha", 255)
         built = _lettering(
             regions,
             translator,
             style_id=payload.get("style_id", "broadcast"),
-            style_overrides=payload.get("style_overrides") or {},
+            style_overrides=style_overrides,
         )
     else:
         built = captions.build(
@@ -246,7 +265,23 @@ def _render(
     if delivery in {"burned", "both"}:
         progress(0.58, "Encoding captions into the video")
         output = destination / f"{stem}.captioned.mp4"
-        burned_path = str(burn(source_path, cues, output, style=built["style"]))
+        prefilters: list[str] = []
+        if on_screen and cover != "backdrop":
+            # The same regions the lettering was placed from, so the patch and
+            # the replacement line cannot disagree about where the original
+            # was. In the same encode, under the subtitles, because a second
+            # pass would cost a generation of quality for nothing.
+            from trendrelay_api.text_cover import cover_filters
+
+            prefilters = cover_filters(
+                regions,
+                mode=cover,
+                colour=payload.get("cover_colour") or "black",
+                strength=float(payload.get("cover_strength") or 0.08),
+            )
+        burned_path = str(
+            burn(source_path, cues, output, style=built["style"], prefilters=prefilters)
+        )
         progress(0.92, "Filing the captioned cut")
         _record_version(workspace_id, asset_id, Path(burned_path), factory=factory)
         produced["burned"] = burned_path

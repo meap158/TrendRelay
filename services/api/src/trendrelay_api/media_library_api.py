@@ -1725,6 +1725,23 @@ class CaptionRequest(BaseModel):
     #: translation of on-screen text that lands at the bottom of the frame is a
     #: second thing to read beside the thing it translates.
     source: Literal["speech", "on_screen"] = "speech"
+    #: How the original on-screen text is hidden under its replacement.
+    #:
+    #: `backdrop` is the lettering's own opaque box - no extra work, and the
+    #: default. The other three patch the picture itself in the same encode,
+    #: from the same measured boxes the replacement is placed by: `solid`
+    #: paints them over, `blur` and `pixelate` let the footage show through
+    #: treated. Whichever is chosen, nothing of the original stays readable.
+    #: Only means something for `source="on_screen"` with a burn - refused
+    #: elsewhere, because a cover that quietly did not happen looks exactly
+    #: like one that failed.
+    cover: Literal["backdrop", "solid", "blur", "pixelate"] = "backdrop"
+    #: The paint for a `solid` cover. The same vocabulary the cover effect
+    #: speaks in Effects, so the two doors describe one thing the same way.
+    cover_colour: Literal["black", "white", "gray"] = "black"
+    #: How strongly `blur` smears or `pixelate` blocks, against the size of
+    #: the covered line. The effect's own range and default.
+    cover_strength: float = Field(default=0.08, ge=0.02, le=0.2)
     #: `sidecar` writes the subtitle files and leaves the video alone.
     #: `burned` re-encodes it with the captions in the picture. `both` does
     #: both, which is the useful default once an encode is being paid for
@@ -1929,6 +1946,26 @@ def render_captions(
             status_code=422,
             detail="Burned captions require a video asset; use subtitle files for audio.",
         )
+    # A picture cover only exists in the burned picture. Refused rather than
+    # ignored, because a cover that quietly did not happen looks exactly like
+    # one that failed - the same reasoning as a misspelled style override.
+    if body.cover != "backdrop":
+        if body.source != "on_screen":
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Covering the original only means something when captioning "
+                    "on-screen text. Speech captions have nothing to cover."
+                ),
+            )
+        if body.delivery == "sidecar":
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "A cover is painted into the picture, so it needs a burned "
+                    "delivery. Subtitle files cannot carry one."
+                ),
+            )
 
     # Refused here rather than inside the worker, so a misspelled style is a
     # complaint on the button rather than a job that fails a minute later.
@@ -1973,6 +2010,9 @@ def render_captions(
                 "transcript_id": transcript_id,
                 "delivery": body.delivery,
                 "source": body.source,
+                "cover": body.cover,
+                "cover_colour": body.cover_colour,
+                "cover_strength": body.cover_strength,
             },
         )
     except LookupError as error:

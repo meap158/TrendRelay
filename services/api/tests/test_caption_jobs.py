@@ -83,7 +83,7 @@ def add_asset(*, transcript: bool = True, video: Path | None = None) -> str:
     return "asset1"
 
 
-def fake_burn(source, cues, output, *, style=None) -> Path:
+def fake_burn(source, cues, output, *, style=None, prefilters=()) -> Path:
     """Stand in for FFmpeg: produce the file it would have written."""
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     Path(output).write_bytes(b"a captioned clip")
@@ -458,6 +458,101 @@ def test_a_clip_whose_text_was_never_read_says_so() -> None:
         assert "on-screen text has not been read" in str(error)
     else:
         raise AssertionError("a clip with no reading rendered anyway")
+
+
+def test_the_cover_is_part_of_the_jobs_identity() -> None:
+    """The same lettering over a blur and over a box are different pictures."""
+    add_asset(transcript=False)
+    add_on_screen_reading()
+
+    boxed = caption_jobs.queue(
+        "ws1", "asset1", actor_user_id="owner",
+        request=request(source="on_screen", delivery="burned"), factory=Factory,
+    )
+    blurred = caption_jobs.queue(
+        "ws1", "asset1", actor_user_id="owner",
+        request=request(source="on_screen", delivery="burned", cover="blur"),
+        factory=Factory,
+    )
+
+    assert boxed["id"] != blurred["id"]
+
+
+def test_a_picture_cover_is_burned_under_the_lettering(tmp_path) -> None:
+    """One encode: the patch goes in as a prefilter of the same burn.
+
+    And the lettering's own backdrop steps aside - left opaque, the box would
+    sit on top of the blur somebody chose precisely because a solid box was
+    not what they wanted.
+    """
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"video")
+    add_asset(transcript=False, video=video)
+    add_on_screen_reading()
+    seen: dict = {}
+
+    def burn(source, cues, output, *, style=None, prefilters=()) -> Path:
+        seen["prefilters"] = list(prefilters)
+        seen["back_alpha"] = style.back_alpha
+        return fake_burn(source, cues, output)
+
+    job = caption_jobs.queue(
+        "ws1", "asset1", actor_user_id="owner",
+        request=request(source="on_screen", delivery="burned", cover="blur"),
+        factory=Factory,
+    )
+    caption_jobs.run_caption_job(job["id"], factory=Factory, burn=burn)
+
+    assert seen["prefilters"] and "boxblur" in seen["prefilters"][0]
+    assert seen["back_alpha"] == 255, "the backdrop hides the patch it was traded for"
+
+
+def test_the_backdrop_cover_needs_no_prefilters(tmp_path) -> None:
+    """The default is the lettering's own box, exactly as before."""
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"video")
+    add_asset(transcript=False, video=video)
+    add_on_screen_reading()
+    seen: dict = {}
+
+    def burn(source, cues, output, *, style=None, prefilters=()) -> Path:
+        seen["prefilters"] = list(prefilters)
+        seen["back_alpha"] = style.back_alpha
+        return fake_burn(source, cues, output)
+
+    job = caption_jobs.queue(
+        "ws1", "asset1", actor_user_id="owner",
+        request=request(source="on_screen", delivery="burned"), factory=Factory,
+    )
+    caption_jobs.run_caption_job(job["id"], factory=Factory, burn=burn)
+
+    assert seen["prefilters"] == []
+    assert seen["back_alpha"] == 0, "opaque, so the original stays hidden"
+
+
+def test_an_explicit_backdrop_override_survives_a_picture_cover(tmp_path) -> None:
+    """Somebody asking for both gets both."""
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"video")
+    add_asset(transcript=False, video=video)
+    add_on_screen_reading()
+    seen: dict = {}
+
+    def burn(source, cues, output, *, style=None, prefilters=()) -> Path:
+        seen["back_alpha"] = style.back_alpha
+        return fake_burn(source, cues, output)
+
+    job = caption_jobs.queue(
+        "ws1", "asset1", actor_user_id="owner",
+        request=request(
+            source="on_screen", delivery="burned", cover="solid",
+            style_overrides={"back_alpha": 96},
+        ),
+        factory=Factory,
+    )
+    caption_jobs.run_caption_job(job["id"], factory=Factory, burn=burn)
+
+    assert seen["back_alpha"] == 96
 
 
 def test_a_clip_that_was_never_measured_cannot_place_anything() -> None:

@@ -329,6 +329,17 @@ export function CaptionEditor({
    * the thing it translates.
    */
   const [captionOf, setCaptionOf] = useState<"speech" | "on_screen">("speech");
+  /**
+   * How the original on-screen text is hidden under its replacement.
+   *
+   * `backdrop` is the lettering's own opaque panel and costs nothing extra.
+   * The picture covers patch the frame itself in the same encode, so they
+   * need a burned delivery - the two controls keep each other honest below
+   * rather than letting a contradictory pair reach the API and bounce.
+   */
+  const [cover, setCover] = useState<"backdrop" | "solid" | "blur" | "pixelate">("backdrop");
+  const [coverColour, setCoverColour] = useState<"black" | "white" | "gray">("black");
+  const [coverStrength, setCoverStrength] = useState(0.08);
   const [translateTo, setTranslateTo] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -714,6 +725,9 @@ export function CaptionEditor({
                 delivery: canBurn ? delivery : "sidecar",
                 style_overrides: styleOverrides,
                 source: captionOf,
+                ...(captionOf === "on_screen" && canBurn && delivery !== "sidecar"
+                  ? { cover, cover_colour: coverColour, cover_strength: coverStrength }
+                  : {}),
                 batch: { id: batchId, total: compatibleTargets.length },
               }),
             },
@@ -764,6 +778,9 @@ export function CaptionEditor({
     batch,
     canBurn,
     compatibleTargets,
+    cover,
+    coverColour,
+    coverStrength,
     delivery,
     loadFiles,
     onQueued,
@@ -850,7 +867,13 @@ export function CaptionEditor({
             <span>Deliver</span>
             <Select
               value={canBurn ? delivery : "sidecar"}
-              onChange={(event) => setDelivery(event.target.value)}
+              onChange={(event) => {
+                setDelivery(event.target.value);
+                // A picture cover only exists in the burned picture, so
+                // stepping back to files-only steps back to the backdrop -
+                // visibly, in its own control, rather than silently dropped.
+                if (event.target.value === "sidecar") setCover("backdrop");
+              }}
               preferredSide="above"
             >
               <option value="sidecar">Subtitle files only</option>
@@ -1203,14 +1226,71 @@ export function CaptionEditor({
             <option value="on_screen">On-screen text — what is written on the picture</option>
           </Select>
           {captionOf === "on_screen" && (
-            <p className="caption-editor-note">
-              Each line is placed over the words it replaces, from this
-              clip&rsquo;s on-screen text reading — so the style decides how it looks and the
-              reading decides where it goes. Each line draws its own solid
-              backdrop over the original text; a cover rendered in the Effects
-              step makes a nicer patch, and the burn lands on that cut when
-              one exists.
-            </p>
+            <>
+              <p className="caption-editor-note">
+                Each line is placed over the words it replaces and sized to the
+                box that was read, so nothing of the original stays visible —
+                the style below decides how the replacement looks.
+              </p>
+              {/* The picture covers are painted into the video, so choosing
+                  one needs a burned delivery. The two controls keep each
+                  other honest here rather than letting a contradictory pair
+                  reach the API and bounce off it. */}
+              <label className="caption-cover-row">
+                <span>Cover the original with</span>
+                <Select
+                  value={cover}
+                  aria-label="Cover the original with"
+                  onChange={(event) => {
+                    const chosen = event.target.value as typeof cover;
+                    setCover(chosen);
+                    if (chosen !== "backdrop" && delivery === "sidecar") {
+                      setDelivery("burned");
+                    }
+                  }}
+                >
+                  <option value="backdrop">The line&rsquo;s own backdrop panel</option>
+                  {canBurn && <option value="solid">A solid paint-over</option>}
+                  {canBurn && <option value="blur">A blur of the original</option>}
+                  {canBurn && <option value="pixelate">Pixelated blocks</option>}
+                </Select>
+              </label>
+              {cover === "solid" && (
+                <label className="caption-cover-row">
+                  <span>Paint</span>
+                  <Select
+                    value={coverColour}
+                    aria-label="Cover colour"
+                    onChange={(event) =>
+                      setCoverColour(event.target.value as typeof coverColour)}
+                  >
+                    <option value="black">Black</option>
+                    <option value="white">White</option>
+                    <option value="gray">Gray</option>
+                  </Select>
+                </label>
+              )}
+              {(cover === "blur" || cover === "pixelate") && (
+                <label className="caption-cover-row">
+                  <span>Strength</span>
+                  <Select
+                    value={String(coverStrength)}
+                    aria-label="Cover strength"
+                    onChange={(event) => setCoverStrength(Number(event.target.value))}
+                  >
+                    <option value="0.05">Subtle</option>
+                    <option value="0.08">Medium</option>
+                    <option value="0.14">Strong</option>
+                  </Select>
+                </label>
+              )}
+              {cover !== "backdrop" && (
+                <p className="caption-editor-note">
+                  Painted into the picture in the same encode as the captions,
+                  so this render delivers a burned cut.
+                </p>
+              )}
+            </>
           )}
         </section>
 
