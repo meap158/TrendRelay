@@ -581,13 +581,21 @@ nav strong { color: var(--text); }
 .feature-reach > .off { position: relative; opacity: 0.45; }
 .feature-reach > .off::after { content: ""; position: absolute; inset-block-start: 50%; inset-inline: -1px; border-top: 2px solid var(--bad); transform: rotate(-45deg); }
 
-/* The heading and its two controls on one row, so the preview keeps the
-   height it had. Wraps rather than shrinking the picker: a destination
-   named "Facebook · Tủ Xinh Của Nàng" is unreadable at half a column. */
-.preview-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-block-end: 8px; }
+/* Two rows, always: the heading, then its controls.
+
+   One wrapping row read as a different panel depending on which account was
+   picked - "Threads · halcyonbooks.official" pushed the controls onto a line
+   of their own while "X / Twitter · BotMeap" fitted beside the heading, so
+   the whole card changed shape as somebody stepped through the list they
+   were comparing. A preview that moves while you compare against it is
+   worse than one that spends a row. */
+.preview-head { display: grid; gap: 6px; margin-block-end: 8px; }
 .preview-head h2 { margin: 0; }
-.preview-head-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.preview-destination { max-inline-size: 240px; }
+.preview-head-controls { display: flex; gap: 6px; align-items: center; min-inline-size: 0; }
+/* Takes the room left over and clips what does not fit, rather than
+   widening the row. The width of an account's name is not a layout. */
+.preview-head-controls .preview-destination { flex: 1 1 auto; min-inline-size: 0; }
+.preview-head-controls > :last-child { flex: 0 0 auto; }
 .post-preview { display: grid; gap: 10px; margin: 0 0 10px; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--panel); }
 /* A phone is the width these networks are read at, so it is the default and
    the narrower of the two. Capped rather than stretched: a preview as wide
