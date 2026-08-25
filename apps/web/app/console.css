@@ -1355,8 +1355,21 @@ html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 /* The Autonomous unlock progress beside the Authority label: a small chip, the
    full count and what still has to resolve on its hover. */
 .autopilot-authority-hint { margin-inline-start: 6px; color: var(--muted); font-size: 10px; font-style: normal; font-weight: 500; white-space: nowrap; cursor: help; border-block-end: 1px dotted var(--line-strong); }
-.autopilot-queue-thumb { display: grid; place-items: center; }
-.autopilot-queue-thumb .picker-thumb, .autopilot-queue-thumb .campaign-pipeline-thumb-empty { display: grid; place-items: center; inline-size: 84px; block-size: 64px; overflow: hidden; border-radius: var(--radius-sm); background: var(--line); color: var(--muted); }
+/* The column is fixed so every row's title starts at the same place; the frame
+   inside it is not, so a clip is shown in its own shape.
+   
+   This box was 84x64 with `object-fit: cover`, and short-form video is 9:16:
+   a vertical clip had well over half its frame thrown away and what survived
+   was a band across the middle. `AssetThumbnail` measures the still and
+   publishes `--thumb-ratio` for exactly this - the campaign queue builds its
+   rows from a post's `asset_id` and passes no width or height, so the measured
+   value is the only one there is. Until it arrives the box keeps the old
+   landscape shape, and only the thumbnail resizes when it does. */
+.autopilot-queue-thumb { display: grid; place-items: center; inline-size: 84px; }
+.autopilot-queue-thumb .picker-thumb, .autopilot-queue-thumb .campaign-pipeline-thumb-empty { display: grid; place-items: center; block-size: 64px; inline-size: 84px; overflow: hidden; border-radius: var(--radius-sm); background: var(--line); color: var(--muted); }
+.autopilot-queue-thumb .picker-thumb { inline-size: auto; max-inline-size: 84px; aspect-ratio: var(--thumb-ratio, 84 / 64); }
+/* `cover` on a box that is already the media's own shape crops nothing, and it
+   avoids the half-pixel letterbox `contain` leaves on a rounded corner. */
 .autopilot-queue-thumb .picker-thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }
 .autopilot-queue-thumb .picker-thumb b { font-size: 12px; }
 .autopilot-queue-thumb .picker-thumb i { display: none; }
