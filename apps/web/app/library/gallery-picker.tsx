@@ -52,6 +52,9 @@ type Suggestion = {
   label: string;
   score: number;
   matched: string[];
+  /** Whether it turns with the head. A chip is the same choice as a tile and
+   *  has to say the same things about it. */
+  dimensional?: boolean;
 };
 
 /**
@@ -614,6 +617,18 @@ export function GalleryPanel({
                       apiFetch={apiFetch}
                     />
                     <span>{optionLabel(t, effect.id, item.value, item.label)}</span>
+                    {/* The same badge the gallery tile wears. A suggestion is
+                        the shortest look somebody gives this dialog, so it is
+                        the last place that should leave out the one thing
+                        distinguishing two objects with the same name. */}
+                    {item.dimensional && (
+                      <em
+                        className="overlay-solid"
+                        title={t("overlayPicker.turnsWithHead")}
+                      >
+                        3D
+                      </em>
+                    )}
                   </button>
                 ))}
               </div>

@@ -652,6 +652,9 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .overlay-suggested-row button:disabled { opacity: .5; cursor: not-allowed; }
 .overlay-suggested-row button.is-chosen { border-color: var(--link); box-shadow: inset 0 0 0 1px var(--link); }
 .overlay-suggested-row span { max-width: 100%; overflow: hidden; font-size: 10px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+/* Same badge as the tile's, a size down: the chip is half the width and
+   the label under it still has to be readable. */
+.overlay-suggested-row em.overlay-solid { border-radius: 999px; padding: 0 5px; background: var(--link-bg); color: var(--link); font-size: 8px; font-style: normal; font-weight: 700; letter-spacing: .06em; }
 .overlay-suggested-row .overlay-sprite, .overlay-suggested-row .overlay-sprite-empty { width: 52px; height: 52px; }
 
 .overlay-gallery { display: grid; align-content: start; gap: 12px; min-height: 0; padding-inline-end: 6px; overflow-y: auto; }

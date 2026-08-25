@@ -287,3 +287,20 @@ def test_every_object_carries_words_in_both_languages(session) -> None:
     ]
 
     assert english_only == [], f"nothing in Chinese: {english_only}"
+
+
+def test_a_suggestion_says_whether_the_object_turns_with_the_head(session) -> None:
+    """A shortlist chip is the same choice as a gallery tile and has to say the
+    same things about it.
+
+    "Crown" and "Solid crown" are suggested together and read identically
+    without it - which is the one pair where leaving the badge off is worst,
+    because the difference between them is the badge.
+    """
+    asset = clip(session, caption="#皇冠 #女王", hashtags=("皇冠", "女王"))
+
+    picks, _how = suggest(session, WORKSPACE, asset)
+    by_id = {item.overlay_id: item for item in picks}
+
+    assert by_id["crown_3d"].dimensional is True
+    assert by_id["crown"].dimensional is False

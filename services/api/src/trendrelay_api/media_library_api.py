@@ -1462,6 +1462,9 @@ def suggest_face_overlay_objects(
                 "value": item.overlay_id,
                 "label": item.label,
                 "group": item.group,
+                # The same flag the gallery's own options carry, so a chip and
+                # a tile describe one object the same way.
+                "dimensional": item.dimensional,
                 "score": item.score,
                 # Shown on the chip. A suggestion nobody can see the reason for
                 # is a suggestion nobody trusts twice.

@@ -80,6 +80,11 @@ class Suggestion:
     label: str
     group: str
     score: float
+    #: Whether it turns with the head. Carried on the suggestion rather than
+    #: looked up again by whatever draws it: a shortlist chip is the same
+    #: choice as a gallery tile and has to say the same things about it, and
+    #: the one that has to fetch the fact separately is the one that forgets.
+    dimensional: bool
     #: The words the clip and the object turned out to share, most telling
     #: first. Shown, because a suggestion nobody can see the reason for is a
     #: suggestion nobody trusts twice.
@@ -238,6 +243,7 @@ def suggest(
             overlay_id=item.id,
             label=item.label,
             group=item.group,
+            dimensional=item.mesh is not None,
             score=round(score, 4),
             matched=tuple(keyword for _worth, keyword in hits[:4]),
         ))
