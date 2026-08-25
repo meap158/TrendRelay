@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { Button } from "../ui/button";
 import { Select } from "../ui/select";
 import { Badge } from "../ui/primitives";
+import { FilterChipStrip } from "../ui/filter-strip";
 import { ParamControl } from "./effect-params";
 import type { EffectDefinition, EffectParam, ParamOption } from "./effect-params";
 import { optionGroup, optionLabel } from "../../lib/i18n/effects";
@@ -466,24 +467,25 @@ export function GalleryPanel({
                 onChange={(event) => setSearch(event.target.value)}
               />
             </label>
+            {/* The shared strip, not a row of its own: it already drags with
+                the mouse, pans natively under a finger, and fades whichever
+                end still holds chips. The copy that used to live here scrolled
+                and showed no scrollbar, so on a desktop with no horizontal
+                wheel the categories past the fold could not be reached at all. */}
             {categories.length > 1 && (
-              <div className="overlay-categories" role="group" aria-label="Object categories">
-                <button
-                  type="button"
-                  className={!category ? "is-active" : ""}
-                  aria-pressed={!category}
-                  onClick={() => setCategory("")}
-                >{t("common.all")} <span>{param.options.length}</span></button>
-                {categories.map(([key, item]) => (
-                  <button
-                    type="button"
-                    key={key}
-                    className={category === key ? "is-active" : ""}
-                    aria-pressed={category === key}
-                    onClick={() => setCategory(key)}
-                  >{item.label} <span>{item.count}</span></button>
-                ))}
-              </div>
+              <FilterChipStrip
+                chips={[
+                  { key: "", label: t("common.all"), count: param.options.length },
+                  ...categories.map(([key, item]) => ({
+                    key, label: item.label, count: item.count,
+                  })),
+                ]}
+                selected={category}
+                onSelect={setCategory}
+                ariaLabel={t("overlayPicker.categories")}
+                className="overlay-categories"
+                dense
+              />
             )}
           </div>
 

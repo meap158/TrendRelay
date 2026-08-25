@@ -48,7 +48,7 @@
 /* `:not(.search-select *)` keeps this page-level button chrome out of the
    shared dropdown: its popover rows are buttons too, and boxing each one drew
    a border between every option that no other dropdown in the app has. */
-.library-search button:not(.search-select *), .library-import button:not(.search-select *), .library-compact-form button:not(.search-select *), .library-enrichment button:not(.search-select *), .library-actions a { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; text-decoration: none; cursor: pointer; }
+.library-search button:not(.ui-button):not(.search-select *), .library-import button:not(.ui-button):not(.search-select *), .library-compact-form button:not(.ui-button):not(.search-select *), .library-enrichment button:not(.ui-button):not(.search-select *), .library-actions a { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); background: var(--panel); font: inherit; text-decoration: none; cursor: pointer; }
 /* One row per asset. Three columns of horizontal cards is a second gallery,
    which is why the toggle looked like it did nothing: both views were grids of
    cards, and only the card's proportions changed. A list earns its name by
@@ -413,6 +413,9 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
    their icon off the text baseline. */
 .library-action-row > :is(button, a, .ui-button) { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; margin: 0; }
 .button-spinner { width: 11px; height: 11px; margin-inline-end: 6px; border: 2px solid var(--line-strong); border-top-color: var(--link); border-radius: 50%; animation: spin 0.8s linear infinite; }
+/* Slowed rather than stopped, matching `.ui-button-spinner`: a frozen ring
+   reads as a hung request, which is worse than gentle motion. */
+@media (prefers-reduced-motion: reduce) { .button-spinner { animation-duration: 2.4s; } }
 /* An asset with more than one cut is marked in the list, so a blurred version
    is visible without opening it. */
 .library-list > button.has-versions { border-inline-start: 3px solid var(--link); }
@@ -629,12 +632,9 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .overlay-choices { display: grid; grid-template-rows: auto minmax(140px, 1fr) auto; gap: 10px; min-height: 0; }
 .overlay-discovery { display: grid; gap: 7px; min-width: 0; }
 .overlay-search input { width: 100%; min-height: 34px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 6px 10px; background: var(--panel); color: var(--text); font: inherit; font-size: 12px; }
-.overlay-categories { display: flex; gap: 5px; max-width: 100%; padding-bottom: 2px; overflow-x: auto; scrollbar-width: none; }
-.overlay-categories::-webkit-scrollbar { display: none; }
-.overlay-categories button { display: inline-flex; flex: none; align-items: center; gap: 5px; min-height: 28px; border: 1px solid var(--line); border-radius: 999px; padding: 4px 9px; background: var(--panel); color: var(--muted); font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
-.overlay-categories button:hover { border-color: var(--line-strong); color: var(--text); }
-.overlay-categories button.is-active { border-color: var(--link); background: var(--link-bg); color: #174ea6; }
-.overlay-categories button span { color: inherit; font-size: 9px; font-variant-numeric: tabular-nums; opacity: .75; }
+/* Placement only. The chips, the drag, the fades and the palette are the
+   shared strip's - see `.filter-chip-*` in ui.css. This says where it sits. */
+.overlay-categories { min-width: 0; }
 .overlay-gallery { display: grid; align-content: start; gap: 12px; min-height: 0; padding-inline-end: 6px; overflow-y: auto; }
 .overlay-gallery h4 { position: sticky; top: 0; z-index: 1; margin: 0; padding: 2px 0 5px; background: var(--panel); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 /* Big enough to see what the thing is and to hit it without aiming. */
