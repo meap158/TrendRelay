@@ -79,6 +79,9 @@ EXPOSURE: dict[str, Access] = {
     "list_posts_needing_copy": Access.READ,
     "get_post_context": Access.READ,
     "get_campaign_config": Access.READ,
+    # What already went out, and what it earned. A read: it is the evidence
+    # an assistant writes from, and it changes nothing.
+    "list_published_posts": Access.READ,
     "list_sops": Access.READ,
     "get_sop": Access.READ,
     # --- Reads: when the workspace posts -----------------------------------

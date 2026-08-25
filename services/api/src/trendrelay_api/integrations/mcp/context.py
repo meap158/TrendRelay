@@ -279,7 +279,7 @@ def _destination_summary(view: dict[str, Any]) -> str:
     the interface says it.
     """
     parts = [str(view.get("provider_label") or view.get("platform") or "a platform")]
-    post_type = view.get("post_type")
+    post_type = view.get("effective_post_type") or view.get("resolved_post_type")
     if post_type:
         parts.append(str(post_type).replace("_", " ").title())
     placement = view.get("link_placement")
@@ -450,7 +450,10 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
     campaign's brief, and whatever copy already exists - so the assistant writes
     into the gaps rather than over the operator.
     """
+    from types import SimpleNamespace
+
     from trendrelay_api.campaign_autopilot_api import _destination_view, _queue_view
+    from trendrelay_api.campaign_runner import _post_type_for
 
     item = session.scalar(
         select(CampaignQueueItem).where(
@@ -470,6 +473,14 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
     # alongside its raw fields.
     destination_views = [_destination_view(session, d) for d in destinations]
     for view in destination_views:
+        configured = (item.post_type_overrides or {}).get(
+            str(view["id"]), view.get("resolved_post_type")
+        )
+        view["effective_post_type"] = _post_type_for(SimpleNamespace(
+            image_paths=item.image_paths,
+            platform=view["platform"],
+            post_type=configured,
+        ))
         view["posts_to"] = _destination_summary(view)
     # The disclosure this post actually carries - its own override, or the
     # campaign's - resolved once so a caption is not written without it.
@@ -529,3 +540,121 @@ def get_post_context(session: Session, workspace_id: str, item_id: str) -> dict[
         "needs": missing,
         "queue_item": _queue_view(item),
     }
+
+
+#: What "interactions" means when a caller does not say.
+#:
+#: Deliberately not views. A view is what the network chose to show the post to;
+#: likes, comments, shares and saves are what a person did about it, and an
+#: assistant looking for a post worth imitating wants the second. Views remain
+#: sortable by name for anyone who wants reach instead.
+INTERACTION_FIELDS = ("likes", "comments", "shares", "saves")
+
+#: Every figure a post can carry, so a caller can sort by any of them.
+SORTABLE_METRICS = ("interactions", "views", *INTERACTION_FIELDS, "watch_seconds")
+
+
+def _interactions(metrics: dict[str, float]) -> float:
+    return sum(float(metrics.get(field) or 0) for field in INTERACTION_FIELDS)
+
+
+def list_published_posts(
+    session: Session,
+    workspace_id: str,
+    campaign_id: str | None = None,
+    platform: str | None = None,
+    sort_by: str = "interactions",
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """Posts that went out, what they got, and the copy that got it.
+
+    The reason this exists: an assistant asked to write a caption has the brief
+    and the product, and no idea which of five hundred posts already worked.
+    "Write another like the ones that did well" is the request, and nothing in
+    this catalogue could answer it.
+
+    So each entry carries the copy as it went out - caption, first comment,
+    thread, hashtags, the products it linked - beside the figures it earned, and
+    a permalink to read the real thing.
+
+    Measurement is reported rather than assumed. A post nobody has read back
+    yet says `measured: false` and carries no figures at all, instead of zeros
+    that would sort it alongside a post that genuinely got nothing. The two are
+    different facts and only one of them is knowable today.
+    """
+    from trendrelay_api.campaign_measurement import latest_metrics
+    from trendrelay_api.publication_models import PublicationExecution
+
+    if sort_by not in SORTABLE_METRICS:
+        raise ValueError(
+            f"Sort by one of {', '.join(SORTABLE_METRICS)}; got {sort_by!r}."
+        )
+    query = select(PublicationExecution).where(
+        PublicationExecution.workspace_id == workspace_id,
+        PublicationExecution.state.in_(("published", "measured")),
+    )
+    if campaign_id:
+        query = query.where(PublicationExecution.campaign_id == campaign_id)
+    if platform:
+        query = query.where(PublicationExecution.platform == platform)
+
+    names = {
+        row.id: row.name
+        for row in session.scalars(
+            select(Campaign).where(Campaign.workspace_id == workspace_id)
+        ).all()
+    }
+    offers = _offer_names(session, workspace_id)
+
+    posts: list[dict[str, Any]] = []
+    for execution in session.scalars(query).all():
+        metrics = latest_metrics(execution)
+        measured = bool(metrics)
+        posts.append({
+            "execution_id": execution.id,
+            "campaign": names.get(execution.campaign_id or ""),
+            "campaign_id": execution.campaign_id,
+            "platform": execution.platform,
+            # The account in words. The stored provider is a connection id and
+            # reads as one; nobody named their login `zernio-zernio-2`.
+            "account": execution.destination_label,
+            "post_type": execution.post_type,
+            "published_at": (
+                execution.published_at.isoformat() if execution.published_at else None
+            ),
+            "permalink": next(iter(execution.permalinks or []), None),
+            # The copy exactly as it went out, which is the point of the tool.
+            "caption": execution.caption,
+            "first_comment": execution.first_comment,
+            "thread": list(execution.thread or []),
+            "link_placement": execution.placement,
+            "products": [offers.get(offer_id, offer_id) for offer_id in execution.offer_ids or []],
+            "media_kind": "images" if execution.image_paths else "video",
+            "measured": measured,
+            "interactions": _interactions(metrics) if measured else None,
+            "metrics": metrics or None,
+        })
+
+    # Unmeasured posts sort last whatever the key, because "not read yet" is not
+    # a score of zero and must never outrank a post that earned something.
+    posts.sort(
+        key=lambda post: (
+            post["measured"],
+            _interactions(post["metrics"] or {}) if sort_by == "interactions"
+            else float((post["metrics"] or {}).get(sort_by) or 0),
+            post["published_at"] or "",
+        ),
+        reverse=True,
+    )
+    return posts[:max(1, min(limit, 100))]
+
+
+def _offer_names(session: Session, workspace_id: str) -> dict[str, str]:
+    """Offer ids to product names, so a post says what it sold."""
+
+    rows = session.execute(
+        select(ProductOffer.id, Product.name)
+        .join(Product, Product.id == ProductOffer.product_id)
+        .where(ProductOffer.workspace_id == workspace_id)
+    ).all()
+    return {offer_id: name for offer_id, name in rows}

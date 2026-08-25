@@ -117,7 +117,8 @@ def test_the_allowed_surface_is_the_reads_the_copy_the_schedule_and_intake() -> 
         "get_campaign_posting_times", "get_import_status",
         "get_post_context", "get_sop", "list_campaigns", "list_library_assets",
         "list_posting_times",
-        "list_posts_needing_copy", "list_sops", "set_campaign_posting_times",
+        "list_posts_needing_copy", "list_published_posts", "list_sops",
+        "set_campaign_posting_times",
         "set_page_posting_times", "set_workspace_posting_times", "upload_image",
         "write_bio_hint", "write_caption", "write_disclosure", "write_first_comment",
         "write_post_copy", "write_thread",
@@ -287,6 +288,27 @@ def test_writing_a_bio_hint_sets_it_and_refuses_a_link(session) -> None:
     # The campaign adds the profile link itself, so the hint carries words only.
     with pytest.raises(ValueError, match="bio hint may not contain a link"):
         writes.write_post_copy(session, "ws", "q1", bio_hint="Shop https://s.shopee.vn/x")
+
+
+def test_mcp_can_set_a_per_destination_post_format(session) -> None:
+    session.add(CampaignDestination(
+        id="d-format", workspace_id="ws", campaign_id="camp",
+        integration_id="instagram-1", platform="instagram", provider="buffer",
+        label="Instagram", enabled=True,
+    ))
+    session.commit()
+
+    result = writes.write_post_copy(
+        session, "ws", "q1", post_types={"d-format": "story"},
+    )
+
+    assert result["post_type_overrides"] == {"d-format": "story"}
+    destination = next(
+        item for item in context.get_post_context(session, "ws", "q1")["destinations"]
+        if item["id"] == "d-format"
+    )
+    assert destination["effective_post_type"] == "story"
+    assert "Story" in destination["posts_to"]
 
 
 def test_writing_a_caption_flips_the_post_to_having_copy(session) -> None:
@@ -1524,3 +1546,120 @@ def test_pictures_become_a_publishable_carousel_without_a_path_being_spoken(
         confirm_external_action=True,
     )
     assert request.image_paths == view["image_paths"]
+
+
+# --- what already worked ---------------------------------------------------------
+#
+# An assistant asked to write a caption has the brief and the product, and no
+# idea which of five hundred posts already worked. "Write another like the ones
+# that did well" was a question the catalogue could not answer.
+
+
+def _published(session, identifier: str, **overrides):
+    from datetime import UTC, datetime
+
+    from trendrelay_api.publication_models import PublicationExecution
+
+    fields = {
+        "workspace_id": "ws", "campaign_id": "camp", "media_path": "clip.mp4",
+        "provider": "zernio", "platform": "tiktok", "destination_label": "Brand",
+        "caption": f"copy for {identifier}", "state": "measured",
+        "published_at": datetime(2026, 8, 20, tzinfo=UTC),
+        "performance_snapshots": [{
+            "at": "2026-08-21T00:00:00+00:00", "window": "24h",
+            "metrics": {"views": 100.0, "likes": 1.0},
+        }],
+    }
+    fields.update(overrides)
+    row = PublicationExecution(id=identifier, **fields)
+    session.add(row)
+    session.commit()
+    return row
+
+
+def _snapshot(**metrics):
+    return [{"at": "2026-08-21T00:00:00+00:00", "window": "24h", "metrics": metrics}]
+
+
+def test_published_posts_rank_by_what_people_did_not_what_they_saw(session) -> None:
+    """Views are what the network showed; interactions are what a person did.
+
+    An assistant looking for a post worth imitating wants the second, so a post
+    seen by thousands and acted on by nobody does not lead the list.
+    """
+    _published(session, "seen", performance_snapshots=_snapshot(views=9000.0, likes=1.0))
+    _published(session, "acted", performance_snapshots=_snapshot(views=10.0, likes=40.0))
+
+    ranked = context.list_published_posts(session, "ws")
+
+    assert [row["execution_id"] for row in ranked] == ["acted", "seen"]
+    assert ranked[0]["interactions"] == 40.0
+
+
+def test_an_unread_post_never_outranks_one_that_earned_something(session) -> None:
+    """"Not measured yet" is not a score of nought.
+
+    Sorted as zero it would sit among the posts that genuinely got nothing, and
+    an assistant reading the tail would treat an unknown as a failure.
+    """
+    _published(session, "known", performance_snapshots=_snapshot(likes=0.0, views=0.0))
+    _published(session, "unread", state="published", performance_snapshots=[])
+
+    ranked = context.list_published_posts(session, "ws")
+
+    assert [row["execution_id"] for row in ranked] == ["known", "unread"]
+    unread = ranked[-1]
+    assert unread["measured"] is False
+    # No figures at all, rather than zeros that would read as an observation.
+    assert unread["metrics"] is None
+    assert unread["interactions"] is None
+
+
+def test_a_post_carries_the_copy_that_earned_its_numbers(session) -> None:
+    """The point of the tool: the figures are the reason to read the copy."""
+    _published(
+        session, "p1",
+        caption="Hook, then the offer.",
+        first_comment="Link in the first comment",
+        thread=["and one more thing"],
+        permalinks=["https://example.test/p/1"],
+    )
+
+    [row] = context.list_published_posts(session, "ws")
+
+    assert row["caption"] == "Hook, then the offer."
+    assert row["first_comment"] == "Link in the first comment"
+    assert row["thread"] == ["and one more thing"]
+    assert row["permalink"] == "https://example.test/p/1"
+    # The account in words. The stored provider is a connection id and reads as
+    # one; nobody named their login `zernio-zernio-2`.
+    assert row["account"] == "Brand"
+
+
+def test_published_posts_narrow_by_campaign_and_platform(session) -> None:
+    _published(session, "mine", campaign_id="camp", platform="tiktok")
+    _published(session, "elsewhere", campaign_id="other", platform="tiktok")
+    _published(session, "other-network", campaign_id="camp", platform="facebook")
+
+    assert [row["execution_id"] for row in
+            context.list_published_posts(session, "ws", campaign_id="camp")] == [
+        "mine", "other-network",
+    ]
+    assert [row["execution_id"] for row in
+            context.list_published_posts(session, "ws", platform="facebook")] == [
+        "other-network",
+    ]
+
+
+def test_sorting_by_a_figure_that_is_not_measured_is_refused(session) -> None:
+    # Named rather than silently ignored: a caller who asked for "engagement"
+    # and got the default order would read the wrong list as the right one.
+    with pytest.raises(ValueError, match="Sort by one of"):
+        context.list_published_posts(session, "ws", sort_by="engagement")
+
+
+def test_a_post_that_never_went_out_is_not_listed(session) -> None:
+    """Only what published. A proposal has no engagement to learn from."""
+    _published(session, "waiting", state="proposed", performance_snapshots=[])
+
+    assert context.list_published_posts(session, "ws") == []

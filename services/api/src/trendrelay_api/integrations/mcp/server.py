@@ -180,6 +180,33 @@ def build_server(workspace_id: str) -> FastMCP:
         return _call("list_campaigns", lambda s: context.list_campaigns(s, workspace_id))
 
     @server.tool(
+        name="list_published_posts",
+        description=(
+            "Posts that already went out, ranked by the interactions they "
+            "earned - likes, comments, shares and saves - with the copy that "
+            "earned them: caption, first comment, thread, the products it "
+            "linked and a permalink. Use it to write from what worked rather "
+            "than from the brief alone. Narrow with campaign_id or platform; "
+            "sort_by takes interactions (default), views, likes, comments, "
+            "shares, saves or watch_seconds. A post nobody has read back yet "
+            "says measured: false and carries no figures - that is not the "
+            "same as a post that got nothing, and it never outranks one."
+        ),
+    )
+    def list_published_posts(
+        campaign_id: str | None = None,
+        platform: str | None = None,
+        sort_by: str = "interactions",
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        return _call(
+            "list_published_posts",
+            lambda s: context.list_published_posts(
+                s, workspace_id, campaign_id, platform, sort_by, limit,
+            ),
+        )
+
+    @server.tool(
         name="list_posts_needing_copy",
         description=(
             "Posts that are queued but have no caption written yet. Pass a "
@@ -577,6 +604,9 @@ TOOL_CATEGORIES: dict[str, tuple[str, ...]] = {
     "Campaign context": (
         "list_campaigns", "list_posts_needing_copy",
         "get_post_context", "get_campaign_config",
+        # What already went out belongs here rather than under Copy: it is
+        # read to decide what to write, not a way of writing it.
+        "list_published_posts",
     ),
     "Copy": (
         "write_caption", "write_first_comment", "write_thread",
