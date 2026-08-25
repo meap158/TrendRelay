@@ -1383,6 +1383,7 @@ export const en = {
     turnedTo: "Turned {turn}°, tilted {tilt}°",
     noWebgl: "This browser cannot show the 3D view. The settings below still work.",
     turnsWithHead: "Turns with the head",
+    chooseFile: "Choose a PNG…",
   },
 
   ui: {

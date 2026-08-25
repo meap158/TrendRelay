@@ -1399,6 +1399,7 @@ export const ru: Messages = {
     turnedTo: "Поворот {turn}°, наклон {tilt}°",
     noWebgl: "Этот браузер не показывает 3D-вид. Настройки ниже по-прежнему работают.",
     turnsWithHead: "Поворачивается с головой",
+    chooseFile: "Выбрать PNG…",
   },
 
   ui: {

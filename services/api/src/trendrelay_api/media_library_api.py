@@ -13,7 +13,17 @@ from secrets import token_hex
 from typing import Annotated, Any, Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import FileResponse
 from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import String, case, cast, func, or_, select
@@ -35,10 +45,11 @@ from trendrelay_api.media_models import (
     MediaAssetVersion,
     MediaTranscript,
 )
-from trendrelay_api.models import utc_now
+
 # The type media travels under when it must not look like media on the wire -
 # shared with the publishing previews so every served byte answers the same.
 from trendrelay_api.media_serving import OPAQUE_MEDIA_TYPE
+from trendrelay_api.models import utc_now
 
 router = APIRouter(
     prefix="/api/workspaces/{workspace_id}/media/library",
@@ -1381,21 +1392,28 @@ def face_overlay_objects(
     membership(session, workspace_id, user.id)
     from trendrelay_api.integrations.overlay_catalogue import (
         GROUP_ORDER,
-        OVERLAY_ROOT,
+        folder,
         options,
-        rejected_drop_ins,
     )
 
+    # Spread rather than rebuilt. This used to name the directory and list the
+    # skipped files itself, so the two ways of asking where a new object goes -
+    # this and the effect's own declaration - could answer differently, and the
+    # picker reads whichever one it happens to have.
+    where = folder()
     return {
         "objects": list(options()),
         "groups": list(GROUP_ORDER),
         # Named so the extension point is discoverable from the interface
         # rather than only from the source.
-        "drop_in_directory": str(OVERLAY_ROOT),
+        "drop_in_directory": where["directory"],
         # A file somebody dropped in that did not appear is the case worth
         # reporting: the gallery cannot show it, so this is the only place its
         # absence can be explained.
-        "skipped": rejected_drop_ins(),
+        "skipped": where["skipped"],
+        "upload": where["upload"],
+        "import_from_library": where["import_from_library"],
+        "accepts": where["accepts"],
     }
 
 
@@ -1439,6 +1457,96 @@ def face_overlay_sprite(
             )
         },
     )
+
+
+class OverlayImport(BaseModel):
+    """A library picture to make available as an object to attach."""
+
+    asset_id: str = Field(min_length=1, max_length=128)
+
+
+def _overlay_added(request: Request, session, workspace_id, user, added, source: str):
+    """Record it, and hand back the option the picker will insert."""
+    audit(
+        session, request, workspace_id, user.id,
+        "face_overlay.object_imported", "overlay", added["value"], {"from": source},
+    )
+    session.commit()
+    return {"face": added, "object": added}
+
+
+@router.post("/face-overlay/objects", status_code=201)
+def import_overlay_from_library(
+    workspace_id: str,
+    body: OverlayImport,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """Make a picture already in the library usable as an object to attach.
+
+    The library is where an operator's pictures already are, and the dialog
+    used to answer "how do I add my own" with the path of a folder - which
+    means leaving the app, finding it, copying a file in, and coming back.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    from trendrelay_api.integrations.overlay_catalogue import (
+        OverlayImportError,
+        import_overlay,
+    )
+
+    asset = _asset_record(session, workspace_id, body.asset_id)
+    if asset.media_kind != "image":
+        raise HTTPException(
+            status_code=422, detail="Only a picture can be attached to a face."
+        )
+    try:
+        data = Path(asset.original_path).read_bytes()
+    except OSError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    try:
+        added = import_overlay(data, asset.title or Path(asset.original_path).stem)
+    except OverlayImportError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return _overlay_added(request, session, workspace_id, user, added, "library")
+
+
+@router.post("/face-overlay/objects/upload", status_code=201)
+async def upload_overlay_object(
+    workspace_id: str,
+    request: Request,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+    file: Annotated[UploadFile, File()],
+) -> dict[str, Any]:
+    """Add an object from a picture on the operator's own machine.
+
+    The other half of the same answer. A sticker somebody just exported is on
+    their desktop rather than in the media library, and telling them to put it
+    in a folder by hand is telling them to leave the dialog they are standing
+    in to do the thing the dialog is for.
+
+    Read with a cap rather than into memory whole: this is a local server, but
+    an endpoint that will hold whatever it is sent is worth not writing.
+    """
+    require_role(membership(session, workspace_id, user.id), {"owner", "editor", "approver"})
+    from trendrelay_api.integrations.overlay_catalogue import (
+        MAX_IMPORT_BYTES,
+        OverlayImportError,
+        import_overlay,
+    )
+
+    data = await file.read(MAX_IMPORT_BYTES + 1)
+    if len(data) > MAX_IMPORT_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"That picture is larger than {MAX_IMPORT_BYTES // (1024 * 1024)} MB.",
+        )
+    try:
+        added = import_overlay(data, file.filename or "object")
+    except OverlayImportError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return _overlay_added(request, session, workspace_id, user, added, "upload")
 
 
 @router.get("/face-overlay/objects/{overlay_id}/mesh")

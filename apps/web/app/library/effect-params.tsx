@@ -78,6 +78,12 @@ export type EffectParam = {
      * media-library base. Absent when this folder does not take one.
      */
     import_from_library?: string;
+    /**
+     * Where a picture on the operator's own machine can be sent, relative to
+     * the media-library base. Absent where this folder only takes a copy of
+     * something already in the library.
+     */
+    upload?: string;
     accepts?: string[];
   } | null;
 };

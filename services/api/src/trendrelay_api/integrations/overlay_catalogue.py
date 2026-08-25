@@ -1094,6 +1094,12 @@ MAX_SIDECAR_TEXT = 200
 #: throw away.
 MAX_DROP_IN_SIDE = 4096
 
+#: The largest picture accepted through the dialog. Well above any real sticker
+#: and far below what would fill a disk, and separate from `MAX_DROP_IN_SIDE`
+#: because that one bounds a file already on the machine while this one bounds
+#: what a request may carry.
+MAX_IMPORT_BYTES = 12 * 1024 * 1024
+
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
@@ -1256,6 +1262,91 @@ def rejected_drop_ins() -> list[dict[str, str]]:
     return problems
 
 
+class OverlayImportError(ValueError):
+    """A picture that cannot become an overlay, with the reason to show."""
+
+
+def _available_id(wanted: str) -> str:
+    """A free id shaped like an id, derived from what the file was called.
+
+    The stem becomes the object's id and reaches a URL and a filesystem path,
+    so it is rebuilt from the allowed characters rather than sanitised in
+    place - a name that is not this shape is replaced, never repaired into
+    something that merely looks safe.
+    """
+    cleaned = re.sub(r"[^a-z0-9_-]+", "-", wanted.strip().lower()).strip("-_")
+    cleaned = re.sub(r"-{2,}", "-", cleaned)[:40].strip("-_")
+    if not cleaned or not cleaned[0].isalnum():
+        cleaned = f"object-{cleaned}".strip("-_")[:40]
+    taken = {item.id for item in catalogue()}
+    if cleaned not in taken and not (OVERLAY_ROOT / f"{cleaned}.png").exists():
+        return cleaned
+    # A second picture called "logo" is a normal thing to add, and refusing it
+    # would send somebody back to a file manager to rename a file.
+    for suffix in range(2, 100):
+        candidate = f"{cleaned[:36]}-{suffix}"
+        if candidate not in taken and not (OVERLAY_ROOT / f"{candidate}.png").exists():
+            return candidate
+    raise OverlayImportError("Too many objects share that name already.")
+
+
+def import_overlay(data: bytes, name: str) -> dict[str, Any]:
+    """Add a picture to the drop-in folder, and hand back the option for it.
+
+    The folder is the extension point and it works, but it is a folder: the
+    picker used to name a path and leave somebody to open a file manager, copy
+    a file in, and come back. This is that, done from the dialog they are
+    already looking at.
+
+    It stays a copy into the same folder rather than a new kind of storage. A
+    recipe refers to an object by id and is re-run months later, and everything
+    that reads the folder - the catalogue, the rejection report, the sprite
+    endpoint - keeps working without being told about this.
+    """
+    if not data:
+        raise OverlayImportError("That file is empty.")
+    if len(data) > MAX_IMPORT_BYTES:
+        raise OverlayImportError(
+            f"That picture is larger than {MAX_IMPORT_BYTES // (1024 * 1024)} MB."
+        )
+    if not data.startswith(PNG_SIGNATURE):
+        # PNG only, because an overlay is pasted with an alpha channel and the
+        # formats people reach for instead - JPEG above all - have none. A
+        # JPEG accepted here would arrive as an opaque rectangle over a face,
+        # which looks like the effect being broken rather than like a choice.
+        raise OverlayImportError(
+            "An object has to be a PNG with a transparent background. A JPEG "
+            "has no transparency, so it would cover the face with a rectangle."
+        )
+    OVERLAY_ROOT.mkdir(parents=True, exist_ok=True)
+    stem = _available_id(Path(name).stem or "object")
+    destination = OVERLAY_ROOT / f"{stem}.png"
+    destination.write_bytes(data)
+    # Validated after it is written, because the reasons a file is refused are
+    # already written down for the folder and asking them twice in two places
+    # is how the two answers start to differ. A file that fails is removed
+    # rather than left to appear in the rejection list.
+    refusal = _rejection(destination)
+    if refusal:
+        destination.unlink(missing_ok=True)
+        raise OverlayImportError(refusal)
+    added = _drop_in(destination)
+    if added is None:
+        destination.unlink(missing_ok=True)
+        raise OverlayImportError("That picture could not be read as an object.")
+    return {
+        "value": added.id,
+        "label": added.label,
+        "group": added.group,
+        "group_id": GROUP_IDS.get(added.group),
+        "occludes": added.occludes,
+        "dimensional": False,
+        "note": added.note,
+        "preview": f"face-overlay/objects/{added.id}/sprite",
+        "custom": True,
+    }
+
+
 def folder() -> dict[str, Any]:
     """Where an operator adds their own objects, and what did not load.
 
@@ -1263,7 +1354,17 @@ def folder() -> dict[str, Any]:
     can name the folder and explain a rejected file without knowing that it is
     showing overlays rather than something else.
     """
-    return {"directory": str(OVERLAY_ROOT), "skipped": rejected_drop_ins()}
+    return {
+        "directory": str(OVERLAY_ROOT),
+        "skipped": rejected_drop_ins(),
+        # Where a picture can be sent to become an object, relative to the
+        # media-library base. Declared so the picker can offer both ways in
+        # without knowing which effect it is showing - the same contract the
+        # face-swap folder already uses for its portraits.
+        "import_from_library": "face-overlay/objects",
+        "upload": "face-overlay/objects/upload",
+        "accepts": [".png"],
+    }
 
 
 def get(overlay_id: str) -> Overlay | None:

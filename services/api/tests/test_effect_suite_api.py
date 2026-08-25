@@ -614,3 +614,150 @@ def test_every_solid_object_serves_a_mesh_the_viewer_can_draw() -> None:
         assert body["faces"], item["value"]
         assert max(body["faces"]) < len(body["vertices"]) // 3, item["value"]
         assert all(0.0 <= channel <= 1.0 for channel in body["colours"]), item["value"]
+
+
+# --- adding an object of your own -----------------------------------------------
+#
+# The folder is the extension point and it works, but it is a folder: the dialog
+# used to answer "how do I add my own" with a path, which means leaving the app,
+# finding it in a file manager, copying a file in, and coming back.
+
+
+def _png(width: int = 16, height: int = 16) -> bytes:
+    """A real PNG with an alpha channel, encoded rather than pasted as bytes."""
+    cv2 = pytest.importorskip("cv2")
+    numpy = pytest.importorskip("numpy")
+    image = numpy.zeros((height, width, 4), dtype=numpy.uint8)
+    image[2:-2, 2:-2] = (40, 90, 220, 255)
+    ok, buffer = cv2.imencode(".png", image)
+    assert ok
+    return bytes(buffer)
+
+
+@pytest.fixture
+def own_folder(tmp_path, monkeypatch):
+    """Somewhere to write that is not the operator's real folder.
+
+    Asked for by name rather than autouse: the tests above read the shipped
+    catalogue, and pointing them at an empty directory would have them pass
+    against nothing.
+    """
+    from trendrelay_api.integrations import overlay_catalogue
+
+    # The catalogue reads the folder on every call, so redirecting the constant
+    # is the whole of it - there is no cache to clear.
+    monkeypatch.setattr(overlay_catalogue, "OVERLAY_ROOT", tmp_path / "overlays")
+    return tmp_path / "overlays"
+
+
+def test_a_picture_can_be_uploaded_straight_into_the_gallery(own_folder) -> None:
+    workspace = create_workspace()
+
+    response = request(
+        "POST",
+        f"{base(workspace)}/objects/upload",
+        files={"file": ("my sticker.png", _png(), "image/png")},
+    )
+
+    assert response.status_code == 201
+    added = response.json()["object"]
+    # The name becomes the id, so it is rebuilt from the characters an id may
+    # hold rather than repaired into something that merely looks safe.
+    assert added["value"] == "my-sticker"
+    assert added["custom"] is True
+    assert added["preview"].endswith("my-sticker/sprite")
+
+
+def test_the_uploaded_object_is_in_the_catalogue_afterwards(own_folder) -> None:
+    workspace = create_workspace()
+    request(
+        "POST", f"{base(workspace)}/objects/upload",
+        files={"file": ("badge.png", _png(), "image/png")},
+    )
+
+    objects = request("GET", f"{base(workspace)}/objects").json()["objects"]
+
+    assert "badge" in {item["value"] for item in objects}
+
+
+def test_a_second_picture_of_the_same_name_does_not_replace_the_first(own_folder) -> None:
+    """Adding two things called "logo" is ordinary, and refusing the second
+    would send somebody back to a file manager to rename a file."""
+    workspace = create_workspace()
+
+    first = request(
+        "POST", f"{base(workspace)}/objects/upload",
+        files={"file": ("logo.png", _png(), "image/png")},
+    ).json()["object"]
+    second = request(
+        "POST", f"{base(workspace)}/objects/upload",
+        files={"file": ("logo.png", _png(20, 20), "image/png")},
+    ).json()["object"]
+
+    assert first["value"] == "logo"
+    assert second["value"] != "logo"
+    objects = {item["value"] for item in
+               request("GET", f"{base(workspace)}/objects").json()["objects"]}
+    assert {first["value"], second["value"]} <= objects
+
+
+def test_a_jpeg_is_refused_with_the_reason_it_would_look_wrong(own_folder) -> None:
+    """It has no alpha, so it would arrive as an opaque rectangle over a face -
+    which reads as the effect being broken rather than as a choice."""
+    workspace = create_workspace()
+
+    response = request(
+        "POST", f"{base(workspace)}/objects/upload",
+        files={"file": ("photo.jpg", b"\xff\xd8\xff\xe0nonsense", "image/jpeg")},
+    )
+
+    assert response.status_code == 422
+    assert "transparen" in response.json()["detail"].lower()
+
+
+def test_a_file_that_is_not_a_picture_at_all_is_refused(own_folder) -> None:
+    workspace = create_workspace()
+
+    response = request(
+        "POST", f"{base(workspace)}/objects/upload",
+        files={"file": ("notes.png", b"this is not a png", "image/png")},
+    )
+
+    assert response.status_code == 422
+
+
+def test_an_empty_file_is_refused_rather_than_written(own_folder) -> None:
+    workspace = create_workspace()
+
+    response = request(
+        "POST", f"{base(workspace)}/objects/upload",
+        files={"file": ("empty.png", b"", "image/png")},
+    )
+
+    assert response.status_code == 422
+
+
+def test_a_refused_picture_leaves_nothing_behind(own_folder) -> None:
+    """It is validated after it is written, so the failure has to clean up -
+    otherwise every rejected upload turns up in the folder's skipped list."""
+    workspace = create_workspace()
+    request(
+        "POST", f"{base(workspace)}/objects/upload",
+        files={"file": ("bad.png", b"not a png at all", "image/png")},
+    )
+
+    body = request("GET", f"{base(workspace)}/objects").json()
+    assert body["skipped"] == []
+    assert not list(own_folder.glob("bad*")) if own_folder.exists() else True
+
+
+def test_the_picker_is_told_both_ways_of_adding_one(own_folder) -> None:
+    """It offers what the folder declares, without knowing which effect it is
+    showing - the same contract the face-swap folder already uses."""
+    workspace = create_workspace()
+
+    body = request("GET", f"{base(workspace)}/objects").json()
+
+    assert body["upload"] == "face-overlay/objects/upload"
+    assert body["import_from_library"] == "face-overlay/objects"
+    assert body["accepts"] == [".png"]

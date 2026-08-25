@@ -1355,6 +1355,7 @@ export const zh: Messages = {
     turnedTo: "转向 {turn}°，俯仰 {tilt}°",
     noWebgl: "此浏览器无法显示 3D 视图。下方的设置仍然可用。",
     turnsWithHead: "随头部转动",
+    chooseFile: "选择 PNG 文件…",
   },
 
   ui: {

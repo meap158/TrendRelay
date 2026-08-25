@@ -1400,6 +1400,7 @@ export const fr: Messages = {
     turnedTo: "Pivoté de {turn}°, incliné de {tilt}°",
     noWebgl: "Ce navigateur ne peut pas afficher la vue 3D. Les réglages ci-dessous fonctionnent toujours.",
     turnsWithHead: "Pivote avec la tête",
+    chooseFile: "Choisir un PNG…",
   },
 
   ui: {

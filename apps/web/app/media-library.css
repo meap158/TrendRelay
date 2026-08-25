@@ -657,8 +657,8 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
    the sticker beside it is invisible in a thumbnail of a face looking
    straight ahead, so it gets the accent the tile has nothing else on. */
 .overlay-choice em.overlay-solid {
-  border-radius: 999px; padding: 1px 6px; background: var(--link-bg);
-  color: var(--link); font-weight: 600;
+  border-radius: 999px; padding: 1px 7px; background: var(--link-bg);
+  color: var(--link); font-size: 9px; font-weight: 700; letter-spacing: .06em;
 }
 .overlay-sprite { width: 68px; height: 68px; object-fit: contain; }
 .overlay-sprite-empty { display: block; width: 68px; height: 68px; border-radius: var(--radius-sm); background: var(--panel-raised); }
@@ -689,6 +689,20 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .overlay-warning { margin: 0; padding: 7px 9px; border-inline-start: 3px solid var(--amber); background: var(--warn-bg); color: var(--text); font-size: 11px; line-height: 1.45; }
 .overlay-empty { margin: 0; color: var(--muted); font-size: 11px; }
 .overlay-folder { display: grid; gap: 6px; }
+/* The native file input, dressed as the button beside it. Its own control is
+   an unstyleable "Choose file / no file chosen" pair, so the input is hidden
+   inside the label and the label is what gets drawn. */
+.overlay-upload {
+  justify-self: start; display: inline-flex; align-items: center; min-height: 28px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  padding: 4px 10px; background: var(--panel); color: var(--text);
+  font-size: 11px; font-weight: 600; cursor: pointer;
+}
+.overlay-upload:hover { background: var(--panel-raised); }
+.overlay-upload:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+/* Focus lands on the input, so the ring has to be drawn on the label. */
+.overlay-upload:has(input:focus-visible) { outline: 2px solid var(--link); outline-offset: 2px; }
+.overlay-upload input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 /* Not a grid: the sentence has an inline `code` in the middle of it, and a grid
    would break it onto a row of its own and strand the full stop after it. */
 .overlay-folder p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }

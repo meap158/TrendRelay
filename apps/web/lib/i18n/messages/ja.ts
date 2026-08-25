@@ -1373,6 +1373,7 @@ export const ja: Messages = {
     turnedTo: "向き {turn}°、傾き {tilt}°",
     noWebgl: "このブラウザーでは3D表示ができません。下の設定はそのまま使えます。",
     turnsWithHead: "頭と一緒に回る",
+    chooseFile: "PNGを選ぶ…",
   },
 
   ui: {

@@ -327,6 +327,40 @@ export function GalleryPanel({
     }
   }
 
+  /**
+   * Add a picture from the operator's own machine.
+   *
+   * The other half of the same answer. A sticker somebody has just exported is
+   * on their desktop rather than in the media library, and naming a folder was
+   * telling them to leave this dialog to do the thing this dialog is for.
+   *
+   * Sent as multipart rather than read here and posted as base64: the file is
+   * handed straight to the request, so nothing has to hold a megabyte of it in
+   * a string first.
+   */
+  async function addFromDisk(file: File | undefined) {
+    if (!folder?.upload || !file) return;
+    setAdding(true);
+    setAddFailure("");
+    try {
+      const carrying = new FormData();
+      carrying.append("file", file);
+      const response = await apiFetch(`${base}/${folder.upload}`, {
+        method: "POST",
+        // Deliberately no content-type: the browser sets it, and setting it by
+        // hand loses the multipart boundary the server needs to read the parts.
+        body: carrying,
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.detail ?? "That picture could not be added.");
+      onCatalogueChanged?.(String(body.object?.value ?? ""));
+    } catch (reason) {
+      setAddFailure(reason instanceof Error ? reason.message : "That picture could not be added.");
+    } finally {
+      setAdding(false);
+    }
+  }
+
   useEffect(() => {
     if (!open) return;
     queueMicrotask(() => {
@@ -550,10 +584,17 @@ export function GalleryPanel({
                       {option.occludes && <em>{t("overlayPicker.hidesTheFace")}</em>}
                       {/* And whether it has a back as well as a front, which a
                           thumbnail of it cannot show and is the whole reason
-                          to pick one of these over the sticker beside it. */}
+                          to pick one of these over the sticker beside it.
+                          "3D" literally, because that is the word somebody
+                          scanning a grid is looking for and it needs no
+                          translating; what it means for the object is on the
+                          badge's own tooltip and in the group's name. */}
                       {option.dimensional && (
-                        <em className="overlay-solid">
-                          {t("overlayPicker.turnsWithHead")}
+                        <em
+                          className="overlay-solid"
+                          title={t("overlayPicker.turnsWithHead")}
+                        >
+                          3D
                         </em>
                       )}
                     </button>
@@ -596,6 +637,25 @@ export function GalleryPanel({
                     onClick={() => void addFromLibrary()}
                   >{t("overlayPicker.add")}</Button>
                 </div>
+              )}
+              {/* A file on their own machine, which is where a sticker they
+                  have just exported actually is. */}
+              {folder.upload && (
+                <label className="overlay-upload">
+                  <input
+                    type="file"
+                    accept={(folder.accepts ?? [".png"]).join(",")}
+                    disabled={!canEdit || adding}
+                    onChange={(event) => {
+                      const [chosen] = event.target.files ?? [];
+                      // Cleared so choosing the same file twice fires again,
+                      // which it will after a rejection somebody has fixed.
+                      event.target.value = "";
+                      void addFromDisk(chosen);
+                    }}
+                  />
+                  <span>{t("overlayPicker.chooseFile")}</span>
+                </label>
               )}
               <p>
                 Or drop a file into <code>{folder.directory}</code>.
