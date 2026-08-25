@@ -17,7 +17,7 @@ import urllib.request
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from secrets import token_hex
 from typing import Annotated, Any, Literal
@@ -55,6 +55,15 @@ JOB_SESSION_FACTORY = SessionFactory
 
 BUNDLE_SOCIAL_API = "https://api.bundle.social/api/v1"
 ZERNIO_API = "https://zernio.com/api/v1"
+
+#: How far into the analytics report to look for one post.
+#:
+#: The report is by date rather than by post, so finding a post means paging
+#: the window it was published in. Three hundred rows is several weeks of a busy
+#: account; past that the post is old enough that its figures have stopped
+#: moving, and a reader that pages for ever is worse than one that gives up.
+ZERNIO_ANALYTICS_PAGE_SIZE = 100
+ZERNIO_ANALYTICS_PAGES = 3
 BUFFER_API = "https://api.buffer.com"
 WOOPSOCIAL_API = "https://api.woopsocial.com/v1"
 
@@ -2178,6 +2187,73 @@ def _zernio_accounts() -> list[dict[str, str]]:
     return accounts
 
 
+def _zernio_analytics_row(
+    connection: Any, wanted: set[str], published_at: Any
+) -> dict[str, Any] | None:
+    """This post's row in Zernio's analytics report, or None.
+
+    Three things had to be right and none of them were.
+
+    **The filter.** The report takes `fromDate`, `toDate`, `platform`, `sortBy`
+    and `limit`. It does not take a post id, and an unsupported parameter is
+    ignored rather than refused - the call answered with an empty report, every
+    time, for every post.
+
+    **The key.** What is stored at delivery is Zernio's post id. The report's
+    own `_id` is the per-platform analytics row, a different entity: across
+    fifty-three delivered posts and forty-three report rows, not one id matched.
+    `latePostId` is the field that points back at the post, and every row
+    carrying one matched a post we had.
+
+    **The fallback.** Failing to match took `rows[0]` - some other post
+    entirely, whose figures were then recorded as this one's. That is the
+    "failure becomes a positive observation" corruption this pipeline exists to
+    refuse, arriving as a plausible number rather than an error. There is no
+    fallback now: not found is None, which the collector reads as still due.
+    """
+    window_from = "1970-01-01"
+    if published_at is not None:
+        try:
+            # A day either side, because the report's dates are days and the
+            # post's is an instant - one published at 23:50 UTC is filed under
+            # tomorrow in an account an hour ahead.
+            window_from = (published_at - timedelta(days=1)).date().isoformat()
+        except (AttributeError, TypeError, ValueError):
+            window_from = "1970-01-01"
+    window_to = (datetime.now(UTC) + timedelta(days=1)).date().isoformat()
+
+    for page in range(1, ZERNIO_ANALYTICS_PAGES + 1):
+        try:
+            with using_connection(connection):
+                payload = _zernio_request(
+                    "GET",
+                    f"/analytics?limit={ZERNIO_ANALYTICS_PAGE_SIZE}&page={page}"
+                    f"&fromDate={quote(window_from)}&toDate={quote(window_to)}",
+                    timeout=30,
+                )
+        except Exception:
+            return None
+        if not payload:
+            return None
+        # Read defensively so a shape change does not silently zero a campaign's
+        # numbers - `posts` is what it answers with today.
+        rows: Any = payload if isinstance(payload, list) else (
+            payload.get("posts") or payload.get("data") or payload.get("results")
+            or payload.get("items") or payload.get("analytics") or []
+        )
+        if isinstance(rows, dict):
+            rows = [rows]
+        if not rows:
+            return None
+        for item in rows:
+            if not isinstance(item, dict):
+                continue
+            for field in ("latePostId", "postId", "_id"):
+                if str(item.get(field) or "") in wanted:
+                    return item
+    return None
+
+
 def _zernio_metrics(execution: Any) -> dict[str, float] | None:
     """A published Zernio post's engagement, in the measurement pipeline's terms.
 
@@ -2195,30 +2271,9 @@ def _zernio_metrics(execution: Any) -> dict[str, float] | None:
     if not post_ids:
         return None
     connection = publishing_connections.find(PROVIDERS, getattr(execution, "provider", ""))
-    try:
-        with using_connection(connection):
-            payload = _zernio_request(
-                "GET", f"/analytics?postId={quote(post_ids[0])}", timeout=30
-            )
-    except Exception:
-        return None
-    if not payload:
-        return None
-    # The report is paginated; a postId filter narrows it to this post, but the
-    # exact envelope key is read defensively so a shape change does not silently
-    # zero a campaign's numbers.
-    rows: Any = payload if isinstance(payload, list) else (
-        payload.get("data") or payload.get("posts") or payload.get("results")
-        or payload.get("items") or payload.get("analytics") or []
-    )
-    if isinstance(rows, dict):
-        rows = [rows]
     wanted = set(post_ids)
-    row = next(
-        (item for item in rows if str(item.get("postId") or item.get("_id") or "") in wanted),
-        rows[0] if rows else None,
-    )
-    if not isinstance(row, dict):
+    row = _zernio_analytics_row(connection, wanted, getattr(execution, "published_at", None))
+    if row is None:
         return None
     stats = row.get("analytics") if isinstance(row.get("analytics"), dict) else row
 

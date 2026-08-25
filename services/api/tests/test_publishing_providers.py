@@ -2538,3 +2538,96 @@ def test_a_story_or_a_reel_still_names_its_type(monkeypatch, media_file: Path) -
         assert sent["body"]["platforms"][0]["platformSpecificData"][
             "contentType"
         ] == post_type
+
+
+# --- reading a post's engagement back -----------------------------------------
+#
+# The report is by date rather than by post, and the id it files a row under is
+# not the id delivery stored. Every part of that had to be got right, and the
+# consequence of getting it wrong was not an error - it was another post's
+# figures recorded as this one's.
+
+
+class _Execution:
+    """Only what the reader touches."""
+
+    def __init__(self, post_id: str) -> None:
+        self.remote_post_ids = [post_id]
+        self.provider = "zernio"
+        self.published_at = datetime(2026, 8, 25, 17, 0, tzinfo=UTC)
+
+
+def _report(rows: list[dict]) -> dict:
+    return {"posts": rows, "pagination": {"page": 1, "pages": 1}}
+
+
+def test_a_post_is_found_by_the_id_the_report_files_it_under(monkeypatch) -> None:
+    """`latePostId`, not `_id`.
+
+    What delivery stores is Zernio's post id; the report's own `_id` is the
+    per-platform analytics row. Across fifty-three delivered posts and
+    forty-three report rows, not one `_id` matched.
+    """
+    monkeypatch.setattr(publishing, "_zernio_request", lambda *a, **k: _report([
+        {"_id": "row-1", "latePostId": "other", "analytics": {"views": 999}},
+        {"_id": "row-2", "latePostId": "mine", "analytics": {"views": 24, "comments": 1}},
+    ]))
+
+    # Only what the platform reported. A field the report omits is left out
+    # rather than recorded as nought, which is a different claim.
+    assert publishing._zernio_metrics(_Execution("mine")) == {
+        "views": 24.0, "comments": 1.0,
+    }
+
+
+def test_a_post_that_is_not_in_the_report_reads_as_nothing(monkeypatch) -> None:
+    """The bug this replaces: it took the first row instead.
+
+    Some other post's figures, recorded as this one's - the "failure becomes a
+    positive observation" corruption arriving as a plausible number rather than
+    an error. None means still due, and the collector tries again.
+    """
+    monkeypatch.setattr(publishing, "_zernio_request", lambda *a, **k: _report([
+        {"_id": "row-1", "latePostId": "someone-else", "analytics": {"views": 999}},
+    ]))
+
+    assert publishing._zernio_metrics(_Execution("mine")) is None
+
+
+def test_the_report_is_asked_by_date_rather_than_by_post(monkeypatch) -> None:
+    """It takes fromDate, toDate, platform, sortBy and limit - not a post id.
+
+    An unsupported parameter is ignored rather than refused, so the call
+    answered with an empty report every time and no post was ever measured.
+    """
+    asked: list[str] = []
+
+    def record(method: str, path: str, **_kwargs):
+        asked.append(path)
+        return _report([{"latePostId": "mine", "analytics": {"views": 5}}])
+
+    monkeypatch.setattr(publishing, "_zernio_request", record)
+    publishing._zernio_metrics(_Execution("mine"))
+
+    assert asked and "postId" not in asked[0]
+    assert "fromDate=" in asked[0] and "toDate=" in asked[0]
+    # From the day before it went out: the report's dates are days and the
+    # post's is an instant.
+    assert "fromDate=2026-08-24" in asked[0]
+
+
+def test_an_empty_report_is_still_due_rather_than_zero(monkeypatch) -> None:
+    monkeypatch.setattr(publishing, "_zernio_request", lambda *a, **k: _report([]))
+
+    assert publishing._zernio_metrics(_Execution("mine")) is None
+
+
+def test_a_post_with_no_delivered_id_is_never_asked_about(monkeypatch) -> None:
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("asked the report about a post that has no id")
+
+    monkeypatch.setattr(publishing, "_zernio_request", refuse)
+    execution = _Execution("mine")
+    execution.remote_post_ids = []
+
+    assert publishing._zernio_metrics(execution) is None
