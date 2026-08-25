@@ -542,7 +542,12 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
 .effect-recipe-preview-head strong { font-size: 12px; }
 .effect-recipe-preview-head small { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .effect-preview-frame { position: relative; display: grid; place-items: center; width: 100%; height: clamp(200px, 38dvh, 420px); border-radius: var(--radius-sm); background: #111827; overflow: hidden; }
-.effect-preview-frame img { display: block; width: 100%; height: 100%; object-fit: contain; }
+/* Absolutely placed, because a percentage height on a grid item in an auto row
+   is circular and quietly becomes auto - the image then takes its natural
+   aspect height, overflows the clamped box, and a portrait clip is clipped to
+   a square instead of letterboxed. Against the positioned box the percentages
+   are real and `contain` shows the whole frame, as the overlay picker does. */
+.effect-preview-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .effect-preview-frame > p { margin: 0; color: #d7deea; font-size: 12px; }
 .effect-preview-frame > span { position: absolute; inset-inline-end: 8px; bottom: 8px; border-radius: var(--radius-sm); padding: 3px 7px; background: rgba(20, 28, 38, .82); color: var(--on-ink); font-size: 10px; }
 .effect-preview-seek { display: grid; gap: 5px; }
