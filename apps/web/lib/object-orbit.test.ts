@@ -175,3 +175,41 @@ test("turning and tilting do not cancel each other out", () => {
     assert.ok(Math.abs(length - 1) < 1e-6, `column ${column} was ${length}`);
   }
 });
+
+// --- and the renderer it is aiming --------------------------------------------
+
+/**
+ * The same angles and the same numbers as `test_overlay_meshes.py`'s
+ * `test_the_browser_and_the_renderer_agree_on_the_rotation`.
+ *
+ * The viewport exists to choose an angle that the renderer will then apply. If
+ * the two compose their rotation differently, the object turns one way under
+ * the cursor and another way in the video, and nothing on either side is
+ * individually wrong - which is why this table is duplicated rather than
+ * derived. Change one and the other fails.
+ */
+const AGREED: [number, number, number[]][] = [
+  [0, 0, [1, 0, 0, 0, 1, 0, 0, 0, 1]],
+  [30, 0, [0.866025, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866025]],
+  [0, 20, [1, 0, 0, 0, 0.939693, -0.34202, 0, 0.34202, 0.939693]],
+  [30, 20, [0.866025, 0.17101, 0.469846, 0, 0.939693, -0.34202, -0.5, 0.296198, 0.813798]],
+  [-45, -15, [0.707107, 0.183013, -0.683013, 0, 0.965926, 0.258819, 0.707107, -0.183013, 0.683013]],
+];
+
+test("the browser turns the object exactly as the renderer will", () => {
+  for (const [yaw, pitch, expected] of AGREED) {
+    const columnMajor = rotation(yaw, pitch);
+    // Back to row-major, which is how the Python side prints its matrix.
+    const rows = [
+      columnMajor[0], columnMajor[3], columnMajor[6],
+      columnMajor[1], columnMajor[4], columnMajor[7],
+      columnMajor[2], columnMajor[5], columnMajor[8],
+    ];
+    rows.forEach((value, at) => {
+      assert.ok(
+        Math.abs(value - expected[at]) < 1e-6,
+        `${yaw}°/${pitch}° slot ${at}: ${value} is not ${expected[at]}`,
+      );
+    });
+  }
+});

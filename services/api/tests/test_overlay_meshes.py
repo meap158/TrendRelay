@@ -216,3 +216,30 @@ def test_an_object_does_not_breathe_as_the_head_turns() -> None:
     # A sphere's silhouette is the same circle whatever the angle, so any
     # change here is the fit moving rather than the object.
     assert max(sizes) - min(sizes) <= max(sizes) * 0.02
+
+
+# --- and the viewport that aims it --------------------------------------------
+
+
+def test_the_browser_and_the_renderer_agree_on_the_rotation() -> None:
+    """The same angles and the same numbers as `object-orbit.test.ts`.
+
+    The picker's viewport exists to choose an angle this renderer will then
+    apply. If the two compose their rotation differently the object turns one
+    way under the cursor and another way in the video, and neither side is
+    individually wrong - which is why the table is duplicated rather than
+    derived. Change one and the other fails.
+    """
+    agreed = [
+        (0, 0, [1, 0, 0, 0, 1, 0, 0, 0, 1]),
+        (30, 0, [0.866025, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866025]),
+        (0, 20, [1, 0, 0, 0, 0.939693, -0.34202, 0, 0.34202, 0.939693]),
+        (30, 20, [0.866025, 0.17101, 0.469846, 0, 0.939693, -0.34202,
+                  -0.5, 0.296198, 0.813798]),
+        (-45, -15, [0.707107, 0.183013, -0.683013, 0, 0.965926, 0.258819,
+                    0.707107, -0.183013, 0.683013]),
+    ]
+    for yaw, pitch, expected in agreed:
+        produced = meshes._rotation(np, yaw, pitch, 0.0).flatten()
+        for at, value in enumerate(expected):
+            assert produced[at] == pytest.approx(value, abs=1e-6), (yaw, pitch, at)
