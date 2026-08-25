@@ -7,6 +7,7 @@ import { Button } from "../ui/button";
 import { Select } from "../ui/select";
 import { Badge } from "../ui/primitives";
 import { FilterChipStrip } from "../ui/filter-strip";
+import { ObjectViewer } from "./object-viewer";
 import { ParamControl } from "./effect-params";
 import type { EffectDefinition, EffectParam, ParamOption } from "./effect-params";
 import { optionGroup, optionLabel } from "../../lib/i18n/effects";
@@ -431,6 +432,24 @@ export function GalleryPanel({
               gallery. Sharing a column with the grid is what squeezed the grid
               into a scrollbar with two thumbnails behind it. */}
           <div className="overlay-adjust">
+            {/* Only for an object that has a back as well as a front. The
+                question it answers - which way should this face - is one a
+                sticker cannot be asked, and a viewport beside a flat object
+                would be a control with nothing on the other end of it. */}
+            {current?.dimensional && (
+              <ObjectViewer
+                base={base}
+                overlayId={String(chosen)}
+                turn={Number(values.turn ?? 0)}
+                tilt={Number(values.tilt ?? 0)}
+                disabled={!canEdit}
+                apiFetch={apiFetch}
+                // Mid-drag: the angle moves, the frame is left alone. A render
+                // per degree would queue a dozen decodes to show one answer.
+                onTurn={({ turn, tilt }) => adjust({ turn, tilt }, false)}
+                onCommit={({ turn, tilt }) => adjust({ turn, tilt })}
+              />
+            )}
             {current?.note && <p className="overlay-note">{current.note}</p>}
             {faded && (
               <p className="overlay-warning" role="alert">

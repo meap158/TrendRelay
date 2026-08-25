@@ -36,6 +36,9 @@ from trendrelay_api.media_models import (
     MediaTranscript,
 )
 from trendrelay_api.models import utc_now
+# The type media travels under when it must not look like media on the wire -
+# shared with the publishing previews so every served byte answers the same.
+from trendrelay_api.media_serving import OPAQUE_MEDIA_TYPE
 
 router = APIRouter(
     prefix="/api/workspaces/{workspace_id}/media/library",
@@ -1020,7 +1023,14 @@ def asset_content(
     version_kind: Literal["original", "proxy", "thumbnail", "audio"],
     user: AuthenticatedUser,
     session: DatabaseSession,
+    opaque: bool = False,
 ):
+    """Serve one stored version of an asset.
+
+    `opaque` hands back the same bytes under a type no download manager
+    recognises - the thumbnails this endpoint serves are fetched and retyped
+    by every surface that shows one, for the same reason previews are.
+    """
     membership(session, workspace_id, user.id)
     _asset_record(session, workspace_id, asset_id)
     version = session.scalar(
@@ -1040,7 +1050,7 @@ def asset_content(
         raise HTTPException(status_code=404, detail="Media file is unavailable.") from error
     return FileResponse(
         path,
-        media_type=version.mime_type,
+        media_type=OPAQUE_MEDIA_TYPE if opaque else version.mime_type,
         filename=path.name,
         content_disposition_type="inline",
     )
@@ -1175,6 +1185,7 @@ def asset_preview_stream(
     user: AuthenticatedUser,
     session: DatabaseSession,
     cut: Annotated[Literal["original", "edited"], Query()] = "original",
+    opaque: bool = False,
 ) -> FileResponse:
     """Stream one cut of an asset that is too big to base64 into a JSON body.
 
@@ -1186,6 +1197,11 @@ def asset_preview_stream(
 
     Same resolution rules as the JSON preview, including preferring the
     captioned cut for `edited`; only the transport differs.
+
+    `opaque` serves the same bytes under a type no download manager watches,
+    for callers that read the response themselves rather than pointing an
+    element at it. A streamed clip served honestly is exactly what a grabber
+    sits waiting for - this endpoint was the one place left still doing it.
     """
     membership(session, workspace_id, user.id)
     asset = _asset_record(session, workspace_id, asset_id)
@@ -1204,7 +1220,10 @@ def asset_preview_stream(
         path = Path(version.path).resolve(strict=True)
     except OSError as error:
         raise HTTPException(status_code=404, detail="Preview is unavailable.") from error
-    return FileResponse(path, media_type=version.mime_type)
+    return FileResponse(
+        path,
+        media_type=OPAQUE_MEDIA_TYPE if opaque else version.mime_type,
+    )
 
 @router.get("/face-blur/status")
 def face_blur_status(
@@ -1420,6 +1439,64 @@ def face_overlay_sprite(
             )
         },
     )
+
+
+@router.get("/face-overlay/objects/{overlay_id}/mesh")
+def face_overlay_mesh(
+    workspace_id: str,
+    overlay_id: str,
+    user: AuthenticatedUser,
+    session: DatabaseSession,
+) -> dict[str, Any]:
+    """The triangles of an object with depth, for the picker to turn.
+
+    The same declaration the renderer draws from, not a second model exported
+    for the browser: the picker's job is to let somebody choose which way a
+    prop faces, and a viewer showing different geometry than the render would
+    be answering that question about a different object.
+
+    It stays an aid rather than a claim about the finished frame. The
+    authoritative preview beside it is still a real frame rendered by the API,
+    which is what the picker has always shown - this is the control for
+    choosing an angle, and the frame is the answer.
+
+    404 for a flat object, which has no triangles rather than an empty set of
+    them: asking for the mesh of a sticker is a caller mistake, not an object
+    that happens to be empty.
+    """
+    membership(session, workspace_id, user.id)
+    from trendrelay_api.integrations.overlay_catalogue import GALLERY_PITCH, GALLERY_YAW, get
+    from trendrelay_api.integrations.overlay_meshes import AMBIENT, LIGHT
+
+    overlay = get(overlay_id)
+    if overlay is None:
+        raise HTTPException(status_code=404, detail="No such overlay.")
+    if overlay.mesh is None:
+        raise HTTPException(
+            status_code=404, detail=f"{overlay.label} is a flat object and has no mesh."
+        )
+    mesh = overlay.mesh
+    return {
+        "id": overlay.id,
+        "label": overlay.label,
+        # Flattened rather than nested, because this is read into typed arrays
+        # and a list of triples would be unpacked on arrival anyway.
+        "vertices": [value for vertex in mesh.vertices for value in vertex],
+        "faces": [index for face in mesh.faces for index in face],
+        # One RGB per face, 0-1, in the order the faces are listed.
+        "colours": [
+            channel / 255.0 for colour in mesh.colours for channel in colour[:3]
+        ],
+        # So the browser lights it the way the renderer does. Sent rather than
+        # duplicated in the frontend: two copies of a lighting direction drift,
+        # and the drift shows as a prop that changes shade when it is placed.
+        "light": list(LIGHT),
+        "ambient": AMBIENT,
+        # Where the gallery thumbnail is drawn from, so a viewer that opens at
+        # the same angle as the tile beside it does not appear to jump.
+        "gallery_yaw": GALLERY_YAW,
+        "gallery_pitch": GALLERY_PITCH,
+    }
 
 
 class EffectPreviewRequest(BaseModel):

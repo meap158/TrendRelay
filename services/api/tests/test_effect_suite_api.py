@@ -21,7 +21,7 @@ from sqlalchemy.pool import StaticPool
 
 from trendrelay_api.auth import CurrentUser, current_user
 from trendrelay_api.database import get_session
-from trendrelay_api.integrations import overlay_catalogue
+from trendrelay_api.integrations import overlay_catalogue, overlay_meshes
 from trendrelay_api.main import app
 from trendrelay_api.models import Base
 
@@ -549,3 +549,68 @@ def test_a_portrait_name_cannot_reach_outside_the_folder(portrait_folder) -> Non
     base_path = f"/api/workspaces/{workspace}/media/library/effects/face-swap/faces"
     for attempt in ("..", "%2E%2E", "..%2F..%2Fetc%2Fpasswd"):
         assert request("DELETE", f"{base_path}/{attempt}").status_code == 404, attempt
+
+
+# --- the triangles of an object with depth --------------------------------------
+
+
+def test_the_picker_can_read_the_mesh_it_has_to_turn() -> None:
+    """The same declaration the renderer draws from, not a second model
+    exported for the browser: a viewer showing different geometry would be
+    answering "which way should this face" about a different object."""
+    workspace = create_workspace()
+
+    body = request("GET", f"{base(workspace)}/objects/cap_3d/mesh").json()
+
+    assert body["id"] == "cap_3d"
+    # Flattened, because it is read into typed arrays at the other end.
+    assert len(body["vertices"]) % 3 == 0
+    assert len(body["faces"]) % 3 == 0
+    assert len(body["colours"]) == len(body["faces"])
+    assert max(body["faces"]) < len(body["vertices"]) // 3
+
+
+def test_the_mesh_carries_the_light_rather_than_leaving_it_to_be_guessed() -> None:
+    """Two copies of a lighting direction drift, and the drift shows up as a
+    prop that changes shade the moment it is placed on a face."""
+    workspace = create_workspace()
+
+    body = request("GET", f"{base(workspace)}/objects/cap_3d/mesh").json()
+
+    assert body["light"] == list(overlay_meshes.LIGHT)
+    assert body["ambient"] == overlay_meshes.AMBIENT
+    # And the angle the tile beside it is drawn at, so opening the viewer does
+    # not look like the object jumped.
+    assert body["gallery_yaw"] == overlay_catalogue.GALLERY_YAW
+
+
+def test_a_flat_object_has_no_mesh_rather_than_an_empty_one() -> None:
+    """Asking a sticker for its triangles is a caller mistake, not an object
+    that happens to have none."""
+    workspace = create_workspace()
+
+    response = request("GET", f"{base(workspace)}/objects/crown/mesh")
+
+    assert response.status_code == 404
+    assert "flat object" in response.json()["detail"]
+
+
+def test_an_object_nobody_ships_is_not_found() -> None:
+    workspace = create_workspace()
+
+    assert request("GET", f"{base(workspace)}/objects/nonsense/mesh").status_code == 404
+
+
+def test_every_solid_object_serves_a_mesh_the_viewer_can_draw() -> None:
+    """A face indexing past its own vertices draws nothing, or throws, and
+    which one depends on the browser."""
+    workspace = create_workspace()
+    objects = request("GET", f"{base(workspace)}/objects").json()["objects"]
+
+    solid = [item for item in objects if item["dimensional"]]
+    assert solid, "nothing in the pack claims to have depth"
+    for item in solid:
+        body = request("GET", f"{base(workspace)}/objects/{item['value']}/mesh").json()
+        assert body["faces"], item["value"]
+        assert max(body["faces"]) < len(body["vertices"]) // 3, item["value"]
+        assert all(0.0 <= channel <= 1.0 for channel in body["colours"]), item["value"]

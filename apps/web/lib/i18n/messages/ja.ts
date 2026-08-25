@@ -1368,6 +1368,10 @@ export const ja: Messages = {
     none: "オブジェクト未選択",
     change: "変更",
     done: "完了",
+    turnObject: "オブジェクトを回す",
+    dragToTurn: "ドラッグして回す、または矢印キーで調整します。",
+    turnedTo: "向き {turn}°、傾き {tilt}°",
+    noWebgl: "このブラウザーでは3D表示ができません。下の設定はそのまま使えます。",
   },
 
   ui: {

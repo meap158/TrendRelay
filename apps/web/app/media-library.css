@@ -657,6 +657,22 @@ p.effect-activity-note { margin: 10px 0 0; color: var(--muted); font-size: 11px;
    top: an effect with eight controls must not cost the picture they change. */
 .overlay-adjust { display: grid; align-content: start; gap: 10px; min-height: 0; border-top: 1px solid var(--line); padding: 10px 6px 0 0; overflow-y: auto; }
 .overlay-adjust input[type="range"] { accent-color: var(--link); }
+/* The 3D viewport. A control rather than a preview - the frame above it is
+   still what the render will look like - so it is sized to be aimed at rather
+   than admired, and it says what to do with it. */
+.object-viewer { display: grid; gap: 5px; justify-items: center; }
+.object-viewer canvas {
+  width: 100%; max-width: 180px; aspect-ratio: 1; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--panel-raised); cursor: grab;
+  /* The gesture is a horizontal-and-vertical drag, so the browser must not
+     claim it for a scroll the moment it starts moving down. */
+  touch-action: none;
+}
+.object-viewer canvas:active { cursor: grabbing; }
+.object-viewer canvas:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.object-viewer canvas[aria-disabled] { opacity: .5; cursor: not-allowed; }
+.object-viewer-hint { margin: 0; color: var(--muted); font-size: 10px; text-align: center; }
+
 .overlay-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .overlay-warning { margin: 0; padding: 7px 9px; border-inline-start: 3px solid var(--amber); background: var(--warn-bg); color: var(--text); font-size: 11px; line-height: 1.45; }
 .overlay-empty { margin: 0; color: var(--muted); font-size: 11px; }

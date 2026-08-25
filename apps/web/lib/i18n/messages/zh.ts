@@ -1350,6 +1350,10 @@ export const zh: Messages = {
     none: "尚未选择物件",
     change: "更换",
     done: "完成",
+    turnObject: "转动物件",
+    dragToTurn: "拖动即可转动，也可以用方向键。",
+    turnedTo: "转向 {turn}°，俯仰 {tilt}°",
+    noWebgl: "此浏览器无法显示 3D 视图。下方的设置仍然可用。",
   },
 
   ui: {

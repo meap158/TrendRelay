@@ -1375,6 +1375,10 @@ export const vi: Messages = {
     none: "Chưa chọn vật thể",
     change: "Đổi",
     done: "Xong",
+    turnObject: "Xoay vật thể",
+    dragToTurn: "Kéo để xoay, hoặc dùng phím mũi tên.",
+    turnedTo: "Xoay {turn}°, ngả {tilt}°",
+    noWebgl: "Trình duyệt này không hiển thị được chế độ xem 3D. Các thiết lập bên dưới vẫn dùng được.",
   },
 
   ui: {

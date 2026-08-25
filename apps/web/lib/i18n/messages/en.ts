@@ -1378,6 +1378,10 @@ export const en = {
     none: "No object chosen",
     change: "Change",
     done: "Done",
+    turnObject: "Turn the object",
+    dragToTurn: "Drag to turn it, or use the arrow keys.",
+    turnedTo: "Turned {turn}°, tilted {tilt}°",
+    noWebgl: "This browser cannot show the 3D view. The settings below still work.",
   },
 
   ui: {

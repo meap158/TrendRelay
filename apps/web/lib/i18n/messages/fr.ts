@@ -1395,6 +1395,10 @@ export const fr: Messages = {
     none: "Aucun objet choisi",
     change: "Changer",
     done: "Terminé",
+    turnObject: "Faire pivoter l'objet",
+    dragToTurn: "Faites glisser pour pivoter, ou utilisez les flèches.",
+    turnedTo: "Pivoté de {turn}°, incliné de {tilt}°",
+    noWebgl: "Ce navigateur ne peut pas afficher la vue 3D. Les réglages ci-dessous fonctionnent toujours.",
   },
 
   ui: {

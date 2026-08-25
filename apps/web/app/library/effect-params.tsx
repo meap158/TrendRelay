@@ -31,6 +31,9 @@ export type ParamOption = {
   group_id?: string | null;
   /** Whether choosing this actually hides a face. Overlay objects set it. */
   occludes?: boolean;
+  /** Whether the object turns with the head, which is what makes a 3D
+   *  viewport worth showing for it. Absent on everything flat. */
+  dimensional?: boolean;
   note?: string;
   /**
    * Where to fetch a thumbnail, relative to the workspace media-library base.
