@@ -31,7 +31,7 @@ import json
 import math
 import re
 import struct
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -154,6 +154,14 @@ class Overlay:
     occludes: bool = False
     #: Said in the picker, where somebody is deciding whether this is enough.
     note: str = ""
+    #: What kind of clip this object suits, for matching a suggestion to a
+    #: video. Editorial rather than descriptive: not what the thing *is* - the
+    #: label already says that - but the words a clip it belongs on would use.
+    #:
+    #: Multilingual on purpose, and the reason is measurable: this workspace's
+    #: library is 2,540 Douyin clips whose captions are Chinese, so an
+    #: English-only vocabulary would match nothing in it. See `OBJECT_KEYWORDS`.
+    keywords: tuple[str, ...] = ()
     shapes: tuple[Shape, ...] = ()
     #: An object with depth, drawn instead of `shapes` when it is present.
     #:
@@ -1067,6 +1075,213 @@ BUILT_IN: tuple[Overlay, ...] = (
 # fashion; the solid objects sit directly behind it, where the newest thing in
 # the pack is seen without displacing the reason the pack exists.
 GROUP_ORDER = (COVER, SOLID, FEATURES, HEADWEAR, REACTIONS, CREATOR_UI)
+
+
+#: What kind of clip each object suits, for suggesting one from what a video
+#: says about itself.
+#:
+#: Kept in one table rather than spread across forty declarations because it is
+#: *editorial* rather than structural: the geometry of a crown is settled and
+#: the words a crown belongs on are a judgement somebody will want to revise
+#: after watching the suggestions be wrong. One block is what makes that a
+#: reviewable diff. `_apply_keywords` puts them onto the objects, and a test
+#: fails if an object is added without an entry.
+#:
+#: Every entry carries Chinese as well as English, and that is not politeness.
+#: This workspace's library is 2,540 Douyin clips; 2,434 of them have captions
+#: and all of those captions are Chinese. An English-only vocabulary would
+#: score zero against the entire library it is meant to serve.
+OBJECT_KEYWORDS: dict[str, tuple[str, ...]] = {
+    # --- covering a face -----------------------------------------------------
+    "censor_block": (
+        "anonymous", "privacy", "hide", "redact", "identity", "confidential",
+        "匿名", "隐私", "遮挡", "打码", "保护",
+    ),
+    "pixel_mask": (
+        "anonymous", "privacy", "censored", "pixelate", "hide", "leak",
+        "匿名", "隐私", "马赛克", "打码", "遮脸",
+    ),
+    "smiley": (
+        "happy", "friendly", "smile", "cheerful", "fun", "positive", "cute",
+        "开心", "笑", "可爱", "搞笑", "快乐",
+    ),
+    "robot": (
+        "robot", "tech", "ai", "gadget", "future", "machine", "automation",
+        "机器人", "科技", "智能", "未来", "数码",
+    ),
+    "skull": (
+        "skull", "halloween", "spooky", "dark", "metal", "edgy", "horror",
+        "骷髅", "万圣节", "恐怖", "暗黑", "吓人",
+    ),
+    "ghost": (
+        "ghost", "halloween", "spooky", "scary", "boo", "haunted",
+        "鬼", "万圣节", "吓人", "灵异", "恐怖",
+    ),
+    "alien": (
+        "alien", "ufo", "space", "weird", "sci-fi", "extraterrestrial",
+        "外星人", "宇宙", "科幻", "飞碟", "奇怪",
+    ),
+    "flower_face": (
+        "flower", "spring", "bloom", "floral", "garden", "fairy", "pretty",
+        "花", "春天", "花朵", "仙女", "唯美", "变装",
+    ),
+    "cloud_face": (
+        "cloud", "dream", "sky", "soft", "calm", "daydream", "weather",
+        "云", "梦幻", "天空", "治愈", "温柔",
+    ),
+    "baby_chibi": (
+        "cute", "baby", "chibi", "kawaii", "adorable", "child", "sweet",
+        "可爱", "萌", "宝宝", "萌娃", "软萌",
+    ),
+    "kitsune": (
+        "fox", "kitsune", "anime", "japan", "mask", "festival", "mythical",
+        "狐狸", "面具", "动漫", "日系", "国风", "古风",
+    ),
+    "panda": (
+        "panda", "cute", "animal", "china", "bamboo", "zoo",
+        "熊猫", "可爱", "动物", "萌", "国宝",
+    ),
+    "boba": (
+        "boba", "bubble tea", "drink", "milk tea", "cafe", "snack", "food",
+        "奶茶", "喝的", "饮品", "美食", "探店",
+    ),
+    "crt_head": (
+        "retro", "tv", "glitch", "vaporwave", "vintage", "static", "screen",
+        "复古", "电视", "故障", "怀旧", "old school",
+    ),
+    # --- eyes and mouth ------------------------------------------------------
+    "censor_bar": (
+        "anonymous", "privacy", "eyes", "hide", "identity", "redact",
+        "匿名", "隐私", "遮眼", "打码",
+    ),
+    "sunglasses": (
+        "cool", "summer", "sunglasses", "beach", "confident", "swagger",
+        "墨镜", "夏天", "酷", "帅", "御姐", "变装",
+    ),
+    "face_mask": (
+        "mask", "health", "hospital", "clinic", "hygiene", "sick", "doctor",
+        "口罩", "医生", "健康", "医院", "防护",
+    ),
+    "moustache": (
+        "moustache", "funny", "disguise", "gentleman", "silly", "vintage",
+        "胡子", "搞笑", "伪装", "绅士",
+    ),
+    "heart_eyes": (
+        "love", "crush", "romance", "adore", "valentine", "swoon", "date",
+        "爱心", "喜欢", "恋爱", "心动", "告白", "情人节",
+    ),
+    "star_glasses": (
+        "party", "star", "celebrate", "disco", "fun", "shine", "festival",
+        "星星", "派对", "闪耀", "庆祝", "开心",
+    ),
+    "cyber_visor": (
+        "cyber", "tech", "gaming", "futuristic", "neon", "esports", "vr",
+        "赛博", "科技", "游戏", "未来", "电竞",
+    ),
+    "dog_nose": (
+        "dog", "puppy", "pet", "animal", "cute", "woof",
+        "狗", "宠物", "可爱", "萌宠", "小狗",
+    ),
+    # --- on the head ---------------------------------------------------------
+    "cat_ears": (
+        "cat", "cute", "kitten", "pet", "kawaii", "neko", "anime",
+        "猫耳", "可爱", "萌", "猫", "二次元", "变装",
+    ),
+    "crown": (
+        "queen", "king", "royal", "winner", "birthday", "princess", "best",
+        "皇冠", "女王", "公主", "第一", "生日", "御姐",
+    ),
+    "party_hat": (
+        "birthday", "party", "celebrate", "anniversary", "congratulations",
+        "生日", "派对", "庆祝", "纪念日", "开心",
+    ),
+    "halo": (
+        "angel", "innocent", "pure", "sweet", "good", "heaven", "dreamy",
+        "天使", "纯洁", "可爱", "梦幻", "圣洁",
+    ),
+    "devil_horns": (
+        "devil", "naughty", "mischief", "evil", "halloween", "sassy", "bad",
+        "恶魔", "调皮", "坏", "万圣节", "腹黑",
+    ),
+    "graduation_cap": (
+        "graduation", "school", "student", "university", "exam", "learn",
+        "毕业", "学生", "大学", "考试", "学习",
+    ),
+    "headphones": (
+        "music", "dj", "song", "beat", "listen", "podcast", "audio", "dance",
+        "音乐", "耳机", "歌", "跳舞", "节奏", "听歌",
+    ),
+    # --- reactions and accents -----------------------------------------------
+    "heart_bubble": (
+        "love", "like", "romance", "sweet", "crush", "affection", "thanks",
+        "爱心", "喜欢", "心动", "甜", "宠粉",
+    ),
+    "lightning": (
+        "energy", "power", "fast", "shock", "strong", "workout", "intense",
+        "闪电", "力量", "爆发", "健身", "速度", "冲",
+    ),
+    "sparkles": (
+        "glow", "shine", "magic", "pretty", "glam", "beauty", "transform",
+        "闪", "发光", "变装", "美", "仙", "魔法",
+    ),
+    # --- creator UI ----------------------------------------------------------
+    "live_badge": (
+        "live", "stream", "broadcast", "online", "now", "streaming",
+        "直播", "开播", "在线", "现场",
+    ),
+    "focus_frame": (
+        "focus", "camera", "shot", "framing", "photography", "record",
+        "对焦", "镜头", "摄影", "拍摄", "女摄",
+    ),
+    "comment_bubble": (
+        "comment", "reply", "chat", "message", "question", "answer", "talk",
+        "评论", "回复", "留言", "聊天", "提问",
+    ),
+    "tap_cursor": (
+        "tap", "click", "tutorial", "how to", "guide", "demo", "step",
+        "点击", "教程", "步骤", "演示", "操作",
+    ),
+    # --- objects with depth --------------------------------------------------
+    "cap_3d": (
+        "cap", "sport", "street", "casual", "gym", "athletic", "hat", "workout",
+        "帽子", "运动", "健身", "街头", "潮流", "腹肌",
+    ),
+    "top_hat_3d": (
+        "formal", "magic", "gentleman", "classy", "vintage", "magician", "show",
+        "礼帽", "绅士", "魔术", "复古", "正式",
+    ),
+    "party_cone_3d": (
+        "birthday", "party", "celebrate", "anniversary", "congratulations",
+        "生日", "派对", "庆祝", "纪念日",
+    ),
+    "crown_3d": (
+        "queen", "king", "royal", "winner", "champion", "best", "luxury",
+        "皇冠", "女王", "冠军", "第一", "豪华", "御姐",
+    ),
+    "sunglasses_3d": (
+        "cool", "summer", "sunglasses", "confident", "swagger", "style", "drip",
+        "墨镜", "酷", "帅", "夏天", "御姐", "变装",
+    ),
+}
+
+
+def _with_keywords(objects: tuple[Overlay, ...]) -> tuple[Overlay, ...]:
+    """The pack, each object carrying the words a clip it suits would use.
+
+    Joined here rather than written into forty declarations, so the editorial
+    judgement lives in one block somebody can read top to bottom and revise
+    after watching the suggestions be wrong.
+    """
+    return tuple(
+        replace(item, keywords=OBJECT_KEYWORDS.get(item.id, ()))
+        for item in objects
+    )
+
+
+#: Rebound once the table above exists. The declarations stay about geometry
+#: and the vocabulary stays in one block, and nothing downstream has to join
+#: the two - by the time anything reads `BUILT_IN`, every object carries both.
+BUILT_IN = _with_keywords(BUILT_IN)
 
 
 # --------------------------------------------------------------------------- #
