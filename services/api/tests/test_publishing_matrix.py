@@ -33,7 +33,13 @@ def test_every_carousel_cell_agrees_with_the_guard_that_refuses_one() -> None:
     for platform, row in rows().items():
         for engine_id in PROVIDERS:
             promised = engine_id in row["carousel_engines"]
-            allowed, _ = carousel_fits_destination(engine_id, platform, 1)
+            # Asked for two, which is the question the column answers.
+            #
+            # One picture is a different fact and a network can hold both:
+            # Pinterest takes a single pin and no gallery at all, so asking
+            # the guard for one image had it agree to a post the column had
+            # never promised.
+            allowed, _ = carousel_fits_destination(engine_id, platform, 2)
             # The guard passes an engine it does not recognise; here every id is
             # known, so a pass means it genuinely carries one.
             assert promised == allowed, (
