@@ -213,3 +213,22 @@ test("the browser turns the object exactly as the renderer will", () => {
     });
   }
 });
+
+test("a drag lands on a whole degree", () => {
+  // These are written into the effect's `turn` and `tilt`, which both declare
+  // `step: 1`. A drag is continuous, so an unrounded angle reached the panel as
+  // "Tilt 54.831460674157306°" and was saved into the recipe that way - a value
+  // no slider can return to and nobody typed.
+  const dragged = orbitFrom({ turn: 0, tilt: 0 }, 37, 23, { width: 173, height: 91 });
+
+  assert.equal(dragged.turn, Math.round(dragged.turn));
+  assert.equal(dragged.tilt, Math.round(dragged.tilt));
+});
+
+test("rounding happens inside the limits, not outside them", () => {
+  // Rounding after the clamp cannot push a value back past the edge.
+  const far = orbitFrom({ turn: 0, tilt: 0 }, 9_999, 9_999, { width: 100, height: 100 });
+
+  assert.ok(Math.abs(far.turn) <= TURN_LIMIT);
+  assert.ok(Math.abs(far.tilt) <= TILT_LIMIT);
+});

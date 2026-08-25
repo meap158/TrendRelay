@@ -835,6 +835,13 @@ export function GalleryChoiceButton({
       <span className="overlay-chosen-name">
         <strong>{option?.label ?? t("overlayPicker.none")}</strong>
         {option?.occludes && <Badge tone="accent">{t("overlayPicker.hidesTheFace")}</Badge>}
+        {/* The same mark the gallery tile and the suggestion chip carry. This
+            is the only place the chosen object is named once the dialog is
+            shut, so leaving it off here is where "Cap" and a solid cap stop
+            being distinguishable at all. */}
+        {option?.dimensional && (
+          <Badge tone="info" className="overlay-solid-badge">3D</Badge>
+        )}
       </span>
       <span className="overlay-chosen-action">{t("overlayPicker.change")}</span>
     </button>

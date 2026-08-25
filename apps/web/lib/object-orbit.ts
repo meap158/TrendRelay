@@ -29,9 +29,14 @@ const SWEEP_DEGREES = 160;
 export type Orbit = { turn: number; tilt: number };
 
 export function clampOrbit({ turn, tilt }: Orbit): Orbit {
+  // Rounded to whole degrees, because these are written into the effect's own
+  // `turn` and `tilt`, both of which declare `step: 1`. A drag produces a
+  // continuous angle, so without this the panel showed
+  // "Tilt 54.831460674157306°" and a saved recipe carried it - a number no
+  // slider can return to and nobody typed.
   return {
-    turn: Math.max(-TURN_LIMIT, Math.min(TURN_LIMIT, turn)),
-    tilt: Math.max(-TILT_LIMIT, Math.min(TILT_LIMIT, tilt)),
+    turn: Math.round(Math.max(-TURN_LIMIT, Math.min(TURN_LIMIT, turn))),
+    tilt: Math.round(Math.max(-TILT_LIMIT, Math.min(TILT_LIMIT, tilt))),
   };
 }
 
